@@ -3203,6 +3203,8 @@ where
     let mut amounts: BTreeMap<Epoch, BTreeMap<Epoch, token::Amount>> =
         BTreeMap::default();
 
+    // Only need to do bonds since rewwards are accumulated during
+    // `unbond_tokens`
     let bonds =
         bond_handle(&bond_id.source, &bond_id.validator).get_data_handler();
     for next in bonds.iter(storage)? {

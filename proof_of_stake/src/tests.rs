@@ -5963,24 +5963,20 @@ fn test_unslashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
         Epoch(0),
         current_epoch + params.pipeline_len,
     ) {
-        let bond_amount = crate::bond_amounts_for_rewards(
+        let bond_amount = crate::bond_amount(
             &storage,
             &BondId {
                 source: delegator.clone(),
                 validator: validator1.clone(),
             },
             epoch,
-            epoch,
         )
-        .unwrap()
-        .get(&epoch)
-        .cloned()
         .unwrap_or_default();
 
         let val_stake =
             crate::read_validator_stake(&storage, &params, &validator1, epoch)
                 .unwrap();
-        dbg!(&bond_amount);
+        // dbg!(&bond_amount);
         assert_eq!(val_stake - val1_init_stake, bond_amount);
     }
 }
@@ -6522,46 +6518,39 @@ fn test_slashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
         super::process_slashes(&mut storage, current_epoch).unwrap();
     }
 
-    for epoch in Epoch::iter_bounds_inclusive(
-        current_epoch + params.pipeline_len,
-        current_epoch + params.pipeline_len,
-    ) {
-        let del_bond_amount = crate::bond_amounts_for_rewards(
-            &storage,
-            &BondId {
-                source: delegator.clone(),
-                validator: validator1.clone(),
-            },
-            epoch,
-            epoch,
-        )
-        .unwrap()
-        .get(&epoch)
-        .cloned()
-        .unwrap_or_default();
+    let pipeline_epoch = current_epoch + params.pipeline_len;
 
-        let self_bond_amount = crate::bond_amounts_for_rewards(
-            &storage,
-            &BondId {
-                source: validator1.clone(),
-                validator: validator1.clone(),
-            },
-            epoch,
-            epoch,
-        )
-        .unwrap()
-        .get(&epoch)
-        .cloned()
-        .unwrap_or_default();
+    let del_bond_amount = crate::bond_amount(
+        &storage,
+        &BondId {
+            source: delegator.clone(),
+            validator: validator1.clone(),
+        },
+        pipeline_epoch,
+    )
+    .unwrap_or_default();
 
-        let val_stake =
-            crate::read_validator_stake(&storage, &params, &validator1, epoch)
-                .unwrap();
-        dbg!(&val_stake);
-        dbg!(&del_bond_amount);
-        dbg!(&self_bond_amount);
+    let self_bond_amount = crate::bond_amount(
+        &storage,
+        &BondId {
+            source: validator1.clone(),
+            validator: validator1.clone(),
+        },
+        pipeline_epoch,
+    )
+    .unwrap_or_default();
 
-        let diff = val_stake - self_bond_amount - del_bond_amount;
-        assert!(diff <= 2.into());
-    }
+    let val_stake = crate::read_validator_stake(
+        &storage,
+        &params,
+        &validator1,
+        pipeline_epoch,
+    )
+    .unwrap();
+    // dbg!(&val_stake);
+    // dbg!(&del_bond_amount);
+    // dbg!(&self_bond_amount);
+
+    let diff = val_stake - self_bond_amount - del_bond_amount;
+    assert!(diff <= 2.into());
 }

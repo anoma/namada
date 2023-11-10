@@ -920,6 +920,7 @@ fn pos_votes_from_abci(
 mod test_finalize_block {
     use std::collections::{BTreeMap, BTreeSet, HashMap};
     use std::num::NonZeroU64;
+    use std::str::FromStr;
 
     use data_encoding::HEXUPPER;
     use namada::core::ledger::eth_bridge::storage::wrapped_erc20s;
@@ -2164,8 +2165,10 @@ mod test_finalize_block {
             source: validator.address.clone(),
             validator: validator.address.clone(),
         };
+        let init_stake = validator.bonded_stake;
 
         let mut total_rewards = token::Amount::zero();
+        let mut total_claimed = token::Amount::zero();
 
         // FINALIZE BLOCK 1. Tell Namada that val1 is the block proposer. We
         // won't receive votes from TM since we receive votes at a 1-block
@@ -2181,8 +2184,6 @@ mod test_finalize_block {
             advance_epoch(&mut shell, &pkh1, &votes, None);
         total_rewards += inflation;
 
-        println!("\nMINTED INFLATION: {}", inflation.to_string_native());
-
         // Claim the rewards from the initial epoch
         let reward_1 = namada_proof_of_stake::claim_reward_tokens(
             &mut shell.wl_storage,
@@ -2191,7 +2192,8 @@ mod test_finalize_block {
             current_epoch,
         )
         .unwrap();
-        assert!(is_reward_equal_enough(total_rewards, reward_1, 1));
+        total_claimed += reward_1;
+        assert!(is_reward_equal_enough(total_rewards, total_claimed, 1));
 
         // Try a claim the next block and ensure we get 0 tokens back
         next_block_for_inflation(&mut shell, pkh1.clone(), votes.clone(), None);
@@ -2222,6 +2224,16 @@ mod test_finalize_block {
         .unwrap();
         assert_eq!(unbond_res.sum, unbond_amount);
 
+        let rew = namada_proof_of_stake::claim_reward_tokens(
+            &mut shell.wl_storage,
+            None,
+            &validator.address,
+            current_epoch,
+        )
+        .unwrap();
+        total_claimed += rew;
+        assert!(is_reward_equal_enough(total_rewards, total_claimed, 3));
+
         // Check the bond amounts for rewards up thru the withdrawable epoch
         let withdraw_epoch = current_epoch + params.withdrawable_epoch_offset();
         let last_claim_epoch =
@@ -2239,22 +2251,22 @@ mod test_finalize_block {
         )
         .unwrap();
 
+        // Should only have the remaining amounts in bonds themselves
         let mut exp_bond_amounts = BTreeMap::<Epoch, token::Amount>::new();
         for epoch in Epoch::iter_bounds_inclusive(
             last_claim_epoch.unwrap_or_default(),
             withdraw_epoch,
         ) {
-            if epoch < current_epoch + params.pipeline_len {
-                exp_bond_amounts.insert(epoch, validator.bonded_stake);
-            } else {
-                exp_bond_amounts
-                    .insert(epoch, validator.bonded_stake - unbond_amount);
-            }
+            exp_bond_amounts
+                .insert(epoch, validator.bonded_stake - unbond_amount);
         }
         assert_eq!(exp_bond_amounts, bond_amounts);
 
+        let pipeline_epoch_from_unbond = current_epoch + params.pipeline_len;
+
         // Advance to the withdrawable epoch
         let mut current_epoch = current_epoch;
+        let mut missed_rewards = token::Amount::zero();
         while current_epoch < withdraw_epoch {
             let votes = get_default_true_votes(
                 &shell.wl_storage,
@@ -2263,7 +2275,11 @@ mod test_finalize_block {
             let (new_epoch, inflation) =
                 advance_epoch(&mut shell, &pkh1, &votes, None);
             current_epoch = new_epoch;
+
             total_rewards += inflation;
+            if current_epoch <= pipeline_epoch_from_unbond {
+                missed_rewards += inflation;
+            }
         }
 
         // Withdraw tokens
@@ -2284,10 +2300,17 @@ mod test_finalize_block {
             current_epoch,
         )
         .unwrap();
+        total_claimed += reward_2;
 
-        // Hacky solution until I come up with smth better
-        let diff = total_rewards - reward_2 - reward_1;
-        assert!(diff < 2 * token::Amount::from(current_epoch.0));
+        // The total rewards claimed should be approximately equal to the total
+        // minted inflation, minus (unbond_amount / initial_stake) * rewards
+        // from the unbond epoch and the following epoch (the missed_rewards)
+        let ratio = Dec::from(unbond_amount) / Dec::from(init_stake);
+        let lost_rewards = ratio * missed_rewards;
+        let uncertainty = Dec::from_str("0.07").unwrap();
+        let token_uncertainty = uncertainty * lost_rewards;
+        let token_diff = total_claimed + lost_rewards - total_rewards;
+        assert!(token_diff < token_uncertainty);
     }
 
     fn get_rewards_acc<S>(storage: &S) -> HashMap<Address, Dec>
