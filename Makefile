@@ -295,7 +295,7 @@ dev-deps:
 	$(rustup) toolchain install $(nightly)
 	$(rustup) target add wasm32-unknown-unknown
 	$(rustup) component add rustfmt clippy miri --toolchain $(nightly)
-	$(cargo) install cargo-watch unclog
+	$(cargo) install cargo-watch unclog wasm-opt
 
 test-miri:
 	$(cargo) +$(nightly) miri setup
