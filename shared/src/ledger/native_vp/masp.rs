@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::transaction::components::I128Sum;
-use namada_core::ledger::gas::MASP_VERIFY_SHIELDED_TX;
+use namada_core::ledger::gas::MASP_VERIFY_SHIELDED_TX_GAS;
 use namada_core::ledger::storage;
 use namada_core::ledger::storage_api::OptionExt;
 use namada_core::ledger::vp_env::VpEnv;
@@ -287,7 +287,7 @@ where
         }
         // Verify the proofs and charge the gas for the expensive execution
         self.ctx
-            .charge_gas(MASP_VERIFY_SHIELDED_TX)
+            .charge_gas(MASP_VERIFY_SHIELDED_TX_GAS)
             .map_err(Error::NativeVpError)?;
         Ok(verify_shielded_tx(&shielded_tx))
     }
