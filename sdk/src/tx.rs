@@ -23,6 +23,7 @@ use namada_core::ibc::core::ics04_channel::timeout::TimeoutHeight;
 use namada_core::ibc::core::timestamp::Timestamp as IbcTimestamp;
 use namada_core::ibc::core::Msg;
 use namada_core::ibc::Height as IbcHeight;
+use namada_core::ibc_proto::cosmos::tx;
 use namada_core::ledger::governance::cli::onchain::{
     DefaultProposal, OnChainProposal, PgfFundingProposal, PgfStewardProposal,
     ProposalVote,
@@ -45,7 +46,7 @@ use namada_core::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
 use namada_core::types::transaction::pgf::UpdateStewardCommission;
-use namada_core::types::transaction::pos;
+use namada_core::types::transaction::pos::{self, InitValidator};
 use namada_core::types::{storage, token};
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
@@ -2003,6 +2004,200 @@ pub async fn build_init_account<'a>(
         None,
     )
     .await
+    .map(|(tx, epoch)| (tx, signing_data, epoch))
+}
+
+pub async fn build_init_validator<'a>(
+    context: &impl Namada<'a>,
+    args::TxInitValidator {
+        tx: tx_args,
+        tx_code_path,
+        scheme,
+        threshold,
+        consensus_key,
+        eth_cold_key,
+        eth_hot_key,
+        protocol_key,
+        commission_rate, 
+        max_commission_rate_change,
+        account_keys,
+        validator_vp_code_path,
+        unsafe_dont_encrypt,
+    }: &args::TxInitValidator,
+) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+    let tx_args = args::Tx {
+        chain_id: tx_args
+            .clone()
+            .chain_id
+            .or_else(|| Some(config.ledger.chain_id.clone())),
+        ..tx_args.clone()
+    };
+    let alias = tx_args
+        .initialized_account_alias
+        .as_ref()
+        .cloned()
+        .unwrap_or_else(|| "validator".to_string());
+
+    let validator_key_alias = format!("{}-key", alias);
+    let consensus_key_alias = format!("{}-consensus-key", alias);
+
+    let threshold = match threshold {
+        Some(threshold) => threshold,
+        None => {
+            return Err(Error::from(TxError::MissingAccountThreshold));
+        }
+    };
+    let eth_hot_key_alias = format!("{}-eth-hot-key", alias);
+    let eth_cold_key_alias = format!("{}-eth-cold-key", alias);
+
+    let mut wallet = context.wallet_mut().await;
+
+    let is_consensus_key_present = consensus_key.is_some();
+    if is_consensus_key_present {
+        let consensus_key = consensus_key.clone().unwrap();
+    }
+    let consensus_key = match consensus_key
+        .map_or_else(|key| match key {
+            common::SecretKey::Ed25519(_) => key,
+            common::SecretKey::Secp256k1(_) => {
+                None
+            }
+        })
+        .unwrap_or_else(|| {
+            display_line!(namada.io(), "Generating consensus key...");
+            let password =
+                read_and_confirm_encryption_password(unsafe_dont_encrypt);
+            wallet
+                .gen_key(
+                    // Note that TM only allows ed25519 for consensus key
+                    SchemeType::Ed25519,
+                    Some(consensus_key_alias.clone()),
+                    tx_args.wallet_alias_force,
+                    None,
+                    password,
+                    None,
+                )
+                .expect("Key generation should not fail.")
+                .1
+        });
+
+    let eth_cold_pk = eth_cold_key
+        .map(|key| match key {
+            common::SecretKey::Secp256k1(_) => key.ref_to(),
+            _ => {
+                edisplay_line!(context.io(), "Eth cold key can only be secp256k1");
+                safe_exit(1)
+            }
+        })
+        .unwrap_or_else(|| {
+            display_line!(context.io(), "Generating Eth cold key...");
+            let password =
+                read_and_confirm_encryption_password(unsafe_dont_encrypt);
+            wallet
+                .gen_key(
+                    // Note that ETH only allows secp256k1
+                    SchemeType::Secp256k1,
+                    Some(eth_cold_key_alias.clone()),
+                    tx_args.wallet_alias_force,
+                    None,
+                    password,
+                    None,
+                )
+                .expect("Key generation should not fail.")
+                .1
+                .ref_to()
+        });
+
+    let eth_hot_pk = eth_hot_key
+        .map(|key| match key {
+            common::SecretKey::Secp256k1(_) => key.ref_to(),
+            common::SecretKey::Ed25519(_) => {
+                edisplay_line!(
+                    namada.io(),
+                    "Eth hot key can only be secp256k1"
+                );
+                safe_exit(1)
+            }
+        })
+        .unwrap_or_else(|| {
+            display_line!(context.io(), "Generating Eth hot key...");
+            let password =
+                read_and_confirm_encryption_password(unsafe_dont_encrypt);
+            wallet
+                .gen_key(
+                    // Note that ETH only allows secp256k1
+                    SchemeType::Secp256k1,
+                    Some(eth_hot_key_alias.clone()),
+                    tx_args.wallet_alias_force,
+                    None,
+                    password,
+                    None,
+                )
+                .expect("Key generation should not fail.")
+                .1
+                .ref_to()
+        });
+    // To avoid wallet deadlocks in following operations
+    drop(wallet);
+
+    // Generate the validator keys
+    let validator_keys = gen_validator_keys(
+        *context.wallet_mut().await,
+        Some(eth_hot_pk.clone()),
+        protocol_key,
+        scheme,
+    )
+    .unwrap();
+    let protocol_key = validator_keys.get_protocol_keypair().ref_to();
+    let dkg_key = validator_keys
+        .dkg_keypair
+        .as_ref()
+        .expect("DKG sessions keys should have been created")
+        .public();
+
+    let validator_vp_code_hash =
+        query_wasm_code_hash(context, validator_vp_code_path.to_str().unwrap())
+            .await
+            .unwrap();
+
+    let tx_code_hash =
+        query_wasm_code_hash(context, args::TX_INIT_VALIDATOR_WASM)
+            .await
+            .unwrap();
+
+    let chain_id = tx_args.chain_id.clone().unwrap();
+    let mut tx = Tx::new(chain_id, tx_args.expiration);
+    let extra_section_hash =
+        tx.add_extra_section_from_hash(validator_vp_code_hash);
+
+    let data = InitValidator {
+        account_keys,
+        threshold,
+        consensus_key: consensus_key.ref_to(),
+        eth_cold_key: key::secp256k1::PublicKey::try_from_pk(&eth_cold_pk)
+            .unwrap(),
+        eth_hot_key: key::secp256k1::PublicKey::try_from_pk(&eth_hot_pk)
+            .unwrap(),
+        protocol_key,
+        dkg_key,
+        commission_rate: commission_rate.clone().to_owned(),
+        max_commission_rate_change: max_commission_rate_change.clone().to_owned(),
+        validator_vp_code_hash: extra_section_hash,
+    };
+
+    tx.add_code_from_hash(tx_code_hash).add_data(data);
+
+    let signing_data = signing::aux_signing_data(context, &tx_args, None, None).await?;
+    build(
+        context,
+        &tx_args,
+        tx_code_path.clone(),
+        data,
+        do_nothing,
+        &signing_data.fee_payer,
+        None,
+    
+    ).await
     .map(|(tx, epoch)| (tx, signing_data, epoch))
 }
 

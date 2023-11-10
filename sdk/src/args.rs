@@ -766,6 +766,43 @@ impl<C: NamadaTypes> TxBuilder<C> for TxInitValidator <C> {
     }
 }
 
+impl<C: NamadaTypes> TxInitValidator<C> {
+    /// A vector of public key to associate with the new account
+    pub fn account_keys(self, account_keys: Vec<C::PublicKey>) -> Self {
+        Self {
+            account_keys,
+            ..self
+        }
+    }
+
+    /// A threshold to associate with the new account
+    pub fn threshold(self, threshold: u8) -> Self {
+        Self {
+            threshold: Some(threshold),
+            ..self
+        }
+    }
+
+    /// Path to the TX WASM code file
+    pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
+        Self {
+            tx_code_path,
+            ..self
+        }
+    }
+}
+
+impl TxInitValidator {
+    /// Build a transaction from this builder
+    pub async fn build<'a>(
+        &self,
+        context: &impl Namada<'a>,
+    ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
+    {
+        tx::build_init_validator(context, self).await
+    }
+}
+
 /// Transaction to update a VP arguments
 #[derive(Clone, Debug)]
 pub struct TxUpdateAccount<C: NamadaTypes = SdkTypes> {
