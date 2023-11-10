@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     pkg-config \
     protobuf-compiler \
+    libudev-dev \
     && apt-get clean
 
 COPY --from=planner /app/recipe.json recipe.json
@@ -32,7 +33,7 @@ FROM debian:bullseye-slim AS runtime
 ENV NAMADA_BASE_DIR=/.namada 
 ENV NAMADA_LOG_COLOR=false
 
-RUN apt-get update && apt-get install libcurl4-openssl-dev -y && apt-get clean
+RUN apt-get update && apt-get install libcurl4-openssl-dev libudev-dev -y && apt-get clean
 
 RUN useradd --create-home namada
 USER namada
