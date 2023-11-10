@@ -3,6 +3,7 @@
     "tx_bridge_pool.wasm": "tx_bridge_pool.69971943e6ad81a537197ee4d7fe8f1211882a17de572b28e71906572e8193af.wasm",
     "tx_change_validator_commission.wasm": "tx_change_validator_commission.94615c76f6f32b627adbbb1279a345bd06c6bd0d4eb65a6286c0038f78e91321.wasm",
     "tx_change_validator_metadata.wasm": "tx_change_validator_metadata.e13d10fb9eaa40510c17495d4aee612c05526ee8fa7ec7b4c619e5d68e0f1bcd.wasm",
+    "tx_claim_rewards.wasm": "tx_claim_rewards.1a165fcb82a58712074e9880e2b1ae8904e0af2d5aca4338c4c6367dc719b9de.wasm",
     "tx_deactivate_validator.wasm": "tx_deactivate_validator.38bdc4c2cda3f09c9c233ccea8f8df64e1d3b7916f67723d079248f36042ec82.wasm",
     "tx_ibc.wasm": "tx_ibc.a74c56e43a62bc89018b2ccc19a4daf02d24a2f7c25ccc7b8e57c1f8ce272b82.wasm",
     "tx_init_account.wasm": "tx_init_account.67cf30a5dc66ed3456e209f6983bb2d17c44b0dc952aeecccee6499939c5c58d.wasm",

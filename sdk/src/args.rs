@@ -1141,6 +1141,43 @@ impl Withdraw {
     }
 }
 
+/// Claim arguments
+#[derive(Clone, Debug)]
+pub struct ClaimRewards<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
+    pub tx: Tx<C>,
+    /// Validator address
+    pub validator: C::Address,
+    /// Source address for claiming rewards due to bonds. For self-bonds, the
+    /// validator is also the source
+    pub source: Option<C::Address>,
+    /// Path to the TX WASM code file
+    pub tx_code_path: PathBuf,
+}
+
+impl<C: NamadaTypes> TxBuilder<C> for ClaimRewards<C> {
+    fn tx<F>(self, func: F) -> Self
+    where
+        F: FnOnce(Tx<C>) -> Tx<C>,
+    {
+        ClaimRewards {
+            tx: func(self.tx),
+            ..self
+        }
+    }
+}
+
+impl ClaimRewards {
+    /// Build a transaction from this builder
+    pub async fn build<'a>(
+        &self,
+        context: &impl Namada<'a>,
+    ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
+    {
+        tx::build_claim_rewards(context, self).await
+    }
+}
+
 /// Query asset conversions
 #[derive(Clone, Debug)]
 pub struct QueryConversions<C: NamadaTypes = SdkTypes> {

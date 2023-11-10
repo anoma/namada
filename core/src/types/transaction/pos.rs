@@ -103,6 +103,27 @@ pub struct Withdraw {
     pub source: Option<Address>,
 }
 
+/// A claim of pending rewards.
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Hash,
+    Eq,
+    Serialize,
+    Deserialize,
+)]
+pub struct ClaimRewards {
+    /// Validator address
+    pub validator: Address,
+    /// Source address for claiming rewards from a bond. For self-bonds, the
+    /// validator is also the source
+    pub source: Option<Address>,
+}
+
 /// A redelegation of bonded tokens from one validator to another.
 #[derive(
     Debug,

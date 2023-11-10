@@ -37,7 +37,7 @@ use namada_core::ledger::storage_api::collections::{LazyCollection, LazySet};
 use namada_core::ledger::storage_api::{
     self, governance, token, ResultExt, StorageRead, StorageWrite,
 };
-use namada_core::types::address::{Address, InternalAddress};
+use namada_core::types::address::{self, Address, InternalAddress};
 use namada_core::types::dec::Dec;
 use namada_core::types::key::{
     common, protocol_pk_key, tm_consensus_key_raw_hash, PublicKeyTmRawHash,
@@ -49,7 +49,8 @@ use rewards::PosRewardsCalculator;
 use storage::{
     bonds_for_source_prefix, bonds_prefix, consensus_keys_key,
     get_validator_address_from_bond, is_bond_key, is_unbond_key,
-    is_validator_slashes_key, last_block_proposer_key, params_key,
+    is_validator_slashes_key, last_block_proposer_key,
+    last_pos_reward_claim_epoch_key, params_key, rewards_counter_key,
     slashes_prefix, unbonds_for_source_prefix, unbonds_prefix,
     validator_address_raw_hash_key, validator_description_key,
     validator_discord_key, validator_email_key, validator_last_slash_key,
@@ -231,20 +232,11 @@ pub fn rewards_accumulator_handle() -> RewardsAccumulator {
     RewardsAccumulator::open(key)
 }
 
-/// Get the storage handle to a validator's self rewards products
+/// Get the storage handle to a validator's rewards products
 pub fn validator_rewards_products_handle(
     validator: &Address,
 ) -> RewardsProducts {
-    let key = storage::validator_self_rewards_product_key(validator);
-    RewardsProducts::open(key)
-}
-
-/// Get the storage handle to the delegator rewards products associated with a
-/// particular validator
-pub fn delegator_rewards_products_handle(
-    validator: &Address,
-) -> RewardsProducts {
-    let key = storage::validator_delegation_rewards_product_key(validator);
+    let key = storage::validator_rewards_product_key(validator);
     RewardsProducts::open(key)
 }
 
@@ -1673,17 +1665,19 @@ pub fn unbond_tokens<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    tracing::debug!(
-        "Unbonding token amount {} at epoch {}",
-        amount.to_string_native(),
-        current_epoch
-    );
     if amount.is_zero() {
         return Ok(ResultSlashing::default());
     }
 
     let params = read_pos_params(storage)?;
     let pipeline_epoch = current_epoch + params.pipeline_len;
+    let withdrawable_epoch = current_epoch + params.withdrawable_epoch_offset();
+    tracing::debug!(
+        "Unbonding token amount {} at epoch {}, withdrawable at epoch {}",
+        amount.to_string_native(),
+        current_epoch,
+        withdrawable_epoch
+    );
 
     // Make sure source is not some other validator
     if let Some(source) = source {
@@ -1723,7 +1717,6 @@ where
     }
 
     let unbonds = unbond_handle(source, validator);
-    let withdrawable_epoch = current_epoch + params.withdrawable_epoch_offset();
 
     let redelegated_bonds =
         delegator_redelegated_bonds_handle(source).at(validator);
@@ -2021,6 +2014,35 @@ where
                 redelegated_deltas.to_string_native()
             );
         }
+    }
+
+    // Tally rewards (only call if this is not the first epoch)
+    if current_epoch > Epoch::default() {
+        let mut rewards = token::Amount::zero();
+
+        let last_claim_epoch =
+            get_last_reward_claim_epoch(storage, source, validator)?
+                .unwrap_or_default();
+        let rewards_products = validator_rewards_products_handle(validator);
+
+        for (start_epoch, slashed_amount) in &result_slashing.epoch_map {
+            // Stop collecting rewards at the moment the unbond is initiated
+            // (right now)
+            for ep in
+                Epoch::iter_bounds_inclusive(*start_epoch, current_epoch.prev())
+            {
+                // Consider the last epoch when rewards were claimed
+                if ep < last_claim_epoch {
+                    continue;
+                }
+                let rp =
+                    rewards_products.get(storage, &ep)?.unwrap_or_default();
+                rewards += rp * (*slashed_amount);
+            }
+        }
+
+        // Update the rewards from the current unbonds first
+        add_rewards_to_counter(storage, source, validator, rewards)?;
     }
 
     Ok(result_slashing)
@@ -2832,6 +2854,7 @@ where
             "Unbond delta ({start_epoch}..{withdraw_epoch}), amount {}",
             amount.to_string_native()
         );
+        // Consider only unbonds that are eligible to be withdrawn
         if withdraw_epoch > current_epoch {
             tracing::debug!(
                 "Not yet withdrawable until epoch {withdraw_epoch}"
@@ -2862,6 +2885,7 @@ where
             (amount, eager_redelegated_unbonds),
         );
     }
+
     let slashes = find_validator_slashes(storage, validator)?;
 
     // `val resultSlashing`
@@ -3021,121 +3045,21 @@ pub fn bond_amount<S>(
 where
     S: StorageRead,
 {
-    // TODO: our method of applying slashes is not correct! This needs review
-
     let params = read_pos_params(storage)?;
+    // Outer key is the start epoch used to calculate slashes. The inner
+    // keys are discarded after applying slashes.
+    let mut amounts: BTreeMap<Epoch, token::Amount> = BTreeMap::default();
 
-    // TODO: apply rewards
-    let slashes = find_validator_slashes(storage, &bond_id.validator)?;
-    // dbg!(&slashes);
-    // let slash_rates =
-    //     slashes
-    //         .iter()
-    //         .fold(BTreeMap::<Epoch, Dec>::new(), |mut map, slash| {
-    //             let tot_rate = map.entry(slash.epoch).or_default();
-    //             *tot_rate = cmp::min(Dec::one(), *tot_rate + slash.rate);
-    //             map
-    //         });
-    // dbg!(&slash_rates);
-
-    // Accumulate incoming redelegations slashes from source validator, if any.
-    // This ensures that if there're slashes on both src validator and dest
-    // validator, they're combined correctly.
-    let mut redelegation_slashes = BTreeMap::<Epoch, token::Amount>::new();
-    for res in delegator_redelegated_bonds_handle(&bond_id.source)
-        .at(&bond_id.validator)
-        .iter(storage)?
-    {
-        let (
-            NestedSubKey::Data {
-                key: redelegation_end,
-                nested_sub_key:
-                    NestedSubKey::Data {
-                        key: src_validator,
-                        nested_sub_key: SubKey::Data(start),
-                    },
-            },
-            delta,
-        ) = res?;
-
-        let list_slashes = validator_slashes_handle(&src_validator)
-            .iter(storage)?
-            .map(Result::unwrap)
-            .filter(|slash| {
-                let slash_processing_epoch =
-                    slash.epoch + params.slash_processing_epoch_offset();
-                start <= slash.epoch
-                    && redelegation_end > slash.epoch
-                    && slash_processing_epoch
-                        > redelegation_end - params.pipeline_len
-            })
-            .collect::<Vec<_>>();
-
-        let slashed_delta = apply_list_slashes(&params, &list_slashes, delta);
-
-        // let mut slashed_delta = delta;
-        // let slashes = find_slashes_in_range(
-        //     storage,
-        //     start,
-        //     Some(redelegation_end),
-        //     &src_validator,
-        // )?;
-        // for (slash_epoch, rate) in slashes {
-        //     let slash_processing_epoch =
-        //         slash_epoch + params.slash_processing_epoch_offset();
-        //     // If the slash was processed after redelegation was submitted
-        //     // it has to be slashed now
-        //     if slash_processing_epoch > redelegation_end -
-        // params.pipeline_len {         let slashed =
-        // slashed_delta.mul_ceil(rate);         slashed_delta -=
-        // slashed;     }
-        // }
-        *redelegation_slashes.entry(redelegation_end).or_default() +=
-            delta - slashed_delta;
-    }
-    // dbg!(&redelegation_slashes);
-
+    // Bonds
     let bonds =
         bond_handle(&bond_id.source, &bond_id.validator).get_data_handler();
-    let mut total_active = token::Amount::zero();
     for next in bonds.iter(storage)? {
-        let (bond_epoch, delta) = dbg!(next?);
-        if bond_epoch > epoch {
-            continue;
+        let (start, delta) = next?;
+        if start <= epoch {
+            let amount = amounts.entry(start).or_default();
+            *amount += delta;
         }
-
-        let list_slashes = slashes
-            .iter()
-            .filter(|slash| bond_epoch <= slash.epoch)
-            .cloned()
-            .collect::<Vec<_>>();
-
-        let mut slashed_delta =
-            apply_list_slashes(&params, &list_slashes, delta);
-
-        // Deduct redelegation src validator slash, if any
-        if let Some(&redelegation_slash) = redelegation_slashes.get(&bond_epoch)
-        {
-            slashed_delta -= redelegation_slash;
-        }
-
-        // let list_slashes = slashes
-        //     .iter()
-        //     .map(Result::unwrap)
-        //     .filter(|slash| bond_epoch <= slash.epoch)
-        //     .collect::<Vec<_>>();
-
-        // for (&slash_epoch, &rate) in &slash_rates {
-        //     if slash_epoch < bond_epoch {
-        //         continue;
-        //     }
-        //     // TODO: think about truncation
-        //     let current_slash = slashed_delta.mul_ceil(rate);
-        //     slashed_delta -= current_slash;
-        // }
-        total_active += slashed_delta;
     }
-    // dbg!(&total_active);
 
     // Add unbonds that are still contributing to stake
     let unbonds = unbond_handle(&bond_id.source, &bond_id.validator);
@@ -3147,31 +3071,16 @@ where
             },
             delta,
         ) = next?;
+        // This is the first epoch in which the unbond stops contributing to
+        // voting power
         let end = withdrawable_epoch - params.withdrawable_epoch_offset()
             + params.pipeline_len;
 
         if start <= epoch && end > epoch {
-            let list_slashes = slashes
-                .iter()
-                .filter(|slash| start <= slash.epoch && end > slash.epoch)
-                .cloned()
-                .collect::<Vec<_>>();
-
-            let slashed_delta =
-                apply_list_slashes(&params, &list_slashes, delta);
-
-            // let mut slashed_delta = delta;
-            // for (&slash_epoch, &rate) in &slash_rates {
-            //     if start <= slash_epoch && end > slash_epoch {
-            //         // TODO: think about truncation
-            //         let current_slash = slashed_delta.mul_ceil(rate);
-            //         slashed_delta -= current_slash;
-            //     }
-            // }
-            total_active += slashed_delta;
+            let amount = amounts.entry(start).or_default();
+            *amount += delta;
         }
     }
-    // dbg!(&total_active);
 
     if bond_id.validator != bond_id.source {
         // Add outgoing redelegations that are still contributing to the source
@@ -3198,27 +3107,10 @@ where
                 && start <= epoch
                 && end > epoch
             {
-                let list_slashes = slashes
-                    .iter()
-                    .filter(|slash| start <= slash.epoch && end > slash.epoch)
-                    .cloned()
-                    .collect::<Vec<_>>();
-
-                let slashed_delta =
-                    apply_list_slashes(&params, &list_slashes, delta);
-
-                // let mut slashed_delta = delta;
-                // for (&slash_epoch, &rate) in &slash_rates {
-                //     if start <= slash_epoch && end > slash_epoch {
-                //         // TODO: think about truncation
-                //         let current_slash = delta.mul_ceil(rate);
-                //         slashed_delta -= current_slash;
-                //     }
-                // }
-                total_active += slashed_delta;
+                let amount = amounts.entry(start).or_default();
+                *amount += delta;
             }
         }
-        // dbg!(&total_active);
 
         // Add outgoing redelegation unbonds that are still contributing to
         // the source validator's stake
@@ -3233,7 +3125,7 @@ where
                             key: redelegation_epoch,
                             nested_sub_key:
                                 NestedSubKey::Data {
-                                    key: withdraw_epoch,
+                                    key: _withdraw_epoch,
                                     nested_sub_key:
                                         NestedSubKey::Data {
                                             key: src_validator,
@@ -3244,39 +3136,114 @@ where
                 },
                 delta,
             ) = res?;
-            let end = withdraw_epoch - params.withdrawable_epoch_offset()
-                + params.pipeline_len;
             if src_validator == bond_id.validator
                 // If the unbonded bond was redelegated after this epoch ...
                 && redelegation_epoch > epoch
-                // ... the start was before or at this epoch ...
+                // ... the start was before or at this epoch
                 && start <= epoch
-                // ... and the end after this epoch
-                && end > epoch
             {
-                let list_slashes = slashes
-                    .iter()
-                    .filter(|slash| start <= slash.epoch && end > slash.epoch)
-                    .cloned()
-                    .collect::<Vec<_>>();
-
-                let slashed_delta =
-                    apply_list_slashes(&params, &list_slashes, delta);
-
-                // let mut slashed_delta = delta;
-                // for (&slash_epoch, &rate) in &slash_rates {
-                //     if start <= slash_epoch && end > slash_epoch {
-                //         let current_slash = delta.mul_ceil(rate);
-                //         slashed_delta -= current_slash;
-                //     }
-                // }
-                total_active += slashed_delta;
+                let amount = amounts.entry(start).or_default();
+                *amount += delta;
             }
         }
     }
-    // dbg!(&total_active);
 
-    Ok(total_active)
+    if !amounts.is_empty() {
+        let slashes = find_validator_slashes(storage, &bond_id.validator)?;
+
+        // Apply slashes
+        for (&start, amount) in amounts.iter_mut() {
+            let list_slashes = slashes
+                .iter()
+                .filter(|slash| {
+                    let processing_epoch =
+                        slash.epoch + params.slash_processing_epoch_offset();
+                    // Only use slashes that were processed before or at the
+                    // epoch associated with the bond amount. This assumes
+                    // that slashes are applied before inflation.
+                    processing_epoch <= epoch && start <= slash.epoch
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+
+            *amount = apply_list_slashes(&params, &list_slashes, *amount);
+        }
+    }
+
+    Ok(amounts.values().cloned().sum())
+}
+
+/// Get bond amounts within the `claim_start..=claim_end` epoch range for
+/// claiming rewards for a given bond ID. Returns a map of bond amounts
+/// associated with every epoch within the given epoch range (accumulative) in
+/// which an amount contributed to the validator's stake.
+/// This function will only consider slashes that were processed before or at
+/// the epoch in which we're calculating the bond amount to correspond to the
+/// validator stake that was used to calculate reward products (slashes do *not*
+/// retrospectively affect the rewards calculated before slash processing).
+pub fn bond_amounts_for_rewards<S>(
+    storage: &S,
+    bond_id: &BondId,
+    claim_start: Epoch,
+    claim_end: Epoch,
+) -> storage_api::Result<BTreeMap<Epoch, token::Amount>>
+where
+    S: StorageRead,
+{
+    let params = read_pos_params(storage)?;
+    // Outer key is every epoch in which the a bond amount contributed to stake
+    // and the inner key is the start epoch used to calculate slashes. The inner
+    // keys are discarded after applying slashes.
+    let mut amounts: BTreeMap<Epoch, BTreeMap<Epoch, token::Amount>> =
+        BTreeMap::default();
+
+    // Only need to do bonds since rewwards are accumulated during
+    // `unbond_tokens`
+    let bonds =
+        bond_handle(&bond_id.source, &bond_id.validator).get_data_handler();
+    for next in bonds.iter(storage)? {
+        let (start, delta) = next?;
+
+        for ep in Epoch::iter_bounds_inclusive(claim_start, claim_end) {
+            // A bond that wasn't unbonded is added to all epochs up to
+            // `claim_end`
+            if start <= ep {
+                let amount =
+                    amounts.entry(ep).or_default().entry(start).or_default();
+                *amount += delta;
+            }
+        }
+    }
+
+    if !amounts.is_empty() {
+        let slashes = find_validator_slashes(storage, &bond_id.validator)?;
+
+        // Apply slashes
+        for (&ep, amounts) in amounts.iter_mut() {
+            for (&start, amount) in amounts.iter_mut() {
+                let list_slashes = slashes
+                    .iter()
+                    .filter(|slash| {
+                        let processing_epoch = slash.epoch
+                            + params.slash_processing_epoch_offset();
+                        // Only use slashes that were processed before or at the
+                        // epoch associated with the bond amount. This assumes
+                        // that slashes are applied before inflation.
+                        processing_epoch <= ep && start <= slash.epoch
+                    })
+                    .cloned()
+                    .collect::<Vec<_>>();
+
+                *amount = apply_list_slashes(&params, &list_slashes, *amount);
+            }
+        }
+    }
+
+    Ok(amounts
+        .into_iter()
+        // Flatten the inner maps to discard bond start epochs
+        .map(|(ep, amounts)| (ep, amounts.values().cloned().sum()))
+        .collect())
 }
 
 /// Get the genesis consensus validators stake and consensus key for Tendermint,
@@ -3998,17 +3965,8 @@ where
     let consensus_validators = consensus_validator_set_handle().at(&epoch);
 
     // Get total stake of the consensus validator set
-    let mut total_consensus_stake = token::Amount::zero();
-    for validator in consensus_validators.iter(storage)? {
-        let (
-            NestedSubKey::Data {
-                key: amount,
-                nested_sub_key: _,
-            },
-            _address,
-        ) = validator?;
-        total_consensus_stake += amount;
-    }
+    let total_consensus_stake =
+        get_total_consensus_stake(storage, epoch, &params)?;
 
     // Get set of signing validator addresses and the combined stake of
     // these signers
@@ -4114,15 +4072,137 @@ where
         rewards_frac += coeffs.active_val_coeff
             * (stake_unscaled / consensus_stake_unscaled);
 
-        // Update the rewards accumulator
-        let prev = rewards_accumulator_handle()
-            .get(storage, &address)?
-            .unwrap_or_default();
-        values.insert(address, prev + rewards_frac);
+        // To be added to the rewards accumulator
+        values.insert(address, rewards_frac);
     }
     for (address, value) in values.into_iter() {
-        rewards_accumulator_handle().insert(storage, address, value)?;
+        // Update the rewards accumulator
+        rewards_accumulator_handle().update(storage, address, |prev| {
+            prev.unwrap_or_default() + value
+        })?;
     }
+
+    Ok(())
+}
+
+#[derive(Clone, Debug)]
+struct Rewards {
+    product: Dec,
+    commissions: token::Amount,
+}
+
+/// Update validator and delegators rewards products and mint the inflation
+/// tokens into the PoS account.
+/// Any left-over inflation tokens from rounding error of the sum of the
+/// rewards is given to the governance address.
+pub fn update_rewards_products_and_mint_inflation<S>(
+    storage: &mut S,
+    params: &PosParams,
+    last_epoch: Epoch,
+    num_blocks_in_last_epoch: u64,
+    inflation: token::Amount,
+    staking_token: &Address,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    // Read the rewards accumulator and calculate the new rewards products
+    // for the previous epoch
+    //
+    // TODO: think about changing the reward to Decimal
+    let mut reward_tokens_remaining = inflation;
+    let mut new_rewards_products: HashMap<Address, Rewards> = HashMap::new();
+    let mut accumulators_sum = Dec::zero();
+    for acc in rewards_accumulator_handle().iter(storage)? {
+        let (validator, value) = acc?;
+        accumulators_sum += value;
+
+        // Get reward token amount for this validator
+        let fractional_claim = value / num_blocks_in_last_epoch;
+        let reward_tokens = fractional_claim * inflation;
+
+        // Get validator stake at the last epoch
+        let stake = Dec::from(read_validator_stake(
+            storage, params, &validator, last_epoch,
+        )?);
+
+        let commission_rate = validator_commission_rate_handle(&validator)
+            .get(storage, last_epoch, params)?
+            .expect("Should be able to find validator commission rate");
+
+        // Calculate the reward product from the whole validator stake and take
+        // out the commissions. Because we're using the whole stake to work with
+        // a single product, we're also taking out commission on validator's
+        // self-bonds, but it is then included in the rewards claimable by the
+        // validator so they get it back.
+        let product =
+            (Dec::one() - commission_rate) * Dec::from(reward_tokens) / stake;
+
+        // Tally the commission tokens earned by the validator.
+        // TODO: think abt Dec rounding and if `new_product` should be used
+        // instead of `reward_tokens`
+        let commissions = commission_rate * reward_tokens;
+
+        new_rewards_products.insert(
+            validator,
+            Rewards {
+                product,
+                commissions,
+            },
+        );
+
+        reward_tokens_remaining -= reward_tokens;
+    }
+    for (
+        validator,
+        Rewards {
+            product,
+            commissions,
+        },
+    ) in new_rewards_products
+    {
+        validator_rewards_products_handle(&validator)
+            .insert(storage, last_epoch, product)?;
+        // The commissions belong to the validator
+        add_rewards_to_counter(storage, &validator, &validator, commissions)?;
+    }
+
+    // Mint tokens to the PoS account for the last epoch's inflation
+    let pos_reward_tokens = inflation - reward_tokens_remaining;
+    tracing::info!(
+        "Minting tokens for PoS rewards distribution into the PoS account. \
+         Amount: {}. Total inflation: {}, number of blocks in the last epoch: \
+         {num_blocks_in_last_epoch}, reward accumulators sum: \
+         {accumulators_sum}.",
+        pos_reward_tokens.to_string_native(),
+        inflation.to_string_native(),
+    );
+    token::credit_tokens(
+        storage,
+        staking_token,
+        &address::POS,
+        pos_reward_tokens,
+    )?;
+
+    if reward_tokens_remaining > token::Amount::zero() {
+        tracing::info!(
+            "Minting tokens remaining from PoS rewards distribution into the \
+             Governance account. Amount: {}.",
+            reward_tokens_remaining.to_string_native()
+        );
+        token::credit_tokens(
+            storage,
+            staking_token,
+            &address::GOV,
+            reward_tokens_remaining,
+        )?;
+    }
+
+    // Clear validator rewards accumulators
+    storage.delete_prefix(
+        // The prefix of `rewards_accumulator_handle`
+        &storage::consensus_validator_rewards_accumulator_key(),
+    )?;
 
     Ok(())
 }
@@ -5795,4 +5875,131 @@ where
         )?;
     }
     Ok(())
+}
+
+/// Claim rewards
+pub fn claim_reward_tokens<S>(
+    storage: &mut S,
+    source: Option<&Address>,
+    validator: &Address,
+    current_epoch: Epoch,
+) -> storage_api::Result<token::Amount>
+where
+    S: StorageRead + StorageWrite,
+{
+    tracing::debug!("Claiming rewards in epoch {current_epoch}");
+
+    let rewards_products = validator_rewards_products_handle(validator);
+    let source = source.cloned().unwrap_or_else(|| validator.clone());
+    tracing::debug!("Source {} --> Validator {}", source, validator);
+
+    if current_epoch == Epoch::default() {
+        // Nothing to claim in the first epoch
+        return Ok(token::Amount::zero());
+    }
+
+    let last_claim_epoch =
+        get_last_reward_claim_epoch(storage, &source, validator)?;
+    if let Some(last_epoch) = last_claim_epoch {
+        if last_epoch == current_epoch {
+            // Already claimed in this epoch
+            return Ok(token::Amount::zero());
+        }
+    }
+
+    let mut reward_tokens = token::Amount::zero();
+
+    // Want to claim from `last_claim_epoch` to `current_epoch.prev()` since
+    // rewards are computed at the end of an epoch
+    let (claim_start, claim_end) = (
+        last_claim_epoch.unwrap_or_default(),
+        // Safe because of the check above
+        current_epoch.prev(),
+    );
+    let bond_amounts = bond_amounts_for_rewards(
+        storage,
+        &BondId {
+            source: source.clone(),
+            validator: validator.clone(),
+        },
+        claim_start,
+        claim_end,
+    )?;
+    for (ep, bond_amount) in bond_amounts {
+        debug_assert!(ep >= claim_start);
+        debug_assert!(ep <= claim_end);
+        let rp = rewards_products.get(storage, &ep)?.unwrap_or_default();
+        let reward = rp * bond_amount;
+        reward_tokens += reward;
+    }
+
+    // Add reward tokens tallied during previous withdrawals
+    reward_tokens += take_rewards_from_counter(storage, &source, validator)?;
+
+    // Update the last claim epoch in storage
+    write_last_reward_claim_epoch(storage, &source, validator, current_epoch)?;
+
+    // Transfer the bonded tokens from PoS to the source
+    let staking_token = staking_token_address(storage);
+    token::transfer(storage, &staking_token, &ADDRESS, &source, reward_tokens)?;
+
+    Ok(reward_tokens)
+}
+
+/// Get the last epoch in which rewards were claimed from storage, if any
+pub fn get_last_reward_claim_epoch<S>(
+    storage: &S,
+    delegator: &Address,
+    validator: &Address,
+) -> storage_api::Result<Option<Epoch>>
+where
+    S: StorageRead,
+{
+    let key = last_pos_reward_claim_epoch_key(delegator, validator);
+    storage.read(&key)
+}
+
+fn write_last_reward_claim_epoch<S>(
+    storage: &mut S,
+    delegator: &Address,
+    validator: &Address,
+    epoch: Epoch,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = last_pos_reward_claim_epoch_key(delegator, validator);
+    storage.write(&key, epoch)
+}
+
+/// Add tokens to a rewards counter.
+fn add_rewards_to_counter<S>(
+    storage: &mut S,
+    source: &Address,
+    validator: &Address,
+    new_rewards: token::Amount,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = rewards_counter_key(source, validator);
+    let current_rewards =
+        storage.read::<token::Amount>(&key)?.unwrap_or_default();
+    storage.write(&key, current_rewards + new_rewards)
+}
+
+/// Take tokens from a rewards counter. Deletes the record after reading.
+fn take_rewards_from_counter<S>(
+    storage: &mut S,
+    source: &Address,
+    validator: &Address,
+) -> storage_api::Result<token::Amount>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = rewards_counter_key(source, validator);
+    let current_rewards =
+        storage.read::<token::Amount>(&key)?.unwrap_or_default();
+    storage.delete(&key)?;
+    Ok(current_rewards)
 }
