@@ -995,8 +995,9 @@ fn reactivate_validator(c: &mut Criterion) {
 
 fn claim_rewards(c: &mut Criterion) {
     let mut group = c.benchmark_group("claim_rewards");
+    let shell = BenchShell::default();
 
-    let claim = generate_tx(
+    let claim = shell.generate_tx(
         TX_CLAIM_REWARDS_WASM,
         Withdraw {
             validator: defaults::validator_address(),
@@ -1007,7 +1008,7 @@ fn claim_rewards(c: &mut Criterion) {
         Some(&defaults::albert_keypair()),
     );
 
-    let self_claim = generate_tx(
+    let self_claim = shell.generate_tx(
         TX_CLAIM_REWARDS_WASM,
         Withdraw {
             validator: defaults::validator_address(),
