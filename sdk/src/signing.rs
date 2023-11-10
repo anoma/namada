@@ -33,7 +33,6 @@ use prost::Message;
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
-use zeroize::Zeroizing;
 
 use super::masp::{ShieldedContext, ShieldedTransfer};
 use crate::args::SdkTypes;
@@ -87,7 +86,6 @@ pub struct SigningTxData {
 pub async fn find_pk<'a>(
     context: &impl Namada<'a>,
     addr: &Address,
-    password: Option<Zeroizing<String>>,
 ) -> Result<common::PublicKey, Error> {
     match addr {
         Address::Established(_) => {
@@ -106,7 +104,7 @@ pub async fn find_pk<'a>(
         Address::Implicit(ImplicitAddress(pkh)) => Ok(context
             .wallet_mut()
             .await
-            .find_key_by_pkh(pkh, password)
+            .find_public_key_by_pkh(pkh)
             .map_err(|err| {
                 Error::Other(format!(
                     "Unable to load the keypair from the wallet for the \
@@ -114,8 +112,7 @@ pub async fn find_pk<'a>(
                     addr.encode(),
                     err
                 ))
-            })?
-            .ref_to()),
+            })?),
         Address::Internal(_) => other_err(format!(
             "Internal address {} doesn't have any signing keys.",
             addr
@@ -188,7 +185,7 @@ pub async fn tx_signers<'a>(
         Some(signer) if signer == masp() => Ok(vec![masp_tx_key().ref_to()]),
 
         Some(signer) => Ok(vec![
-            find_pk(context, &signer, args.password.clone()).await?,
+            find_pk(context, &signer).await?,
         ]),
         None => other_err(
             "All transactions must be signed; please either specify the key \
