@@ -31,8 +31,6 @@ use crate::types::string_encoding;
     Ord,
     PartialOrd,
     Hash,
-    Serialize,
-    Deserialize,
     BorshSerialize,
     BorshDeserialize,
     BorshSchema,
@@ -42,6 +40,51 @@ pub enum PublicKey {
     Ed25519(ed25519::PublicKey),
     /// Encapsulate Secp256k1 public keys
     Secp256k1(secp256k1::PublicKey),
+}
+
+const ED25519_PK_PREFIX: &str = "ED25519_PK_PREFIX";
+const SECP256K1_PK_PREFIX: &str = "SECP256K1_PK_PREFIX";
+
+impl Serialize for PublicKey {
+    fn serialize<S>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        // String encoded, because toml doesn't support enums
+        let prefix = match self {
+            PublicKey::Ed25519(_) => ED25519_PK_PREFIX,
+            PublicKey::Secp256k1(_) => SECP256K1_PK_PREFIX,
+        };
+        let keypair_string = format!("{}{}", prefix, self);
+        Serialize::serialize(&keypair_string, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for PublicKey {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+
+        let keypair_string: String =
+            serde::Deserialize::deserialize(deserializer)
+                .map_err(D::Error::custom)?;
+        if let Some(raw) = keypair_string.strip_prefix(ED25519_PK_PREFIX) {
+            PublicKey::from_str(raw).map_err(D::Error::custom)
+        } else if let Some(raw) =
+            keypair_string.strip_prefix(SECP256K1_PK_PREFIX)
+        {
+            PublicKey::from_str(raw).map_err(D::Error::custom)
+        } else {
+            Err(D::Error::custom(
+                "Could not deserialize SecretKey do to invalid prefix",
+            ))
+        }
+    }
 }
 
 impl super::PublicKey for PublicKey {
@@ -77,6 +120,8 @@ impl super::PublicKey for PublicKey {
 pub type DecodeError = string_encoding::DecodeError;
 
 impl string_encoding::Format for PublicKey {
+    type EncodedBytes<'a> = Vec<u8>;
+
     const HRP: &'static str = string_encoding::COMMON_PK_HRP;
 
     fn to_bytes(&self) -> Vec<u8> {
@@ -251,6 +296,8 @@ pub enum Signature {
 }
 
 impl string_encoding::Format for Signature {
+    type EncodedBytes<'a> = Vec<u8>;
+
     const HRP: &'static str = string_encoding::COMMON_SIG_HRP;
 
     fn to_bytes(&self) -> Vec<u8> {

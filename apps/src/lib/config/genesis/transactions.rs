@@ -330,7 +330,9 @@ pub fn sign_delegation_bond_tx(
     // Try to look-up the source from wallet first - if it's an alias of an
     // implicit account that should give us the right key
     let found_key = match alias {
-        AliasOrPk::Alias(alias) => wallet.find_key(&alias.normalize(), None),
+        AliasOrPk::Alias(alias) => {
+            wallet.find_secret_key(&alias.normalize(), None)
+        }
         AliasOrPk::PublicKey(pk) => wallet.find_key_by_pk(pk, None),
     };
     let source_key = match found_key {

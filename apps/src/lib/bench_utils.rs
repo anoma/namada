@@ -704,15 +704,17 @@ impl Default for BenchShieldedCtx {
         let mut chain_ctx = ctx.take_chain_or_exit();
 
         // Generate spending key for Albert and Bertha
-        chain_ctx.wallet.gen_spending_key(
+        chain_ctx.wallet.gen_store_spending_key(
             ALBERT_SPENDING_KEY.to_string(),
             None,
             true,
+            &mut OsRng,
         );
-        chain_ctx.wallet.gen_spending_key(
+        chain_ctx.wallet.gen_store_spending_key(
             BERTHA_SPENDING_KEY.to_string(),
             None,
             true,
+            &mut OsRng,
         );
         crate::wallet::save(&chain_ctx.wallet).unwrap();
 

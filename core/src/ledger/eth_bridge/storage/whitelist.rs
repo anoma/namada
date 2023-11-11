@@ -129,7 +129,9 @@ mod tests {
             suffix: KeyType::Whitelisted,
         }
         .into();
-        let expected = "#atest1v9hx7w36g42ysgzzwf5kgem9ypqkgerjv4ehxgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq8f99ew/whitelist/0x6b175474e89094c44da98b954eedeac495271d0f/whitelisted";
+        let expected = "#tnam1quqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqfgdmms/\
+                        whitelist/0x6b175474e89094c44da98b954eedeac495271d0f/\
+                        whitelisted";
         assert_eq!(expected, key.to_string());
     }
 

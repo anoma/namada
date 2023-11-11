@@ -210,15 +210,15 @@ elif [ "$1" = "client" ]; then
 
     cargo run --bin namadac --features std -- ibc-transfer --source albert --receiver bertha  --token nam --amount 100000 --channel-id channel-0 --port-id transfer --signing-keys albert-key --timeout-sec-offset 5 --force --ledger-address 127.0.0.1:27657
 
-    cargo run --bin namadaw -- masp add --alias a_spending_key --value xsktest1qqqqqqqqqqqqqq9v0sls5r5de7njx8ehu49pqgmqr9ygelg87l5x8y4s9r0pjlvu69au6gn3su5ewneas486hdccyayx32hxvt64p3d0hfuprpgcgv2q9gdx3jvxrn02f0nnp3jtdd6f5vwscfuyum083cvfv4jun75ak5sdgrm2pthzj3sflxc0jx0edrakx3vdcngrfjmru8ywkguru8mxss2uuqxdlglaz6undx5h8w7g70t2es850g48xzdkqay5qs0yw06rtxcvedhsv --unsafe-dont-encrypt
+    cargo run --bin namadaw -- masp add --alias a_spending_key --value zsknam1qqqqqqqqqqqqqq9v0sls5r5de7njx8ehu49pqgmqr9ygelg87l5x8y4s9r0pjlvu69au6gn3su5ewneas486hdccyayx32hxvt64p3d0hfuprpgcgv2q9gdx3jvxrn02f0nnp3jtdd6f5vwscfuyum083cvfv4jun75ak5sdgrm2pthzj3sflxc0jx0edrakx3vdcngrfjmru8ywkguru8mxss2uuqxdlglaz6undx5h8w7g70t2es850g48xzdkqay5qs0yw06rtxc9q0cqr --unsafe-dont-encrypt
     
-    cargo run --bin namadaw -- masp add --alias b_spending_key --value xsktest1qqqqqqqqqqqqqqpagte43rsza46v55dlz8cffahv0fnr6eqacvnrkyuf9lmndgal7c2k4r7f7zu2yr5rjwr374unjjeuzrh6mquzy6grfdcnnu5clzaq2llqhr70a8yyx0p62aajqvrqjxrht3myuyypsvm725uyt5vm0fqzrzuuedtf6fala4r4nnazm9y9hq5yu6pq24arjskmpv4mdgfn3spffxxv8ugvym36kmnj45jcvvmm227vqjm5fq8882yhjsq97p7xrwqqd82s0 --unsafe-dont-encrypt
+    cargo run --bin namadaw -- masp add --alias b_spending_key --value zsknam1qqqqqqqqqqqqqqpagte43rsza46v55dlz8cffahv0fnr6eqacvnrkyuf9lmndgal7c2k4r7f7zu2yr5rjwr374unjjeuzrh6mquzy6grfdcnnu5clzaq2llqhr70a8yyx0p62aajqvrqjxrht3myuyypsvm725uyt5vm0fqzrzuuedtf6fala4r4nnazm9y9hq5yu6pq24arjskmpv4mdgfn3spffxxv8ugvym36kmnj45jcvvmm227vqjm5fq8882yhjsq97p7xrwqf599qq --unsafe-dont-encrypt
 
-    cargo run --bin namadaw -- masp add --alias ab_payment_address --value patest1dxj5kfjvm27rk5wg8ym0mjrhthz6whagdfj9krqfvyszffh4n0mx9f7cauvz6tr43vp22qgsefr
+    cargo run --bin namadaw -- masp add --alias ab_payment_address --value znam1qp562jexfndtcw63equndlwgwawutf6l4p4xgkcvp9sjqf9x7kdlvc48mrh3stfvwk9s9fgsmhuz6
 
-    cargo run --bin namadaw -- masp add --alias aa_payment_address --value patest1a8sfz9c6axdhn925e5qrgzz86msq6yj4uhmxayynucea7gssepk89dgqkx00srfkn4m6kt9jpau
+    cargo run --bin namadaw -- masp add --alias aa_payment_address --value znam1qr57pyghrt5ek7v42nxsqdqggltwqrgj2hjlvm5sj0nr8hezzryxcu44qzcea7qdx6wh02cvt9jlu
     
-    cargo run --bin namadaw -- masp add --alias bb_payment_address --value patest1vqe0vyxh6wmhahwa52gthgd6edgqxfmgyv8e94jtwn55mdvpvylcyqnp59595272qrz3zxn0ysg
+    cargo run --bin namadaw -- masp add --alias bb_payment_address --value znam1qpsr9ass6lfmwlkamk3fpwapht94qqe8dq3slykkfd6wjnd4s9snlqszvxsksk3tegqv2yg9rcrzd
 
     # TODO vector produced only when epoch boundaries not straddled
     cargo run --bin namadac --features std -- transfer --source albert --target aa_payment_address --token btc --amount 20 --force --ledger-address 127.0.0.1:27657

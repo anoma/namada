@@ -39,6 +39,8 @@ fn wallet_encrypted_key_cmds() -> Result<()> {
     cmd.send_line(password)?;
     cmd.exp_string("Enter same passphrase again: ")?;
     cmd.send_line(password)?;
+    cmd.exp_string("Enter BIP39 passphrase (empty for none): ")?;
+    cmd.send_line("")?;
     cmd.exp_string(&format!(
         "Successfully added a key and an address with alias: \"{}\"",
         key_alias.to_lowercase()
@@ -87,6 +89,9 @@ fn wallet_encrypted_key_cmds_env_var() -> Result<()> {
         Some(20),
     )?;
 
+    cmd.exp_string("Enter BIP39 passphrase (empty for none): ")?;
+    cmd.send_line("")?;
+
     cmd.exp_string(&format!(
         "Successfully added a key and an address with alias: \"{}\"",
         key_alias
@@ -126,6 +131,8 @@ fn wallet_unencrypted_key_cmds() -> Result<()> {
         &["key", "gen", "--alias", key_alias, "--unsafe-dont-encrypt"],
         Some(20),
     )?;
+    cmd.exp_string("Enter BIP39 passphrase (empty for none): ")?;
+    cmd.send_line("")?;
     cmd.exp_string(&format!(
         "Successfully added a key and an address with alias: \"{}\"",
         key_alias
@@ -159,7 +166,7 @@ fn wallet_address_cmds() -> Result<()> {
     let test = setup::single_node_net()?;
     let gen_address_alias = "test_address_1";
     let add_address_alias = "test_address_2";
-    let add_address = "atest1v4ehgw36gs6yydf4xq6ngdpex5c5yw2zxgunqvfjgvurxv6ygsmr2dfcxfznxde4xuurw334uclqv3";
+    let add_address = "tnam1q82t25z5f9gmnv5sztyr8ht9tqhrw4u875qjhy56";
 
     // 1. address gen
     let mut cmd = run!(
@@ -174,6 +181,8 @@ fn wallet_address_cmds() -> Result<()> {
         ],
         Some(20),
     )?;
+    cmd.exp_string("Enter BIP39 passphrase (empty for none): ")?;
+    cmd.send_line("")?;
     cmd.exp_string(&format!(
         "Successfully added a key and an address with alias: \"{}\"",
         gen_address_alias

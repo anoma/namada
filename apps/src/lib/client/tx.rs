@@ -1,6 +1,12 @@
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::Write;
 
+use borsh::BorshDeserialize;
+use borsh_ext::BorshSerializeExt;
+use ledger_namada_rs::{BIP44Path, NamadaApp};
+use ledger_transport_hid::hidapi::HidApi;
+use ledger_transport_hid::TransportNativeHID;
 use namada::core::ledger::governance::cli::offline::{
     OfflineProposal, OfflineSignedProposal, OfflineVote,
 };
@@ -8,7 +14,7 @@ use namada::core::ledger::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal, ProposalVote,
 };
 use namada::ibc::applications::transfer::Memo;
-use namada::proto::Tx;
+use namada::proto::{CompressedSignature, Section, Signer, Tx};
 use namada::types::address::{Address, ImplicitAddress};
 use namada::types::dec::Dec;
 use namada::types::io::Io;
@@ -16,10 +22,12 @@ use namada::types::key::{self, *};
 use namada::types::transaction::pos::InitValidator;
 use namada_sdk::rpc::{TxBroadcastData, TxResponse};
 use namada_sdk::{display_line, edisplay_line, error, signing, tx, Namada};
+use rand::rngs::OsRng;
 
 use super::rpc;
 use crate::cli::{args, safe_exit};
 use crate::client::rpc::query_wasm_code_hash;
+use crate::client::tx::signing::{default_sign, SigningTxData};
 use crate::client::tx::tx::ProcessTxResponse;
 use crate::config::TendermintMode;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
@@ -57,6 +65,137 @@ pub async fn aux_signing_data<'a>(
     Ok(signing_data)
 }
 
+// Sign the given transaction using a hardware wallet as a backup
+pub async fn sign<'a>(
+    context: &impl Namada<'a>,
+    tx: &mut Tx,
+    args: &args::Tx,
+    signing_data: SigningTxData,
+) -> Result<(), error::Error> {
+    // Setup a reusable context for signing transactions using the Ledger
+    if args.use_device {
+        // Setup a reusable context for signing transactions using the Ledger
+        let hidapi = HidApi::new().map_err(|err| {
+            error::Error::Other(format!("Failed to create Hidapi: {}", err))
+        })?;
+        let app = NamadaApp::new(TransportNativeHID::new(&hidapi).map_err(
+            |err| {
+                error::Error::Other(format!(
+                    "Unable to connect to Ledger: {}",
+                    err
+                ))
+            },
+        )?);
+        // A closure to facilitate signing transactions also using the Ledger
+        let with_hw =
+            |mut tx: Tx,
+             pubkey: common::PublicKey,
+             parts: HashSet<signing::Signable>| {
+                let app = &app;
+                async move {
+                    // Obtain derivation path corresponding to the signing
+                    // public key
+                    let path = context
+                        .wallet()
+                        .await
+                        .find_path_by_pkh(&(&pubkey).into())
+                        .map_err(|_| {
+                            error::Error::Other(
+                                "Unable to find derivation path for key"
+                                    .to_string(),
+                            )
+                        })?;
+                    let path = BIP44Path {
+                        path: path.to_string(),
+                    };
+                    // Now check that the public key at this path in the Ledger
+                    // matches
+                    let response_pubkey = app
+                        .get_address_and_pubkey(&path, false)
+                        .await
+                        .map_err(|err| error::Error::Other(err.to_string()))?;
+                    let response_pubkey = common::PublicKey::try_from_slice(
+                        &response_pubkey.public_key,
+                    )
+                    .map_err(|err| {
+                        error::Error::Other(format!(
+                            "unable to decode public key from hardware \
+                             wallet: {}",
+                            err
+                        ))
+                    })?;
+                    if response_pubkey != pubkey {
+                        return Err(error::Error::Other(format!(
+                            "Unrecognized public key fetched fom Ledger: {}. \
+                             Expected {}.",
+                            response_pubkey, pubkey,
+                        )));
+                    }
+                    // Get the Ledger to sign using our obtained derivation path
+                    let response = app
+                        .sign(&path, &tx.serialize_to_vec())
+                        .await
+                        .map_err(|err| error::Error::Other(err.to_string()))?;
+                    // Sign the raw header if that is requested
+                    if parts.contains(&signing::Signable::RawHeader) {
+                        let pubkey =
+                            common::PublicKey::try_from_slice(&response.pubkey)
+                                .expect(
+                                    "unable to parse public key from Ledger",
+                                );
+                        let signature = common::Signature::try_from_slice(
+                            &response.raw_signature,
+                        )
+                        .expect("unable to parse signature from Ledger");
+                        // Signatures from the Ledger come back in compressed
+                        // form
+                        let compressed = CompressedSignature {
+                            targets: response.raw_indices,
+                            signer: Signer::PubKeys(vec![pubkey]),
+                            signatures: [(0, signature)].into(),
+                        };
+                        // Expand out the signature before adding it to the
+                        // transaction
+                        tx.add_section(Section::Signature(
+                            compressed.expand(&tx),
+                        ));
+                    }
+                    // Sign the fee header if that is requested
+                    if parts.contains(&signing::Signable::FeeHeader) {
+                        let pubkey =
+                            common::PublicKey::try_from_slice(&response.pubkey)
+                                .expect(
+                                    "unable to parse public key from Ledger",
+                                );
+                        let signature = common::Signature::try_from_slice(
+                            &response.wrapper_signature,
+                        )
+                        .expect("unable to parse signature from Ledger");
+                        // Signatures from the Ledger come back in compressed
+                        // form
+                        let compressed = CompressedSignature {
+                            targets: response.wrapper_indices,
+                            signer: Signer::PubKeys(vec![pubkey]),
+                            signatures: [(0, signature)].into(),
+                        };
+                        // Expand out the signature before adding it to the
+                        // transaction
+                        tx.add_section(Section::Signature(
+                            compressed.expand(&tx),
+                        ));
+                    }
+                    Ok(tx)
+                }
+            };
+        // Finally, begin the signing with the Ledger as backup
+        context.sign(tx, args, signing_data, with_hw).await?;
+    } else {
+        // Otherwise sign without a backup procedure
+        context.sign(tx, args, signing_data, default_sign).await?;
+    }
+    Ok(())
+}
+
 // Build a transaction to reveal the signer of the given transaction.
 pub async fn submit_reveal_aux<'a>(
     context: &impl Namada<'a>,
@@ -68,12 +207,11 @@ pub async fn submit_reveal_aux<'a>(
     }
 
     if let Address::Implicit(ImplicitAddress(pkh)) = address {
-        let key = context
+        let public_key = context
             .wallet_mut()
             .await
-            .find_key_by_pkh(pkh, args.clone().password)
+            .find_public_key_by_pkh(pkh)
             .map_err(|e| error::Error::Other(e.to_string()))?;
-        let public_key = key.ref_to();
 
         if tx::is_reveal_pk_needed(context.client(), address, args.force)
             .await?
@@ -87,7 +225,7 @@ pub async fn submit_reveal_aux<'a>(
 
             signing::generate_test_vector(context, &tx).await?;
 
-            context.sign(&mut tx, &args, signing_data).await?;
+            sign(context, &mut tx, &args, signing_data).await?;
 
             context.submit(tx, &args).await?;
         }
@@ -109,7 +247,9 @@ pub async fn submit_bridge_pool_tx<'a, N: Namada<'a>>(
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         submit_reveal_aux(namada, tx_args.clone(), &args.sender).await?;
-        namada.sign(&mut tx, &tx_args, signing_data).await?;
+
+        sign(namada, &mut tx, &tx_args, signing_data).await?;
+
         namada.submit(tx, &tx_args).await?;
     }
 
@@ -132,7 +272,8 @@ where
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
-        namada.sign(&mut tx, &args.tx, signing_data).await?;
+        sign(namada, &mut tx, &args.tx, signing_data).await?;
+
         namada.submit(tx, &args.tx).await?;
     }
 
@@ -153,7 +294,8 @@ where
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
-        namada.sign(&mut tx, &args.tx, signing_data).await?;
+        sign(namada, &mut tx, &args.tx, signing_data).await?;
+
         namada.submit(tx, &args.tx).await?;
     }
 
@@ -175,7 +317,8 @@ where
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
-        namada.sign(&mut tx, &args.tx, signing_data).await?;
+        sign(namada, &mut tx, &args.tx, signing_data).await?;
+
         namada.submit(tx, &args.tx).await?;
     }
 
@@ -247,14 +390,13 @@ pub async fn submit_init_validator<'a>(
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             wallet
-                .gen_key(
+                .gen_store_secret_key(
                     // Note that TM only allows ed25519 for consensus key
                     SchemeType::Ed25519,
                     Some(consensus_key_alias.clone()),
                     tx_args.wallet_alias_force,
-                    None,
                     password,
-                    None,
+                    &mut OsRng,
                 )
                 .expect("Key generation should not fail.")
                 .1
@@ -276,14 +418,13 @@ pub async fn submit_init_validator<'a>(
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             wallet
-                .gen_key(
+                .gen_store_secret_key(
                     // Note that ETH only allows secp256k1
                     SchemeType::Secp256k1,
                     Some(eth_cold_key_alias.clone()),
                     tx_args.wallet_alias_force,
-                    None,
                     password,
-                    None,
+                    &mut OsRng,
                 )
                 .expect("Key generation should not fail.")
                 .1
@@ -306,14 +447,13 @@ pub async fn submit_init_validator<'a>(
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             wallet
-                .gen_key(
+                .gen_store_secret_key(
                     // Note that ETH only allows secp256k1
                     SchemeType::Secp256k1,
                     Some(eth_hot_key_alias.clone()),
                     tx_args.wallet_alias_force,
-                    None,
                     password,
-                    None,
+                    &mut OsRng,
                 )
                 .expect("Key generation should not fail.")
                 .1
@@ -411,7 +551,7 @@ pub async fn submit_init_validator<'a>(
     if tx_args.dump_tx {
         tx::dump_tx(namada.io(), &tx_args, tx);
     } else {
-        namada.sign(&mut tx, &tx_args, signing_data).await?;
+        sign(namada, &mut tx, &tx_args, signing_data).await?;
 
         let result = namada.submit(tx, &tx_args).await?.initialized_accounts();
 
@@ -532,7 +672,8 @@ pub async fn submit_transfer<'a>(
             tx::dump_tx(namada.io(), &args.tx, tx);
             break;
         } else {
-            namada.sign(&mut tx, &args.tx, signing_data).await?;
+            sign(namada, &mut tx, &args.tx, signing_data).await?;
+
             let result = namada.submit(tx, &args.tx).await?;
 
             let submission_epoch = rpc::query_and_print_epoch(namada).await;
@@ -577,7 +718,8 @@ where
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
-        namada.sign(&mut tx, &args.tx, signing_data).await?;
+        sign(namada, &mut tx, &args.tx, signing_data).await?;
+
         namada.submit(tx, &args.tx).await?;
     }
 
@@ -703,7 +845,8 @@ where
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx_builder);
     } else {
-        namada.sign(&mut tx_builder, &args.tx, signing_data).await?;
+        sign(namada, &mut tx_builder, &args.tx, signing_data).await?;
+
         namada.submit(tx_builder, &args.tx).await?;
     }
 
@@ -780,7 +923,8 @@ where
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx_builder);
     } else {
-        namada.sign(&mut tx_builder, &args.tx, signing_data).await?;
+        sign(namada, &mut tx_builder, &args.tx, signing_data).await?;
+
         namada.submit(tx_builder, &args.tx).await?;
     }
 
@@ -897,7 +1041,7 @@ where
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
-        namada.sign(&mut tx, &args.tx, signing_data).await?;
+        sign(namada, &mut tx, &args.tx, signing_data).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -919,7 +1063,7 @@ where
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
-        namada.sign(&mut tx, &args.tx, signing_data).await?;
+        sign(namada, &mut tx, &args.tx, signing_data).await?;
 
         namada.submit(tx, &args.tx).await?;
 
@@ -943,7 +1087,7 @@ where
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
-        namada.sign(&mut tx, &args.tx, signing_data).await?;
+        sign(namada, &mut tx, &args.tx, signing_data).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -964,7 +1108,7 @@ where
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
-        namada.sign(&mut tx, &args.tx, signing_data).await?;
+        sign(namada, &mut tx, &args.tx, signing_data).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -986,7 +1130,7 @@ where
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
-        namada.sign(&mut tx, &args.tx, signing_data).await?;
+        sign(namada, &mut tx, &args.tx, signing_data).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -1008,7 +1152,7 @@ where
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
-        namada.sign(&mut tx, &args.tx, signing_data).await?;
+        sign(namada, &mut tx, &args.tx, signing_data).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -1031,7 +1175,8 @@ where
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
-        namada.sign(&mut tx, &args.tx, signing_data).await?;
+        sign(namada, &mut tx, &args.tx, signing_data).await?;
+
         namada.submit(tx, &args.tx).await?;
     }
 
@@ -1052,7 +1197,8 @@ where
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
-        namada.sign(&mut tx, &args.tx, signing_data).await?;
+        sign(namada, &mut tx, &args.tx, signing_data).await?;
+
         namada.submit(tx, &args.tx).await?;
     }
 

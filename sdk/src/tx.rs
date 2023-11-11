@@ -260,7 +260,8 @@ pub async fn build_reveal_pk<'a>(
     public_key: &common::PublicKey,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
     let signing_data =
-        signing::aux_signing_data(context, args, None, None).await?;
+        signing::aux_signing_data(context, args, None, Some(public_key.into()))
+            .await?;
 
     build(
         context,
@@ -469,7 +470,7 @@ pub async fn save_initialized_accounts<'a, N: Namada<'a>>(
                 None => N::WalletUtils::read_alias(&encoded).into(),
             };
             let alias = alias.into_owned();
-            let added = context.wallet_mut().await.add_address(
+            let added = context.wallet_mut().await.insert_address(
                 alias.clone(),
                 address.clone(),
                 args.wallet_alias_force,

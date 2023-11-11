@@ -8,6 +8,7 @@ use namada_sdk::wallet::pre_genesis::{
     ReadError, ValidatorStore, ValidatorWallet,
 };
 use namada_sdk::wallet::{gen_key_to_store, WalletIo};
+use rand::rngs::OsRng;
 use zeroize::Zeroizing;
 
 use crate::wallet::store::gen_validator_keys;
@@ -110,18 +111,21 @@ fn gen(
     scheme: SchemeType,
     password: Option<Zeroizing<String>>,
 ) -> ValidatorWallet {
-    let (account_key, account_sk) = gen_key_to_store(scheme, password.clone());
+    let (account_key, account_sk) =
+        gen_key_to_store(scheme, password.clone(), &mut OsRng);
     let (consensus_key, consensus_sk) = gen_key_to_store(
         // Note that TM only allows ed25519 for consensus key
         SchemeType::Ed25519,
         password.clone(),
+        &mut OsRng,
     );
     let (eth_cold_key, eth_cold_sk) =
-        gen_key_to_store(SchemeType::Secp256k1, password.clone());
+        gen_key_to_store(SchemeType::Secp256k1, password.clone(), &mut OsRng);
     let (tendermint_node_key, tendermint_node_sk) = gen_key_to_store(
         // Note that TM only allows ed25519 for node IDs
         SchemeType::Ed25519,
         password,
+        &mut OsRng,
     );
     let validator_keys = gen_validator_keys(None, None, scheme);
     let eth_hot_key = validator_keys.eth_bridge_keypair.clone();

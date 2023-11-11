@@ -4,7 +4,10 @@ use ark_std::rand::prelude::*;
 use ark_std::rand::SeedableRng;
 use namada::types::key::*;
 use namada::types::transaction::EllipticCurve;
-use namada_sdk::wallet::{gen_sk_rng, LoadStoreError, Store, ValidatorKeys};
+use namada_sdk::wallet::{
+    gen_secret_key, LoadStoreError, Store, ValidatorKeys,
+};
+use rand::rngs::OsRng;
 
 use crate::wallet::CliWalletUtils;
 
@@ -48,9 +51,9 @@ pub fn gen_validator_keys(
             }
             k
         })
-        .unwrap_or_else(|| gen_sk_rng(SchemeType::Secp256k1));
-    let protocol_keypair =
-        protocol_keypair.unwrap_or_else(|| gen_sk_rng(protocol_keypair_scheme));
+        .unwrap_or_else(|| gen_secret_key(SchemeType::Secp256k1, &mut OsRng));
+    let protocol_keypair = protocol_keypair
+        .unwrap_or_else(|| gen_secret_key(protocol_keypair_scheme, &mut OsRng));
     let dkg_keypair = ferveo_common::Keypair::<EllipticCurve>::new(
         &mut StdRng::from_entropy(),
     );
@@ -73,8 +76,9 @@ mod test_wallet {
         let validator_keys =
             gen_validator_keys(None, None, SchemeType::Ed25519);
         store.add_validator_data(
-            Address::decode("atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5").unwrap(),
-            validator_keys
+            Address::decode("tnam1q99c37u38grkdcc2qze0hz4zjjd8zr3yucd3mzgz")
+                .unwrap(),
+            validator_keys,
         );
         let data = store.encode();
         let _ = Store::decode(data).expect("Test failed");
@@ -86,8 +90,9 @@ mod test_wallet {
         let validator_keys =
             gen_validator_keys(None, None, SchemeType::Secp256k1);
         store.add_validator_data(
-            Address::decode("atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5").unwrap(),
-            validator_keys
+            Address::decode("tnam1q99c37u38grkdcc2qze0hz4zjjd8zr3yucd3mzgz")
+                .unwrap(),
+            validator_keys,
         );
         let data = store.encode();
         let _ = Store::decode(data).expect("Test failed");

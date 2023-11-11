@@ -44,7 +44,7 @@ An unsigned `established_account` tx example:
 [[established_account]]
 alias = "Albert" # Aliases are case-insensitive
 vp = "vp_user"
-public_key = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
+public_key = "tpknam1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63we33t3r"
 ```
 
 ### Genesis tx `validator_account`
@@ -60,11 +60,11 @@ vp = "vp_validator"
 commission_rate = "0.05"
 max_commission_rate_change = "0.01"
 net_address = "127.0.0.1:27656"
-account_key = "pktest1qzjnu45v9uvvz4shwkxrgq44l7l4ncs0ryt9mwt7973fdjvm76tgkkakjmf"
-consensus_key = "pktest1qp4dcws0fthlrt69erz854efxxtxvympw9m3npy2w8rphqgxu2ufc476rgt"
-protocol_key = "pktest1qqwg6uwuxn70spl9x377v0q6fzr6d29gpkdfc0tmp8uj97p5awnukkeue3k"
-tendermint_node_key = "pktest1qzmajsm6a5uamaq7el4kkp6txe9jt0ld3q0jy0er7cuz0u0k2yck6ls5ppm"
-dkg_key = "dpktest1vqqqqqqzlgrsdkkjc0yg842xqkffy7g2vwvx3x8389ydprz2qwncruzxr8cg8u939z4yy76wkx6uwfe7qur95yrftsd0r8lu0ayhu4zqsrkf9em3n5zpm7jkcmjtg0a24h2fa5gejvt0ywddwc6xa72f3z8czkcw9ynw66"
+account_key = "tpknam1qzjnu45v9uvvz4shwkxrgq44l7l4ncs0ryt9mwt7973fdjvm76tgkulmxll"
+consensus_key = "tpknam1qp4dcws0fthlrt69erz854efxxtxvympw9m3npy2w8rphqgxu2ufcluhhva"
+protocol_key = "tpknam1qqwg6uwuxn70spl9x377v0q6fzr6d29gpkdfc0tmp8uj97p5awnukum3d4q"
+tendermint_node_key = "tpknam1qzmajsm6a5uamaq7el4kkp6txe9jt0ld3q0jy0er7cuz0u0k2yck64je49d"
+dkg_key = "dpknam1vqqqqqqzlgrsdkkjc0yg842xqkffy7g2vwvx3x8389ydprz2qwncruzxr8cg8u939z4yy76wkx6uwfe7qur95yrftsd0r8lu0ayhu4zqsrkf9em3n5zpm7jkcmjtg0a24h2fa5gejvt0ywddwc6xa72f3z8czkcwrz38vq"
 ```
 
 ### Genesis tx `transfer`
@@ -76,7 +76,7 @@ An unsigned `transfer` tx example:
 ```toml
 [[transfer]]
 token = "NAM"
-source = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
+source = "tpknam1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63we33t3r"
 target = "albert"
 amount = 1_000_000
 ```
@@ -98,7 +98,7 @@ For a delegation `bond` tx from an implicit account, one can use a public key as
 
 ```toml
 [[bond]]
-source = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
+source = "tpknam1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63we33t3r"
 validator = "validator-0"
 amount = 20_000 # in native token NAM
 ```
