@@ -1634,13 +1634,13 @@ mod test_finalize_block {
     where
         F: FnOnce(&mut TestShell) -> (Tx, TestBpAction),
     {
-        let (mut shell, _, _, _) = setup_at_height(3u64);
+        let (mut shell, _, _, _) = setup_at_height(1u64);
         namada::eth_bridge::test_utils::commit_bridge_pool_root_at_height(
-            &mut shell.wl_storage.storage,
+            &mut shell.wl_storage,
             &KeccakHash([1; 32]),
-            3.into(),
+            1.into(),
         );
-        let value = BlockHeight(4).serialize_to_vec();
+        let value = BlockHeight(2).serialize_to_vec();
         shell
             .wl_storage
             .storage

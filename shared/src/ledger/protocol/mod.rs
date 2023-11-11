@@ -1210,7 +1210,7 @@ mod tests {
         let root = wl_storage.ethbridge_queries().get_bridge_pool_root();
         let nonce = wl_storage.ethbridge_queries().get_bridge_pool_nonce();
         test_utils::commit_bridge_pool_root_at_height(
-            &mut wl_storage.storage,
+            &mut wl_storage,
             &root,
             100.into(),
         );

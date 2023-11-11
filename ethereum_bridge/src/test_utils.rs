@@ -3,11 +3,9 @@
 use std::collections::HashMap;
 use std::num::NonZeroU64;
 
-use borsh_ext::BorshSerializeExt;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
 use namada_core::ledger::eth_bridge::storage::whitelist;
-use namada_core::ledger::storage::mockdb::MockDBWriteBatch;
-use namada_core::ledger::storage::testing::{TestStorage, TestWlStorage};
+use namada_core::ledger::storage::testing::TestWlStorage;
 use namada_core::ledger::storage_api::token::credit_tokens;
 use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::address::{self, wnam, Address};
@@ -189,9 +187,7 @@ pub fn init_storage_with_validators(
 ) -> HashMap<Address, TestValidatorKeys> {
     // set last height to a reasonable value;
     // it should allow vote extensions to be cast
-    if let Some(b) = wl_storage.storage.last_block.as_mut() {
-        b.height = 3.into();
-    }
+    wl_storage.storage.block.height = 1.into();
 
     let mut all_keys = HashMap::new();
     let validators: Vec<_> = consensus_validators
@@ -233,6 +229,7 @@ pub fn init_storage_with_validators(
             .expect("Test failed");
     }
     wl_storage.commit_block().expect("Test failed");
+    wl_storage.storage.block.height += 1;
 
     all_keys
 }
@@ -242,19 +239,14 @@ pub fn init_storage_with_validators(
 ///
 /// N.B. assumes the bridge pool is empty.
 pub fn commit_bridge_pool_root_at_height(
-    storage: &mut TestStorage,
+    wl_storage: &mut TestWlStorage,
     root: &KeccakHash,
     height: BlockHeight,
 ) {
-    let value = height.serialize_to_vec();
-    storage
-        .block
-        .tree
-        .update(&get_key_from_hash(root), value)
-        .unwrap();
-    storage.block.height = height;
-    storage.commit_block(MockDBWriteBatch).unwrap();
-    storage.block.tree.delete(&get_key_from_hash(root)).unwrap();
+    wl_storage.storage.block.height = height;
+    wl_storage.write(&get_key_from_hash(root), height).unwrap();
+    wl_storage.commit_block().unwrap();
+    wl_storage.delete(&get_key_from_hash(root)).unwrap();
 }
 
 /// Append validators to storage at the current epoch

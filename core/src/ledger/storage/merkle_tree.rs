@@ -19,7 +19,7 @@ use crate::ledger::eth_bridge::storage::bridge_pool::{
     is_pending_transfer_key, BridgePoolTree,
 };
 use crate::ledger::storage::ics23_specs::ibc_leaf_spec;
-use crate::ledger::storage::{ics23_specs, types, BlockHeight};
+use crate::ledger::storage::{ics23_specs, types, BlockHeight, Epoch, KeySeg};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::hash::Hash;
 use crate::types::keccak::KeccakHash;
@@ -175,7 +175,33 @@ impl StoreType {
         SUB_TREE_TYPES.iter()
     }
 
-    fn sub_key(key: &Key) -> Result<(Self, Key)> {
+    /// Get an iterator for subtrees
+    pub fn iter_subtrees() -> std::slice::Iter<'static, Self> {
+        static SUB_TREE_TYPES: [StoreType; 4] = [
+            StoreType::Account,
+            StoreType::PoS,
+            StoreType::Ibc,
+            StoreType::BridgePool,
+        ];
+        SUB_TREE_TYPES.iter()
+    }
+
+    /// Get an iterator for the provable subtrees
+    pub fn iter_provable() -> std::slice::Iter<'static, Self> {
+        static SUB_TREE_TYPES: [StoreType; 2] =
+            [StoreType::Ibc, StoreType::BridgePool];
+        SUB_TREE_TYPES.iter()
+    }
+
+    /// Get an iterator for the non-provable subtrees
+    pub fn iter_non_provable() -> std::slice::Iter<'static, Self> {
+        static SUB_TREE_TYPES: [StoreType; 2] =
+            [StoreType::Account, StoreType::PoS];
+        SUB_TREE_TYPES.iter()
+    }
+
+    /// Get the store type and the sub key
+    pub fn sub_key(key: &Key) -> Result<(Self, Key)> {
         if key.is_empty() {
             return Err(Error::EmptyKey("the key is empty".to_owned()));
         }
@@ -204,6 +230,19 @@ impl StoreType {
             // use the same key for Account
             _ => Ok((StoreType::Account, key.clone())),
         }
+    }
+
+    /// Get the key prefix if the store type is for a provable subtree.
+    /// Otherwise, returns None.
+    pub fn provable_prefix(&self) -> Option<Key> {
+        let addr = match self {
+            Self::Ibc => Address::Internal(InternalAddress::Ibc),
+            Self::BridgePool => {
+                Address::Internal(InternalAddress::EthBridgePool)
+            }
+            _ => return None,
+        };
+        Some(addr.to_db_key().into())
     }
 
     /// Decode the backing store from bytes and tag its type correctly
@@ -259,6 +298,22 @@ impl fmt::Display for StoreType {
     }
 }
 
+/// Get the key prefix with which the base root and store are stored in the
+/// storage
+pub fn base_tree_key_prefix(height: BlockHeight) -> Key {
+    Key::from(height.to_db_key())
+        .with_segment("tree".to_owned())
+        .with_segment(StoreType::Base.to_string())
+}
+
+/// Get the key prefix with which the subtree root and store are stored in the
+/// storage
+pub fn subtree_key_prefix(st: &StoreType, epoch: Epoch) -> Key {
+    Key::from(epoch.to_db_key())
+        .with_segment("tree".to_owned())
+        .with_segment(st.to_string())
+}
+
 /// Merkle tree storage
 #[derive(Default)]
 pub struct MerkleTree<H: StorageHasher + Default> {
@@ -279,7 +334,7 @@ impl<H: StorageHasher + Default> core::fmt::Debug for MerkleTree<H> {
 }
 
 impl<H: StorageHasher + Default> MerkleTree<H> {
-    /// Restore the tree from the stores
+    /// Restore the full tree from the stores
     pub fn new(stores: MerkleTreeStoresRead) -> Result<Self> {
         let base = Smt::new(stores.base.0.into(), stores.base.1);
         let account = Smt::new(stores.account.0.into(), stores.account.1);
@@ -319,6 +374,23 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
             Err(Error::MerkleTree(
                 "Invalid MerkleTreeStoresRead".to_string(),
             ))
+        }
+    }
+
+    /// Restore the partial tree from the stores without validation
+    pub fn new_partial(stores: MerkleTreeStoresRead) -> Self {
+        let base = Smt::new(stores.base.0.into(), stores.base.1);
+        let account = Smt::new(stores.account.0.into(), stores.account.1);
+        let ibc = Amt::new(stores.ibc.0.into(), stores.ibc.1);
+        let pos = Smt::new(stores.pos.0.into(), stores.pos.1);
+        let bridge_pool =
+            BridgePoolTree::new(stores.bridge_pool.0, stores.bridge_pool.1);
+        Self {
+            base,
+            account,
+            ibc,
+            pos,
+            bridge_pool,
         }
     }
 
@@ -511,6 +583,7 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
 }
 
 /// The root hash of the merkle tree as bytes
+#[derive(PartialEq)]
 pub struct MerkleRoot(pub [u8; 32]);
 
 impl From<H256> for MerkleRoot {
@@ -533,6 +606,12 @@ impl From<KeccakHash> for MerkleRoot {
 }
 
 impl From<MerkleRoot> for KeccakHash {
+    fn from(root: MerkleRoot) -> Self {
+        Self(root.0)
+    }
+}
+
+impl From<MerkleRoot> for Hash {
     fn from(root: MerkleRoot) -> Self {
         Self(root.0)
     }

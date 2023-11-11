@@ -222,7 +222,6 @@ mod test_apply_bp_roots_to_storage {
 
     use assert_matches::assert_matches;
     use borsh::BorshDeserialize;
-    use borsh_ext::BorshSerializeExt;
     use namada_core::ledger::eth_bridge::storage::bridge_pool::{
         get_key_from_hash, get_nonce_key,
     };
@@ -270,26 +269,26 @@ mod test_apply_bp_roots_to_storage {
                 (validator_c.clone(), Amount::native_whole(40)),
             ]),
         );
+        // First commit
+        wl_storage.storage.block.height = 1.into();
+        wl_storage.commit_block().unwrap();
+
         bridge_pool_vp::init_storage(&mut wl_storage);
         test_utils::commit_bridge_pool_root_at_height(
-            &mut wl_storage.storage,
+            &mut wl_storage,
             &KeccakHash([1; 32]),
             99.into(),
         );
         test_utils::commit_bridge_pool_root_at_height(
-            &mut wl_storage.storage,
+            &mut wl_storage,
             &KeccakHash([1; 32]),
             100.into(),
         );
-        let value = BlockHeight(101).serialize_to_vec();
         wl_storage
-            .storage
-            .block
-            .tree
-            .update(&get_key_from_hash(&KeccakHash([1; 32])), value)
+            .write(&get_key_from_hash(&KeccakHash([1; 32])), BlockHeight(101))
             .expect("Test failed");
         wl_storage
-            .write_bytes(&get_nonce_key(), Uint::from(42).serialize_to_vec())
+            .write(&get_nonce_key(), Uint::from(42))
             .expect("Test failed");
         TestPackage {
             validators: [validator_a, validator_b, validator_c],
@@ -816,7 +815,7 @@ mod test_apply_bp_roots_to_storage {
         // set up the bridge pool's storage
         bridge_pool_vp::init_storage(&mut wl_storage);
         test_utils::commit_bridge_pool_root_at_height(
-            &mut wl_storage.storage,
+            &mut wl_storage,
             &KeccakHash([1; 32]),
             3.into(),
         );
