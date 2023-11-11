@@ -51,25 +51,31 @@ impl Vote {
     }
 }
 
-/// Rappresent a tally type
+/// Represent a tally type
 pub enum TallyType {
-    /// Rappresent a tally type for proposal requiring 2/3 of the votes
-    TwoThird,
-    /// Rappresent a tally type for proposal requiring 1/3 of the votes
-    OneThird,
-    /// Rappresent a tally type for proposal requiring less than 1/3 of the
-    /// votes to be nay
-    LessOneThirdNay,
+    /// Represent a tally type for proposal requiring 2/3 of the total voting
+    /// power to be yay
+    TwoThirds,
+    /// Represent a tally type for proposal requiring 1/2 of yay votes over at
+    /// least 1/3 of the voting power
+    OneHalfOverOneThird,
+    /// Represent a tally type for proposal requiring less than 1/2 of nay
+    /// votes over at least 1/3 of the voting power
+    LessOneHalfOverOneThirdNay,
 }
 
 impl TallyType {
     /// Compute the type of tally for a proposal
     pub fn from(proposal_type: ProposalType, is_steward: bool) -> Self {
         match (proposal_type, is_steward) {
-            (ProposalType::Default(_), _) => TallyType::TwoThird,
-            (ProposalType::PGFSteward(_), _) => TallyType::TwoThird,
-            (ProposalType::PGFPayment(_), true) => TallyType::LessOneThirdNay,
-            (ProposalType::PGFPayment(_), false) => TallyType::OneThird,
+            (ProposalType::Default(_), _) => TallyType::TwoThirds,
+            (ProposalType::PGFSteward(_), _) => TallyType::OneHalfOverOneThird,
+            (ProposalType::PGFPayment(_), true) => {
+                TallyType::LessOneHalfOverOneThirdNay
+            }
+            (ProposalType::PGFPayment(_), false) => {
+                TallyType::OneHalfOverOneThird
+            }
         }
     }
 }
@@ -98,27 +104,32 @@ impl TallyResult {
         tally_type: &TallyType,
         yay_voting_power: VotePower,
         nay_voting_power: VotePower,
+        abstain_voting_power: VotePower,
         total_voting_power: VotePower,
     ) -> Self {
         let passed = match tally_type {
-            TallyType::TwoThird => {
-                let at_least_two_third_voted = yay_voting_power
-                    + nay_voting_power
-                    >= total_voting_power / 3 * 2;
-                let at_last_half_voted_yay =
-                    yay_voting_power > nay_voting_power;
-                at_least_two_third_voted && at_last_half_voted_yay
+            TallyType::TwoThirds => {
+                yay_voting_power >= total_voting_power * 2 / 3
             }
-            TallyType::OneThird => {
-                let at_least_two_third_voted = yay_voting_power
-                    + nay_voting_power
-                    >= total_voting_power / 3;
+            TallyType::OneHalfOverOneThird => {
+                let at_least_one_third_voted =
+                    yay_voting_power + nay_voting_power + abstain_voting_power
+                        >= total_voting_power / 3;
+
+                // At least half of non-abstained votes are yay
                 let at_last_half_voted_yay =
-                    yay_voting_power > nay_voting_power;
-                at_least_two_third_voted && at_last_half_voted_yay
+                    yay_voting_power >= nay_voting_power;
+                at_least_one_third_voted && at_last_half_voted_yay
             }
-            TallyType::LessOneThirdNay => {
-                nay_voting_power <= total_voting_power / 3
+            TallyType::LessOneHalfOverOneThirdNay => {
+                let less_one_third_voted =
+                    yay_voting_power + nay_voting_power + abstain_voting_power
+                        < total_voting_power / 3;
+
+                // More than half of non-abstained votes are yay
+                let more_than_half_voted_yay =
+                    yay_voting_power > nay_voting_power;
+                less_one_third_voted || more_than_half_voted_yay
             }
         };
 
@@ -135,8 +146,10 @@ pub struct ProposalResult {
     pub total_voting_power: VotePower,
     /// The total voting power from yay votes
     pub total_yay_power: VotePower,
-    /// The total voting power from nay votes (unused at the moment)
+    /// The total voting power from nay votes
     pub total_nay_power: VotePower,
+    /// The total voting power from abstained votes
+    pub total_abstain_power: VotePower,
 }
 
 impl Display for ProposalResult {
@@ -161,9 +174,18 @@ impl Display for ProposalResult {
 }
 
 impl ProposalResult {
-    /// Return true if two third of total voting power voted nay
-    pub fn two_third_nay(&self) -> bool {
-        self.total_nay_power >= (self.total_voting_power / 3) * 2
+    /// Return true if at least 1/3 of the total voting power voted and at least
+    /// two third of the non-abstained voting power voted nay
+    pub fn two_thirds_nay_over_two_thirds_total(&self) -> bool {
+        let at_least_two_thirds_voted = self.total_yay_power
+            + self.total_nay_power
+            + self.total_abstain_power
+            >= self.total_voting_power * 2 / 3;
+
+        let at_least_two_thirds_nay = self.total_nay_power
+            >= (self.total_nay_power + self.total_yay_power) * 2 / 3;
+
+        at_least_two_thirds_voted && at_least_two_thirds_nay
     }
 }
 
@@ -196,12 +218,37 @@ impl TallyVote {
         }
     }
 
-    /// Check if two votes are equal
-    pub fn is_same_side(&self, other: &TallyVote) -> bool {
-        let both_yay = self.is_yay() && other.is_yay();
-        let both_nay = !self.is_yay() && !other.is_yay();
+    /// Check if a vote is nay
+    pub fn is_nay(&self) -> bool {
+        match self {
+            TallyVote::OnChain(vote) => vote.is_nay(),
+            TallyVote::Offline(vote) => vote.is_nay(),
+        }
+    }
 
-        both_yay || !both_nay
+    /// Check if a vote is abstain
+    pub fn is_abstain(&self) -> bool {
+        match self {
+            TallyVote::OnChain(vote) => vote.is_abstain(),
+            TallyVote::Offline(vote) => vote.is_abstain(),
+        }
+    }
+
+    /// Check if two votes are equal, returns an error if the variants of the
+    /// two instances are different
+    pub fn is_same_side(
+        &self,
+        other: &TallyVote,
+    ) -> Result<bool, &'static str> {
+        match (self, other) {
+            (TallyVote::OnChain(vote), TallyVote::OnChain(other_vote)) => {
+                Ok(vote.is_same_side(other_vote))
+            }
+            (TallyVote::Offline(vote), TallyVote::Offline(other_vote)) => {
+                Ok(vote.is_same_side(other_vote))
+            }
+            _ => Err("Cannot compare different variants of governance votes"),
+        }
     }
 }
 
@@ -226,39 +273,80 @@ pub fn compute_proposal_result(
 ) -> ProposalResult {
     let mut yay_voting_power = VotePower::default();
     let mut nay_voting_power = VotePower::default();
+    let mut abstain_voting_power = VotePower::default();
 
     for (address, vote_power) in votes.validator_voting_power {
         let vote_type = votes.validators_vote.get(&address);
         if let Some(vote) = vote_type {
             if vote.is_yay() {
                 yay_voting_power += vote_power;
-            } else {
+            } else if vote.is_nay() {
                 nay_voting_power += vote_power;
+            } else if vote.is_abstain() {
+                abstain_voting_power += vote_power;
             }
         }
     }
 
-    for (delegator, degalations) in votes.delegator_voting_power {
+    for (delegator, delegations) in votes.delegator_voting_power {
         let delegator_vote = match votes.delegators_vote.get(&delegator) {
             Some(vote) => vote,
             None => continue,
         };
-        for (validator, voting_power) in degalations {
+        for (validator, voting_power) in delegations {
             let validator_vote = votes.validators_vote.get(&validator);
             if let Some(validator_vote) = validator_vote {
-                if !validator_vote.is_same_side(delegator_vote) {
+                let validator_vote_is_same_side =
+                    match validator_vote.is_same_side(delegator_vote) {
+                        Ok(result) => result,
+                        Err(_) => {
+                            // Unexpected path, all the votes should be
+                            // validated by the VP and only online votes should
+                            // be allowed in storage
+                            tracing::warn!(
+                                "Found unexpected offline vote type: forcing \
+                                 the proposal to fail."
+                            );
+                            // Force failure of the proposal
+                            return ProposalResult {
+                                result: TallyResult::Rejected,
+                                total_voting_power: VotePower::default(),
+                                total_yay_power: VotePower::default(),
+                                total_nay_power: VotePower::default(),
+                                total_abstain_power: VotePower::default(),
+                            };
+                        }
+                    };
+                if !validator_vote_is_same_side {
                     if delegator_vote.is_yay() {
                         yay_voting_power += voting_power;
-                        nay_voting_power -= voting_power;
-                    } else {
+                        if validator_vote.is_nay() {
+                            nay_voting_power -= voting_power;
+                        } else if validator_vote.is_abstain() {
+                            abstain_voting_power -= voting_power;
+                        }
+                    } else if delegator_vote.is_nay() {
                         nay_voting_power += voting_power;
-                        yay_voting_power -= voting_power;
+                        if validator_vote.is_yay() {
+                            yay_voting_power -= voting_power;
+                        } else if validator_vote.is_abstain() {
+                            abstain_voting_power -= voting_power;
+                        }
+                    } else if delegator_vote.is_abstain() {
+                        abstain_voting_power += voting_power;
+                        if validator_vote.is_yay() {
+                            yay_voting_power -= voting_power;
+                        } else if validator_vote.is_nay() {
+                            nay_voting_power -= voting_power;
+                        }
                     }
                 }
             } else if delegator_vote.is_yay() {
                 yay_voting_power += voting_power;
-            } else {
+            } else if delegator_vote.is_nay() {
                 nay_voting_power += voting_power;
+            } else if delegator_vote.is_abstain() {
+                abstain_voting_power += voting_power;
             }
         }
     }
@@ -267,6 +355,7 @@ pub fn compute_proposal_result(
         &tally_at,
         yay_voting_power,
         nay_voting_power,
+        abstain_voting_power,
         total_voting_power,
     );
 
@@ -275,6 +364,7 @@ pub fn compute_proposal_result(
         total_voting_power,
         total_yay_power: yay_voting_power,
         total_nay_power: nay_voting_power,
+        total_abstain_power: abstain_voting_power,
     }
 }
 
