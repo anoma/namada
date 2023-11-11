@@ -35,7 +35,7 @@ jobs:
   build-wasm:
     timeout-minutes: 30
     runs-on: 
-      group: namada-runners-ubuntu-22
+      group: namada-runners
     container: 
       image: ghcr.io/anoma/namada:wasm-main
     strategy:
@@ -92,7 +92,7 @@ jobs:
   test-wasm:
     timeout-minutes: 30
     runs-on: 
-      group: namada-runners-ubuntu-22
+      group: namada-runners
     needs: [build-wasm]
     container: 
       image: ghcr.io/anoma/namada:wasm-main
@@ -187,7 +187,7 @@ jobs:
 
   unit-and-integration-tests:
     runs-on: 
-      group: namada-runners-ubuntu-22
+      group: namada-runners
     timeout-minutes: 30
     needs: [build-wasm]
     strategy:
@@ -285,7 +285,7 @@ jobs:
 
   run-benchmarks:
     runs-on: 
-      group: namada-runners-ubuntu-22
+      group: namada-runners
     timeout-minutes: 60
     needs: [build-wasm]
     strategy:
@@ -373,7 +373,7 @@ jobs:
 
   namada-release:
     runs-on: 
-      group: namada-runners-ubuntu-22
+      group: namada-runners
     timeout-minutes: 40
     strategy:
       fail-fast: false
@@ -473,7 +473,7 @@ jobs:
 
   namada-e2e:
     runs-on: 
-      group: namada-runners-ubuntu-22
+      group: namada-runners
     needs: [build-wasm, namada-release]
     # timeout-minutes: 80
     strategy:
