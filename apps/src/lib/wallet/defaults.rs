@@ -130,7 +130,7 @@ mod dev {
         }
         let path = root_dir.join("genesis/localnet/src/pre-genesis");
         let wallet = crate::wallet::load(&path).unwrap();
-        let sk = match wallet.get_keys().get(name).unwrap().0 {
+        let sk = match wallet.get_secret_keys().get(name).unwrap().0 {
             namada_sdk::wallet::StoredKeypair::Encrypted(_) => {
                 panic!("{}'s keypair should not be encrypted", name)
             }

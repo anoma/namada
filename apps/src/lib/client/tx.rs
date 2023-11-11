@@ -1122,7 +1122,7 @@ where
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
-        namada.sign(&mut tx, &args.tx, signing_data).await?;
+        sign(namada, &mut tx, &args.tx, signing_data).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -1187,7 +1187,7 @@ where
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
-        namada.sign(&mut tx, &args.tx, signing_data).await?;
+        sign(namada, &mut tx, &args.tx, signing_data).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -1231,7 +1231,7 @@ where
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
-        namada.sign(&mut tx, &args.tx, signing_data).await?;
+        sign(namada, &mut tx, &args.tx, signing_data).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -1253,7 +1253,7 @@ where
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
-        namada.sign(&mut tx, &args.tx, signing_data).await?;
+        sign(namada, &mut tx, &args.tx, signing_data).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
