@@ -1,18 +1,36 @@
+use std::collections::HashMap;
+use std::str::FromStr;
+
 use criterion::{criterion_group, criterion_main, Criterion};
 use namada::core::ledger::governance::storage::proposal::ProposalType;
 use namada::core::ledger::governance::storage::vote::{
     StorageProposalVote, VoteType,
 };
+use namada::core::ledger::pgf::storage::steward::StewardDetail;
 use namada::core::types::key::{
     common, SecretKey as SecretKeyInterface, SigScheme,
 };
 use namada::core::types::token::Amount;
 use namada::core::types::transaction::account::{InitAccount, UpdateAccount};
 use namada::core::types::transaction::pos::InitValidator;
+use namada::ibc::core::ics02_client::client_type::ClientType;
+use namada::ibc::core::ics03_connection::connection::Counterparty;
+use namada::ibc::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
+use namada::ibc::core::ics03_connection::version::Version;
+use namada::ibc::core::ics04_channel::channel::Order;
+use namada::ibc::core::ics04_channel::msgs::MsgChannelOpenInit;
+use namada::ibc::core::ics04_channel::Version as ChannelVersion;
+use namada::ibc::core::ics23_commitment::commitment::CommitmentPrefix;
+use namada::ibc::core::ics24_host::identifier::{
+    ClientId, ConnectionId, PortId,
+};
+use namada::ledger::eth_bridge::read_native_erc20_address;
 use namada::ledger::storage_api::StorageRead;
 use namada::proof_of_stake::types::SlashType;
-use namada::proof_of_stake::{self, read_pos_params};
+use namada::proof_of_stake::{self, read_pos_params, KeySeg};
 use namada::proto::{Code, Section};
+use namada::types::address::Address;
+use namada::types::eth_bridge_pool::{GasFee, PendingTransfer};
 use namada::types::hash::Hash;
 use namada::types::key::{ed25519, secp256k1, PublicKey, RefTo};
 use namada::types::masp::{TransferSource, TransferTarget};
@@ -25,20 +43,21 @@ use namada::types::transaction::pos::{
 };
 use namada::types::transaction::EllipticCurve;
 use namada_apps::bench_utils::{
-    generate_ibc_transfer_tx, generate_tx, BenchShell, BenchShieldedCtx,
-    ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
-    TX_BOND_WASM, TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_INIT_ACCOUNT_WASM,
-    TX_INIT_PROPOSAL_WASM, TX_INIT_VALIDATOR_WASM, TX_REDELEGATE_WASM,
+    BenchShell, BenchShieldedCtx, ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY,
+    BERTHA_PAYMENT_ADDRESS, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
+    TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
+    TX_INIT_PROPOSAL_WASM, TX_REDELEGATE_WASM, TX_RESIGN_STEWARD,
     TX_REVEAL_PK_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
-    TX_UPDATE_ACCOUNT_WASM, TX_VOTE_PROPOSAL_WASM, TX_WITHDRAW_WASM,
-    VP_VALIDATOR_WASM,
+    TX_UPDATE_ACCOUNT_WASM, TX_UPDATE_STEWARD_COMMISSION,
+    TX_VOTE_PROPOSAL_WASM, TX_WITHDRAW_WASM, VP_VALIDATOR_WASM,
 };
 use namada_apps::wallet::defaults;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use sha2::Digest;
 
-// TODO: need to benchmark tx_bridge_pool.wasm
+const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
+
 fn transfer(c: &mut Criterion) {
     let mut group = c.benchmark_group("transfer");
     let amount = Amount::native_whole(500);
@@ -108,7 +127,7 @@ fn transfer(c: &mut Criterion) {
                 |(shielded_ctx, signed_tx)| {
                     shielded_ctx.shell.execute_tx(signed_tx);
                 },
-                criterion::BatchSize::LargeInput,
+                criterion::BatchSize::SmallInput,
             )
         });
     }
@@ -119,7 +138,8 @@ fn transfer(c: &mut Criterion) {
 fn bond(c: &mut Criterion) {
     let mut group = c.benchmark_group("bond");
 
-    let bond = generate_tx(
+    let shell = BenchShell::default();
+    let bond = shell.generate_tx(
         TX_BOND_WASM,
         Bond {
             validator: defaults::validator_address(),
@@ -131,7 +151,7 @@ fn bond(c: &mut Criterion) {
         Some(&defaults::albert_keypair()),
     );
 
-    let self_bond = generate_tx(
+    let self_bond = shell.generate_tx(
         TX_BOND_WASM,
         Bond {
             validator: defaults::validator_address(),
@@ -150,7 +170,7 @@ fn bond(c: &mut Criterion) {
             b.iter_batched_ref(
                 BenchShell::default,
                 |shell| shell.execute_tx(signed_tx),
-                criterion::BatchSize::LargeInput,
+                criterion::BatchSize::SmallInput,
             )
         });
     }
@@ -161,7 +181,8 @@ fn bond(c: &mut Criterion) {
 fn unbond(c: &mut Criterion) {
     let mut group = c.benchmark_group("unbond");
 
-    let unbond = generate_tx(
+    let shell = BenchShell::default();
+    let unbond = shell.generate_tx(
         TX_UNBOND_WASM,
         Bond {
             validator: defaults::validator_address(),
@@ -173,7 +194,7 @@ fn unbond(c: &mut Criterion) {
         Some(&defaults::albert_keypair()),
     );
 
-    let self_unbond = generate_tx(
+    let self_unbond = shell.generate_tx(
         TX_UNBOND_WASM,
         Bond {
             validator: defaults::validator_address(),
@@ -192,7 +213,7 @@ fn unbond(c: &mut Criterion) {
             b.iter_batched_ref(
                 BenchShell::default,
                 |shell| shell.execute_tx(signed_tx),
-                criterion::BatchSize::LargeInput,
+                criterion::BatchSize::SmallInput,
             )
         });
     }
@@ -202,8 +223,9 @@ fn unbond(c: &mut Criterion) {
 
 fn withdraw(c: &mut Criterion) {
     let mut group = c.benchmark_group("withdraw");
+    let shell = BenchShell::default();
 
-    let withdraw = generate_tx(
+    let withdraw = shell.generate_tx(
         TX_WITHDRAW_WASM,
         Withdraw {
             validator: defaults::validator_address(),
@@ -214,7 +236,7 @@ fn withdraw(c: &mut Criterion) {
         Some(&defaults::albert_keypair()),
     );
 
-    let self_withdraw = generate_tx(
+    let self_withdraw = shell.generate_tx(
         TX_WITHDRAW_WASM,
         Withdraw {
             validator: defaults::validator_address(),
@@ -236,7 +258,7 @@ fn withdraw(c: &mut Criterion) {
 
                     // Unbond funds
                     let unbond_tx = match bench_name {
-                        "withdraw" => generate_tx(
+                        "withdraw" => shell.generate_tx(
                             TX_UNBOND_WASM,
                             Bond {
                                 validator: defaults::validator_address(),
@@ -247,7 +269,7 @@ fn withdraw(c: &mut Criterion) {
                             None,
                             Some(&defaults::albert_keypair()),
                         ),
-                        "self_withdraw" => generate_tx(
+                        "self_withdraw" => shell.generate_tx(
                             TX_UNBOND_WASM,
                             Bond {
                                 validator: defaults::validator_address(),
@@ -278,7 +300,7 @@ fn withdraw(c: &mut Criterion) {
                     shell
                 },
                 |shell| shell.execute_tx(signed_tx),
-                criterion::BatchSize::LargeInput,
+                criterion::BatchSize::SmallInput,
             )
         });
     }
@@ -287,10 +309,10 @@ fn withdraw(c: &mut Criterion) {
 }
 
 fn redelegate(c: &mut Criterion) {
-    let mut group = c.benchmark_group("redelegate");
+    let shell = BenchShell::default();
 
     let redelegation = |dest_validator| {
-        generate_tx(
+        shell.generate_tx(
             TX_REDELEGATE_WASM,
             Redelegation {
                 src_validator: defaults::validator_address(),
@@ -304,7 +326,7 @@ fn redelegate(c: &mut Criterion) {
         )
     };
 
-    group.bench_function("redelegate", |b| {
+    c.bench_function("redelegate", |b| {
         b.iter_batched_ref(
             || {
                 let shell = BenchShell::default();
@@ -316,11 +338,9 @@ fn redelegate(c: &mut Criterion) {
                 (shell, redelegation(validator_2))
             },
             |(shell, tx)| shell.execute_tx(tx),
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::SmallInput,
         )
     });
-
-    group.finish();
 }
 
 fn reveal_pk(c: &mut Criterion) {
@@ -329,8 +349,9 @@ fn reveal_pk(c: &mut Criterion) {
         ed25519::SigScheme::generate(&mut csprng)
             .try_to_sk()
             .unwrap();
+    let shell = BenchShell::default();
 
-    let tx = generate_tx(
+    let tx = shell.generate_tx(
         TX_REVEAL_PK_WASM,
         new_implicit_account.to_public(),
         None,
@@ -342,12 +363,12 @@ fn reveal_pk(c: &mut Criterion) {
         b.iter_batched_ref(
             BenchShell::default,
             |shell| shell.execute_tx(&tx),
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::SmallInput,
         )
     });
 }
 
-fn update_vp(c: &mut Criterion) {
+fn update_account(c: &mut Criterion) {
     let shell = BenchShell::default();
     let vp_code_hash: Hash = shell
         .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
@@ -364,7 +385,7 @@ fn update_vp(c: &mut Criterion) {
         public_keys: vec![defaults::albert_keypair().ref_to()],
         threshold: None,
     };
-    let vp = generate_tx(
+    let vp = shell.generate_tx(
         TX_UPDATE_ACCOUNT_WASM,
         data,
         None,
@@ -372,11 +393,11 @@ fn update_vp(c: &mut Criterion) {
         Some(&defaults::albert_keypair()),
     );
 
-    c.bench_function("update_vp", |b| {
+    c.bench_function("update_account", |b| {
         b.iter_batched_ref(
             BenchShell::default,
             |shell| shell.execute_tx(&vp),
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::SmallInput,
         )
     });
 }
@@ -404,7 +425,7 @@ fn init_account(c: &mut Criterion) {
         vp_code_hash: extra_hash,
         threshold: 1,
     };
-    let tx = generate_tx(
+    let tx = shell.generate_tx(
         TX_INIT_ACCOUNT_WASM,
         data,
         None,
@@ -416,7 +437,7 @@ fn init_account(c: &mut Criterion) {
         b.iter_batched_ref(
             BenchShell::default,
             |shell| shell.execute_tx(&tx),
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::SmallInput,
         )
     });
 }
@@ -434,7 +455,7 @@ fn init_proposal(c: &mut Criterion) {
                         "minimal_proposal" => {
                             let content_section =
                                 Section::ExtraData(Code::new(vec![]));
-                            generate_tx(
+                            shell.generate_tx(
                                 TX_INIT_PROPOSAL_WASM,
                                 InitProposalData {
                                     id: None,
@@ -484,7 +505,7 @@ fn init_proposal(c: &mut Criterion) {
                                         as _
                                 ]));
 
-                            generate_tx(
+                            shell.generate_tx(
                                 TX_INIT_PROPOSAL_WASM,
                                 InitProposalData {
                                     id: Some(1),
@@ -508,7 +529,7 @@ fn init_proposal(c: &mut Criterion) {
                     (shell, signed_tx)
                 },
                 |(shell, signed_tx)| shell.execute_tx(signed_tx),
-                criterion::BatchSize::LargeInput,
+                criterion::BatchSize::SmallInput,
             )
         });
     }
@@ -518,7 +539,8 @@ fn init_proposal(c: &mut Criterion) {
 
 fn vote_proposal(c: &mut Criterion) {
     let mut group = c.benchmark_group("vote_proposal");
-    let delegator_vote = generate_tx(
+    let shell = BenchShell::default();
+    let delegator_vote = shell.generate_tx(
         TX_VOTE_PROPOSAL_WASM,
         VoteProposalData {
             id: 0,
@@ -531,7 +553,7 @@ fn vote_proposal(c: &mut Criterion) {
         Some(&defaults::albert_keypair()),
     );
 
-    let validator_vote = generate_tx(
+    let validator_vote = shell.generate_tx(
         TX_VOTE_PROPOSAL_WASM,
         VoteProposalData {
             id: 0,
@@ -552,7 +574,7 @@ fn vote_proposal(c: &mut Criterion) {
             b.iter_batched_ref(
                 BenchShell::default,
                 |shell| shell.execute_tx(signed_tx),
-                criterion::BatchSize::LargeInput,
+                criterion::BatchSize::SmallInput,
             )
         });
     }
@@ -618,7 +640,7 @@ fn init_validator(c: &mut Criterion) {
         max_commission_rate_change: namada::types::dec::Dec::default(),
         validator_vp_code_hash: extra_hash,
     };
-    let tx = generate_tx(
+    let tx = shell.generate_tx(
         TX_INIT_VALIDATOR_WASM,
         data,
         None,
@@ -630,13 +652,14 @@ fn init_validator(c: &mut Criterion) {
         b.iter_batched_ref(
             BenchShell::default,
             |shell| shell.execute_tx(&tx),
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::SmallInput,
         )
     });
 }
 
 fn change_validator_commission(c: &mut Criterion) {
-    let signed_tx = generate_tx(
+    let shell = BenchShell::default();
+    let signed_tx = shell.generate_tx(
         TX_CHANGE_VALIDATOR_COMMISSION_WASM,
         CommissionChange {
             validator: defaults::validator_address(),
@@ -651,30 +674,89 @@ fn change_validator_commission(c: &mut Criterion) {
         b.iter_batched_ref(
             BenchShell::default,
             |shell| shell.execute_tx(&signed_tx),
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::SmallInput,
         )
     });
 }
 
 fn ibc(c: &mut Criterion) {
-    let signed_tx = generate_ibc_transfer_tx();
+    let mut group = c.benchmark_group("tx_ibc");
+    let shell = BenchShell::default();
 
-    c.bench_function("ibc_transfer", |b| {
-        b.iter_batched_ref(
-            || {
-                let mut shell = BenchShell::default();
-                shell.init_ibc_channel();
-
-                shell
-            },
-            |shell| shell.execute_tx(&signed_tx),
-            criterion::BatchSize::LargeInput,
+    // Connection handshake
+    let msg = MsgConnectionOpenInit {
+        client_id_on_a: ClientId::new(
+            ClientType::new("01-tendermint".to_string()).unwrap(),
+            1,
         )
-    });
+        .unwrap(),
+        counterparty: Counterparty::new(
+            ClientId::from_str("01-tendermint-1").unwrap(),
+            None,
+            CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
+        ),
+        version: Some(Version::default()),
+        delay_period: std::time::Duration::new(100, 0),
+        signer: defaults::albert_address().to_string().into(),
+    };
+    let open_connection = shell.generate_ibc_tx(TX_IBC_WASM, msg);
+
+    // Channel handshake
+    let msg = MsgChannelOpenInit {
+        port_id_on_a: PortId::transfer(),
+        connection_hops_on_a: vec![ConnectionId::new(1)],
+        port_id_on_b: PortId::transfer(),
+        ordering: Order::Unordered,
+        signer: defaults::albert_address().to_string().into(),
+        version_proposal: ChannelVersion::new("ics20-1".to_string()),
+    };
+
+    // Avoid serializing the data again with borsh
+    let open_channel = shell.generate_ibc_tx(TX_IBC_WASM, msg);
+
+    // Ibc transfer
+    let outgoing_transfer = shell.generate_ibc_transfer_tx();
+
+    // NOTE: Ibc encompass a variety of different messages that can be executed,
+    // here we only benchmark a few of those
+    for (signed_tx, bench_name) in
+        [open_connection, open_channel, outgoing_transfer]
+            .iter()
+            .zip(["open_connection", "open_channel", "outgoing_transfer"])
+    {
+        group.bench_function(bench_name, |b| {
+            b.iter_batched_ref(
+                || {
+                    let mut shell = BenchShell::default();
+                    // Initialize the state according to the target tx
+                    match bench_name {
+                        "open_connection" => {
+                            let _ = shell.init_ibc_client_state(
+                                namada::core::types::storage::Key::from(
+                                    Address::Internal(namada::types::address::InternalAddress::Ibc).to_db_key(),
+                                ),
+                            );
+                        }
+                        "open_channel" => {
+                            let _ = shell.init_ibc_connection();
+                        }
+                        "outgoing_transfer" => shell.init_ibc_channel(),
+                        _ => panic!("Unexpected bench test"),
+                    }
+                    shell
+                },
+                |shell| shell.execute_tx(signed_tx),
+                criterion::BatchSize::SmallInput,
+            )
+        });
+    }
+
+    group.finish();
 }
 
 fn unjail_validator(c: &mut Criterion) {
-    let signed_tx = generate_tx(
+    let shell = BenchShell::default();
+    let signed_tx = shell.generate_tx(
         TX_UNJAIL_VALIDATOR_WASM,
         defaults::validator_address(),
         None,
@@ -713,7 +795,106 @@ fn unjail_validator(c: &mut Criterion) {
                 shell
             },
             |shell| shell.execute_tx(&signed_tx),
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::SmallInput,
+        )
+    });
+}
+
+fn tx_bridge_pool(c: &mut Criterion) {
+    let shell = BenchShell::default();
+
+    let data = PendingTransfer {
+        transfer: namada::types::eth_bridge_pool::TransferToEthereum {
+            kind: namada::types::eth_bridge_pool::TransferToEthereumKind::Erc20,
+            asset: read_native_erc20_address(&shell.wl_storage).unwrap(),
+            recipient: namada::types::ethereum_events::EthAddress([1u8; 20]),
+            sender: defaults::albert_address(),
+            amount: Amount::from(1),
+        },
+        gas_fee: GasFee {
+            amount: Amount::from(100),
+            payer: defaults::albert_address(),
+            token: shell.wl_storage.storage.native_token.clone(),
+        },
+    };
+    let tx = shell.generate_tx(
+        TX_BRIDGE_POOL_WASM,
+        data,
+        None,
+        None,
+        Some(&defaults::albert_keypair()),
+    );
+    c.bench_function("bridge pool", |b| {
+        b.iter_batched_ref(
+            BenchShell::default,
+            |shell| shell.execute_tx(&tx),
+            criterion::BatchSize::SmallInput,
+        )
+    });
+}
+
+fn resign_steward(c: &mut Criterion) {
+    c.bench_function("resign steward", |b| {
+        b.iter_batched_ref(
+            || {
+                let mut shell = BenchShell::default();
+                namada::core::ledger::pgf::storage::keys::stewards_handle()
+                    .insert(
+                        &mut shell.wl_storage,
+                        defaults::albert_address(),
+                        StewardDetail::base(defaults::albert_address()),
+                    )
+                    .unwrap();
+
+                let tx = shell.generate_tx(
+                    TX_RESIGN_STEWARD,
+                    defaults::albert_address(),
+                    None,
+                    None,
+                    Some(&defaults::albert_keypair()),
+                );
+
+                (shell, tx)
+            },
+            |(shell, tx)| shell.execute_tx(tx),
+            criterion::BatchSize::SmallInput,
+        )
+    });
+}
+
+fn update_steward_commission(c: &mut Criterion) {
+    c.bench_function("update steward commission", |b| {
+        b.iter_batched_ref(
+            || {
+                let mut shell = BenchShell::default();
+                namada::core::ledger::pgf::storage::keys::stewards_handle()
+                    .insert(
+                        &mut shell.wl_storage,
+                        defaults::albert_address(),
+                        StewardDetail::base(defaults::albert_address()),
+                    )
+                    .unwrap();
+
+                let data =
+                    namada::types::transaction::pgf::UpdateStewardCommission {
+                        steward: defaults::albert_address(),
+                        commission: HashMap::from([(
+                            defaults::albert_address(),
+                            namada::types::dec::Dec::zero(),
+                        )]),
+                    };
+                let tx = shell.generate_tx(
+                    TX_UPDATE_STEWARD_COMMISSION,
+                    data,
+                    None,
+                    None,
+                    Some(&defaults::albert_keypair()),
+                );
+
+                (shell, tx)
+            },
+            |(shell, tx)| shell.execute_tx(tx),
+            criterion::BatchSize::SmallInput,
         )
     });
 }
@@ -726,13 +907,16 @@ criterion_group!(
     withdraw,
     redelegate,
     reveal_pk,
-    update_vp,
+    update_account,
     init_account,
     init_proposal,
     vote_proposal,
     init_validator,
     change_validator_commission,
     ibc,
-    unjail_validator
+    unjail_validator,
+    tx_bridge_pool,
+    resign_steward,
+    update_steward_commission
 );
 criterion_main!(whitelisted_txs);

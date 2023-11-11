@@ -306,7 +306,7 @@ where
             storage_iter,
             write_log_iter,
         },
-        gas::STORAGE_ACCESS_GAS_PER_BYTE,
+        prefix.len() as u64 * gas::STORAGE_ACCESS_GAS_PER_BYTE,
     )
 }
 
@@ -331,7 +331,7 @@ where
             storage_iter,
             write_log_iter,
         },
-        gas::STORAGE_ACCESS_GAS_PER_BYTE,
+        prefix.len() as u64 * gas::STORAGE_ACCESS_GAS_PER_BYTE,
     )
 }
 

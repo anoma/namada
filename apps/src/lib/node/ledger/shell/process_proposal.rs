@@ -764,7 +764,7 @@ where
                 // valid transaction and avoid wasting block
                 // resources (ABCI only)
                 let mut tx_gas_meter = TxGasMeter::new(wrapper.gas_limit);
-                if tx_gas_meter.add_tx_size_gas(tx_bytes).is_err() {
+                if tx_gas_meter.add_wrapper_gas(tx_bytes).is_err() {
                     // Account for the tx's resources even in case of an error.
                     // Ignore any allocation error
                     let _ = metadata
@@ -859,6 +859,7 @@ where
                         vp_wasm_cache,
                         tx_wasm_cache,
                         Some(block_proposer),
+                        false,
                     ) {
                         Ok(()) => TxResult {
                             code: ErrorCodes::Ok.into(),
@@ -1699,8 +1700,9 @@ mod test_process_proposal {
             response.result.info,
             String::from(
                 "Error trying to apply a transaction: Error while processing \
-                 transaction's fees: Insufficient transparent balance to pay \
-                 fees"
+                 transaction's fees: Transparent balance of wrapper's signer \
+                 was insufficient to pay fee. All the available transparent \
+                 funds have been moved to the block proposer"
             )
         );
     }
@@ -1764,8 +1766,9 @@ mod test_process_proposal {
             response.result.info,
             String::from(
                 "Error trying to apply a transaction: Error while processing \
-                 transaction's fees: Insufficient transparent balance to pay \
-                 fees"
+                 transaction's fees: Transparent balance of wrapper's signer \
+                 was insufficient to pay fee. All the available transparent \
+                 funds have been moved to the block proposer"
             )
         );
     }
@@ -2514,7 +2517,7 @@ mod test_process_proposal {
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount_per_gas_unit: 100.into(),
-                    token: address::btc(),
+                    token: address::apfel(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 Epoch(0),

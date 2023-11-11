@@ -23,6 +23,7 @@ use super::Error;
 use crate::ledger::native_vp::CtxPreStorageRead;
 use crate::vm::WasmCacheAccess;
 
+/// Pseudo execution environment context for ibc native vp
 #[derive(Debug)]
 pub struct PseudoExecutionContext<'view, 'a, DB, H, CA>
 where
@@ -44,6 +45,7 @@ where
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
+    /// Generate new pseudo execution context
     pub fn new(ctx: CtxPreStorageRead<'view, 'a, DB, H, CA>) -> Self {
         Self {
             store: HashMap::new(),
@@ -52,11 +54,16 @@ where
         }
     }
 
-    pub fn get_changed_keys(&self) -> HashSet<&Key> {
+    /// Get the set of changed keys
+    pub(crate) fn get_changed_keys(&self) -> HashSet<&Key> {
         self.store.keys().filter(|k| is_ibc_key(k)).collect()
     }
 
-    pub fn get_changed_value(&self, key: &Key) -> Option<&StorageModification> {
+    /// Get the changed value
+    pub(crate) fn get_changed_value(
+        &self,
+        key: &Key,
+    ) -> Option<&StorageModification> {
         self.store.get(key)
     }
 }
@@ -282,6 +289,7 @@ where
 {
 }
 
+/// Ibc native vp validation context
 #[derive(Debug)]
 pub struct VpValidationContext<'view, 'a, DB, H, CA>
 where
@@ -299,6 +307,7 @@ where
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
+    /// Generate a new ibc vp validation context
     pub fn new(ctx: CtxPreStorageRead<'view, 'a, DB, H, CA>) -> Self {
         Self { ctx }
     }

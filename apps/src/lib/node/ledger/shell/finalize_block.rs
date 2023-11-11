@@ -267,9 +267,6 @@ where
                                 msg
                             )
                         }
-                        self.wl_storage
-                            .write_tx_hash(tx.header_hash())
-                            .expect("Error while writing tx hash to storage");
                     }
                 }
 
@@ -1111,7 +1108,7 @@ mod test_finalize_block {
         FinalizeBlock, ProcessedTx,
     };
 
-    const GAS_LIMIT_MULTIPLIER: u64 = 1_000_000;
+    const GAS_LIMIT_MULTIPLIER: u64 = 100_000_000;
 
     /// Make a wrapper tx and a processed tx from the wrapped tx that can be
     /// added to `FinalizeBlock` request.
@@ -2417,18 +2414,10 @@ mod test_finalize_block {
         assert_eq!(root_pre.0, root_post.0);
 
         assert_eq!(event[0].event_type.to_string(), String::from("applied"));
-        let code = event[0]
-            .attributes
-            .get("code")
-            .expect("Testfailed")
-            .as_str();
+        let code = event[0].attributes.get("code").unwrap().as_str();
         assert_eq!(code, String::from(ErrorCodes::Ok).as_str());
         assert_eq!(event[1].event_type.to_string(), String::from("applied"));
-        let code = event[1]
-            .attributes
-            .get("code")
-            .expect("Testfailed")
-            .as_str();
+        let code = event[1].attributes.get("code").unwrap().as_str();
         assert_eq!(code, String::from(ErrorCodes::WasmRuntimeError).as_str());
 
         for (inner, wrapper) in [(inner, wrapper), (new_inner, new_wrapper)] {

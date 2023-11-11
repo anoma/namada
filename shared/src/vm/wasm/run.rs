@@ -4,9 +4,7 @@ use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
-use namada_core::ledger::gas::{
-    GasMetering, TxGasMeter, WASM_MEMORY_PAGE_GAS_COST,
-};
+use namada_core::ledger::gas::{GasMetering, TxGasMeter, WASM_MEMORY_PAGE_GAS};
 use namada_core::ledger::storage::write_log::StorageModification;
 use namada_core::types::transaction::TxSentinel;
 use namada_core::types::validity_predicate::VpSentinel;
@@ -564,13 +562,15 @@ where
             Ok((module, store))
         }
         Commitment::Id(code) => {
+            let tx_len = code.len() as u64;
             gas_meter
-                .add_compiling_gas(
-                    u64::try_from(code.len())
-                        .map_err(|e| Error::ConversionError(e.to_string()))?,
-                )
+                .add_wasm_validation_gas(tx_len)
                 .map_err(|e| Error::GasError(e.to_string()))?;
             validate_untrusted_wasm(code).map_err(Error::ValidationError)?;
+
+            gas_meter
+                .add_compiling_gas(tx_len)
+                .map_err(|e| Error::GasError(e.to_string()))?;
             match wasm_cache.compile_or_fetch(code)? {
                 Some((module, store)) => Ok((module, store)),
                 None => Err(Error::NoCompiledWasmCode),
@@ -584,7 +584,7 @@ fn get_gas_rules() -> wasm_instrument::gas_metering::ConstantCostRules {
     // NOTE: costs set to 0 don't actually trigger the injection of a call to
     // the gas host function (no useless instructions are injected)
     let instruction_cost = 0;
-    let memory_grow_cost = WASM_MEMORY_PAGE_GAS_COST;
+    let memory_grow_cost = WASM_MEMORY_PAGE_GAS;
     let call_per_local_cost = 0;
     wasm_instrument::gas_metering::ConstantCostRules::new(
         instruction_cost,
@@ -609,7 +609,7 @@ mod tests {
     use crate::types::validity_predicate::EvalVp;
     use crate::vm::wasm;
 
-    const TX_GAS_LIMIT: u64 = 100_000_000;
+    const TX_GAS_LIMIT: u64 = 10_000_000_000;
 
     /// Test that when a transaction wasm goes over the stack-height limit, the
     /// execution is aborted.
