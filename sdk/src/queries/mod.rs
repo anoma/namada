@@ -59,8 +59,9 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    if request.height != BlockHeight(0)
-        && request.height != ctx.wl_storage.storage.get_last_block_height()
+    if request.height.value() != 0
+        && request.height.value()
+            != ctx.wl_storage.storage.get_last_block_height().0
     {
         return Err(storage_api::Error::new_const(
             "This query doesn't support arbitrary block heights, only the \
@@ -169,10 +170,14 @@ mod testing {
         ) -> Result<EncodedResponseQuery, Self::Error> {
             let data = data.unwrap_or_default();
             let height = height.unwrap_or_default();
+            let height: crate::tendermint::block::Height =
+                height.try_into().map_err(|err| {
+                    std::io::Error::new(std::io::ErrorKind::InvalidInput, err)
+                })?;
             // Handle a path by invoking the `RPC.handle` directly with the
             // borrowed storage
             let request = RequestQuery {
-                data,
+                data: data.into(),
                 path,
                 height,
                 prove,

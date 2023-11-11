@@ -21,6 +21,11 @@ pub mod wasm_loader;
 pub use std;
 
 pub mod facade {
+    // TODO: re-import v0_37 only
     pub use namada::{tendermint, tendermint_proto, tendermint_rpc};
-    pub use {tendermint_config, tower_abci};
+    pub use tendermint_config;
+    pub mod tower_abci {
+        pub use tower_abci::v037::*;
+        pub use tower_abci::BoxError;
+    }
 }

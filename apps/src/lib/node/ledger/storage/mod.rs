@@ -386,7 +386,8 @@ mod tests {
                     "At height {height} will {}",
                     if write_value { "write" } else { "delete" }
                 );
-                (BlockHeight::from(height as u64), write_value)
+                // start from height 1 - 0 is sentinel
+                (BlockHeight::from(height as u64 + 1), write_value)
             });
 
         let key = Key::parse("key").expect("cannot parse the key string");

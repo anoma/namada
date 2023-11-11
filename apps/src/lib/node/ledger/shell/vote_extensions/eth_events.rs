@@ -365,7 +365,7 @@ mod test_vote_extensions {
         consensus_validator_set_handle,
         read_consensus_validator_set_addresses_with_stake,
     };
-    use namada::tendermint_proto::v0_37::abci::VoteInfo;
+    use namada::tendermint::abci::types::VoteInfo;
     use namada::types::address::testing::gen_established_address;
     use namada::types::ethereum_events::{
         EthAddress, EthereumEvent, TransferToEthereum, Uint,
@@ -626,15 +626,14 @@ mod test_vote_extensions {
             Epoch::default(),
         );
         let votes = vec![VoteInfo {
-            validator: Some(namada::tendermint_proto::v0_37::abci::Validator {
-                address: pkh1.clone().into(),
-                power: u128::try_from(val1.bonded_stake).expect("Test failed")
-                    as i64,
-            }),
-            signed_last_block: true,
+            validator: crate::facade::tendermint::abci::types::Validator {
+                address: pkh1,
+                power: (u128::try_from(val1.bonded_stake).expect("Test failed") as u64).try_into().unwrap(),
+            },
+            sig_info: crate::facade::tendermint::abci::types::BlockSignatureInfo::LegacySigned,
         }];
         let req = FinalizeBlock {
-            proposer_address: pkh1,
+            proposer_address: pkh1.to_vec(),
             votes,
             ..Default::default()
         };

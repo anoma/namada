@@ -7,6 +7,7 @@ use thiserror::Error;
 
 use crate::events::log::EventLog;
 use crate::tendermint::merkle::proof::ProofOps;
+pub use crate::tendermint::v0_37::abci::request::Query as RequestQuery;
 /// A request context provides read-only access to storage and WASM compilation
 /// caches to request handlers.
 #[derive(Debug, Clone)]
@@ -76,35 +77,6 @@ pub enum Error {
     InvalidHeight(BlockHeight),
 }
 
-/// Temporary domain-type for `tendermint_proto::abci::RequestQuery`, copied
-/// from <https://github.com/informalsystems/tendermint-rs/pull/862>
-/// until we are on a branch that has it included.
-#[derive(Clone, PartialEq, Eq, Debug, Default)]
-pub struct RequestQuery {
-    /// Raw query bytes.
-    ///
-    /// Can be used with or in lieu of `path`.
-    pub data: Vec<u8>,
-    /// Path of the request, like an HTTP `GET` path.
-    ///
-    /// Can be used with or in lieu of `data`.
-    ///
-    /// Applications MUST interpret `/store` as a query by key on the
-    /// underlying store. The key SHOULD be specified in the Data field.
-    /// Applications SHOULD allow queries over specific types like
-    /// `/accounts/...` or `/votes/...`.
-    pub path: String,
-    /// The block height for which the query should be executed.
-    ///
-    /// The default `0` returns data for the latest committed block. Note that
-    /// this is the height of the block containing the application's Merkle
-    /// root hash, which represents the state as it was after committing
-    /// the block at `height - 1`.
-    pub height: BlockHeight,
-    /// Whether to return a Merkle proof with the response, if possible.
-    pub prove: bool,
-}
-
 /// Generic response from a query
 #[derive(Clone, Debug, Default)]
 pub struct ResponseQuery<T> {
@@ -118,40 +90,3 @@ pub struct ResponseQuery<T> {
 
 /// [`ResponseQuery`] with borsh-encoded `data` field
 pub type EncodedResponseQuery = ResponseQuery<Vec<u8>>;
-
-impl RequestQuery {
-    /// Try to convert tendermint RequestQuery into our [`RequestQuery`]
-    /// domain type. This tries to convert the block height into our
-    /// [`BlockHeight`] type, where `0` is treated as a special value to signal
-    /// to use the latest committed block height as per tendermint ABCI Query
-    /// spec. A negative block height will cause an error.
-    pub fn try_from_tm<D, H>(
-        storage: &WlStorage<D, H>,
-        crate::tendermint_proto::v0_37::abci::RequestQuery {
-            data,
-            path,
-            height,
-            prove,
-        }: crate::tendermint_proto::v0_37::abci::RequestQuery,
-    ) -> Result<Self, String>
-    where
-        D: DB + for<'iter> DBIter<'iter>,
-        H: StorageHasher,
-    {
-        let height = match height {
-            0 => {
-                // `0` means last committed height
-                storage.storage.get_last_block_height()
-            }
-            _ => BlockHeight(height.try_into().map_err(|_| {
-                format!("Query height cannot be negative, got: {}", height)
-            })?),
-        };
-        Ok(Self {
-            data: data.to_vec(),
-            path,
-            height,
-            prove,
-        })
-    }
-}
