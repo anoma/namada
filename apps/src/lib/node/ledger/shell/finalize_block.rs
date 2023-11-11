@@ -2145,17 +2145,19 @@ mod test_finalize_block {
                 .unwrap()
                 .unwrap();
             let hash_string = tm_consensus_key_raw_hash(&ck);
-            HEXUPPER.decode(hash_string.as_bytes()).unwrap()
+            let decoded = HEXUPPER.decode(hash_string.as_bytes()).unwrap();
+            TryFrom::try_from(decoded).unwrap()
         };
 
         let pkh1 = get_pkh(validator.address.clone(), Epoch::default());
         let votes = vec![VoteInfo {
-            validator: Some(Validator {
-                address: pkh1.clone().into(),
-                power: u128::try_from(validator.bonded_stake)
-                    .expect("Test failed") as i64,
-            }),
-            signed_last_block: true,
+            validator: Validator {
+                address: pkh1,
+                power: (u128::try_from(validator.bonded_stake).unwrap() as u64)
+                    .try_into()
+                    .unwrap(),
+            },
+            sig_info: tendermint::abci::types::BlockSignatureInfo::LegacySigned,
         }];
         // let rewards_prod_1 =
         // validator_rewards_products_handle(&val1.address);
@@ -2180,7 +2182,7 @@ mod test_finalize_block {
         // FINALIZE BLOCK 1. Tell Namada that val1 is the block proposer. We
         // won't receive votes from TM since we receive votes at a 1-block
         // delay, so votes will be empty here
-        next_block_for_inflation(&mut shell, pkh1.clone(), vec![], None);
+        next_block_for_inflation(&mut shell, pkh1.to_vec(), vec![], None);
         assert!(
             rewards_accumulator_handle()
                 .is_empty(&shell.wl_storage)
@@ -2203,7 +2205,12 @@ mod test_finalize_block {
         assert!(is_reward_equal_enough(total_rewards, total_claimed, 1));
 
         // Try a claim the next block and ensure we get 0 tokens back
-        next_block_for_inflation(&mut shell, pkh1.clone(), votes.clone(), None);
+        next_block_for_inflation(
+            &mut shell,
+            pkh1.to_vec(),
+            votes.clone(),
+            None,
+        );
         let att = namada_proof_of_stake::claim_reward_tokens(
             &mut shell.wl_storage,
             None,
