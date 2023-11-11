@@ -32,7 +32,7 @@ mod dev {
     }
 
     /// The default keys with their aliases.
-    pub fn keys() -> Vec<(Alias, common::SecretKey)> {
+    pub fn keys() -> HashMap<Alias, common::SecretKey> {
         vec![
             ("albert".into(), albert_keypair()),
             ("bertha".into(), bertha_keypair()),
@@ -41,6 +41,8 @@ mod dev {
             ("ester".into(), ester_keypair()),
             ("validator".into(), validator_keypair()),
         ]
+        .into_iter()
+        .collect()
     }
 
     /// The default tokens with their aliases.
@@ -59,8 +61,8 @@ mod dev {
     }
 
     /// The default addresses with their aliases.
-    pub fn addresses() -> Vec<(Alias, Address)> {
-        let mut addresses: Vec<(Alias, Address)> = vec![
+    pub fn addresses() -> HashMap<Alias, Address> {
+        let mut addresses: HashMap<Alias, Address> = vec![
             ("pos".into(), pos::ADDRESS),
             ("pos_slash_pool".into(), pos::SLASH_POOL_ADDRESS),
             ("governance".into(), governance::ADDRESS),
@@ -71,7 +73,9 @@ mod dev {
             ("christel".into(), christel_address()),
             ("daewon".into(), daewon_address()),
             ("ester".into(), ester_address()),
-        ];
+        ]
+        .into_iter()
+        .collect();
         let token_addresses = tokens()
             .into_iter()
             .map(|(addr, alias)| (alias.into(), addr));

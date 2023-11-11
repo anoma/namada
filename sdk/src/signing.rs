@@ -1,5 +1,5 @@
 //! Functions to sign transactions
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Display;
 
 use borsh::BorshDeserialize;
@@ -30,9 +30,9 @@ use namada_core::types::transaction::governance::{
 use namada_core::types::transaction::pos::InitValidator;
 use namada_core::types::transaction::{pos, Fee};
 use prost::Message;
+use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
-use zeroize::Zeroizing;
 
 use super::masp::{ShieldedContext, ShieldedTransfer};
 use crate::args::SdkTypes;
@@ -88,7 +88,6 @@ pub struct SigningTxData {
 pub async fn find_pk<'a>(
     context: &impl Namada<'a>,
     addr: &Address,
-    password: Option<Zeroizing<String>>,
 ) -> Result<common::PublicKey, Error> {
     match addr {
         Address::Established(_) => {
@@ -107,7 +106,7 @@ pub async fn find_pk<'a>(
         Address::Implicit(ImplicitAddress(pkh)) => Ok(context
             .wallet_mut()
             .await
-            .find_key_by_pkh(pkh, password)
+            .find_public_key_by_pkh(pkh)
             .map_err(|err| {
                 Error::Other(format!(
                     "Unable to load the keypair from the wallet for the \
@@ -115,8 +114,7 @@ pub async fn find_pk<'a>(
                     addr.encode(),
                     err
                 ))
-            })?
-            .ref_to()),
+            })?),
         Address::Internal(_) => other_err(format!(
             "Internal address {} doesn't have any signing keys.",
             addr
@@ -188,15 +186,32 @@ pub async fn tx_signers<'a>(
     match signer {
         Some(signer) if signer == masp() => Ok(vec![masp_tx_key().ref_to()]),
 
-        Some(signer) => Ok(vec![
-            find_pk(context, &signer, args.password.clone()).await?,
-        ]),
+        Some(signer) => Ok(vec![find_pk(context, &signer).await?]),
         None => other_err(
             "All transactions must be signed; please either specify the key \
              or the address from which to look up the signing key."
                 .to_string(),
         ),
     }
+}
+
+/// The different parts of a transaction that can be signed
+#[derive(Eq, Hash, PartialEq)]
+pub enum Signable {
+    FeeHeader,
+    RawHeader,
+}
+
+/// Causes sign_tx to attempt signing using only the software wallet
+pub async fn default_sign(
+    _tx: Tx,
+    pubkey: common::PublicKey,
+    _parts: HashSet<Signable>,
+) -> Result<Tx, Error> {
+    Err(Error::Other(format!(
+        "unable to sign transaction with {}",
+        pubkey
+    )))
 }
 
 /// Sign a transaction with a given signing key or public key of a given signer.
@@ -210,42 +225,96 @@ pub async fn tx_signers<'a>(
 /// hashes needed for monitoring the tx on chain.
 ///
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
-pub fn sign_tx<U: WalletIo>(
-    wallet: &mut Wallet<U>,
+pub async fn sign_tx<'a, F: std::future::Future<Output = Result<Tx, Error>>>(
+    context: &impl Namada<'a>,
     args: &args::Tx,
     tx: &mut Tx,
     signing_data: SigningTxData,
+    sign: impl Fn(Tx, common::PublicKey, HashSet<Signable>) -> F,
 ) -> Result<(), Error> {
+    let mut used_pubkeys = HashSet::new();
+
+    // First try to sign the raw header with the supplied signatures
     if !args.signatures.is_empty() {
         let signatures = args
             .signatures
             .iter()
-            .map(|bytes| SignatureIndex::deserialize(bytes).unwrap())
+            .map(|bytes| {
+                let sigidx = SignatureIndex::deserialize(bytes).unwrap();
+                used_pubkeys.insert(sigidx.pubkey.clone());
+                sigidx
+            })
             .collect();
         tx.add_signatures(signatures);
-    } else if let Some(account_public_keys_map) =
-        signing_data.account_public_keys_map
+    }
+
+    // Then try to sign the raw header with private keys in the software wallet
+    if let Some(account_public_keys_map) = signing_data.account_public_keys_map
     {
+        let mut wallet = context.wallet_mut().await;
         let signing_tx_keypairs = signing_data
             .public_keys
             .iter()
             .filter_map(|public_key| {
-                match find_key_by_pk(wallet, args, public_key) {
-                    Ok(secret_key) => Some(secret_key),
-                    Err(_) => None,
+                if used_pubkeys.contains(public_key) {
+                    None
+                } else {
+                    match find_key_by_pk(*wallet, args, public_key) {
+                        Ok(secret_key) => {
+                            used_pubkeys.insert(public_key.clone());
+                            Some(secret_key)
+                        }
+                        Err(_) => None,
+                    }
                 }
             })
             .collect::<Vec<common::SecretKey>>();
-        tx.sign_raw(
-            signing_tx_keypairs,
-            account_public_keys_map,
-            signing_data.owner,
-        );
+        if !signing_tx_keypairs.is_empty() {
+            tx.sign_raw(
+                signing_tx_keypairs,
+                account_public_keys_map,
+                signing_data.owner,
+            );
+        }
     }
 
-    let fee_payer_keypair =
-        find_key_by_pk(wallet, args, &signing_data.fee_payer)?;
-    tx.sign_wrapper(fee_payer_keypair);
+    // Then try to sign the raw header using the hardware wallet
+    for pubkey in signing_data.public_keys {
+        if !used_pubkeys.contains(&pubkey) && pubkey != signing_data.fee_payer {
+            if let Ok(ntx) = sign(
+                tx.clone(),
+                pubkey.clone(),
+                HashSet::from([Signable::RawHeader]),
+            )
+            .await
+            {
+                *tx = ntx;
+                used_pubkeys.insert(pubkey.clone());
+            }
+        }
+    }
+
+    // Then try signing the fee header with the software wallet otherwise use
+    // the fallback
+    let key = {
+        // Lock the wallet just long enough to extract a key from it without
+        // interfering with the sign closure call
+        let mut wallet = context.wallet_mut().await;
+        find_key_by_pk(*wallet, args, &signing_data.fee_payer)
+    };
+    match key {
+        Ok(fee_payer_keypair) => {
+            tx.sign_wrapper(fee_payer_keypair);
+        }
+        Err(_) => {
+            *tx = sign(
+                tx.clone(),
+                signing_data.fee_payer.clone(),
+                HashSet::from([Signable::FeeHeader, Signable::RawHeader]),
+            )
+            .await?;
+        }
+    }
     Ok(())
 }
 
@@ -289,7 +358,7 @@ pub async fn aux_signing_data<'a>(
         context
             .wallet_mut()
             .await
-            .generate_disposable_signing_key()
+            .gen_disposable_signing_key(&mut OsRng)
             .to_public()
     } else {
         match &args.wrapper_fee_payer {

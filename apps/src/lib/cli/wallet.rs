@@ -2,18 +2,24 @@
 
 use std::fs::File;
 use std::io::{self, Write};
+use std::str::FromStr;
 
+use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use color_eyre::eyre::Result;
 use itertools::sorted;
+use ledger_namada_rs::{BIP44Path, NamadaApp};
+use ledger_transport_hid::hidapi::HidApi;
+use ledger_transport_hid::TransportNativeHID;
 use masp_primitives::zip32::ExtendedFullViewingKey;
+use namada::types::address::Address;
 use namada::types::io::Io;
 use namada::types::key::*;
 use namada::types::masp::{MaspValue, PaymentAddress};
 use namada_sdk::masp::find_valid_diversifier;
 use namada_sdk::wallet::{
-    DecryptionError, FindKeyError, GenRestoreKeyError, Wallet, WalletIo,
-    WalletStorage,
+    DecryptionError, DerivationPath, DerivationPathError, FindKeyError, Wallet,
+    WalletIo, WalletStorage,
 };
 use namada_sdk::{display, display_line, edisplay_line};
 use rand_core::OsRng;
@@ -28,19 +34,20 @@ use crate::wallet::{
 };
 
 impl CliApi {
-    pub fn handle_wallet_command(
+    pub async fn handle_wallet_command(
         cmd: cmds::NamadaWallet,
         mut ctx: Context,
         io: &impl Io,
     ) -> Result<()> {
         match cmd {
             cmds::NamadaWallet::Key(sub) => match sub {
-                cmds::WalletKey::Restore(cmds::KeyRestore(args)) => {
-                    key_and_address_restore(
+                cmds::WalletKey::Derive(cmds::KeyDerive(args)) => {
+                    key_and_address_derive(
                         &mut ctx.borrow_mut_chain_or_exit().wallet,
                         io,
                         args,
                     )
+                    .await
                 }
                 cmds::WalletKey::Gen(cmds::KeyGen(args)) => {
                     key_and_address_gen(ctx, io, args)
@@ -59,12 +66,13 @@ impl CliApi {
                 cmds::WalletAddress::Gen(cmds::AddressGen(args)) => {
                     key_and_address_gen(ctx, io, args)
                 }
-                cmds::WalletAddress::Restore(cmds::AddressRestore(args)) => {
-                    key_and_address_restore(
+                cmds::WalletAddress::Derive(cmds::AddressDerive(args)) => {
+                    key_and_address_derive(
                         &mut ctx.borrow_mut_chain_or_exit().wallet,
                         io,
                         args,
                     )
+                    .await
                 }
                 cmds::WalletAddress::Find(cmds::AddressOrAliasFind(args)) => {
                     address_or_alias_find(ctx, io, args)
@@ -261,7 +269,8 @@ fn spending_key_gen(
     let mut wallet = load_wallet(ctx, is_pre_genesis);
     let alias = alias.to_lowercase();
     let password = read_and_confirm_encryption_password(unsafe_dont_encrypt);
-    let (alias, _key) = wallet.gen_spending_key(alias, password, alias_force);
+    let (alias, _key) =
+        wallet.gen_store_spending_key(alias, password, alias_force, &mut OsRng);
     wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
     display_line!(
         io,
@@ -334,12 +343,7 @@ fn address_key_add(
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             let alias = wallet
-                .encrypt_insert_spending_key(
-                    alias,
-                    spending_key,
-                    password,
-                    alias_force,
-                )
+                .insert_spending_key(alias, spending_key, password, alias_force)
                 .unwrap_or_else(|| {
                     edisplay_line!(io, "Spending key not added");
                     cli::safe_exit(1);
@@ -365,38 +369,113 @@ fn address_key_add(
     );
 }
 
-/// Restore a keypair and an implicit address from the mnemonic code in the
+/// Decode the derivation path from the given string unless it is "default",
+/// in which case use the default derivation path for the given scheme.
+pub fn decode_derivation_path(
+    scheme: SchemeType,
+    derivation_path: String,
+) -> Result<DerivationPath, DerivationPathError> {
+    let is_default = derivation_path.eq_ignore_ascii_case("DEFAULT");
+    let parsed_derivation_path = if is_default {
+        DerivationPath::default_for_scheme(scheme)
+    } else {
+        DerivationPath::from_path_str(scheme, &derivation_path)?
+    };
+    if !parsed_derivation_path.is_compatible(scheme) {
+        println!(
+            "WARNING: the specified derivation path may be incompatible with \
+             the chosen cryptography scheme."
+        )
+    }
+    println!("Using HD derivation path {}", parsed_derivation_path);
+    Ok(parsed_derivation_path)
+}
+
+/// Derives a keypair and an implicit address from the mnemonic code in the
 /// wallet.
-fn key_and_address_restore(
+async fn key_and_address_derive(
     wallet: &mut Wallet<impl WalletStorage + WalletIo>,
     io: &impl Io,
-    args::KeyAndAddressRestore {
+    args::KeyAndAddressDerive {
         scheme,
         alias,
         alias_force,
         unsafe_dont_encrypt,
         derivation_path,
-    }: args::KeyAndAddressRestore,
+        use_device,
+    }: args::KeyAndAddressDerive,
 ) {
-    let encryption_password =
-        read_and_confirm_encryption_password(unsafe_dont_encrypt);
-    let (alias, _key) = wallet
-        .derive_key_from_user_mnemonic_code(
-            scheme,
-            alias,
-            alias_force,
-            derivation_path,
-            None,
-            encryption_password,
-        )
+    let derivation_path = decode_derivation_path(scheme, derivation_path)
         .unwrap_or_else(|err| {
             edisplay_line!(io, "{}", err);
             cli::safe_exit(1)
-        })
-        .unwrap_or_else(|| {
-            display_line!(io, "No changes are persisted. Exiting.");
-            cli::safe_exit(0);
         });
+    let alias = if !use_device {
+        let encryption_password =
+            read_and_confirm_encryption_password(unsafe_dont_encrypt);
+        wallet
+            .derive_key_from_mnemonic_code(
+                scheme,
+                alias,
+                alias_force,
+                derivation_path,
+                None,
+                encryption_password,
+            )
+            .unwrap_or_else(|err| {
+                edisplay_line!(io, "{}", err);
+                display_line!(io, "No changes are persisted. Exiting.");
+                cli::safe_exit(1)
+            })
+            .0
+    } else {
+        let hidapi = HidApi::new().unwrap_or_else(|err| {
+            edisplay_line!(io, "Failed to create Hidapi: {}", err);
+            cli::safe_exit(1)
+        });
+        let app = NamadaApp::new(
+            TransportNativeHID::new(&hidapi).unwrap_or_else(|err| {
+                edisplay_line!(io, "Unable to connect to Ledger: {}", err);
+                cli::safe_exit(1)
+            }),
+        );
+        let response = app
+            .get_address_and_pubkey(
+                &BIP44Path {
+                    path: derivation_path.to_string(),
+                },
+                true,
+            )
+            .await
+            .unwrap_or_else(|err| {
+                edisplay_line!(
+                    io,
+                    "Unable to connect to query address and public key from \
+                     Ledger: {}",
+                    err
+                );
+                cli::safe_exit(1)
+            });
+
+        let pubkey = common::PublicKey::try_from_slice(&response.public_key)
+            .expect("unable to decode public key from hardware wallet");
+        let pkh = PublicKeyHash::from(&pubkey);
+        let address = Address::from_str(&response.address_str)
+            .expect("unable to decode address from hardware wallet");
+
+        wallet
+            .insert_public_key(
+                alias.unwrap_or_else(|| pkh.to_string()),
+                pubkey,
+                Some(address),
+                Some(derivation_path),
+                alias_force,
+            )
+            .unwrap_or_else(|| {
+                display_line!(io, "No changes are persisted. Exiting.");
+                cli::safe_exit(1)
+            })
+    };
     wallet
         .save()
         .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
@@ -424,27 +503,33 @@ fn key_and_address_gen(
     let mut wallet = load_wallet(ctx, is_pre_genesis);
     let encryption_password =
         read_and_confirm_encryption_password(unsafe_dont_encrypt);
+    let derivation_path = decode_derivation_path(scheme, derivation_path)
+        .unwrap_or_else(|err| {
+            edisplay_line!(io, "{}", err);
+            cli::safe_exit(1)
+        });
     let mut rng = OsRng;
-    let derivation_path_and_mnemonic_rng =
-        derivation_path.map(|p| (p, &mut rng));
-    let (alias, _key, _mnemonic) = wallet
-        .gen_key(
+    let (_mnemonic, seed) = Wallet::<CliWalletUtils>::gen_hd_seed(
+        None, &mut rng,
+    )
+    .unwrap_or_else(|err| {
+        edisplay_line!(io, "{}", err);
+        cli::safe_exit(1)
+    });
+    let alias = wallet
+        .derive_store_hd_secret_key(
             scheme,
             alias,
             alias_force,
-            None,
+            seed,
+            derivation_path,
             encryption_password,
-            derivation_path_and_mnemonic_rng,
         )
-        .unwrap_or_else(|err| match err {
-            GenRestoreKeyError::KeyStorageError => {
-                display_line!(io, "No changes are persisted. Exiting.");
-                cli::safe_exit(0);
-            }
-            _ => {
-                edisplay_line!(io, "{}", err);
-                cli::safe_exit(1);
-            }
+        .map(|x| x.0)
+        .unwrap_or_else(|err| {
+            eprintln!("{}", err);
+            println!("No changes are persisted. Exiting.");
+            cli::safe_exit(0);
         });
     wallet
         .save()
@@ -482,7 +567,9 @@ fn key_find(
                     );
                     cli::safe_exit(1)
                 }
-                Some(alias) => wallet.find_key(alias.to_lowercase(), None),
+                Some(alias) => {
+                    wallet.find_secret_key(alias.to_lowercase(), None)
+                }
             }
         }
     };
@@ -512,8 +599,8 @@ fn key_list(
     }: args::KeyList,
 ) {
     let wallet = load_wallet(ctx, is_pre_genesis);
-    let known_keys = wallet.get_keys();
-    if known_keys.is_empty() {
+    let known_public_keys = wallet.get_public_keys();
+    if known_public_keys.is_empty() {
         display_line!(
             io,
             "No known keys. Try `key gen --alias my-key` to generate a new \
@@ -523,45 +610,47 @@ fn key_list(
         let stdout = io::stdout();
         let mut w = stdout.lock();
         display_line!(io, &mut w; "Known keys:").unwrap();
-        for (alias, (stored_keypair, pkh)) in known_keys {
-            let encrypted = if stored_keypair.is_encrypted() {
-                "encrypted"
-            } else {
-                "not encrypted"
+        let known_secret_keys = wallet.get_secret_keys();
+        for (alias, public_key) in known_public_keys {
+            let stored_keypair = known_secret_keys.get(&alias);
+            let encrypted = match stored_keypair {
+                None => "external",
+                Some((stored_keypair, _pkh))
+                    if stored_keypair.is_encrypted() =>
+                {
+                    "encrypted"
+                }
+                Some(_) => "not encrypted",
             };
             display_line!(io,
                 &mut w;
                 "  Alias \"{}\" ({}):", alias, encrypted,
             )
             .unwrap();
-            if let Some(pkh) = pkh {
-                display_line!(io, &mut w; "    Public key hash: {}", pkh)
-                    .unwrap();
-            }
-            match stored_keypair.get::<CliWalletUtils>(decrypt, None) {
-                Ok(keypair) => {
-                    display_line!(io,
-                        &mut w;
-                        "    Public key: {}", keypair.ref_to(),
-                    )
-                    .unwrap();
-                    if unsafe_show_secret {
+            display_line!(io, &mut w; "    Public key hash: {}", PublicKeyHash::from(&public_key))
+                .unwrap();
+            display_line!(io, &mut w; "    Public key: {}", public_key)
+                .unwrap();
+            if let Some((stored_keypair, _pkh)) = stored_keypair {
+                match stored_keypair.get::<CliWalletUtils>(decrypt, None) {
+                    Ok(keypair) if unsafe_show_secret => {
                         display_line!(io,
-                            &mut w;
-                            "    Secret key: {}", keypair,
+                                      &mut w;
+                                      "    Secret key: {}", keypair,
                         )
                         .unwrap();
                     }
-                }
-                Err(DecryptionError::NotDecrypting) if !decrypt => {
-                    continue;
-                }
-                Err(err) => {
-                    display_line!(io,
-                        &mut w;
-                        "    Couldn't decrypt the keypair: {}", err,
-                    )
-                    .unwrap();
+                    Ok(_keypair) => {}
+                    Err(DecryptionError::NotDecrypting) if !decrypt => {
+                        continue;
+                    }
+                    Err(err) => {
+                        display_line!(io,
+                                      &mut w;
+                                      "    Couldn't decrypt the keypair: {}", err,
+                        )
+                            .unwrap();
+                    }
                 }
             }
         }
@@ -579,7 +668,7 @@ fn key_export(
 ) {
     let mut wallet = load_wallet(ctx, is_pre_genesis);
     wallet
-        .find_key(alias.to_lowercase(), None)
+        .find_secret_key(alias.to_lowercase(), None)
         .map(|keypair| {
             let file_data = keypair.serialize_to_vec();
             let file_name = format!("key_{}", alias.to_lowercase());
@@ -676,7 +765,7 @@ fn address_add(
 ) {
     let mut wallet = load_wallet(ctx, is_pre_genesis);
     if wallet
-        .add_address(alias.to_lowercase(), address, alias_force)
+        .insert_address(alias.to_lowercase(), address, alias_force)
         .is_none()
     {
         edisplay_line!(io, "Address not added");
