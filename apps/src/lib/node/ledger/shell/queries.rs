@@ -137,7 +137,6 @@ where
 // which is not possible from `namada` since we do not have
 // access to the `Shell` there
 #[cfg(test)]
-#[cfg(not(feature = "abcipp"))]
 mod test_queries {
     use namada::core::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
     use namada::ledger::pos::PosQueries;
@@ -202,27 +201,6 @@ mod test_queries {
                             .must_send_valset_upd(SendValsetUpd::Now),
                         can_send,
                     );
-                    // TODO(feature = "abcipp"): test
-                    // `SendValsetUpd::AtPrevHeight`; `idx` is the value
-                    // of the current index being iterated over
-                    // the array `epoch_assertions`
-                    //
-                    // ```ignore
-                    // if let Some((epoch, height, can_send)) =
-                    //     epoch_assertions.get(_idx.wrapping_sub(1)).copied()
-                    // {
-                    //     assert_eq!(
-                    //         shell.storage.get_epoch(height.into()),
-                    //         Some(Epoch(epoch))
-                    //     );
-                    //     assert_eq!(
-                    //         shell.storage.must_send_valset_upd(
-                    //             SendValsetUpd::AtPrevHeight
-                    //         ),
-                    //         can_send,
-                    //     );
-                    // }
-                    // ```
                     let params =
                         shell.wl_storage.pos_queries().get_pos_params();
                     let consensus_set: Vec<WeightedValidator> =
@@ -263,13 +241,6 @@ mod test_queries {
         };
     }
 
-    #[cfg(feature = "abcipp")]
-    test_must_send_valset_upd! {
-        // TODO(feature = "abcipp"): add some epoch assertions
-        epoch_assertions: []
-    }
-
-    #[cfg(not(feature = "abcipp"))]
     test_must_send_valset_upd! {
         epoch_assertions: [
             // (current epoch, current block height, can send valset upd)

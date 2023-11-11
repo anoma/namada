@@ -13,10 +13,7 @@ repository.workspace = true
 version.workspace = true
 
 [features]
-default = ["abciplus"]
-abciplus = [
-  "namada_core/abciplus",
-]
+default = []
 # testing helpers
 testing = ["proptest"]
 

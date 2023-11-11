@@ -7,29 +7,21 @@ use std::task::{Context, Poll};
 use futures::future::FutureExt;
 use namada::proof_of_stake::find_validator_by_raw_hash;
 use namada::proto::Tx;
-#[cfg(not(feature = "abcipp"))]
 use namada::types::hash::Hash;
 use namada::types::key::tm_raw_hash_to_string;
-#[cfg(not(feature = "abcipp"))]
-use namada::types::storage::BlockHash;
-use namada::types::storage::BlockHeight;
-#[cfg(not(feature = "abcipp"))]
+use namada::types::storage::{BlockHash, BlockHeight};
 use namada::types::transaction::hash_tx;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc::UnboundedSender;
 use tower::Service;
 
 use super::abcipp_shim_types::shim::request::{FinalizeBlock, ProcessedTx};
-#[cfg(not(feature = "abcipp"))]
-use super::abcipp_shim_types::shim::TxBytes;
-use super::abcipp_shim_types::shim::{Error, Request, Response};
+use super::abcipp_shim_types::shim::{Error, Request, Response, TxBytes};
 use crate::config;
 use crate::config::{Action, ActionAtHeight};
-#[cfg(not(feature = "abcipp"))]
 use crate::facade::tendermint_proto::v0_37::abci::{
     RequestBeginBlock, ResponseDeliverTx,
 };
-#[cfg(not(feature = "abcipp"))]
 use crate::facade::tower_abci::response::DeliverTx;
 use crate::facade::tower_abci::{BoxError, Request as Req, Response as Resp};
 use crate::node::ledger::shell::{EthereumOracleChannels, Shell};
@@ -40,9 +32,7 @@ use crate::node::ledger::shell::{EthereumOracleChannels, Shell};
 #[derive(Debug)]
 pub struct AbcippShim {
     service: Shell,
-    #[cfg(not(feature = "abcipp"))]
     begin_block_request: Option<RequestBeginBlock>,
-    #[cfg(not(feature = "abcipp"))]
     delivered_txs: Vec<TxBytes>,
     shell_recv: std::sync::mpsc::Receiver<(
         Req,
@@ -80,9 +70,7 @@ impl AbcippShim {
                     vp_wasm_compilation_cache,
                     tx_wasm_compilation_cache,
                 ),
-                #[cfg(not(feature = "abcipp"))]
                 begin_block_request: None,
-                #[cfg(not(feature = "abcipp"))]
                 delivered_txs: vec![],
                 shell_recv,
             },
@@ -96,7 +84,6 @@ impl AbcippShim {
         )
     }
 
-    #[cfg(not(feature = "abcipp"))]
     /// Get the hash of the txs in the block
     pub fn get_hash(&self) -> Hash {
         let bytes: Vec<u8> =
@@ -119,39 +106,11 @@ impl AbcippShim {
                         }
                         _ => unreachable!(),
                     }),
-                #[cfg(feature = "abcipp")]
-                Req::FinalizeBlock(block) => {
-                    let block_time =
-                        self.service.get_block_timestamp(block.time.clone());
-                    let unprocessed_txs = block.txs.clone();
-                    let (processing_results, _) =
-                        self.service.process_txs(&block.txs, block_time);
-                    let mut txs = Vec::with_capacity(unprocessed_txs.len());
-                    for (result, tx) in processing_results
-                        .into_iter()
-                        .zip(unprocessed_txs.into_iter())
-                    {
-                        txs.push(ProcessedTx { tx, result });
-                    }
-                    let mut finalize_req: FinalizeBlock = block.into();
-                    finalize_req.txs = txs;
-                    self.service
-                        .call(Request::FinalizeBlock(finalize_req))
-                        .map_err(Error::from)
-                        .and_then(|res| match res {
-                            Response::FinalizeBlock(resp) => {
-                                Ok(Resp::FinalizeBlock(resp.into()))
-                            }
-                            _ => Err(Error::ConvertResp(res)),
-                        })
-                }
-                #[cfg(not(feature = "abcipp"))]
                 Req::BeginBlock(block) => {
                     // we save this data to be forwarded to finalize later
                     self.begin_block_request = Some(block);
                     Ok(Resp::BeginBlock(Default::default()))
                 }
-                #[cfg(not(feature = "abcipp"))]
                 Req::DeliverTx(tx) => {
                     let mut deliver: DeliverTx = Default::default();
                     // Attach events to this transaction if possible
@@ -162,7 +121,6 @@ impl AbcippShim {
                     self.delivered_txs.push(tx.tx);
                     Ok(Resp::DeliverTx(deliver))
                 }
-                #[cfg(not(feature = "abcipp"))]
                 Req::EndBlock(_) => {
                     let begin_block_request =
                         self.begin_block_request.take().unwrap();

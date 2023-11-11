@@ -212,57 +212,6 @@ where
                         .expect("Missing wrapper tx in queue");
                 }
 
-                #[cfg(not(any(feature = "abciplus", feature = "abcipp")))]
-                if let TxType::Wrapper(wrapper) = &tx_header.tx_type {
-                    // Charge fee if wrapper transaction went out of gas or
-                    // failed because of fees (also write the wrapper hash to
-                    // storage to prevent replays that would force the fee payer
-                    // to pay more than once)
-                    let error_code =
-                        ErrorCodes::from_u32(processed_tx.result.code).unwrap();
-                    if (error_code == ErrorCodes::TxGasLimit)
-                        | (error_code == ErrorCodes::FeeError)
-                    {
-                        let masp_transaction = wrapper
-                            .unshield_section_hash
-                            .map(|ref hash| {
-                                tx.get_section(hash)
-                                    .map(|section| {
-                                        if let Section::MaspTx(transaction) =
-                                            section.as_ref()
-                                        {
-                                            Some(transaction.to_owned())
-                                        } else {
-                                            None
-                                        }
-                                    })
-                                    .flatten()
-                            })
-                            .flatten();
-                        if let Err(msg) = protocol::apply_wrapper_tx(
-                            wrapper,
-                            masp_transaction,
-                            &processed_tx.tx,
-                            ShellParams::new(
-                                &mut TxGasMeter::new_from_sub_limit(
-                                    u64::MAX.into(),
-                                ),
-                                &mut self.wl_storage,
-                                &mut self.vp_wasm_cache,
-                                &mut self.tx_wasm_cache,
-                            ),
-                            Some(&native_block_proposer_address),
-                        ) {
-                            self.wl_storage.write_log.drop_tx();
-                            tracing::error!(
-                                "Rejected wrapper tx {} could not pay fee: {}",
-                                hash::Hash::sha256(tx.header_hash()),
-                                msg
-                            )
-                        }
-                    }
-                }
-
                 continue;
             }
 

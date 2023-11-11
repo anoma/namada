@@ -145,8 +145,6 @@ mod tests {
     use crate::types::hash::Hash;
     use crate::types::key;
     use crate::types::key::RefTo;
-    #[cfg(feature = "abcipp")]
-    use crate::types::storage::BlockHeight;
 
     /// Test the hashing of an Ethereum event
     #[test]
@@ -204,7 +202,6 @@ mod tests {
         // so each of them signs `ext` with their respective sk
         let ext_1 = Signed::new(&sk_1, ext(validator_1.clone()));
         let ext_2 = Signed::new(&sk_2, ext(validator_2.clone()));
-        #[cfg(not(feature = "abcipp"))]
         let ext_3 = Signed::new(&sk_1, {
             let mut ext = Vext::empty(
                 BlockHeight(last_block_height.0 - 1),
@@ -216,21 +213,10 @@ mod tests {
             ext
         });
 
-        #[cfg(feature = "abcipp")]
-        let ext = vec![ext_1, ext_2];
-        #[cfg(not(feature = "abcipp"))]
         let ext = vec![ext_1, ext_2, ext_3];
 
         // we have the `Signed<Vext>` instances we need,
         // let us now compress them into a single `VextDigest`
-        #[cfg(feature = "abcipp")]
-        let signatures: HashMap<_, _> = [
-            ((validator_1.clone(), last_block_height), ext[0].sig.clone()),
-            ((validator_2.clone(), last_block_height), ext[1].sig.clone()),
-        ]
-        .into_iter()
-        .collect();
-        #[cfg(not(feature = "abcipp"))]
         let signatures: HashMap<_, _> = [
             ((validator_1.clone(), last_block_height), ext[0].sig.clone()),
             ((validator_2.clone(), last_block_height), ext[1].sig.clone()),
@@ -241,15 +227,7 @@ mod tests {
         ]
         .into_iter()
         .collect();
-        #[cfg(feature = "abcipp")]
-        let signers = {
-            let mut s = BTreeSet::new();
-            s.insert((validator_1.clone(), last_block_height));
-            s.insert((validator_2, last_block_height));
-            s
-        };
 
-        #[cfg(not(feature = "abcipp"))]
         let signers = {
             let mut s = BTreeSet::new();
             s.insert((validator_1.clone(), last_block_height));

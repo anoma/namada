@@ -12,8 +12,6 @@ use namada::types::token;
 use namada::types::vote_extensions::ethereum_events::{
     self, MultiSignedEthEvent,
 };
-#[cfg(feature = "abcipp")]
-use namada::types::voting_power::FractionalVotingPower;
 use namada_sdk::eth_bridge::EthBridgeQueries;
 
 use super::*;
@@ -55,7 +53,7 @@ where
         (token::Amount, Signed<ethereum_events::Vext>),
         VoteExtensionError,
     > {
-        // NOTE(not(feature = "abciplus")): for ABCI++, we should pass
+        // NOTE: for ABCI++, we should pass
         // `last_height` here, instead of `ext.data.block_height`
         let ext_height_epoch = match self
             .wl_storage
@@ -84,17 +82,6 @@ where
             );
             return Err(VoteExtensionError::EthereumBridgeInactive);
         }
-        #[cfg(feature = "abcipp")]
-        if ext.data.block_height != last_height {
-            tracing::debug!(
-                ext_height = ?ext.data.block_height,
-                ?last_height,
-                "Ethereum events vote extension issued for a block height \
-                 different from the expected last height."
-            );
-            return Err(VoteExtensionError::UnexpectedBlockHeight);
-        }
-        #[cfg(not(feature = "abcipp"))]
         if ext.data.block_height > last_height {
             tracing::debug!(
                 ext_height = ?ext.data.block_height,
@@ -310,29 +297,10 @@ where
         &self,
         vote_extensions: Vec<Signed<ethereum_events::Vext>>,
     ) -> Option<ethereum_events::VextDigest> {
-        #[cfg(not(feature = "abcipp"))]
         #[allow(clippy::question_mark)]
         if self.wl_storage.storage.last_block.is_none() {
             return None;
         }
-
-        #[cfg(feature = "abcipp")]
-        let vexts_epoch = self
-            .wl_storage
-            .pos_queries()
-            .get_epoch(self.wl_storage.storage.get_last_block_height())
-            .expect(
-                "The epoch of the last block height should always be known",
-            );
-
-        #[cfg(feature = "abcipp")]
-        let total_voting_power = u64::from(
-            self.wl_storage
-                .pos_queries()
-                .get_total_voting_power(Some(vexts_epoch)),
-        );
-        #[cfg(feature = "abcipp")]
-        let mut voting_power = FractionalVotingPower::default();
 
         let mut event_observers = BTreeMap::new();
         let mut signatures = HashMap::new();
@@ -342,20 +310,6 @@ where
         {
             let validator_addr = vote_extension.data.validator_addr;
             let block_height = vote_extension.data.block_height;
-
-            // update voting power
-            #[cfg(feature = "abcipp")]
-            {
-                let validator_voting_power = u64::from(_validator_voting_power);
-                voting_power += FractionalVotingPower::new(
-                    validator_voting_power,
-                    total_voting_power,
-                )
-                .expect(
-                    "The voting power we obtain from storage should always be \
-                     valid",
-                );
-            }
 
             // register all ethereum events seen by `validator_addr`
             for ev in vote_extension.data.ethereum_events {
@@ -387,15 +341,6 @@ where
             }
         }
 
-        #[cfg(feature = "abcipp")]
-        if voting_power <= FractionalVotingPower::TWO_THIRDS {
-            tracing::error!(
-                "Tendermint has decided on a block including Ethereum events \
-                 reflecting <= 2/3 of the total stake"
-            );
-            return None;
-        }
-
         let events: Vec<MultiSignedEthEvent> = event_observers
             .into_iter()
             .map(|(event, signers)| MultiSignedEthEvent { event, signers })
@@ -409,8 +354,6 @@ where
 mod test_vote_extensions {
     use std::convert::TryInto;
 
-    #[cfg(feature = "abcipp")]
-    use borsh::BorshDeserialize;
     use borsh_ext::BorshSerializeExt;
     use namada::core::ledger::storage_api::collections::lazy_map::{
         NestedSubKey, SubKey,
@@ -422,32 +365,16 @@ mod test_vote_extensions {
         consensus_validator_set_handle,
         read_consensus_validator_set_addresses_with_stake,
     };
-    #[cfg(feature = "abcipp")]
-    use namada::proto::{SignableEthMessage, Signed};
     use namada::tendermint_proto::v0_37::abci::VoteInfo;
     use namada::types::address::testing::gen_established_address;
-    #[cfg(feature = "abcipp")]
-    use namada::types::eth_abi::Encode;
     use namada::types::ethereum_events::{
         EthAddress, EthereumEvent, TransferToEthereum, Uint,
     };
     use namada::types::hash::Hash;
-    #[cfg(feature = "abcipp")]
-    use namada::types::keccak::keccak_hash;
-    #[cfg(feature = "abcipp")]
-    use namada::types::keccak::KeccakHash;
     use namada::types::key::*;
     use namada::types::storage::{Epoch, InnerEthEventsQueue};
-    #[cfg(feature = "abcipp")]
-    use namada::types::vote_extensions::bridge_pool_roots;
     use namada::types::vote_extensions::ethereum_events;
-    #[cfg(feature = "abcipp")]
-    use namada::types::vote_extensions::VoteExtension;
 
-    #[cfg(feature = "abcipp")]
-    use crate::facade::tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
-    #[cfg(feature = "abcipp")]
-    use crate::facade::tower_abci::request;
     use crate::node::ledger::shell::test_utils::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
 
@@ -590,64 +517,6 @@ mod test_vote_extensions {
         assert_eq!(expected_events, got_events);
     }
 
-    /// Test that ethereum events are added to vote extensions.
-    /// Check that vote extensions pass verification.
-    #[cfg(feature = "abcipp")]
-    #[tokio::test]
-    async fn test_eth_events_vote_extension() {
-        let (mut shell, _, oracle, _) = setup_at_height(1);
-        let address = shell
-            .mode
-            .get_validator_address()
-            .expect("Test failed")
-            .clone();
-        let event_1 = EthereumEvent::TransfersToEthereum {
-            nonce: 0.into(),
-            transfers: vec![TransferToEthereum {
-                amount: 100.into(),
-                asset: EthAddress([1; 20]),
-                receiver: EthAddress([2; 20]),
-                checksum: Hash::default(),
-            }],
-            relayer: gen_established_address(),
-        };
-        let event_2 = EthereumEvent::NewContract {
-            name: "Test".to_string(),
-            address: EthAddress([0; 20]),
-        };
-        oracle.send(event_1.clone()).await.expect("Test failed");
-        oracle.send(event_2.clone()).await.expect("Test failed");
-        let vote_extension =
-            <VoteExtension as BorshDeserialize>::try_from_slice(
-                &shell.extend_vote(Default::default()).vote_extension[..],
-            )
-            .expect("Test failed");
-
-        let [event_first, event_second]: [EthereumEvent; 2] = vote_extension
-            .ethereum_events
-            .clone()
-            .expect("Test failed")
-            .data
-            .ethereum_events
-            .try_into()
-            .expect("Test failed");
-
-        assert_eq!(event_first, event_1);
-        assert_eq!(event_second, event_2);
-        let req = request::VerifyVoteExtension {
-            hash: vec![],
-            validator_address: address
-                .raw_hash()
-                .expect("Test failed")
-                .as_bytes()
-                .to_vec(),
-            height: 1,
-            vote_extension: vote_extension.serialize_to_vec(),
-        };
-        let res = shell.verify_vote_extension(req);
-        assert_eq!(res.status, i32::from(VerifyStatus::Accept));
-    }
-
     /// Test that Ethereum events signed by a non-validator are rejected
     #[test]
     fn test_eth_events_must_be_signed_by_validator() {
@@ -677,56 +546,6 @@ mod test_vote_extensions {
             validator_addr: address.clone(),
         }
         .sign(&signing_key);
-        #[cfg(feature = "abcipp")]
-        let req = request::VerifyVoteExtension {
-            hash: vec![],
-            validator_address: address
-                .raw_hash()
-                .expect("Test failed")
-                .as_bytes()
-                .to_vec(),
-            height: 0,
-            vote_extension: VoteExtension {
-                ethereum_events: Some(ethereum_events.clone()),
-                bridge_pool_root: {
-                    let to_sign = keccak_hash(
-                        [
-                            KeccakHash([0; 32]).encode().into_inner(),
-                            Uint::from(0).encode().into_inner(),
-                        ]
-                        .concat(),
-                    );
-                    let sig = Signed::<_, SignableEthMessage>::new(
-                        shell
-                            .mode
-                            .get_eth_bridge_keypair()
-                            .expect("Test failed"),
-                        to_sign,
-                    )
-                    .sig;
-                    Some(
-                        bridge_pool_roots::Vext {
-                            block_height: shell
-                                .wl_storage
-                                .storage
-                                .get_last_block_height(),
-                            validator_addr: address,
-                            sig,
-                        }
-                        .sign(
-                            shell.mode.get_protocol_key().expect("Test failed"),
-                        ),
-                    )
-                },
-                validator_set_update: None,
-            }
-            .serialize_to_vec(),
-        };
-        #[cfg(feature = "abcipp")]
-        assert_eq!(
-            shell.verify_vote_extension(req).status,
-            i32::from(VerifyStatus::Reject)
-        );
         assert!(!shell.validate_eth_events_vext(
             ethereum_events,
             shell.wl_storage.pos_queries().get_current_decision_height(),
@@ -868,52 +687,6 @@ mod test_vote_extensions {
             validator_addr: address.clone(),
         };
 
-        #[cfg(feature = "abcipp")]
-        {
-            let signed_vext = ethereum_events
-                .clone()
-                .sign(shell.mode.get_protocol_key().expect("Test failed"));
-            let bp_root = {
-                let to_sign = keccak_hash(
-                    [
-                        KeccakHash([0; 32]).encode().into_inner(),
-                        Uint::from(0).encode().into_inner(),
-                    ]
-                    .concat(),
-                );
-                let sig = Signed::<_, SignableEthMessage>::new(
-                    shell.mode.get_eth_bridge_keypair().expect("Test failed"),
-                    to_sign,
-                )
-                .sig;
-                bridge_pool_roots::Vext {
-                    block_height: shell
-                        .wl_storage
-                        .storage
-                        .get_last_block_height(),
-                    validator_addr: address.clone(),
-                    sig,
-                }
-                .sign(shell.mode.get_protocol_key().expect("Test failed"))
-            };
-            let req = request::VerifyVoteExtension {
-                hash: vec![],
-                validator_address: address.serialize_to_vec(),
-                height: 0,
-                vote_extension: VoteExtension {
-                    ethereum_events: Some(signed_vext),
-                    bridge_pool_root: Some(bp_root),
-                    validator_set_update: None,
-                }
-                .serialize_to_vec(),
-            };
-
-            assert_eq!(
-                shell.verify_vote_extension(req).status,
-                i32::from(VerifyStatus::Reject)
-            );
-        }
-
         ethereum_events.block_height =
             shell.wl_storage.storage.get_last_block_height() + 1;
         let signed_vext = ethereum_events
@@ -947,18 +720,6 @@ mod test_vote_extensions {
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
 
-        #[cfg(feature = "abcipp")]
-        let req = request::VerifyVoteExtension {
-            hash: vec![],
-            validator_address: address.serialize_to_vec(),
-            height: 0,
-            vote_extension: vote_ext.serialize_to_vec(),
-        };
-        #[cfg(feature = "abcipp")]
-        assert_eq!(
-            shell.verify_vote_extension(req).status,
-            i32::from(VerifyStatus::Reject)
-        );
         assert!(!shell.validate_eth_events_vext(
             vote_ext,
             shell.wl_storage.storage.get_last_block_height()

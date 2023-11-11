@@ -413,8 +413,14 @@ where
             } else {
                 // Balance was insufficient for fee payment, move all the
                 // available funds in the transparent balance of
-                // the fee payer. This branch should only be taken when using
-                // ABCI
+                // the fee payer. This shouldn't happen as it should be
+                // prevented from mempool.
+                tracing::error!(
+                    "Transfer of tx fee cannot be applied to due to \
+                     insufficient funds. Falling back to transferring the \
+                     available balance which is less than the fee. This \
+                     shouldn't happen."
+                );
                 token_transfer(
                     wl_storage,
                     &wrapper.fee.token,
@@ -433,17 +439,12 @@ where
             }
         }
         Err(e) => {
-            // Fee overflow, move all the available funds in the transparent
-            // balance of the fee payer. This branch should only be
-            // taken when using ABCI
-            token_transfer(
-                wl_storage,
-                &wrapper.fee.token,
-                &wrapper.fee_payer(),
-                block_proposer,
-                balance,
-            )
-            .map_err(|e| Error::FeeError(e.to_string()))?;
+            // Fee overflow. This shouldn't happen as it should be prevented
+            // from mempool.
+            tracing::error!(
+                "Transfer of tx fee cannot be applied to due to fee overflow. \
+                 This shouldn't happen."
+            );
 
             Err(Error::FeeError(format!(
                 "{}. All the available transparent funds have been moved to \
