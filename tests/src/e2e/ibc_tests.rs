@@ -218,7 +218,7 @@ fn setup_two_single_node_nets() -> Result<(Test, Test)> {
     // epoch per 100 seconds
     let update_genesis =
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
-            genesis.parameters.parameters.epochs_per_year = 315_360;
+            genesis.parameters.parameters.epochs_per_year = 31536;
             setup::set_validators(1, genesis, base_dir, |_| 0)
         };
     let test_a = setup::network(update_genesis, None)?;
@@ -1402,16 +1402,19 @@ fn check_balances(
 ) -> Result<()> {
     // Check the balances on Chain A
     let rpc_a = get_actor_rpc(test_a, &Who::Validator(0));
-    let query_args = vec!["balance", "--token", NAM, "--node", &rpc_a];
-    let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
     // Check the escrowed balance
-    let expected = format!(
-        ": 100000, owned by {}",
-        Address::Internal(InternalAddress::Ibc)
-    );
-    client.exp_string(&expected)?;
+    let escrow = Address::Internal(InternalAddress::Ibc).to_string();
+    let query_args = vec![
+        "balance", "--owner", &escrow, "--token", NAM, "--node", &rpc_a,
+    ];
+    let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
+    client.exp_string("nam: 100000")?;
     // Check the source balance
-    let expected = ": 880000, owned by albert".to_string();
+    let query_args = vec![
+        "balance", "--owner", ALBERT, "--token", NAM, "--node", &rpc_a,
+    ];
+    let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
+    let expected = "nam: 880000".to_string();
     client.exp_string(&expected)?;
     client.assert_success();
 
@@ -1466,16 +1469,19 @@ fn check_balances_after_back(
 ) -> Result<()> {
     // Check the balances on Chain A
     let rpc_a = get_actor_rpc(test_a, &Who::Validator(0));
-    let query_args = vec!["balance", "--token", NAM, "--node", &rpc_a];
-    let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
     // Check the escrowed balance
-    let expected = format!(
-        ": 50000, owned by {}",
-        Address::Internal(InternalAddress::Ibc)
-    );
-    client.exp_string(&expected)?;
+    let escrow = Address::Internal(InternalAddress::Ibc).to_string();
+    let query_args = vec![
+        "balance", "--owner", &escrow, "--token", NAM, "--node", &rpc_a,
+    ];
+    let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
+    client.exp_string("nam: 50000")?;
     // Check the source balance
-    let expected = ": 930000, owned by albert".to_string();
+    let query_args = vec![
+        "balance", "--owner", ALBERT, "--token", NAM, "--node", &rpc_a,
+    ];
+    let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
+    let expected = "nam: 930000".to_string();
     client.exp_string(&expected)?;
     client.assert_success();
 
