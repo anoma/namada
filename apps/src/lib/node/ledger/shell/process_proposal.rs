@@ -19,7 +19,7 @@ use namada_sdk::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 use super::block_alloc::{BlockSpace, EncryptedTxsBins};
 use super::*;
 use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
-use crate::facade::tendermint_proto::abci::RequestProcessProposal;
+use crate::facade::tendermint_proto::v0_37::abci::RequestProcessProposal;
 use crate::node::ledger::shell::block_alloc::{AllocFailure, TxBin};
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::ProcessProposal;
 use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;

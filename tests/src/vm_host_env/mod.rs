@@ -1033,7 +1033,7 @@ mod tests {
         let mut actions = tx_host_env::ibc::ibc_actions(tx::ctx());
         // the dummy module closes the channel
         let dummy_module = DummyTransferModule {};
-        actions.add_transfer_route(dummy_module.module_id(), dummy_module);
+        actions.add_transfer_module(dummy_module.module_id(), dummy_module);
         actions
             .execute(&tx_data)
             .expect("closing the channel failed");

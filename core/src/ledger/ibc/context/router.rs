@@ -1,15 +1,40 @@
 //! Functions to handle IBC modules
 
+use std::collections::HashMap;
 use std::rc::Rc;
 
-use super::super::{IbcActions, IbcCommonContext};
+use super::super::ModuleWrapper;
 use crate::ibc::core::ics24_host::identifier::PortId;
 use crate::ibc::core::router::{Module, ModuleId, Router};
 
-impl<C> Router for IbcActions<'_, C>
-where
-    C: IbcCommonContext,
-{
+/// IBC router
+#[derive(Debug, Default)]
+pub struct IbcRouter<'a> {
+    modules: HashMap<ModuleId, Rc<dyn ModuleWrapper + 'a>>,
+    ports: HashMap<PortId, ModuleId>,
+}
+
+impl<'a> IbcRouter<'a> {
+    /// Make new Router
+    pub fn new() -> Self {
+        Self {
+            modules: HashMap::new(),
+            ports: HashMap::new(),
+        }
+    }
+
+    /// Add TokenTransfer route
+    pub fn add_transfer_module(
+        &mut self,
+        module_id: ModuleId,
+        module: impl ModuleWrapper + 'a,
+    ) {
+        self.modules.insert(module_id.clone(), Rc::new(module));
+        self.ports.insert(PortId::transfer(), module_id);
+    }
+}
+
+impl<'a> Router for IbcRouter<'a> {
     fn get_route(&self, module_id: &ModuleId) -> Option<&dyn Module> {
         self.modules.get(module_id).map(|b| b.as_module())
     }
@@ -24,11 +49,7 @@ where
             .map(|b| b.as_module_mut())
     }
 
-    fn has_route(&self, module_id: &ModuleId) -> bool {
-        self.modules.contains_key(module_id)
-    }
-
-    fn lookup_module_by_port(&self, port_id: &PortId) -> Option<ModuleId> {
+    fn lookup_module(&self, port_id: &PortId) -> Option<ModuleId> {
         self.ports.get(port_id).cloned()
     }
 }

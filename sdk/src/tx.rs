@@ -309,10 +309,7 @@ pub async fn broadcast_tx<'a>(
     // `tendermint-rs` for this, which is currently using a hard-coded 30s
     // timeout.
     let response = lift_rpc_error(
-        context
-            .client()
-            .broadcast_tx_sync(tx.to_bytes().into())
-            .await,
+        context.client().broadcast_tx_sync(tx.to_bytes()).await,
     )?;
 
     if response.code == 0.into() {

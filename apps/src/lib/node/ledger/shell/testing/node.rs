@@ -25,8 +25,8 @@ use namada::proof_of_stake::{
     read_consensus_validator_set_addresses_with_stake,
     validator_consensus_key_handle,
 };
-use namada::tendermint_proto::abci::VoteInfo;
-use namada::tendermint_rpc::endpoint::abci_info;
+use namada::tendermint::abci::response::Info;
+use namada::tendermint_proto::v0_37::abci::VoteInfo;
 use namada::tendermint_rpc::SimpleRequest;
 use namada::types::control_flow::time::Duration;
 use namada::types::ethereum_events::EthereumEvent;
@@ -39,11 +39,10 @@ use num_traits::cast::FromPrimitive;
 use regex::Regex;
 use tokio::sync::mpsc;
 
-use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
-use crate::facade::tendermint_proto::abci::{
+use crate::facade::tendermint_proto::v0_37::abci::response_process_proposal::ProposalStatus;
+use crate::facade::tendermint_proto::v0_37::abci::{
     RequestPrepareProposal, RequestProcessProposal,
 };
-use crate::facade::tendermint_rpc::endpoint::abci_info::AbciInfo;
 use crate::facade::tendermint_rpc::error::Error as RpcError;
 use crate::facade::{tendermint, tendermint_rpc};
 use crate::node::ledger::ethereum_oracle::test_tools::mock_web3_client::{
@@ -380,8 +379,8 @@ impl MockNode {
         let hash_string = tm_consensus_key_raw_hash(&ck);
         let pkh1 = HEXUPPER.decode(hash_string.as_bytes()).unwrap();
         let votes = vec![VoteInfo {
-            validator: Some(namada::tendermint_proto::abci::Validator {
-                address: pkh1.clone(),
+            validator: Some(namada::tendermint_proto::v0_37::abci::Validator {
+                address: pkh1.clone().into(),
                 power: u128::try_from(val1.bonded_stake).unwrap() as i64,
             }),
             signed_last_block: true,
@@ -403,7 +402,7 @@ impl MockNode {
             // in the finalize block request
             let txs = {
                 let req = RequestPrepareProposal {
-                    proposer_address: proposer_address.clone(),
+                    proposer_address: proposer_address.clone().into(),
                     ..Default::default()
                 };
                 let txs = locked.prepare_proposal(req).txs;
@@ -459,8 +458,8 @@ impl MockNode {
         let (proposer_address, votes) = self.prepare_request();
 
         let req = RequestProcessProposal {
-            txs: txs.clone(),
-            proposer_address: proposer_address.clone(),
+            txs: txs.clone().into_iter().map(|tx| tx.into()).collect(),
+            proposer_address: proposer_address.clone().into(),
             ..Default::default()
         };
         let mut locked = self.shell.lock().unwrap();
@@ -494,7 +493,10 @@ impl MockNode {
             txs: txs
                 .into_iter()
                 .zip(result.tx_results.into_iter())
-                .map(|(tx, result)| ProcessedTx { tx, result })
+                .map(|(tx, result)| ProcessedTx {
+                    tx: tx.into(),
+                    result,
+                })
                 .collect(),
             proposer_address,
             votes,
@@ -604,7 +606,7 @@ impl<'a> Client for &'a MockNode {
     async fn perform<R>(
         &self,
         _request: R,
-    ) -> std::result::Result<R::Response, RpcError>
+    ) -> std::result::Result<R::Output, RpcError>
     where
         R: SimpleRequest,
     {
@@ -612,10 +614,10 @@ impl<'a> Client for &'a MockNode {
     }
 
     /// `/abci_info`: get information about the ABCI application.
-    async fn abci_info(&self) -> Result<abci_info::AbciInfo, RpcError> {
+    async fn abci_info(&self) -> Result<Info, RpcError> {
         self.drive_mock_services_bg().await;
         let locked = self.shell.lock().unwrap();
-        Ok(AbciInfo {
+        Ok(Info {
             data: "Namada".to_string(),
             version: "test".to_string(),
             app_version: 0,
@@ -634,7 +636,9 @@ impl<'a> Client for &'a MockNode {
                 .as_ref()
                 .map(|b| b.hash.0)
                 .unwrap_or_default()
-                .to_vec(),
+                .to_vec()
+                .try_into()
+                .unwrap(),
         })
     }
 
@@ -642,7 +646,7 @@ impl<'a> Client for &'a MockNode {
     /// from `CheckTx`.
     async fn broadcast_tx_sync(
         &self,
-        tx: namada::tendermint::abci::Transaction,
+        tx: impl Into<Vec<u8>>,
     ) -> Result<tendermint_rpc::endpoint::broadcast::tx_sync::Response, RpcError>
     {
         self.drive_mock_services_bg().await;
@@ -650,26 +654,29 @@ impl<'a> Client for &'a MockNode {
             code: Default::default(),
             data: Default::default(),
             log: Default::default(),
-            hash: tendermint::abci::transaction::Hash::new([0; 32]),
+            hash: tendermint::Hash::default(),
         };
         let tx_bytes: Vec<u8> = tx.into();
         self.submit_txs(vec![tx_bytes]);
         if !self.success() {
             // TODO: submit_txs should return the correct error code + message
-            resp.code = tendermint::abci::Code::Err(1337);
+            resp.code = 1337.into();
             return Ok(resp);
         } else {
             self.clear_results();
         }
         let (proposer_address, _) = self.prepare_request();
         let req = RequestPrepareProposal {
-            proposer_address,
+            proposer_address: proposer_address.into(),
             ..Default::default()
         };
-        let txs = {
+        let txs: Vec<Vec<u8>> = {
             let locked = self.shell.lock().unwrap();
             locked.prepare_proposal(req).txs
-        };
+        }
+        .into_iter()
+        .map(|tx| tx.into())
+        .collect();
         if !txs.is_empty() {
             self.submit_txs(txs);
         }
@@ -770,14 +777,15 @@ impl<'a> Client for &'a MockNode {
                     None
                 }
             })
-            .map(|event| namada::tendermint::abci::responses::Event {
-                type_str: event.event_type.to_string(),
+            .map(|event| namada::tendermint::abci::Event {
+                kind: event.event_type.to_string(),
                 attributes: event
                     .attributes
                     .iter()
-                    .map(|(k, v)| namada::tendermint::abci::tag::Tag {
+                    .map(|(k, v)| namada::tendermint::abci::EventAttribute {
                         key: k.parse().unwrap(),
                         value: v.parse().unwrap(),
+                        index: true,
                     })
                     .collect(),
             })
@@ -787,10 +795,12 @@ impl<'a> Client for &'a MockNode {
         Ok(tendermint_rpc::endpoint::block_results::Response {
             height,
             txs_results: None,
+            finalize_block_events: vec![],
             begin_block_events: None,
             end_block_events: has_events.then_some(events),
             validator_updates: vec![],
             consensus_param_updates: None,
+            app_hash: namada::tendermint::hash::AppHash::default(),
         })
     }
 

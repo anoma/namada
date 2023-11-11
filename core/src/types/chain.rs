@@ -10,8 +10,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-/// The length of chain ID string
-pub const CHAIN_ID_LENGTH: usize = 30;
+/// The length of the chain ID string. Tendermint's MAX_LENGTH is 50, and ibc-rs
+/// would append a maximum of 21 characters.
+pub const CHAIN_ID_LENGTH: usize = 29;
 /// The maximum length of chain ID prefix
 pub const CHAIN_ID_PREFIX_MAX_LEN: usize = 19;
 /// Separator between chain ID prefix and the generated hash
@@ -177,7 +178,7 @@ impl ProposalBytes {
 }
 
 /// Release default chain ID. Must be [`CHAIN_ID_LENGTH`] long.
-pub const DEFAULT_CHAIN_ID: &str = "namada-internal.00000000000000";
+pub const DEFAULT_CHAIN_ID: &str = "namada-internal.00000000000-0";
 
 /// Chain ID
 #[derive(
@@ -211,10 +212,10 @@ impl ChainId {
         let mut hasher = Sha256::new();
         hasher.update(genesis_bytes);
         // less `1` for chain ID prefix separator char
-        let width = CHAIN_ID_LENGTH - 1 - prefix.len();
+        let width = CHAIN_ID_LENGTH - 3 - prefix.len();
         // lowercase hex of the first `width` chars of the hash
         let hash = format!("{:.width$x}", hasher.finalize(), width = width,);
-        let raw = format!("{}{}{}", prefix, CHAIN_ID_PREFIX_SEP, hash);
+        let raw = format!("{}{}{}-0", prefix, CHAIN_ID_PREFIX_SEP, hash);
         ChainId(raw)
     }
 
@@ -230,10 +231,10 @@ impl ChainId {
                 let mut hasher = Sha256::new();
                 hasher.update(genesis_bytes);
                 // less `1` for chain ID prefix separator char
-                let width = CHAIN_ID_LENGTH - 1 - prefix.len();
+                let width = CHAIN_ID_LENGTH - 3 - prefix.len();
                 // lowercase hex of the first `width` chars of the hash
                 let expected_hash =
-                    format!("{:.width$x}", hasher.finalize(), width = width,);
+                    format!("{:.width$x}-0", hasher.finalize(), width = width,);
                 if hash != expected_hash {
                     errors.push(ChainIdValidationError::InvalidHash(
                         expected_hash,

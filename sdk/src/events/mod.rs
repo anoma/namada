@@ -15,7 +15,7 @@ use serde_json::Value;
 
 // use crate::ledger::governance::utils::ProposalEvent;
 use crate::error::{EncodingError, Error, EventError};
-use crate::tendermint_proto::abci::EventAttribute;
+use crate::tendermint_proto::v0_37::abci::EventAttribute;
 
 /// Indicates if an event is emitted do to
 /// an individual Tx or the nature of a finalized block
@@ -172,7 +172,7 @@ impl From<IbcEvent> for Event {
 }
 
 /// Convert our custom event into the necessary tendermint proto type
-impl From<Event> for crate::tendermint_proto::abci::Event {
+impl From<Event> for crate::tendermint_proto::v0_37::abci::Event {
     fn from(event: Event) -> Self {
         Self {
             r#type: event.event_type.to_string(),

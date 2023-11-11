@@ -5,6 +5,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Once;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -54,6 +55,7 @@ use namada::ibc_proto::protobuf::Protobuf;
 use namada::ledger::dry_run_tx;
 use namada::ledger::gas::TxGasMeter;
 use namada::ledger::ibc::storage::{channel_key, connection_key};
+use namada::ledger::native_vp::ibc::get_dummy_header;
 use namada::ledger::queries::{
     Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
@@ -89,8 +91,8 @@ use crate::cli::Context;
 use crate::config;
 use crate::config::global::GlobalConfig;
 use crate::config::TendermintMode;
-use crate::facade::tendermint_proto::abci::RequestInitChain;
 use crate::facade::tendermint_proto::google::protobuf::Timestamp;
+use crate::facade::tendermint_proto::v0_37::abci::RequestInitChain;
 use crate::node::ledger::shell::Shell;
 use crate::wallet::{defaults, CliWalletUtils};
 
@@ -390,12 +392,15 @@ impl BenchShell {
     }
 
     pub fn init_ibc_client_state(&mut self, addr_key: Key) -> ClientId {
+        // Set a dummy header
+        self.wl_storage
+            .storage
+            .set_header(get_dummy_header())
+            .unwrap();
         // Set client state
-        let client_id = ClientId::new(
-            ClientType::new("01-tendermint".to_string()).unwrap(),
-            1,
-        )
-        .unwrap();
+        let client_id =
+            ClientId::new(ClientType::new("01-tendermint").unwrap(), 1)
+                .unwrap();
         let client_state_key = addr_key.join(&Key::from(
             IbcPath::ClientState(
                 namada::ibc::core::ics24_host::path::ClientStatePath(
@@ -406,10 +411,10 @@ impl BenchShell {
             .to_db_key(),
         ));
         let client_state = ClientState::new(
-            IbcChainId::from(ChainId::default().to_string()),
+            IbcChainId::from_str(&ChainId::default().to_string()).unwrap(),
             TrustThreshold::ONE_THIRD,
-            std::time::Duration::new(1, 0),
-            std::time::Duration::new(2, 0),
+            std::time::Duration::new(100, 0),
+            std::time::Duration::new(200, 0),
             std::time::Duration::new(1, 0),
             IbcHeight::new(0, 1).unwrap(),
             ProofSpecs::cosmos(),
@@ -425,6 +430,34 @@ impl BenchShell {
             .storage
             .write(&client_state_key, bytes)
             .expect("write failed");
+
+        // Set consensus state
+        let now: namada::tendermint::Time =
+            DateTimeUtc::now().try_into().unwrap();
+        let consensus_key = addr_key.join(&Key::from(
+            IbcPath::ClientConsensusState(
+                namada::ibc::core::ics24_host::path::ClientConsensusStatePath {
+                    client_id: client_id.clone(),
+                    epoch: 0,
+                    height: 1,
+                },
+            )
+            .to_string()
+            .to_db_key(),
+        ));
+
+        let consensus_state = ConsensusState {
+            timestamp: now,
+            root: CommitmentRoot::from_bytes(&[]),
+            next_validators_hash: Hash::Sha256([0u8; 32]),
+        };
+
+        let bytes =
+            <ConsensusState as Protobuf<Any>>::encode_vec(&consensus_state);
+        self.wl_storage
+            .storage
+            .write(&consensus_key, bytes)
+            .unwrap();
 
         client_id
     }
@@ -479,7 +512,7 @@ impl BenchShell {
     }
 
     pub fn init_ibc_channel(&mut self) {
-        let (addr_key, client_id) = self.init_ibc_connection();
+        let _ = self.init_ibc_connection();
 
         // Set Channel open
         let counterparty = ChannelCounterparty::new(
@@ -499,34 +532,6 @@ impl BenchShell {
         self.wl_storage
             .storage
             .write(&channel_key, channel.encode_vec())
-            .unwrap();
-
-        // Set consensus state
-        let now: namada::tendermint::Time =
-            DateTimeUtc::now().try_into().unwrap();
-        let consensus_key = addr_key.join(&Key::from(
-            IbcPath::ClientConsensusState(
-                namada::ibc::core::ics24_host::path::ClientConsensusStatePath {
-                    client_id,
-                    epoch: 0,
-                    height: 1,
-                },
-            )
-            .to_string()
-            .to_db_key(),
-        ));
-
-        let consensus_state = ConsensusState {
-            timestamp: now,
-            root: CommitmentRoot::from_bytes(&[]),
-            next_validators_hash: Hash::Sha256([0u8; 32]),
-        };
-
-        let bytes =
-            <ConsensusState as Protobuf<Any>>::encode_vec(&consensus_state);
-        self.wl_storage
-            .storage
-            .write(&consensus_key, bytes)
             .unwrap();
     }
 }
@@ -696,11 +701,13 @@ impl Client for BenchShell {
     async fn perform<R>(
         &self,
         _request: R,
-    ) -> Result<R::Response, tendermint_rpc::Error>
+    ) -> Result<R::Output, tendermint_rpc::Error>
     where
         R: tendermint_rpc::SimpleRequest,
     {
-        tendermint_rpc::Response::from_string("MOCK RESPONSE")
+        Ok(R::Output::from(
+            tendermint_rpc::Response::from_string("MOCK RESPONSE").unwrap(),
+        ))
     }
 }
 
