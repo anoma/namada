@@ -8,8 +8,6 @@ use namada::proto::Signed;
 use namada::types::keccak::keccak_hash;
 use namada::types::storage::BlockHeight;
 use namada::types::token;
-#[cfg(feature = "abcipp")]
-use namada::types::voting_power::FractionalVotingPower;
 
 use super::*;
 use crate::node::ledger::shell::Shell;
@@ -51,7 +49,7 @@ where
         (token::Amount, Signed<bridge_pool_roots::Vext>),
         VoteExtensionError,
     > {
-        // NOTE(not(feature = "abciplus")): for ABCI++, we should pass
+        // NOTE: for ABCI++, we should pass
         // `last_height` here, instead of `ext.data.block_height`
         let ext_height_epoch = match self
             .wl_storage
@@ -81,17 +79,6 @@ where
             return Err(VoteExtensionError::EthereumBridgeInactive);
         }
 
-        #[cfg(feature = "abcipp")]
-        if ext.data.block_height != last_height {
-            tracing::debug!(
-                ext_height = ?ext.data.block_height,
-                ?last_height,
-                "Bridge pool root's vote extension issued for a block height \
-                 different from the expected last height."
-            );
-            return Err(VoteExtensionError::UnexpectedBlockHeight);
-        }
-        #[cfg(not(feature = "abcipp"))]
         if ext.data.block_height > last_height {
             tracing::debug!(
                 ext_height = ?ext.data.block_height,
@@ -209,68 +196,10 @@ where
                 ext_1.data.validator_addr == ext_2.data.validator_addr
             })
     }
-
-    /// Compresses a set of signed Bridge pool roots into a single
-    /// [`bridge_pool_roots::MultiSignedVext`], whilst filtering invalid
-    /// [`Signed<bridge_pool_roots::Vext>`] instances in the process.
-    #[cfg(feature = "abcipp")]
-    pub fn compress_bridge_pool_roots(
-        &self,
-        vote_extensions: Vec<Signed<bridge_pool_roots::Vext>>,
-    ) -> Option<bridge_pool_roots::MultiSignedVext> {
-        let vexts_epoch = self
-            .wl_storage
-            .pos_queries()
-            .get_epoch(self.wl_storage.storage.get_last_block_height())
-            .expect(
-                "The epoch of the last block height should always be known",
-            );
-        let total_voting_power = u64::from(
-            self.wl_storage
-                .pos_queries()
-                .get_total_voting_power(Some(vexts_epoch)),
-        );
-        let mut voting_power = FractionalVotingPower::default();
-
-        let mut bp_root_sigs = bridge_pool_roots::MultiSignedVext::default();
-
-        for (validator_voting_power, vote_extension) in
-            self.filter_invalid_bp_roots_vexts(vote_extensions)
-        {
-            // update voting power
-            let validator_voting_power = u64::from(validator_voting_power);
-            voting_power += FractionalVotingPower::new(
-                validator_voting_power,
-                total_voting_power,
-            )
-            .expect(
-                "The voting power we obtain from storage should always be \
-                 valid",
-            );
-            tracing::debug!(
-                ?vote_extension.sig,
-                ?vote_extension.data.validator_addr,
-                "Inserting signature into bridge_pool_roots::MultSignedVext"
-            );
-            bp_root_sigs.insert(vote_extension);
-        }
-        if voting_power <= FractionalVotingPower::TWO_THIRDS {
-            tracing::error!(
-                "Tendermint has decided on a block including Ethereum events \
-                 reflecting <= 2/3 of the total stake"
-            );
-            None
-        } else {
-            Some(bp_root_sigs)
-        }
-    }
 }
 
 #[cfg(test)]
 mod test_bp_vote_extensions {
-    #[cfg(feature = "abcipp")]
-    use borsh::BorshDeserialize;
-    #[cfg(not(feature = "abcipp"))]
     use namada::core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
     use namada::ledger::pos::PosQueries;
     use namada::ledger::storage_api::StorageWrite;
@@ -284,22 +213,13 @@ mod test_bp_vote_extensions {
     };
     use namada::proto::{SignableEthMessage, Signed};
     use namada::tendermint_proto::v0_37::abci::VoteInfo;
-    #[cfg(not(feature = "abcipp"))]
     use namada::types::ethereum_events::Uint;
-    #[cfg(not(feature = "abcipp"))]
     use namada::types::keccak::{keccak_hash, KeccakHash};
     use namada::types::key::*;
     use namada::types::storage::BlockHeight;
     use namada::types::token;
     use namada::types::vote_extensions::bridge_pool_roots;
-    #[cfg(feature = "abcipp")]
-    use namada::types::vote_extensions::VoteExtension;
-    #[cfg(not(feature = "abcipp"))]
     use namada_sdk::eth_bridge::EthBridgeQueries;
-    #[cfg(feature = "abcipp")]
-    use tendermint_proto_abcipp::abci::response_verify_vote_extension::VerifyStatus;
-    #[cfg(feature = "abcipp")]
-    use tower_abci_abcipp::request;
 
     use crate::node::ledger::shell::test_utils::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
@@ -432,51 +352,6 @@ mod test_bp_vote_extensions {
         ))
     }
 
-    /// Test that signed bridge pool Merkle roots and nonces
-    /// are added to vote extensions and pass verification.
-    #[cfg(feature = "abcipp")]
-    #[test]
-    fn test_bp_root_vext() {
-        let (mut shell, _, _, _) = setup_at_height(3u64);
-        let address = shell
-            .mode
-            .get_validator_address()
-            .expect("Test failed")
-            .clone();
-
-        let vote_extension =
-            <VoteExtension as BorshDeserialize>::try_from_slice(
-                &shell.extend_vote(Default::default()).vote_extension[..],
-            )
-            .expect("Test failed");
-        let to_sign = get_bp_bytes_to_sign();
-        let sig = Signed::<_, SignableEthMessage>::new(
-            shell.mode.get_eth_bridge_keypair().expect("Test failed"),
-            to_sign,
-        )
-        .sig;
-        let bp_root = bridge_pool_roots::Vext {
-            block_height: shell.wl_storage.storage.get_last_block_height(),
-            validator_addr: address.clone(),
-            sig,
-        }
-        .sign(shell.mode.get_protocol_key().expect("Test failed"));
-
-        assert_eq!(vote_extension.bridge_pool_root, Some(bp_root));
-        let req = request::VerifyVoteExtension {
-            hash: vec![],
-            validator_address: address
-                .raw_hash()
-                .expect("Test failed")
-                .as_bytes()
-                .to_vec(),
-            height: 0,
-            vote_extension: vote_extension.serialize_to_vec(),
-        };
-        let res = shell.verify_vote_extension(req);
-        assert_eq!(res.status, i32::from(VerifyStatus::Accept));
-    }
-
     /// Test that we de-duplicate the bridge pool vexts
     /// in a block proposal by validator address.
     #[test]
@@ -605,18 +480,6 @@ mod test_bp_vote_extensions {
         );
     }
 
-    /// Test that an [`bridge_pool_roots::Vext`] that labels its included
-    /// block height as lower than the current block height is rejected.
-    #[cfg(feature = "abcipp")]
-    #[test]
-    fn test_block_height_too_low() {
-        let (shell, _, _, _) = setup_at_height(3u64);
-        reject_incorrect_block_number(
-            (shell.wl_storage.storage.get_last_block_height().0 - 1).into(),
-            &shell,
-        );
-    }
-
     /// Test if we reject Bridge pool roots vote extensions
     /// issued at genesis.
     #[test]
@@ -675,7 +538,6 @@ mod test_bp_vote_extensions {
 
     /// Test that we can verify vext from several block heights
     /// prior.
-    #[cfg(not(feature = "abcipp"))]
     #[test]
     fn test_vext_for_old_height() {
         let (mut shell, _recv, _, _oracle_control_recv) = setup_at_height(1u64);
@@ -743,7 +605,6 @@ mod test_bp_vote_extensions {
 
     /// Test that if the wrong block height is given for the provided root,
     /// we reject.
-    #[cfg(not(feature = "abcipp"))]
     #[test]
     fn test_wrong_height_for_root() {
         let (mut shell, _recv, _, _oracle_control_recv) = setup_at_height(1u64);

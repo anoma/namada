@@ -264,7 +264,6 @@ impl From<DateTimeUtc> for prost_types::Timestamp {
     }
 }
 
-#[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 impl TryFrom<crate::tendermint_proto::google::protobuf::Timestamp>
     for DateTimeUtc
 {
@@ -301,7 +300,6 @@ impl From<DateTimeUtc> for Rfc3339String {
     }
 }
 
-#[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 impl TryFrom<DateTimeUtc> for crate::tendermint::time::Time {
     type Error = crate::tendermint::Error;
 
@@ -310,7 +308,6 @@ impl TryFrom<DateTimeUtc> for crate::tendermint::time::Time {
     }
 }
 
-#[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 impl TryFrom<crate::tendermint::time::Time> for DateTimeUtc {
     type Error = chrono::ParseError;
 
@@ -319,14 +316,12 @@ impl TryFrom<crate::tendermint::time::Time> for DateTimeUtc {
     }
 }
 
-#[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 impl From<crate::tendermint::Timeout> for DurationNanos {
     fn from(val: crate::tendermint::Timeout) -> Self {
         Self::from(std::time::Duration::from(val))
     }
 }
 
-#[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 impl From<DurationNanos> for crate::tendermint::Timeout {
     fn from(val: DurationNanos) -> Self {
         Self::from(std::time::Duration::from(val))

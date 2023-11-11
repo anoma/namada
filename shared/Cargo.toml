@@ -15,7 +15,7 @@ version.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["abciplus", "namada-sdk", "wasm-runtime"]
+default = ["namada-sdk", "wasm-runtime"]
 mainnet = [
   "namada_core/mainnet",
 ]
@@ -55,13 +55,6 @@ tendermint-rpc = [
 # tendermint-rpc HttpClient
 http-client = [
   "tendermint-rpc/http-client"
-]
-
-abciplus = [
-  "namada_core/abciplus",
-  "namada_proof_of_stake/abciplus",
-  "namada_ethereum_bridge/abciplus",
-  "namada_sdk/abciplus",
 ]
 
 ibc-mocks = [

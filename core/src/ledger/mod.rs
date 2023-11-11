@@ -3,7 +3,6 @@
 pub mod eth_bridge;
 pub mod gas;
 pub mod governance;
-#[cfg(any(feature = "abciplus", feature = "abcipp"))]
 pub mod ibc;
 pub mod inflation;
 pub mod parameters;

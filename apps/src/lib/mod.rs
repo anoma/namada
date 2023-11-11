@@ -21,19 +21,6 @@ pub mod wasm_loader;
 pub use std;
 
 pub mod facade {
-    //! Facade module to reason about `abcipp` feature flag logic.
-
-    #[cfg(not(feature = "abcipp"))]
-    pub use {
-        namada::tendermint, namada::tendermint_proto, namada::tendermint_rpc,
-        tendermint_config, tower_abci,
-    };
-    #[cfg(feature = "abcipp")]
-    pub use {
-        tendermint_abcipp as tendermint,
-        tendermint_config_abcipp as tendermint_config,
-        tendermint_proto_abcipp as tendermint_proto,
-        tendermint_rpc_abcipp as tendermint_rpc,
-        tower_abci_abcipp as tower_abci,
-    };
+    pub use namada::{tendermint, tendermint_proto, tendermint_rpc};
+    pub use {tendermint_config, tower_abci};
 }

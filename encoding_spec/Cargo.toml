@@ -13,10 +13,7 @@ repository.workspace = true
 version.workspace = true
 
 [features]
-default = ["abciplus"]
-abciplus = [
-  "namada/abciplus"
-]
+default = []
 
 [dependencies]
 namada = {path = "../shared"}

@@ -339,7 +339,6 @@ impl ShellMode {
 
     /// If this node is a validator, broadcast a tx
     /// to the mempool using the broadcaster subprocess
-    #[cfg_attr(feature = "abcipp", allow(dead_code))]
     pub fn broadcast(&self, data: Vec<u8>) {
         if let Self::Validator {
             broadcast_sender, ..
@@ -1074,7 +1073,6 @@ where
         tx_bytes: &[u8],
         r#_type: MempoolTxType,
     ) -> response::CheckTx {
-        #[cfg(not(feature = "abcipp"))]
         use namada::types::transaction::protocol::{
             ethereum_tx_data_variants, ProtocolTxType,
         };
@@ -1149,7 +1147,6 @@ where
 
         match tx_type.tx_type {
             TxType::Protocol(protocol_tx) => match protocol_tx.tx {
-                #[cfg(not(feature = "abcipp"))]
                 ProtocolTxType::EthEventsVext => {
                     let ext = try_vote_extension!(
                         "Ethereum events",
@@ -1171,7 +1168,6 @@ where
                         response.log = String::from(VALID_MSG);
                     }
                 }
-                #[cfg(not(feature = "abcipp"))]
                 ProtocolTxType::BridgePoolVext => {
                     let ext = try_vote_extension!(
                         "Bridge pool roots",
@@ -1195,7 +1191,6 @@ where
                         response.log = String::from(VALID_MSG);
                     }
                 }
-                #[cfg(not(feature = "abcipp"))]
                 ProtocolTxType::ValSetUpdateVext => {
                     let ext = try_vote_extension!(
                         "validator set update",
@@ -1882,14 +1877,6 @@ mod test_utils {
             }
             self.wl_storage.storage.get_current_epoch().0
         }
-    }
-
-    /// Get the only validator's voting power.
-    #[inline]
-    #[cfg(not(feature = "abcipp"))]
-    #[allow(dead_code)]
-    pub fn get_validator_bonded_stake() -> namada::types::token::Amount {
-        200_000_000_000.into()
     }
 
     /// Config parameters to set up a test shell.
