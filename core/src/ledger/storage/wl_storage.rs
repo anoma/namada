@@ -69,6 +69,14 @@ where
 
         self.storage.has_replay_protection_entry(hash)
     }
+
+    /// Check if the given tx hash has already been committed to storage
+    pub fn has_committed_replay_protection_entry(
+        &self,
+        hash: &Hash,
+    ) -> Result<bool, super::Error> {
+        self.storage.has_replay_protection_entry(hash)
+    }
 }
 
 /// Common trait for [`WlStorage`] and [`TempWlStorage`], used to implement

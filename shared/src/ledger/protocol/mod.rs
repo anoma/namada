@@ -29,7 +29,7 @@ use crate::ledger::pgf::PgfVp;
 use crate::ledger::pos::{self, PosVP};
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, WlStorage, DB};
-use crate::ledger::{replay_protection, storage_api};
+use crate::ledger::storage_api;
 use crate::proto::{self, Tx};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage;
@@ -62,6 +62,10 @@ pub enum Error {
     FeeError(String),
     #[error("Invalid transaction signature")]
     InvalidTxSignature,
+    #[error(
+        "The decrypted transaction {0} has already been applied in this block"
+    )]
+    ReplayAttempt(Hash),
     #[error("Error executing VP for addresses: {0:?}")]
     VpRunnerError(vm::wasm::run::Error),
     #[error("The address {0} doesn't exist")]
@@ -212,12 +216,11 @@ where
 }
 
 /// Performs the required operation on a wrapper transaction:
+///  - replay protection
 ///  - fee payment
 ///  - gas accounting
-///  - replay protection
 ///
-/// Returns the set of changed storage keys. The caller should write the hash of
-/// the wrapper header to storage in case of failure.
+/// Returns the set of changed storage keys.
 pub(crate) fn apply_wrapper_tx<'a, D, H, CA, WLS>(
     tx: Tx,
     wrapper: &WrapperTx,
@@ -234,6 +237,12 @@ where
 {
     let mut changed_keys = BTreeSet::default();
 
+    // Write wrapper tx hash to storage
+    shell_params
+        .wl_storage
+        .write_tx_hash(tx.header_hash())
+        .expect("Error while writing tx hash to storage");
+
     // Charge fee before performing any fallible operations
     charge_fee(
         wrapper,
@@ -248,15 +257,6 @@ where
         .tx_gas_meter
         .add_tx_size_gas(tx_bytes)
         .map_err(|err| Error::GasError(err.to_string()))?;
-
-    // If wrapper was succesful, write inner tx hash to storage
-    shell_params
-        .wl_storage
-        .write_tx_hash(tx.raw_header_hash())
-        .expect("Error while writing tx hash to storage");
-    changed_keys.insert(replay_protection::get_replay_protection_last_key(
-        &tx.raw_header_hash(),
-    ));
 
     Ok(changed_keys)
 }
@@ -577,6 +577,13 @@ where
             tx_wasm_cache,
         )
     };
+
+    let tx_hash = tx.raw_header_hash();
+    if let Some(true) = write_log.has_replay_protection_entry(&tx_hash) {
+        // If the same transaction has already been applied in this block, skip
+        // execution and return
+        return Err(Error::ReplayAttempt(tx_hash));
+    }
 
     let verifiers = execute_tx(
         &tx,
@@ -1035,10 +1042,10 @@ where
                 Err(err) => match err {
                     // Execution of VPs can (and must) be short-circuited
                     // only in case of a gas overflow to prevent the
-                    // transaction from conuming resources that have not
+                    // transaction from consuming resources that have not
                     // been acquired in the corresponding wrapper tx. For
                     // all the other errors we keep evaluating the vps. This
-                    // allow to display a consistent VpsResult accross all
+                    // allows to display a consistent VpsResult accross all
                     // nodes and find any invalid signatures
                     Error::GasError(_) => {
                         return Err(err);
