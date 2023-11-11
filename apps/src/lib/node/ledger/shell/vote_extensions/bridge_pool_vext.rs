@@ -340,6 +340,7 @@ mod test_bp_vote_extensions {
             current_epoch: 0.into(),
             commission_rate: Default::default(),
             max_commission_rate_change: Default::default(),
+            metadata: Default::default(),
             offset_opt: None,
         })
         .expect("Test failed");

@@ -12,7 +12,7 @@ use namada::core::types::key::{
 };
 use namada::core::types::token::Amount;
 use namada::core::types::transaction::account::{InitAccount, UpdateAccount};
-use namada::core::types::transaction::pos::InitValidator;
+use namada::core::types::transaction::pos::{InitValidator, MetaDataChange};
 use namada::ibc::core::ics02_client::client_type::ClientType;
 use namada::ibc::core::ics03_connection::connection::Counterparty;
 use namada::ibc::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
@@ -45,12 +45,13 @@ use namada::types::transaction::EllipticCurve;
 use namada_apps::bench_utils::{
     BenchShell, BenchShieldedCtx, ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY,
     BERTHA_PAYMENT_ADDRESS, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
-    TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_DEACTIVATE_VALIDATOR_WASM,
-    TX_IBC_WASM, TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL_WASM,
-    TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM, TX_RESIGN_STEWARD,
-    TX_REVEAL_PK_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
-    TX_UPDATE_ACCOUNT_WASM, TX_UPDATE_STEWARD_COMMISSION,
-    TX_VOTE_PROPOSAL_WASM, TX_WITHDRAW_WASM, VP_VALIDATOR_WASM,
+    TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_CHANGE_VALIDATOR_METADATA_WASM,
+    TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
+    TX_INIT_PROPOSAL_WASM, TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM,
+    TX_RESIGN_STEWARD, TX_REVEAL_PK_WASM, TX_UNBOND_WASM,
+    TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
+    TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL_WASM, TX_WITHDRAW_WASM,
+    VP_VALIDATOR_WASM,
 };
 use namada_apps::wallet::defaults;
 use rand::rngs::StdRng;
@@ -639,6 +640,10 @@ fn init_validator(c: &mut Criterion) {
         dkg_key,
         commission_rate: namada::types::dec::Dec::default(),
         max_commission_rate_change: namada::types::dec::Dec::default(),
+        email: "null@null.net".to_string(),
+        description: None,
+        website: None,
+        discord_handle: None,
         validator_vp_code_hash: extra_hash,
     };
     let tx = shell.generate_tx(
@@ -676,6 +681,35 @@ fn change_validator_commission(c: &mut Criterion) {
             BenchShell::default,
             |shell| shell.execute_tx(&signed_tx),
             criterion::BatchSize::SmallInput,
+        )
+    });
+}
+
+fn change_validator_metadata(c: &mut Criterion) {
+    // Choose just one piece of data arbitrarily to change
+    let metadata_change = MetaDataChange {
+        validator: defaults::validator_address(),
+        email: None,
+        description: Some("I will change this piece of data".to_string()),
+        website: None,
+        discord_handle: None,
+        commission_rate: None,
+    };
+
+    let shell = BenchShell::default();
+    let signed_tx = shell.generate_tx(
+        TX_CHANGE_VALIDATOR_METADATA_WASM,
+        metadata_change,
+        None,
+        None,
+        Some(&defaults::validator_keypair()),
+    );
+
+    c.bench_function("change_validator_metadata", |b| {
+        b.iter_batched_ref(
+            BenchShell::default,
+            |shell| shell.execute_tx(&signed_tx),
+            criterion::BatchSize::LargeInput,
         )
     });
 }
@@ -979,6 +1013,7 @@ criterion_group!(
     resign_steward,
     update_steward_commission,
     deactivate_validator,
-    reactivate_validator
+    reactivate_validator,
+    change_validator_metadata
 );
 criterion_main!(whitelisted_txs);

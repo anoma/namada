@@ -746,6 +746,14 @@ pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
     pub commission_rate: Dec,
     /// Maximum commission rate change
     pub max_commission_rate_change: Dec,
+    /// The validator email
+    pub email: String,
+    /// The validator description
+    pub description: Option<String>,
+    /// The validator website
+    pub website: Option<String>,
+    /// The validator's discord handle
+    pub discord_handle: Option<String>,
     /// Path to the VP WASM code file
     pub validator_vp_code_path: PathBuf,
     /// Path to the TX WASM code file
@@ -1268,6 +1276,65 @@ impl CommissionRateChange {
 
 #[derive(Clone, Debug)]
 /// Commission rate change args
+pub struct MetaDataChange<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
+    pub tx: Tx<C>,
+    /// Validator address (should be self)
+    pub validator: C::Address,
+    /// New validator email
+    pub email: Option<String>,
+    /// New validator description
+    pub description: Option<String>,
+    /// New validator website
+    pub website: Option<String>,
+    /// New validator discord handle
+    pub discord_handle: Option<String>,
+    /// New validator commission rate
+    pub commission_rate: Option<Dec>,
+    /// Path to the TX WASM code file
+    pub tx_code_path: PathBuf,
+}
+
+impl<C: NamadaTypes> TxBuilder<C> for MetaDataChange<C> {
+    fn tx<F>(self, func: F) -> Self
+    where
+        F: FnOnce(Tx<C>) -> Tx<C>,
+    {
+        MetaDataChange {
+            tx: func(self.tx),
+            ..self
+        }
+    }
+}
+
+impl<C: NamadaTypes> MetaDataChange<C> {
+    /// Validator address (should be self)
+    pub fn validator(self, validator: C::Address) -> Self {
+        Self { validator, ..self }
+    }
+
+    /// Path to the TX WASM code file
+    pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
+        Self {
+            tx_code_path,
+            ..self
+        }
+    }
+}
+
+impl MetaDataChange {
+    /// Build a transaction from this builder
+    pub async fn build<'a>(
+        &self,
+        context: &impl Namada<'a>,
+    ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
+    {
+        tx::build_validator_metadata_change(context, self).await
+    }
+}
+
+#[derive(Clone, Debug)]
+/// Commission rate change args
 pub struct UpdateStewardCommission<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
@@ -1538,6 +1605,15 @@ pub struct QueryCommissionRate<C: NamadaTypes = SdkTypes> {
     pub validator: C::Address,
     /// Epoch in which to find commission rate
     pub epoch: Option<Epoch>,
+}
+
+/// Query validator metadata
+#[derive(Clone, Debug)]
+pub struct QueryMetaData<C: NamadaTypes = SdkTypes> {
+    /// Common query args
+    pub query: Query<C>,
+    /// Address of a validator
+    pub validator: C::Address,
 }
 
 /// Query PoS slashes

@@ -391,6 +391,10 @@ pub fn make_dev_genesis(
                     commission_rate: Dec::new(5, 2).expect("This can't fail"),
                     max_commission_rate_change: Dec::new(1, 2)
                         .expect("This can't fail"),
+                    email: "null@null.net".to_string(),
+                    description: None,
+                    website: None,
+                    discord_handle: None,
                     net_address: SocketAddr::new(
                         IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
                         8080,

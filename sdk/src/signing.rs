@@ -48,10 +48,10 @@ use crate::masp::make_asset_type;
 use crate::proto::{MaspBuilder, Section, Tx};
 use crate::rpc::{query_wasm_code_hash, validate_amount};
 use crate::tx::{
-    TX_BOND_WASM, TX_CHANGE_COMMISSION_WASM, TX_DEACTIVATE_VALIDATOR_WASM,
-    TX_IBC_WASM, TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL,
-    TX_INIT_VALIDATOR_WASM, TX_REACTIVATE_VALIDATOR_WASM, TX_REVEAL_PK,
-    TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
+    TX_BOND_WASM, TX_CHANGE_COMMISSION_WASM, TX_CHANGE_METADATA_WASM,
+    TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
+    TX_INIT_PROPOSAL, TX_INIT_VALIDATOR_WASM, TX_REACTIVATE_VALIDATOR_WASM,
+    TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
     TX_UPDATE_ACCOUNT_WASM, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM, VP_USER_WASM,
 };
 pub use crate::wallet::store::AddressVpType;
@@ -914,6 +914,8 @@ pub async fn to_ledger_vector<'a>(
     let withdraw_hash = query_wasm_code_hash(context, TX_WITHDRAW_WASM).await?;
     let change_commission_hash =
         query_wasm_code_hash(context, TX_CHANGE_COMMISSION_WASM).await?;
+    let change_metadata_hash =
+        query_wasm_code_hash(context, TX_CHANGE_METADATA_WASM).await?;
     let user_hash = query_wasm_code_hash(context, VP_USER_WASM).await?;
     let unjail_validator_hash =
         query_wasm_code_hash(context, TX_UNJAIL_VALIDATOR_WASM).await?;
@@ -1465,6 +1467,48 @@ pub async fn to_ledger_vector<'a>(
             format!("New rate : {}", commission_change.new_rate),
             format!("Validator : {}", commission_change.validator),
         ]);
+    } else if code_hash == change_metadata_hash {
+        let metadata_change = pos::MetaDataChange::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
+
+        tv.name = "Change_MetaData_0".to_string();
+
+        tv.output.extend(vec!["Type : Change metadata".to_string()]);
+
+        let mut other_items = vec![];
+        if let Some(email) = metadata_change.email {
+            other_items.push(format!("New email : {}", email));
+        }
+        if let Some(description) = metadata_change.description {
+            if description.is_empty() {
+                other_items.push("Description removed".to_string());
+            } else {
+                other_items.push(format!("New description : {}", description));
+            }
+        }
+        if let Some(website) = metadata_change.website {
+            if website.is_empty() {
+                other_items.push("Website removed".to_string());
+            } else {
+                other_items.push(format!("New website : {}", website));
+            }
+        }
+        if let Some(discord_handle) = metadata_change.discord_handle {
+            if discord_handle.is_empty() {
+                other_items.push("Discord handle removed".to_string());
+            } else {
+                other_items
+                    .push(format!("New discord handle : {}", discord_handle));
+            }
+        }
+
+        tv.output.extend(other_items.clone());
+        tv.output_expert.extend(other_items);
     } else if code_hash == unjail_validator_hash {
         let address = Address::try_from_slice(
             &tx.data()

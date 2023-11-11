@@ -1412,6 +1412,7 @@ mod test {
                 commission_rate: Dec::new(1, 1).expect("Dec creation failed"),
                 max_commission_rate_change: Dec::new(1, 1)
                     .expect("Dec creation failed"),
+                metadata: Default::default(),
             }]
             .into_iter(),
             Epoch::default(),

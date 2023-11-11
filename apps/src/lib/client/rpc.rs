@@ -50,6 +50,7 @@ use namada::types::token::{Change, MaspDenom};
 use namada::types::{storage, token};
 use namada_sdk::error::{is_pinned_error, Error, PinnedBalanceError};
 use namada_sdk::masp::{Conversions, MaspAmount, MaspChange};
+use namada_sdk::proof_of_stake::types::ValidatorMetaData;
 use namada_sdk::rpc::{
     self, enriched_bonds_and_unbonds, query_epoch, TxResponse,
 };
@@ -1850,6 +1851,16 @@ pub async fn query_commission_rate<
     )
 }
 
+/// Query and return validator's metadata
+pub async fn query_metadata<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
+    validator: &Address,
+) -> Option<ValidatorMetaData> {
+    unwrap_client_response::<C, Option<ValidatorMetaData>>(
+        RPC.vp().pos().validator_metadata(client, validator).await,
+    )
+}
+
 /// Query and return validator's state
 pub async fn query_validator_state<
     C: namada::ledger::queries::Client + Sync,
@@ -1920,6 +1931,83 @@ pub async fn query_and_print_commission_rate<'a>(
 
     let info: Option<CommissionPair> =
         query_commission_rate(context.client(), &validator, args.epoch).await;
+    match info {
+        Some(CommissionPair {
+            commission_rate: rate,
+            max_commission_change_per_epoch: change,
+        }) => {
+            display_line!(
+                context.io(),
+                "Validator {} commission rate: {}, max change per epoch: {}",
+                validator.encode(),
+                rate,
+                change
+            );
+        }
+        None => {
+            display_line!(
+                context.io(),
+                "Address {} is not a validator (did not find commission rate \
+                 and max change)",
+                validator.encode(),
+            );
+        }
+    }
+}
+
+/// Query PoS validator's metadata
+pub async fn query_and_print_metadata<'a>(
+    context: &impl Namada<'a>,
+    args: args::QueryMetaData,
+) {
+    let validator = args.validator;
+
+    let metadata: Option<ValidatorMetaData> =
+        query_metadata(context.client(), &validator).await;
+
+    match metadata {
+        Some(ValidatorMetaData {
+            email,
+            description,
+            website,
+            discord_handle,
+        }) => {
+            display_line!(
+                context.io(),
+                "Validator {} metadata:\nEmail: {}",
+                validator.encode(),
+                email
+            );
+            if let Some(description) = description {
+                display_line!(context.io(), "Description: {}", description);
+            } else {
+                display_line!(context.io(), "No description");
+            }
+            if let Some(website) = website {
+                display_line!(context.io(), "Website: {}", website);
+            } else {
+                display_line!(context.io(), "No website");
+            }
+            if let Some(discord_handle) = discord_handle {
+                display_line!(
+                    context.io(),
+                    "Discord handle: {}",
+                    discord_handle
+                );
+            } else {
+                display_line!(context.io(), "No discord handle");
+            }
+        }
+        None => display_line!(
+            context.io(),
+            "Validator {} does not have an email set and may not exist",
+            validator.encode()
+        ),
+    }
+
+    // Get commission rate info for the current epoch
+    let info: Option<CommissionPair> =
+        query_commission_rate(context.client(), &validator, None).await;
     match info {
         Some(CommissionPair {
             commission_rate: rate,

@@ -45,6 +45,7 @@ cargo run --bin namadac -- --base-dir "genesis/localnet/src" utils \
   --net-address "127.0.0.1:27656" \
   --commission-rate 0.05 \
   --max-commission-rate-change 0.01 \
+  --email "null@null.net" \
   --transfer-from-source-amount 200000 \
   --self-bond-amount 100000 \
   --unsafe-dont-encrypt

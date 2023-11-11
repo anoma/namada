@@ -328,6 +328,43 @@ pub struct GenesisValidator {
     pub commission_rate: Dec,
     /// Maximum change in commission rate permitted per epoch
     pub max_commission_rate_change: Dec,
+    /// Validator metadata
+    pub metadata: ValidatorMetaData,
+}
+
+/// Validator metadata
+#[derive(
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshSchema,
+    BorshDeserialize,
+    Eq,
+    Ord,
+    PartialOrd,
+    PartialEq,
+)]
+pub struct ValidatorMetaData {
+    /// Validator's email
+    pub email: String,
+    /// Validator description
+    pub description: Option<String>,
+    /// Validator website
+    pub website: Option<String>,
+    /// Validator's discord handle
+    pub discord_handle: Option<String>,
+}
+
+#[cfg(any(test, feature = "testing"))]
+impl Default for ValidatorMetaData {
+    fn default() -> Self {
+        Self {
+            email: String::from("null@null.net"),
+            description: Default::default(),
+            website: Default::default(),
+            discord_handle: Default::default(),
+        }
+    }
 }
 
 /// An update of the consensus and below-capacity validator set.

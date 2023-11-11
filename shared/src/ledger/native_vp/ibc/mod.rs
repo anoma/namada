@@ -298,6 +298,7 @@ pub fn get_dummy_genesis_validator()
         eth_hot_key,
         commission_rate,
         max_commission_rate_change,
+        metadata: Default::default(),
     }
 }
 

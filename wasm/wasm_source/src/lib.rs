@@ -4,6 +4,8 @@ pub mod tx_bond;
 pub mod tx_bridge_pool;
 #[cfg(feature = "tx_change_validator_commission")]
 pub mod tx_change_validator_commission;
+#[cfg(feature = "tx_change_validator_metadata")]
+pub mod tx_change_validator_metadata;
 #[cfg(feature = "tx_deactivate_validator")]
 pub mod tx_deactivate_validator;
 #[cfg(feature = "tx_ibc")]

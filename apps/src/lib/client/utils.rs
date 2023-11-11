@@ -605,6 +605,10 @@ pub fn init_genesis_validator(
         key_scheme,
         transfer_from_source_amount,
         self_bond_amount,
+        email,
+        description,
+        website,
+        discord_handle,
     }: args::InitGenesisValidator,
 ) {
     let (mut source_wallet, wallet_file) =
@@ -630,6 +634,11 @@ pub fn init_genesis_validator(
             "The validator maximum change in commission rate per epoch must \
              not exceed 1.0 or 100%"
         );
+        safe_exit(1)
+    }
+    // Validate the email
+    if email.is_empty() {
+        eprintln!("The validator email must not be an empty string");
         safe_exit(1)
     }
     let pre_genesis_dir =
@@ -661,6 +670,10 @@ pub fn init_genesis_validator(
             net_address,
             transfer_from_source_amount,
             self_bond_amount,
+            email,
+            description,
+            website,
+            discord_handle,
         },
         &mut source_wallet,
         &validator_wallet,
