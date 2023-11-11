@@ -138,6 +138,20 @@ impl string_encoding::Format for PublicKey {
 
 impl_display_and_from_str_via_format!(PublicKey);
 
+impl From<PublicKey> for crate::tendermint::PublicKey {
+    fn from(value: PublicKey) -> Self {
+        use crate::tendermint::PublicKey as TmPK;
+        match value {
+            PublicKey::Ed25519(ed25519::PublicKey(pk)) => {
+                TmPK::from_raw_ed25519(pk.as_bytes()).unwrap()
+            }
+            PublicKey::Secp256k1(secp256k1::PublicKey(pk)) => {
+                TmPK::from_raw_secp256k1(&pk.to_sec1_bytes()).unwrap()
+            }
+        }
+    }
+}
+
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum EthAddressConvError {

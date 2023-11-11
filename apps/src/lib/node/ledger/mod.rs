@@ -17,6 +17,7 @@ use futures::future::TryFutureExt;
 use namada::core::ledger::governance::storage::keys as governance_storage;
 use namada::eth_bridge::ethers::providers::{Http, Provider};
 use namada::types::storage::Key;
+use namada_sdk::tendermint::abci::request::CheckTxKind;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
 use tokio::sync::mpsc;
@@ -30,8 +31,8 @@ use self::shims::abcipp_shim::AbciService;
 use crate::cli::args;
 use crate::config::utils::{convert_tm_addr_to_socket_addr, num_of_threads};
 use crate::config::{ethereum_bridge, TendermintMode};
-use crate::facade::tendermint_proto::v0_37::abci::CheckTxType;
-use crate::facade::tower_abci::{response, split, Server};
+use crate::facade::tendermint::v0_37::abci::response;
+use crate::facade::tower_abci::{split, Server};
 use crate::node::ledger::broadcaster::Broadcaster;
 use crate::node::ledger::ethereum_oracle as oracle;
 use crate::node::ledger::shell::{Error, MempoolTxType, Shell};
@@ -106,14 +107,20 @@ impl Shell {
             Request::Query(query) => Ok(Response::Query(self.query(query))),
             Request::PrepareProposal(block) => {
                 tracing::debug!("Request PrepareProposal");
-                Ok(Response::PrepareProposal(self.prepare_proposal(block)))
+                // TODO: use TM domain type in the handler
+                Ok(Response::PrepareProposal(
+                    self.prepare_proposal(block.into()),
+                ))
             }
             Request::VerifyHeader(_req) => {
                 Ok(Response::VerifyHeader(self.verify_header(_req)))
             }
             Request::ProcessProposal(block) => {
                 tracing::debug!("Request ProcessProposal");
-                Ok(Response::ProcessProposal(self.process_proposal(block)))
+                // TODO: use TM domain type in the handler
+                let (response, _tx_results) =
+                    self.process_proposal(block.into());
+                Ok(Response::ProcessProposal(response))
             }
             Request::RevertProposal(_req) => {
                 Ok(Response::RevertProposal(self.revert_proposal(_req)))
@@ -123,24 +130,23 @@ impl Shell {
                 self.load_proposals();
                 self.finalize_block(finalize).map(Response::FinalizeBlock)
             }
-            Request::Commit(_) => {
+            Request::Commit => {
                 tracing::debug!("Request Commit");
                 Ok(Response::Commit(self.commit()))
             }
-            Request::Flush(_) => Ok(Response::Flush(Default::default())),
+            Request::Flush => Ok(Response::Flush),
             Request::Echo(msg) => Ok(Response::Echo(response::Echo {
                 message: msg.message,
             })),
             Request::CheckTx(tx) => {
-                let r#type = match CheckTxType::try_from(tx.r#type)
-                    .expect("received unexpected CheckTxType from ABCI")
-                {
-                    CheckTxType::New => MempoolTxType::NewTransaction,
-                    CheckTxType::Recheck => MempoolTxType::RecheckTransaction,
+                let mempool_tx_type = match tx.kind {
+                    CheckTxKind::New => MempoolTxType::NewTransaction,
+                    CheckTxKind::Recheck => MempoolTxType::RecheckTransaction,
                 };
+                let r#type = mempool_tx_type;
                 Ok(Response::CheckTx(self.mempool_validate(&tx.tx, r#type)))
             }
-            Request::ListSnapshots(_) => {
+            Request::ListSnapshots => {
                 Ok(Response::ListSnapshots(Default::default()))
             }
             Request::OfferSnapshot(_) => {
@@ -530,7 +536,7 @@ async fn run_abci(
         .mempool(
             ServiceBuilder::new()
                 .load_shed()
-                .buffer(1024)
+                .buffer(5000) // matching default Comet's mempool.size
                 .service(mempool),
         )
         .info(
@@ -544,7 +550,7 @@ async fn run_abci(
         .unwrap();
     tokio::select! {
         // Run the server with the ABCI service
-        status = server.listen(proxy_app_address) => {
+        status = server.listen_tcp(proxy_app_address) => {
             status.map_err(|err| Error::TowerServer(err.to_string()))
         },
         resp_sender = abort_recv => {

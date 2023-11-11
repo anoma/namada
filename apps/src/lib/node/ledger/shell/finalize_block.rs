@@ -26,9 +26,7 @@ use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 
 use super::governance::execute_governance_proposals;
 use super::*;
-use crate::facade::tendermint_proto::v0_37::abci::{
-    Misbehavior as Evidence, VoteInfo,
-};
+use crate::facade::tendermint::abci::types::{Misbehavior, VoteInfo};
 use crate::node::ledger::shell::stats::InternalStats;
 
 impl<D, H> Shell<D, H>
@@ -531,7 +529,7 @@ where
         &mut self,
         header: Header,
         hash: BlockHash,
-        byzantine_validators: Vec<Evidence>,
+        byzantine_validators: Vec<Misbehavior>,
     ) -> (BlockHeight, bool) {
         let height = self.wl_storage.storage.get_last_block_height() + 1;
 
@@ -560,7 +558,17 @@ where
     fn update_epoch(&mut self, response: &mut shim::response::FinalizeBlock) {
         // Apply validator set update
         response.validator_updates = self
-            .get_abci_validator_updates(false)
+            .get_abci_validator_updates(false, |pk, power| {
+                let pub_key =
+                    crate::facade::tendermint_proto::v0_37::crypto::PublicKey {
+                        sum: Some(key_to_tendermint(&pk).unwrap()),
+                    };
+                let pub_key = Some(pub_key);
+                namada::tendermint_proto::v0_37::abci::ValidatorUpdate {
+                    pub_key,
+                    power,
+                }
+            })
             .expect("Must be able to update validator set");
     }
 
@@ -824,54 +832,48 @@ fn pos_votes_from_abci(
         .filter_map(
             |VoteInfo {
                  validator,
-                 signed_last_block,
+                 sig_info,
              }| {
-                if let Some(
-                    crate::facade::tendermint_proto::v0_37::abci::Validator {
-                        address,
-                        power,
-                    },
-                ) = validator
-                {
-                    let tm_raw_hash_string = HEXUPPER.encode(address);
-                    if *signed_last_block {
-                        tracing::debug!(
-                            "Looking up validator from Tendermint VoteInfo's \
-                             raw hash {tm_raw_hash_string}"
-                        );
+                let crate::facade::tendermint::abci::types::Validator {
+                    address,
+                    power,
+                } = validator;
+                let tm_raw_hash_string = HEXUPPER.encode(address);
+                if sig_info.is_signed() {
+                    tracing::debug!(
+                        "Looking up validator from Tendermint VoteInfo's raw \
+                         hash {tm_raw_hash_string}"
+                    );
 
-                        // Look-up the native address
-                        let validator_address = find_validator_by_raw_hash(
-                            storage,
-                            &tm_raw_hash_string,
-                        )
-                        .expect(
-                            "Must be able to read from storage to find native \
-                             address of validator from tendermint raw hash",
-                        )
-                        .expect(
-                            "Must be able to find the native address of \
-                             validator from tendermint raw hash",
-                        );
+                    // Look-up the native address
+                    let validator_address = find_validator_by_raw_hash(
+                        storage,
+                        &tm_raw_hash_string,
+                    )
+                    .expect(
+                        "Must be able to read from storage to find native \
+                         address of validator from tendermint raw hash",
+                    )
+                    .expect(
+                        "Must be able to find the native address of validator \
+                         from tendermint raw hash",
+                    );
 
-                        // Try to convert voting power to u64
-                        let validator_vp = u64::try_from(*power).expect(
-                            "Must be able to convert voting power from i64 to \
-                             u64",
-                        );
+                    // Try to convert voting power to u64
+                    let validator_vp = u64::try_from(*power).expect(
+                        "Must be able to convert voting power from i64 to u64",
+                    );
 
-                        return Some(namada_proof_of_stake::types::VoteInfo {
-                            validator_address,
-                            validator_vp,
-                        });
-                    } else {
-                        tracing::debug!(
-                            "Validator {tm_raw_hash_string} didn't sign last \
-                             block"
-                        )
-                    }
+                    Some(namada_proof_of_stake::types::VoteInfo {
+                        validator_address,
+                        validator_vp,
+                    })
+                } else {
+                    tracing::debug!(
+                        "Validator {tm_raw_hash_string} didn't sign last block"
+                    );
+                    None
                 }
-                None
             },
         )
         .collect()
@@ -941,7 +943,7 @@ mod test_finalize_block {
     use test_log::test;
 
     use super::*;
-    use crate::facade::tendermint_proto::v0_37::abci::{
+    use crate::facade::tendermint::abci::types::{
         Misbehavior, Validator, VoteInfo,
     };
     use crate::node::ledger::oracle::control::Command;
@@ -1752,11 +1754,13 @@ mod test_finalize_block {
         .unwrap();
 
         let votes = vec![VoteInfo {
-            validator: Some(Validator {
-                address: proposer_address.clone().into(),
-                power: u128::try_from(val_stake).expect("Test failed") as i64,
-            }),
-            signed_last_block: true,
+            validator: Validator {
+                address: proposer_address.clone().try_into().unwrap(),
+                power: (u128::try_from(val_stake).expect("Test failed") as u64)
+                    .try_into()
+                    .unwrap(),
+            },
+            sig_info: tendermint::abci::types::BlockSignatureInfo::LegacySigned,
         }];
 
         // Need to supply a proposer address and votes to flow through the
@@ -1843,7 +1847,9 @@ mod test_finalize_block {
                 .unwrap()
                 .unwrap();
             let hash_string = tm_consensus_key_raw_hash(&ck);
-            HEXUPPER.decode(hash_string.as_bytes()).unwrap()
+            let vec = HEXUPPER.decode(hash_string.as_bytes()).unwrap();
+            let res: [u8; 20] = TryFrom::try_from(vec).unwrap();
+            res
         };
 
         let pkh1 = get_pkh(val1.address.clone(), Epoch::default());
@@ -1854,40 +1860,52 @@ mod test_finalize_block {
         // All validators sign blocks initially
         let votes = vec![
             VoteInfo {
-                validator: Some(Validator {
-                    address: pkh1.clone().into(),
-                    power: u128::try_from(val1.bonded_stake)
+                validator: Validator {
+                    address: pkh1,
+                    power: (u128::try_from(val1.bonded_stake)
                         .expect("Test failed")
-                        as i64,
-                }),
-                signed_last_block: true,
+                        as u64)
+                        .try_into()
+                        .unwrap(),
+                },
+                sig_info:
+                    tendermint::abci::types::BlockSignatureInfo::LegacySigned,
             },
             VoteInfo {
-                validator: Some(Validator {
-                    address: pkh2.clone().into(),
-                    power: u128::try_from(val2.bonded_stake)
+                validator: Validator {
+                    address: pkh2,
+                    power: (u128::try_from(val2.bonded_stake)
                         .expect("Test failed")
-                        as i64,
-                }),
-                signed_last_block: true,
+                        as u64)
+                        .try_into()
+                        .unwrap(),
+                },
+                sig_info:
+                    tendermint::abci::types::BlockSignatureInfo::LegacySigned,
             },
             VoteInfo {
-                validator: Some(Validator {
-                    address: pkh3.clone().into(),
-                    power: u128::try_from(val3.bonded_stake)
+                validator: Validator {
+                    address: pkh3,
+                    power: (u128::try_from(val3.bonded_stake)
                         .expect("Test failed")
-                        as i64,
-                }),
-                signed_last_block: true,
+                        as u64)
+                        .try_into()
+                        .unwrap(),
+                },
+                sig_info:
+                    tendermint::abci::types::BlockSignatureInfo::LegacySigned,
             },
             VoteInfo {
-                validator: Some(Validator {
-                    address: pkh4.clone().into(),
-                    power: u128::try_from(val4.bonded_stake)
+                validator: Validator {
+                    address: pkh4,
+                    power: (u128::try_from(val4.bonded_stake)
                         .expect("Test failed")
-                        as i64,
-                }),
-                signed_last_block: true,
+                        as u64)
+                        .try_into()
+                        .unwrap(),
+                },
+                sig_info:
+                    tendermint::abci::types::BlockSignatureInfo::LegacySigned,
             },
         ];
 
@@ -1917,7 +1935,7 @@ mod test_finalize_block {
         // FINALIZE BLOCK 1. Tell Namada that val1 is the block proposer. We
         // won't receive votes from TM since we receive votes at a 1-block
         // delay, so votes will be empty here
-        next_block_for_inflation(&mut shell, pkh1.clone(), vec![], None);
+        next_block_for_inflation(&mut shell, pkh1.to_vec(), vec![], None);
         assert!(
             rewards_accumulator_handle()
                 .is_empty(&shell.wl_storage)
@@ -1927,7 +1945,12 @@ mod test_finalize_block {
         // FINALIZE BLOCK 2. Tell Namada that val1 is the block proposer.
         // Include votes that correspond to block 1. Make val2 the next block's
         // proposer.
-        next_block_for_inflation(&mut shell, pkh2.clone(), votes.clone(), None);
+        next_block_for_inflation(
+            &mut shell,
+            pkh2.to_vec(),
+            votes.clone(),
+            None,
+        );
         assert!(rewards_prod_1.is_empty(&shell.wl_storage).unwrap());
         assert!(rewards_prod_2.is_empty(&shell.wl_storage).unwrap());
         assert!(rewards_prod_3.is_empty(&shell.wl_storage).unwrap());
@@ -1950,7 +1973,7 @@ mod test_finalize_block {
         );
 
         // FINALIZE BLOCK 3, with val1 as proposer for the next block.
-        next_block_for_inflation(&mut shell, pkh1.clone(), votes, None);
+        next_block_for_inflation(&mut shell, pkh1.to_vec(), votes, None);
         assert!(rewards_prod_1.is_empty(&shell.wl_storage).unwrap());
         assert!(rewards_prod_2.is_empty(&shell.wl_storage).unwrap());
         assert!(rewards_prod_3.is_empty(&shell.wl_storage).unwrap());
@@ -1971,46 +1994,64 @@ mod test_finalize_block {
         // Now we don't receive a vote from val4.
         let votes = vec![
             VoteInfo {
-                validator: Some(Validator {
-                    address: pkh1.clone().into(),
-                    power: u128::try_from(val1.bonded_stake)
+                validator: Validator {
+                    address: pkh1,
+                    power: (u128::try_from(val1.bonded_stake)
                         .expect("Test failed")
-                        as i64,
-                }),
-                signed_last_block: true,
+                        as u64)
+                        .try_into()
+                        .unwrap(),
+                },
+                sig_info:
+                    tendermint::abci::types::BlockSignatureInfo::LegacySigned,
             },
             VoteInfo {
-                validator: Some(Validator {
-                    address: pkh2.into(),
-                    power: u128::try_from(val2.bonded_stake)
+                validator: Validator {
+                    address: pkh2,
+                    power: (u128::try_from(val2.bonded_stake)
                         .expect("Test failed")
-                        as i64,
-                }),
-                signed_last_block: true,
+                        as u64)
+                        .try_into()
+                        .unwrap(),
+                },
+                sig_info:
+                    tendermint::abci::types::BlockSignatureInfo::LegacySigned,
             },
             VoteInfo {
-                validator: Some(Validator {
-                    address: pkh3.into(),
-                    power: u128::try_from(val3.bonded_stake)
+                validator: Validator {
+                    address: pkh3,
+                    power: (u128::try_from(val3.bonded_stake)
                         .expect("Test failed")
-                        as i64,
-                }),
-                signed_last_block: true,
+                        as u64)
+                        .try_into()
+                        .unwrap(),
+                },
+                sig_info:
+                    tendermint::abci::types::BlockSignatureInfo::LegacySigned,
             },
             VoteInfo {
-                validator: Some(Validator {
-                    address: pkh4.into(),
-                    power: u128::try_from(val4.bonded_stake)
+                validator: Validator {
+                    address: pkh4,
+                    power: (u128::try_from(val4.bonded_stake)
                         .expect("Test failed")
-                        as i64,
-                }),
-                signed_last_block: false,
+                        as u64)
+                        .try_into()
+                        .unwrap(),
+                },
+                sig_info: tendermint::abci::types::BlockSignatureInfo::Flag(
+                    tendermint::block::BlockIdFlag::Absent,
+                ),
             },
         ];
 
         // FINALIZE BLOCK 4. The next block proposer will be val1. Only val1,
         // val2, and val3 vote on this block.
-        next_block_for_inflation(&mut shell, pkh1.clone(), votes.clone(), None);
+        next_block_for_inflation(
+            &mut shell,
+            pkh1.to_vec(),
+            votes.clone(),
+            None,
+        );
         assert!(rewards_prod_1.is_empty(&shell.wl_storage).unwrap());
         assert!(rewards_prod_2.is_empty(&shell.wl_storage).unwrap());
         assert!(rewards_prod_3.is_empty(&shell.wl_storage).unwrap());
@@ -2045,7 +2086,7 @@ mod test_finalize_block {
             );
             next_block_for_inflation(
                 &mut shell,
-                pkh1.clone(),
+                pkh1.to_vec(),
                 votes.clone(),
                 None,
             );
@@ -3112,11 +3153,13 @@ mod test_finalize_block {
                 .unwrap()
                 .unwrap();
             let hash_string = tm_consensus_key_raw_hash(&ck);
-            HEXUPPER.decode(hash_string.as_bytes()).unwrap()
+            let vec = HEXUPPER.decode(hash_string.as_bytes()).unwrap();
+            let res: [u8; 20] = TryFrom::try_from(vec).unwrap();
+            res
         };
 
-        let mut all_pkhs: Vec<Vec<u8>> = Vec::new();
-        let mut behaving_pkhs: Vec<Vec<u8>> = Vec::new();
+        let mut all_pkhs: Vec<[u8; 20]> = Vec::new();
+        let mut behaving_pkhs: Vec<[u8; 20]> = Vec::new();
         for (idx, validator) in validator_set.iter().enumerate() {
             // Every validator should be in the consensus set
             assert_eq!(
@@ -3132,11 +3175,11 @@ mod test_finalize_block {
             }
         }
 
-        let pkh1 = all_pkhs[0].clone();
-        let pkh2 = all_pkhs[1].clone();
+        let pkh1 = all_pkhs[0];
+        let pkh2 = all_pkhs[1];
 
         // Finalize block 1 (no votes since this is the first block)
-        next_block_for_inflation(&mut shell, pkh1.clone(), vec![], None);
+        next_block_for_inflation(&mut shell, pkh1.to_vec(), vec![], None);
 
         let votes = get_default_true_votes(
             &shell.wl_storage,
@@ -3150,29 +3193,29 @@ mod test_finalize_block {
         // Misbehavior struct are used in Namada
         let byzantine_validators = vec![
             Misbehavior {
-                r#type: 1,
-                validator: Some(Validator {
-                    address: pkh1.clone().into(),
+                kind: MisbehaviorKind::DuplicateVote,
+                validator: Validator {
+                    address: pkh1,
                     power: Default::default(),
-                }),
-                height: 1,
-                time: Default::default(),
+                },
+                height: 1_u32.into(),
+                time: tendermint::Time::unix_epoch(),
                 total_voting_power: Default::default(),
             },
             Misbehavior {
-                r#type: 2,
-                validator: Some(Validator {
-                    address: pkh2.into(),
+                kind: MisbehaviorKind::LightClientAttack,
+                validator: Validator {
+                    address: pkh2,
                     power: Default::default(),
-                }),
-                height: 1,
-                time: Default::default(),
+                },
+                height: 2_u32.into(),
+                time: tendermint::Time::unix_epoch(),
                 total_voting_power: Default::default(),
             },
         ];
         next_block_for_inflation(
             &mut shell,
-            pkh1.clone(),
+            pkh1.to_vec(),
             votes,
             Some(byzantine_validators),
         );
@@ -3243,7 +3286,7 @@ mod test_finalize_block {
             );
             next_block_for_inflation(
                 &mut shell,
-                pkh1.clone(),
+                pkh1.to_vec(),
                 votes.clone(),
                 None,
             );
@@ -3516,7 +3559,7 @@ mod test_finalize_block {
         let total_initial_stake = num_validators * initial_stake;
 
         // Finalize block 1
-        next_block_for_inflation(&mut shell, pkh1.clone(), vec![], None);
+        next_block_for_inflation(&mut shell, pkh1.to_vec(), vec![], None);
 
         let votes = get_default_true_votes(&shell.wl_storage, Epoch::default());
         assert!(!votes.is_empty());
@@ -3712,13 +3755,13 @@ mod test_finalize_block {
             .pred_epochs
             .first_block_heights[misbehavior_epoch.0 as usize];
         let misbehaviors = vec![Misbehavior {
-            r#type: 1,
-            validator: Some(Validator {
-                address: pkh1.clone().into(),
+            kind: MisbehaviorKind::DuplicateVote,
+            validator: Validator {
+                address: pkh1,
                 power: Default::default(),
-            }),
-            height: height.0 as i64,
-            time: Default::default(),
+            },
+            height: height.try_into().unwrap(),
+            time: tendermint::Time::unix_epoch(),
             total_voting_power: Default::default(),
         }];
         let votes = get_default_true_votes(
@@ -3727,7 +3770,7 @@ mod test_finalize_block {
         );
         next_block_for_inflation(
             &mut shell,
-            pkh1.clone(),
+            pkh1.to_vec(),
             votes.clone(),
             Some(misbehaviors),
         );
@@ -3775,23 +3818,23 @@ mod test_finalize_block {
             .first_block_heights[4];
         let misbehaviors = vec![
             Misbehavior {
-                r#type: 1,
-                validator: Some(Validator {
-                    address: pkh1.clone().into(),
+                kind: MisbehaviorKind::DuplicateVote,
+                validator: Validator {
+                    address: pkh1,
                     power: Default::default(),
-                }),
-                height: height.0 as i64,
-                time: Default::default(),
+                },
+                height: height.try_into().unwrap(),
+                time: tendermint::Time::unix_epoch(),
                 total_voting_power: Default::default(),
             },
             Misbehavior {
-                r#type: 2,
-                validator: Some(Validator {
-                    address: pkh1.clone().into(),
+                kind: MisbehaviorKind::DuplicateVote,
+                validator: Validator {
+                    address: pkh1,
                     power: Default::default(),
-                }),
-                height: height4.0 as i64,
-                time: Default::default(),
+                },
+                height: height4.try_into().unwrap(),
+                time: tendermint::Time::unix_epoch(),
                 total_voting_power: Default::default(),
             },
         ];
@@ -3801,7 +3844,7 @@ mod test_finalize_block {
         );
         next_block_for_inflation(
             &mut shell,
-            pkh1.clone(),
+            pkh1.to_vec(),
             votes,
             Some(misbehaviors),
         );
@@ -4327,7 +4370,7 @@ mod test_finalize_block {
         );
 
         // Finalize block 1
-        next_block_for_inflation(&mut shell, pkh1.clone(), vec![], None);
+        next_block_for_inflation(&mut shell, pkh1.to_vec(), vec![], None);
 
         let votes = get_default_true_votes(&shell.wl_storage, Epoch::default());
         assert!(!votes.is_empty());
@@ -4472,11 +4515,11 @@ mod test_finalize_block {
                     epoch,
                 );
                 VoteInfo {
-                    validator: Some(Validator {
-                        address: pkh.into(),
-                        power: u128::try_from(val.bonded_stake).unwrap() as i64,
-                    }),
-                    signed_last_block: true,
+                    validator: Validator {
+                        address: pkh,
+                        power: (u128::try_from(val.bonded_stake).unwrap() as u64).try_into().unwrap(),
+                    },
+                    sig_info: tendermint::abci::types::BlockSignatureInfo::LegacySigned,
                 }
             })
             .collect::<Vec<_>>()
@@ -4601,14 +4644,16 @@ mod test_finalize_block {
         let _ = control_receiver.recv().await.expect("Test failed");
         // Finalize block 2
         let votes = vec![VoteInfo {
-            validator: Some(Validator {
-                address: pkh1.clone().into(),
-                power: u128::try_from(val1.bonded_stake).expect("Test failed")
-                    as i64,
-            }),
-            signed_last_block: true,
+            validator: Validator {
+                address: pkh1,
+                power: (u128::try_from(val1.bonded_stake).expect("Test failed")
+                    as u64)
+                    .try_into()
+                    .unwrap(),
+            },
+            sig_info: tendermint::abci::types::BlockSignatureInfo::LegacySigned,
         }];
-        next_block_for_inflation(&mut shell, pkh1.clone(), votes, None);
+        next_block_for_inflation(&mut shell, pkh1.to_vec(), votes, None);
         let Command::UpdateConfig(cmd) =
             control_receiver.recv().await.expect("Test failed");
         assert_eq!(u64::from(cmd.min_confirmations), 42);

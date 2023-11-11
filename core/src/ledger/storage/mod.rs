@@ -628,14 +628,15 @@ where
         }
     }
 
-    /// Returns a value from the specified subspace at the given height and the
-    /// gas cost
+    /// Returns a value from the specified subspace at the given height or the
+    /// last committed height when 0 and the gas cost.
     pub fn read_with_height(
         &self,
         key: &Key,
         height: BlockHeight,
     ) -> Result<(Option<Vec<u8>>, u64)> {
-        if height >= self.get_last_block_height() {
+        // `0` means last committed height
+        if height == BlockHeight(0) || height >= self.get_last_block_height() {
             self.read(key)
         } else {
             match self.db.read_subspace_val_with_height(

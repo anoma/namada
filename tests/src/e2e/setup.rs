@@ -990,7 +990,7 @@ where
 
     run_cmd
         .env("NAMADA_LOG", log_level)
-        .env("NAMADA_CMT_STDOUT", "false")
+        .env("NAMADA_CMT_STDOUT", "true")
         .env("CMT_LOG_LEVEL", "info")
         .env("NAMADA_LOG_COLOR", "false")
         .current_dir(working_dir)
