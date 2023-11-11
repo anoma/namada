@@ -2174,7 +2174,7 @@ mod test_finalize_block {
         let pkh1 = get_pkh(validator.address.clone(), Epoch::default());
         let votes = vec![VoteInfo {
             validator: Some(Validator {
-                address: pkh1.clone(),
+                address: pkh1.clone().into(),
                 power: u128::try_from(validator.bonded_stake)
                     .expect("Test failed") as i64,
             }),
