@@ -109,12 +109,23 @@ where
                 &mut self.wl_storage,
                 current_epoch,
             )?;
+
+            // Prune old consensus validator from liveness records
+            namada_proof_of_stake::prune_liveness_data_and_record(
+                &mut self.wl_storage,
+                current_epoch,
+            )?;
         }
 
         // Invariant: Has to be applied before `record_slashes_from_evidence`
         // because it potentially needs to be able to read validator state from
         // previous epoch and jailing validator removes the historical state
-        self.log_block_rewards(&req.votes, height, current_epoch, new_epoch)?;
+        let application_votes = self.log_block_rewards(
+            &req.votes,
+            height,
+            current_epoch,
+            new_epoch,
+        )?;
 
         // Invariant: This has to be applied after
         // `copy_validator_sets_and_positions` and before `self.update_epoch`.
@@ -127,6 +138,15 @@ where
             self.process_slashes();
             self.apply_inflation(current_epoch)?;
         }
+
+        // Consensus set liveness check
+        namada_proof_of_stake::record_liveness_data(
+            &mut self.wl_storage,
+            &application_votes.unwrap_or_default(),
+            current_epoch,
+            height,
+        )?;
+        // FIXME: jail
 
         let mut stats = InternalStats::default();
 
@@ -766,7 +786,7 @@ where
         height: BlockHeight,
         current_epoch: Epoch,
         new_epoch: bool,
-    ) -> Result<()> {
+    ) -> Result<Option<Vec<namada_proof_of_stake::types::VoteInfo>>> {
         // Read the block proposer of the previously committed block in storage
         // (n-1 if we are in the process of finalizing n right now).
         match read_last_block_proposer_address(&self.wl_storage)? {
@@ -783,8 +803,9 @@ where
                         current_epoch
                     },
                     &proposer_address,
-                    votes,
+                    votes.clone(),
                 )?;
+                Ok(Some(votes))
             }
             None => {
                 if height > BlockHeight::default().next_height() {
@@ -796,9 +817,9 @@ where
                         "No last block proposer at height {height}"
                     );
                 }
+                Ok(None)
             }
         }
-        Ok(())
     }
 
     // Write the inner tx hash to storage and remove the corresponding wrapper

@@ -17,7 +17,7 @@ use namada_core::ledger::storage_api::collections::{
 use namada_core::types::address::Address;
 use namada_core::types::dec::Dec;
 use namada_core::types::key::common;
-use namada_core::types::storage::{Epoch, KeySeg};
+use namada_core::types::storage::{BlockHeight, Epoch, KeySeg};
 use namada_core::types::token;
 use namada_core::types::token::Amount;
 pub use rev_order::ReverseOrdTokenAmount;
@@ -254,6 +254,23 @@ pub type DelegatorRedelegatedUnbonded =
 /// - src bond start epoch where it started contributing to src validator
 pub type EagerRedelegatedBondsMap =
     BTreeMap<Address, BTreeMap<Epoch, token::Amount>>;
+
+/// The status of liveness for a consensus validator
+#[derive(Debug, BorshSerialize, BorshDeserialize)]
+pub struct LivenessStatus {
+    /// The block height at which the validator has joined the consensus set
+    pub consensus_set_join_height: BlockHeight,
+    /// The number of block votes that the validator has failed to submit
+    pub number_of_missed_votes: u64,
+}
+
+/// Liveness record of the consensus validator set. Maps every conensus
+/// validator into the set of the block heights for which their vote is missing.
+pub type ConsensusValidatorSetLivenessRecord =
+    NestedMap<Address, LazySet<BlockHeight>>;
+
+/// Liveness data of the consensus validator set.
+pub type ConsensusValidatorSetLivenessData = LazyMap<Address, LivenessStatus>;
 
 #[derive(
     Debug, Clone, BorshSerialize, BorshDeserialize, Eq, Hash, PartialEq,

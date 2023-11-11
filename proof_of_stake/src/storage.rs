@@ -54,6 +54,9 @@ const VALIDATOR_EMAIL_KEY: &str = "email";
 const VALIDATOR_DESCRIPTION_KEY: &str = "description";
 const VALIDATOR_WEBSITE_KEY: &str = "website";
 const VALIDATOR_DISCORD_KEY: &str = "discord_handle";
+const CONSENSUS_VALIDATOR_SET_LIVENESS: &str = "liveness";
+const LIVENESS_RECORDS: &str = "records";
+const LIVENESS_DATA: &str = "data";
 
 /// Is the given key a PoS storage key?
 pub fn is_pos_key(key: &Key) -> bool {
@@ -791,5 +794,23 @@ pub fn validator_website_key(validator: &Address) -> Key {
 pub fn validator_discord_key(validator: &Address) -> Key {
     validator_prefix(validator)
         .push(&VALIDATOR_DISCORD_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key for the liveness records.
+pub fn conensus_validator_set_liveness_records() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&CONSENSUS_VALIDATOR_SET_LIVENESS.to_owned())
+        .expect("Cannot obtain a storage key")
+        .push(&LIVENESS_RECORDS.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key for the liveness data.
+pub fn consensus_validator_set_liveness_data() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&CONSENSUS_VALIDATOR_SET_LIVENESS.to_owned())
+        .expect("Cannot obtain a storage key")
+        .push(&LIVENESS_DATA.to_owned())
         .expect("Cannot obtain a storage key")
 }

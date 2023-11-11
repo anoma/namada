@@ -42,6 +42,7 @@ use namada_core::types::dec::Dec;
 use namada_core::types::key::{
     common, protocol_pk_key, tm_consensus_key_raw_hash, PublicKeyTmRawHash,
 };
+use namada_core::types::storage::BlockHeight;
 pub use namada_core::types::storage::{Epoch, Key, KeySeg};
 use once_cell::unsync::Lazy;
 pub use parameters::{OwnedPosParams, PosParams};
@@ -60,13 +61,14 @@ use types::{
     into_tm_voting_power, BelowCapacityValidatorSet,
     BelowCapacityValidatorSets, BondDetails, BondId, Bonds,
     BondsAndUnbondsDetail, BondsAndUnbondsDetails, CommissionRates,
-    ConsensusValidator, ConsensusValidatorSet, ConsensusValidatorSets,
-    DelegatorRedelegatedBonded, DelegatorRedelegatedUnbonded,
-    EagerRedelegatedBondsMap, EpochedSlashes, IncomingRedelegations,
-    OutgoingRedelegations, Position, RedelegatedBondsOrUnbonds,
-    RedelegatedTokens, ReverseOrdTokenAmount, RewardsAccumulator,
-    RewardsProducts, Slash, SlashType, SlashedAmount, Slashes,
-    TotalConsensusStakes, TotalDeltas, TotalRedelegatedBonded,
+    ConsensusValidator, ConsensusValidatorSet,
+    ConsensusValidatorSetLivenessData, ConsensusValidatorSetLivenessRecord,
+    ConsensusValidatorSets, DelegatorRedelegatedBonded,
+    DelegatorRedelegatedUnbonded, EagerRedelegatedBondsMap, EpochedSlashes,
+    IncomingRedelegations, LivenessStatus, OutgoingRedelegations, Position,
+    RedelegatedBondsOrUnbonds, RedelegatedTokens, ReverseOrdTokenAmount,
+    RewardsAccumulator, RewardsProducts, Slash, SlashType, SlashedAmount,
+    Slashes, TotalConsensusStakes, TotalDeltas, TotalRedelegatedBonded,
     TotalRedelegatedUnbonded, UnbondDetails, Unbonds, ValidatorAddresses,
     ValidatorConsensusKeys, ValidatorDeltas, ValidatorEthColdKeys,
     ValidatorEthHotKeys, ValidatorMetaData, ValidatorPositionAddresses,
@@ -81,6 +83,9 @@ pub const ADDRESS: Address = Address::Internal(InternalAddress::PoS);
 /// Address of the PoS slash pool account
 pub const SLASH_POOL_ADDRESS: Address =
     Address::Internal(InternalAddress::PosSlashPool);
+
+// Size of the sliding window for validators acitivity evaluation
+const LIVENESS_BLOCKS_NUM: u64 = 10_000;
 
 /// Address of the staking token (i.e. the native token)
 pub fn staking_token_address(storage: &impl StorageRead) -> Address {
@@ -286,6 +291,20 @@ pub fn delegator_redelegated_unbonds_handle(
 ) -> DelegatorRedelegatedUnbonded {
     let key: Key = storage::delegator_redelegated_unbonds_key(delegator);
     DelegatorRedelegatedUnbonded::open(key)
+}
+
+/// Get the storage handle to the liveness record of the consensus validator set
+pub fn consensus_validator_set_liveness_record_handle()
+-> ConsensusValidatorSetLivenessRecord {
+    let key = storage::conensus_validator_set_liveness_records();
+    ConsensusValidatorSetLivenessRecord::open(key)
+}
+
+/// Get the storage handle to the liveness data of the consensus validator set
+pub fn consensus_validator_set_liveness_data_handle()
+-> ConsensusValidatorSetLivenessData {
+    let key = storage::consensus_validator_set_liveness_data();
+    ConsensusValidatorSetLivenessData::open(key)
 }
 
 /// Init genesis. Requires that the governance parameters are initialized.
@@ -5602,6 +5621,172 @@ where
         current_epoch,
         params.pipeline_len,
     )?;
+
+    Ok(())
+}
+
+/// Remove old consensus validators from liveness data and record
+pub fn prune_liveness_data_and_record<S>(
+    storage: &mut S,
+    epoch: Epoch,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let consensus_validator_set = consensus_validator_set_handle()
+        .at(&epoch)
+        .iter(storage)?
+        .map(|entry| {
+            let (
+                NestedSubKey::Data {
+                    key: _,
+                    nested_sub_key: _,
+                },
+                address,
+            ) = entry.unwrap();
+            address
+        })
+        .collect::<HashSet<Address>>();
+    let liveness_record = consensus_validator_set_liveness_record_handle();
+    let liveness_data = consensus_validator_set_liveness_data_handle();
+
+    let mut validators_to_prune = liveness_record
+        .iter(storage)?
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let (
+                NestedSubKey::Data {
+                    key: address,
+                    nested_sub_key: _,
+                },
+                _,
+            ) = entry;
+
+            if consensus_validator_set.contains(&address) {
+                None
+            } else {
+                Some(address)
+            }
+        })
+        .collect::<Vec<Address>>();
+
+    validators_to_prune.extend(liveness_data.iter(storage)?.filter_map(
+        |entry| {
+            let (address, _) = entry.ok()?;
+
+            if consensus_validator_set.contains(&address) {
+                None
+            } else {
+                Some(address)
+            }
+        },
+    ));
+
+    for ref validator in validators_to_prune {
+        liveness_record.remove_all(storage, validator)?;
+        liveness_data.remove(storage, validator)?;
+    }
+
+    Ok(())
+}
+
+/// Record the liveness data of the consensus validators
+pub fn record_liveness_data<S>(
+    storage: &mut S,
+    votes: &[VoteInfo],
+    epoch: Epoch,
+    block_height: BlockHeight,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let consensus_validator_set = consensus_validator_set_handle()
+        .at(&epoch)
+        .iter(storage)?
+        .map(|entry| {
+            let (
+                NestedSubKey::Data {
+                    key: _,
+                    nested_sub_key: _,
+                },
+                address,
+            ) = entry.unwrap();
+            address
+        })
+        .collect::<HashSet<Address>>();
+    let liveness_record = consensus_validator_set_liveness_record_handle();
+    let liveness_data = consensus_validator_set_liveness_data_handle();
+
+    // Transform the vote vector into a map
+    let votes_ref_map = votes
+        .iter()
+        .map(|vote| (&vote.validator_address))
+        .collect::<HashSet<&Address>>();
+
+    let prune_height = block_height - LIVENESS_BLOCKS_NUM;
+
+    for validator_address in consensus_validator_set.into_iter() {
+        // Prune old vote (only need to look for the block height that was just
+        // pushed out of the sliding window)
+        let pruned_missing_vote = liveness_record
+            .at(&validator_address)
+            .remove(storage, &prune_height)?;
+
+        if pruned_missing_vote {
+            // Update liveness data
+            liveness_data.update(
+                storage,
+                validator_address.clone(),
+                |status| {
+                    let mut status = status.expect(&format!(
+                        "Expected liveness data for validator {} was not found",
+                        validator_address
+                    ));
+                    status.number_of_missed_votes -= 1;
+                    status
+                },
+            )?;
+        }
+
+        // Evaluate new vote
+        if !votes_ref_map.contains(&validator_address) {
+            // Insert the height of the missing vote in storage
+            liveness_record
+                .at(&validator_address)
+                .insert(storage, block_height)?;
+
+            // Update liveness data
+            liveness_data.update(storage, validator_address, |status| {
+                match status {
+                    Some(mut status) => {
+                        status.number_of_missed_votes += 1;
+                        status
+                    }
+                    None => {
+                        // Missing liveness data for the validator (newly added
+                        // to the conensus set), intialize it
+                        LivenessStatus {
+                            consensus_set_join_height: block_height,
+                            number_of_missed_votes: 1,
+                        }
+                    }
+                }
+            })?;
+        } else {
+            // Initialize any new consensus validator who has signed the first
+            // block
+            if !liveness_data.contains(storage, &validator_address)? {
+                liveness_data.insert(
+                    storage,
+                    validator_address,
+                    LivenessStatus {
+                        consensus_set_join_height: block_height,
+                        number_of_missed_votes: 0,
+                    },
+                )?;
+            }
+        }
+    }
 
     Ok(())
 }
