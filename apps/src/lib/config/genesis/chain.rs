@@ -101,7 +101,7 @@ impl Finalized {
     ) -> Wallet<CliWalletUtils> {
         let mut wallet = crate::wallet::load_or_new(base_dir);
         for (alias, config) in &self.tokens.token {
-            wallet.add_address(
+            wallet.insert_address(
                 alias.normalize(),
                 config.address.clone(),
                 false,
@@ -113,7 +113,7 @@ impl Finalized {
         }
         if let Some(txs) = &self.transactions.validator_account {
             for tx in txs {
-                wallet.add_address(
+                wallet.insert_address(
                     tx.tx.alias.normalize(),
                     tx.address.clone(),
                     false,
@@ -122,7 +122,7 @@ impl Finalized {
         }
         if let Some(txs) = &self.transactions.established_account {
             for tx in txs {
-                wallet.add_address(
+                wallet.insert_address(
                     tx.tx.alias.normalize(),
                     tx.address.clone(),
                     false,

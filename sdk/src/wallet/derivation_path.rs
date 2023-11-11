@@ -3,6 +3,7 @@ use std::str::FromStr;
 
 use derivation_path::{ChildIndex, DerivationPath as DerivationPathInner};
 use namada_core::types::key::SchemeType;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use tiny_hderive::bip44::{
     DerivationPath as HDeriveDerivationPath,
@@ -19,7 +20,7 @@ pub enum DerivationPathError {
     InvalidDerivationPath(String),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DerivationPath(DerivationPathInner);
 
 impl DerivationPath {
@@ -102,6 +103,29 @@ impl DerivationPath {
 impl fmt::Display for DerivationPath {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Display::fmt(&self.0, f)
+    }
+}
+
+impl FromStr for DerivationPath {
+    type Err = DerivationPathError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        DerivationPathInner::from_str(s).map(Self).map_err(|err| {
+            DerivationPathError::InvalidDerivationPath(err.to_string())
+        })
+    }
+}
+
+impl Serialize for DerivationPath {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.collect_str(self)
+    }
+}
+
+impl<'de> Deserialize<'de> for DerivationPath {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let string = String::deserialize(d)?;
+        string.parse().map_err(serde::de::Error::custom)
     }
 }
 

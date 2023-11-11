@@ -1,7 +1,10 @@
 use std::path::{Path, PathBuf};
 
 use namada::types::key::*;
-use namada_sdk::wallet::{gen_sk_rng, LoadStoreError, Store, ValidatorKeys};
+use namada_sdk::wallet::{
+    gen_secret_key, LoadStoreError, Store, ValidatorKeys,
+};
+use rand::rngs::OsRng;
 
 use crate::wallet::CliWalletUtils;
 
@@ -45,9 +48,9 @@ pub fn gen_validator_keys(
             }
             k
         })
-        .unwrap_or_else(|| gen_sk_rng(SchemeType::Secp256k1));
-    let protocol_keypair =
-        protocol_keypair.unwrap_or_else(|| gen_sk_rng(protocol_keypair_scheme));
+        .unwrap_or_else(|| gen_secret_key(SchemeType::Secp256k1, &mut OsRng));
+    let protocol_keypair = protocol_keypair
+        .unwrap_or_else(|| gen_secret_key(protocol_keypair_scheme, &mut OsRng));
     ValidatorKeys {
         protocol_keypair,
         eth_bridge_keypair,

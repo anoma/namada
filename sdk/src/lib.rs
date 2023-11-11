@@ -27,6 +27,7 @@ pub mod io;
 pub mod queries;
 pub mod wallet;
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -128,6 +129,7 @@ pub trait Namada<'a>: Sized {
             tx_reveal_code_path: PathBuf::from(TX_REVEAL_PK),
             verification_key: None,
             password: None,
+            use_device: false,
         }
     }
 
@@ -456,13 +458,14 @@ pub trait Namada<'a>: Sized {
     }
 
     /// Sign the given transaction using the given signing data
-    async fn sign(
+    async fn sign<F: std::future::Future<Output = crate::error::Result<Tx>>>(
         &self,
         tx: &mut Tx,
         args: &args::Tx,
         signing_data: SigningTxData,
+        with: impl Fn(Tx, common::PublicKey, HashSet<signing::Signable>) -> F,
     ) -> crate::error::Result<()> {
-        signing::sign_tx(*self.wallet_mut().await, args, tx, signing_data)
+        signing::sign_tx(self, args, tx, signing_data, with).await
     }
 
     /// Process the given transaction using the given flags
@@ -561,6 +564,7 @@ where
                 tx_reveal_code_path: PathBuf::from(TX_REVEAL_PK),
                 verification_key: None,
                 password: None,
+                use_device: false,
             },
         }
     }

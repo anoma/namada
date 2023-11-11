@@ -15,17 +15,12 @@ version.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["rand", "rand_core"]
-masp-tx-gen = [
-  "rand",
-  "rand_core",
-]
+default = []
 
 multicore = ["masp_proofs/multicore"]
 
 namada-sdk = [
   "tendermint-rpc",
-  "masp-tx-gen",
   "masp_primitives/transparent-inputs"
 ]
 
@@ -56,8 +51,6 @@ testing = [
   "namada_ethereum_bridge/testing",
   "namada_proof_of_stake/testing",
   "async-client",
-  "rand_core",
-  "rand",
 ]
 
 [dependencies]
@@ -84,8 +77,8 @@ owo-colors = "3.5.0"
 parse_duration = "2.1.1"
 paste.workspace = true
 prost.workspace = true
-rand = {optional = true, workspace = true}
-rand_core = {optional = true, workspace = true}
+rand.workspace = true
+rand_core.workspace = true
 ripemd.workspace = true
 serde.workspace = true
 serde_json.workspace = true

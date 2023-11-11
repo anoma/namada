@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-20.04]
+        os: [ubuntu-latest]
         nightly_version: [nightly-2023-06-01]
         make:
           - name: Audit
@@ -54,6 +54,8 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-
       - name: Install cargo ${{ matrix.make.command }}
         run: curl https://i.jpillora.com/${{ matrix.make.version }}! | bash
+      - name: Install libudev
+        run: sudo apt-get update && sudo apt-get -y install libudev-dev
       - name: Install Protoc
         uses: heliaxdev/setup-protoc@v2
         with:

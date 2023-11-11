@@ -1739,6 +1739,8 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub verification_key: Option<C::PublicKey>,
     /// Password to decrypt key
     pub password: Option<Zeroizing<String>>,
+    /// Use device to sign the transaction
+    pub use_device: bool,
 }
 
 /// Builder functions for Tx
@@ -1955,12 +1957,12 @@ pub struct KeyAndAddressGen {
     /// Don't encrypt the keypair
     pub unsafe_dont_encrypt: bool,
     /// BIP44 derivation path
-    pub derivation_path: Option<String>,
+    pub derivation_path: String,
 }
 
 /// Wallet restore key and implicit address arguments
 #[derive(Clone, Debug)]
-pub struct KeyAndAddressRestore {
+pub struct KeyAndAddressDerive {
     /// Scheme type
     pub scheme: SchemeType,
     /// Key alias
@@ -1970,7 +1972,9 @@ pub struct KeyAndAddressRestore {
     /// Don't encrypt the keypair
     pub unsafe_dont_encrypt: bool,
     /// BIP44 derivation path
-    pub derivation_path: Option<String>,
+    pub derivation_path: String,
+    /// Use device to generate key and address
+    pub use_device: bool,
 }
 
 /// Wallet key lookup arguments

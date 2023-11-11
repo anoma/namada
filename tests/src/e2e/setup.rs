@@ -33,6 +33,7 @@ use namada_sdk::wallet::alias::Alias;
 use namada_tx_prelude::token;
 use namada_vp_prelude::HashSet;
 use once_cell::sync::Lazy;
+use rand::rngs::OsRng;
 use rand::Rng;
 use serde_json;
 use tempfile::{tempdir, tempdir_in, TempDir};
@@ -148,8 +149,14 @@ where
         let mut wallet = wallet::load(&wallet_path)
             .expect("Could not locate pre-genesis wallet used for e2e tests.");
         let alias = format!("validator-{}-balance-key", val);
-        let (alias, sk, _mnemonic) = wallet
-            .gen_key(SchemeType::Ed25519, Some(alias), true, None, None, None)
+        let (alias, sk) = wallet
+            .gen_store_secret_key(
+                SchemeType::Ed25519,
+                Some(alias),
+                true,
+                None,
+                &mut OsRng,
+            )
             .unwrap_or_else(|_| {
                 panic!("Could not generate new key for validator-{}", val)
             });
