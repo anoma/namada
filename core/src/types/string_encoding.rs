@@ -33,8 +33,6 @@ pub const MASP_PAYMENT_ADDRESS_HRP: &str = "znam";
 pub const MASP_EXT_SPENDING_KEY_HRP: &str = "zsknam";
 /// `common::PublicKey` human-readable part
 pub const COMMON_PK_HRP: &str = "tpknam";
-/// `DkgPublicKey` human-readable part
-pub const DKG_PK_HRP: &str = "dpknam";
 /// `common::Signature` human-readable part
 pub const COMMON_SIG_HRP: &str = "signam";
 

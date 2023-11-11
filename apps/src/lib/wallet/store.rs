@@ -1,9 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use ark_std::rand::prelude::*;
-use ark_std::rand::SeedableRng;
 use namada::types::key::*;
-use namada::types::transaction::EllipticCurve;
 use namada_sdk::wallet::{gen_sk_rng, LoadStoreError, Store, ValidatorKeys};
 
 use crate::wallet::CliWalletUtils;
@@ -51,13 +48,9 @@ pub fn gen_validator_keys(
         .unwrap_or_else(|| gen_sk_rng(SchemeType::Secp256k1));
     let protocol_keypair =
         protocol_keypair.unwrap_or_else(|| gen_sk_rng(protocol_keypair_scheme));
-    let dkg_keypair = ferveo_common::Keypair::<EllipticCurve>::new(
-        &mut StdRng::from_entropy(),
-    );
     ValidatorKeys {
         protocol_keypair,
         eth_bridge_keypair,
-        dkg_keypair: Some(dkg_keypair.into()),
     }
 }
 

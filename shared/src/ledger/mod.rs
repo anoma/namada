@@ -6,7 +6,7 @@ pub mod ibc;
 pub mod native_vp;
 pub mod pgf;
 pub mod pos;
-#[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
+#[cfg(feature = "wasm-runtime")]
 pub mod protocol;
 pub use namada_sdk::queries;
 pub mod storage;
@@ -19,12 +19,12 @@ pub use namada_core::ledger::{
 };
 use namada_sdk::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
 
-#[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
+#[cfg(feature = "wasm-runtime")]
 use crate::vm::wasm::{TxCache, VpCache};
 use crate::vm::WasmCacheAccess;
 
 /// Dry run a transaction
-#[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
+#[cfg(feature = "wasm-runtime")]
 pub fn dry_run_tx<D, H, CA>(
     mut ctx: RequestCtx<'_, D, H, VpCache<CA>, TxCache<CA>>,
     request: &RequestQuery,
@@ -38,10 +38,7 @@ where
     use namada_core::ledger::gas::{Gas, GasMetering, TxGasMeter};
     use namada_core::ledger::storage::TempWlStorage;
     use namada_core::proto::Tx;
-    use namada_core::types::transaction::wrapper::wrapper_tx::PairingEngine;
-    use namada_core::types::transaction::{
-        AffineCurve, DecryptedTx, EllipticCurve,
-    };
+    use namada_core::types::transaction::DecryptedTx;
 
     use crate::ledger::protocol::ShellParams;
     use crate::types::storage::TxIndex;
@@ -76,10 +73,6 @@ where
             temp_wl_storage.write_log.commit_tx();
             cumulated_gas = tx_gas_meter.get_tx_consumed_gas();
 
-            // NOTE: the encryption key for a dry-run should always be an
-            // hardcoded, dummy one
-            let _privkey =
-            <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
             tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
             TxGasMeter::new_from_sub_limit(tx_gas_meter.get_available_gas())
         }

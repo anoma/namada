@@ -12,7 +12,7 @@ pub mod ledger;
 pub mod proto;
 pub mod types;
 
-pub use {ferveo_common, ibc, ibc_proto, tendermint, tendermint_proto};
+pub use {ibc, ibc_proto, tendermint, tendermint_proto};
 
 // A handy macro for tests
 #[cfg(test)]

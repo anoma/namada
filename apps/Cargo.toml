@@ -62,7 +62,7 @@ integration = []
 
 
 [dependencies]
-namada = {path = "../shared", features = ["ferveo-tpke", "masp-tx-gen", "multicore", "http-client", "tendermint-rpc"]}
+namada = {path = "../shared", features = ["masp-tx-gen", "multicore", "http-client", "tendermint-rpc"]}
 namada_sdk = {path = "../sdk", default-features = false, features = ["wasm-runtime", "masp-tx-gen"]}
 namada_test_utils = {path = "../test_utils", optional = true}
 ark-serialize.workspace = true
@@ -90,8 +90,6 @@ ethbridge-bridge-events.workspace = true
 ethbridge-events.workspace = true
 eyre.workspace = true
 fd-lock.workspace = true
-ferveo-common.workspace = true
-ferveo.workspace = true
 flate2.workspace = true
 futures.workspace = true
 itertools.workspace = true

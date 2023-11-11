@@ -46,7 +46,6 @@ impl From<bool> for HostEnvResult {
     }
 }
 
-#[cfg(feature = "ferveo-tpke")]
 mod tx_queue {
     use borsh::{BorshDeserialize, BorshSerialize};
 
@@ -99,7 +98,6 @@ mod tx_queue {
     }
 }
 
-#[cfg(feature = "ferveo-tpke")]
 pub use tx_queue::{TxInQueue, TxQueue};
 
 /// Expired transaction kinds.

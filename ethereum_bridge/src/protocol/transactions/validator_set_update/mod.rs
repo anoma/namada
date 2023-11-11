@@ -7,8 +7,6 @@ use namada_core::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
 use namada_core::types::address::Address;
 use namada_core::types::storage::{BlockHeight, Epoch};
 use namada_core::types::token::Amount;
-#[allow(unused_imports)]
-use namada_core::types::transaction::protocol::ProtocolTxType;
 use namada_core::types::transaction::TxResult;
 use namada_core::types::vote_extensions::validator_set_update;
 
