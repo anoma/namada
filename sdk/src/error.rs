@@ -151,6 +151,17 @@ pub enum TxError {
          restored."
     )]
     ValidatorNotCurrentlyJailed(Address),
+    /// Already inactive at pipeline epoch
+    #[error(
+        "The validator address {0} is inactive at the pipeline epoch {1}."
+    )]
+    ValidatorInactive(Address, Epoch),
+    /// Validator not inactive
+    #[error(
+        "The validator address {0} is not inactive at epoch {1} and so cannot \
+         be reactivated."
+    )]
+    ValidatorNotInactive(Address, Epoch),
     /// Validator still frozen and ineligible to be unjailed
     #[error(
         "The validator address {0} is currently frozen and ineligible to be \

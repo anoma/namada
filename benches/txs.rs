@@ -45,8 +45,9 @@ use namada::types::transaction::EllipticCurve;
 use namada_apps::bench_utils::{
     BenchShell, BenchShieldedCtx, ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY,
     BERTHA_PAYMENT_ADDRESS, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
-    TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
-    TX_INIT_PROPOSAL_WASM, TX_REDELEGATE_WASM, TX_RESIGN_STEWARD,
+    TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_DEACTIVATE_VALIDATOR_WASM,
+    TX_IBC_WASM, TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL_WASM,
+    TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM, TX_RESIGN_STEWARD,
     TX_REVEAL_PK_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
     TX_UPDATE_ACCOUNT_WASM, TX_UPDATE_STEWARD_COMMISSION,
     TX_VOTE_PROPOSAL_WASM, TX_WITHDRAW_WASM, VP_VALIDATOR_WASM,
@@ -899,6 +900,65 @@ fn update_steward_commission(c: &mut Criterion) {
     });
 }
 
+fn deactivate_validator(c: &mut Criterion) {
+    let shell = BenchShell::default();
+    let signed_tx = shell.generate_tx(
+        TX_DEACTIVATE_VALIDATOR_WASM,
+        defaults::validator_address(),
+        None,
+        None,
+        Some(&defaults::validator_keypair()),
+    );
+
+    c.bench_function("deactivate_validator", |b| {
+        b.iter_batched_ref(
+            BenchShell::default,
+            |shell| shell.execute_tx(&signed_tx),
+            criterion::BatchSize::LargeInput,
+        )
+    });
+}
+
+fn reactivate_validator(c: &mut Criterion) {
+    let shell = BenchShell::default();
+    let signed_tx = shell.generate_tx(
+        TX_REACTIVATE_VALIDATOR_WASM,
+        defaults::validator_address(),
+        None,
+        None,
+        Some(&defaults::validator_keypair()),
+    );
+
+    c.bench_function("reactivate_validator", |b| {
+        b.iter_batched_ref(
+            || {
+                let mut shell = BenchShell::default();
+
+                // Deactivate the validator
+                let pos_params = read_pos_params(&shell.wl_storage).unwrap();
+                let current_epoch = shell.wl_storage.storage.block.epoch;
+                proof_of_stake::deactivate_validator(
+                    &mut shell.wl_storage,
+                    &defaults::validator_address(),
+                    current_epoch,
+                )
+                .unwrap();
+
+                shell.wl_storage.commit_tx();
+                shell.commit();
+                // Advance by slash epoch offset epochs
+                for _ in 0..=pos_params.pipeline_len {
+                    shell.advance_epoch();
+                }
+
+                shell
+            },
+            |shell| shell.execute_tx(&signed_tx),
+            criterion::BatchSize::LargeInput,
+        )
+    });
+}
+
 criterion_group!(
     whitelisted_txs,
     transfer,
@@ -917,6 +977,8 @@ criterion_group!(
     unjail_validator,
     tx_bridge_pool,
     resign_steward,
-    update_steward_commission
+    update_steward_commission,
+    deactivate_validator,
+    reactivate_validator
 );
 criterion_main!(whitelisted_txs);

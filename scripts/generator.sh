@@ -134,6 +134,10 @@ elif [ "$1" = "client" ]; then
     
     cargo run --bin namadac --features std -- unjail-validator --validator Bertha --gas-token NAM --force --node 127.0.0.1:27657
 
+    cargo run --bin namadac --features std -- deactivate-validator --validator Bertha --gas-token NAM --force --node 127.0.0.1:27657
+
+    cargo run --bin namadac --features std -- reactivate-validator --validator Bertha --gas-token NAM --force --node 127.0.0.1:27657
+
     cargo run --bin namadac --features std -- change-commission-rate --validator Bertha --commission-rate 0.02 --gas-token NAM --force --node 127.0.0.1:27657
 
     PROPOSAL_ID_0=$(cargo run --bin namadac --features std -- init-proposal --force --data-path proposal_default.json --node 127.0.0.1:27657 | grep -o -P '(?<=/proposal/).*(?=/author)')

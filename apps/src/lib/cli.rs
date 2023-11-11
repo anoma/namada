@@ -225,6 +225,8 @@ pub mod cmds {
                 // PoS transactions
                 .subcommand(TxInitValidator::def().display_order(2))
                 .subcommand(TxUnjailValidator::def().display_order(2))
+                .subcommand(TxDeactivateValidator::def().display_order(2))
+                .subcommand(TxReactivateValidator::def().display_order(2))
                 .subcommand(Bond::def().display_order(2))
                 .subcommand(Unbond::def().display_order(2))
                 .subcommand(Withdraw::def().display_order(2))
@@ -273,6 +275,10 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, TxInitValidator);
             let tx_unjail_validator =
                 Self::parse_with_ctx(matches, TxUnjailValidator);
+            let tx_deactivate_validator =
+                Self::parse_with_ctx(matches, TxDeactivateValidator);
+            let tx_reactivate_validator =
+                Self::parse_with_ctx(matches, TxReactivateValidator);
             let tx_reveal_pk = Self::parse_with_ctx(matches, TxRevealPk);
             let tx_init_proposal =
                 Self::parse_with_ctx(matches, TxInitProposal);
@@ -330,6 +336,8 @@ pub mod cmds {
                 .or(tx_init_validator)
                 .or(tx_commission_rate_change)
                 .or(tx_unjail_validator)
+                .or(tx_deactivate_validator)
+                .or(tx_reactivate_validator)
                 .or(bond)
                 .or(unbond)
                 .or(withdraw)
@@ -403,6 +411,8 @@ pub mod cmds {
         TxInitValidator(TxInitValidator),
         TxCommissionRateChange(TxCommissionRateChange),
         TxUnjailValidator(TxUnjailValidator),
+        TxDeactivateValidator(TxDeactivateValidator),
+        TxReactivateValidator(TxReactivateValidator),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
         TxRevealPk(TxRevealPk),
@@ -1401,6 +1411,55 @@ pub mod cmds {
                     "Send a signed transaction to unjail a jailed validator.",
                 )
                 .add_args::<args::TxUnjailValidator<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct TxDeactivateValidator(
+        pub args::TxDeactivateValidator<args::CliTypes>,
+    );
+
+    impl SubCmd for TxDeactivateValidator {
+        const CMD: &'static str = "deactivate-validator";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxDeactivateValidator(args::TxDeactivateValidator::parse(
+                    matches,
+                ))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Send a signed transaction to deactivate a validator.")
+                .add_args::<args::TxDeactivateValidator<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct TxReactivateValidator(
+        pub args::TxReactivateValidator<args::CliTypes>,
+    );
+
+    impl SubCmd for TxReactivateValidator {
+        const CMD: &'static str = "reactivate-validator";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxReactivateValidator(args::TxReactivateValidator::parse(
+                    matches,
+                ))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Send a signed transaction to reactivate an inactive \
+                     validator.",
+                )
+                .add_args::<args::TxReactivateValidator<args::CliTypes>>()
         }
     }
 
@@ -2672,6 +2731,8 @@ pub mod args {
     pub const TX_BRIDGE_POOL_WASM: &str = "tx_bridge_pool.wasm";
     pub const TX_CHANGE_COMMISSION_WASM: &str =
         "tx_change_validator_commission.wasm";
+    pub const TX_DEACTIVATE_VALIDATOR_WASM: &str =
+        "tx_deactivate_validator.wasm";
     pub const TX_IBC_WASM: &str = "tx_ibc.wasm";
     pub const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
     pub const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
@@ -2681,6 +2742,8 @@ pub mod args {
     pub const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
     pub const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
     pub const TX_UNJAIL_VALIDATOR_WASM: &str = "tx_unjail_validator.wasm";
+    pub const TX_REACTIVATE_VALIDATOR_WASM: &str =
+        "tx_reactivate_validator.wasm";
     pub const TX_REDELEGATE_WASM: &str = "tx_redelegate.wasm";
     pub const TX_UPDATE_STEWARD_COMMISSION: &str =
         "tx_update_steward_commission.wasm";
@@ -4956,9 +5019,75 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>().arg(
-                VALIDATOR.def().help(
-                    "The address of the jailed validator to re-activate.",
-                ),
+                VALIDATOR
+                    .def()
+                    .help("The address of the jailed validator to unjail."),
+            )
+        }
+    }
+
+    impl CliToSdk<TxDeactivateValidator<SdkTypes>>
+        for TxDeactivateValidator<CliTypes>
+    {
+        fn to_sdk(self, ctx: &mut Context) -> TxDeactivateValidator<SdkTypes> {
+            TxDeactivateValidator::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                validator: ctx.borrow_chain_or_exit().get(&self.validator),
+                tx_code_path: self.tx_code_path.to_path_buf(),
+            }
+        }
+    }
+
+    impl Args for TxDeactivateValidator<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let validator = VALIDATOR.parse(matches);
+            let tx_code_path = PathBuf::from(TX_DEACTIVATE_VALIDATOR_WASM);
+            Self {
+                tx,
+                validator,
+                tx_code_path,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx<CliTypes>>().arg(
+                VALIDATOR
+                    .def()
+                    .help("The address of the jailed validator to deactivate."),
+            )
+        }
+    }
+
+    impl CliToSdk<TxReactivateValidator<SdkTypes>>
+        for TxReactivateValidator<CliTypes>
+    {
+        fn to_sdk(self, ctx: &mut Context) -> TxReactivateValidator<SdkTypes> {
+            TxReactivateValidator::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                validator: ctx.borrow_chain_or_exit().get(&self.validator),
+                tx_code_path: self.tx_code_path.to_path_buf(),
+            }
+        }
+    }
+
+    impl Args for TxReactivateValidator<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let validator = VALIDATOR.parse(matches);
+            let tx_code_path = PathBuf::from(TX_REACTIVATE_VALIDATOR_WASM);
+            Self {
+                tx,
+                validator,
+                tx_code_path,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx<CliTypes>>().arg(
+                VALIDATOR
+                    .def()
+                    .help("The address of the jailed validator to deactivate."),
             )
         }
     }
