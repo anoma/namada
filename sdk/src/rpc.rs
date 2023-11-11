@@ -1120,12 +1120,12 @@ pub async fn query_ibc_denom<'a, N: Namada<'a>>(
     owner: Option<&Address>,
 ) -> String {
     let hash = match token {
-        Address::Internal(InternalAddress::IbcToken(hash)) => hash,
+        Address::Internal(InternalAddress::IbcToken(hash)) => hash.to_string(),
         _ => return token.to_string(),
     };
 
     if let Some(owner) = owner {
-        let ibc_denom_key = ibc_denom_key(owner.to_string(), hash);
+        let ibc_denom_key = ibc_denom_key(owner.to_string(), &hash);
         if let Ok(ibc_denom) =
             query_storage_value::<_, String>(context.client(), &ibc_denom_key)
                 .await
@@ -1141,7 +1141,7 @@ pub async fn query_ibc_denom<'a, N: Namada<'a>>(
     {
         for (key, ibc_denom) in ibc_denoms {
             if let Some((_, token_hash)) = is_ibc_denom_key(&key) {
-                if token_hash == *hash {
+                if token_hash == hash {
                     return ibc_denom;
                 }
             }

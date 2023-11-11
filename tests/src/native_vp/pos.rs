@@ -603,6 +603,7 @@ pub mod testing {
     pub type PosStorageChanges = Vec<PosStorageChange>;
 
     #[derive(Clone, Debug)]
+    #[allow(clippy::large_enum_variant)]
     pub enum ValidPosAction {
         InitValidator {
             address: Address,
