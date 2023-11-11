@@ -52,7 +52,10 @@ use crate::{run, run_as};
 ///
 /// ```
 /// let storage_key = storage_key("queue");
-/// assert_eq!(storage_key, "#atest1v9hx7w36g42ysgzzwf5kgem9ypqkgerjv4ehxgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq8f99ew/queue");
+/// assert_eq!(
+///     storage_key,
+///     "#tnam1quqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqfgdmms/queue"
+/// );
 /// ```
 fn storage_key(path: &str) -> String {
     format!("#{BRIDGE_ADDRESS}/{path}")

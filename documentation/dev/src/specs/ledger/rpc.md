@@ -30,7 +30,7 @@ For example, to find if an established address exists on-chain, we can submit a 
 
 TODO document response types encoding after <https://github.com/anoma/namada/issues/439>
 
-The Proof-of-Stake queries are built on top of the [read-only queries](#read-only-queries), where all the PoS data are stored under the [internal `PoS` address](../encoding.html#internaladdress), which is governed by its native validity predicate. The bech32m encoded address of the PoS account currently is `"atest1v9hx7w362pex7mmxyphkvgznw3skkefqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqq8ylv7"`, in the storage keys below in place of `PoS`.
+The Proof-of-Stake queries are built on top of the [read-only queries](#read-only-queries), where all the PoS data are stored under the [internal `PoS` address](../encoding.html#internaladdress), which is governed by its native validity predicate. The bech32m encoded address of the PoS account currently is `"tnam1qgqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqc8j2fp"`, in the storage keys below in place of `PoS`.
 
 Note that in the query paths below (and in all storage keys in general), addresses are encoded with bech32m and prefixed with `#` character.
 

@@ -77,6 +77,8 @@ impl super::PublicKey for PublicKey {
 pub type DecodeError = string_encoding::DecodeError;
 
 impl string_encoding::Format for PublicKey {
+    type EncodedBytes<'a> = Vec<u8>;
+
     const HRP: &'static str = string_encoding::COMMON_PK_HRP;
 
     fn to_bytes(&self) -> Vec<u8> {
@@ -251,6 +253,8 @@ pub enum Signature {
 }
 
 impl string_encoding::Format for Signature {
+    type EncodedBytes<'a> = Vec<u8>;
+
     const HRP: &'static str = string_encoding::COMMON_SIG_HRP;
 
     fn to_bytes(&self) -> Vec<u8> {

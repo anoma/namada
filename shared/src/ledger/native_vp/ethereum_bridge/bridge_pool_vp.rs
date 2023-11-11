@@ -707,7 +707,7 @@ mod test_bridge_pool_vp {
 
     /// An established user address for testing & development
     fn bertha_address() -> Address {
-        Address::decode("atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw")
+        Address::decode("tnam1qyctxtpnkhwaygye0sftkq28zedf774xc5a2m7st")
             .expect("The token address decoding shouldn't fail")
     }
 
@@ -729,7 +729,7 @@ mod test_bridge_pool_vp {
 
     /// A sampled established address for tests
     pub fn established_address_1() -> Address {
-        Address::decode("atest1v4ehgw36g56ngwpk8ppnzsf4xqeyvsf3xq6nxde5gseyys3nxgenvvfex5cnyd2rx9zrzwfctgx7sp")
+        Address::decode("tnam1q8j5s6xp55p05yznwnftkv3kr9gjtsw3nq7x6tw5")
             .expect("The token address decoding shouldn't fail")
     }
 
