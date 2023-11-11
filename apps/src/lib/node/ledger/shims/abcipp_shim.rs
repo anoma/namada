@@ -19,11 +19,12 @@ use super::abcipp_shim_types::shim::request::{FinalizeBlock, ProcessedTx};
 use super::abcipp_shim_types::shim::{Error, Request, Response, TxBytes};
 use crate::config;
 use crate::config::{Action, ActionAtHeight};
-use crate::facade::tendermint_proto::v0_37::abci::{
-    RequestBeginBlock, ResponseDeliverTx,
+use crate::facade::tendermint::v0_37::abci::response::DeliverTx;
+use crate::facade::tendermint::v0_37::abci::{
+    request, Request as Req, Response as Resp,
 };
-use crate::facade::tower_abci::response::DeliverTx;
-use crate::facade::tower_abci::{BoxError, Request as Req, Response as Resp};
+use crate::facade::tendermint_proto::v0_37::abci::ResponseDeliverTx;
+use crate::facade::tower_abci::BoxError;
 use crate::node::ledger::shell::{EthereumOracleChannels, Shell};
 
 /// The shim wraps the shell, which implements ABCI++.
@@ -32,7 +33,7 @@ use crate::node::ledger::shell::{EthereumOracleChannels, Shell};
 #[derive(Debug)]
 pub struct AbcippShim {
     service: Shell,
-    begin_block_request: Option<RequestBeginBlock>,
+    begin_block_request: Option<request::BeginBlock>,
     delivered_txs: Vec<TxBytes>,
     shell_recv: std::sync::mpsc::Receiver<(
         Req,
@@ -100,12 +101,7 @@ impl AbcippShim {
                     .service
                     .call(Request::ProcessProposal(proposal))
                     .map_err(Error::from)
-                    .and_then(|res| match res {
-                        Response::ProcessProposal(resp) => {
-                            Ok(Resp::ProcessProposal((&resp).into()))
-                        }
-                        _ => unreachable!(),
-                    }),
+                    .and_then(|resp| resp.try_into()),
                 Req::BeginBlock(block) => {
                     // we save this data to be forwarded to finalize later
                     self.begin_block_request = Some(block);
@@ -114,9 +110,13 @@ impl AbcippShim {
                 Req::DeliverTx(tx) => {
                     let mut deliver: DeliverTx = Default::default();
                     // Attach events to this transaction if possible
-                    if let Ok(tx) = Tx::try_from(&tx.tx[..]) {
-                        let resp: ResponseDeliverTx = tx.into();
-                        deliver.events = resp.events;
+                    if Tx::try_from(&tx.tx[..]).is_ok() {
+                        let resp = ResponseDeliverTx::default();
+                        deliver.events = resp
+                            .events
+                            .into_iter()
+                            .map(|v| TryFrom::try_from(v).unwrap())
+                            .collect();
                     }
                     self.delivered_txs.push(tx.tx);
                     Ok(Resp::DeliverTx(deliver))
@@ -124,19 +124,14 @@ impl AbcippShim {
                 Req::EndBlock(_) => {
                     let begin_block_request =
                         self.begin_block_request.take().unwrap();
-                    let block_time = self.service.get_block_timestamp(
-                        begin_block_request
-                            .header
-                            .as_ref()
-                            .and_then(|header| header.time.to_owned()),
-                    );
+                    let block_time = begin_block_request
+                        .header
+                        .time
+                        .try_into()
+                        .expect("valid RFC3339 block time");
 
                     let tm_raw_hash_string = tm_raw_hash_to_string(
-                        &begin_block_request
-                            .header
-                            .as_ref()
-                            .expect("Missing block header")
-                            .proposer_address,
+                        begin_block_request.header.proposer_address,
                     );
                     let block_proposer = find_validator_by_raw_hash(
                         &self.service.wl_storage,
@@ -172,7 +167,7 @@ impl AbcippShim {
                         .map_err(Error::from)
                         .and_then(|res| match res {
                             Response::FinalizeBlock(resp) => {
-                                Ok(Resp::EndBlock(resp.into()))
+                                Ok(Resp::EndBlock(crate::facade::tendermint_proto::v0_37::abci::ResponseEndBlock::from(resp).try_into().unwrap()))
                             }
                             _ => Err(Error::ConvertResp(res)),
                         })
@@ -319,14 +314,18 @@ impl AbciService {
     /// to possibly take an action.
     fn get_action(&self, req: &Req) -> Option<CheckAction> {
         match req {
-            Req::PrepareProposal(req) => Some(CheckAction::Check(req.height)),
-            Req::ProcessProposal(req) => Some(CheckAction::Check(req.height)),
+            Req::PrepareProposal(req) => {
+                Some(CheckAction::Check(req.height.into()))
+            }
+            Req::ProcessProposal(req) => {
+                Some(CheckAction::Check(req.height.into()))
+            }
             Req::EndBlock(req) => Some(CheckAction::Check(req.height)),
             Req::BeginBlock(_)
             | Req::DeliverTx(_)
             | Req::InitChain(_)
             | Req::CheckTx(_)
-            | Req::Commit(_) => {
+            | Req::Commit => {
                 if self.suspended {
                     Some(CheckAction::AlreadySuspended)
                 } else {

@@ -16,7 +16,6 @@ use namada_sdk::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 
 use super::block_alloc::{BlockSpace, EncryptedTxsBins};
 use super::*;
-use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
 use crate::facade::tendermint_proto::v0_37::abci::RequestProcessProposal;
 use crate::node::ledger::shell::block_alloc::{AllocFailure, TxBin};
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::ProcessProposal;
@@ -83,7 +82,7 @@ where
     pub fn process_proposal(
         &self,
         req: RequestProcessProposal,
-    ) -> ProcessProposal {
+    ) -> (ProcessProposal, Vec<TxResult>) {
         tracing::info!(
             proposer = ?HEXUPPER.encode(&req.proposer_address),
             height = req.height,
@@ -140,17 +139,14 @@ where
         }
 
         let will_reject_proposal = invalid_txs || has_remaining_decrypted_txs;
-
-        let status = if will_reject_proposal {
-            ProposalStatus::Reject
-        } else {
-            ProposalStatus::Accept
-        };
-
-        ProcessProposal {
-            status: status as i32,
+        (
+            if will_reject_proposal {
+                ProcessProposal::Reject
+            } else {
+                ProcessProposal::Accept
+            },
             tx_results,
-        }
+        )
     }
 
     /// Evaluates the corresponding [`TxResult`] for each tx in the

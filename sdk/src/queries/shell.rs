@@ -234,7 +234,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     if let Some(past_height_limit) = ctx.storage_read_past_height_limit {
-        if request.height.0 + past_height_limit
+        if request.height.value() + past_height_limit
             < ctx.wl_storage.storage.get_last_block_height().0
         {
             return Err(storage_api::Error::new(std::io::Error::new(
@@ -251,7 +251,7 @@ where
     match ctx
         .wl_storage
         .storage
-        .read_with_height(&storage_key, request.height)
+        .read_with_height(&storage_key, request.height.into())
         .into_storage_result()?
     {
         (Some(value), _gas) => {
@@ -259,7 +259,11 @@ where
                 let proof = ctx
                     .wl_storage
                     .storage
-                    .get_existence_proof(&storage_key, &value, request.height)
+                    .get_existence_proof(
+                        &storage_key,
+                        &value,
+                        request.height.into(),
+                    )
                     .into_storage_result()?;
                 Some(proof)
             } else {
@@ -276,7 +280,10 @@ where
                 let proof = ctx
                     .wl_storage
                     .storage
-                    .get_non_existence_proof(&storage_key, request.height)
+                    .get_non_existence_proof(
+                        &storage_key,
+                        request.height.into(),
+                    )
                     .into_storage_result()?;
                 Some(proof)
             } else {
@@ -316,7 +323,7 @@ where
             let mut proof = ctx
                 .wl_storage
                 .storage
-                .get_existence_proof(key, value, request.height)
+                .get_existence_proof(key, value, request.height.into())
                 .into_storage_result()?;
             ops.append(&mut proof.ops);
         }

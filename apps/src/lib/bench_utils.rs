@@ -60,7 +60,6 @@ use namada::ledger::queries::{
     Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
 use namada::ledger::storage_api::StorageRead;
-use namada::proof_of_stake;
 use namada::proto::{Code, Data, Section, Signature, Tx};
 use namada::tendermint::Hash;
 use namada::tendermint_rpc::{self};
@@ -76,6 +75,7 @@ use namada::types::token::DenominatedAmount;
 use namada::types::transaction::governance::InitProposalData;
 use namada::types::transaction::pos::Bond;
 use namada::vm::wasm::run;
+use namada::{proof_of_stake, tendermint};
 use namada_sdk::masp::{
     self, ShieldedContext, ShieldedTransfer, ShieldedUtils,
 };
@@ -91,8 +91,8 @@ use crate::cli::Context;
 use crate::config;
 use crate::config::global::GlobalConfig;
 use crate::config::TendermintMode;
+use crate::facade::tendermint::v0_37::abci::request::InitChain;
 use crate::facade::tendermint_proto::google::protobuf::Timestamp;
-use crate::facade::tendermint_proto::v0_37::abci::RequestInitChain;
 use crate::node::ledger::shell::Shell;
 use crate::wallet::{defaults, CliWalletUtils};
 
@@ -183,13 +183,39 @@ impl Default for BenchShell {
 
         shell
             .init_chain(
-                RequestInitChain {
-                    time: Some(Timestamp {
+                InitChain {
+                    time: Timestamp {
                         seconds: 0,
                         nanos: 0,
-                    }),
+                    }
+                    .try_into()
+                    .unwrap(),
                     chain_id: ChainId::default().to_string(),
-                    ..Default::default()
+                    consensus_params: tendermint::consensus::params::Params {
+                        block: tendermint::block::Size {
+                            max_bytes: 0,
+                            max_gas: 0,
+                            time_iota_ms: 0,
+                        },
+                        evidence: tendermint::evidence::Params {
+                            max_age_num_blocks: 0,
+                            max_age_duration: tendermint::evidence::Duration(
+                                core::time::Duration::MAX,
+                            ),
+                            max_bytes: 0,
+                        },
+                        validator:
+                            tendermint::consensus::params::ValidatorParams {
+                                pub_key_types: vec![],
+                            },
+                        version: None,
+                        abci: tendermint::consensus::params::AbciParams {
+                            vote_extensions_enable_height: None,
+                        },
+                    },
+                    validators: vec![],
+                    app_state_bytes: vec![].into(),
+                    initial_height: 0_u32.into(),
                 },
                 2,
             )
@@ -676,9 +702,9 @@ impl Client for BenchShell {
         let height = height.unwrap_or_default();
 
         let request = RequestQuery {
-            data,
+            data: data.into(),
             path,
-            height,
+            height: height.try_into().unwrap(),
             prove,
         };
 

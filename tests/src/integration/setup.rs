@@ -191,17 +191,39 @@ fn create_node(
         results: Arc::new(Mutex::new(vec![])),
         auto_drive_services,
     };
-    let init_req = namada_apps::facade::tower_abci::request::InitChain {
-        time: Some(Timestamp {
-            seconds: 0,
-            nanos: 0,
-        }),
-        chain_id: chain_id.to_string(),
-        consensus_params: None,
-        validators: vec![],
-        app_state_bytes: vec![].into(),
-        initial_height: 0,
-    };
+    let init_req =
+        namada_apps::facade::tendermint::v0_37::abci::request::InitChain {
+            time: Timestamp {
+                seconds: 0,
+                nanos: 0,
+            }
+            .try_into().unwrap(),
+            chain_id: chain_id.to_string(),
+            consensus_params:
+                namada_apps::facade::tendermint::consensus::params::Params {
+                    block: namada_apps::facade::tendermint::block::Size {
+                        max_bytes: 0,
+                        max_gas: 0,
+                        time_iota_ms: 0,
+                    },
+                    evidence:
+                     namada_apps::facade::tendermint::evidence::Params {
+                        max_age_num_blocks:  0,
+                        max_age_duration: namada_apps::facade::tendermint::evidence::Duration(core::time::Duration::MAX),
+                        max_bytes: 0,
+                    },
+                    validator: namada_apps::facade::tendermint::consensus::params::ValidatorParams {
+                        pub_key_types: vec![]
+                    },
+                    version: None,
+                    abci: namada_apps::facade::tendermint::consensus::params::AbciParams {
+                        vote_extensions_enable_height: None,
+                    },
+                },
+            validators: vec![],
+            app_state_bytes: vec![].into(),
+            initial_height: 0_u32.into(),
+        };
     {
         let mut locked = node.shell.lock().unwrap();
         locked

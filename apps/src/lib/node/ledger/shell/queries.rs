@@ -26,36 +26,21 @@ where
             storage_read_past_height_limit: self.storage_read_past_height_limit,
         };
 
-        // Convert request to domain-type
-        let request = match namada::ledger::queries::RequestQuery::try_from_tm(
-            &self.wl_storage,
-            query,
-        ) {
-            Ok(request) => request,
-            Err(err) => {
-                return response::Query {
-                    code: 1,
-                    info: format!("Unexpected query: {}", err),
-                    ..Default::default()
-                };
-            }
-        };
-
         // Invoke the root RPC handler - returns borsh-encoded data on success
-        let result = if request.path == "/shell/dry_run_tx" {
-            dry_run_tx(ctx, &request)
+        let result = if query.path == "/shell/dry_run_tx" {
+            dry_run_tx(ctx, &query)
         } else {
-            namada::ledger::queries::handle_path(ctx, &request)
+            namada::ledger::queries::handle_path(ctx, &query)
         };
         match result {
             Ok(ResponseQuery { data, info, proof }) => response::Query {
                 value: data.into(),
                 info,
-                proof_ops: proof.map(Into::into),
+                proof: proof.map(Into::into),
                 ..Default::default()
             },
             Err(err) => response::Query {
-                code: 1,
+                code: 1.into(),
                 info: format!("RPC error: {}", err),
                 ..Default::default()
             },
@@ -85,11 +70,11 @@ mod test_queries {
     use namada::ledger::pos::PosQueries;
     use namada::proof_of_stake::read_consensus_validator_set_addresses_with_stake;
     use namada::proof_of_stake::types::WeightedValidator;
+    use namada::tendermint::abci::types::VoteInfo;
     use namada::types::storage::Epoch;
     use namada_sdk::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 
     use super::*;
-    use crate::facade::tendermint_proto::v0_37::abci::VoteInfo;
     use crate::node::ledger::shell::test_utils;
     use crate::node::ledger::shell::test_utils::get_pkh_from_address;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
@@ -164,18 +149,14 @@ mod test_queries {
                         Epoch::default(),
                     );
                     let votes = vec![VoteInfo {
-                        validator: Some(
-                            namada::tendermint_proto::v0_37::abci::Validator {
-                                address: pkh1.clone().into(),
-                                power: u128::try_from(val1.bonded_stake)
-                                    .expect("Test failed")
-                                    as i64,
-                            },
-                        ),
-                        signed_last_block: true,
+                        validator: namada::tendermint::abci::types::Validator {
+                            address: pkh1.clone().into(),
+                            power: (u128::try_from(val1.bonded_stake).expect("Test failed") as u64).try_into().unwrap(),
+                        },
+                        sig_info: namada::tendermint::abci::types::BlockSignatureInfo::LegacySigned,
                     }];
                     let req = FinalizeBlock {
-                        proposer_address: pkh1,
+                        proposer_address: pkh1.to_vec(),
                         votes,
                         ..Default::default()
                     };

@@ -263,6 +263,20 @@ impl From<u64> for BlockHeight {
     }
 }
 
+impl From<tendermint::block::Height> for BlockHeight {
+    fn from(height: tendermint::block::Height) -> Self {
+        Self(u64::from(height))
+    }
+}
+
+impl TryFrom<BlockHeight> for tendermint::block::Height {
+    type Error = tendermint::Error;
+
+    fn try_from(height: BlockHeight) -> std::result::Result<Self, Self::Error> {
+        Self::try_from(height.0)
+    }
+}
+
 impl TryFrom<i64> for BlockHeight {
     type Error = String;
 
