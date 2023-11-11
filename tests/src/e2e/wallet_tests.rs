@@ -39,6 +39,8 @@ fn wallet_encrypted_key_cmds() -> Result<()> {
     cmd.send_line(password)?;
     cmd.exp_string("Enter same passphrase again: ")?;
     cmd.send_line(password)?;
+    cmd.exp_string("Enter BIP39 passphrase (empty for none): ")?;
+    cmd.send_line("")?;
     cmd.exp_string(&format!(
         "Successfully added a key and an address with alias: \"{}\"",
         key_alias.to_lowercase()
@@ -87,6 +89,9 @@ fn wallet_encrypted_key_cmds_env_var() -> Result<()> {
         Some(20),
     )?;
 
+    cmd.exp_string("Enter BIP39 passphrase (empty for none): ")?;
+    cmd.send_line("")?;
+
     cmd.exp_string(&format!(
         "Successfully added a key and an address with alias: \"{}\"",
         key_alias
@@ -126,6 +131,8 @@ fn wallet_unencrypted_key_cmds() -> Result<()> {
         &["key", "gen", "--alias", key_alias, "--unsafe-dont-encrypt"],
         Some(20),
     )?;
+    cmd.exp_string("Enter BIP39 passphrase (empty for none): ")?;
+    cmd.send_line("")?;
     cmd.exp_string(&format!(
         "Successfully added a key and an address with alias: \"{}\"",
         key_alias
@@ -174,6 +181,8 @@ fn wallet_address_cmds() -> Result<()> {
         ],
         Some(20),
     )?;
+    cmd.exp_string("Enter BIP39 passphrase (empty for none): ")?;
+    cmd.send_line("")?;
     cmd.exp_string(&format!(
         "Successfully added a key and an address with alias: \"{}\"",
         gen_address_alias

@@ -614,8 +614,9 @@ pub fn init_genesis_validator(
     let (mut source_wallet, wallet_file) =
         load_pre_genesis_wallet_or_exit(&global_args.base_dir);
 
-    let source_key =
-        source_wallet.find_key(&source, None).unwrap_or_else(|err| {
+    let source_key = source_wallet
+        .find_secret_key(&source, None)
+        .unwrap_or_else(|err| {
             eprintln!(
                 "Couldn't find key for source \"{source}\" in the pre-genesis \
                  wallet {}. Failed with {err}.",

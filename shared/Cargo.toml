@@ -58,12 +58,6 @@ ibc-mocks = [
   "namada_sdk/ibc-mocks",
 ]
 
-masp-tx-gen = [
-  "rand",
-  "rand_core",
-  "namada_sdk/masp-tx-gen",
-]
-
 # for integration tests and test utilies
 testing = [
   "namada_core/testing",
@@ -72,14 +66,11 @@ testing = [
   "namada_sdk/testing",
   "async-client",
   "proptest",
-  "rand_core",
-  "rand",
   "tempfile",
 ]
 
 namada-sdk = [
   "tendermint-rpc",
-  "masp-tx-gen",
   "masp_primitives/transparent-inputs",
   "namada_sdk/namada-sdk",
 ]
@@ -120,8 +111,8 @@ parse_duration = "2.1.1"
 paste.workspace = true
 proptest = {version = "1.2.0", optional = true}
 prost.workspace = true
-rand = {optional = true, workspace = true}
-rand_core = {optional = true, workspace = true}
+rand.workspace = true
+rand_core.workspace = true
 rayon = {version = "=1.5.3", optional = true}
 ripemd.workspace = true
 serde.workspace = true

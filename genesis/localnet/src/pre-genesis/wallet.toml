@@ -4,7 +4,7 @@
 
 [payment_addrs]
 
-[keys]
+[secret_keys]
 albert-key = "unencrypted:0083318ccceac6c08a0177667840b4b93f0e455e45d4c38c28b73b8f8462fbf548"
 bertha-key = "unencrypted:0073ed61817720d27784e7a9bca4a60668d763a6f7ecac2d45ed1f241aa5c59e99"
 christel-key = "unencrypted:003625b939a58ef60402d7cf8fc04250026cc1ba90cc3028af1ce6b22be857ffc7"
@@ -12,6 +12,17 @@ daewon = "unencrypted:00d19e226c0e7d123d79f5908b5948d4c461b66a5f8aa95600c28b55ab
 ester = "unencrypted:01369093e2035d84f72a7e5a17c89b7a938b5d08cc87b2289805e3afcc66ef9a42"
 faucet-key = "unencrypted:00548aa8393422b88dce5f4be8ee0320638061c3e0649ada1b0dacbec4c0c75bb2"
 validator-0-balance-key = "unencrypted:000b9c8cb8f3ad6b8a387b064a11c0e98189814e9733aa7bb1e802425f6356f98a"
+
+[public_keys]
+albert-key = "ED25519_PK_PREFIXtpknam1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63we33t3r"
+bertha-key = "ED25519_PK_PREFIXtpknam1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3nds48x83t"
+christel-key = "ED25519_PK_PREFIXtpknam1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzwgc7uu"
+daewon = "ED25519_PK_PREFIXtpknam1qzz4x4fammhdcfa0g8xw4udkq8s4n6kjhzlxh00ul3da05wuu9wkykqqvjm"
+ester = "SECP256K1_PK_PREFIXtpknam1qypvqpzu74nafjahlwyq272dj76qq9rz30dulyc94883tmj893mquqs74gxv4"
+faucet-key = "ED25519_PK_PREFIXtpknam1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgyq0vra4"
+validator-0-balance-key = "ED25519_PK_PREFIXtpknam1qzp22w6trhmxmp2dx5h883c2l684z0e20a9egusmxaat62wvaa4agjf64ch"
+
+[derivation_paths]
 
 [addresses]
 albert-key = "tnam1qp2yqaffsk2wekd8fheu5c0cv3heg8v37vmdd45u"

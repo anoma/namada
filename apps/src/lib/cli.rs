@@ -510,7 +510,7 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     #[allow(clippy::large_enum_variant)]
     pub enum WalletKey {
-        Restore(KeyRestore),
+        Derive(KeyDerive),
         Gen(KeyGen),
         Find(KeyFind),
         List(KeyList),
@@ -523,7 +523,7 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
                 let generate = SubCmd::parse(matches).map(Self::Gen);
-                let restore = SubCmd::parse(matches).map(Self::Restore);
+                let restore = SubCmd::parse(matches).map(Self::Derive);
                 let lookup = SubCmd::parse(matches).map(Self::Find);
                 let list = SubCmd::parse(matches).map(Self::List);
                 let export = SubCmd::parse(matches).map(Self::Export);
@@ -539,7 +539,7 @@ pub mod cmds {
                 )
                 .subcommand_required(true)
                 .arg_required_else_help(true)
-                .subcommand(KeyRestore::def())
+                .subcommand(KeyDerive::def())
                 .subcommand(KeyGen::def())
                 .subcommand(KeyFind::def())
                 .subcommand(KeyList::def())
@@ -549,26 +549,27 @@ pub mod cmds {
 
     /// Restore a keypair and implicit address from the mnemonic code
     #[derive(Clone, Debug)]
-    pub struct KeyRestore(pub args::KeyAndAddressRestore);
+    pub struct KeyDerive(pub args::KeyAndAddressDerive);
 
-    impl SubCmd for KeyRestore {
-        const CMD: &'static str = "restore";
+    impl SubCmd for KeyDerive {
+        const CMD: &'static str = "derive";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .map(|matches| Self(args::KeyAndAddressRestore::parse(matches)))
+                .map(|matches| Self(args::KeyAndAddressDerive::parse(matches)))
         }
 
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "Restores a keypair from the given mnemonic code and HD \
+                    "Derives a keypair from the given mnemonic code and HD \
                      derivation path and derives the implicit address from \
                      its public key. Stores the keypair and the address with \
-                     the given alias.",
+                     the given alias. A hardware wallet can be used, in which \
+                     case a private key is not derivable.",
                 )
-                .add_args::<args::KeyAndAddressRestore>()
+                .add_args::<args::KeyAndAddressDerive>()
         }
     }
 
@@ -822,7 +823,7 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     pub enum WalletAddress {
         Gen(AddressGen),
-        Restore(AddressRestore),
+        Derive(AddressDerive),
         Find(AddressOrAliasFind),
         List(AddressList),
         Add(AddressAdd),
@@ -834,7 +835,7 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
                 let gen = SubCmd::parse(matches).map(Self::Gen);
-                let restore = SubCmd::parse(matches).map(Self::Restore);
+                let restore = SubCmd::parse(matches).map(Self::Derive);
                 let find = SubCmd::parse(matches).map(Self::Find);
                 let list = SubCmd::parse(matches).map(Self::List);
                 let add = SubCmd::parse(matches).map(Self::Add);
@@ -851,7 +852,7 @@ pub mod cmds {
                 .subcommand_required(true)
                 .arg_required_else_help(true)
                 .subcommand(AddressGen::def())
-                .subcommand(AddressRestore::def())
+                .subcommand(AddressDerive::def())
                 .subcommand(AddressOrAliasFind::def())
                 .subcommand(AddressList::def())
                 .subcommand(AddressAdd::def())
@@ -884,26 +885,27 @@ pub mod cmds {
 
     /// Restore a keypair and an implicit address from the mnemonic code
     #[derive(Clone, Debug)]
-    pub struct AddressRestore(pub args::KeyAndAddressRestore);
+    pub struct AddressDerive(pub args::KeyAndAddressDerive);
 
-    impl SubCmd for AddressRestore {
-        const CMD: &'static str = "restore";
+    impl SubCmd for AddressDerive {
+        const CMD: &'static str = "derive";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).map(|matches| {
-                AddressRestore(args::KeyAndAddressRestore::parse(matches))
+                AddressDerive(args::KeyAndAddressDerive::parse(matches))
             })
         }
 
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "Restores a keypair from the given mnemonic code and HD \
+                    "Derives a keypair from the given mnemonic code and HD \
                      derivation path and derives the implicit address from \
                      its public key. Stores the keypair and the address with \
-                     the given alias.",
+                     the given alias. A hardware wallet can be used, in which \
+                     case a private key is not derivable.",
                 )
-                .add_args::<args::KeyAndAddressRestore>()
+                .add_args::<args::KeyAndAddressDerive>()
         }
     }
 
@@ -2942,9 +2944,8 @@ pub mod args {
         arg("genesis-validator").opt();
     pub const HALT_ACTION: ArgFlag = flag("halt");
     pub const HASH_LIST: Arg<String> = arg("hash-list");
-    pub const HD_WALLET_DERIVATION_PATH: Arg<String> = arg("hd-path");
-    pub const HD_WALLET_DERIVATION_PATH_OPT: ArgOpt<String> =
-        HD_WALLET_DERIVATION_PATH.opt();
+    pub const HD_WALLET_DERIVATION_PATH: ArgDefault<String> =
+        arg_default("hd-path", DefaultFn(|| "default".to_string()));
     pub const HISTORIC: ArgFlag = flag("historic");
     pub const IBC_TRANSFER_MEMO_PATH: ArgOpt<PathBuf> = arg_opt("memo-path");
     pub const LEDGER_ADDRESS_ABOUT: &str =
@@ -3032,6 +3033,7 @@ pub mod args {
     pub const THRESOLD: ArgOpt<u8> = arg_opt("threshold");
     pub const UNSAFE_DONT_ENCRYPT: ArgFlag = flag("unsafe-dont-encrypt");
     pub const UNSAFE_SHOW_SECRET: ArgFlag = flag("unsafe-show-secret");
+    pub const USE_DEVICE: ArgFlag = flag("use-device");
     pub const VALIDATOR: Arg<WalletAddress> = arg("validator");
     pub const VALIDATOR_OPT: ArgOpt<WalletAddress> = VALIDATOR.opt();
     pub const VALIDATOR_ACCOUNT_KEY: ArgOpt<WalletPublicKey> =
@@ -3962,7 +3964,7 @@ pub mod args {
                 public_keys: self
                     .public_keys
                     .iter()
-                    .map(|pk| chain_ctx.get_cached(pk))
+                    .map(|pk| chain_ctx.get(pk))
                     .collect(),
                 threshold: self.threshold,
             }
@@ -4016,7 +4018,7 @@ pub mod args {
                 account_keys: self
                     .account_keys
                     .iter()
-                    .map(|x| chain_ctx.get_cached(x))
+                    .map(|x| chain_ctx.get(x))
                     .collect(),
                 threshold: self.threshold,
                 consensus_key: self
@@ -4026,9 +4028,7 @@ pub mod args {
                     .eth_cold_key
                     .map(|x| chain_ctx.get_cached(&x)),
                 eth_hot_key: self.eth_hot_key.map(|x| chain_ctx.get_cached(&x)),
-                protocol_key: self
-                    .protocol_key
-                    .map(|x| chain_ctx.get_cached(&x)),
+                protocol_key: self.protocol_key.map(|x| chain_ctx.get(&x)),
                 commission_rate: self.commission_rate,
                 max_commission_rate_change: self.max_commission_rate_change,
                 email: self.email,
@@ -4175,7 +4175,7 @@ pub mod args {
                 public_keys: self
                     .public_keys
                     .iter()
-                    .map(|pk| chain_ctx.get_cached(pk))
+                    .map(|pk| chain_ctx.get(pk))
                     .collect(),
                 threshold: self.threshold,
             }
@@ -4624,7 +4624,7 @@ pub mod args {
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
             RevealPk::<SdkTypes> {
                 tx,
-                public_key: chain_ctx.get_cached(&self.public_key),
+                public_key: chain_ctx.get(&self.public_key),
             }
         }
     }
@@ -5622,7 +5622,7 @@ pub mod args {
                     .collect(),
                 verification_key: self
                     .verification_key
-                    .map(|public_key| ctx.get_cached(&public_key)),
+                    .map(|public_key| ctx.get(&public_key)),
                 disposable_signing_key: self.disposable_signing_key,
                 tx_reveal_code_path: self.tx_reveal_code_path,
                 password: self.password,
@@ -5633,6 +5633,7 @@ pub mod args {
                 wrapper_fee_payer: self
                     .wrapper_fee_payer
                     .map(|x| ctx.get_cached(&x)),
+                use_device: self.use_device,
             }
         }
     }
@@ -5758,6 +5759,10 @@ pub mod args {
                     )
                     .conflicts_with(DISPOSABLE_SIGNING_KEY.name),
             )
+            .arg(USE_DEVICE.def().help(
+                "Use an attached hardware wallet device to sign the \
+                 transaction.",
+            ))
         }
 
         fn parse(matches: &ArgMatches) -> Self {
@@ -5785,6 +5790,7 @@ pub mod args {
             let password = None;
             let wrapper_fee_payer = FEE_PAYER_OPT.parse(matches);
             let output_folder = OUTPUT_FOLDER_PATH.parse(matches);
+            let use_device = USE_DEVICE.parse(matches);
             Self {
                 dry_run,
                 dry_run_wrapper,
@@ -5808,6 +5814,7 @@ pub mod args {
                 chain_id,
                 wrapper_fee_payer,
                 output_folder,
+                use_device,
             }
         }
     }
@@ -5982,18 +5989,20 @@ pub mod args {
         }
     }
 
-    impl Args for KeyAndAddressRestore {
+    impl Args for KeyAndAddressDerive {
         fn parse(matches: &ArgMatches) -> Self {
             let scheme = SCHEME.parse(matches);
             let alias = ALIAS_OPT.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
-            let derivation_path = HD_WALLET_DERIVATION_PATH_OPT.parse(matches);
+            let use_device = USE_DEVICE.parse(matches);
+            let derivation_path = HD_WALLET_DERIVATION_PATH.parse(matches);
             Self {
                 scheme,
                 alias,
                 alias_force,
                 unsafe_dont_encrypt,
+                use_device,
                 derivation_path,
             }
         }
@@ -6017,7 +6026,11 @@ pub mod args {
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
                  used in a live network.",
             ))
-            .arg(HD_WALLET_DERIVATION_PATH_OPT.def().help(
+            .arg(USE_DEVICE.def().help(
+                "Derive an address and public key from the seed stored on the \
+                 connected hardware wallet.",
+            ))
+            .arg(HD_WALLET_DERIVATION_PATH.def().help(
                 "HD key derivation path. Use keyword `default` to refer to a \
                  scheme default path:\n- m/44'/60'/0'/0/0 for secp256k1 \
                  scheme\n- m/44'/877'/0'/0'/0' for ed25519 scheme.\nFor \
@@ -6035,7 +6048,7 @@ pub mod args {
             let alias_force = ALIAS_FORCE.parse(matches);
             let is_pre_genesis = PRE_GENESIS.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
-            let derivation_path = HD_WALLET_DERIVATION_PATH_OPT.parse(matches);
+            let derivation_path = HD_WALLET_DERIVATION_PATH.parse(matches);
             Self {
                 scheme,
                 alias,
@@ -6067,7 +6080,7 @@ pub mod args {
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
                  used in a live network.",
             ))
-            .arg(HD_WALLET_DERIVATION_PATH_OPT.def().help(
+            .arg(HD_WALLET_DERIVATION_PATH.def().help(
                 "Generate a new key and wallet using BIP39 mnemonic code and \
                  HD derivation path. Use keyword `default` to refer to a \
                  scheme default path:\n- m/44'/60'/0'/0/0 for secp256k1 \
