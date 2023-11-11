@@ -1,5 +1,65 @@
 # CHANGELOG
 
+## v0.26.0
+
+Namada 0.26.0 is a minor release on the way to mainnet with updates to PoS and governance as well as its upstream dependencies.
+
+### BUG FIXES
+
+- Fix Windows build by disabling RocksDB jemalloc feature.
+  ([\#2100](https://github.com/anoma/namada/pull/2100))
+- Fix balance query not to return duplicate results
+  ([\#2125](https://github.com/anoma/namada/issues/2125))
+- Fixed bugs in the governance VP and in the PGF inflation mechanism.
+  ([\#2133](https://github.com/anoma/namada/pull/2133))
+- Added handling of ABCI Info requests load-shedding and removed load-shedding
+  from Mempool requests. ([\#2152](https://github.com/anoma/namada/pull/2152))
+
+### FEATURES
+
+- Implements a claim-based rewards system for PoS inflation.
+  ([\#1992](https://github.com/anoma/namada/pull/1992))
+- Store validator metadata on-chain
+  ([\#2045](https://github.com/anoma/namada/pull/2045))
+- Add transactions to deactivate and reactivate a validator
+  ([\#2082](https://github.com/anoma/namada/pull/2082))
+- Added Ledger support to the CLI client.
+  ([\#2118](https://github.com/anoma/namada/pull/2118))
+- Added the option to abstain from voting a governance proposal.
+  ([\#2128](https://github.com/anoma/namada/pull/2128))
+
+### IMPROVEMENTS
+
+- Improved replay protection for invalid transactions.
+  ([\#1905](https://github.com/anoma/namada/pull/1905))
+- store only essential merkle tree snapshots
+  ([\#2043](https://github.com/anoma/namada/issues/2043))
+- Replace strings with a specialized IBC token hash type in addresses
+  ([\#2046](https://github.com/anoma/namada/pull/2046))
+- Switch to a more compact representation in Namada's transparent
+  addresses, and change all bech32m HRPs to their mainnet equivalent
+  ([\#2060](https://github.com/anoma/namada/pull/2060))
+- refactoring IBC and remove IBC token denomination
+  ([\#2062](https://github.com/anoma/namada/issues/2062))
+- Upgraded to upstream ibc-rs and tendermint-rs crates.
+  ([\#2084](https://github.com/anoma/namada/pull/2084))
+- Updated the gas costs. Introduced a local validator configuration
+  parameter to set the accepted tokens and amounts for fees.
+  ([\#2091](https://github.com/anoma/namada/pull/2091))
+- Moved the inner transaction replay check at execution time.
+  ([\#2104](https://github.com/anoma/namada/pull/2104))
+- Removed "abcipp" and "abciplus" features and "abcipp"-only code.
+  ([\#2112](https://github.com/anoma/namada/pull/2112))
+- Removed the DKG implementation with its ferveo dependency.
+  ([\#2115](https://github.com/anoma/namada/pull/2115))
+- Upgraded to upstream tower-abci version.
+  ([\#2141](https://github.com/anoma/namada/pull/2141))
+
+### SDK
+
+- Updated the `LedgerProposalVote` display method to account for the new
+  `Abstain` vote variant. ([\#2128](https://github.com/anoma/namada/pull/2128))
+
 ## v0.25.0
 
 This release includes only the new genesis flow.
@@ -87,9 +147,9 @@ Namada 0.24.0 is a minor release that introduces an SDK crate, PoS redelegation,
 
 ### MISCELLANEOUS
 
-- Tag `ed25519` keys with `ZeroizeOnDrop`
-  ([\#1958](https://github.com/anoma/namada/pull/1958))
 - Switched from using `libsecp256k1` to `k256` crate.
+  ([\#1958](https://github.com/anoma/namada/pull/1958))
+- Tag `ed25519` keys with `ZeroizeOnDrop`
   ([\#1958](https://github.com/anoma/namada/pull/1958))
 
 ### SDK
