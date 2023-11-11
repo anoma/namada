@@ -13,38 +13,23 @@ repository.workspace = true
 version.workspace = true
 
 [features]
-default = ["ferveo-tpke"]
+default = ["rand"]
 mainnet = []
-ferveo-tpke = [
-  "ferveo",
-  "tpke",
-  "ark-ec",
-  "rand_core",
-  "rand",
-]
-wasm-runtime = [
-  "rayon",
-]
-
-ibc-mocks = [
-  "ibc/mocks",
-]
-
+wasm-runtime = ["rayon"]
+rand = ["dep:rand", "rand_core"]
+ibc-mocks = ["ibc/mocks" ]
 ethers-derive = [
   "ethbridge-structs/ethers-derive"
 ]
-
 # for integration tests and test utilies
 testing = [
   "rand",
-  "rand_core",
   "proptest",
 ]
 
 [dependencies]
 namada_macros = {path = "../macros"}
 ark-bls12-381.workspace = true
-ark-ec = {version = "0.3", optional = true}
 ark-serialize.workspace = true
 arse-merkle-tree.workspace = true
 bech32.workspace = true
@@ -57,9 +42,6 @@ ed25519-consensus.workspace = true
 ethabi.workspace = true
 ethbridge-structs.workspace = true
 eyre.workspace = true
-ferveo = {optional = true, git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
-ferveo-common = {git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
-tpke = {package = "group-threshold-cryptography", optional = true, git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
 ibc = { version = "0.47.0", default-features = false, features = ["serde"]}
 ibc-derive = { version = "0.3.0"}
 ibc-proto = {version = "0.37.1", default-features = false}

@@ -9,7 +9,6 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::types::ibc::IbcEvent;
-#[cfg(feature = "ferveo-tpke")]
 use namada_core::types::transaction::TxType;
 use serde_json::Value;
 
@@ -91,7 +90,6 @@ impl FromStr for EventType {
 impl Event {
     /// Creates a new event with the hash and height of the transaction
     /// already filled in
-    #[cfg(feature = "ferveo-tpke")]
     pub fn new_tx_event(tx: &crate::proto::Tx, height: u64) -> Self {
         let mut event = match tx.header().tx_type {
             TxType::Wrapper(_) => {

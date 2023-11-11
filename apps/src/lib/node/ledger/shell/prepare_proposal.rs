@@ -11,10 +11,7 @@ use namada::types::address::Address;
 use namada::types::internal::TxInQueue;
 use namada::types::key::tm_raw_hash_to_string;
 use namada::types::time::DateTimeUtc;
-use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
-use namada::types::transaction::{
-    AffineCurve, DecryptedTx, EllipticCurve, TxType,
-};
+use namada::types::transaction::{DecryptedTx, TxType};
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::WasmCacheAccess;
 
@@ -262,9 +259,6 @@ where
         &self,
         mut alloc: BlockAllocator<BuildingDecryptedTxBatch>,
     ) -> (Vec<TxBytes>, BlockAllocator<BuildingProtocolTxBatch>) {
-        // TODO: This should not be hardcoded
-        let privkey =
-            <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
         let pos_queries = self.wl_storage.pos_queries();
         let txs = self
             .wl_storage
@@ -277,21 +271,8 @@ where
                      gas: _,
                 }| {
                     let mut tx = tx.clone();
-                    match tx.decrypt(privkey).ok()
-                    {
-                        Some(_) => {
-                            tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
-                            tx
-                        },
-                        // An absent or undecryptable inner_tx are both
-                        // treated as undecryptable
-                        None => {
-                            tx.update_header(TxType::Decrypted(
-                                DecryptedTx::Undecryptable
-                            ));
-                            tx
-                        },
-                    }.to_bytes().into()
+                    tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
+                    tx.to_bytes().into()
                 },
             )
             // TODO: make sure all decrypted txs are accepted
@@ -497,7 +478,7 @@ mod test_prepare_proposal {
         let (shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
 
         let signed_vote_extension = {
-            let (protocol_key, _, _) = wallet::defaults::validator_keys();
+            let (protocol_key, _) = wallet::defaults::validator_keys();
             let validator_addr = wallet::defaults::validator_address();
 
             // generate a valid signature
@@ -529,7 +510,7 @@ mod test_prepare_proposal {
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
 
         fn check_invalid(shell: &TestShell, height: BlockHeight) {
-            let (protocol_key, _, _) = wallet::defaults::validator_keys();
+            let (protocol_key, _) = wallet::defaults::validator_keys();
             let validator_addr = wallet::defaults::validator_address();
 
             let signed_vote_extension = {
@@ -702,7 +683,7 @@ mod test_prepare_proposal {
         );
 
         // test prepare proposal
-        let (protocol_key, _, _) = wallet::defaults::validator_keys();
+        let (protocol_key, _) = wallet::defaults::validator_keys();
         let validator_addr = wallet::defaults::validator_address();
 
         let ethereum_event = EthereumEvent::TransfersToNamada {

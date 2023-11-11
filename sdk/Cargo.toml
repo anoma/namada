@@ -15,10 +15,7 @@ version.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-ferveo-tpke = [
-  "namada_core/ferveo-tpke",
-]
-
+default = ["rand", "rand_core"]
 masp-tx-gen = [
   "rand",
   "rand_core",
@@ -29,7 +26,6 @@ multicore = ["masp_proofs/multicore"]
 namada-sdk = [
   "tendermint-rpc",
   "masp-tx-gen",
-  "ferveo-tpke",
   "masp_primitives/transparent-inputs"
 ]
 

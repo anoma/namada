@@ -1,8 +1,6 @@
 //! Cryptographic keys
 
 pub mod common;
-/// Elliptic curve keys for the DKG
-pub mod dkg_session_keys;
 pub mod ed25519;
 pub mod secp256k1;
 

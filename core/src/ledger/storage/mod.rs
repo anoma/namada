@@ -45,10 +45,7 @@ use crate::types::address::{
 };
 use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
 use crate::types::hash::{Error as HashError, Hash};
-use crate::types::internal::ExpiredTxsQueue;
-// TODO
-#[cfg(feature = "ferveo-tpke")]
-use crate::types::internal::TxQueue;
+use crate::types::internal::{ExpiredTxsQueue, TxQueue};
 use crate::types::storage::{
     BlockHash, BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue,
     Header, Key, KeySeg, MembershipProof, TxIndex, BLOCK_HASH_LENGTH,
@@ -106,7 +103,6 @@ where
     /// The currently saved conversion state
     pub conversion_state: ConversionState,
     /// Wrapper txs to be decrypted in the next block proposal
-    #[cfg(feature = "ferveo-tpke")]
     pub tx_queue: TxQueue,
     /// Queue of expired transactions that need to be retransmitted.
     ///
@@ -207,7 +203,6 @@ pub struct BlockStateRead {
     /// Results of applying transactions
     pub results: BlockResults,
     /// Wrapper txs to be decrypted in the next block proposal
-    #[cfg(feature = "ferveo-tpke")]
     pub tx_queue: TxQueue,
     /// The latest block height on Ethereum processed, if
     /// the bridge is enabled.
@@ -243,7 +238,6 @@ pub struct BlockStateWrite<'a> {
     /// Results of applying transactions
     pub results: &'a BlockResults,
     /// Wrapper txs to be decrypted in the next block proposal
-    #[cfg(feature = "ferveo-tpke")]
     pub tx_queue: &'a TxQueue,
     /// The latest block height on Ethereum processed, if
     /// the bridge is enabled.
@@ -452,7 +446,6 @@ where
             update_epoch_blocks_delay: None,
             tx_index: TxIndex::default(),
             conversion_state: ConversionState::default(),
-            #[cfg(feature = "ferveo-tpke")]
             tx_queue: TxQueue::default(),
             expired_txs_queue: ExpiredTxsQueue::default(),
             native_token,
@@ -477,7 +470,6 @@ where
             update_epoch_blocks_delay,
             results,
             address_gen,
-            #[cfg(feature = "ferveo-tpke")]
             tx_queue,
             ethereum_height,
             eth_events_queue,
@@ -525,10 +517,7 @@ where
                     self.conversion_state.assets = assets;
                 }
             }
-            #[cfg(feature = "ferveo-tpke")]
-            {
-                self.tx_queue = tx_queue;
-            }
+            self.tx_queue = tx_queue;
             self.ethereum_height = ethereum_height;
             self.eth_events_queue = eth_events_queue;
             tracing::debug!("Loaded storage from DB");
@@ -584,7 +573,6 @@ where
             next_epoch_min_start_time: self.next_epoch_min_start_time,
             update_epoch_blocks_delay: self.update_epoch_blocks_delay,
             address_gen: &self.address_gen,
-            #[cfg(feature = "ferveo-tpke")]
             tx_queue: &self.tx_queue,
             ethereum_height: self.ethereum_height.as_ref(),
             eth_events_queue: &self.eth_events_queue,
@@ -1286,7 +1274,6 @@ pub mod testing {
                 update_epoch_blocks_delay: None,
                 tx_index: TxIndex::default(),
                 conversion_state: ConversionState::default(),
-                #[cfg(feature = "ferveo-tpke")]
                 tx_queue: TxQueue::default(),
                 expired_txs_queue: ExpiredTxsQueue::default(),
                 native_token: address::nam(),
