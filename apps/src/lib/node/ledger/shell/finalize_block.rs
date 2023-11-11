@@ -825,17 +825,7 @@ where
         let pgf_pd_rate =
             pgf_parameters.pgf_inflation_rate / Dec::from(epochs_per_year);
         let pgf_inflation = Dec::from(total_tokens) * pgf_pd_rate;
-
-        let stewards = pgf::get_stewards(&self.wl_storage)?;
-        let pgf_stewards_pd_rate =
-            pgf_parameters.stewards_inflation_rate / Dec::from(epochs_per_year);
-        let pgf_steward_inflation =
-            Dec::from(total_tokens) * pgf_stewards_pd_rate;
-        let total_pgf_stewards_inflation =
-            pgf_steward_inflation * Dec::from(stewards.len());
-
-        let pgf_inflation_amount =
-            token::Amount::from(pgf_inflation + total_pgf_stewards_inflation);
+        let pgf_inflation_amount = token::Amount::from(pgf_inflation);
 
         credit_tokens(
             &mut self.wl_storage,
@@ -855,22 +845,23 @@ where
         pgf_fundings.sort_by(|a, b| a.id.cmp(&b.id));
 
         for funding in pgf_fundings {
-            if credit_tokens(
+            if storage_api::token::transfer(
                 &mut self.wl_storage,
                 &staking_token,
+                &pgf_address,
                 &funding.detail.target,
                 funding.detail.amount,
             )
             .is_ok()
             {
                 tracing::info!(
-                    "Minted {} tokens for {} project.",
+                    "Paying {} tokens for {} project.",
                     funding.detail.amount.to_string_native(),
                     &funding.detail.target,
                 );
             } else {
                 tracing::warn!(
-                    "Failed Minting {} tokens for {} project.",
+                    "Failed to pay {} tokens for {} project.",
                     funding.detail.amount.to_string_native(),
                     &funding.detail.target,
                 );
@@ -878,6 +869,12 @@ where
         }
 
         // Pgf steward inflation
+        let stewards = pgf::get_stewards(&self.wl_storage)?;
+        let pgf_stewards_pd_rate =
+            pgf_parameters.stewards_inflation_rate / Dec::from(epochs_per_year);
+        let pgf_steward_inflation =
+            Dec::from(total_tokens) * pgf_stewards_pd_rate;
+
         for steward in stewards {
             for (address, percentage) in steward.reward_distribution {
                 let pgf_steward_reward = pgf_steward_inflation

@@ -671,19 +671,13 @@ where
         address: &Address,
         delegation_address: &Address,
     ) -> Result<bool> {
-        let bond_handle = pos::namada_proof_of_stake::bond_handle(
-            address,
-            delegation_address,
-        );
-        let params =
-            pos::namada_proof_of_stake::read_pos_params(&self.ctx.pre())?;
-        let bond = bond_handle.get_sum(&self.ctx.pre(), epoch, &params)?;
-
-        if bond.is_some() && verifiers.contains(address) {
-            Ok(true)
-        } else {
-            Ok(false)
-        }
+        Ok(address != delegation_address
+            && verifiers.contains(address)
+            && pos::namada_proof_of_stake::is_delegator(
+                &self.ctx.pre(),
+                address,
+                Some(epoch),
+            )?)
     }
 }
 
