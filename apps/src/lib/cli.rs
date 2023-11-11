@@ -231,6 +231,7 @@ pub mod cmds {
                 .subcommand(Unbond::def().display_order(2))
                 .subcommand(Withdraw::def().display_order(2))
                 .subcommand(Redelegate::def().display_order(2))
+                .subcommand(ClaimRewards::def().display_order(2))
                 .subcommand(TxCommissionRateChange::def().display_order(2))
                 .subcommand(TxMetadataChange::def().display_order(2))
                 // Ethereum bridge transactions
@@ -299,6 +300,7 @@ pub mod cmds {
             let unbond = Self::parse_with_ctx(matches, Unbond);
             let withdraw = Self::parse_with_ctx(matches, Withdraw);
             let redelegate = Self::parse_with_ctx(matches, Redelegate);
+            let claim_rewards = Self::parse_with_ctx(matches, ClaimRewards);
             let query_epoch = Self::parse_with_ctx(matches, QueryEpoch);
             let query_account = Self::parse_with_ctx(matches, QueryAccount);
             let query_transfers = Self::parse_with_ctx(matches, QueryTransfers);
@@ -351,6 +353,7 @@ pub mod cmds {
                 .or(unbond)
                 .or(withdraw)
                 .or(redelegate)
+                .or(claim_rewards)
                 .or(add_to_eth_bridge_pool)
                 .or(tx_update_steward_commission)
                 .or(tx_resign_steward)
@@ -431,6 +434,7 @@ pub mod cmds {
         Bond(Bond),
         Unbond(Unbond),
         Withdraw(Withdraw),
+        ClaimRewards(ClaimRewards),
         Redelegate(Redelegate),
         AddToEthBridgePool(AddToEthBridgePool),
         TxUpdateStewardCommission(TxUpdateStewardCommission),
@@ -1530,6 +1534,28 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Withdraw tokens from previously unbonded PoS bond.")
                 .add_args::<args::Withdraw<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct ClaimRewards(pub args::ClaimRewards<args::CliTypes>);
+
+    impl SubCmd for ClaimRewards {
+        const CMD: &'static str = "claim-rewards";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| ClaimRewards(args::ClaimRewards::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Claim available rewards tokens from bonds that \
+                     contributed in consensus.",
+                )
+                .add_args::<args::ClaimRewards<args::CliTypes>>()
         }
     }
 
@@ -2808,6 +2834,7 @@ pub mod args {
         "tx_update_steward_commission.wasm";
     pub const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
     pub const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
+    pub const TX_CLAIM_REWARDS_WASM: &str = "tx_claim_rewards.wasm";
     pub const TX_RESIGN_STEWARD: &str = "tx_resign_steward.wasm";
 
     pub const VP_USER_WASM: &str = "vp_user.wasm";
@@ -4790,6 +4817,43 @@ pub mod args {
                     "Source address for withdrawing from delegations. For \
                      withdrawing from self-bonds, the validator is also the \
                      source.",
+                ))
+        }
+    }
+
+    impl CliToSdk<ClaimRewards<SdkTypes>> for ClaimRewards<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> ClaimRewards<SdkTypes> {
+            let tx = self.tx.to_sdk(ctx);
+            let chain_ctx = ctx.borrow_chain_or_exit();
+            ClaimRewards::<SdkTypes> {
+                tx,
+                validator: chain_ctx.get(&self.validator),
+                source: self.source.map(|x| chain_ctx.get(&x)),
+                tx_code_path: self.tx_code_path.to_path_buf(),
+            }
+        }
+    }
+
+    impl Args for ClaimRewards<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let validator = VALIDATOR.parse(matches);
+            let source = SOURCE_OPT.parse(matches);
+            let tx_code_path = PathBuf::from(TX_CLAIM_REWARDS_WASM);
+            Self {
+                tx,
+                validator,
+                source,
+                tx_code_path,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx<CliTypes>>()
+                .arg(VALIDATOR.def().help("Validator address."))
+                .arg(SOURCE_OPT.def().help(
+                    "Source address for claiming rewards for a bond. For \
+                     self-bonds, the validator is also the source.",
                 ))
         }
     }

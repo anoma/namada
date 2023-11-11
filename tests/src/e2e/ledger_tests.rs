@@ -1162,7 +1162,13 @@ fn pos_bonds() -> Result<()> {
     Ok(())
 }
 
-/// TODO
+/// Test for claiming PoS inflationary rewards
+///
+/// 1. Run the ledger node
+/// 2. Wait some epochs while inflationary rewards accumulate in the PoS system
+/// 3. Submit a claim-rewards tx
+/// 4. Query the validator's balance before and after the claim tx to ensure
+/// that reward tokens were actually transferred
 #[test]
 fn pos_rewards() -> Result<()> {
     let test = setup::network(
@@ -1172,12 +1178,12 @@ fn pos_rewards() -> Result<()> {
             genesis.parameters.parameters.max_expected_time_per_block = 1;
             genesis.parameters.pos_params.pipeline_len = 2;
             genesis.parameters.pos_params.unbonding_len = 4;
-            setup::set_validators(3, genesis, base_dir, default_port_offset)
+            setup::set_validators(1, genesis, base_dir, default_port_offset)
         },
         None,
     )?;
 
-    for i in 0..3 {
+    for i in 0..1 {
         set_ethereum_bridge_mode(
             &test,
             &test.net.chain_id,
@@ -1188,146 +1194,35 @@ fn pos_rewards() -> Result<()> {
     }
 
     // 1. Run 3 genesis validator ledger nodes
-    let bg_validator_0 =
+    let _bg_validator_0 =
         start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
             .background();
-    let bg_validator_1 =
-        start_namada_ledger_node_wait_wasm(&test, Some(1), Some(40))?
-            .background();
-    let bg_validator_2 =
-        start_namada_ledger_node_wait_wasm(&test, Some(2), Some(40))?
-            .background();
 
-    let validator_zero_rpc = get_actor_rpc(&test, &Who::Validator(0));
-    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(1));
+    let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
-    // Submit a delegation from Bertha to validator-0
-    let tx_args = vec![
-        "bond",
-        "--validator",
-        "validator-0",
-        "--source",
-        BERTHA,
-        "--amount",
-        "10000.0",
-        "--gas-amount",
-        "0",
-        "--gas-token",
-        NAM,
-        "--signing-keys",
-        BERTHA_KEY,
-        "--ledger-address",
-        &validator_zero_rpc,
-    ];
-
-    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction applied with result:")?;
-    client.exp_string("Transaction is valid.")?;
-    client.assert_success();
-
-    // Check that all validator nodes processed the tx with same result
-    let validator_0 = bg_validator_0.foreground();
-    let validator_1 = bg_validator_1.foreground();
-    let validator_2 = bg_validator_2.foreground();
-
-    // let expected_result = "all VPs accepted transaction";
-    // validator_0.exp_string(expected_result)?;
-    // validator_1.exp_string(expected_result)?;
-    // validator_2.exp_string(expected_result)?;
-
-    let _bg_validator_0 = validator_0.background();
-    let _bg_validator_1 = validator_1.background();
-    let _bg_validator_2 = validator_2.background();
-    // put money in the validator account from its balance account so that it
-    // can self-bond
+    // Put money in the validator account from its balance account so that it
+    // can pay gas fees
     let tx_args = vec![
         "transfer",
         "--source",
-        "validator-1-balance-key",
+        "validator-0-balance-key",
         "--target",
-        "validator-1-validator-key",
+        "validator-0-validator-key",
         "--amount",
         "100.0",
         "--token",
         "NAM",
         "--node",
-        &validator_one_rpc,
+        &validator_0_rpc,
     ];
     let mut client =
-        run_as!(test, Who::Validator(1), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction applied with result:")?;
-    client.exp_string("Transaction is valid.")?;
-    client.assert_success();
-    // Let validator-1 self-bond
-    let tx_args = vec![
-        "bond",
-        "--validator",
-        "validator-1",
-        "--amount",
-        "30000.0",
-        "--gas-amount",
-        "0",
-        "--gas-token",
-        NAM,
-        "--signing-keys",
-        "validator-1-validator-key",
-        "--ledger-address",
-        &validator_one_rpc,
-    ];
-    let mut client =
-        run_as!(test, Who::Validator(1), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction applied with result:")?;
-    client.exp_string("Transaction is valid.")?;
-    client.assert_success();
-    // put money in the validator account from its balance account so that it
-    // can self-bond
-    let tx_args = vec![
-        "transfer",
-        "--source",
-        "validator-2-balance-key",
-        "--target",
-        "validator-2-validator-key",
-        "--amount",
-        "100.0",
-        "--token",
-        "NAM",
-        "--node",
-        &validator_one_rpc,
-    ];
-    let mut client =
-        run_as!(test, Who::Validator(2), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction applied with result:")?;
-    client.exp_string("Transaction is valid.")?;
-    client.assert_success();
-
-    // Let validator-2 self-bond
-    let tx_args = vec![
-        "bond",
-        "--validator",
-        "validator-2",
-        "--amount",
-        "25000.0",
-        "--gas-amount",
-        "0",
-        "--gas-token",
-        NAM,
-        "--signing-keys",
-        "validator-2-validator-key",
-        "--ledger-address",
-        &validator_zero_rpc,
-    ];
-    let mut client =
-        run_as!(test, Who::Validator(2), Bin::Client, tx_args, Some(40))?;
+        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
     // Wait some epochs
-    let epoch = get_epoch(&test, &validator_zero_rpc)?;
+    let epoch = get_epoch(&test, &validator_0_rpc)?;
     let wait_epoch = epoch + 4_u64;
-    println!(
-        "Current epoch: {}, earliest epoch for withdrawal: {}",
-        epoch, wait_epoch
-    );
 
     let start = Instant::now();
     let loop_timeout = Duration::new(40, 0);
@@ -1335,11 +1230,65 @@ fn pos_rewards() -> Result<()> {
         if Instant::now().duration_since(start) > loop_timeout {
             panic!("Timed out waiting for epoch: {}", wait_epoch);
         }
-        let epoch = epoch_sleep(&test, &validator_zero_rpc, 40)?;
+        let epoch = epoch_sleep(&test, &validator_0_rpc, 40)?;
         if dbg!(epoch) >= wait_epoch {
             break;
         }
     }
+
+    let query_balance_args = vec![
+        "balance",
+        "--owner",
+        "validator-0",
+        "--token",
+        NAM,
+        "--node",
+        &validator_0_rpc,
+    ];
+    let mut client = run!(test, Bin::Client, query_balance_args, Some(40))?;
+    let (_, res) = client.exp_regex(r"nam: [0-9\.]+").unwrap();
+    let amount_pre = token::Amount::from_str(
+        res.split(' ').last().unwrap(),
+        NATIVE_MAX_DECIMAL_PLACES,
+    )
+    .unwrap();
+    client.assert_success();
+
+    let tx_args = vec![
+        "claim-rewards",
+        "--validator",
+        "validator-0",
+        "--signing-keys",
+        "validator-0-validator-key",
+        "--node",
+        &validator_0_rpc,
+    ];
+    let mut client =
+        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    let query_balance_args = vec![
+        "balance",
+        "--owner",
+        "validator-0",
+        "--token",
+        NAM,
+        "--node",
+        &validator_0_rpc,
+    ];
+    let mut client = run!(test, Bin::Client, query_balance_args, Some(40))?;
+    let (_, res) = client.exp_regex(r"nam: [0-9\.]+").unwrap();
+    let amount_post = token::Amount::from_str(
+        res.split(' ').last().unwrap(),
+        NATIVE_MAX_DECIMAL_PLACES,
+    )
+    .unwrap();
+    client.assert_success();
+
+    assert!(amount_post > amount_pre);
+
     Ok(())
 }
 

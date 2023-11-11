@@ -65,7 +65,7 @@ use crate::signing::SigningTxData;
 use crate::token::DenominatedAmount;
 use crate::tx::{
     ProcessTxResponse, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
-    TX_CHANGE_COMMISSION_WASM, TX_CHANGE_METADATA_WASM,
+    TX_CHANGE_COMMISSION_WASM, TX_CHANGE_METADATA_WASM, TX_CLAIM_REWARDS_WASM,
     TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM, TX_INIT_PROPOSAL,
     TX_INIT_VALIDATOR_WASM, TX_REACTIVATE_VALIDATOR_WASM, TX_RESIGN_STEWARD,
     TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
@@ -394,6 +394,16 @@ pub trait Namada<'a>: Sized {
             validator,
             source: None,
             tx_code_path: PathBuf::from(TX_WITHDRAW_WASM),
+            tx: self.tx_builder(),
+        }
+    }
+
+    /// Make a Claim-rewards builder from the given minimum set of arguments
+    fn new_claim_rewards(&self, validator: Address) -> args::ClaimRewards {
+        args::ClaimRewards {
+            validator,
+            source: None,
+            tx_code_path: PathBuf::from(TX_CLAIM_REWARDS_WASM),
             tx: self.tx_builder(),
         }
     }

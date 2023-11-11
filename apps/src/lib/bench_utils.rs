@@ -112,6 +112,7 @@ pub const TX_UNJAIL_VALIDATOR_WASM: &str = "tx_unjail_validator.wasm";
 pub const TX_DEACTIVATE_VALIDATOR_WASM: &str = "tx_deactivate_validator.wasm";
 pub const TX_REACTIVATE_VALIDATOR_WASM: &str = "tx_reactivate_validator.wasm";
 pub const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
+pub const TX_CLAIM_REWARDS_WASM: &str = "tx_claim_rewards.wasm";
 pub const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
 pub const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
 

@@ -6,6 +6,8 @@ pub mod tx_bridge_pool;
 pub mod tx_change_validator_commission;
 #[cfg(feature = "tx_change_validator_metadata")]
 pub mod tx_change_validator_metadata;
+#[cfg(feature = "tx_claim_rewards")]
+pub mod tx_claim_rewards;
 #[cfg(feature = "tx_deactivate_validator")]
 pub mod tx_deactivate_validator;
 #[cfg(feature = "tx_ibc")]

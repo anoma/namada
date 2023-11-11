@@ -1055,9 +1055,9 @@ impl Default for Parameters {
     fn default() -> Self {
         Self {
             max_reward_rate: Dec::from_str("0.1").unwrap(),
-            kp_gain_nom: Dec::from_str("0.1").unwrap(),
-            kd_gain_nom: Dec::from_str("0.1").unwrap(),
-            locked_ratio_target: Dec::from_str("0.1").unwrap(),
+            kp_gain_nom: Dec::from_str("0.25").unwrap(),
+            kd_gain_nom: Dec::from_str("0.25").unwrap(),
+            locked_ratio_target: Dec::from_str("0.6667").unwrap(),
         }
     }
 }
