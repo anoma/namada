@@ -47,7 +47,8 @@ jobs:
       - name: Switch to tag if specified
         if: "${{ github.event.inputs.tag != '' }}"
         run: git checkout ${{ github.event.inputs.tag }}
-      - name: Install libudev
+      - name: Install libudev (Linux)
+        if: startsWith(runner.os, 'Linux')
         run: sudo apt-get update && sudo apt-get -y install libudev-dev
       - name: Install Protoc
         uses: heliaxdev/setup-protoc@v2
@@ -80,11 +81,6 @@ jobs:
         if: startsWith(runner.os, 'Windows')
         run: |
           curl -L https://github.com/EmbarkStudios/cargo-about/releases/download/0.5.7/cargo-about-0.5.7-x86_64-pc-windows-msvc.tar.gz -o cargo-about
-          pwd
-          echo $GITHUB_PATH
-          echo $env.GITHUB_PATH
-          echo $GITHUB_WORKSPACE
-          echo $env.GITHUB_WORKSPACE
           echo "${GITHUB_WORKSPACE}" >> $env.GITHUB_PATH
         env:
           ACTIONS_ALLOW_UNSECURE_COMMANDS: true
