@@ -128,9 +128,9 @@ test: test-unit test-e2e test-wasm test-benches
 test-coverage:
 	# Run integration tests separately because they require `integration`
 	# feature (and without coverage) and run them with pre-built MASP proofs
-	$(cargo) +$(nightly) llvm-cov --output-dir target \
+	$(cargo) +$(nightly) llvm-cov --output-path lcov.info \
 		--features namada/testing \
-		--html \
+		--lcov \
 		-- --skip e2e --skip pos_state_machine_test --skip integration \
 		-Z unstable-options --report-time && \
 	NAMADA_MASP_TEST_SEED=$(NAMADA_MASP_TEST_SEED) \

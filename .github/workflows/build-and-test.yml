@@ -267,11 +267,10 @@ jobs:
           NAMADA_MASP_PARAMS_DIR: /home/runner/.masp-params
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Upload coverage
-        uses: actions/upload-artifact@v3
+        uses: codecov/codecov-action@v3
         with:
-          name: coverage-${{ github.event.pull_request.head.sha || github.sha }}
-          path: target/html
-          retention-days: 3
+          files: lcov.info
+          fail_ci_if_error: true
       - name: Print sccache stats
         if: always()
         run: sccache --show-stats || true
