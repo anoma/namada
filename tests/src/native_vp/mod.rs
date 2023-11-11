@@ -54,6 +54,7 @@ impl TestNativeVpEnv {
             gas_meter: RefCell::new(VpGasMeter::new_from_tx_meter(
                 &self.tx_env.gas_meter,
             )),
+            sentinel: Default::default(),
             storage: &self.tx_env.wl_storage.storage,
             write_log: &self.tx_env.wl_storage.write_log,
             tx: &self.tx_env.tx,

@@ -6,7 +6,10 @@ use namada_tx_prelude::*;
 #[transaction(gas = 260000)]
 fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     let signed = tx_data;
-    let data = signed.data().ok_or_err_msg("Missing data")?;
+    let data = signed.data().ok_or_err_msg("Missing data").map_err(|err| {
+        ctx.set_commitment_sentinel();
+        err
+    })?;
     let withdraw = transaction::pos::Withdraw::try_from_slice(&data[..])
         .wrap_err("failed to decode Withdraw")?;
 
