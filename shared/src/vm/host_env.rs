@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::convert::TryInto;
 use std::num::TryFromIntError;
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::transaction::Transaction;
 use namada_core::ledger::gas::{
@@ -25,6 +25,7 @@ use super::WasmCacheAccess;
 use crate::ledger::gas::{self, VpGasMeter};
 use crate::ledger::storage::write_log::{self, WriteLog};
 use crate::ledger::storage::{self, Storage, StorageHasher};
+use crate::ledger::storage_api::{self, ResultExt};
 use crate::ledger::vp_host_fns;
 use crate::proto::Tx;
 use crate::types::address::{self, Address};
@@ -2167,21 +2168,22 @@ where
 }
 
 // Temp. workaround for <https://github.com/anoma/namada/issues/1831>
-impl<'a, DB, H, CA> namada_core::ledger::ibc::IbcStorageContext
-    for TxCtx<'a, DB, H, CA>
+use namada_core::ledger::storage_api::StorageRead;
+
+use crate::types::storage::BlockHash;
+impl<'a, DB, H, CA> StorageRead for TxCtx<'a, DB, H, CA>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
-    type Error = TxRuntimeError;
     // type PrefixIter<'iter> = KeyValIterator<(String, Vec<u8>)>;
     type PrefixIter<'iter> = u64 where Self: 'iter;
 
-    fn read(
+    fn read_bytes(
         &self,
         key: &Key,
-    ) -> std::result::Result<Option<Vec<u8>>, Self::Error> {
+    ) -> std::result::Result<Option<Vec<u8>>, storage_api::Error> {
         let write_log = unsafe { self.write_log.get() };
         let (log_val, gas) = write_log.read(key);
         ibc_tx_charge_gas(self, gas)?;
@@ -2199,15 +2201,14 @@ where
             None => {
                 // when not found in write log, try to read from the storage
                 let storage = unsafe { self.storage.get() };
-                let (value, gas) =
-                    storage.read(key).map_err(TxRuntimeError::StorageError)?;
+                let (value, gas) = storage.read(key).into_storage_result()?;
                 ibc_tx_charge_gas(self, gas)?;
                 value
             }
         })
     }
 
-    fn has_key(&self, key: &Key) -> Result<bool, Self::Error> {
+    fn has_key(&self, key: &Key) -> Result<bool, storage_api::Error> {
         // try to read from the write log first
         let write_log = unsafe { self.write_log.get() };
         let (log_val, gas) = write_log.read(key);
@@ -2220,31 +2221,18 @@ where
             None => {
                 // when not found in write log, try to check the storage
                 let storage = unsafe { self.storage.get() };
-                let (present, gas) = storage
-                    .has_key(key)
-                    .map_err(TxRuntimeError::StorageError)?;
+                let (present, gas) =
+                    storage.has_key(key).into_storage_result()?;
                 ibc_tx_charge_gas(self, gas)?;
                 present
             }
         })
     }
 
-    fn write(
-        &mut self,
-        key: &Key,
-        data: Vec<u8>,
-    ) -> std::result::Result<(), Self::Error> {
-        let write_log = unsafe { self.write_log.get() };
-        let (gas, _size_diff) = write_log
-            .write(key, data)
-            .map_err(TxRuntimeError::StorageModificationError)?;
-        ibc_tx_charge_gas(self, gas)
-    }
-
     fn iter_prefix<'iter>(
         &'iter self,
         prefix: &Key,
-    ) -> Result<Self::PrefixIter<'iter>, Self::Error> {
+    ) -> Result<Self::PrefixIter<'iter>, storage_api::Error> {
         let write_log = unsafe { self.write_log.get() };
         let storage = unsafe { self.storage.get() };
         let (iter, gas) = storage::iter_prefix_post(write_log, storage, prefix);
@@ -2257,15 +2245,13 @@ where
     fn iter_next<'iter>(
         &'iter self,
         iter_id: &mut Self::PrefixIter<'iter>,
-    ) -> Result<Option<(String, Vec<u8>)>, Self::Error> {
+    ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
         let write_log = unsafe { self.write_log.get() };
         let iterators = unsafe { self.iterators.get() };
         let iter_id = PrefixIteratorId::new(*iter_id);
         while let Some((key, val, iter_gas)) = iterators.next(iter_id) {
-            let (log_val, log_gas) = write_log.read(
-                &Key::parse(key.clone())
-                    .map_err(TxRuntimeError::StorageDataError)?,
-            );
+            let (log_val, log_gas) =
+                write_log.read(&Key::parse(key.clone()).into_storage_result()?);
             ibc_tx_charge_gas(self, iter_gas + log_gas)?;
             match log_val {
                 Some(write_log::StorageModification::Write { ref value }) => {
@@ -2292,22 +2278,110 @@ where
         Ok(None)
     }
 
-    fn delete(&mut self, key: &Key) -> std::result::Result<(), Self::Error> {
-        if key.is_validity_predicate().is_some() {
-            return Err(TxRuntimeError::CannotDeleteVp);
-        }
+    fn get_chain_id(&self) -> Result<String, storage_api::Error> {
+        let storage = unsafe { self.storage.get() };
+        let (chain_id, gas) = storage.get_chain_id();
+        ibc_tx_charge_gas(self, gas)?;
+        Ok(chain_id)
+    }
 
+    fn get_block_height(&self) -> Result<BlockHeight, storage_api::Error> {
+        let storage = unsafe { self.storage.get() };
+        let (height, gas) = storage.get_block_height();
+        ibc_tx_charge_gas(self, gas)?;
+        Ok(height)
+    }
+
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<namada_core::types::storage::Header>, storage_api::Error>
+    {
+        let storage = unsafe { self.storage.get() };
+        let (header, gas) = storage
+            .get_block_header(Some(height))
+            .into_storage_result()?;
+        ibc_tx_charge_gas(self, gas)?;
+        Ok(header)
+    }
+
+    fn get_block_hash(&self) -> Result<BlockHash, storage_api::Error> {
+        let storage = unsafe { self.storage.get() };
+        let (hash, gas) = storage.get_block_hash();
+        ibc_tx_charge_gas(self, gas)?;
+        Ok(hash)
+    }
+
+    fn get_block_epoch(&self) -> Result<Epoch, storage_api::Error> {
+        let storage = unsafe { self.storage.get() };
+        let (epoch, gas) = storage.get_current_epoch();
+        ibc_tx_charge_gas(self, gas)?;
+        Ok(epoch)
+    }
+
+    fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error> {
+        let tx_index = unsafe { self.tx_index.get() };
+        ibc_tx_charge_gas(
+            self,
+            crate::vm::host_env::gas::STORAGE_ACCESS_GAS_PER_BYTE,
+        )?;
+        Ok(TxIndex(tx_index.0))
+    }
+
+    fn get_native_token(&self) -> Result<Address, storage_api::Error> {
+        let storage = unsafe { self.storage.get() };
+        let native_token = storage.native_token.clone();
+        ibc_tx_charge_gas(
+            self,
+            crate::vm::host_env::gas::STORAGE_ACCESS_GAS_PER_BYTE,
+        )?;
+        Ok(native_token)
+    }
+}
+
+// Temp. workaround for <https://github.com/anoma/namada/issues/1831>
+use namada_core::ledger::storage_api::StorageWrite;
+impl<'a, DB, H, CA> StorageWrite for TxCtx<'a, DB, H, CA>
+where
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    CA: WasmCacheAccess,
+{
+    fn write_bytes(
+        &mut self,
+        key: &Key,
+        data: impl AsRef<[u8]>,
+    ) -> Result<(), storage_api::Error> {
         let write_log = unsafe { self.write_log.get() };
         let (gas, _size_diff) = write_log
-            .delete(key)
-            .map_err(TxRuntimeError::StorageModificationError)?;
+            .write(key, data.as_ref().to_vec())
+            .into_storage_result()?;
         ibc_tx_charge_gas(self, gas)
     }
 
+    fn delete(&mut self, key: &Key) -> Result<(), storage_api::Error> {
+        if key.is_validity_predicate().is_some() {
+            return Err(TxRuntimeError::CannotDeleteVp).into_storage_result();
+        }
+
+        let write_log = unsafe { self.write_log.get() };
+        let (gas, _size_diff) = write_log.delete(key).into_storage_result()?;
+        ibc_tx_charge_gas(self, gas)
+    }
+}
+
+// Temp. workaround for <https://github.com/anoma/namada/issues/1831>
+impl<'a, DB, H, CA> namada_core::ledger::ibc::IbcStorageContext
+    for TxCtx<'a, DB, H, CA>
+where
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    CA: WasmCacheAccess,
+{
     fn emit_ibc_event(
         &mut self,
         event: IbcEvent,
-    ) -> std::result::Result<(), Self::Error> {
+    ) -> Result<(), storage_api::Error> {
         let write_log = unsafe { self.write_log.get() };
         let gas = write_log.emit_ibc_event(event);
         ibc_tx_charge_gas(self, gas)
@@ -2316,7 +2390,7 @@ where
     fn get_ibc_events(
         &self,
         event_type: impl AsRef<str>,
-    ) -> Result<Vec<IbcEvent>, Self::Error> {
+    ) -> Result<Vec<IbcEvent>, storage_api::Error> {
         let write_log = unsafe { self.write_log.get() };
         Ok(write_log
             .get_ibc_events()
@@ -2332,24 +2406,23 @@ where
         dest: &Address,
         token: &Address,
         amount: namada_core::types::token::DenominatedAmount,
-    ) -> std::result::Result<(), Self::Error> {
+    ) -> Result<(), storage_api::Error> {
         use namada_core::types::token;
 
         if amount.amount != token::Amount::default() && src != dest {
             let src_key = token::balance_key(token, src);
             let dest_key = token::balance_key(token, dest);
-            let src_bal: Option<token::Amount> =
-                ibc_read_borsh(self, &src_key)?;
+            let src_bal = self.read::<token::Amount>(&src_key)?;
             let mut src_bal = src_bal.unwrap_or_else(|| {
                 self.log_string(format!("src {} has no balance", src_key));
                 unreachable!()
             });
             src_bal.spend(&amount.amount);
-            let mut dest_bal: token::Amount =
-                ibc_read_borsh(self, &dest_key)?.unwrap_or_default();
+            let mut dest_bal =
+                self.read::<token::Amount>(&dest_key)?.unwrap_or_default();
             dest_bal.receive(&amount.amount);
-            ibc_write_borsh(self, &src_key, &src_bal)?;
-            ibc_write_borsh(self, &dest_key, &dest_bal)?;
+            self.write(&src_key, src_bal)?;
+            self.write(&dest_key, dest_bal)?;
         }
         Ok(())
     }
@@ -2357,14 +2430,13 @@ where
     fn handle_masp_tx(
         &mut self,
         shielded: &IbcShieldedTransfer,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), storage_api::Error> {
         let masp_addr = address::masp();
         let head_tx_key = Key::from(masp_addr.to_db_key())
             .push(&HEAD_TX_KEY.to_owned())
             .expect("Cannot obtain a storage key");
-        let current_tx_idx: u64 = ibc_read_borsh(self, &head_tx_key)
-            .unwrap_or(None)
-            .unwrap_or(0);
+        let current_tx_idx =
+            self.read::<u64>(&head_tx_key).unwrap_or(None).unwrap_or(0);
         let current_tx_key = Key::from(masp_addr.to_db_key())
             .push(&(TX_KEY_PREFIX.to_owned() + &current_tx_idx.to_string()))
             .expect("Cannot obtain a storage key");
@@ -2372,20 +2444,20 @@ where
         // so that clients do not have to separately look these
         // up
         let record: (Epoch, BlockHeight, TxIndex, Transfer, Transaction) = (
-            ibc_get_block_epoch(self)?,
-            self.get_height()?,
-            ibc_get_tx_index(self)?,
+            self.get_block_epoch()?,
+            self.get_block_height()?,
+            self.get_tx_index()?,
             shielded.transfer.clone(),
             shielded.masp_tx.clone(),
         );
-        ibc_write_borsh(self, &current_tx_key, &record)?;
-        ibc_write_borsh(self, &head_tx_key, &(current_tx_idx + 1))?;
+        self.write(&current_tx_key, record)?;
+        self.write(&head_tx_key, current_tx_idx + 1)?;
         // If storage key has been supplied, then pin this transaction to it
         if let Some(key) = &shielded.transfer.key {
             let pin_key = Key::from(masp_addr.to_db_key())
                 .push(&(PIN_KEY_PREFIX.to_owned() + key))
                 .expect("Cannot obtain a storage key");
-            ibc_write_borsh(self, &pin_key, &current_tx_idx)?;
+            self.write(&pin_key, current_tx_idx)?;
         }
         Ok(())
     }
@@ -2395,30 +2467,27 @@ where
         target: &Address,
         token: &Address,
         amount: namada_core::types::token::DenominatedAmount,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), storage_api::Error> {
         use namada_core::types::token;
 
         let target_key = token::balance_key(token, target);
-        let mut target_bal: token::Amount =
-            ibc_read_borsh(self, &target_key)?.unwrap_or_default();
+        let mut target_bal =
+            self.read::<token::Amount>(&target_key)?.unwrap_or_default();
         target_bal.receive(&amount.amount);
 
         let minted_key = token::minted_balance_key(token);
-        let mut minted_bal: token::Amount =
-            ibc_read_borsh(self, &minted_key)?.unwrap_or_default();
+        let mut minted_bal =
+            self.read::<token::Amount>(&minted_key)?.unwrap_or_default();
         minted_bal.receive(&amount.amount);
 
-        ibc_write_borsh(self, &target_key, &target_bal)?;
-        ibc_write_borsh(self, &minted_key, &minted_bal)?;
+        self.write(&target_key, target_bal)?;
+        self.write(&minted_key, minted_bal)?;
 
         let minter_key = token::minter_key(token);
-        ibc_write_borsh(
-            self,
+        self.write(
             &minter_key,
-            &Address::Internal(address::InternalAddress::Ibc),
-        )?;
-
-        Ok(())
+            Address::Internal(address::InternalAddress::Ibc),
+        )
     }
 
     fn burn_token(
@@ -2426,46 +2495,22 @@ where
         target: &Address,
         token: &Address,
         amount: namada_core::types::token::DenominatedAmount,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), storage_api::Error> {
         use namada_core::types::token;
 
         let target_key = token::balance_key(token, target);
-        let mut target_bal: token::Amount =
-            ibc_read_borsh(self, &target_key)?.unwrap_or_default();
+        let mut target_bal =
+            self.read::<token::Amount>(&target_key)?.unwrap_or_default();
         target_bal.spend(&amount.amount);
 
         // burn the minted amount
         let minted_key = token::minted_balance_key(token);
-        let mut minted_bal: token::Amount =
-            ibc_read_borsh(self, &minted_key)?.unwrap_or_default();
+        let mut minted_bal =
+            self.read::<token::Amount>(&minted_key)?.unwrap_or_default();
         minted_bal.spend(&amount.amount);
 
-        ibc_write_borsh(self, &target_key, &target_bal)?;
-        ibc_write_borsh(self, &minted_key, &minted_bal)?;
-
-        Ok(())
-    }
-
-    fn get_height(&self) -> std::result::Result<BlockHeight, Self::Error> {
-        let storage = unsafe { self.storage.get() };
-        let (height, gas) = storage.get_block_height();
-        ibc_tx_charge_gas(self, gas)?;
-        Ok(height)
-    }
-
-    fn get_header(
-        &self,
-        height: BlockHeight,
-    ) -> std::result::Result<
-        Option<namada_core::types::storage::Header>,
-        Self::Error,
-    > {
-        let storage = unsafe { self.storage.get() };
-        let (header, gas) = storage
-            .get_block_header(Some(height))
-            .map_err(TxRuntimeError::StorageError)?;
-        ibc_tx_charge_gas(self, gas)?;
-        Ok(header)
+        self.write(&target_key, target_bal)?;
+        self.write(&minted_key, minted_bal)
     }
 
     fn log_string(&self, message: String) {
@@ -2478,7 +2523,7 @@ where
 fn ibc_tx_charge_gas<'a, DB, H, CA>(
     ctx: &TxCtx<'a, DB, H, CA>,
     used_gas: u64,
-) -> TxResult<()>
+) -> Result<(), storage_api::Error>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
@@ -2486,9 +2531,7 @@ where
 {
     let gas_meter = unsafe { ctx.gas_meter.get() };
     // if we run out of gas, we need to stop the execution
-    let result = gas_meter
-        .consume(used_gas)
-        .map_err(TxRuntimeError::OutOfGas);
+    let result = gas_meter.consume(used_gas).into_storage_result();
     if let Err(err) = &result {
         tracing::info!(
             "Stopping transaction execution because of gas error: {}",
@@ -2496,78 +2539,6 @@ where
         );
     }
     result
-}
-
-/// Read borsh encoded val by key.
-// Temp helper for ibc tx workaround.
-fn ibc_read_borsh<'a, T, DB, H, CA>(
-    ctx: &TxCtx<'a, DB, H, CA>,
-    key: &Key,
-) -> TxResult<Option<T>>
-where
-    T: BorshDeserialize,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: StorageHasher,
-    CA: WasmCacheAccess,
-{
-    let bytes = namada_core::ledger::ibc::IbcStorageContext::read(ctx, key)?;
-    match bytes {
-        Some(bytes) => {
-            let val = T::try_from_slice(&bytes)
-                .map_err(TxRuntimeError::EncodingError)?;
-            Ok(Some(val))
-        }
-        None => Ok(None),
-    }
-}
-
-/// Write borsh encoded val by key.
-// Temp helper for ibc tx workaround.
-fn ibc_write_borsh<'a, T, DB, H, CA>(
-    ctx: &mut TxCtx<'a, DB, H, CA>,
-    key: &Key,
-    val: &T,
-) -> TxResult<()>
-where
-    T: BorshSerialize,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: StorageHasher,
-    CA: WasmCacheAccess,
-{
-    let bytes = borsh::to_vec(val).map_err(TxRuntimeError::EncodingError)?;
-    namada_core::ledger::ibc::IbcStorageContext::write(ctx, key, bytes)?;
-    Ok(())
-}
-
-/// Get the current epoch.
-// Temp helper for ibc tx workaround.
-fn ibc_get_block_epoch<'a, DB, H, CA>(
-    ctx: &TxCtx<'a, DB, H, CA>,
-) -> TxResult<Epoch>
-where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: StorageHasher,
-    CA: WasmCacheAccess,
-{
-    let storage = unsafe { ctx.storage.get() };
-    let (epoch, gas) = storage.get_current_epoch();
-    ibc_tx_charge_gas(ctx, gas)?;
-    Ok(epoch)
-}
-
-/// Get the tx index.
-// Temp helper for ibc tx workaround.
-fn ibc_get_tx_index<'a, DB, H, CA>(
-    ctx: &TxCtx<'a, DB, H, CA>,
-) -> TxResult<TxIndex>
-where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: StorageHasher,
-    CA: WasmCacheAccess,
-{
-    let tx_index = unsafe { ctx.tx_index.get() };
-    ibc_tx_charge_gas(ctx, MEMORY_ACCESS_GAS_PER_BYTE)?;
-    Ok(TxIndex(tx_index.0))
 }
 
 // Temp. workaround for <https://github.com/anoma/namada/issues/1831>

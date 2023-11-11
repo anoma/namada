@@ -308,6 +308,7 @@ mod tests {
     use std::convert::TryFrom;
     use std::str::FromStr;
 
+    use borsh::BorshDeserialize;
     use borsh_ext::BorshSerializeExt;
     use namada_core::ledger::gas::TxGasMeter;
     use namada_core::ledger::governance::parameters::GovernanceParameters;
@@ -401,6 +402,7 @@ mod tests {
         get_epoch_duration_storage_key, get_max_expected_time_per_block_key,
     };
     use crate::ledger::parameters::EpochDuration;
+    use crate::ledger::storage_api::StorageRead;
     use crate::ledger::{ibc, pos};
     use crate::proto::{Code, Data, Section, Signature, Tx};
     use crate::tendermint::time::Time as TmTime;
@@ -584,8 +586,8 @@ mod tests {
         }
     }
 
-    fn increment_counter(wl_storage: &mut TestWlStorage, key: &Key) {
-        let count = match wl_storage.storage.read(key).expect("read failed").0 {
+    fn increment_sequence(wl_storage: &mut TestWlStorage, key: &Key) {
+        let count = match wl_storage.read_bytes(key).expect("read failed") {
             Some(value) => {
                 let count: [u8; 8] =
                     value.try_into().expect("decoding a count failed");
@@ -596,6 +598,19 @@ mod tests {
         wl_storage
             .write_log
             .write(key, (count + 1).to_be_bytes().to_vec())
+            .expect("write failed");
+    }
+
+    fn increment_counter(wl_storage: &mut TestWlStorage, key: &Key) {
+        let count = match wl_storage.read_bytes(key).expect("read failed") {
+            Some(value) => {
+                u64::try_from_slice(&value).expect("invalid counter value")
+            }
+            None => unreachable!("The counter should be initialized"),
+        };
+        wl_storage
+            .write_log
+            .write(key, (count + 1).serialize_to_vec())
             .expect("write failed");
     }
 
@@ -1571,13 +1586,13 @@ mod tests {
         let channel_id = get_channel_id();
         let port_id = msg.port_id_on_a.clone();
         let send_key = next_sequence_send_key(&port_id, &channel_id);
-        increment_counter(&mut wl_storage, &send_key);
+        increment_sequence(&mut wl_storage, &send_key);
         keys_changed.insert(send_key);
         let recv_key = next_sequence_recv_key(&port_id, &channel_id);
-        increment_counter(&mut wl_storage, &recv_key);
+        increment_sequence(&mut wl_storage, &recv_key);
         keys_changed.insert(recv_key);
         let ack_key = next_sequence_ack_key(&port_id, &channel_id);
-        increment_counter(&mut wl_storage, &ack_key);
+        increment_sequence(&mut wl_storage, &ack_key);
         keys_changed.insert(ack_key);
         // event
         let event = RawIbcEvent::OpenInitChannel(ChanOpenInit::new(
@@ -1694,13 +1709,13 @@ mod tests {
         let channel_id = get_channel_id();
         let port_id = msg.port_id_on_a.clone();
         let send_key = next_sequence_send_key(&port_id, &channel_id);
-        increment_counter(&mut wl_storage, &send_key);
+        increment_sequence(&mut wl_storage, &send_key);
         keys_changed.insert(send_key);
         let recv_key = next_sequence_recv_key(&port_id, &channel_id);
-        increment_counter(&mut wl_storage, &recv_key);
+        increment_sequence(&mut wl_storage, &recv_key);
         keys_changed.insert(recv_key);
         let ack_key = next_sequence_ack_key(&port_id, &channel_id);
-        increment_counter(&mut wl_storage, &ack_key);
+        increment_sequence(&mut wl_storage, &ack_key);
         keys_changed.insert(ack_key);
         // event
         let event = RawIbcEvent::OpenTryChannel(ChanOpenTry::new(

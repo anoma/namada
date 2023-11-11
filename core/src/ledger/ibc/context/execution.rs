@@ -1,33 +1,25 @@
 //! ExecutionContext implementation for IBC
 
-use borsh::BorshDeserialize;
-use borsh_ext::BorshSerializeExt;
-
 use super::super::{IbcActions, IbcCommonContext};
 use crate::ibc::core::events::IbcEvent;
 use crate::ibc::core::ics02_client::client_state::ClientState;
 use crate::ibc::core::ics02_client::consensus_state::ConsensusState;
-use crate::ibc::core::ics02_client::error::ClientError;
 use crate::ibc::core::ics03_connection::connection::ConnectionEnd;
-use crate::ibc::core::ics03_connection::error::ConnectionError;
 use crate::ibc::core::ics04_channel::channel::ChannelEnd;
 use crate::ibc::core::ics04_channel::commitment::{
     AcknowledgementCommitment, PacketCommitment,
 };
-use crate::ibc::core::ics04_channel::error::{ChannelError, PacketError};
 use crate::ibc::core::ics04_channel::packet::{Receipt, Sequence};
 use crate::ibc::core::ics24_host::identifier::{ClientId, ConnectionId};
 use crate::ibc::core::ics24_host::path::{
     AckPath, ChannelEndPath, ClientConnectionPath, ClientConsensusStatePath,
-    ClientStatePath, CommitmentPath, ConnectionPath, Path, ReceiptPath,
-    SeqAckPath, SeqRecvPath, SeqSendPath,
+    ClientStatePath, CommitmentPath, ConnectionPath, ReceiptPath, SeqAckPath,
+    SeqRecvPath, SeqSendPath,
 };
 use crate::ibc::core::timestamp::Timestamp;
-use crate::ibc::core::{ContextError, ExecutionContext, ValidationContext};
+use crate::ibc::core::{ContextError, ExecutionContext};
 use crate::ibc::Height;
-use crate::ibc_proto::protobuf::Protobuf;
 use crate::ledger::ibc::storage;
-use crate::tendermint_proto::Protobuf as TmProtobuf;
 
 impl<C> ExecutionContext for IbcActions<'_, C>
 where
@@ -38,18 +30,9 @@ where
         client_state_path: ClientStatePath,
         client_state: Box<dyn ClientState>,
     ) -> Result<(), ContextError> {
-        let path = Path::ClientState(client_state_path);
-        let key = storage::ibc_key(path.to_string())
-            .expect("Creating a key for the client state shouldn't fail");
-        let bytes = client_state.encode_vec();
-        self.ctx.borrow_mut().write(&key, bytes).map_err(|_| {
-            ContextError::ClientError(ClientError::Other {
-                description: format!(
-                    "Writing the client state failed: Key {}",
-                    key
-                ),
-            })
-        })
+        self.ctx
+            .borrow_mut()
+            .store_client_state(&client_state_path.0, client_state)
     }
 
     fn store_consensus_state(
@@ -57,27 +40,24 @@ where
         consensus_state_path: ClientConsensusStatePath,
         consensus_state: Box<dyn ConsensusState>,
     ) -> Result<(), ContextError> {
-        let path = Path::ClientConsensusState(consensus_state_path);
-        let key = storage::ibc_key(path.to_string())
-            .expect("Creating a key for the client state shouldn't fail");
-        let bytes = consensus_state.encode_vec();
-        self.ctx.borrow_mut().write(&key, bytes).map_err(|_| {
-            ContextError::ClientError(ClientError::Other {
-                description: format!(
-                    "Writing the consensus state failed: Key {}",
-                    key
-                ),
-            })
-        })
+        let client_id = consensus_state_path.client_id;
+        let height = Height::new(
+            consensus_state_path.epoch,
+            consensus_state_path.height,
+        )?;
+        self.ctx.borrow_mut().store_consensus_state(
+            &client_id,
+            height,
+            consensus_state,
+        )
     }
 
     fn increase_client_counter(&mut self) {
         let key = storage::client_counter_key();
-        let count = self.client_counter().expect("read failed");
         self.ctx
             .borrow_mut()
-            .write(&key, (count + 1).to_be_bytes().to_vec())
-            .expect("write failed");
+            .increment_counter(&key)
+            .expect("Error cannot be returned");
     }
 
     fn store_update_time(
@@ -86,30 +66,9 @@ where
         _height: Height,
         timestamp: Timestamp,
     ) -> Result<(), ContextError> {
-        let key = storage::client_update_timestamp_key(&client_id);
-        match timestamp.into_tm_time() {
-            Some(time) => self
-                .ctx
-                .borrow_mut()
-                .write(
-                    &key,
-                    time.encode_vec().expect("encoding shouldn't fail"),
-                )
-                .map_err(|_| {
-                    ContextError::ClientError(ClientError::Other {
-                        description: format!(
-                            "Writing the consensus state failed: Key {}",
-                            key
-                        ),
-                    })
-                }),
-            None => Err(ContextError::ClientError(ClientError::Other {
-                description: format!(
-                    "The client timestamp is invalid: ID {}",
-                    client_id
-                ),
-            })),
-        }
+        self.ctx
+            .borrow_mut()
+            .store_update_time(&client_id, timestamp)
     }
 
     fn store_update_height(
@@ -118,16 +77,9 @@ where
         _height: Height,
         host_height: Height,
     ) -> Result<(), ContextError> {
-        let key = storage::client_update_height_key(&client_id);
-        let bytes = host_height.encode_vec();
-        self.ctx.borrow_mut().write(&key, bytes).map_err(|_| {
-            ContextError::ClientError(ClientError::Other {
-                description: format!(
-                    "Writing the consensus state failed: Key {}",
-                    key
-                ),
-            })
-        })
+        self.ctx
+            .borrow_mut()
+            .store_update_height(&client_id, host_height)
     }
 
     fn store_connection(
@@ -135,18 +87,9 @@ where
         connection_path: &ConnectionPath,
         connection_end: ConnectionEnd,
     ) -> Result<(), ContextError> {
-        let path = Path::Connection(connection_path.clone());
-        let key = storage::ibc_key(path.to_string())
-            .expect("Creating a key for the client state shouldn't fail");
-        let bytes = connection_end.encode_vec();
-        self.ctx.borrow_mut().write(&key, bytes).map_err(|_| {
-            ContextError::ConnectionError(ConnectionError::Other {
-                description: format!(
-                    "Writing the connection end failed: Key {}",
-                    key
-                ),
-            })
-        })
+        self.ctx
+            .borrow_mut()
+            .store_connection(&connection_path.0, connection_end)
     }
 
     fn store_connection_to_client(
@@ -154,48 +97,16 @@ where
         client_connection_path: &ClientConnectionPath,
         conn_id: ConnectionId,
     ) -> Result<(), ContextError> {
-        let path = Path::ClientConnection(client_connection_path.clone());
-        let key = storage::ibc_key(path.to_string())
-            .expect("Creating a key for the client state shouldn't fail");
-        let list = match self.ctx.borrow().read(&key) {
-            Ok(Some(value)) => {
-                let list = String::try_from_slice(&value).map_err(|e| {
-                    ContextError::ConnectionError(ConnectionError::Other {
-                        description: format!(
-                            "Decoding the connection list failed: Key {}, \
-                             error {}",
-                            key, e
-                        ),
-                    })
-                })?;
-                format!("{},{}", list, conn_id)
-            }
-            Ok(None) => conn_id.to_string(),
-            Err(_) => {
-                Err(ContextError::ConnectionError(ConnectionError::Other {
-                    description: format!(
-                        "Reading the connection list of failed: Key {}",
-                        key,
-                    ),
-                }))?
-            }
-        };
-        let bytes = list.serialize_to_vec();
-        self.ctx.borrow_mut().write(&key, bytes).map_err(|_| {
-            ContextError::ConnectionError(ConnectionError::Other {
-                description: format!(
-                    "Writing the list of connection IDs failed: Key {}",
-                    key
-                ),
-            })
-        })
+        self.ctx
+            .borrow_mut()
+            .append_connection(&client_connection_path.0, conn_id)
     }
 
     fn increase_connection_counter(&mut self) {
         let key = storage::connection_counter_key();
         self.ctx
             .borrow_mut()
-            .increase_counter(&key)
+            .increment_counter(&key)
             .expect("Error cannot be returned");
     }
 
@@ -204,28 +115,23 @@ where
         path: &CommitmentPath,
         commitment: PacketCommitment,
     ) -> Result<(), ContextError> {
-        self.ctx
-            .borrow_mut()
-            .store_packet_commitment(path, commitment)
+        self.ctx.borrow_mut().store_packet_commitment(
+            &path.port_id,
+            &path.channel_id,
+            path.sequence,
+            commitment,
+        )
     }
 
     fn delete_packet_commitment(
         &mut self,
         path: &CommitmentPath,
     ) -> Result<(), ContextError> {
-        let path = Path::Commitment(path.clone());
-        let key = storage::ibc_key(path.to_string())
-            .expect("Creating a key for the client state shouldn't fail");
-        self.ctx.borrow_mut().delete(&key).map_err(|_| {
-            ContextError::PacketError(PacketError::Channel(
-                ChannelError::Other {
-                    description: format!(
-                        "Deleting the packet commitment failed: Key {}",
-                        key
-                    ),
-                },
-            ))
-        })
+        self.ctx.borrow_mut().delete_packet_commitment(
+            &path.port_id,
+            &path.channel_id,
+            path.sequence,
+        )
     }
 
     fn store_packet_receipt(
@@ -233,21 +139,11 @@ where
         path: &ReceiptPath,
         _receipt: Receipt,
     ) -> Result<(), ContextError> {
-        let path = Path::Receipt(path.clone());
-        let key = storage::ibc_key(path.to_string())
-            .expect("Creating a key for the client state shouldn't fail");
-        // the value is the same as ibc-go
-        let bytes = [1_u8].to_vec();
-        self.ctx.borrow_mut().write(&key, bytes).map_err(|_| {
-            ContextError::PacketError(PacketError::Channel(
-                ChannelError::Other {
-                    description: format!(
-                        "Writing the receipt failed: Key {}",
-                        key
-                    ),
-                },
-            ))
-        })
+        self.ctx.borrow_mut().store_packet_receipt(
+            &path.port_id,
+            &path.channel_id,
+            path.sequence,
+        )
     }
 
     fn store_packet_acknowledgement(
@@ -255,39 +151,23 @@ where
         path: &AckPath,
         ack_commitment: AcknowledgementCommitment,
     ) -> Result<(), ContextError> {
-        let path = Path::Ack(path.clone());
-        let key = storage::ibc_key(path.to_string())
-            .expect("Creating a key for the client state shouldn't fail");
-        let bytes = ack_commitment.into_vec();
-        self.ctx.borrow_mut().write(&key, bytes).map_err(|_| {
-            ContextError::PacketError(PacketError::Channel(
-                ChannelError::Other {
-                    description: format!(
-                        "Writing the packet ack failed: Key {}",
-                        key
-                    ),
-                },
-            ))
-        })
+        self.ctx.borrow_mut().store_packet_ack(
+            &path.port_id,
+            &path.channel_id,
+            path.sequence,
+            ack_commitment,
+        )
     }
 
     fn delete_packet_acknowledgement(
         &mut self,
         path: &AckPath,
     ) -> Result<(), ContextError> {
-        let path = Path::Ack(path.clone());
-        let key = storage::ibc_key(path.to_string())
-            .expect("Creating a key for the client state shouldn't fail");
-        self.ctx.borrow_mut().delete(&key).map_err(|_| {
-            ContextError::PacketError(PacketError::Channel(
-                ChannelError::Other {
-                    description: format!(
-                        "Deleting the packet ack failed: Key {}",
-                        key
-                    ),
-                },
-            ))
-        })
+        self.ctx.borrow_mut().delete_packet_ack(
+            &path.port_id,
+            &path.channel_id,
+            path.sequence,
+        )
     }
 
     fn store_channel(
@@ -295,18 +175,9 @@ where
         path: &ChannelEndPath,
         channel_end: ChannelEnd,
     ) -> Result<(), ContextError> {
-        let path = Path::ChannelEnd(path.clone());
-        let key = storage::ibc_key(path.to_string())
-            .expect("Creating a key for the client state shouldn't fail");
-        let bytes = channel_end.encode_vec();
-        self.ctx.borrow_mut().write(&key, bytes).map_err(|_| {
-            ContextError::ChannelError(ChannelError::Other {
-                description: format!(
-                    "Writing the channel end failed: Key {}",
-                    key
-                ),
-            })
-        })
+        self.ctx
+            .borrow_mut()
+            .store_channel(&path.0, &path.1, channel_end)
     }
 
     fn store_next_sequence_send(
@@ -314,7 +185,9 @@ where
         path: &SeqSendPath,
         seq: Sequence,
     ) -> Result<(), ContextError> {
-        self.ctx.borrow_mut().store_next_sequence_send(path, seq)
+        self.ctx
+            .borrow_mut()
+            .store_next_sequence_send(&path.0, &path.1, seq)
     }
 
     fn store_next_sequence_recv(
@@ -322,10 +195,9 @@ where
         path: &SeqRecvPath,
         seq: Sequence,
     ) -> Result<(), ContextError> {
-        let path = Path::SeqRecv(path.clone());
-        let key = storage::ibc_key(path.to_string())
-            .expect("Creating a key for the client state shouldn't fail");
-        self.ctx.borrow_mut().store_sequence(&key, seq)
+        self.ctx
+            .borrow_mut()
+            .store_next_sequence_recv(&path.0, &path.1, seq)
     }
 
     fn store_next_sequence_ack(
@@ -333,17 +205,16 @@ where
         path: &SeqAckPath,
         seq: Sequence,
     ) -> Result<(), ContextError> {
-        let path = Path::SeqAck(path.clone());
-        let key = storage::ibc_key(path.to_string())
-            .expect("Creating a key for the client state shouldn't fail");
-        self.ctx.borrow_mut().store_sequence(&key, seq)
+        self.ctx
+            .borrow_mut()
+            .store_next_sequence_ack(&path.0, &path.1, seq)
     }
 
     fn increase_channel_counter(&mut self) {
         let key = storage::channel_counter_key();
         self.ctx
             .borrow_mut()
-            .increase_counter(&key)
+            .increment_counter(&key)
             .expect("Error cannot be returned");
     }
 
