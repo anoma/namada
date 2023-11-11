@@ -60,9 +60,7 @@ use namada_core::types::token;
 use namada_core::types::token::{
     Change, MaspDenom, Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX,
 };
-use namada_core::types::transaction::{
-    AffineCurve, EllipticCurve, PairingEngine, WrapperTx,
-};
+use namada_core::types::transaction::WrapperTx;
 #[cfg(feature = "masp-tx-gen")]
 use rand_core::{CryptoRng, OsRng, RngCore};
 use ripemd::Digest as RipemdDigest;
@@ -1964,15 +1962,10 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
 
 /// Extract the payload from the given Tx object
 fn extract_payload(
-    mut tx: Tx,
+    tx: Tx,
     wrapper: &mut Option<WrapperTx>,
     transfer: &mut Option<Transfer>,
 ) -> Result<(), Error> {
-    let privkey =
-        <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
-    tx.decrypt(privkey).map_err(|e| {
-        Error::Other(format!("unable to decrypt transaction: {}", e))
-    })?;
     *wrapper = tx.header.wrapper();
     let _ = tx.data().map(|signed| {
         Transfer::try_from_slice(&signed[..]).map(|tfer| *transfer = Some(tfer))

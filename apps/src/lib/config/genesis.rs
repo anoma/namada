@@ -19,7 +19,6 @@ use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::{Dec, GenesisValidator, OwnedPosParams};
 use namada::types::address::Address;
 use namada::types::chain::ProposalBytes;
-use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, DurationSecs};
 use namada::types::token::Denomination;
@@ -75,8 +74,6 @@ pub struct Validator {
     /// this key on a transaction signature.
     /// Note that this is distinct from consensus key used in the PoS system.
     pub account_key: common::PublicKey,
-    /// The public DKG session key used during the DKG protocol
-    pub dkg_public_key: DkgPublicKey,
     /// These tokens are not staked and hence do not contribute to the
     /// validator's voting power
     pub non_staked_balance: token::Amount,
@@ -374,8 +371,7 @@ pub fn make_dev_genesis(
         );
         let eth_cold_keypair =
             common::SecretKey::try_from_sk(&secp_eth_cold_keypair).unwrap();
-        let (protocol_keypair, eth_bridge_keypair, dkg_keypair) =
-            defaults::validator_keys();
+        let (protocol_keypair, eth_bridge_keypair) = defaults::validator_keys();
         let alias = Alias::from_str(&format!("validator-{}", val + 1))
             .expect("infallible");
         // add the validator
@@ -384,9 +380,6 @@ pub fn make_dev_genesis(
                 address,
                 tx: transactions::ValidatorAccountTx {
                     alias: alias.clone(),
-                    dkg_key: StringEncoded {
-                        raw: dkg_keypair.public(),
-                    },
                     vp: "vp_validator".to_string(),
                     commission_rate: Dec::new(5, 2).expect("This can't fail"),
                     max_commission_rate_change: Dec::new(1, 2)
@@ -481,7 +474,7 @@ pub mod tests {
         let keypair: common::SecretKey =
             ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap();
         let kp_arr = keypair.serialize_to_vec();
-        let (protocol_keypair, _eth_hot_bridge_keypair, dkg_keypair) =
+        let (protocol_keypair, _eth_hot_bridge_keypair) =
             wallet::defaults::validator_keys();
 
         // TODO: derive validator eth address from an eth keypair
@@ -497,7 +490,6 @@ pub mod tests {
         println!("address: {}", address);
         println!("keypair: {:?}", kp_arr);
         println!("protocol_keypair: {:?}", protocol_keypair);
-        println!("dkg_keypair: {:?}", dkg_keypair.serialize_to_vec());
         println!(
             "eth_cold_gov_keypair: {:?}",
             eth_cold_gov_keypair.serialize_to_vec()

@@ -36,8 +36,6 @@ pub struct InitValidator {
     pub eth_hot_key: secp256k1::PublicKey,
     /// Public key used to sign protocol transactions
     pub protocol_key: common::PublicKey,
-    /// Serialization of the public session key used in the DKG
-    pub dkg_key: crate::types::key::dkg_session_keys::DkgPublicKey,
     /// The initial commission rate charged for delegation rewards
     pub commission_rate: Dec,
     /// The maximum change allowed per epoch to the commission rate. This is

@@ -830,7 +830,7 @@ macro_rules! router {
 
 /// You can expand the `handlers!` macro invocation with e.g.:
 /// ```shell
-/// cargo expand ledger::queries::router::test_rpc_handlers --features "ferveo-tpke, ibc-mocks, testing, wasm-runtime, tendermint-rpc" --tests --lib
+/// cargo expand ledger::queries::router::test_rpc_handlers --features "ibc-mocks, testing, wasm-runtime, tendermint-rpc" --tests --lib
 /// ```
 #[cfg(test)]
 mod test_rpc_handlers {
@@ -959,7 +959,7 @@ mod test_rpc_handlers {
 
 /// You can expand the `router!` macro invocation with e.g.:
 /// ```shell
-/// cargo expand ledger::queries::router::test_rpc --features "ferveo-tpke, ibc-mocks, testing, wasm-runtime, tendermint-rpc" --tests --lib
+/// cargo expand ledger::queries::router::test_rpc --features "ibc-mocks, testing, wasm-runtime, tendermint-rpc" --tests --lib
 /// ```
 #[cfg(test)]
 mod test_rpc {

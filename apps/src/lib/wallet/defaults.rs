@@ -16,27 +16,19 @@ mod dev {
     use namada::types::address::{
         apfel, btc, dot, eth, kartoffel, nam, schnitzel, Address,
     };
-    use namada::types::key::dkg_session_keys::DkgKeypair;
     use namada::types::key::*;
     use namada_sdk::wallet::alias::Alias;
     use namada_sdk::wallet::pre_genesis::ValidatorWallet;
 
     /// Get protocol, eth_bridge, and dkg keys from the validator pre-genesis
     /// wallet
-    pub fn validator_keys() -> (common::SecretKey, common::SecretKey, DkgKeypair)
-    {
+    pub fn validator_keys() -> (common::SecretKey, common::SecretKey) {
         let protocol_key = get_validator_pre_genesis_wallet()
             .store
             .validator_keys
             .protocol_keypair;
         let eth_bridge_key = get_validator_pre_genesis_wallet().eth_hot_key;
-        let dkg_key = get_validator_pre_genesis_wallet()
-            .store
-            .validator_keys
-            .dkg_keypair
-            .unwrap();
-
-        (protocol_key, eth_bridge_key, dkg_key)
+        (protocol_key, eth_bridge_key)
     }
 
     /// The default keys with their aliases.

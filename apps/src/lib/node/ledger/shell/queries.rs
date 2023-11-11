@@ -1,17 +1,9 @@
 //! Shell methods for querying state
 
-use borsh_ext::BorshSerializeExt;
-use ferveo_common::TendermintValidator;
 use namada::ledger::dry_run_tx;
-use namada::ledger::pos::into_tm_voting_power;
 use namada::ledger::queries::{RequestCtx, ResponseQuery};
 use namada::ledger::storage_api::token;
-use namada::proof_of_stake::{
-    read_consensus_validator_set_addresses_with_stake, read_pos_params,
-};
 use namada::types::address::Address;
-use namada::types::key;
-use namada::types::key::dkg_session_keys::DkgPublicKey;
 
 use super::*;
 use crate::node::ledger::response;
@@ -82,55 +74,6 @@ where
         token::read_balance(&self.wl_storage, token, owner)
             .expect("Token balance read in the protocol must not fail")
     }
-
-    /// Lookup data about a validator from their protocol signing key
-    #[allow(dead_code)]
-    pub fn get_validator_from_protocol_pk(
-        &self,
-        pk: &common::PublicKey,
-    ) -> Option<TendermintValidator<EllipticCurve>> {
-        let pk_bytes = pk.serialize_to_vec();
-        // get the current epoch
-        let (current_epoch, _) = self.wl_storage.storage.get_current_epoch();
-
-        // TODO: resolve both unwrap() instances better below
-
-        // get the PoS params
-        let pos_params = read_pos_params(&self.wl_storage).unwrap();
-        // get the consensus validator set
-        let consensus_vals = read_consensus_validator_set_addresses_with_stake(
-            &self.wl_storage,
-            current_epoch,
-        )
-        .unwrap();
-
-        consensus_vals
-            .iter()
-            .find(|validator| {
-                let pk_key = key::protocol_pk_key(&validator.address);
-                match self.wl_storage.read_bytes(&pk_key) {
-                    Ok(Some(bytes)) => bytes == pk_bytes,
-                    _ => false,
-                }
-            })
-            .map(|validator| {
-                let dkg_key =
-                    key::dkg_session_keys::dkg_pk_key(&validator.address);
-                let dkg_publickey: DkgPublicKey = self
-                    .wl_storage
-                    .read(&dkg_key)
-                    .expect("Validator should have public dkg key")
-                    .expect("Validator should have public dkg key");
-                TendermintValidator {
-                    power: into_tm_voting_power(
-                        pos_params.tm_votes_per_token,
-                        validator.bonded_stake,
-                    ) as u64,
-                    address: validator.address.to_string(),
-                    public_key: (&dkg_publickey).into(),
-                }
-            })
-    }
 }
 
 // NOTE: we are testing `namada::ledger::queries_ext`,
@@ -140,6 +83,7 @@ where
 mod test_queries {
     use namada::core::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
     use namada::ledger::pos::PosQueries;
+    use namada::proof_of_stake::read_consensus_validator_set_addresses_with_stake;
     use namada::proof_of_stake::types::WeightedValidator;
     use namada::types::storage::Epoch;
     use namada_sdk::eth_bridge::{EthBridgeQueries, SendValsetUpd};
