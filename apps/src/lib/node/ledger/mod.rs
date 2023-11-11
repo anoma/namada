@@ -531,12 +531,7 @@ async fn run_abci(
     let server = Server::builder()
         .consensus(consensus)
         .snapshot(snapshot)
-        .mempool(
-            ServiceBuilder::new()
-                .load_shed()
-                .buffer(5000) // matching default Comet's mempool.size
-                .service(mempool),
-        )
+        .mempool(mempool) // don't load_shed, it will make CometBFT crash
         .info(
             ServiceBuilder::new()
                 .load_shed()
