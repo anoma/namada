@@ -424,7 +424,7 @@ mod test_vote_extensions {
     };
     #[cfg(feature = "abcipp")]
     use namada::proto::{SignableEthMessage, Signed};
-    use namada::tendermint_proto::abci::VoteInfo;
+    use namada::tendermint_proto::v0_37::abci::VoteInfo;
     use namada::types::address::testing::gen_established_address;
     #[cfg(feature = "abcipp")]
     use namada::types::eth_abi::Encode;
@@ -807,8 +807,8 @@ mod test_vote_extensions {
             Epoch::default(),
         );
         let votes = vec![VoteInfo {
-            validator: Some(namada::tendermint_proto::abci::Validator {
-                address: pkh1.clone(),
+            validator: Some(namada::tendermint_proto::v0_37::abci::Validator {
+                address: pkh1.clone().into(),
                 power: u128::try_from(val1.bonded_stake).expect("Test failed")
                     as i64,
             }),

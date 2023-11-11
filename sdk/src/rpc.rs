@@ -42,7 +42,7 @@ use crate::proto::Tx;
 use crate::queries::vp::pos::EnrichedBondsAndUnbondsDetails;
 use crate::queries::{Client, RPC};
 use crate::tendermint::block::Height;
-use crate::tendermint::merkle::proof::Proof;
+use crate::tendermint::merkle::proof::ProofOps;
 use crate::tendermint_rpc::error::Error as TError;
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
@@ -317,7 +317,7 @@ pub async fn query_storage_value_bytes<C: crate::queries::Client + Sync>(
     key: &storage::Key,
     height: Option<BlockHeight>,
     prove: bool,
-) -> Result<(Option<Vec<u8>>, Option<Proof>), error::Error> {
+) -> Result<(Option<Vec<u8>>, Option<ProofOps>), error::Error> {
     let data = None;
     let response = convert_response::<C, _>(
         RPC.shell()
@@ -590,10 +590,10 @@ pub async fn query_tx_response<C: crate::queries::Client + Sync>(
             events
                 .iter()
                 .find(|event| {
-                    event.type_str == tx_query.event_type()
+                    event.kind == tx_query.event_type()
                         && event.attributes.iter().any(|tag| {
-                            tag.key.as_ref() == "hash"
-                                && tag.value.as_ref() == tx_query.tx_hash()
+                            &tag.key == "hash"
+                                && tag.value == tx_query.tx_hash()
                         })
                 })
                 .cloned()

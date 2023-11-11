@@ -406,8 +406,10 @@ async fn write_tm_genesis(
     file.read_to_end(&mut file_contents)
         .await
         .expect("Couldn't read Tendermint genesis file");
-    let mut genesis: Genesis = serde_json::from_slice(&file_contents[..])
-        .expect("Couldn't deserialize the genesis file");
+    // Set `Option<String>` for the omitted `app_state`
+    let mut genesis: Genesis<Option<String>> =
+        serde_json::from_slice(&file_contents[..])
+            .expect("Couldn't deserialize the genesis file");
     genesis.chain_id =
         FromStr::from_str(chain_id.as_str()).expect("Invalid chain ID");
     genesis.genesis_time = genesis_time
@@ -422,9 +424,9 @@ async fn write_tm_genesis(
         // gas is metered app-side, so we disable it
         // at the Tendermint level
         max_gas: -1,
+        /// This parameter has no value anymore in Tendermint-core
+        time_iota_ms: block::Size::default_time_iota_ms(),
     };
-    #[cfg(not(feature = "abcipp"))]
-    let size = Some(size);
     genesis.consensus_params.block = size;
     #[cfg(feature = "abcipp")]
     {

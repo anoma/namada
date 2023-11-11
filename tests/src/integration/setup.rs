@@ -199,7 +199,7 @@ fn create_node(
         chain_id: chain_id.to_string(),
         consensus_params: None,
         validators: vec![],
-        app_state_bytes: vec![],
+        app_state_bytes: vec![].into(),
         initial_height: 0,
     };
     {
