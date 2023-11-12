@@ -32,6 +32,22 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         .code
         .hash();
 
+    // Check that the tx has been signed with all the keys to be used for the
+    // validator account
+    let mut all_pks = init_validator.account_keys.clone();
+    all_pks.push(init_validator.consensus_key.clone());
+    all_pks.push(key::common::PublicKey::Secp256k1(
+        init_validator.eth_cold_key.clone(),
+    ));
+    all_pks.push(key::common::PublicKey::Secp256k1(
+        init_validator.eth_hot_key.clone(),
+    ));
+    all_pks.push(init_validator.protocol_key.clone());
+    if !matches!(verify_signatures_of_pks(ctx, &signed, all_pks), Ok(true)) {
+        debug_log!("Keys ownership signature verification failed");
+        panic!()
+    }
+
     // Register the validator in PoS
     match ctx.init_validator(init_validator, validator_vp_code_hash) {
         Ok(validator_address) => {
