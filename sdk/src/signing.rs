@@ -384,6 +384,51 @@ pub async fn aux_signing_data<'a>(
     })
 }
 
+pub async fn init_validator_signing_data<'a>(
+    context: &impl Namada<'a>,
+    args: &args::Tx<SdkTypes>,
+    validator_keys: Vec<common::PublicKey>,
+) -> Result<SigningTxData, Error> {
+    let mut public_keys = if args.wrapper_fee_payer.is_none() {
+        tx_signers(context, args, None).await?
+    } else {
+        vec![]
+    };
+    public_keys.extend(validator_keys.clone());
+
+    let account_public_keys_map =
+        Some(AccountPublicKeysMap::from_iter(validator_keys));
+
+    let fee_payer = if args.disposable_signing_key {
+        context
+            .wallet_mut()
+            .await
+            .gen_disposable_signing_key(&mut OsRng)
+            .to_public()
+    } else {
+        match &args.wrapper_fee_payer {
+            Some(keypair) => keypair.to_public(),
+            None => public_keys.get(0).ok_or(TxError::InvalidFeePayer)?.clone(),
+        }
+    };
+
+    if fee_payer == masp_tx_key().to_public() {
+        other_err(
+            "The gas payer cannot be the MASP, please provide a different gas \
+             payer."
+                .to_string(),
+        )?;
+    }
+
+    Ok(SigningTxData {
+        owner: None,
+        public_keys,
+        threshold: 0,
+        account_public_keys_map,
+        fee_payer,
+    })
+}
+
 /// Informations about the post-tx balance of the tx's source. Used to correctly
 /// handle fee validation in the wrapper tx
 pub struct TxSourcePostBalance {

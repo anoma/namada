@@ -27,7 +27,9 @@ use rand::rngs::OsRng;
 use super::rpc;
 use crate::cli::{args, safe_exit};
 use crate::client::rpc::query_wasm_code_hash;
-use crate::client::tx::signing::{default_sign, SigningTxData};
+use crate::client::tx::signing::{
+    default_sign, init_validator_signing_data, SigningTxData,
+};
 use crate::client::tx::tx::ProcessTxResponse;
 use crate::config::TendermintMode;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
@@ -477,7 +479,7 @@ pub async fn submit_init_validator<'a>(
         scheme,
     )
     .unwrap();
-    let protocol_key = validator_keys.get_protocol_keypair().ref_to();
+    let protocol_key = validator_keys.get_protocol_keypair().to_public();
 
     let validator_vp_code_hash =
         query_wasm_code_hash(namada, validator_vp_code_path.to_str().unwrap())
@@ -546,9 +548,17 @@ pub async fn submit_init_validator<'a>(
         validator_vp_code_hash: extra_section_hash,
     };
 
+    // Put together all the PKs that we have to sign with to verify ownership
+    let mut all_pks = data.account_keys.clone();
+    all_pks.push(consensus_key.to_public());
+    all_pks.push(eth_cold_pk);
+    all_pks.push(eth_hot_pk);
+    all_pks.push(data.protocol_key.clone());
+
     tx.add_code_from_hash(tx_code_hash).add_data(data);
 
-    let signing_data = aux_signing_data(namada, &tx_args, None, None).await?;
+    let signing_data =
+        init_validator_signing_data(namada, &tx_args, all_pks).await?;
 
     tx::prepare_tx(
         namada,
