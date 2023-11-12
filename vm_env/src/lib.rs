@@ -117,6 +117,18 @@ pub mod tx {
 
         /// Set the sentinel for a wrong tx section commitment
         pub fn namada_tx_set_commitment_sentinel();
+
+        // Verify the signatures of a tx
+        pub fn namada_tx_verify_tx_section_signature(
+            hash_list_ptr: u64,
+            hash_list_len: u64,
+            public_keys_map_ptr: u64,
+            public_keys_map_len: u64,
+            threshold: u8,
+            max_signatures_ptr: u64,
+            max_signatures_len: u64,
+        ) -> i64;
+
     }
 }
 

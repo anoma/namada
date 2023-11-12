@@ -19,7 +19,6 @@ use std::marker::PhantomData;
 pub use borsh::{BorshDeserialize, BorshSerialize};
 pub use borsh_ext;
 use borsh_ext::BorshSerializeExt;
-pub use namada_core::ledger::eth_bridge;
 pub use namada_core::ledger::governance::storage as gov_storage;
 pub use namada_core::ledger::parameters::storage as parameters_storage;
 pub use namada_core::ledger::storage::types::encode;
@@ -28,11 +27,14 @@ pub use namada_core::ledger::storage_api::{
     ResultExt, StorageRead, StorageWrite,
 };
 pub use namada_core::ledger::tx_env::TxEnv;
+pub use namada_core::ledger::{eth_bridge, parameters};
 pub use namada_core::proto::{Section, Tx};
+use namada_core::types::account::AccountPublicKeysMap;
 pub use namada_core::types::address::Address;
 use namada_core::types::chain::CHAIN_ID_LENGTH;
 pub use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::internal::HostEnvResult;
+use namada_core::types::key::common;
 use namada_core::types::storage::TxIndex;
 pub use namada_core::types::storage::{
     self, BlockHash, BlockHeight, Epoch, Header, BLOCK_HASH_LENGTH,
@@ -360,4 +362,37 @@ impl TxEnv for Ctx {
 // Temp. workaround for <https://github.com/anoma/namada/issues/1831>
 pub fn tx_ibc_execute() {
     unsafe { namada_tx_ibc_execute() }
+}
+
+/// Verify section signatures against the given list of keys
+pub fn verify_signatures_of_pks(
+    ctx: &Ctx,
+    tx: &Tx,
+    pks: Vec<common::PublicKey>,
+) -> EnvResult<bool> {
+    let max_signatures_per_transaction =
+        parameters::max_signatures_per_transaction(ctx)?;
+
+    // Require signatures from all the given keys
+    let threshold = u8::try_from(pks.len()).into_storage_result()?;
+    let public_keys_index_map = AccountPublicKeysMap::from_iter(pks);
+
+    // Serialize parameters
+    let max_signatures = max_signatures_per_transaction.serialize_to_vec();
+    let public_keys_map = public_keys_index_map.serialize_to_vec();
+    let targets = [tx.raw_header_hash()].serialize_to_vec();
+
+    let valid = unsafe {
+        namada_tx_verify_tx_section_signature(
+            targets.as_ptr() as _,
+            targets.len() as _,
+            public_keys_map.as_ptr() as _,
+            public_keys_map.len() as _,
+            threshold,
+            max_signatures.as_ptr() as _,
+            max_signatures.len() as _,
+        )
+    };
+
+    Ok(HostEnvResult::is_success(valid))
 }
