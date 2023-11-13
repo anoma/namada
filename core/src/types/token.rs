@@ -18,7 +18,7 @@ use crate::ledger::storage as ledger_storage;
 use crate::ledger::storage_api::token::read_denom;
 use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
 use crate::types::address::{
-    masp, Address, DecodeError as AddressError, InternalAddress,
+    Address, DecodeError as AddressError, InternalAddress, MASP,
 };
 use crate::types::dec::Dec;
 use crate::types::hash::Hash;
@@ -1123,7 +1123,7 @@ pub fn is_denom_key(token_addr: &Address, key: &Key) -> bool {
 pub fn is_masp_key(key: &Key) -> bool {
     matches!(&key.segments[..],
         [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
-            if *addr == masp()
+            if *addr == MASP
                 && (key == HEAD_TX_KEY
                     || key.starts_with(TX_KEY_PREFIX)
                     || key.starts_with(PIN_KEY_PREFIX)))

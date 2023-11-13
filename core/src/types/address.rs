@@ -60,6 +60,8 @@ pub const POS_SLASH_POOL: Address =
     Address::Internal(InternalAddress::PosSlashPool);
 /// Internal Governance address
 pub const GOV: Address = Address::Internal(InternalAddress::Governance);
+/// Internal MASP address
+pub const MASP: Address = Address::Internal(InternalAddress::Masp);
 
 /// Error from decoding address from string
 pub type DecodeError = string_encoding::DecodeError;
@@ -121,6 +123,7 @@ impl From<raw::Address<'_, raw::Validated>> for Address {
             raw::Discriminant::IbcToken => Address::Internal(
                 InternalAddress::IbcToken(IbcTokenHash(*raw_addr.data())),
             ),
+            raw::Discriminant::Masp => Address::Internal(InternalAddress::Masp),
         }
     }
 }
@@ -207,6 +210,11 @@ impl<'addr> From<&'addr Address> for raw::Address<'addr, raw::Validated> {
             }
             Address::Internal(InternalAddress::Pgf) => {
                 raw::Address::from_discriminant(raw::Discriminant::Pgf)
+                    .validate()
+                    .expect("This raw address is valid")
+            }
+            Address::Internal(InternalAddress::Masp) => {
+                raw::Address::from_discriminant(raw::Discriminant::Masp)
                     .validate()
                     .expect("This raw address is valid")
             }
@@ -346,7 +354,7 @@ impl TryFrom<Signer> for Address {
         Address::decode(signer.as_ref()).or(
             match crate::types::masp::PaymentAddress::from_str(signer.as_ref())
             {
-                Ok(_) => Ok(masp()),
+                Ok(_) => Ok(MASP),
                 Err(_) => Err(DecodeError::InvalidInnerEncoding(format!(
                     "Invalid address for IBC transfer: {signer}"
                 ))),
@@ -485,6 +493,8 @@ pub enum InternalAddress {
     Multitoken,
     /// Pgf
     Pgf,
+    /// Masp
+    Masp,
 }
 
 impl Display for InternalAddress {
@@ -505,6 +515,7 @@ impl Display for InternalAddress {
                 Self::Nut(eth_addr) => format!("Non-usable token: {eth_addr}"),
                 Self::Multitoken => "Multitoken".to_string(),
                 Self::Pgf => "PublicGoodFundings".to_string(),
+                Self::Masp => "MASP".to_string(),
             }
         )
     }
@@ -563,12 +574,6 @@ pub fn apfel() -> Address {
 /// Temporary helper for testing
 pub fn kartoffel() -> Address {
     Address::decode("tnam1q87teqzjytwa9xd9qk8u558xxnrwuzdjzs7zvhzr")
-        .expect("The token address decoding shouldn't fail")
-}
-
-/// Temporary helper for testing
-pub fn masp() -> Address {
-    Address::decode("tnam1q9lm5pvkxhnw9wwwhu33vkvtylwfkn5kw53xwud8")
         .expect("The token address decoding shouldn't fail")
 }
 
@@ -809,6 +814,7 @@ pub mod testing {
             InternalAddress::Erc20(_) => {}
             InternalAddress::Nut(_) => {}
             InternalAddress::Pgf => {}
+            InternalAddress::Masp => {}
             InternalAddress::Multitoken => {} /* Add new addresses in the
                                                * `prop_oneof` below. */
         };
@@ -825,6 +831,7 @@ pub mod testing {
             Just(arb_nut()),
             Just(InternalAddress::Multitoken),
             Just(InternalAddress::Pgf),
+            Just(InternalAddress::Masp),
         ]
     }
 

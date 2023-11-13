@@ -10,7 +10,7 @@ use masp_primitives::transaction::Transaction;
 use namada_core::ledger::gas::{
     GasMetering, TxGasMeter, MEMORY_ACCESS_GAS_PER_BYTE,
 };
-use namada_core::types::address::ESTABLISHED_ADDRESS_BYTES_LEN;
+use namada_core::types::address::{ESTABLISHED_ADDRESS_BYTES_LEN, MASP};
 use namada_core::types::internal::KeyVal;
 use namada_core::types::storage::TX_INDEX_LENGTH;
 use namada_core::types::transaction::TxSentinel;
@@ -1945,40 +1945,6 @@ where
     }
 }
 
-/// Verify a ShieldedTransaction.
-pub fn vp_verify_masp<MEM, DB, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
-    tx_ptr: u64,
-    tx_len: u64,
-) -> vp_host_fns::EnvResult<i64>
-where
-    MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: StorageHasher,
-    EVAL: VpEvaluator,
-    CA: WasmCacheAccess,
-{
-    let gas_meter = unsafe { env.ctx.gas_meter.get() };
-    let sentinel = unsafe { env.ctx.sentinel.get() };
-    let (tx_bytes, gas) = env
-        .memory
-        .read_bytes(tx_ptr, tx_len as _)
-        .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
-    vp_host_fns::add_gas(gas_meter, gas, sentinel)?;
-
-    let shielded: Transaction =
-        BorshDeserialize::try_from_slice(tx_bytes.as_slice())
-            .map_err(vp_host_fns::RuntimeError::EncodingError)?;
-
-    Ok(
-        // TODO: once the runtime gas meter is implemented we need to benchmark
-        // this funcion and charge the gas here. For the moment, the cost of
-        // this is included in the benchmark of the masp vp
-        HostEnvResult::from(namada_sdk::masp::verify_shielded_tx(&shielded))
-            .to_i64(),
-    )
-}
-
 /// Log a string from exposed to the wasm VM Tx environment. The message will be
 /// printed at the [`tracing::Level::INFO`]. This function is for development
 /// only.
@@ -2431,7 +2397,7 @@ where
         &mut self,
         shielded: &IbcShieldedTransfer,
     ) -> Result<(), storage_api::Error> {
-        let masp_addr = address::masp();
+        let masp_addr = MASP;
         let head_tx_key = Key::from(masp_addr.to_db_key())
             .push(&HEAD_TX_KEY.to_owned())
             .expect("Cannot obtain a storage key");

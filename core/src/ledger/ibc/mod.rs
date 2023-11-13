@@ -31,7 +31,7 @@ use crate::ibc::core::ics24_host::identifier::{
 use crate::ibc::core::router::ModuleId;
 use crate::ibc::core::{execute, validate, MsgEnvelope, RouterError};
 use crate::ibc_proto::google::protobuf::Any;
-use crate::types::address::{masp, Address};
+use crate::types::address::{Address, MASP};
 use crate::types::ibc::{
     get_shielded_transfer, is_ibc_denom, EVENT_TYPE_DENOM_TRACE,
     EVENT_TYPE_PACKET,
@@ -190,7 +190,7 @@ where
                     .or_else(|_| {
                         // Replace it with MASP address when the receiver is a
                         // payment address
-                        PaymentAddress::from_str(receiver).map(|_| masp())
+                        PaymentAddress::from_str(receiver).map(|_| MASP)
                     })
                     .map_err(|_| {
                         Error::Denom(format!(

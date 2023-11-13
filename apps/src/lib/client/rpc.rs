@@ -39,7 +39,7 @@ use namada::ledger::pos::PosParams;
 use namada::ledger::queries::RPC;
 use namada::ledger::storage::ConversionState;
 use namada::proof_of_stake::types::{ValidatorState, WeightedValidator};
-use namada::types::address::{masp, Address, InternalAddress};
+use namada::types::address::{Address, InternalAddress, MASP};
 use namada::types::hash::Hash;
 use namada::types::ibc::{is_ibc_denom, IbcTokenHash};
 use namada::types::io::Io;
@@ -203,7 +203,7 @@ pub async fn query_transfers<'a>(
         );
         // Display the transparent changes first
         for (account, MaspChange { ref asset, change }) in tfer_delta {
-            if account != masp() {
+            if account != MASP {
                 display!(context.io(), "  {}:", account);
                 let token_alias =
                     lookup_token_alias(context, asset, &account).await;
@@ -230,7 +230,7 @@ pub async fn query_transfers<'a>(
                 display!(context.io(), "  {}:", fvk_map[&account]);
                 for (token_addr, val) in masp_change {
                     let token_alias =
-                        lookup_token_alias(context, &token_addr, &masp()).await;
+                        lookup_token_alias(context, &token_addr, &MASP).await;
                     let sign = match val.cmp(&Change::zero()) {
                         Ordering::Greater => "+",
                         Ordering::Less => "-",
@@ -528,7 +528,7 @@ pub async fn query_pinned_balance<'a>(
                         .format_amount(token_addr, (*value).into())
                         .await;
                     let token_alias =
-                        lookup_token_alias(context, token_addr, &masp()).await;
+                        lookup_token_alias(context, token_addr, &MASP).await;
                     display_line!(
                         context.io(),
                         " {}: {}",
@@ -821,7 +821,7 @@ pub async fn query_shielded_balance<'a>(
         // Here the user wants to know the balance for a specific token
         (Some(base_token), true) => {
             let tokens =
-                query_tokens(context, Some(&base_token), Some(&masp())).await;
+                query_tokens(context, Some(&base_token), Some(&MASP)).await;
             for (token_alias, token) in tokens {
                 // Query the multi-asset balance at the given spending key
                 let viewing_key =
@@ -939,7 +939,7 @@ pub async fn query_shielded_balance<'a>(
             }
             for ((fvk, token), token_balance) in balance_map {
                 // Only assets with the current timestamp count
-                let alias = lookup_token_alias(context, &token, &masp()).await;
+                let alias = lookup_token_alias(context, &token, &MASP).await;
                 display_line!(context.io(), "Shielded Token {}:", alias);
                 let formatted =
                     context.format_amount(&token, token_balance.into()).await;
@@ -1066,7 +1066,7 @@ pub async fn print_decoded_balance<'a>(
             display_line!(
                 context.io(),
                 "{} : {}",
-                lookup_token_alias(context, token_addr, &masp()).await,
+                lookup_token_alias(context, token_addr, &MASP).await,
                 context.format_amount(token_addr, (*amount).into()).await,
             );
         }
@@ -2335,7 +2335,7 @@ pub async fn query_conversions<'a>(
         .wallet()
         .await
         .get_addresses_with_vp_type(AddressVpType::Token);
-    let masp_addr = masp();
+    let masp_addr = MASP;
     let key_prefix: Key = masp_addr.to_db_key().into();
     let state_key = key_prefix
         .push(&(token::CONVERSION_KEY_PREFIX.to_owned()))
