@@ -926,6 +926,7 @@ mod test_finalize_block {
     use namada::types::ethereum_events::{EthAddress, Uint as ethUint};
     use namada::types::hash::Hash;
     use namada::types::keccak::KeccakHash;
+    use namada::types::key::testing::common_sk_from_simple_seed;
     use namada::types::key::tm_consensus_key_raw_hash;
     use namada::types::storage::Epoch;
     use namada::types::time::{DateTimeUtc, DurationSecs};
@@ -2488,6 +2489,316 @@ mod test_finalize_block {
 
         assert_eq!(exp_val_reward, val_reward_2);
         assert_eq!(exp_del_reward, del_reward_1);
+    }
+
+    /// A unit test for changing consensus keys and communicating to CometBFT
+    #[test]
+    fn test_change_validator_consensus_key() {
+        let (mut shell, _recv, _, _) = setup_with_cfg(SetupCfg {
+            last_height: 0,
+            num_validators: 3,
+            ..Default::default()
+        });
+
+        let mut validators: BTreeSet<WeightedValidator> =
+            read_consensus_validator_set_addresses_with_stake(
+                &shell.wl_storage,
+                Epoch::default(),
+            )
+            .unwrap()
+            .into_iter()
+            .collect();
+
+        let params = read_pos_params(&shell.wl_storage).unwrap();
+        let mut current_epoch = shell.wl_storage.storage.block.epoch;
+
+        let validator1 = validators.pop_first().unwrap();
+        let validator2 = validators.pop_first().unwrap();
+        let validator3 = validators.pop_first().unwrap();
+
+        let init_stake = validator1.bonded_stake;
+
+        // Give the validators some tokens for txs
+        let staking_token = shell.wl_storage.storage.native_token.clone();
+        credit_tokens(
+            &mut shell.wl_storage,
+            &staking_token,
+            &validator1.address,
+            init_stake,
+        )
+        .unwrap();
+        credit_tokens(
+            &mut shell.wl_storage,
+            &staking_token,
+            &validator2.address,
+            init_stake,
+        )
+        .unwrap();
+        credit_tokens(
+            &mut shell.wl_storage,
+            &staking_token,
+            &validator3.address,
+            init_stake,
+        )
+        .unwrap();
+
+        let get_pkh = |address, epoch| {
+            let ck = validator_consensus_key_handle(&address)
+                .get(&shell.wl_storage, epoch, &params)
+                .unwrap()
+                .unwrap();
+            let hash_string = tm_consensus_key_raw_hash(&ck);
+            HEXUPPER.decode(hash_string.as_bytes()).unwrap()
+        };
+        let pkh1 = get_pkh(validator1.address.clone(), Epoch::default());
+
+        // FINALIZE BLOCK 1. Tell Namada that val1 is the block proposer. We
+        // won't receive votes from TM since we receive votes at a 1-block
+        // delay, so votes will be empty here
+        next_block_for_inflation(&mut shell, pkh1.clone(), vec![], None);
+        assert!(
+            rewards_accumulator_handle()
+                .is_empty(&shell.wl_storage)
+                .unwrap()
+        );
+
+        // Check that there's 3 unique consensus keys
+        let consensus_keys =
+            namada_proof_of_stake::get_consensus_key_set(&shell.wl_storage)
+                .unwrap();
+        assert_eq!(consensus_keys.len(), 3);
+        // let ck1 = validator_consensus_key_handle(&validator)
+        //     .get(&storage, current_epoch, &params)
+        //     .unwrap()
+        //     .unwrap();
+        // assert_eq!(ck, og_ck);
+
+        // Let one validator update stake, one change consensus key, and then
+        // one do both
+
+        // Validator1 bonds 1 NAM
+        let bond_amount = token::Amount::native_whole(1);
+        namada_proof_of_stake::bond_tokens(
+            &mut shell.wl_storage,
+            None,
+            &validator1.address,
+            bond_amount,
+            current_epoch,
+            None,
+        )
+        .unwrap();
+
+        // Validator2 changes consensus key
+        let new_ck2 = common_sk_from_simple_seed(1).ref_to();
+        namada_proof_of_stake::change_consensus_key(
+            &mut shell.wl_storage,
+            &validator2.address,
+            &new_ck2,
+            current_epoch,
+        )
+        .unwrap();
+
+        // Validator3 bonds 1 NAM and changes consensus key
+        namada_proof_of_stake::bond_tokens(
+            &mut shell.wl_storage,
+            None,
+            &validator3.address,
+            bond_amount,
+            current_epoch,
+            None,
+        )
+        .unwrap();
+        let new_ck3 = common_sk_from_simple_seed(2).ref_to();
+        namada_proof_of_stake::change_consensus_key(
+            &mut shell.wl_storage,
+            &validator3.address,
+            &new_ck3,
+            current_epoch,
+        )
+        .unwrap();
+
+        // Check that there's 5 unique consensus keys
+        let consensus_keys =
+            namada_proof_of_stake::get_consensus_key_set(&shell.wl_storage)
+                .unwrap();
+        assert_eq!(consensus_keys.len(), 5);
+
+        // Advance to pipeline epoch
+        for _ in 0..params.pipeline_len {
+            let votes = get_default_true_votes(
+                &shell.wl_storage,
+                shell.wl_storage.storage.block.epoch,
+            );
+            let (new_epoch, _inflation) =
+                advance_epoch(&mut shell, &pkh1, &votes, None);
+            current_epoch = new_epoch;
+        }
+
+        let consensus_vals = read_consensus_validator_set_addresses_with_stake(
+            &shell.wl_storage,
+            current_epoch,
+        )
+        .unwrap();
+        let exp_vals = vec![
+            WeightedValidator {
+                address: validator1.address.clone(),
+                bonded_stake: init_stake + bond_amount,
+            },
+            WeightedValidator {
+                address: validator2.address.clone(),
+                bonded_stake: init_stake,
+            },
+            WeightedValidator {
+                address: validator3.address.clone(),
+                bonded_stake: init_stake + bond_amount,
+            },
+        ]
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+        assert_eq!(consensus_vals, exp_vals);
+
+        // Val 1 changes consensus key
+        let new_ck1 = common_sk_from_simple_seed(3).ref_to();
+        namada_proof_of_stake::change_consensus_key(
+            &mut shell.wl_storage,
+            &validator1.address,
+            &new_ck1,
+            current_epoch,
+        )
+        .unwrap();
+
+        // Val 2 is fully unbonded
+        namada_proof_of_stake::unbond_tokens(
+            &mut shell.wl_storage,
+            None,
+            &validator2.address,
+            init_stake,
+            current_epoch,
+            false,
+        )
+        .unwrap();
+
+        // Val 3 is fully unbonded and changes consensus key
+        namada_proof_of_stake::unbond_tokens(
+            &mut shell.wl_storage,
+            None,
+            &validator3.address,
+            init_stake + bond_amount,
+            current_epoch,
+            false,
+        )
+        .unwrap();
+        let new2_ck3 = common_sk_from_simple_seed(4).ref_to();
+        namada_proof_of_stake::change_consensus_key(
+            &mut shell.wl_storage,
+            &validator1.address,
+            &new2_ck3,
+            current_epoch,
+        )
+        .unwrap();
+
+        // Check that there's 7 unique consensus keys
+        let consensus_keys =
+            namada_proof_of_stake::get_consensus_key_set(&shell.wl_storage)
+                .unwrap();
+        assert_eq!(consensus_keys.len(), 7);
+
+        // Advance to pipeline epoch
+        for _ in 0..params.pipeline_len {
+            let votes = get_default_true_votes(
+                &shell.wl_storage,
+                shell.wl_storage.storage.block.epoch,
+            );
+            let (new_epoch, _inflation) =
+                advance_epoch(&mut shell, &pkh1, &votes, None);
+            current_epoch = new_epoch;
+        }
+
+        let consensus_vals = read_consensus_validator_set_addresses_with_stake(
+            &shell.wl_storage,
+            current_epoch,
+        )
+        .unwrap();
+        let exp_vals = vec![WeightedValidator {
+            address: validator1.address.clone(),
+            bonded_stake: init_stake + bond_amount,
+        }]
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+        assert_eq!(consensus_vals, exp_vals);
+
+        // Now promote the below-threshold validators back into the consensus
+        // set, along with consensus key changes
+
+        // Val2 bonds 1 NAM and changes consensus key
+        namada_proof_of_stake::bond_tokens(
+            &mut shell.wl_storage,
+            None,
+            &validator2.address,
+            bond_amount,
+            current_epoch,
+            None,
+        )
+        .unwrap();
+        let new2_ck2 = common_sk_from_simple_seed(5).ref_to();
+        namada_proof_of_stake::change_consensus_key(
+            &mut shell.wl_storage,
+            &validator2.address,
+            &new2_ck2,
+            current_epoch,
+        )
+        .unwrap();
+
+        // Val3 bonds 1 NAM
+        namada_proof_of_stake::bond_tokens(
+            &mut shell.wl_storage,
+            None,
+            &validator3.address,
+            bond_amount,
+            current_epoch,
+            None,
+        )
+        .unwrap();
+
+        // Check that there's 8 unique consensus keys
+        let consensus_keys =
+            namada_proof_of_stake::get_consensus_key_set(&shell.wl_storage)
+                .unwrap();
+        assert_eq!(consensus_keys.len(), 8);
+
+        // Advance to pipeline epoch
+        for _ in 0..params.pipeline_len {
+            let votes = get_default_true_votes(
+                &shell.wl_storage,
+                shell.wl_storage.storage.block.epoch,
+            );
+            let (new_epoch, _inflation) =
+                advance_epoch(&mut shell, &pkh1, &votes, None);
+            current_epoch = new_epoch;
+        }
+
+        let consensus_vals = read_consensus_validator_set_addresses_with_stake(
+            &shell.wl_storage,
+            current_epoch,
+        )
+        .unwrap();
+        let exp_vals = vec![
+            WeightedValidator {
+                address: validator1.address,
+                bonded_stake: init_stake + bond_amount,
+            },
+            WeightedValidator {
+                address: validator2.address,
+                bonded_stake: bond_amount,
+            },
+            WeightedValidator {
+                address: validator3.address,
+                bonded_stake: bond_amount,
+            },
+        ]
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+        assert_eq!(consensus_vals, exp_vals);
     }
 
     fn get_rewards_acc<S>(storage: &S) -> HashMap<Address, Dec>
