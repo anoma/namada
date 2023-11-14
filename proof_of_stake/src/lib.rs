@@ -753,9 +753,18 @@ where
             }
             Ok(false)
         }
-        None => Ok(storage_api::iter_prefix_bytes(storage, &prefix)?
-            .next()
-            .is_some()),
+        None => {
+            let iter = storage_api::iter_prefix_bytes(storage, &prefix)?;
+            for res in iter {
+                let (key, _) = res?;
+                if let Some((bond_id, _epoch)) = is_bond_key(&key) {
+                    if bond_id.source != bond_id.validator {
+                        return Ok(true);
+                    }
+                }
+            }
+            Ok(false)
+        }
     }
 }
 
