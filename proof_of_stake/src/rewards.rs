@@ -90,6 +90,11 @@ impl PosRewardsCalculator {
 
     /// Implement as ceiling of (2/3) * validator set stake
     fn get_min_required_votes(&self) -> Amount {
-        ((self.total_stake * 2u64) + (3u64 - 1u64)) / 3u64
+        (self
+            .total_stake
+            .checked_mul(2.into())
+            .expect("Amount overflow while computing minimum required votes")
+            + (3u64 - 1u64))
+            / 3u64
     }
 }

@@ -518,7 +518,13 @@ where
     let val = handle
         .get_delta_val(storage, current_epoch + offset)?
         .unwrap_or_default();
-    handle.set(storage, val + delta, current_epoch, offset)
+    handle.set(
+        storage,
+        val.checked_add(&delta)
+            .expect("Validator deltas updated amount should not overflow"),
+        current_epoch,
+        offset,
+    )
 }
 
 /// Read PoS total stake (sum of deltas).
@@ -698,7 +704,13 @@ where
     let val = handle
         .get_delta_val(storage, current_epoch + offset)?
         .unwrap_or_default();
-    handle.set(storage, val + delta, current_epoch, offset)
+    handle.set(
+        storage,
+        val.checked_add(&delta)
+            .expect("Total deltas updated amount should not overflow"),
+        current_epoch,
+        offset,
+    )
 }
 
 /// Check if the provided address is a validator address
@@ -987,7 +999,10 @@ where
 
     // tracing::debug!("VALIDATOR STAKE BEFORE UPDATE: {}", tokens_pre);
 
-    let tokens_post = tokens_pre.change() + token_change;
+    let tokens_post = tokens_pre
+        .change()
+        .checked_add(&token_change)
+        .expect("Post-validator set update token amount has overflowed");
     debug_assert!(tokens_post.non_negative());
     let tokens_post = token::Amount::from_change(tokens_post);
 
@@ -1475,7 +1490,9 @@ where
                 },
                 _validator,
             ) = entry?;
-            Ok(acc + amount)
+            Ok(acc.checked_add(amount).expect(
+                "Total consensus stake computation should not overflow.",
+            ))
         })
 }
 
