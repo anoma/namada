@@ -371,6 +371,82 @@ jobs:
           cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache
           cargo-cache
 
+  namada-sdk:
+    runs-on: 
+      group: namada-runners
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        nightly_version: [nightly-2023-06-01]
+        mold_version: [2.3.2]
+        make:
+          - name: ABCI
+
+    env:
+      RUSTC_WRAPPER: sccache
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        if: ${{ github.event_name != 'pull_request_target' }}
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        if: ${{ github.event_name == 'pull_request_target' }}
+        # See comment in build-and-test.yml
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Install libudev
+        run: sudo apt-get update && sudo apt-get -y install libudev-dev
+      - name: Install Protoc
+        uses: heliaxdev/setup-protoc@v2
+        with:
+          version: "25.0"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
+      - name: Setup rust toolchain
+        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+        with:
+          profile: default
+          override: true
+      - name: Setup rust nightly
+        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+        with:
+          toolchain: ${{ matrix.nightly_version }}
+          profile: default
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        continue-on-error: false
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+      - name: Start sccache server
+        run: sccache --start-server
+      - name: Install mold linker
+        run: |
+          wget -q -O- https://github.com/rui314/mold/releases/download/v${{ matrix.mold_version }}/mold-${{ matrix.mold_version }}-x86_64-linux.tar.gz | tar -xz
+          mv mold-${{ matrix.mold_version }}-x86_64-linux/bin/mold  /usr/local/bin      
+      - name: Run benchmarks tests
+        run: make build-sdk
+        env:
+          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
+      - name: Print sccache stats
+        if: always()
+        run: sccache --show-stats || true
+      - name: Stop sccache server
+        if: always()
+        run: sccache --stop-server || true
+      - name: Clean cargo cache
+        run: |
+          cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache
+          cargo-cache
+
   namada-release:
     runs-on: 
       group: namada-runners
