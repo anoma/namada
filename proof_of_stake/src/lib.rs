@@ -2818,6 +2818,14 @@ where
 {
     tracing::debug!("Changing consensus key for validator {}", validator);
 
+    // Require that the new consensus key is an Ed25519 key
+    match consensus_key {
+        common::PublicKey::Ed25519(_) => {}
+        common::PublicKey::Secp256k1(_) => {
+            return Err(ConsensusKeyChangeError::MustBeEd25519.into());
+        }
+    }
+
     // Check for uniqueness of the consensus key
     try_insert_consensus_key(storage, consensus_key)?;
 
@@ -2832,8 +2840,6 @@ where
 
     // Write validator's new raw hash
     write_validator_address_raw_hash(storage, validator, consensus_key)?;
-
-    // TODO: anything else?
 
     Ok(())
 }
