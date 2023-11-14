@@ -327,7 +327,7 @@ where
             current_epoch,
             epoch,
         )?;
-        store_total_consensus_stake(storage, epoch)?;
+        compute_and_store_total_consensus_stake(storage, epoch)?;
     }
     Ok(())
 }
@@ -1482,8 +1482,8 @@ where
         })
 }
 
-/// Store total consensus stake
-pub fn store_total_consensus_stake<S>(
+/// Compute and then store the total consensus stake
+pub fn compute_and_store_total_consensus_stake<S>(
     storage: &mut S,
     epoch: Epoch,
 ) -> storage_api::Result<()>
@@ -1492,7 +1492,7 @@ where
 {
     let total = compute_total_consensus_stake(storage, epoch)?;
     tracing::debug!(
-        "Computed total consensus stake for epoch {}: {}",
+        "Total consensus stake for epoch {}: {}",
         epoch,
         total.to_string_native()
     );
@@ -5670,7 +5670,7 @@ pub mod test_utils {
             )?;
         }
         // Store the total consensus validator stake to storage
-        store_total_consensus_stake(storage, current_epoch)?;
+        compute_and_store_total_consensus_stake(storage, current_epoch)?;
 
         // Copy validator sets and positions
         copy_genesis_validator_sets(storage, params, current_epoch)?;

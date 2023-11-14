@@ -53,7 +53,8 @@ use crate::{
     apply_list_slashes, become_validator, below_capacity_validator_set_handle,
     bond_handle, bond_tokens, bonds_and_unbonds,
     compute_amount_after_slashing_unbond,
-    compute_amount_after_slashing_withdraw, compute_bond_at_epoch,
+    compute_amount_after_slashing_withdraw,
+    compute_and_store_total_consensus_stake, compute_bond_at_epoch,
     compute_modified_redelegation, compute_new_redelegated_unbonds,
     compute_slash_bond_at_epoch, compute_slashable_amount,
     consensus_validator_set_handle, copy_validator_sets_and_positions,
@@ -66,9 +67,9 @@ use crate::{
     read_consensus_validator_set_addresses_with_stake, read_total_stake,
     read_validator_deltas_value, read_validator_stake, slash,
     slash_redelegation, slash_validator, slash_validator_redelegation,
-    staking_token_address, store_total_consensus_stake, total_bonded_handle,
-    total_deltas_handle, total_unbonded_handle, unbond_handle, unbond_tokens,
-    unjail_validator, update_validator_deltas, update_validator_set,
+    staking_token_address, total_bonded_handle, total_deltas_handle,
+    total_unbonded_handle, unbond_handle, unbond_tokens, unjail_validator,
+    update_validator_deltas, update_validator_set,
     validator_consensus_key_handle, validator_incoming_redelegations_handle,
     validator_outgoing_redelegations_handle, validator_set_positions_handle,
     validator_set_update_tendermint, validator_slashes_handle,
@@ -2195,7 +2196,7 @@ fn get_tendermint_set_updates(
 fn advance_epoch(s: &mut TestWlStorage, params: &PosParams) -> Epoch {
     s.storage.block.epoch = s.storage.block.epoch.next();
     let current_epoch = s.storage.block.epoch;
-    store_total_consensus_stake(s, current_epoch).unwrap();
+    compute_and_store_total_consensus_stake(s, current_epoch).unwrap();
     copy_validator_sets_and_positions(
         s,
         params,

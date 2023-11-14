@@ -157,7 +157,7 @@ where
         self.apply_genesis_txs_transfer(&genesis);
         self.apply_genesis_txs_bonds(&genesis);
 
-        pos::namada_proof_of_stake::store_total_consensus_stake(
+        pos::namada_proof_of_stake::compute_and_store_total_consensus_stake(
             &mut self.wl_storage,
             Default::default(),
         )
