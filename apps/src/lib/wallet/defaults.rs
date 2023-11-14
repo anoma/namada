@@ -73,6 +73,7 @@ mod dev {
             ("christel".into(), christel_address()),
             ("daewon".into(), daewon_address()),
             ("ester".into(), ester_address()),
+            ("masp".into(), namada::types::address::MASP),
         ]
         .into_iter()
         .collect();

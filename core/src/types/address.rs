@@ -530,6 +530,7 @@ impl InternalAddress {
             "ethbridge" => Some(InternalAddress::EthBridge),
             "bridgepool" => Some(InternalAddress::EthBridgePool),
             "governance" => Some(InternalAddress::Governance),
+            "masp" => Some(InternalAddress::Masp),
             _ => None,
         }
     }
