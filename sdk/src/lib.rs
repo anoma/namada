@@ -55,7 +55,7 @@ use crate::tx::{
     ProcessTxResponse, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
     TX_CHANGE_COMMISSION_WASM, TX_CHANGE_METADATA_WASM, TX_CLAIM_REWARDS_WASM,
     TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM, TX_INIT_PROPOSAL,
-    TX_INIT_VALIDATOR_WASM, TX_REACTIVATE_VALIDATOR_WASM, TX_RESIGN_STEWARD,
+    TX_INIT_VALIDATOR_WASM, TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM, TX_RESIGN_STEWARD,
     TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
     TX_UPDATE_ACCOUNT_WASM, TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL,
     TX_WITHDRAW_WASM, VP_USER_WASM,
@@ -203,6 +203,28 @@ pub trait Namada<'a>: Sized {
             source: None,
             tx: self.tx_builder(),
             tx_code_path: PathBuf::from(TX_UNBOND_WASM),
+        }
+    }
+
+    fn new_redelegation(
+        &self,
+        source: Address,
+        src_validator: Address,
+        dest_validator: Address,
+        amount: token::Amount,
+    ) -> args::Redelegate {
+        args::Redelegate {
+            tx: self.tx_builder(),
+            /// Source validator address
+            src_validator,
+            /// Destination validator address
+            dest_validator,
+            /// Owner of the bonds that are being redelegated
+            owner: source,
+            /// The amount of tokens to redelegate
+            amount,
+            /// Path to the TX WASM code file
+            tx_code_path: PathBuf::from(TX_REDELEGATE_WASM),
         }
     }
 
