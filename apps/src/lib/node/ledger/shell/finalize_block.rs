@@ -88,6 +88,8 @@ where
                 .expect("Failed tx hashes finalization")
         }
 
+        let pos_params =
+            namada_proof_of_stake::read_pos_params(&self.wl_storage)?;
         if new_epoch {
             namada::ledger::storage::update_allowed_conversions(
                 &mut self.wl_storage,
@@ -97,8 +99,6 @@ where
 
             // Copy the new_epoch + pipeline_len - 1 validator set into
             // new_epoch + pipeline_len
-            let pos_params =
-                namada_proof_of_stake::read_pos_params(&self.wl_storage)?;
             namada_proof_of_stake::copy_validator_sets_and_positions(
                 &mut self.wl_storage,
                 &pos_params,
@@ -146,7 +146,19 @@ where
             current_epoch,
             height,
         )?;
-        // FIXME: jail
+        // Jail validators for inactivity
+        let validator_set_update_epoch = if update_for_tendermint {
+            current_epoch.next()
+        } else {
+            current_epoch.next().next()
+        };
+        namada_proof_of_stake::jail_for_liveness(
+            &mut self.wl_storage,
+            &pos_params,
+            height,
+            current_epoch,
+            validator_set_update_epoch,
+        )?;
 
         let mut stats = InternalStats::default();
 

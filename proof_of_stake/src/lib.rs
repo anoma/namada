@@ -86,6 +86,8 @@ pub const SLASH_POOL_ADDRESS: Address =
 
 // Size of the sliding window for validators acitivity evaluation
 const LIVENESS_BLOCKS_NUM: u64 = 10_000;
+// The maximum tolerated percentage of missing votes in the sliding window
+const LIVENESS_THRESHOLD: u64 = 10;
 
 /// Address of the staking token (i.e. the native token)
 pub fn staking_token_address(storage: &impl StorageRead) -> Address {
@@ -5628,13 +5630,13 @@ where
 /// Remove old consensus validators from liveness data and record
 pub fn prune_liveness_data_and_record<S>(
     storage: &mut S,
-    epoch: Epoch,
+    current_epoch: Epoch,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
     let consensus_validator_set = consensus_validator_set_handle()
-        .at(&epoch)
+        .at(&current_epoch)
         .iter(storage)?
         .map(|entry| {
             let (
@@ -5647,20 +5649,13 @@ where
             address
         })
         .collect::<HashSet<Address>>();
-    let liveness_record = consensus_validator_set_liveness_record_handle();
     let liveness_data = consensus_validator_set_liveness_data_handle();
+    let liveness_record = consensus_validator_set_liveness_record_handle();
 
-    let mut validators_to_prune = liveness_record
+    let validators_to_prune = liveness_data
         .iter(storage)?
         .filter_map(|entry| {
-            let entry = entry.ok()?;
-            let (
-                NestedSubKey::Data {
-                    key: address,
-                    nested_sub_key: _,
-                },
-                _,
-            ) = entry;
+            let (address, _) = entry.ok()?;
 
             if consensus_validator_set.contains(&address) {
                 None
@@ -5670,19 +5665,7 @@ where
         })
         .collect::<Vec<Address>>();
 
-    validators_to_prune.extend(liveness_data.iter(storage)?.filter_map(
-        |entry| {
-            let (address, _) = entry.ok()?;
-
-            if consensus_validator_set.contains(&address) {
-                None
-            } else {
-                Some(address)
-            }
-        },
-    ));
-
-    for ref validator in validators_to_prune {
+    for validator in &validators_to_prune {
         liveness_record.remove_all(storage, validator)?;
         liveness_data.remove(storage, validator)?;
     }
@@ -5785,6 +5768,55 @@ where
                     },
                 )?;
             }
+        }
+    }
+
+    Ok(())
+}
+
+/// Jail validators who failed to match the liveness threshold
+pub fn jail_for_liveness<S>(
+    storage: &mut S,
+    params: &PosParams,
+    block_height: BlockHeight,
+    current_epoch: Epoch,
+    validator_set_update_epoch: Epoch,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    // Jail inactive validators
+    let validators_to_jail = consensus_validator_set_liveness_data_handle()
+        .iter(storage)?
+        .filter_map(|entry| {
+            let (address, status) = entry.ok()?;
+
+            // Wait for at least a window length before jailing
+            if block_height.0 - status.consensus_set_join_height.0
+                >= LIVENESS_BLOCKS_NUM
+            {
+                // Check if validator failed to match the threshold and jail
+                // them
+                if status.number_of_missed_votes
+                    > (LIVENESS_BLOCKS_NUM / 100) * LIVENESS_THRESHOLD
+                {
+                    return Some(address);
+                }
+            }
+
+            None
+        })
+        .collect::<Vec<Address>>();
+
+    let start_offset = validator_set_update_epoch.0 - current_epoch.0;
+    for validator in &validators_to_jail {
+        for offset in start_offset..=params.pipeline_len {
+            validator_state_handle(validator).set(
+                storage,
+                ValidatorState::Jailed,
+                current_epoch,
+                offset,
+            )?;
         }
     }
 
