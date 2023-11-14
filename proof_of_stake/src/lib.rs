@@ -5461,58 +5461,13 @@ where
     // Remove the validator from the validator set. If it is in the consensus
     // set, promote the next validator.
     match pipeline_state {
-        ValidatorState::Consensus => {
-            let consensus_set = consensus_validator_set_handle()
-                .at(&pipeline_epoch)
-                .at(&pipeline_stake);
-            // TODO: handle the unwrap better here
-            let val_position = validator_set_positions_handle()
-                .at(&pipeline_epoch)
-                .get(storage, validator)?
-                .unwrap();
-            let removed = consensus_set.remove(storage, &val_position)?;
-            debug_assert_eq!(removed, Some(validator.clone()));
+        ValidatorState::Consensus => deactivate_consensus_validator(
+            storage,
+            validator,
+            pipeline_epoch,
+            pipeline_stake,
+        )?,
 
-            // Remove position
-            validator_set_positions_handle()
-                .at(&pipeline_epoch)
-                .remove(storage, validator)?;
-
-            // Now promote the next below-capacity validator to the consensus
-            // set
-            let below_cap_set =
-                below_capacity_validator_set_handle().at(&pipeline_epoch);
-            let max_below_capacity_validator_amount =
-                get_max_below_capacity_validator_amount(
-                    &below_cap_set,
-                    storage,
-                )?;
-
-            if let Some(max_bc_amount) = max_below_capacity_validator_amount {
-                let below_cap_vals_max =
-                    below_cap_set.at(&max_bc_amount.into());
-                let lowest_position =
-                    find_first_position(&below_cap_vals_max, storage)?.unwrap();
-                let removed_max_below_capacity = below_cap_vals_max
-                    .remove(storage, &lowest_position)?
-                    .expect("Must have been removed");
-
-                insert_validator_into_set(
-                    &consensus_validator_set_handle()
-                        .at(&pipeline_epoch)
-                        .at(&max_bc_amount),
-                    storage,
-                    &pipeline_epoch,
-                    &removed_max_below_capacity,
-                )?;
-                validator_state_handle(&removed_max_below_capacity).set(
-                    storage,
-                    ValidatorState::Consensus,
-                    pipeline_epoch,
-                    0,
-                )?;
-            }
-        }
         ValidatorState::BelowCapacity => {
             let below_capacity_set = below_capacity_validator_set_handle()
                 .at(&pipeline_epoch)
@@ -5554,6 +5509,65 @@ where
         current_epoch,
         params.pipeline_len,
     )?;
+
+    Ok(())
+}
+
+fn deactivate_consensus_validator<S>(
+    storage: &mut S,
+
+    validator: &Address,
+    target_epoch: Epoch,
+    stake: token::Amount,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let consensus_set = consensus_validator_set_handle()
+        .at(&target_epoch)
+        .at(&stake);
+    // TODO: handle the unwrap better here
+    let val_position = validator_set_positions_handle()
+        .at(&target_epoch)
+        .get(storage, validator)?
+        .unwrap();
+    let removed = consensus_set.remove(storage, &val_position)?;
+    debug_assert_eq!(removed, Some(validator.clone()));
+
+    // Remove position
+    validator_set_positions_handle()
+        .at(&target_epoch)
+        .remove(storage, validator)?;
+
+    // Now promote the next below-capacity validator to the consensus
+    // set
+    let below_cap_set = below_capacity_validator_set_handle().at(&target_epoch);
+    let max_below_capacity_validator_amount =
+        get_max_below_capacity_validator_amount(&below_cap_set, storage)?;
+
+    if let Some(max_bc_amount) = max_below_capacity_validator_amount {
+        let below_cap_vals_max = below_cap_set.at(&max_bc_amount.into());
+        let lowest_position =
+            find_first_position(&below_cap_vals_max, storage)?.unwrap();
+        let removed_max_below_capacity = below_cap_vals_max
+            .remove(storage, &lowest_position)?
+            .expect("Must have been removed");
+
+        insert_validator_into_set(
+            &consensus_validator_set_handle()
+                .at(&target_epoch)
+                .at(&max_bc_amount),
+            storage,
+            &target_epoch,
+            &removed_max_below_capacity,
+        )?;
+        validator_state_handle(&removed_max_below_capacity).set(
+            storage,
+            ValidatorState::Consensus,
+            target_epoch,
+            0,
+        )?;
+    }
 
     Ok(())
 }
@@ -5768,9 +5782,8 @@ where
 /// Jail validators who failed to match the liveness threshold
 pub fn jail_for_liveness<S>(
     storage: &mut S,
-    params: &PosParams,
+    pos_params: &PosParams,
     current_epoch: Epoch,
-    validator_set_update_epoch: Epoch,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -5795,16 +5808,24 @@ where
         })
         .collect::<Vec<Address>>();
 
-    let start_offset = validator_set_update_epoch.0 - current_epoch.0;
     for validator in &validators_to_jail {
-        for offset in start_offset..=params.pipeline_len {
-            validator_state_handle(validator).set(
+        deactivate_consensus_validator(
+            storage,
+            validator,
+            current_epoch.next(),
+            read_validator_stake(
                 storage,
-                ValidatorState::Jailed,
-                current_epoch,
-                offset,
-            )?;
-        }
+                pos_params,
+                validator,
+                current_epoch.next(),
+            )?,
+        )?;
+        validator_state_handle(validator).set(
+            storage,
+            ValidatorState::Jailed,
+            current_epoch,
+            1,
+        )?;
     }
 
     Ok(())

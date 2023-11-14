@@ -147,16 +147,10 @@ where
             height,
         )?;
         // Jail validators for inactivity
-        let validator_set_update_epoch = if update_for_tendermint {
-            current_epoch.next()
-        } else {
-            current_epoch.next().next()
-        };
         namada_proof_of_stake::jail_for_liveness(
             &mut self.wl_storage,
             &pos_params,
             current_epoch,
-            validator_set_update_epoch,
         )?;
 
         let mut stats = InternalStats::default();
