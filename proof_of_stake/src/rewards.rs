@@ -55,7 +55,6 @@ impl PosRewardsCalculator {
     /// the validator's signing behavior and stake to determine the fraction of
     /// the block rewards earned.
     pub fn get_reward_coeffs(&self) -> Result<PosRewards, RewardsError> {
-        // TODO: think about possibility of u64 overflow
         let votes_needed = self.get_min_required_votes();
 
         let Self {

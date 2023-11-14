@@ -2501,7 +2501,6 @@ fn test_compute_modified_redelegation() {
     let mut bob = validator2.clone();
 
     // Ensure a ranking order of alice > bob
-    // TODO: check why this needs to be > (am I just confusing myself?)
     if bob > alice {
         alice = validator2;
         bob = validator1;
