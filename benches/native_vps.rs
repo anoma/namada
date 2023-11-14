@@ -33,24 +33,29 @@ use namada::ledger::native_vp::ethereum_bridge::nut::NonUsableTokens;
 use namada::ledger::native_vp::ethereum_bridge::vp::EthBridge;
 use namada::ledger::native_vp::ibc::context::PseudoExecutionContext;
 use namada::ledger::native_vp::ibc::Ibc;
+use namada::ledger::native_vp::masp::MaspVp;
 use namada::ledger::native_vp::multitoken::MultitokenVp;
 use namada::ledger::native_vp::parameters::ParametersVp;
 use namada::ledger::native_vp::{Ctx, NativeVp};
 use namada::ledger::pgf::PgfVp;
 use namada::ledger::pos::PosVP;
+use namada::namada_sdk::masp::verify_shielded_tx;
+use namada::namada_sdk::masp_primitives::transaction::Transaction;
 use namada::proof_of_stake;
 use namada::proof_of_stake::KeySeg;
 use namada::proto::{Code, Section, Tx};
 use namada::types::address::InternalAddress;
 use namada::types::eth_bridge_pool::{GasFee, PendingTransfer};
+use namada::types::masp::{TransferSource, TransferTarget};
 use namada::types::storage::{Epoch, TxIndex};
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
 use namada_apps::bench_utils::{
-    generate_foreign_key_tx, BenchShell, TX_BRIDGE_POOL_WASM, TX_IBC_WASM,
-    TX_INIT_PROPOSAL_WASM, TX_RESIGN_STEWARD, TX_TRANSFER_WASM,
-    TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL_WASM,
+    generate_foreign_key_tx, BenchShell, BenchShieldedCtx,
+    ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
+    TX_BRIDGE_POOL_WASM, TX_IBC_WASM, TX_INIT_PROPOSAL_WASM, TX_RESIGN_STEWARD,
+    TX_TRANSFER_WASM, TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL_WASM,
 };
 use namada_apps::wallet::defaults;
 
@@ -462,6 +467,135 @@ fn vp_multitoken(c: &mut Criterion) {
             })
         });
     }
+}
+
+// Generate and run masp transaction to be verified
+fn setup_storage_for_masp_verification(
+    bench_name: &str,
+) -> (BenchShieldedCtx, Tx) {
+    let amount = Amount::native_whole(500);
+    let mut shielded_ctx = BenchShieldedCtx::default();
+
+    let albert_spending_key = shielded_ctx
+        .wallet
+        .find_spending_key(ALBERT_SPENDING_KEY, None)
+        .unwrap()
+        .to_owned();
+    let albert_payment_addr = shielded_ctx
+        .wallet
+        .find_payment_addr(ALBERT_PAYMENT_ADDRESS)
+        .unwrap()
+        .to_owned();
+    let bertha_payment_addr = shielded_ctx
+        .wallet
+        .find_payment_addr(BERTHA_PAYMENT_ADDRESS)
+        .unwrap()
+        .to_owned();
+
+    // Shield some tokens for Albert
+    let shield_tx = shielded_ctx.generate_masp_tx(
+        amount,
+        TransferSource::Address(defaults::albert_address()),
+        TransferTarget::PaymentAddress(albert_payment_addr),
+    );
+    shielded_ctx.shell.execute_tx(&shield_tx);
+    shielded_ctx.shell.wl_storage.commit_tx();
+    shielded_ctx.shell.commit();
+
+    let signed_tx = match bench_name {
+        "shielding" => shielded_ctx.generate_masp_tx(
+            amount,
+            TransferSource::Address(defaults::albert_address()),
+            TransferTarget::PaymentAddress(albert_payment_addr),
+        ),
+        "unshielding" => shielded_ctx.generate_masp_tx(
+            amount,
+            TransferSource::ExtendedSpendingKey(albert_spending_key),
+            TransferTarget::Address(defaults::albert_address()),
+        ),
+        "shielded" => shielded_ctx.generate_masp_tx(
+            amount,
+            TransferSource::ExtendedSpendingKey(albert_spending_key),
+            TransferTarget::PaymentAddress(bertha_payment_addr),
+        ),
+        _ => panic!("Unexpected bench test"),
+    };
+    shielded_ctx.shell.execute_tx(&signed_tx);
+
+    (shielded_ctx, signed_tx)
+}
+
+fn masp(c: &mut Criterion) {
+    let mut group = c.benchmark_group("vp_masp");
+
+    for bench_name in ["shielding", "unshielding", "shielded"] {
+        group.bench_function(bench_name, |b| {
+            let (shielded_ctx, signed_tx) =
+                setup_storage_for_masp_verification(bench_name);
+            let (verifiers, keys_changed) = shielded_ctx
+                .shell
+                .wl_storage
+                .write_log
+                .verifiers_and_changed_keys(&BTreeSet::default());
+
+            let masp = MaspVp {
+                ctx: Ctx::new(
+                    &Address::Internal(InternalAddress::Masp),
+                    &shielded_ctx.shell.wl_storage.storage,
+                    &shielded_ctx.shell.wl_storage.write_log,
+                    &signed_tx,
+                    &TxIndex(0),
+                    VpGasMeter::new_from_tx_meter(
+                        &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+                    ),
+                    &keys_changed,
+                    &verifiers,
+                    shielded_ctx.shell.vp_wasm_cache.clone(),
+                ),
+            };
+
+            b.iter(|| {
+                assert!(
+                    masp.validate_tx(
+                        &signed_tx,
+                        masp.ctx.keys_changed,
+                        masp.ctx.verifiers,
+                    )
+                    .unwrap()
+                );
+            })
+        });
+    }
+
+    group.finish();
+}
+
+fn masp_verify_shielded_tx(c: &mut Criterion) {
+    let mut group = c.benchmark_group("vp_masp_verify_shielded_tx");
+
+    for bench_name in ["shielding", "unshielding", "shielded"] {
+        group.bench_function(bench_name, |b| {
+            let (_, signed_tx) =
+                setup_storage_for_masp_verification(bench_name);
+
+            let transaction = signed_tx
+                .sections
+                .into_iter()
+                .filter_map(|section| match section {
+                    Section::MaspTx(transaction) => Some(transaction),
+                    _ => None,
+                })
+                .collect::<Vec<Transaction>>()
+                .first()
+                .unwrap()
+                .to_owned();
+            b.iter(|| {
+                assert!(verify_shielded_tx(&transaction));
+            })
+        });
+    }
+
+    group.finish();
 }
 
 fn pgf(c: &mut Criterion) {
@@ -1146,6 +1280,8 @@ criterion_group!(
     governance,
     // slash_fund,
     ibc,
+    masp,
+    masp_verify_shielded_tx,
     vp_multitoken,
     pgf,
     eth_bridge_nut,

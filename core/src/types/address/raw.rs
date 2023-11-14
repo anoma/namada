@@ -63,6 +63,8 @@ pub enum Discriminant {
     Nut = 12,
     /// IBC token raw address.
     IbcToken = 13,
+    /// MASP raw address.
+    Masp = 14,
 }
 
 /// Raw address representation.

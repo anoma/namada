@@ -109,7 +109,7 @@ where
     /// Get the shielded action including the transfer and the masp tx
     fn get_shielded_action(
         &self,
-        tx_data: Tx,
+        tx_data: &Tx,
     ) -> Result<(Transfer, Transaction), storage_api::Error> {
         let signed = tx_data;
         if let Ok(transfer) =
@@ -142,9 +142,6 @@ where
                 )
             })
     }
-
-    /// Verify a MASP transaction
-    fn verify_masp(&self, tx: Vec<u8>) -> Result<bool, storage_api::Error>;
 
     /// Charge the provided gas for the current vp
     fn charge_gas(&self, used_gas: u64) -> Result<(), storage_api::Error>;

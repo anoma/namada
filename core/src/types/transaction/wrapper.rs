@@ -15,7 +15,7 @@ pub mod wrapper_tx {
     use thiserror::Error;
 
     use crate::proto::{Code, Data, Section, Tx};
-    use crate::types::address::{masp, Address};
+    use crate::types::address::{Address, MASP};
     use crate::types::hash::Hash;
     use crate::types::key::*;
     use crate::types::storage::Epoch;
@@ -310,7 +310,7 @@ pub mod wrapper_tx {
             );
 
             let transfer = Transfer {
-                source: masp(),
+                source: MASP,
                 target: self.fee_payer(),
                 token: self.fee.token.clone(),
                 amount: DenominatedAmount {
