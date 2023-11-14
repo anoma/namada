@@ -322,7 +322,7 @@ where
             current_epoch,
             epoch,
         )?;
-        compute_and_store_total_consensus_stake(storage, epoch)?;
+        // compute_and_store_total_consensus_stake(storage, epoch)?;
     }
     Ok(())
 }
