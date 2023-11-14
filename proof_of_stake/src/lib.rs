@@ -65,7 +65,7 @@ use types::{
     ConsensusValidatorSetLivenessData, ConsensusValidatorSetLivenessRecord,
     ConsensusValidatorSets, DelegatorRedelegatedBonded,
     DelegatorRedelegatedUnbonded, EagerRedelegatedBondsMap, EpochedSlashes,
-    IncomingRedelegations, LivenessStatus, OutgoingRedelegations, Position,
+    IncomingRedelegations, OutgoingRedelegations, Position,
     RedelegatedBondsOrUnbonds, RedelegatedTokens, ReverseOrdTokenAmount,
     RewardsAccumulator, RewardsProducts, Slash, SlashType, SlashedAmount,
     Slashes, TotalConsensusStakes, TotalDeltas, TotalRedelegatedBonded,
@@ -84,10 +84,10 @@ pub const ADDRESS: Address = Address::Internal(InternalAddress::PoS);
 pub const SLASH_POOL_ADDRESS: Address =
     Address::Internal(InternalAddress::PosSlashPool);
 
-// Size of the sliding window for validators acitivity evaluation
+// Length in blocks of the sliding window for validators activity verification
 const LIVENESS_BLOCKS_NUM: u64 = 10_000;
 // The maximum tolerated percentage of missing votes in the sliding window
-const LIVENESS_THRESHOLD: u64 = 10;
+const LIVENESS_THRESHOLD_PERCENTAGE: u64 = 10;
 
 /// Address of the staking token (i.e. the native token)
 pub fn staking_token_address(storage: &impl StorageRead) -> Address {
@@ -5720,13 +5720,12 @@ where
             liveness_data.update(
                 storage,
                 validator_address.clone(),
-                |status| {
-                    let mut status = status.expect(&format!(
+                |missed_votes| {
+                    let missed_votes = missed_votes.expect(&format!(
                         "Expected liveness data for validator {} was not found",
                         validator_address
                     ));
-                    status.number_of_missed_votes -= 1;
-                    status
+                    missed_votes - 1
                 },
             )?;
         }
@@ -5739,34 +5738,26 @@ where
                 .insert(storage, block_height)?;
 
             // Update liveness data
-            liveness_data.update(storage, validator_address, |status| {
-                match status {
-                    Some(mut status) => {
-                        status.number_of_missed_votes += 1;
-                        status
-                    }
-                    None => {
-                        // Missing liveness data for the validator (newly added
-                        // to the conensus set), intialize it
-                        LivenessStatus {
-                            consensus_set_join_height: block_height,
-                            number_of_missed_votes: 1,
+            liveness_data.update(
+                storage,
+                validator_address,
+                |missed_votes| {
+                    match missed_votes {
+                        Some(missed_votes) => missed_votes + 1,
+                        None => {
+                            // Missing liveness data for the validator (newly
+                            // added to the conensus
+                            // set), intialize it
+                            1
                         }
                     }
-                }
-            })?;
+                },
+            )?;
         } else {
             // Initialize any new consensus validator who has signed the first
             // block
             if !liveness_data.contains(storage, &validator_address)? {
-                liveness_data.insert(
-                    storage,
-                    validator_address,
-                    LivenessStatus {
-                        consensus_set_join_height: block_height,
-                        number_of_missed_votes: 0,
-                    },
-                )?;
+                liveness_data.insert(storage, validator_address, 0)?;
             }
         }
     }
@@ -5778,33 +5769,29 @@ where
 pub fn jail_for_liveness<S>(
     storage: &mut S,
     params: &PosParams,
-    block_height: BlockHeight,
     current_epoch: Epoch,
     validator_set_update_epoch: Epoch,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
+    // Derive the actual missing votes limit from the percentage
+    let missing_votes_threshold =
+        (LIVENESS_BLOCKS_NUM / 100) * LIVENESS_THRESHOLD_PERCENTAGE;
+
     // Jail inactive validators
     let validators_to_jail = consensus_validator_set_liveness_data_handle()
         .iter(storage)?
         .filter_map(|entry| {
-            let (address, status) = entry.ok()?;
+            let (address, missed_votes) = entry.ok()?;
 
-            // Wait for at least a window length before jailing
-            if block_height.0 - status.consensus_set_join_height.0
-                >= LIVENESS_BLOCKS_NUM
-            {
-                // Check if validator failed to match the threshold and jail
-                // them
-                if status.number_of_missed_votes
-                    > (LIVENESS_BLOCKS_NUM / 100) * LIVENESS_THRESHOLD
-                {
-                    return Some(address);
-                }
+            // Check if validator failed to match the threshold and jail
+            // them
+            if missed_votes > missing_votes_threshold {
+                Some(address)
+            } else {
+                None
             }
-
-            None
         })
         .collect::<Vec<Address>>();
 

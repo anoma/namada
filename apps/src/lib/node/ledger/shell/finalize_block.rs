@@ -155,7 +155,6 @@ where
         namada_proof_of_stake::jail_for_liveness(
             &mut self.wl_storage,
             &pos_params,
-            height,
             current_epoch,
             validator_set_update_epoch,
         )?;
