@@ -103,14 +103,14 @@ pub type TotalConsensusStakes = crate::epoched::Epoched<
 /// Epoched validator's deltas.
 pub type ValidatorDeltas = crate::epoched::EpochedDelta<
     token::Change,
-    crate::epoched::OffsetUnbondingLen,
+    crate::epoched::OffsetPipelineLen,
     crate::epoched::OffsetMaxProposalPeriodOrSlashProcessingLenPlus,
 >;
 
 /// Epoched total deltas.
 pub type TotalDeltas = crate::epoched::EpochedDelta<
     token::Change,
-    crate::epoched::OffsetUnbondingLen,
+    crate::epoched::OffsetPipelineLen,
     crate::epoched::OffsetMaxProposalPeriodOrSlashProcessingLenPlus,
 >;
 
@@ -146,7 +146,7 @@ pub type ValidatorSlashes = NestedMap<Address, Slashes>;
 /// slashes earlier than `cubic_window_width` epochs behind the current
 pub type EpochedSlashes = crate::epoched::NestedEpoched<
     ValidatorSlashes,
-    crate::epoched::OffsetUnbondingLen,
+    crate::epoched::OffsetPipelineLen,
     crate::epoched::OffsetSlashProcessingLenPlus,
 >;
 
