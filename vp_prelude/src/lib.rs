@@ -14,7 +14,6 @@ use std::convert::TryFrom;
 use std::marker::PhantomData;
 
 pub use borsh::{BorshDeserialize, BorshSerialize};
-pub use borsh_ext;
 use borsh_ext::BorshSerializeExt;
 pub use namada_core::ledger::governance::storage as gov_storage;
 pub use namada_core::ledger::parameters;
@@ -34,10 +33,10 @@ use namada_core::types::storage::{
 };
 pub use namada_core::types::*;
 pub use namada_macros::validity_predicate;
-pub use namada_proof_of_stake::storage as proof_of_stake;
 use namada_vm_env::vp::*;
 use namada_vm_env::{read_from_buffer, read_key_val_bytes_from_buffer};
 pub use sha2::{Digest, Sha256, Sha384, Sha512};
+pub use {borsh_ext, namada_proof_of_stake as proof_of_stake};
 
 pub fn sha256(bytes: &[u8]) -> Hash {
     let digest = Sha256::digest(bytes);
