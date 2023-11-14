@@ -1,7 +1,6 @@
 //! Proof-of-Stake native validity predicate.
 
 use std::collections::BTreeSet;
-use std::panic::{RefUnwindSafe, UnwindSafe};
 
 use namada_core::ledger::storage_api::governance;
 // use borsh::BorshDeserialize;
@@ -56,30 +55,6 @@ where
     pub fn new(ctx: Ctx<'a, DB, H, CA>) -> Self {
         Self { ctx }
     }
-}
-
-// TODO this is temporarily to run PoS native VP in a new thread to avoid
-// crashing the ledger (in apps/src/lib/node/ledger/protocol/mod.rs). The
-// RefCells contained within PosVP are not thread-safe, but each thread has its
-// own instances.
-impl<DB, H, CA> UnwindSafe for PosVP<'_, DB, H, CA>
-where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
-    H: 'static + StorageHasher,
-    CA: 'static + WasmCacheAccess,
-{
-}
-
-// TODO this is temporarily to run PoS native VP in a new thread to avoid
-// crashing the ledger (in apps/src/lib/node/ledger/protocol/mod.rs). The
-// RefCells contained within PosVP are not thread-safe, but each thread has its
-// own instances.
-impl<DB, H, CA> RefUnwindSafe for PosVP<'_, DB, H, CA>
-where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
-    H: 'static + StorageHasher,
-    CA: 'static + WasmCacheAccess,
-{
 }
 
 impl<'a, DB, H, CA> NativeVp for PosVP<'a, DB, H, CA>
