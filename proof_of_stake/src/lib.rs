@@ -2827,6 +2827,44 @@ where
     Ok(())
 }
 
+/// Consensus key change for a validator
+pub fn change_consensus_key<S>(
+    storage: &mut S,
+    validator: &Address,
+    consensus_key: &common::PublicKey,
+    current_epoch: Epoch,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    tracing::debug!("Changing consensus key for validator {}", validator);
+
+    // Require that the new consensus key is an Ed25519 key
+    match consensus_key {
+        common::PublicKey::Ed25519(_) => {}
+        common::PublicKey::Secp256k1(_) => {
+            return Err(ConsensusKeyChangeError::MustBeEd25519.into());
+        }
+    }
+
+    // Check for uniqueness of the consensus key
+    try_insert_consensus_key(storage, consensus_key)?;
+
+    // Set the new consensus key at the pipeline epoch
+    let params = read_pos_params(storage)?;
+    validator_consensus_key_handle(validator).set(
+        storage,
+        consensus_key.clone(),
+        current_epoch,
+        params.pipeline_len,
+    )?;
+
+    // Write validator's new raw hash
+    write_validator_address_raw_hash(storage, validator, consensus_key)?;
+
+    Ok(())
+}
+
 /// Withdraw tokens from those that have been unbonded from proof-of-stake
 pub fn withdraw_tokens<S>(
     storage: &mut S,
@@ -3040,6 +3078,18 @@ where
 {
     let key = consensus_keys_key();
     LazySet::open(key).try_insert(storage, consensus_key.clone())
+}
+
+/// Get the unique set of consensus keys in storage
+pub fn get_consensus_key_set<S>(
+    storage: &S,
+) -> storage_api::Result<BTreeSet<common::PublicKey>>
+where
+    S: StorageRead,
+{
+    let key = consensus_keys_key();
+    let lazy_set = LazySet::<common::PublicKey>::open(key);
+    Ok(lazy_set.iter(storage)?.map(Result::unwrap).collect())
 }
 
 /// Check if the given consensus key is already being used to ensure uniqueness.
@@ -3317,7 +3367,7 @@ where
     tracing::debug!("Communicating validator set updates to Tendermint.");
     // Because this is called 2 blocks before a start on an epoch, we're gonna
     // give Tendermint updates for the next epoch
-    let next_epoch: Epoch = current_epoch.next();
+    let next_epoch = current_epoch.next();
 
     let new_consensus_validator_handle =
         consensus_validator_set_handle().at(&next_epoch);
@@ -3326,7 +3376,7 @@ where
 
     let new_consensus_validators = new_consensus_validator_handle
         .iter(storage)?
-        .filter_map(|validator| {
+        .map(|validator| {
             let (
                 NestedSubKey::Data {
                     key: new_stake,
@@ -3339,6 +3389,15 @@ where
                 "Consensus validator address {address}, stake {}",
                 new_stake.to_string_native()
             );
+
+            let new_consensus_key = validator_consensus_key_handle(&address)
+                .get(storage, next_epoch, params)
+                .unwrap()
+                .unwrap();
+
+            let old_consensus_key = validator_consensus_key_handle(&address)
+                .get(storage, current_epoch, params)
+                .unwrap();
 
             // Check if the validator was consensus in the previous epoch with
             // the same stake. If so, no updated is needed.
@@ -3369,11 +3428,24 @@ where
                 if matches!(prev_state, Some(ValidatorState::Consensus))
                     && *prev_tm_voting_power == *new_tm_voting_power
                 {
-                    tracing::debug!(
-                        "skipping validator update, {address} is in consensus \
-                         set but voting power hasn't changed"
-                    );
-                    return None;
+                    if old_consensus_key.as_ref().unwrap() == &new_consensus_key
+                    {
+                        tracing::debug!(
+                            "skipping validator update, {address} is in \
+                             consensus set but voting power hasn't changed"
+                        );
+                        return vec![];
+                    } else {
+                        return vec![
+                            ValidatorSetUpdate::Consensus(ConsensusValidator {
+                                consensus_key: new_consensus_key,
+                                bonded_stake: new_stake,
+                            }),
+                            ValidatorSetUpdate::Deactivated(
+                                old_consensus_key.unwrap(),
+                            ),
+                        ];
+                    }
                 }
                 // If both previous and current voting powers are 0, and the
                 // validator_stake_threshold is 0, skip update
@@ -3385,26 +3457,36 @@ where
                         "skipping validator update, {address} is in consensus \
                          set but without voting power"
                     );
-                    return None;
+                    return vec![];
                 }
             }
-            let consensus_key = validator_consensus_key_handle(&address)
-                .get(storage, next_epoch, params)
-                .unwrap()
-                .unwrap();
+
             tracing::debug!(
                 "{address} consensus key {}",
-                consensus_key.tm_raw_hash()
+                new_consensus_key.tm_raw_hash()
             );
-            Some(ValidatorSetUpdate::Consensus(ConsensusValidator {
-                consensus_key,
-                bonded_stake: new_stake,
-            }))
+
+            if old_consensus_key.as_ref() == Some(&new_consensus_key)
+                || old_consensus_key.is_none()
+            {
+                vec![ValidatorSetUpdate::Consensus(ConsensusValidator {
+                    consensus_key: new_consensus_key,
+                    bonded_stake: new_stake,
+                })]
+            } else {
+                vec![
+                    ValidatorSetUpdate::Consensus(ConsensusValidator {
+                        consensus_key: new_consensus_key,
+                        bonded_stake: new_stake,
+                    }),
+                    ValidatorSetUpdate::Deactivated(old_consensus_key.unwrap()),
+                ]
+            }
         });
 
     let prev_consensus_validators = prev_consensus_validator_handle
         .iter(storage)?
-        .filter_map(|validator| {
+        .map(|validator| {
             let (
                 NestedSubKey::Data {
                     key: _prev_stake,
@@ -3431,10 +3513,15 @@ where
                 )
             });
 
+            let old_consensus_key = validator_consensus_key_handle(&address)
+                .get(storage, current_epoch, params)
+                .unwrap()
+                .unwrap();
+
             // If the validator is still in the Consensus set, we accounted for
             // it in the `new_consensus_validators` iterator above
             if matches!(new_state, Some(ValidatorState::Consensus)) {
-                return None;
+                return vec![];
             } else if params.validator_stake_threshold.is_zero()
                 && *prev_tm_voting_power == 0
             {
@@ -3445,7 +3532,7 @@ where
                     "skipping validator update, {address} is in consensus set \
                      but without voting power"
                 );
-                return None;
+                return vec![];
             }
 
             // The remaining validators were previously Consensus but no longer
@@ -3458,11 +3545,12 @@ where
                 "{address} consensus key {}",
                 consensus_key.tm_raw_hash()
             );
-            Some(ValidatorSetUpdate::Deactivated(consensus_key))
+            vec![ValidatorSetUpdate::Deactivated(old_consensus_key)]
         });
 
     Ok(new_consensus_validators
         .chain(prev_consensus_validators)
+        .flatten()
         .map(f)
         .collect())
 }

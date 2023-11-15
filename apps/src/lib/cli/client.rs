@@ -232,6 +232,36 @@ impl CliApi {
                         tx::submit_validator_commission_change(&namada, args)
                             .await?;
                     }
+                    Sub::TxChangeConsensusKey(TxChangeConsensusKey(
+                        mut args,
+                    )) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.tx.ledger_address,
+                            )
+                        });
+                        client.wait_until_node_is_synced(io).await?;
+                        let args = args.to_sdk(&mut ctx);
+                        let cli::context::ChainContext {
+                            mut wallet,
+                            mut config,
+                            mut shielded,
+                            native_token,
+                        } = ctx.take_chain_or_exit();
+                        let namada = NamadaImpl::native_new(
+                            &client,
+                            &mut wallet,
+                            &mut shielded,
+                            io,
+                            native_token,
+                        );
+                        tx::submit_change_consensus_key(
+                            &namada,
+                            &mut config,
+                            args,
+                        )
+                        .await?;
+                    }
                     Sub::TxMetadataChange(TxMetadataChange(mut args)) => {
                         let client = client.unwrap_or_else(|| {
                             C::from_tendermint_address(

@@ -8,6 +8,7 @@ use namada_core::ledger::storage_api;
 use namada_core::ledger::storage_api::collections::lazy_map;
 use namada_core::ledger::storage_api::OptionExt;
 use namada_core::types::address::Address;
+use namada_core::types::key::common;
 use namada_core::types::storage::Epoch;
 use namada_core::types::token;
 use namada_proof_of_stake::parameters::PosParams;
@@ -109,6 +110,8 @@ router! {POS,
 
     ( "validator_by_tm_addr" / [tm_addr: String] )
         -> Option<Address> = validator_by_tm_addr,
+
+    ( "consensus_keys" ) -> BTreeSet<common::PublicKey> = consensus_key_set,
 
 }
 
@@ -581,6 +584,17 @@ where
     H: 'static + StorageHasher + Sync,
 {
     namada_proof_of_stake::find_validator_by_raw_hash(ctx.wl_storage, tm_addr)
+}
+
+/// Native validator address by looking up the Tendermint address
+fn consensus_key_set<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+) -> storage_api::Result<BTreeSet<common::PublicKey>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    namada_proof_of_stake::get_consensus_key_set(ctx.wl_storage)
 }
 
 /// Client-only methods for the router type are composed from router functions.

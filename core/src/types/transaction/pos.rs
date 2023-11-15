@@ -193,3 +193,23 @@ pub struct MetaDataChange {
     /// Validator's commission rate
     pub commission_rate: Option<Dec>,
 }
+
+/// A change to the validator's consensus key.
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Hash,
+    Eq,
+    Serialize,
+    Deserialize,
+)]
+pub struct ConsensusKeyChange {
+    /// Validator address
+    pub validator: Address,
+    /// The new consensus key
+    pub consensus_key: common::PublicKey,
+}
