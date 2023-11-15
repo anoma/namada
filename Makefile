@@ -253,6 +253,9 @@ bench:
 build-doc:
 	$(cargo) doc --no-deps
 
+build-sdk:
+	$(cargo) build --package namada_sdk
+
 doc:
 	# build and opens the docs in browser
 	$(cargo) doc --open
