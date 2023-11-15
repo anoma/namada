@@ -22,6 +22,7 @@ use sha2::{Digest, Sha256};
 
 use crate::cli::args;
 use crate::cli::context::ENV_VAR_WASM_DIR;
+use crate::config::genesis::chain::DeriveEstablishedAddress;
 use crate::config::global::GlobalConfig;
 use crate::config::{
     self, genesis, get_default_namada_folder, Config, TendermintMode,
@@ -588,6 +589,95 @@ pub fn default_base_dir(
     );
 }
 
+/// Derive and print all established addresses from the provided
+/// genesis txs toml file.
+pub fn derive_genesis_addresses(
+    global_args: args::Global,
+    args: args::DeriveGenesisAddresses,
+) {
+    let maybe_pre_genesis_wallet =
+        try_load_pre_genesis_wallet(&global_args.base_dir)
+            .map(|(wallet, _)| wallet);
+
+    let genesis_txs =
+        genesis::templates::read_transactions(&args.genesis_txs_path).unwrap();
+
+    println!("{}", "Established account txs:".underline().bold());
+    for tx in genesis_txs
+        .established_account
+        .as_ref()
+        .into_iter()
+        .flatten()
+    {
+        let address = {
+            let unsigned =
+                genesis::transactions::UnsignedEstablishedAccountTx::from(tx);
+            unsigned.derive_address()
+        };
+        let pk = if let Some(public_key) = tx.public_key.as_ref() {
+            &public_key.pk.raw
+        } else {
+            continue;
+        };
+
+        println!();
+        println!("{} {address}", "Address:".bold().bright_green());
+        println!("{} {pk}", "Public key:".bold().bright_green());
+
+        let maybe_alias =
+            maybe_pre_genesis_wallet.as_ref().and_then(|wallet| {
+                let implicit_address = pk.into();
+                wallet.find_alias(&implicit_address)
+            });
+
+        if let Some(alias) = maybe_alias {
+            println!("{} {alias}", "Wallet alias:".bold().bright_green());
+        }
+    }
+    if genesis_txs
+        .established_account
+        .as_ref()
+        .map(|txs| txs.is_empty())
+        .unwrap_or(true)
+    {
+        println!();
+        println!("{}", "<nil>".dimmed());
+    }
+
+    println!();
+
+    println!("{}", "Validator account txs:".underline().bold());
+    for tx in genesis_txs.validator_account.as_ref().into_iter().flatten() {
+        let address = {
+            let unsigned =
+                genesis::transactions::UnsignedValidatorAccountTx::from(tx);
+            unsigned.derive_address()
+        };
+        println!();
+        println!("{} {address}", "Address:".bold().bright_green());
+        let keys = [
+            ("Account key:", &tx.account_key.pk.raw),
+            ("Consensus key:", &tx.consensus_key.pk.raw),
+            ("Protocol key:", &tx.protocol_key.pk.raw),
+            ("Tendermint node key:", &tx.tendermint_node_key.pk.raw),
+            ("Ethereum hot key:", &tx.eth_hot_key.pk.raw),
+            ("Ethereum cold key:", &tx.eth_cold_key.pk.raw),
+        ];
+        for (description, key) in keys {
+            println!("{} {key}", description.bold().bright_green());
+        }
+    }
+    if genesis_txs
+        .validator_account
+        .as_ref()
+        .map(|txs| txs.is_empty())
+        .unwrap_or(true)
+    {
+        println!();
+        println!("{}", "<nil>".dimmed());
+    }
+}
+
 /// Initialize a genesis established account.
 /// key into a special "pre-genesis" wallet.
 pub fn init_genesis_established_account(
@@ -722,22 +812,27 @@ pub fn init_genesis_validator(
     println!("{}: {toml_path_str}", "Wrote genesis tx to".bold());
 }
 
+/// Try to load a pre-genesis wallet or return nothing,
+/// if it cannot be found.
+pub fn try_load_pre_genesis_wallet(
+    base_dir: &Path,
+) -> Option<(Wallet<CliWalletUtils>, PathBuf)> {
+    let pre_genesis_dir = base_dir.join(PRE_GENESIS_DIR);
+
+    crate::wallet::load(&pre_genesis_dir).map(|wallet| {
+        let wallet_file = crate::wallet::wallet_file(&pre_genesis_dir);
+        (wallet, wallet_file)
+    })
+}
+
 /// Try to load a pre-genesis wallet or terminate if it cannot be found.
 pub fn load_pre_genesis_wallet_or_exit(
     base_dir: &Path,
 ) -> (Wallet<CliWalletUtils>, PathBuf) {
-    let pre_genesis_dir = base_dir.join(PRE_GENESIS_DIR);
-    let wallet_file = crate::wallet::wallet_file(&pre_genesis_dir);
-    (
-        crate::wallet::load(&pre_genesis_dir).unwrap_or_else(|| {
-            eprintln!(
-                "No pre-genesis wallet found at {}.",
-                wallet_file.to_string_lossy()
-            );
-            safe_exit(1)
-        }),
-        wallet_file,
-    )
+    try_load_pre_genesis_wallet(base_dir).unwrap_or_else(|| {
+        eprintln!("No pre-genesis wallet found.",);
+        safe_exit(1)
+    })
 }
 
 async fn download_file(url: impl AsRef<str>) -> reqwest::Result<Bytes> {
