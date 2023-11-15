@@ -5800,7 +5800,7 @@ where
         })?
         .as_u64();
 
-    // Jail inactive validators
+    // Jail inactive validators for the next epoch
     let validators_to_jail = consensus_validator_set_liveness_data_handle()
         .iter(storage)?
         .filter_map(|entry| {
@@ -5816,24 +5816,33 @@ where
         })
         .collect::<Vec<Address>>();
 
+    let next_epoch_validator_set_positions =
+        validator_set_positions_handle().at(&current_epoch.next());
     for validator in &validators_to_jail {
-        deactivate_consensus_validator(
-            storage,
-            validator,
-            current_epoch.next(),
-            read_validator_stake(
+        // Jail validator if it's scheduled to be in the next epoch consensus
+        // set
+        if next_epoch_validator_set_positions
+            .get(storage, validator)?
+            .is_some()
+        {
+            deactivate_consensus_validator(
                 storage,
-                pos_params,
                 validator,
                 current_epoch.next(),
-            )?,
-        )?;
-        validator_state_handle(validator).set(
-            storage,
-            ValidatorState::Jailed,
-            current_epoch,
-            1,
-        )?;
+                read_validator_stake(
+                    storage,
+                    pos_params,
+                    validator,
+                    current_epoch.next(),
+                )?,
+            )?;
+            validator_state_handle(validator).set(
+                storage,
+                ValidatorState::Jailed,
+                current_epoch,
+                1,
+            )?;
+        }
     }
 
     Ok(())

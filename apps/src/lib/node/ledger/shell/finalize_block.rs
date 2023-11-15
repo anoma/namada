@@ -4533,6 +4533,102 @@ mod test_finalize_block {
         Ok(())
     }
 
+    #[test]
+    fn test_jail_validator_for_inactivity() -> storage_api::Result<()> {
+        let num_validators = 4_u64;
+        let (mut shell, _recv, _, _) = setup_with_cfg(SetupCfg {
+            last_height: 0,
+            num_validators,
+            ..Default::default()
+        });
+        let params = read_pos_params(&shell.wl_storage).unwrap();
+
+        let consensus_set: Vec<WeightedValidator> =
+            read_consensus_validator_set_addresses_with_stake(
+                &shell.wl_storage,
+                Epoch::default(),
+            )
+            .unwrap()
+            .into_iter()
+            .collect();
+        let val1 = consensus_set[0].clone();
+        let pkh1 = get_pkh_from_address(
+            &shell.wl_storage,
+            &params,
+            val1.address,
+            Epoch::default(),
+        );
+        let val2 = consensus_set[1].clone();
+        let pkh2 = get_pkh_from_address(
+            &shell.wl_storage,
+            &params,
+            val2.address.clone(),
+            Epoch::default(),
+        );
+
+        let validator_stake = namada_proof_of_stake::read_validator_stake(
+            &shell.wl_storage,
+            &params,
+            &val2.address,
+            Epoch(3),
+        )
+        .unwrap();
+
+        // Finalize block 1
+        next_block_for_inflation(&mut shell, pkh1.to_vec(), vec![], None);
+        let pos_params = read_pos_params(&shell.wl_storage).unwrap();
+        // Add one to verify that the logic holds even if the validator has
+        // already been jailed
+        let minimum_unsigned_blocks = ((Dec::one()
+            - pos_params.liveness_threshold)
+            * pos_params.liveness_window_check)
+            .to_uint()
+            .unwrap()
+            .as_u64()
+            + 1;
+        for _height in 0..minimum_unsigned_blocks {
+            let mut votes = get_default_true_votes(
+                &shell.wl_storage,
+                shell.wl_storage.storage.block.epoch,
+            );
+            votes.retain(|vote| vote.validator.address != pkh2);
+            next_block_for_inflation(&mut shell, pkh1.to_vec(), votes, None);
+        }
+
+        // Assert that the validator was jailed
+        let mut target_jail_epoch = shell.wl_storage.storage.last_epoch;
+        let validator_state_current_epoch =
+            validator_state_handle(&val2.address)
+                .get(&shell.wl_storage, target_jail_epoch, &params)
+                .unwrap()
+                .unwrap();
+
+        if !matches!(validator_state_current_epoch, ValidatorState::Jailed) {
+            // We need to check the next epoch
+            target_jail_epoch = target_jail_epoch.next();
+            assert_eq!(
+                validator_state_handle(&val2.address)
+                    .get(&shell.wl_storage, target_jail_epoch, &params)
+                    .unwrap()
+                    .unwrap(),
+                ValidatorState::Jailed
+            );
+        }
+
+        // Assert that the stake of the jailed validator hasn't change
+        let validator_stake_after_jail =
+            namada_proof_of_stake::read_validator_stake(
+                &shell.wl_storage,
+                &params,
+                &val2.address,
+                target_jail_epoch,
+            )
+            .unwrap();
+        assert_eq!(validator_stake, validator_stake_after_jail);
+
+        Ok(())
+    }
+
     fn get_default_true_votes<S>(storage: &S, epoch: Epoch) -> Vec<VoteInfo>
     where
         S: StorageRead,
