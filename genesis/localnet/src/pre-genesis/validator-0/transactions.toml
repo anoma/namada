@@ -1,5 +1,4 @@
 [[validator_account]]
-alias = "validator-0"
 vp = "vp_validator"
 commission_rate = "0.05"
 max_commission_rate_change = "0.01"
@@ -7,38 +6,31 @@ email = "null@null.net"
 net_address = "127.0.0.1:27656"
 
 [validator_account.account_key]
-pk = "tpknam1qzuaykg8nrmzuaefut39aaxl0gl66y62285cnwe37gq0a96qaf4qgp5yqtw"
-authorization = "signam1qpcvzjdqkvhud9lez3exq3vy7dnp4kyjgsk92yx5cslwzjs0q9czx8ajxztx5pftx9hsf9w2shh6rt0uv6xeyu30ljqkrqj6hnrwn5gqfd9pwf"
+pk = "tpknam1qpzrttnzfyt6xfu2vy092eruasll3z52rjfexwapdw0rdww5uktlk3j73dw"
+authorization = "signam1qpacfs9vhfmng7kg4mwv5w5erpx0aep6ttlss8fp7lywk5tdylprd5lwjtcntdpkj2f0sv86jh8yqk9yz3htzgf49806tpxekmm7zvcvx5zwrc"
 
 [validator_account.consensus_key]
-pk = "tpknam1qpudpptwfh9u5mhvksrguyqk6wvyhus0kf2cs9qr0xuq9k4fepldgqv3ztq"
-authorization = "signam1qpuhmvgl330cr3acugaddhn6q9xdw3577h3mv9yszau2smxmn7yvmn2yplfym4sk30r2hz943989sd68umu70e4wsk5q6j2gzzjfg4q0qjvz6f"
+pk = "tpknam1qrh65c7f0v7czem4mzmene8alcut27sud6w9n5xpasklweq48rk3kxj5jqz"
+authorization = "signam1qpqc3pgxr4vrjejl4jgdqqrf7qlguha2qttzsy9m6h90td5elqcl3u8xdu5zg2awrz8wfpuxkcsgrgtx9s2ttkjv33syexx73879zes9fl8u6l"
 
 [validator_account.protocol_key]
-pk = "tpknam1qzxs6kchkustgjxld3xz0u3c8gfnkvda042vp06auk6zfrru5hhxqqvyxq6"
-authorization = "signam1qztaxmfgncmv5jn9tak0au2ryzxwxrlhn2qyfx4fgewuv5p7jelpfpqe9mlp7y73vsw7r8hu509swj8mumgryswu38m7mvxn9asqn0cq7aqvjp"
+pk = "tpknam1qz7pxp8xn5evxkkglzfgnwnepppzugvvzgzkjtk4r7mk4kk7cl8qzl0djvm"
+authorization = "signam1qr3c4ffk5v4a8ghwenrc6lzegefas20nw5n0ua0hjzru7vjarkfphgrkhrr62jpq2yjnq3npdjx9xs62cdmeqz5sa0sfzg242vk37vgdh4uskx"
 
 [validator_account.tendermint_node_key]
-pk = "tpknam1qzckzn2rc4pr26e0clxajgcllasr6tke4yqrsu7wskw89uka29zykram505"
-authorization = "signam1qrgvyj39ljlequl20hx2mz9wpuyjl8lj826c0upy9agt4txuyyusuqkhdmm2aajglupssqcsx8nv62etua6vn0duzrucut4m74nmhscwy3knc3"
+pk = "tpknam1qq86kujgcx26w54qnled9cdvxn6u2jyfmpluaajfm5g67w748xg0qtgwqwg"
+authorization = "signam1qq46hmyr4a535la3fh7gyuq9uc3t3f5lmzauy3qykej5amye904ya8dp9telpew0nn4m5lfrqy0jet24qhu7jve8nzq65acymdv7phcdhgr842"
 
 [validator_account.eth_hot_key]
-pk = "tpknam1qyp8znkp023autwqh2cy6c6vhnz8vsm4p6w9ngpnnamqk6dj5w6ktxqjnd0qj"
-authorization = "signam1q9fd4nkz8df5ajh6jrsn6mrt0apvn4266walr8pnczl0xtn847u6usdemslvusseerhrd6hftse8zfch5tlpmqp4y9xz3563mu0d26hnqq942mt2"
+pk = "tpknam1qypr03729ez4ms2cmqajy4r8t09ljg98k9u6vfv7zxyz6c3y4mn8uws2flwkm"
+authorization = "signam1qykjcjy046u0hs0ghlf90afq26p6de65rllfu29kd354yzhpc0dksnaxqjh0a6sjzwv56txd666uwfdx2w9pkr7rzxrrr0naxk3gxp6sqqqsgh4c"
 
 [validator_account.eth_cold_key]
-pk = "tpknam1qyp4aw7a07f4ltuq3f0c4sgyq3kzgh6z40w8jt40wl7uhfj7e3m3u9qr792xg"
-authorization = "signam1qyqcc7wstsnuadu75jnwg8hxz34nglxj9h9yqyx2c4qqdpxw50ff60hu0swfj7xdkz34tgl9e50jlmzphkgtpw3gg0hsgp35lhsl6rmeqqq28kph"
-
-[[transfer]]
-token = "nam"
-source = "tpknam1qzp22w6trhmxmp2dx5h883c2l684z0e20a9egusmxaat62wvaa4agjf64ch"
-target = "validator-0"
-amount = "200000"
-signature = "signam1qz8ch7n6jp7g7hvnzkhmprhqc5umd0gatarlttm7gpcdx6g8hmgqffdq67fn6vzcflmym5xej3m5jmfw7nap00s4nlx2zxrlwz0wlfgt3lswty"
+pk = "tpknam1qypmnl7euqn0ej0tcdg4l9u5khmxzryy3dsdqyfl34hfqkgufehxugcj9uc9x"
+authorization = "signam1q97m2g3uvgtausnq3vdjd4sg5f7mz8pktfta5czgv6p0yz63ahwa7tvmef79ne6z9u8vj0637hrasv7ud3534c8wr744ge6q9ztf84gyqy3lzywq"
 
 [[bond]]
-source = "validator-0"
-validator = "validator-0"
+source = "tnam1qyfcx4un953sf06lhcja377hk2z6faw67ykx549w"
+validator = "tnam1qyfcx4un953sf06lhcja377hk2z6faw67ykx549w"
 amount = "100000"
-signature = "signam1qrd7wg2sdla73z7626r2ep8895d9ed4ljq37nz6kmy2rcm36yqjugw6vle7kl70l0d585t382s9vd28k2duwz0lu7ux0vua6aaarjssgdf46n2"
+signature = "signam1qrzvengdrngds8rz9qj0m5mze2afd5mev479nadnx3gq2alcnxyx59eyxk2q0kc0qv9w6936fmgvq0snu0yx7lfpes9akw2txrjsxqsvwc6xwz"
