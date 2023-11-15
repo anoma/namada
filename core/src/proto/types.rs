@@ -1464,9 +1464,10 @@ impl Tx {
     pub fn add_extra_section_from_hash(
         &mut self,
         hash: crate::types::hash::Hash,
+        tag: Option<String>,
     ) -> crate::types::hash::Hash {
         let sechash = self
-            .add_section(Section::ExtraData(Code::from_hash(hash, None)))
+            .add_section(Section::ExtraData(Code::from_hash(hash, tag)))
             .get_hash();
         sechash
     }
@@ -1475,9 +1476,10 @@ impl Tx {
     pub fn add_extra_section(
         &mut self,
         code: Vec<u8>,
+        tag: Option<String>,
     ) -> (&mut Self, crate::types::hash::Hash) {
         let sechash = self
-            .add_section(Section::ExtraData(Code::new(code, None)))
+            .add_section(Section::ExtraData(Code::new(code, tag)))
             .get_hash();
         (self, sechash)
     }

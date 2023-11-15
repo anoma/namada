@@ -1721,12 +1721,12 @@ pub async fn build_default_proposal<'a>(
     let push_data =
         |tx_builder: &mut Tx, init_proposal_data: &mut InitProposalData| {
             let (_, extra_section_hash) = tx_builder
-                .add_extra_section(proposal_to_vec(proposal.proposal)?);
+                .add_extra_section(proposal_to_vec(proposal.proposal)?, None);
             init_proposal_data.content = extra_section_hash;
 
             if let Some(init_proposal_code) = proposal.data {
                 let (_, extra_section_hash) =
-                    tx_builder.add_extra_section(init_proposal_code);
+                    tx_builder.add_extra_section(init_proposal_code, None);
                 init_proposal_data.r#type =
                     ProposalType::Default(Some(extra_section_hash));
             };
@@ -1860,7 +1860,7 @@ pub async fn build_pgf_funding_proposal<'a>(
 
     let add_section = |tx: &mut Tx, data: &mut InitProposalData| {
         let (_, extra_section_hash) =
-            tx.add_extra_section(proposal_to_vec(proposal.proposal)?);
+            tx.add_extra_section(proposal_to_vec(proposal.proposal)?, None);
         data.content = extra_section_hash;
         Ok(())
     };
@@ -1905,7 +1905,7 @@ pub async fn build_pgf_stewards_proposal<'a>(
 
     let add_section = |tx: &mut Tx, data: &mut InitProposalData| {
         let (_, extra_section_hash) =
-            tx.add_extra_section(proposal_to_vec(proposal.proposal)?);
+            tx.add_extra_section(proposal_to_vec(proposal.proposal)?, None);
         data.content = extra_section_hash;
         Ok(())
     };
@@ -2381,7 +2381,10 @@ pub async fn build_init_account<'a>(
     };
 
     let add_code_hash = |tx: &mut Tx, data: &mut InitAccount| {
-        let extra_section_hash = tx.add_extra_section_from_hash(vp_code_hash);
+        let extra_section_hash = tx.add_extra_section_from_hash(
+            vp_code_hash,
+            Some(vp_code_path.to_string_lossy().into_owned()),
+        );
         data.vp_code_hash = extra_section_hash;
         Ok(())
     };
@@ -2439,8 +2442,11 @@ pub async fn build_update_account<'a>(
 
     let chain_id = tx_args.chain_id.clone().unwrap();
     let mut tx = Tx::new(chain_id, tx_args.expiration);
-    let extra_section_hash = vp_code_hash
-        .map(|vp_code_hash| tx.add_extra_section_from_hash(vp_code_hash));
+    let extra_section_hash = vp_code_path.as_ref().zip(vp_code_hash)
+        .map(|(code_path, vp_code_hash)| tx.add_extra_section_from_hash(
+            vp_code_hash,
+            Some(code_path.to_string_lossy().into_owned()),
+        ));
 
     let data = UpdateAccount {
         addr,
@@ -2450,8 +2456,14 @@ pub async fn build_update_account<'a>(
     };
 
     let add_code_hash = |tx: &mut Tx, data: &mut UpdateAccount| {
-        let extra_section_hash = vp_code_hash
-            .map(|vp_code_hash| tx.add_extra_section_from_hash(vp_code_hash));
+        let extra_section_hash = vp_code_path.as_ref().zip(vp_code_hash).map(
+            |(code_path, vp_code_hash)| {
+                tx.add_extra_section_from_hash(
+                    vp_code_hash,
+                    Some(code_path.to_string_lossy().into_owned()),
+                )
+            },
+        );
         data.vp_code_hash = extra_section_hash;
         Ok(())
     };
