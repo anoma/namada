@@ -5732,14 +5732,7 @@ where
                 liveness_data.update(
                     storage,
                     validator_address.clone(),
-                    |missed_votes| {
-                        let missed_votes = missed_votes.expect(&format!(
-                            "Expected liveness data for validator {} was not \
-                             found",
-                            validator_address
-                        ));
-                        missed_votes - 1
-                    },
+                    |missed_votes| missed_votes.unwrap() - 1,
                 )?;
             }
         }
