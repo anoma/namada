@@ -580,6 +580,9 @@ impl CliApi {
                 Utils::InitNetwork(InitNetwork(args)) => {
                     utils::init_network(global_args, args)
                 }
+                Utils::InitGenesisEstablishedAccount(
+                    InitGenesisEstablishedAccount(args),
+                ) => utils::init_genesis_established_account(global_args, args),
                 Utils::InitGenesisValidator(InitGenesisValidator(args)) => {
                     utils::init_genesis_validator(global_args, args)
                 }
