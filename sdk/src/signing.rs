@@ -1086,8 +1086,19 @@ pub async fn to_ledger_vector<'a>(
                 "Maximum commission rate change : {}",
                 init_validator.max_commission_rate_change,
             ),
-            format!("Validator VP type : {}", vp_code),
+            format!("Email : {}", init_validator.email),
         ]);
+        if let Some(description) = &init_validator.description {
+            tv.output.push(format!("Description : {}", description));
+        }
+        if let Some(website) = &init_validator.website {
+            tv.output.push(format!("Website : {}", website));
+        }
+        if let Some(discord_handle) = &init_validator.discord_handle {
+            tv.output
+                .push(format!("Discord handle : {}", discord_handle));
+        }
+        tv.output.push(format!("Validator VP type : {}", vp_code));
 
         tv.output_expert.extend(
             init_validator
@@ -1106,11 +1117,23 @@ pub async fn to_ledger_vector<'a>(
                 "Maximum commission rate change : {}",
                 init_validator.max_commission_rate_change
             ),
-            format!(
-                "Validator VP type : {}",
-                HEXLOWER.encode(&extra.code.hash().0)
-            ),
+            format!("Email : {}", init_validator.email),
         ]);
+        if let Some(description) = &init_validator.description {
+            tv.output_expert
+                .push(format!("Description : {}", description));
+        }
+        if let Some(website) = &init_validator.website {
+            tv.output_expert.push(format!("Website : {}", website));
+        }
+        if let Some(discord_handle) = &init_validator.discord_handle {
+            tv.output_expert
+                .push(format!("Discord handle : {}", discord_handle));
+        }
+        tv.output_expert.push(format!(
+            "Validator VP type : {}",
+            HEXLOWER.encode(&extra.code.hash().0)
+        ));
     } else if code_sec.tag == Some(TX_INIT_PROPOSAL.to_string()) {
         let init_proposal_data = InitProposalData::try_from_slice(
             &tx.data()
