@@ -678,11 +678,10 @@ fn change_validator_commission(c: &mut Criterion) {
 
 fn change_consensus_key(c: &mut Criterion) {
     let mut csprng = rand::rngs::OsRng {};
-    let consensus_key: common::PublicKey =
-        secp256k1::SigScheme::generate(&mut csprng)
-            .try_to_sk::<common::SecretKey>()
-            .unwrap()
-            .to_public();
+    let consensus_key = ed25519::SigScheme::generate(&mut csprng)
+        .try_to_sk::<common::SecretKey>()
+        .unwrap()
+        .to_public();
 
     let shell = BenchShell::default();
     let signed_tx = shell.generate_tx(
