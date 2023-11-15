@@ -2179,6 +2179,7 @@ pub mod cmds {
         FetchWasms(FetchWasms),
         ValidateWasm(ValidateWasm),
         InitNetwork(InitNetwork),
+        DeriveGenesisAddresses(DeriveGenesisAddresses),
         InitGenesisEstablishedAccount(InitGenesisEstablishedAccount),
         InitGenesisValidator(InitGenesisValidator),
         PkToTmAddress(PkToTmAddress),
@@ -2200,6 +2201,8 @@ pub mod cmds {
                     SubCmd::parse(matches).map(Self::ValidateWasm);
                 let init_network =
                     SubCmd::parse(matches).map(Self::InitNetwork);
+                let derive_addresses =
+                    SubCmd::parse(matches).map(Self::DeriveGenesisAddresses);
                 let init_established = SubCmd::parse(matches)
                     .map(Self::InitGenesisEstablishedAccount);
                 let init_genesis =
@@ -2217,6 +2220,7 @@ pub mod cmds {
                     .or(fetch_wasms)
                     .or(validate_wasm)
                     .or(init_network)
+                    .or(derive_addresses)
                     .or(init_established)
                     .or(init_genesis)
                     .or(pk_to_tm_address)
@@ -2234,6 +2238,7 @@ pub mod cmds {
                 .subcommand(FetchWasms::def())
                 .subcommand(ValidateWasm::def())
                 .subcommand(InitNetwork::def())
+                .subcommand(DeriveGenesisAddresses::def())
                 .subcommand(InitGenesisEstablishedAccount::def())
                 .subcommand(InitGenesisValidator::def())
                 .subcommand(PkToTmAddress::def())
@@ -2322,6 +2327,25 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Initialize a new test network.")
                 .add_args::<args::InitNetwork>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct DeriveGenesisAddresses(pub args::DeriveGenesisAddresses);
+
+    impl SubCmd for DeriveGenesisAddresses {
+        const CMD: &'static str = "derive-genesis-addresses";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                Self(args::DeriveGenesisAddresses::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Derive account addresses from a genesis txs toml file.")
+                .add_args::<args::DeriveGenesisAddresses>()
         }
     }
 
@@ -6723,6 +6747,22 @@ pub mod args {
                 "Specify a directory into which to store the archive. Default \
                  is the current working directory.",
             ))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct DeriveGenesisAddresses {
+        pub genesis_txs_path: PathBuf,
+    }
+
+    impl Args for DeriveGenesisAddresses {
+        fn parse(matches: &ArgMatches) -> Self {
+            let genesis_txs_path = PATH.parse(matches);
+            Self { genesis_txs_path }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(PATH.def().help("Path to the genesis txs toml file."))
         }
     }
 
