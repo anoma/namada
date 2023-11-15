@@ -5776,7 +5776,7 @@ where
 pub fn jail_for_liveness<S>(
     storage: &mut S,
     pos_params: &PosParams,
-    current_epoch: Epoch,
+    target_epoch: Epoch,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -5793,7 +5793,7 @@ where
         })?
         .as_u64();
 
-    // Jail inactive validators for the next epoch
+    // Jail inactive validators
     let validators_to_jail = consensus_validator_set_liveness_data_handle()
         .iter(storage)?
         .filter_map(|entry| {
@@ -5809,32 +5809,36 @@ where
         })
         .collect::<Vec<Address>>();
 
-    let next_epoch_validator_set_positions =
-        validator_set_positions_handle().at(&current_epoch.next());
+    let validator_set_positions = validator_set_positions_handle();
     for validator in &validators_to_jail {
-        // Jail validator if it's scheduled to be in the next epoch consensus
-        // set
-        if next_epoch_validator_set_positions
-            .get(storage, validator)?
-            .is_some()
-        {
-            deactivate_consensus_validator(
-                storage,
-                validator,
-                current_epoch.next(),
-                read_validator_stake(
-                    storage,
-                    pos_params,
-                    validator,
-                    current_epoch.next(),
-                )?,
-            )?;
+        for offset in 0..pos_params.pipeline_len {
             validator_state_handle(validator).set(
                 storage,
                 ValidatorState::Jailed,
-                current_epoch,
-                1,
+                target_epoch,
+                offset,
             )?;
+
+            // Deactivate validator if it's scheduled to be in the target epoch
+            // consensus set
+            if validator_set_positions
+                .at(&(target_epoch + offset))
+                .get(storage, validator)?
+                .is_some()
+            {
+                let deactivate_target_epoch = target_epoch + offset;
+                deactivate_consensus_validator(
+                    storage,
+                    validator,
+                    deactivate_target_epoch,
+                    read_validator_stake(
+                        storage,
+                        pos_params,
+                        validator,
+                        deactivate_target_epoch,
+                    )?,
+                )?;
+            }
         }
     }
 

@@ -147,11 +147,13 @@ where
             height,
             &pos_params,
         )?;
+        let validator_set_update_epoch =
+            self.get_validator_set_update_epoch(current_epoch);
         // Jail validators for inactivity
         namada_proof_of_stake::jail_for_liveness(
             &mut self.wl_storage,
             &pos_params,
-            current_epoch,
+            validator_set_update_epoch,
         )?;
 
         let mut stats = InternalStats::default();

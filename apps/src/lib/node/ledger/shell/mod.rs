@@ -750,23 +750,8 @@ where
                         }
                     };
                 // Check if we're gonna switch to a new epoch after a delay
-                let validator_set_update_epoch = if let Some(delay) =
-                    self.wl_storage.storage.update_epoch_blocks_delay
-                {
-                    if delay == EPOCH_SWITCH_BLOCKS_DELAY {
-                        // If we're about to update validator sets for the
-                        // upcoming epoch, we can still remove the validator
-                        current_epoch.next()
-                    } else {
-                        // If we're waiting to switch to a new epoch, it's too
-                        // late to update validator sets
-                        // on the next epoch, so we need to
-                        // wait for the one after.
-                        current_epoch.next().next()
-                    }
-                } else {
-                    current_epoch.next()
-                };
+                let validator_set_update_epoch =
+                    self.get_validator_set_update_epoch(current_epoch);
                 tracing::info!(
                     "Slashing {} for {} in epoch {}, block height {} (current \
                      epoch = {}, validator set update epoch = \
@@ -790,6 +775,28 @@ where
                     tracing::error!("Error in slashing: {}", err);
                 }
             }
+        }
+    }
+
+    /// Get the next epoch for which we can request validator set changed
+    pub fn get_validator_set_update_epoch(
+        &self,
+        current_epoch: namada_sdk::core::types::storage::Epoch,
+    ) -> namada_sdk::core::types::storage::Epoch {
+        if let Some(delay) = self.wl_storage.storage.update_epoch_blocks_delay {
+            if delay == EPOCH_SWITCH_BLOCKS_DELAY {
+                // If we're about to update validator sets for the
+                // upcoming epoch, we can still remove the validator
+                current_epoch.next()
+            } else {
+                // If we're waiting to switch to a new epoch, it's too
+                // late to update validator sets
+                // on the next epoch, so we need to
+                // wait for the one after.
+                current_epoch.next().next()
+            }
+        } else {
+            current_epoch.next()
         }
     }
 
