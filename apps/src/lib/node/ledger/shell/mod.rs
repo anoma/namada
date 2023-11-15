@@ -803,6 +803,7 @@ where
                 current_epoch,
                 err
             );
+            panic!("Error while processing slashes");
         }
     }
 

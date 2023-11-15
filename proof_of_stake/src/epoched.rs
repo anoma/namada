@@ -402,8 +402,6 @@ where
     }
 
     /// Update data by removing old epochs
-    // TODO: should we consider more complex handling of empty epochs in the
-    // data below?
     pub fn update_data<S>(
         &self,
         storage: &mut S,

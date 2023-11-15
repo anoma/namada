@@ -19,8 +19,8 @@ use namada_proof_of_stake::parameters::OwnedPosParams;
 use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_proof_of_stake::types::GenesisValidator;
 use namada_proof_of_stake::{
-    become_validator, bond_tokens, staking_token_address,
-    store_total_consensus_stake, BecomeValidator,
+    become_validator, bond_tokens, compute_and_store_total_consensus_stake,
+    staking_token_address, BecomeValidator,
 };
 
 use crate::parameters::{
@@ -293,7 +293,7 @@ pub fn append_validators_to_storage(
         all_keys.insert(validator, keys);
     }
 
-    store_total_consensus_stake(
+    compute_and_store_total_consensus_stake(
         wl_storage,
         current_epoch + params.pipeline_len,
     )

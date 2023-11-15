@@ -53,7 +53,8 @@ use crate::{
     apply_list_slashes, become_validator, below_capacity_validator_set_handle,
     bond_handle, bond_tokens, bonds_and_unbonds,
     compute_amount_after_slashing_unbond,
-    compute_amount_after_slashing_withdraw, compute_bond_at_epoch,
+    compute_amount_after_slashing_withdraw,
+    compute_and_store_total_consensus_stake, compute_bond_at_epoch,
     compute_modified_redelegation, compute_new_redelegated_unbonds,
     compute_slash_bond_at_epoch, compute_slashable_amount,
     consensus_validator_set_handle, copy_validator_sets_and_positions,
@@ -66,9 +67,9 @@ use crate::{
     read_consensus_validator_set_addresses_with_stake, read_total_stake,
     read_validator_deltas_value, read_validator_stake, slash,
     slash_redelegation, slash_validator, slash_validator_redelegation,
-    staking_token_address, store_total_consensus_stake, total_bonded_handle,
-    total_deltas_handle, total_unbonded_handle, unbond_handle, unbond_tokens,
-    unjail_validator, update_validator_deltas, update_validator_set,
+    staking_token_address, total_bonded_handle, total_deltas_handle,
+    total_unbonded_handle, unbond_handle, unbond_tokens, unjail_validator,
+    update_validator_deltas, update_validator_set,
     validator_consensus_key_handle, validator_incoming_redelegations_handle,
     validator_outgoing_redelegations_handle, validator_set_positions_handle,
     validator_set_update_tendermint, validator_slashes_handle,
@@ -289,6 +290,22 @@ proptest! {
 
     ) {
         test_update_rewards_products_aux(genesis_validators)
+    }
+}
+
+proptest! {
+    // Generate arb valid input for `test_is_delegator`
+    #![proptest_config(Config {
+        cases: 100,
+        .. Config::default()
+    })]
+    #[test]
+    fn test_is_delegator(
+
+    genesis_validators in arb_genesis_validators(2..3, None),
+
+    ) {
+        test_is_delegator_aux(genesis_validators)
     }
 }
 
@@ -2195,7 +2212,7 @@ fn get_tendermint_set_updates(
 fn advance_epoch(s: &mut TestWlStorage, params: &PosParams) -> Epoch {
     s.storage.block.epoch = s.storage.block.epoch.next();
     let current_epoch = s.storage.block.epoch;
-    store_total_consensus_stake(s, current_epoch).unwrap();
+    compute_and_store_total_consensus_stake(s, current_epoch).unwrap();
     copy_validator_sets_and_positions(
         s,
         params,
@@ -2500,7 +2517,6 @@ fn test_compute_modified_redelegation() {
     let mut bob = validator2.clone();
 
     // Ensure a ranking order of alice > bob
-    // TODO: check why this needs to be > (am I just confusing myself?)
     if bob > alice {
         alice = validator2;
         bob = validator1;
@@ -6559,4 +6575,110 @@ fn test_slashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
 
     let diff = val_stake - self_bond_amount - del_bond_amount;
     assert!(diff <= 2.into());
+}
+
+fn test_is_delegator_aux(mut validators: Vec<GenesisValidator>) {
+    validators.sort_by(|a, b| b.tokens.cmp(&a.tokens));
+
+    let validator1 = validators[0].address.clone();
+    let validator2 = validators[1].address.clone();
+
+    let mut storage = TestWlStorage::default();
+    let params = OwnedPosParams {
+        unbonding_len: 4,
+        ..Default::default()
+    };
+
+    // Genesis
+    let mut current_epoch = storage.storage.block.epoch;
+    let params = test_init_genesis(
+        &mut storage,
+        params,
+        validators.clone().into_iter(),
+        current_epoch,
+    )
+    .unwrap();
+    storage.commit_block().unwrap();
+
+    // Get delegators with some tokens
+    let staking_token = staking_token_address(&storage);
+    let delegator1 = address::testing::gen_implicit_address();
+    let delegator2 = address::testing::gen_implicit_address();
+    let del_balance = token::Amount::native_whole(1000);
+    credit_tokens(&mut storage, &staking_token, &delegator1, del_balance)
+        .unwrap();
+    credit_tokens(&mut storage, &staking_token, &delegator2, del_balance)
+        .unwrap();
+
+    // Advance to epoch 1
+    current_epoch = advance_epoch(&mut storage, &params);
+    super::process_slashes(&mut storage, current_epoch).unwrap();
+
+    // Delegate in epoch 1 to validator1
+    let del1_epoch = current_epoch;
+    super::bond_tokens(
+        &mut storage,
+        Some(&delegator1),
+        &validator1,
+        1000.into(),
+        current_epoch,
+        None,
+    )
+    .unwrap();
+
+    // Advance to epoch 2
+    current_epoch = advance_epoch(&mut storage, &params);
+    super::process_slashes(&mut storage, current_epoch).unwrap();
+
+    // Delegate in epoch 2 to validator2
+    let del2_epoch = current_epoch;
+    super::bond_tokens(
+        &mut storage,
+        Some(&delegator2),
+        &validator2,
+        1000.into(),
+        current_epoch,
+        None,
+    )
+    .unwrap();
+
+    // Checks
+    assert!(super::is_validator(&storage, &validator1).unwrap());
+    assert!(super::is_validator(&storage, &validator2).unwrap());
+    assert!(!super::is_delegator(&storage, &validator1, None).unwrap());
+    assert!(!super::is_delegator(&storage, &validator2, None).unwrap());
+
+    assert!(!super::is_validator(&storage, &delegator1).unwrap());
+    assert!(!super::is_validator(&storage, &delegator2).unwrap());
+    assert!(super::is_delegator(&storage, &delegator1, None).unwrap());
+    assert!(super::is_delegator(&storage, &delegator2, None).unwrap());
+
+    for epoch in Epoch::default().iter_range(del1_epoch.0 + params.pipeline_len)
+    {
+        assert!(
+            !super::is_delegator(&storage, &delegator1, Some(epoch)).unwrap()
+        );
+    }
+    assert!(
+        super::is_delegator(
+            &storage,
+            &delegator1,
+            Some(del1_epoch + params.pipeline_len)
+        )
+        .unwrap()
+    );
+    for epoch in Epoch::default().iter_range(del2_epoch.0 + params.pipeline_len)
+    {
+        assert!(
+            !super::is_delegator(&storage, &delegator2, Some(epoch)).unwrap()
+        );
+    }
+    assert!(
+        super::is_delegator(
+            &storage,
+            &delegator2,
+            Some(del2_epoch + params.pipeline_len)
+        )
+        .unwrap()
+    );
 }
