@@ -132,7 +132,7 @@ pub fn init_validator(
         discord_handle,
     }: GenesisValidatorData,
     validator_wallet: &ValidatorWallet,
-) -> Transactions<Unvalidated> {
+) -> (Address, Transactions<Unvalidated>) {
     let unsigned_validator_account_tx = UnsignedValidatorAccountTx {
         account_key: StringEncoded::new(validator_wallet.account_key.ref_to()),
         consensus_key: StringEncoded::new(
@@ -164,8 +164,6 @@ pub fn init_validator(
         net_address,
     };
     let unsigned_validator_addr =
-        unsigned_validator_account_tx.derive_address();
-    let unsigned_validator_established_addr =
         unsigned_validator_account_tx.derive_established_address();
     let validator_account = Some(vec![sign_validator_account_tx(
         unsigned_validator_account_tx,
@@ -177,20 +175,23 @@ pub fn init_validator(
     } else {
         let unsigned_bond_tx = BondTx {
             source: GenesisAddress::EstablishedAddress(
-                unsigned_validator_established_addr,
+                unsigned_validator_addr.clone(),
             ),
-            validator: unsigned_validator_addr,
+            validator: Address::Established(unsigned_validator_addr.clone()),
             amount: self_bond_amount,
         };
         let bond_tx = sign_self_bond_tx(unsigned_bond_tx, validator_wallet);
         Some(vec![bond_tx])
     };
 
-    Transactions {
+    let address = Address::Established(unsigned_validator_addr);
+    let txs = Transactions {
         validator_account,
         bond,
         ..Default::default()
-    }
+    };
+
+    (address, txs)
 }
 
 pub fn sign_established_account_tx(

@@ -693,7 +693,7 @@ pub fn init_genesis_validator(
         pre_genesis::validator_file_name(&pre_genesis_dir).to_string_lossy()
     );
 
-    let transactions = genesis::transactions::init_validator(
+    let (address, transactions) = genesis::transactions::init_validator(
         genesis::transactions::GenesisValidatorData {
             commission_rate,
             max_commission_rate_change,
@@ -706,27 +706,20 @@ pub fn init_genesis_validator(
         },
         &validator_wallet,
     );
+    let toml_path = validator_pre_genesis_txs_file(&pre_genesis_dir);
+    let toml_path_str = toml_path.to_string_lossy();
 
     let genesis_part = toml::to_string(&transactions).unwrap();
-    println!("Your public signed pre-genesis transactions TOML:");
-    println!();
-    println!("{genesis_part}");
-
-    let file_name = validator_pre_genesis_txs_file(&pre_genesis_dir);
-    fs::write(&file_name, genesis_part).unwrap_or_else(|err| {
+    fs::write(&toml_path, genesis_part).unwrap_or_else(|err| {
         eprintln!(
-            "Couldn't write pre-genesis transactions file to {}. Failed with: \
-             {}",
-            file_name.to_string_lossy(),
-            err
+            "Couldn't write pre-genesis transactions file to {toml_path_str}. \
+             Failed with: {err}",
         );
         safe_exit(1)
     });
-    println!();
-    println!(
-        "Pre-genesis transactions TOML written to {}",
-        file_name.to_string_lossy()
-    );
+
+    println!("{}: {address}", "Derived validator account address".bold());
+    println!("{}: {toml_path_str}", "Wrote genesis tx to".bold());
 }
 
 /// Try to load a pre-genesis wallet or terminate if it cannot be found.
