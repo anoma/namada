@@ -145,6 +145,7 @@ where
             &application_votes.unwrap_or_default(),
             current_epoch,
             height,
+            &pos_params,
         )?;
         // Jail validators for inactivity
         namada_proof_of_stake::jail_for_liveness(

@@ -84,11 +84,6 @@ pub const ADDRESS: Address = Address::Internal(InternalAddress::PoS);
 pub const SLASH_POOL_ADDRESS: Address =
     Address::Internal(InternalAddress::PosSlashPool);
 
-// Length in blocks of the sliding window for validators activity verification
-const LIVENESS_BLOCKS_NUM: u64 = 10_000;
-// The maximum tolerated percentage of missing votes in the sliding window
-const LIVENESS_THRESHOLD_PERCENTAGE: u64 = 10;
-
 /// Address of the staking token (i.e. the native token)
 pub fn staking_token_address(storage: &impl StorageRead) -> Address {
     storage
@@ -5693,6 +5688,7 @@ pub fn record_liveness_data<S>(
     votes: &[VoteInfo],
     epoch: Epoch,
     block_height: BlockHeight,
+    pos_params: &PosParams,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -5720,7 +5716,8 @@ where
         .map(|vote| (&vote.validator_address))
         .collect::<HashSet<&Address>>();
 
-    let prune_height = block_height.0.checked_sub(LIVENESS_BLOCKS_NUM);
+    let prune_height =
+        block_height.0.checked_sub(pos_params.liveness_window_check);
 
     for validator_address in consensus_validator_set.into_iter() {
         // Prune old vote (only need to look for the block height that was just
@@ -5792,8 +5789,16 @@ where
     S: StorageRead + StorageWrite,
 {
     // Derive the actual missing votes limit from the percentage
-    let missing_votes_threshold =
-        (LIVENESS_BLOCKS_NUM / 100) * LIVENESS_THRESHOLD_PERCENTAGE;
+    let missing_votes_threshold = ((Dec::one()
+        - pos_params.liveness_threshold)
+        * pos_params.liveness_window_check)
+        .to_uint()
+        .ok_or_else(|| {
+            storage_api::Error::SimpleMessage(
+                "Found negative liveness threshold",
+            )
+        })?
+        .as_u64();
 
     // Jail inactive validators
     let validators_to_jail = consensus_validator_set_liveness_data_handle()

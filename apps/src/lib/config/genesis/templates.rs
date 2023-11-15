@@ -400,6 +400,12 @@ pub struct PosParams {
     /// The minimum amount of bonded tokens that a validator needs to be in
     /// either the `consensus` or `below_capacity` validator sets
     pub validator_stake_threshold: token::Amount,
+    /// The length, in blocks, of the sliding window for consensus validators
+    /// inactivity verification
+    pub liveness_window_check: u64,
+    /// The minimum required activity of consensus validators, in percentage,
+    /// over the `liveness_window_check`
+    pub liveness_threshold: Dec,
 }
 
 #[derive(
