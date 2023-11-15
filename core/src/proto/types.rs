@@ -387,6 +387,7 @@ impl Code {
     pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
         hasher.update(self.salt);
         hasher.update(self.code.hash());
+        hasher.update(self.tag.serialize_to_vec());
         hasher
     }
 }
