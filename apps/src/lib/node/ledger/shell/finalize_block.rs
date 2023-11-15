@@ -4628,6 +4628,26 @@ mod test_finalize_block {
             .unwrap();
         assert_eq!(validator_stake, validator_stake_after_jail);
 
+        // Check validator jailed and stake for the entire pipeline length
+        for offset in 1..params.pipeline_len {
+            assert_eq!(
+                validator_state_handle(&val2.address)
+                    .get(&shell.wl_storage, target_jail_epoch + offset, &params)
+                    .unwrap()
+                    .unwrap(),
+                ValidatorState::Jailed
+            );
+            let validator_stake_after_jail =
+                namada_proof_of_stake::read_validator_stake(
+                    &shell.wl_storage,
+                    &params,
+                    &val2.address,
+                    target_jail_epoch + offset,
+                )
+                .unwrap();
+            assert_eq!(validator_stake, validator_stake_after_jail);
+        }
+
         Ok(())
     }
 
