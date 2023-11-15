@@ -46,14 +46,14 @@ use crate::ibc_proto::google::protobuf::Any;
 use crate::io::*;
 use crate::masp::make_asset_type;
 use crate::proto::{MaspBuilder, Section, Tx};
-use crate::rpc::{query_wasm_code_hash, validate_amount};
+use crate::rpc::validate_amount;
 use crate::tx::{
     TX_BOND_WASM, TX_CHANGE_COMMISSION_WASM, TX_CHANGE_METADATA_WASM,
     TX_CLAIM_REWARDS_WASM, TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM,
     TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL, TX_INIT_VALIDATOR_WASM,
     TX_REACTIVATE_VALIDATOR_WASM, TX_REVEAL_PK, TX_TRANSFER_WASM,
     TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
-    TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM, VP_USER_WASM,
+    TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM, VP_USER_WASM, VP_VALIDATOR_WASM,
 };
 pub use crate::wallet::store::AddressVpType;
 use crate::wallet::{Wallet, WalletIo};
@@ -967,8 +967,6 @@ pub async fn to_ledger_vector<'a>(
     context: &impl Namada<'a>,
     tx: &Tx,
 ) -> Result<LedgerVector, Error> {
-    let user_hash = query_wasm_code_hash(context, VP_USER_WASM).await?;
-
     // To facilitate lookups of human-readable token names
     let tokens: HashMap<Address, String> = context
         .wallet()
@@ -1013,13 +1011,15 @@ pub async fn to_ledger_vector<'a>(
         let extra = tx
             .get_section(&init_account.vp_code_hash)
             .and_then(|x| Section::extra_data_sec(x.as_ref()))
-            .ok_or_else(|| Error::Other("unable to load vp code".to_string()))?
-            .code
-            .hash();
-        let vp_code = if extra == user_hash {
+            .ok_or_else(|| {
+                Error::Other("unable to load vp code".to_string())
+            })?;
+        let vp_code = if extra.tag == Some(VP_USER_WASM.to_string()) {
             "User".to_string()
+        } else if extra.tag == Some(VP_VALIDATOR_WASM.to_string()) {
+            "Validator".to_string()
         } else {
-            HEXLOWER.encode(&extra.0)
+            HEXLOWER.encode(&extra.code.hash().0)
         };
         tv.output.extend(vec![format!("Type : Init Account")]);
         tv.output.extend(
@@ -1041,7 +1041,7 @@ pub async fn to_ledger_vector<'a>(
         );
         tv.output_expert.extend(vec![
             format!("Threshold : {}", init_account.threshold),
-            format!("VP type : {}", HEXLOWER.encode(&extra.0)),
+            format!("VP type : {}", HEXLOWER.encode(&extra.code.hash().0)),
         ]);
     } else if code_sec.tag == Some(TX_INIT_VALIDATOR_WASM.to_string()) {
         let init_validator = InitValidator::try_from_slice(
@@ -1057,13 +1057,15 @@ pub async fn to_ledger_vector<'a>(
         let extra = tx
             .get_section(&init_validator.validator_vp_code_hash)
             .and_then(|x| Section::extra_data_sec(x.as_ref()))
-            .ok_or_else(|| Error::Other("unable to load vp code".to_string()))?
-            .code
-            .hash();
-        let vp_code = if extra == user_hash {
+            .ok_or_else(|| {
+                Error::Other("unable to load vp code".to_string())
+            })?;
+        let vp_code = if extra.tag == Some(VP_USER_WASM.to_string()) {
             "User".to_string()
+        } else if extra.tag == Some(VP_VALIDATOR_WASM.to_string()) {
+            "Validator".to_string()
         } else {
-            HEXLOWER.encode(&extra.0)
+            HEXLOWER.encode(&extra.code.hash().0)
         };
 
         tv.output.extend(vec!["Type : Init Validator".to_string()]);
@@ -1082,9 +1084,9 @@ pub async fn to_ledger_vector<'a>(
             format!("Commission rate : {}", init_validator.commission_rate),
             format!(
                 "Maximum commission rate change : {}",
-                init_validator.max_commission_rate_change
+                init_validator.max_commission_rate_change,
             ),
-            format!("Validator VP type : {}", vp_code,),
+            format!("Validator VP type : {}", vp_code),
         ]);
 
         tv.output_expert.extend(
@@ -1104,7 +1106,10 @@ pub async fn to_ledger_vector<'a>(
                 "Maximum commission rate change : {}",
                 init_validator.max_commission_rate_change
             ),
-            format!("Validator VP type : {}", HEXLOWER.encode(&extra.0)),
+            format!(
+                "Validator VP type : {}",
+                HEXLOWER.encode(&extra.code.hash().0)
+            ),
         ]);
     } else if code_sec.tag == Some(TX_INIT_PROPOSAL.to_string()) {
         let init_proposal_data = InitProposalData::try_from_slice(
@@ -1232,13 +1237,13 @@ pub async fn to_ledger_vector<'a>(
                     .and_then(|x| Section::extra_data_sec(x.as_ref()))
                     .ok_or_else(|| {
                         Error::Other("unable to load vp code".to_string())
-                    })?
-                    .code
-                    .hash();
-                let vp_code = if extra == user_hash {
+                    })?;
+                let vp_code = if extra.tag == Some(VP_USER_WASM.to_string()) {
                     "User".to_string()
+                } else if extra.tag == Some(VP_VALIDATOR_WASM.to_string()) {
+                    "Validator".to_string()
                 } else {
-                    HEXLOWER.encode(&extra.0)
+                    HEXLOWER.encode(&extra.code.hash().0)
                 };
                 tv.output.extend(vec![
                     format!("Type : Update VP"),
@@ -1274,7 +1279,7 @@ pub async fn to_ledger_vector<'a>(
                 }
                 tv.output_expert.extend(vec![format!(
                     "VP type : {}",
-                    HEXLOWER.encode(&extra.0)
+                    HEXLOWER.encode(&extra.code.hash().0)
                 )]);
             }
             None => (),

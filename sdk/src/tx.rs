@@ -2442,11 +2442,14 @@ pub async fn build_update_account<'a>(
 
     let chain_id = tx_args.chain_id.clone().unwrap();
     let mut tx = Tx::new(chain_id, tx_args.expiration);
-    let extra_section_hash = vp_code_path.as_ref().zip(vp_code_hash)
-        .map(|(code_path, vp_code_hash)| tx.add_extra_section_from_hash(
-            vp_code_hash,
-            Some(code_path.to_string_lossy().into_owned()),
-        ));
+    let extra_section_hash = vp_code_path.as_ref().zip(vp_code_hash).map(
+        |(code_path, vp_code_hash)| {
+            tx.add_extra_section_from_hash(
+                vp_code_hash,
+                Some(code_path.to_string_lossy().into_owned()),
+            )
+        },
+    );
 
     let data = UpdateAccount {
         addr,
