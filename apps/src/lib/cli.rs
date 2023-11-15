@@ -2179,6 +2179,7 @@ pub mod cmds {
         FetchWasms(FetchWasms),
         ValidateWasm(ValidateWasm),
         InitNetwork(InitNetwork),
+        InitGenesisEstablishedAccount(InitGenesisEstablishedAccount),
         InitGenesisValidator(InitGenesisValidator),
         PkToTmAddress(PkToTmAddress),
         DefaultBaseDir(DefaultBaseDir),
@@ -2199,6 +2200,8 @@ pub mod cmds {
                     SubCmd::parse(matches).map(Self::ValidateWasm);
                 let init_network =
                     SubCmd::parse(matches).map(Self::InitNetwork);
+                let init_established = SubCmd::parse(matches)
+                    .map(Self::InitGenesisEstablishedAccount);
                 let init_genesis =
                     SubCmd::parse(matches).map(Self::InitGenesisValidator);
                 let pk_to_tm_address =
@@ -2214,6 +2217,7 @@ pub mod cmds {
                     .or(fetch_wasms)
                     .or(validate_wasm)
                     .or(init_network)
+                    .or(init_established)
                     .or(init_genesis)
                     .or(pk_to_tm_address)
                     .or(default_base_dir)
@@ -2230,6 +2234,7 @@ pub mod cmds {
                 .subcommand(FetchWasms::def())
                 .subcommand(ValidateWasm::def())
                 .subcommand(InitNetwork::def())
+                .subcommand(InitGenesisEstablishedAccount::def())
                 .subcommand(InitGenesisValidator::def())
                 .subcommand(PkToTmAddress::def())
                 .subcommand(DefaultBaseDir::def())
@@ -2317,6 +2322,29 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Initialize a new test network.")
                 .add_args::<args::InitNetwork>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct InitGenesisEstablishedAccount(
+        pub args::InitGenesisEstablishedAccount,
+    );
+
+    impl SubCmd for InitGenesisEstablishedAccount {
+        const CMD: &'static str = "init-genesis-established-account";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                Self(args::InitGenesisEstablishedAccount::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Initialize an established account available at genesis.",
+                )
+                .add_args::<args::InitGenesisEstablishedAccount>()
         }
     }
 
@@ -3084,6 +3112,7 @@ pub mod args {
     pub const VERIFICATION_KEY: ArgOpt<WalletPublicKey> =
         arg_opt("verification-key");
     pub const VIEWING_KEY: Arg<WalletViewingKey> = arg("key");
+    pub const VP: ArgOpt<String> = arg_opt("vp");
     pub const WALLET_ALIAS_FORCE: ArgFlag = flag("wallet-alias-force");
     pub const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
     pub const WASM_DIR: ArgOpt<PathBuf> = arg_opt("wasm-dir");
@@ -6693,6 +6722,31 @@ pub mod args {
             .arg(ARCHIVE_DIR.def().help(
                 "Specify a directory into which to store the archive. Default \
                  is the current working directory.",
+            ))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct InitGenesisEstablishedAccount {
+        pub vp: String,
+        pub wallet_alias: String,
+    }
+
+    impl Args for InitGenesisEstablishedAccount {
+        fn parse(matches: &ArgMatches) -> Self {
+            let wallet_alias = ALIAS.parse(matches);
+            let vp = VP.parse(matches).unwrap_or_else(|| "vp_user".to_string());
+            Self { wallet_alias, vp }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                ALIAS
+                    .def()
+                    .help("The alias of the key to use from the wallet."),
+            )
+            .arg(VP.def().help(
+                "The validity predicate of the account. Defaults to `vp_user`.",
             ))
         }
     }

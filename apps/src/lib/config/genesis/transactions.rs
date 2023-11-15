@@ -100,6 +100,25 @@ pub fn parse_unsigned(
     toml::from_slice(bytes)
 }
 
+/// Create signed [`Transactions`] for an established account.
+pub fn init_established_account(
+    vp: String,
+    public_key: common::PublicKey,
+    wallet: &mut Wallet<CliWalletUtils>,
+) -> (Address, Transactions<Unvalidated>) {
+    let unsigned_tx = EstablishedAccountTx {
+        vp,
+        public_key: Some(StringEncoded::new(public_key)),
+    };
+    let address = unsigned_tx.derive_address();
+    let signed_tx = sign_established_account_tx(unsigned_tx, wallet);
+    let txs = Transactions {
+        established_account: Some(vec![signed_tx]),
+        ..Default::default()
+    };
+    (address, txs)
+}
+
 /// Create signed [`Transactions`] for a genesis validator.
 pub fn init_validator(
     GenesisValidatorData {
