@@ -1957,7 +1957,7 @@ pub struct KeyAndAddressGen {
     /// Don't encrypt the keypair
     pub unsafe_dont_encrypt: bool,
     /// BIP44 derivation path
-    pub derivation_path: String,
+    pub derivation_path: Option<String>,
 }
 
 /// Wallet restore key and implicit address arguments

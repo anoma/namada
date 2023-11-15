@@ -2944,8 +2944,9 @@ pub mod args {
         arg("genesis-validator").opt();
     pub const HALT_ACTION: ArgFlag = flag("halt");
     pub const HASH_LIST: Arg<String> = arg("hash-list");
-    pub const HD_WALLET_DERIVATION_PATH: ArgDefault<String> =
-        arg_default("hd-path", DefaultFn(|| "default".to_string()));
+    pub const HD_WALLET_DERIVATION_PATH: Arg<String> = arg("hd-path");
+    pub const HD_WALLET_DERIVATION_PATH_OPT: ArgOpt<String> =
+        HD_WALLET_DERIVATION_PATH.opt();
     pub const HISTORIC: ArgFlag = flag("historic");
     pub const IBC_TRANSFER_MEMO_PATH: ArgOpt<PathBuf> = arg_opt("memo-path");
     pub const LEDGER_ADDRESS_ABOUT: &str =
@@ -6048,7 +6049,7 @@ pub mod args {
             let alias_force = ALIAS_FORCE.parse(matches);
             let is_pre_genesis = PRE_GENESIS.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
-            let derivation_path = HD_WALLET_DERIVATION_PATH.parse(matches);
+            let derivation_path = HD_WALLET_DERIVATION_PATH_OPT.parse(matches);
             Self {
                 scheme,
                 alias,
@@ -6080,7 +6081,7 @@ pub mod args {
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
                  used in a live network.",
             ))
-            .arg(HD_WALLET_DERIVATION_PATH.def().help(
+            .arg(HD_WALLET_DERIVATION_PATH_OPT.def().help(
                 "Generate a new key and wallet using BIP39 mnemonic code and \
                  HD derivation path. Use keyword `default` to refer to a \
                  scheme default path:\n- m/44'/60'/0'/0/0 for secp256k1 \
