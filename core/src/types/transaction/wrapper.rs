@@ -163,21 +163,6 @@ pub mod wrapper_tx {
         }
     }
 
-    /// A degenerate PoW solution type
-    #[derive(
-        Debug,
-        Clone,
-        BorshSerialize,
-        BorshDeserialize,
-        BorshSchema,
-        Serialize,
-        Deserialize,
-    )]
-    pub enum Solution {
-        /// No PoW solution
-        None,
-    }
-
     /// A transaction with an encrypted payload, an optional shielded pool
     /// unshielding tx for fee payment and some non-encrypted metadata for
     /// inclusion and / or verification purposes
@@ -204,8 +189,6 @@ pub mod wrapper_tx {
         /// The hash of the optional, unencrypted, unshielding transaction for
         /// fee payment
         pub unshield_section_hash: Option<Hash>,
-        /// Mandatory 0x00 byte for deprecated field
-        pub pow_solution: Solution,
     }
 
     impl WrapperTx {
@@ -227,7 +210,6 @@ pub mod wrapper_tx {
                 epoch,
                 gas_limit,
                 unshield_section_hash: unshield_hash,
-                pow_solution: Solution::None,
             }
         }
 
