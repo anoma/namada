@@ -55,7 +55,6 @@ impl PosRewardsCalculator {
     /// the validator's signing behavior and stake to determine the fraction of
     /// the block rewards earned.
     pub fn get_reward_coeffs(&self) -> Result<PosRewards, RewardsError> {
-        // TODO: think about possibility of u64 overflow
         let votes_needed = self.get_min_required_votes();
 
         let Self {
@@ -91,6 +90,11 @@ impl PosRewardsCalculator {
 
     /// Implement as ceiling of (2/3) * validator set stake
     fn get_min_required_votes(&self) -> Amount {
-        ((self.total_stake * 2u64) + (3u64 - 1u64)) / 3u64
+        (self
+            .total_stake
+            .checked_mul(2.into())
+            .expect("Amount overflow while computing minimum required votes")
+            + (3u64 - 1u64))
+            / 3u64
     }
 }
