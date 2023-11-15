@@ -372,7 +372,10 @@ fn update_account(c: &mut Criterion) {
     let vp_code_hash: Hash = shell
         .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
         .unwrap();
-    let extra_section = Section::ExtraData(Code::from_hash(vp_code_hash));
+    let extra_section = Section::ExtraData(Code::from_hash(
+        vp_code_hash,
+        Some(VP_VALIDATOR_WASM.to_string()),
+    ));
     let data = UpdateAccount {
         addr: defaults::albert_address(),
         vp_code_hash: Some(Hash(
@@ -412,7 +415,10 @@ fn init_account(c: &mut Criterion) {
     let vp_code_hash: Hash = shell
         .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
         .unwrap();
-    let extra_section = Section::ExtraData(Code::from_hash(vp_code_hash));
+    let extra_section = Section::ExtraData(Code::from_hash(
+        vp_code_hash,
+        Some(VP_VALIDATOR_WASM.to_string()),
+    ));
     let extra_hash = Hash(
         extra_section
             .hash(&mut sha2::Sha256::new())
@@ -453,7 +459,7 @@ fn init_proposal(c: &mut Criterion) {
                     let signed_tx = match bench_name {
                         "minimal_proposal" => {
                             let content_section =
-                                Section::ExtraData(Code::new(vec![]));
+                                Section::ExtraData(Code::new(vec![], None));
                             shell.generate_tx(
                                 TX_INIT_PROPOSAL_WASM,
                                 InitProposalData {
@@ -496,13 +502,13 @@ fn init_proposal(c: &mut Criterion) {
                                     0;
                                     max_proposal_content_size
                                         as _
-                                ]));
+                                ], None));
                             let wasm_code_section =
                                 Section::ExtraData(Code::new(vec![
                                     0;
                                     max_code_size
                                         as _
-                                ]));
+                                ], None));
 
                             shell.generate_tx(
                                 TX_INIT_PROPOSAL_WASM,
@@ -613,8 +619,10 @@ fn init_validator(c: &mut Criterion) {
     let validator_vp_code_hash: Hash = shell
         .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
         .unwrap();
-    let extra_section =
-        Section::ExtraData(Code::from_hash(validator_vp_code_hash));
+    let extra_section = Section::ExtraData(Code::from_hash(
+        validator_vp_code_hash,
+        Some(VP_VALIDATOR_WASM.to_string()),
+    ));
     let extra_hash = Hash(
         extra_section
             .hash(&mut sha2::Sha256::new())

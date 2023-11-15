@@ -546,7 +546,11 @@ pub async fn submit_init_validator<'a>(
         validator_vp_code_hash: extra_section_hash,
     };
 
-    tx.add_code_from_hash(tx_code_hash).add_data(data);
+    tx.add_code_from_hash(
+        tx_code_hash,
+        Some(args::TX_INIT_VALIDATOR_WASM.to_string()),
+    )
+    .add_data(data);
 
     let signing_data = aux_signing_data(namada, &tx_args, None, None).await?;
 

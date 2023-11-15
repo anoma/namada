@@ -76,7 +76,10 @@ fn vp_user(c: &mut Criterion) {
     let vp_validator_hash = shell
         .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
         .unwrap();
-    let extra_section = Section::ExtraData(Code::from_hash(vp_validator_hash));
+    let extra_section = Section::ExtraData(Code::from_hash(
+        vp_validator_hash,
+        Some(VP_VALIDATOR_WASM.to_string()),
+    ));
     let data = UpdateAccount {
         addr: defaults::albert_address(),
         vp_code_hash: Some(Hash(
@@ -360,7 +363,10 @@ fn vp_validator(c: &mut Criterion) {
         Some(&defaults::bertha_keypair()),
     );
 
-    let extra_section = Section::ExtraData(Code::from_hash(vp_code_hash));
+    let extra_section = Section::ExtraData(Code::from_hash(
+        vp_code_hash,
+        Some(VP_VALIDATOR_WASM.to_string()),
+    ));
     let data = UpdateAccount {
         addr: defaults::validator_address(),
         vp_code_hash: Some(Hash(

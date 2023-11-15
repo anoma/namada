@@ -247,7 +247,10 @@ impl Default for BenchShell {
         bench_shell.wl_storage.commit_tx();
 
         // Initialize governance proposal
-        let content_section = Section::ExtraData(Code::new(vec![]));
+        let content_section = Section::ExtraData(Code::new(
+            vec![],
+            Some(TX_INIT_PROPOSAL_WASM.to_string()),
+        ));
         let voting_start_epoch =
             Epoch(2 + params.pipeline_len + params.unbonding_len);
         let signed_tx = bench_shell.generate_tx(
@@ -305,7 +308,10 @@ impl BenchShell {
         let code_hash = self
             .read_storage_key(&Key::wasm_hash(wasm_code_path))
             .unwrap();
-        tx.set_code(Code::from_hash(code_hash));
+        tx.set_code(Code::from_hash(
+            code_hash,
+            Some(wasm_code_path.to_string()),
+        ));
         tx.set_data(Data::new(borsh::to_vec(&data).unwrap()));
 
         if let Some(transaction) = shielded {
@@ -340,7 +346,10 @@ impl BenchShell {
         let code_hash = self
             .read_storage_key(&Key::wasm_hash(wasm_code_path))
             .unwrap();
-        tx.set_code(Code::from_hash(code_hash));
+        tx.set_code(Code::from_hash(
+            code_hash,
+            Some(wasm_code_path.to_string()),
+        ));
 
         let mut data = vec![];
         prost::Message::encode(&msg.to_any(), &mut data).unwrap();
@@ -568,7 +577,7 @@ pub fn generate_foreign_key_tx(signer: &SecretKey) -> Tx {
     let mut tx = Tx::from_type(namada::types::transaction::TxType::Decrypted(
         namada::types::transaction::DecryptedTx::Decrypted,
     ));
-    tx.set_code(Code::new(wasm_code));
+    tx.set_code(Code::new(wasm_code, None));
     tx.set_data(Data::new(
         TxWriteData {
             key: Key::from("bench_foreign_key".to_string().to_db_key()),

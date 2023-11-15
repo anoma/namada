@@ -2033,8 +2033,11 @@ pub async fn build_ibc_transfer<'a>(
 
     let chain_id = args.tx.chain_id.clone().unwrap();
     let mut tx = Tx::new(chain_id, args.tx.expiration);
-    tx.add_code_from_hash(tx_code_hash)
-        .add_serialized_data(data);
+    tx.add_code_from_hash(
+        tx_code_hash,
+        Some(args.tx_code_path.to_string_lossy().into_owned()),
+    )
+    .add_serialized_data(data);
 
     let epoch = prepare_tx(
         context,
@@ -2099,7 +2102,12 @@ where
 
     on_tx(&mut tx_builder, &mut data)?;
 
-    tx_builder.add_code_from_hash(tx_code_hash).add_data(data);
+    tx_builder
+        .add_code_from_hash(
+            tx_code_hash,
+            Some(path.to_string_lossy().into_owned()),
+        )
+        .add_data(data);
 
     let epoch = prepare_tx(
         context,
@@ -2485,16 +2493,16 @@ pub async fn build_custom<'a>(
             Error::Other("Invalid tx deserialization.".to_string())
         })?
     } else {
-        let tx_code_hash = query_wasm_code_hash_buf(
-            context,
-            code_path
-                .as_ref()
-                .ok_or(Error::Other("No code path supplied".to_string()))?,
-        )
-        .await?;
+        let code_path = code_path
+            .as_ref()
+            .ok_or(Error::Other("No code path supplied".to_string()))?;
+        let tx_code_hash = query_wasm_code_hash_buf(context, code_path).await?;
         let chain_id = tx_args.chain_id.clone().unwrap();
         let mut tx = Tx::new(chain_id, tx_args.expiration);
-        tx.add_code_from_hash(tx_code_hash);
+        tx.add_code_from_hash(
+            tx_code_hash,
+            Some(code_path.to_string_lossy().into_owned()),
+        );
         data_path.clone().map(|data| tx.add_serialized_data(data));
         tx
     };

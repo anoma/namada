@@ -325,6 +325,7 @@ where
         // balance
         match wrapper.generate_fee_unshielding(
             get_transfer_hash_from_storage(*wl_storage),
+            Some("tx_transfer.wasm".to_string()),
             transaction,
         ) {
             Ok(fee_unshielding_tx) => {

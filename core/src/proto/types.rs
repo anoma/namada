@@ -357,22 +357,29 @@ pub struct Code {
     pub salt: [u8; 8],
     /// Actual transaction code
     pub code: Commitment,
+    /// The tag for the transaction code
+    pub tag: Option<String>,
 }
 
 impl Code {
     /// Make a new code section with the given bytes
-    pub fn new(code: Vec<u8>) -> Self {
+    pub fn new(code: Vec<u8>, tag: Option<String>) -> Self {
         Self {
             salt: DateTimeUtc::now().0.timestamp_millis().to_le_bytes(),
             code: Commitment::Id(code),
+            tag,
         }
     }
 
     /// Make a new code section with the given hash
-    pub fn from_hash(hash: crate::types::hash::Hash) -> Self {
+    pub fn from_hash(
+        hash: crate::types::hash::Hash,
+        tag: Option<String>,
+    ) -> Self {
         Self {
             salt: DateTimeUtc::now().0.timestamp_millis().to_le_bytes(),
             code: Commitment::Hash(hash),
+            tag,
         }
     }
 
@@ -1458,7 +1465,7 @@ impl Tx {
         hash: crate::types::hash::Hash,
     ) -> crate::types::hash::Hash {
         let sechash = self
-            .add_section(Section::ExtraData(Code::from_hash(hash)))
+            .add_section(Section::ExtraData(Code::from_hash(hash, None)))
             .get_hash();
         sechash
     }
@@ -1469,7 +1476,7 @@ impl Tx {
         code: Vec<u8>,
     ) -> (&mut Self, crate::types::hash::Hash) {
         let sechash = self
-            .add_section(Section::ExtraData(Code::new(code)))
+            .add_section(Section::ExtraData(Code::new(code, None)))
             .get_hash();
         (self, sechash)
     }
@@ -1493,14 +1500,19 @@ impl Tx {
     pub fn add_code_from_hash(
         &mut self,
         code_hash: crate::types::hash::Hash,
+        tag: Option<String>,
     ) -> &mut Self {
-        self.set_code(Code::from_hash(code_hash));
+        self.set_code(Code::from_hash(code_hash, tag));
         self
     }
 
     /// Add wasm code to the tx builder
-    pub fn add_code(&mut self, code: Vec<u8>) -> &mut Self {
-        self.set_code(Code::new(code));
+    pub fn add_code(
+        &mut self,
+        code: Vec<u8>,
+        tag: Option<String>,
+    ) -> &mut Self {
+        self.set_code(Code::new(code, tag));
         self
     }
 

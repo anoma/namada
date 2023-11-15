@@ -389,7 +389,7 @@ mod tests {
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
-        tx.set_code(Code::new(vec![]));
+        tx.set_code(Code::new(vec![], None));
         tx.add_section(Section::Signature(Signature::new(
             vec![tx.raw_header_hash()],
             pks_map.index_secret_keys(vec![keypair]),
@@ -575,7 +575,7 @@ mod tests {
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
-        tx.set_code(Code::new(vec![]));
+        tx.set_code(Code::new(vec![], None));
         tx.add_section(Section::Signature(Signature::new(
             vec![tx.raw_header_hash()],
             pks_map.index_secret_keys(vec![secret_key]),
@@ -734,7 +734,7 @@ mod tests {
             let mut vp_env = vp_host_env::take();
             let mut tx = vp_env.tx.clone();
             tx.set_data(Data::new(vec![]));
-            tx.set_code(Code::new(vec![]));
+            tx.set_code(Code::new(vec![], None));
             tx.add_section(Section::Signature(Signature::new(
                 vec![tx.raw_header_hash()],
                 pks_map.index_secret_keys(vec![keypair]),
@@ -820,7 +820,7 @@ mod tests {
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
-        tx.set_code(Code::new(vec![]));
+        tx.set_code(Code::new(vec![], None));
         tx.add_section(Section::Signature(Signature::new(
             vec![tx.raw_header_hash()],
             pks_map.index_secret_keys(vec![keypair]),
@@ -875,7 +875,7 @@ mod tests {
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
-        tx.set_code(Code::new(vec![]));
+        tx.set_code(Code::new(vec![], None));
         tx.add_section(Section::Signature(Signature::new(
             vec![tx.raw_header_hash()],
             pks_map.index_secret_keys(vec![keypair]),
@@ -931,7 +931,7 @@ mod tests {
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
-        tx.set_code(Code::new(vec![]));
+        tx.set_code(Code::new(vec![], None));
         tx.add_section(Section::Signature(Signature::new(
             vec![tx.raw_header_hash()],
             pks_map.index_secret_keys(vec![keypair]),
@@ -987,7 +987,7 @@ mod tests {
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
-        tx.set_code(Code::new(vec![]));
+        tx.set_code(Code::new(vec![], None));
         tx.add_section(Section::Signature(Signature::new(
             vec![tx.raw_header_hash()],
             pks_map.index_secret_keys(vec![keypair]),
@@ -1042,7 +1042,7 @@ mod tests {
 
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
-        tx.set_code(Code::new(vec![]));
+        tx.set_code(Code::new(vec![], None));
         tx.set_data(Data::new(vec![]));
         tx.add_section(Section::Signature(Signature::new(
             vec![tx.raw_header_hash()],
