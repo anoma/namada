@@ -1,0 +1,6 @@
+[[established_account]]
+vp = "vp_user"
+
+[established_account.public_key]
+pk = "tpknam1qrnw8mxyqlj60mykgevnldcj5mg2fya7fs5a8xqdkd2gwtxhef0zy8a2wha"
+authorization = "signam1qz39jpapmmxyc99ra8ty74kdx8c0kax3n42z7n5y44e3tcara4ezm3l4llgwgqhp0kgg0kz48d02v2xfeqn5at4h069dddvmlhral7qgm59d37"

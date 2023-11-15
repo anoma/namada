@@ -91,7 +91,12 @@ min_proposal_grace_epochs = 6
 # Public goods funding parameters
 [pgf_params]
 # Initial set of stewards
-stewards = ["bertha", "validator-0"]
+stewards = [
+    # bertha
+    "tnam1qx6qc3cpupxgntk7awtqrnqh02cyr3e8vghpspr7",
+    # validator-0
+    "tnam1qyfcx4un953sf06lhcja377hk2z6faw67ykx549w"
+]
 # The pgf funding inflation rate
 pgf_inflation_rate = "0.1"
 # The pgf stewards inflation rate

@@ -13,102 +13,23 @@
 
 # Albert
 [[established_account]]
-alias = "albert"
 vp = "vp_user"
-public_key = "tpknam1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63we33t3r"
+public_key = "tpknam1qrnw8mxyqlj60mykgevnldcj5mg2fya7fs5a8xqdkd2gwtxhef0zy8a2wha"
 
 # Bertha
 [[established_account]]
-alias = "bertha"
 vp = "vp_user"
-public_key = "tpknam1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3nds48x83t"
+public_key = "tpknam1qq52dx5e290wyh7ngdt6wudtyd502lg6ln49yvg3vz97e8j2ruux5e3yewq"
 
 # Christel
 [[established_account]]
-alias = "christel"
 vp = "vp_user"
-public_key = "tpknam1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzwgc7uu"
+public_key = "tpknam1qqwfpuvn8x7yqtquejhppef4vddv9ghusec2rkaxav38amamxaxpgj9cs79"
 
-# Transfer all the Albert's tokens into it's established account:
-[[transfer]]
-token = "NAM"
-source = "tpknam1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63we33t3r"
-target = "albert"
-amount = "1000000"
+##########################################################################################
 
-[[transfer]]
-token = "BTC"
-source = "tpknam1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63we33t3r"
-target = "albert"
-amount = "1000000"
-
-[[transfer]]
-token = "ETH"
-source = "tpknam1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63we33t3r"
-target = "albert"
-amount = "1000000"
-
-[[transfer]]
-token = "DOT"
-source = "tpknam1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63we33t3r"
-target = "albert"
-amount = "1000000"
-
-[[transfer]]
-token = "Schnitzel"
-source = "tpknam1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63we33t3r"
-target = "albert"
-amount = "1000000"
-
-[[transfer]]
-token = "Apfel"
-source = "tpknam1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63we33t3r"
-target = "albert"
-amount = "1000000"
-
-[[transfer]]
-token = "Kartoffel"
-source = "tpknam1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63we33t3r"
-target = "albert"
-amount = "1000000"
-
-[[transfer]]
-token = "NAM"
-source = "tpknam1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3nds48x83t"
-target = "bertha"
-amount = "1000000"
-
-[[transfer]]
-token = "BTC"
-source = "tpknam1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3nds48x83t"
-target = "bertha"
-amount = "1000000"
-
-[[transfer]]
-token = "ETH"
-source = "tpknam1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3nds48x83t"
-target = "bertha"
-amount = "1000000"
-
-[[transfer]]
-token = "NAM"
-source = "tpknam1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzwgc7uu"
-target = "christel"
-amount = "1000000"
-
-[[transfer]]
-token = "BTC"
-source = "tpknam1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzwgc7uu"
-target = "christel"
-amount = "1000000"
-
-[[transfer]]
-token = "ETH"
-source = "tpknam1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzwgc7uu"
-target = "christel"
-amount = "1000000"
-
+# Albert bonds to `validator-0`
 [[bond]]
-source = "albert"
-validator = "validator-0"
+source = "tnam1q8uthkc42sw609e8ce6tcjwu6mgz6zgtccff8wdt"
+validator = "tnam1qyfcx4un953sf06lhcja377hk2z6faw67ykx549w"
 amount = "20000"
