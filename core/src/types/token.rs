@@ -898,8 +898,6 @@ pub const MINTED_STORAGE_KEY: &str = "minted";
 pub const HEAD_TX_KEY: &str = "head-tx";
 /// Key segment prefix for shielded transaction key
 pub const TX_KEY_PREFIX: &str = "tx-";
-/// Key segment prefix for MASP conversions
-pub const CONVERSION_KEY_PREFIX: &str = "conv";
 /// Key segment prefix for pinned shielded transactions
 pub const PIN_KEY_PREFIX: &str = "pin-";
 /// Last calculated inflation value handed out

@@ -5,6 +5,7 @@ pub mod gas;
 pub mod governance;
 pub mod ibc;
 pub mod inflation;
+pub mod masp_conversions;
 pub mod parameters;
 pub mod pgf;
 pub mod replay_protection;

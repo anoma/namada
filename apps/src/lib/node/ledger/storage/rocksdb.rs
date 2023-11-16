@@ -17,6 +17,7 @@
 //!     - `tx_queue`
 //!     - `next_epoch_min_start_height`
 //!     - `next_epoch_min_start_time`
+//!   - `conversion_state`: MASP conversion state
 //! - `subspace`: accounts sub-spaces
 //!   - `{address}/{dyn}`: any byte data associated with accounts
 //! - `diffs`: diffs in account subspaces' key-vals
@@ -47,6 +48,7 @@ use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
 use itertools::Either;
+use namada::core::ledger::masp_conversions::ConversionState;
 use namada::core::types::ethereum_structs;
 use namada::ledger::storage::merkle_tree::{
     base_tree_key_prefix, subtree_key_prefix,
@@ -467,6 +469,7 @@ impl RocksDB {
         for metadata_key in [
             "next_epoch_min_start_height",
             "next_epoch_min_start_time",
+            "conversion_state",
             "tx_queue",
         ] {
             let previous_key = format!("pred/{}", metadata_key);
@@ -658,6 +661,17 @@ impl DB for RocksDB {
                 return Ok(None);
             }
         };
+        let conversion_state: ConversionState = match self
+            .0
+            .get_cf(state_cf, "conversion_state")
+            .map_err(|e| Error::DBError(e.into_string()))?
+        {
+            Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
+            None => {
+                tracing::error!("Couldn't load conversion state from the DB");
+                return Ok(None);
+            }
+        };
         let tx_queue: TxQueue = match self
             .0
             .get_cf(state_cf, "tx_queue")
@@ -820,6 +834,7 @@ impl DB for RocksDB {
                 epoch,
                 pred_epochs,
                 results,
+                conversion_state,
                 next_epoch_min_start_height,
                 next_epoch_min_start_time,
                 update_epoch_blocks_delay,
@@ -854,6 +869,7 @@ impl DB for RocksDB {
             update_epoch_blocks_delay,
             address_gen,
             results,
+            conversion_state,
             tx_queue,
             ethereum_height,
             eth_events_queue,
@@ -913,6 +929,27 @@ impl DB for RocksDB {
             "update_epoch_blocks_delay",
             types::encode(&update_epoch_blocks_delay),
         );
+
+        // Save the conversion state when the epoch is updated
+        if is_full_commit {
+            if let Some(current_value) = self
+                .0
+                .get_cf(state_cf, "conversion_state")
+                .map_err(|e| Error::DBError(e.into_string()))?
+            {
+                // Write the predecessor value for rollback
+                batch.0.put_cf(
+                    state_cf,
+                    "pred/conversion_state",
+                    current_value,
+                );
+            }
+            batch.0.put_cf(
+                state_cf,
+                "conversion_state",
+                types::encode(conversion_state),
+            );
+        }
 
         // Tx queue
         if let Some(pred_tx_queue) = self
@@ -1929,6 +1966,7 @@ mod test {
         let update_epoch_blocks_delay = None;
         let address_gen = EstablishedAddressGen::new("whatever");
         let tx_queue = TxQueue::default();
+        let conversion_state = ConversionState::default();
         let results = BlockResults::default();
         let eth_events_queue = EthEventsQueue::default();
         let block = BlockStateWrite {
@@ -1939,6 +1977,7 @@ mod test {
             time,
             epoch,
             results: &results,
+            conversion_state: &conversion_state,
             pred_epochs: &pred_epochs,
             next_epoch_min_start_height,
             next_epoch_min_start_time,

@@ -54,13 +54,12 @@ mod tests {
     use std::collections::HashMap;
 
     use itertools::Itertools;
+    use namada::core::ledger::masp_conversions::update_allowed_conversions;
     use namada::ledger::gas::STORAGE_ACCESS_GAS_PER_BYTE;
     use namada::ledger::ibc::storage::ibc_key;
     use namada::ledger::parameters::{EpochDuration, Parameters};
     use namada::ledger::storage::write_log::WriteLog;
-    use namada::ledger::storage::{
-        types, update_allowed_conversions, StoreType, WlStorage,
-    };
+    use namada::ledger::storage::{types, StoreType, WlStorage};
     use namada::ledger::storage_api::{self, StorageWrite};
     use namada::types::chain::ChainId;
     use namada::types::hash::Hash;
