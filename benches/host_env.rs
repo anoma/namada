@@ -31,7 +31,7 @@ fn tx_section_signature_validation(c: &mut Criterion) {
         transfer_data,
         None,
         None,
-        Some(&defaults::albert_keypair()),
+        vec![&defaults::albert_keypair()],
     );
     let section_hash = tx.header_hash();
 
