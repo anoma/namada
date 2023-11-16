@@ -583,11 +583,10 @@ fn vote_proposal(c: &mut Criterion) {
 
 fn init_validator(c: &mut Criterion) {
     let mut csprng = rand::rngs::OsRng {};
-    let consensus_key: common::PublicKey =
-        secp256k1::SigScheme::generate(&mut csprng)
-            .try_to_sk::<common::SecretKey>()
-            .unwrap()
-            .to_public();
+    let consensus_private_key = ed25519::SigScheme::generate(&mut csprng)
+        .try_to_sk::<common::SecretKey>()
+        .unwrap();
+    let consensus_key = consensus_private_key.to_public();
 
     let eth_cold_key = secp256k1::PublicKey::try_from_pk(
         &secp256k1::SigScheme::generate(&mut csprng)
@@ -641,7 +640,7 @@ fn init_validator(c: &mut Criterion) {
         data,
         None,
         Some(vec![extra_section]),
-        Some(&defaults::albert_keypair()),
+        Some(&consensus_private_key),
     );
 
     c.bench_function("init_validator", |b| {
