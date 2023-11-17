@@ -36,6 +36,7 @@ use namada_core::types::dec::Dec;
 use namada_core::types::key::{
     common, protocol_pk_key, tm_consensus_key_raw_hash, PublicKeyTmRawHash,
 };
+use namada_core::types::storage::BlockHeight;
 pub use namada_core::types::storage::{Epoch, Key, KeySeg};
 use once_cell::unsync::Lazy;
 pub use parameters::{OwnedPosParams, PosParams};
@@ -57,16 +58,16 @@ use types::{
     ConsensusValidator, ConsensusValidatorSet, ConsensusValidatorSets,
     DelegatorRedelegatedBonded, DelegatorRedelegatedUnbonded,
     EagerRedelegatedBondsMap, EpochedSlashes, IncomingRedelegations,
-    OutgoingRedelegations, Position, RedelegatedBondsOrUnbonds,
-    RedelegatedTokens, ReverseOrdTokenAmount, RewardsAccumulator,
-    RewardsProducts, Slash, SlashType, SlashedAmount, Slashes,
-    TotalConsensusStakes, TotalDeltas, TotalRedelegatedBonded,
-    TotalRedelegatedUnbonded, UnbondDetails, Unbonds, ValidatorAddresses,
-    ValidatorConsensusKeys, ValidatorDeltas, ValidatorEthColdKeys,
-    ValidatorEthHotKeys, ValidatorMetaData, ValidatorPositionAddresses,
-    ValidatorProtocolKeys, ValidatorSetPositions, ValidatorSetUpdate,
-    ValidatorState, ValidatorStates, ValidatorTotalUnbonded, VoteInfo,
-    WeightedValidator,
+    LivenessMissedVotes, LivenessSumMissedVotes, OutgoingRedelegations,
+    Position, RedelegatedBondsOrUnbonds, RedelegatedTokens,
+    ReverseOrdTokenAmount, RewardsAccumulator, RewardsProducts, Slash,
+    SlashType, SlashedAmount, Slashes, TotalConsensusStakes, TotalDeltas,
+    TotalRedelegatedBonded, TotalRedelegatedUnbonded, UnbondDetails, Unbonds,
+    ValidatorAddresses, ValidatorConsensusKeys, ValidatorDeltas,
+    ValidatorEthColdKeys, ValidatorEthHotKeys, ValidatorMetaData,
+    ValidatorPositionAddresses, ValidatorProtocolKeys, ValidatorSetPositions,
+    ValidatorSetUpdate, ValidatorState, ValidatorStates,
+    ValidatorTotalUnbonded, VoteInfo, WeightedValidator,
 };
 
 /// Address of the PoS account implemented as a native VP
@@ -280,6 +281,18 @@ pub fn delegator_redelegated_unbonds_handle(
 ) -> DelegatorRedelegatedUnbonded {
     let key: Key = storage::delegator_redelegated_unbonds_key(delegator);
     DelegatorRedelegatedUnbonded::open(key)
+}
+
+/// Get the storage handle to the missed votes for liveness tracking
+pub fn liveness_missed_votes_handle() -> LivenessMissedVotes {
+    let key = storage::liveness_missed_votes_key();
+    LivenessMissedVotes::open(key)
+}
+
+/// Get the storage handle to the sum of missed votes for liveness tracking
+pub fn liveness_sum_missed_votes_handle() -> LivenessSumMissedVotes {
+    let key = storage::liveness_sum_missed_votes_key();
+    LivenessSumMissedVotes::open(key)
 }
 
 /// Init genesis. Requires that the governance parameters are initialized.
@@ -4393,7 +4406,6 @@ where
     // Need `+1` because we process at the beginning of a new epoch
     let processing_epoch =
         evidence_epoch + params.slash_processing_epoch_offset();
-    let pipeline_epoch = current_epoch + params.pipeline_len;
 
     // Add the slash to the list of enqueued slashes to be processed at a later
     // epoch
@@ -4411,118 +4423,14 @@ where
         write_validator_last_slash_epoch(storage, validator, evidence_epoch)?;
     }
 
-    // Remove the validator from the set starting at the next epoch and up thru
-    // the pipeline epoch.
-    for epoch in
-        Epoch::iter_bounds_inclusive(validator_set_update_epoch, pipeline_epoch)
-    {
-        let prev_state = validator_state_handle(validator)
-            .get(storage, epoch, params)?
-            .expect("Expected to find a valid validator.");
-        match prev_state {
-            ValidatorState::Consensus => {
-                let amount_pre =
-                    read_validator_stake(storage, params, validator, epoch)?;
-                let val_position = validator_set_positions_handle()
-                    .at(&epoch)
-                    .get(storage, validator)?
-                    .expect("Could not find validator's position in storage.");
-                let _ = consensus_validator_set_handle()
-                    .at(&epoch)
-                    .at(&amount_pre)
-                    .remove(storage, &val_position)?;
-                validator_set_positions_handle()
-                    .at(&epoch)
-                    .remove(storage, validator)?;
-
-                // For the pipeline epoch only:
-                // promote the next max inactive validator to the active
-                // validator set at the pipeline offset
-                if epoch == pipeline_epoch {
-                    let below_capacity_handle =
-                        below_capacity_validator_set_handle().at(&epoch);
-                    let max_below_capacity_amount =
-                        get_max_below_capacity_validator_amount(
-                            &below_capacity_handle,
-                            storage,
-                        )?;
-                    if let Some(max_below_capacity_amount) =
-                        max_below_capacity_amount
-                    {
-                        let position_to_promote = find_first_position(
-                            &below_capacity_handle
-                                .at(&max_below_capacity_amount.into()),
-                            storage,
-                        )?
-                        .expect("Should return a position.");
-                        let max_bc_validator = below_capacity_handle
-                            .at(&max_below_capacity_amount.into())
-                            .remove(storage, &position_to_promote)?
-                            .expect(
-                                "Should have returned a removed validator.",
-                            );
-                        insert_validator_into_set(
-                            &consensus_validator_set_handle()
-                                .at(&epoch)
-                                .at(&max_below_capacity_amount),
-                            storage,
-                            &epoch,
-                            &max_bc_validator,
-                        )?;
-                        validator_state_handle(&max_bc_validator).set(
-                            storage,
-                            ValidatorState::Consensus,
-                            current_epoch,
-                            params.pipeline_len,
-                        )?;
-                    }
-                }
-            }
-            ValidatorState::BelowCapacity => {
-                let amount_pre = validator_deltas_handle(validator)
-                    .get_sum(storage, epoch, params)?
-                    .unwrap_or_default();
-                debug_assert!(amount_pre.non_negative());
-                let val_position = validator_set_positions_handle()
-                    .at(&epoch)
-                    .get(storage, validator)?
-                    .expect("Could not find validator's position in storage.");
-                let _ = below_capacity_validator_set_handle()
-                    .at(&epoch)
-                    .at(&token::Amount::from_change(amount_pre).into())
-                    .remove(storage, &val_position)?;
-                validator_set_positions_handle()
-                    .at(&epoch)
-                    .remove(storage, validator)?;
-            }
-            ValidatorState::BelowThreshold => {
-                tracing::debug!("Below-threshold");
-            }
-            ValidatorState::Inactive => {
-                tracing::debug!("INACTIVE");
-                panic!(
-                    "Shouldn't be here - haven't implemented inactive vals yet"
-                )
-            }
-            ValidatorState::Jailed => {
-                tracing::debug!(
-                    "Found evidence for a validator who is already jailed"
-                );
-                // return Ok(());
-            }
-        }
-    }
-    // Safe sub cause `validator_set_update_epoch > current_epoch`
-    let start_offset = validator_set_update_epoch.0 - current_epoch.0;
-    // Set the validator state as `Jailed` thru the pipeline epoch
-    for offset in start_offset..=params.pipeline_len {
-        validator_state_handle(validator).set(
-            storage,
-            ValidatorState::Jailed,
-            current_epoch,
-            offset,
-        )?;
-    }
+    // Jail the validator and update validator sets
+    jail_validator(
+        storage,
+        params,
+        validator,
+        current_epoch,
+        validator_set_update_epoch,
+    )?;
 
     // No other actions are performed here until the epoch in which the slash is
     // processed.
@@ -5175,7 +5083,7 @@ where
     Ok(cmp::min(amount_due, slashable_amount))
 }
 
-/// Unjail a validator that is currently jailed
+/// Unjail a validator that is currently jailed.
 pub fn unjail_validator<S>(
     storage: &mut S,
     validator: &Address,
@@ -5207,17 +5115,18 @@ where
 
     // Check that the unjailing tx can be submitted given the current epoch
     // and the most recent infraction epoch
-    let last_slash_epoch = read_validator_last_slash_epoch(storage, validator)?
-        .unwrap_or_default();
-    let eligible_epoch =
-        last_slash_epoch + params.slash_processing_epoch_offset();
-    if current_epoch < eligible_epoch {
-        return Err(UnjailValidatorError::NotEligible(
-            validator.clone(),
-            eligible_epoch,
-            current_epoch,
-        )
-        .into());
+    let last_slash_epoch = read_validator_last_slash_epoch(storage, validator)?;
+    if let Some(last_slash_epoch) = last_slash_epoch {
+        let eligible_epoch =
+            last_slash_epoch + params.slash_processing_epoch_offset();
+        if current_epoch < eligible_epoch {
+            return Err(UnjailValidatorError::NotEligible(
+                validator.clone(),
+                eligible_epoch,
+                current_epoch,
+            )
+            .into());
+        }
     }
 
     // Re-insert the validator into the validator set and update its state
@@ -5539,58 +5448,13 @@ where
     // Remove the validator from the validator set. If it is in the consensus
     // set, promote the next validator.
     match pipeline_state {
-        ValidatorState::Consensus => {
-            let consensus_set = consensus_validator_set_handle()
-                .at(&pipeline_epoch)
-                .at(&pipeline_stake);
-            // TODO: handle the unwrap better here
-            let val_position = validator_set_positions_handle()
-                .at(&pipeline_epoch)
-                .get(storage, validator)?
-                .unwrap();
-            let removed = consensus_set.remove(storage, &val_position)?;
-            debug_assert_eq!(removed, Some(validator.clone()));
+        ValidatorState::Consensus => deactivate_consensus_validator(
+            storage,
+            validator,
+            pipeline_epoch,
+            pipeline_stake,
+        )?,
 
-            // Remove position
-            validator_set_positions_handle()
-                .at(&pipeline_epoch)
-                .remove(storage, validator)?;
-
-            // Now promote the next below-capacity validator to the consensus
-            // set
-            let below_cap_set =
-                below_capacity_validator_set_handle().at(&pipeline_epoch);
-            let max_below_capacity_validator_amount =
-                get_max_below_capacity_validator_amount(
-                    &below_cap_set,
-                    storage,
-                )?;
-
-            if let Some(max_bc_amount) = max_below_capacity_validator_amount {
-                let below_cap_vals_max =
-                    below_cap_set.at(&max_bc_amount.into());
-                let lowest_position =
-                    find_first_position(&below_cap_vals_max, storage)?.unwrap();
-                let removed_max_below_capacity = below_cap_vals_max
-                    .remove(storage, &lowest_position)?
-                    .expect("Must have been removed");
-
-                insert_validator_into_set(
-                    &consensus_validator_set_handle()
-                        .at(&pipeline_epoch)
-                        .at(&max_bc_amount),
-                    storage,
-                    &pipeline_epoch,
-                    &removed_max_below_capacity,
-                )?;
-                validator_state_handle(&removed_max_below_capacity).set(
-                    storage,
-                    ValidatorState::Consensus,
-                    pipeline_epoch,
-                    0,
-                )?;
-            }
-        }
         ValidatorState::BelowCapacity => {
             let below_capacity_set = below_capacity_validator_set_handle()
                 .at(&pipeline_epoch)
@@ -5632,6 +5496,65 @@ where
         current_epoch,
         params.pipeline_len,
     )?;
+
+    Ok(())
+}
+
+fn deactivate_consensus_validator<S>(
+    storage: &mut S,
+
+    validator: &Address,
+    target_epoch: Epoch,
+    stake: token::Amount,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let consensus_set = consensus_validator_set_handle()
+        .at(&target_epoch)
+        .at(&stake);
+    // TODO: handle the unwrap better here
+    let val_position = validator_set_positions_handle()
+        .at(&target_epoch)
+        .get(storage, validator)?
+        .unwrap();
+    let removed = consensus_set.remove(storage, &val_position)?;
+    debug_assert_eq!(removed, Some(validator.clone()));
+
+    // Remove position
+    validator_set_positions_handle()
+        .at(&target_epoch)
+        .remove(storage, validator)?;
+
+    // Now promote the next below-capacity validator to the consensus
+    // set
+    let below_cap_set = below_capacity_validator_set_handle().at(&target_epoch);
+    let max_below_capacity_validator_amount =
+        get_max_below_capacity_validator_amount(&below_cap_set, storage)?;
+
+    if let Some(max_bc_amount) = max_below_capacity_validator_amount {
+        let below_cap_vals_max = below_cap_set.at(&max_bc_amount.into());
+        let lowest_position =
+            find_first_position(&below_cap_vals_max, storage)?.unwrap();
+        let removed_max_below_capacity = below_cap_vals_max
+            .remove(storage, &lowest_position)?
+            .expect("Must have been removed");
+
+        insert_validator_into_set(
+            &consensus_validator_set_handle()
+                .at(&target_epoch)
+                .at(&max_bc_amount),
+            storage,
+            &target_epoch,
+            &removed_max_below_capacity,
+        )?;
+        validator_state_handle(&removed_max_below_capacity).set(
+            storage,
+            ValidatorState::Consensus,
+            target_epoch,
+            0,
+        )?;
+    }
 
     Ok(())
 }
@@ -5700,6 +5623,169 @@ where
         current_epoch,
         params.pipeline_len,
     )?;
+
+    Ok(())
+}
+
+/// Remove liveness data from storage for all validators that are not in the
+/// current consensus validator set.
+pub fn prune_liveness_data<S>(
+    storage: &mut S,
+    current_epoch: Epoch,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let consensus_validators =
+        read_consensus_validator_set_addresses(storage, current_epoch)?;
+    let liveness_missed_votes = liveness_missed_votes_handle();
+    let liveness_sum_missed_votes = liveness_sum_missed_votes_handle();
+
+    let validators_to_prune = liveness_sum_missed_votes
+        .iter(storage)?
+        .filter_map(|entry| {
+            let (address, _) = entry.ok()?;
+
+            if consensus_validators.contains(&address) {
+                None
+            } else {
+                Some(address)
+            }
+        })
+        .collect::<Vec<Address>>();
+
+    for validator in &validators_to_prune {
+        liveness_missed_votes.remove_all(storage, validator)?;
+        liveness_sum_missed_votes.remove(storage, validator)?;
+    }
+
+    Ok(())
+}
+
+/// Record the liveness data of the consensus validators
+pub fn record_liveness_data<S>(
+    storage: &mut S,
+    votes: &[VoteInfo],
+    votes_epoch: Epoch,
+    votes_height: BlockHeight,
+    pos_params: &PosParams,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let consensus_validators =
+        read_consensus_validator_set_addresses(storage, votes_epoch)?;
+    let liveness_missed_votes = liveness_missed_votes_handle();
+    let liveness_sum_missed_votes = liveness_sum_missed_votes_handle();
+
+    // Get the addresses of the validators who voted
+    let vote_addresses = votes
+        .iter()
+        .map(|vote| (&vote.validator_address))
+        .collect::<HashSet<&Address>>();
+
+    let height_to_prune =
+        votes_height.0.checked_sub(pos_params.liveness_window_check);
+
+    for cons_validator in consensus_validators.into_iter() {
+        // Prune old vote (only need to look for the block height that was just
+        // pushed out of the sliding window)
+        if let Some(prune_height) = height_to_prune {
+            let pruned_missing_vote = liveness_missed_votes
+                .at(&cons_validator)
+                .remove(storage, &prune_height)?;
+
+            if pruned_missing_vote {
+                // Update liveness data
+                liveness_sum_missed_votes.update(
+                    storage,
+                    cons_validator.clone(),
+                    |missed_votes| missed_votes.unwrap() - 1,
+                )?;
+            }
+        }
+
+        // Evaluate new vote
+        if !vote_addresses.contains(&cons_validator) {
+            // Insert the height of the missing vote in storage
+            liveness_missed_votes
+                .at(&cons_validator)
+                .insert(storage, votes_height.0)?;
+
+            // Update liveness data
+            liveness_sum_missed_votes.update(
+                storage,
+                cons_validator,
+                |missed_votes| {
+                    match missed_votes {
+                        Some(missed_votes) => missed_votes + 1,
+                        None => {
+                            // Missing liveness data for the validator (newly
+                            // added to the conensus
+                            // set), intialize it
+                            1
+                        }
+                    }
+                },
+            )?;
+        } else {
+            // Initialize any new consensus validator who has signed the first
+            // block
+            if !liveness_sum_missed_votes.contains(storage, &cons_validator)? {
+                liveness_sum_missed_votes.insert(storage, cons_validator, 0)?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Jail validators who failed to match the liveness threshold
+pub fn jail_for_liveness<S>(
+    storage: &mut S,
+    params: &PosParams,
+    current_epoch: Epoch,
+    jail_epoch: Epoch,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    // Derive the actual missing votes limit from the percentage
+    let missing_votes_threshold = ((Dec::one() - params.liveness_threshold)
+        * params.liveness_window_check)
+        .to_uint()
+        .ok_or_else(|| {
+            storage_api::Error::SimpleMessage(
+                "Found negative liveness threshold",
+            )
+        })?
+        .as_u64();
+
+    // Jail inactive validators
+    let validators_to_jail = liveness_sum_missed_votes_handle()
+        .iter(storage)?
+        .filter_map(|entry| {
+            let (address, missed_votes) = entry.ok()?;
+
+            // Check if validator failed to match the threshold and jail
+            // them
+            if missed_votes >= missing_votes_threshold {
+                Some(address)
+            } else {
+                None
+            }
+        })
+        .collect::<HashSet<_>>();
+
+    for validator in &validators_to_jail {
+        tracing::info!(
+            "Jailing validator {} starting in epoch {} for missing too many \
+             votes to ensure liveness",
+            validator,
+            jail_epoch,
+        );
+        jail_validator(storage, params, validator, current_epoch, jail_epoch)?;
+    }
 
     Ok(())
 }
@@ -6100,4 +6186,152 @@ where
         storage.read::<token::Amount>(&key)?.unwrap_or_default();
     storage.delete(&key)?;
     Ok(current_rewards)
+}
+
+/// Jail a validator by removing it from and updating the validator sets and
+/// changing a its state to `Jailed`. Validators are jailed for liveness and for
+/// misbehaving.
+fn jail_validator<S>(
+    storage: &mut S,
+    params: &PosParams,
+    validator: &Address,
+    current_epoch: Epoch,
+    validator_set_update_epoch: Epoch,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    tracing::debug!(
+        "Jailing validator {} beginning in epoch {}",
+        validator,
+        validator_set_update_epoch
+    );
+
+    // Remove the validator from the set starting at the update epoch and up
+    // thru the pipeline epoch.
+    let pipeline_epoch = current_epoch + params.pipeline_len;
+    for epoch in
+        Epoch::iter_bounds_inclusive(validator_set_update_epoch, pipeline_epoch)
+    {
+        let prev_state = validator_state_handle(validator)
+            .get(storage, epoch, params)?
+            .expect("Expected to find a valid validator.");
+        match prev_state {
+            ValidatorState::Consensus => {
+                tracing::debug!(
+                    "Removing validator from the consensus set in epoch {}",
+                    epoch
+                );
+                let amount_pre =
+                    read_validator_stake(storage, params, validator, epoch)?;
+                let val_position = validator_set_positions_handle()
+                    .at(&epoch)
+                    .get(storage, validator)?
+                    .expect("Could not find validator's position in storage.");
+                let _ = consensus_validator_set_handle()
+                    .at(&epoch)
+                    .at(&amount_pre)
+                    .remove(storage, &val_position)?;
+                validator_set_positions_handle()
+                    .at(&epoch)
+                    .remove(storage, validator)?;
+
+                // For the pipeline epoch only:
+                // promote the next max inactive validator to the active
+                // validator set at the pipeline offset
+                if epoch == pipeline_epoch {
+                    let below_capacity_handle =
+                        below_capacity_validator_set_handle().at(&epoch);
+                    let max_below_capacity_amount =
+                        get_max_below_capacity_validator_amount(
+                            &below_capacity_handle,
+                            storage,
+                        )?;
+                    if let Some(max_below_capacity_amount) =
+                        max_below_capacity_amount
+                    {
+                        let position_to_promote = find_first_position(
+                            &below_capacity_handle
+                                .at(&max_below_capacity_amount.into()),
+                            storage,
+                        )?
+                        .expect("Should return a position.");
+                        let max_bc_validator = below_capacity_handle
+                            .at(&max_below_capacity_amount.into())
+                            .remove(storage, &position_to_promote)?
+                            .expect(
+                                "Should have returned a removed validator.",
+                            );
+                        insert_validator_into_set(
+                            &consensus_validator_set_handle()
+                                .at(&epoch)
+                                .at(&max_below_capacity_amount),
+                            storage,
+                            &epoch,
+                            &max_bc_validator,
+                        )?;
+                        validator_state_handle(&max_bc_validator).set(
+                            storage,
+                            ValidatorState::Consensus,
+                            current_epoch,
+                            params.pipeline_len,
+                        )?;
+                    }
+                }
+            }
+            ValidatorState::BelowCapacity => {
+                tracing::debug!(
+                    "Removing validator from the below-capacity set in epoch \
+                     {}",
+                    epoch
+                );
+
+                let amount_pre = validator_deltas_handle(validator)
+                    .get_sum(storage, epoch, params)?
+                    .unwrap_or_default();
+                debug_assert!(amount_pre.non_negative());
+                let val_position = validator_set_positions_handle()
+                    .at(&epoch)
+                    .get(storage, validator)?
+                    .expect("Could not find validator's position in storage.");
+                let _ = below_capacity_validator_set_handle()
+                    .at(&epoch)
+                    .at(&token::Amount::from_change(amount_pre).into())
+                    .remove(storage, &val_position)?;
+                validator_set_positions_handle()
+                    .at(&epoch)
+                    .remove(storage, validator)?;
+            }
+            ValidatorState::BelowThreshold => {
+                tracing::debug!(
+                    "Setting below-threshold validator as jailed in epoch {}",
+                    epoch
+                );
+            }
+            ValidatorState::Inactive => {
+                tracing::debug!(
+                    "Setting inactive validator as jailed in epoch {}",
+                    epoch
+                );
+            }
+            ValidatorState::Jailed => {
+                tracing::debug!(
+                    "Found evidence for a validator who is already jailed"
+                );
+            }
+        }
+    }
+
+    // Safe sub cause `validator_set_update_epoch > current_epoch`
+    let start_offset = validator_set_update_epoch.0 - current_epoch.0;
+    // Set the validator state as `Jailed` thru the pipeline epoch
+    for offset in start_offset..=params.pipeline_len {
+        validator_state_handle(validator).set(
+            storage,
+            ValidatorState::Jailed,
+            current_epoch,
+            offset,
+        )?;
+    }
+    Ok(())
 }

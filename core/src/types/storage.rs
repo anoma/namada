@@ -292,6 +292,11 @@ impl BlockHeight {
     pub fn next_height(&self) -> BlockHeight {
         BlockHeight(self.0 + 1)
     }
+
+    /// Get the height of the previous block
+    pub fn prev_height(&self) -> BlockHeight {
+        BlockHeight(self.0 - 1)
+    }
 }
 
 impl TryFrom<&[u8]> for BlockHash {
