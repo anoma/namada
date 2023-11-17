@@ -17,7 +17,7 @@ use namada_core::ledger::storage_api::collections::{
 use namada_core::types::address::Address;
 use namada_core::types::dec::Dec;
 use namada_core::types::key::common;
-use namada_core::types::storage::{BlockHeight, Epoch, KeySeg};
+use namada_core::types::storage::{Epoch, KeySeg};
 use namada_core::types::token;
 use namada_core::types::token::Amount;
 pub use rev_order::ReverseOrdTokenAmount;
@@ -257,7 +257,7 @@ pub type EagerRedelegatedBondsMap =
 
 /// Liveness record of the consensus validator set. Records the block heights at
 /// which the consensus validator missed a vote.
-pub type LivenessMissedVotes = NestedMap<Address, LazySet<BlockHeight>>;
+pub type LivenessMissedVotes = NestedMap<Address, LazySet<u64>>;
 
 /// The sum of missed votes within some interval for each of the consensus
 /// validators. The value in this map should in principle be the number of

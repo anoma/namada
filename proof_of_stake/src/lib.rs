@@ -5567,15 +5567,15 @@ where
 pub fn record_liveness_data<S>(
     storage: &mut S,
     votes: &[VoteInfo],
-    current_epoch: Epoch,
-    current_height: BlockHeight,
+    votes_epoch: Epoch,
+    votes_height: BlockHeight,
     pos_params: &PosParams,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
     let consensus_validators =
-        read_consensus_validator_set_addresses(storage, current_epoch)?;
+        read_consensus_validator_set_addresses(storage, votes_epoch)?;
     let liveness_missed_votes = liveness_missed_votes_handle();
     let liveness_sum_missed_votes = liveness_sum_missed_votes_handle();
 
@@ -5585,9 +5585,8 @@ where
         .map(|vote| (&vote.validator_address))
         .collect::<HashSet<&Address>>();
 
-    let height_to_prune = current_height
-        .0
-        .checked_sub(pos_params.liveness_window_check);
+    let height_to_prune =
+        votes_height.0.checked_sub(pos_params.liveness_window_check);
 
     for cons_validator in consensus_validators.into_iter() {
         // Prune old vote (only need to look for the block height that was just
@@ -5595,7 +5594,7 @@ where
         if let Some(prune_height) = height_to_prune {
             let pruned_missing_vote = liveness_missed_votes
                 .at(&cons_validator)
-                .remove(storage, &prune_height.into())?;
+                .remove(storage, &prune_height)?;
 
             if pruned_missing_vote {
                 // Update liveness data
@@ -5612,7 +5611,7 @@ where
             // Insert the height of the missing vote in storage
             liveness_missed_votes
                 .at(&cons_validator)
-                .insert(storage, current_height)?;
+                .insert(storage, votes_height.0)?;
 
             // Update liveness data
             liveness_sum_missed_votes.update(
@@ -5671,7 +5670,7 @@ where
 
             // Check if validator failed to match the threshold and jail
             // them
-            if missed_votes > missing_votes_threshold {
+            if missed_votes >= missing_votes_threshold {
                 Some(address)
             } else {
                 None
@@ -5680,6 +5679,12 @@ where
         .collect::<HashSet<_>>();
 
     for validator in &validators_to_jail {
+        tracing::info!(
+            "Jailing validator {} starting in epoch {} for missing too many \
+             votes to ensure liveness",
+            validator,
+            jail_epoch,
+        );
         jail_validator(storage, params, validator, current_epoch, jail_epoch)?;
     }
 

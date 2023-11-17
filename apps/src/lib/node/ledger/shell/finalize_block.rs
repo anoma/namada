@@ -113,21 +113,22 @@ where
                 &mut self.wl_storage,
                 current_epoch,
             )?;
-
-            // Prune liveness data from validators that are no longer in the
-            // consensus set
-            namada_proof_of_stake::prune_liveness_data(
-                &mut self.wl_storage,
-                current_epoch,
-            )?;
         }
 
+        // Get the actual votes from cometBFT in the preferred format
         let votes = pos_votes_from_abci(&self.wl_storage, &req.votes);
 
         // Invariant: Has to be applied before `record_slashes_from_evidence`
         // because it potentially needs to be able to read validator state from
         // previous epoch and jailing validator removes the historical state
-        self.log_block_rewards(&req.votes, height, current_epoch, new_epoch)?;
+        if !votes.is_empty() {
+            self.log_block_rewards(
+                votes.clone(),
+                height,
+                current_epoch,
+                new_epoch,
+            )?;
+        }
 
         // Invariant: This has to be applied after
         // `copy_validator_sets_and_positions` and before `self.update_epoch`.
@@ -142,13 +143,26 @@ where
         }
 
         // Consensus set liveness check
-        namada_proof_of_stake::record_liveness_data(
-            &mut self.wl_storage,
-            &votes,
-            current_epoch,
-            height,
-            &pos_params,
-        )?;
+        if !votes.is_empty() {
+            let vote_height = height.prev_height();
+            let epoch_of_votes = self
+                .wl_storage
+                .storage
+                .block
+                .pred_epochs
+                .get_epoch(vote_height)
+                .expect(
+                    "Should always find an epoch when looking up the vote \
+                     height before recording liveness data.",
+                );
+            namada_proof_of_stake::record_liveness_data(
+                &mut self.wl_storage,
+                &votes,
+                epoch_of_votes,
+                vote_height,
+                &pos_params,
+            )?;
+        }
 
         let validator_set_update_epoch =
             self.get_validator_set_update_epoch(current_epoch);
@@ -160,6 +174,15 @@ where
             current_epoch,
             validator_set_update_epoch,
         )?;
+
+        if new_epoch {
+            // Prune liveness data from validators that are no longer in the
+            // consensus set
+            namada_proof_of_stake::prune_liveness_data(
+                &mut self.wl_storage,
+                current_epoch,
+            )?;
+        }
 
         let mut stats = InternalStats::default();
 
@@ -795,7 +818,7 @@ where
     // Process the proposer and votes in the block to assign their PoS rewards.
     fn log_block_rewards(
         &mut self,
-        votes: &[VoteInfo],
+        votes: Vec<namada_proof_of_stake::types::VoteInfo>,
         height: BlockHeight,
         current_epoch: Epoch,
         new_epoch: bool,
@@ -807,7 +830,6 @@ where
                 tracing::debug!(
                     "Found last block proposer: {proposer_address}"
                 );
-                let votes = pos_votes_from_abci(&self.wl_storage, votes);
                 namada_proof_of_stake::log_block_rewards(
                     &mut self.wl_storage,
                     if new_epoch {
