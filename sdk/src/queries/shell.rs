@@ -169,10 +169,7 @@ where
         .assets
         .iter()
         .map(|(&asset_type, ((ref addr, _), epoch, ref conv, _))| {
-            (
-                asset_type.clone(),
-                (addr.clone(), epoch.clone(), conv.clone().into()),
-            )
+            (asset_type, (addr.clone(), *epoch, conv.clone().into()))
         })
         .collect())
 }

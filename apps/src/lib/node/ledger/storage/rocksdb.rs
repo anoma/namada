@@ -469,7 +469,6 @@ impl RocksDB {
         for metadata_key in [
             "next_epoch_min_start_height",
             "next_epoch_min_start_time",
-            "conversion_state",
             "tx_queue",
         ] {
             let previous_key = format!("pred/{}", metadata_key);
@@ -484,6 +483,19 @@ impl RocksDB {
             // don't have their predecessors in storage, but there's no need to
             // since we cannot do more than one rollback anyway because of
             // Tendermint.
+        }
+
+        // Revert conversion state if the epoch had been changed
+        if last_block.pred_epochs.get_epoch(previous_height)
+            != Some(last_block.epoch)
+        {
+            let previous_key = "pred/conversion_state".to_string();
+            let previous_value = self
+                .0
+                .get_cf(state_cf, previous_key.as_bytes())
+                .map_err(|e| Error::DBError(e.to_string()))?
+                .ok_or(Error::UnknownKey { key: previous_key })?;
+            batch.put_cf(state_cf, "conversion_state", previous_value);
         }
 
         // Delete block results for the last block
@@ -1692,7 +1704,9 @@ mod imp {
 #[cfg(test)]
 mod test {
     use namada::ledger::storage::{MerkleTree, Sha256Hasher};
-    use namada::types::address::EstablishedAddressGen;
+    use namada::types::address::{
+        gen_established_address, EstablishedAddressGen,
+    };
     use namada::types::storage::{BlockHash, Epoch, Epochs};
     use tempfile::tempdir;
     use test_log::test;
@@ -1715,7 +1729,15 @@ mod test {
         )
         .unwrap();
 
-        add_block_to_batch(&db, &mut batch, BlockHeight::default()).unwrap();
+        add_block_to_batch(
+            &db,
+            &mut batch,
+            BlockHeight::default(),
+            Epoch::default(),
+            Epochs::default(),
+            &ConversionState::default(),
+        )
+        .unwrap();
         db.exec_batch(batch.0).unwrap();
 
         let _state = db
@@ -1889,6 +1911,12 @@ mod test {
         // Write first block
         let mut batch = RocksDB::batch();
         let height_0 = BlockHeight(100);
+        let mut pred_epochs = Epochs::default();
+        pred_epochs.new_epoch(height_0);
+        let mut conversion_state_0 = ConversionState::default();
+        conversion_state_0
+            .tokens
+            .insert("dummy1".to_string(), gen_established_address("test"));
         let to_delete_val = vec![1_u8, 1, 0, 0];
         let to_overwrite_val = vec![1_u8, 1, 1, 0];
         db.batch_write_subspace_val(
@@ -1906,12 +1934,25 @@ mod test {
         )
         .unwrap();
 
-        add_block_to_batch(&db, &mut batch, height_0).unwrap();
+        add_block_to_batch(
+            &db,
+            &mut batch,
+            height_0,
+            Epoch(1),
+            pred_epochs.clone(),
+            &conversion_state_0,
+        )
+        .unwrap();
         db.exec_batch(batch.0).unwrap();
 
         // Write second block
         let mut batch = RocksDB::batch();
         let height_1 = BlockHeight(101);
+        pred_epochs.new_epoch(height_1);
+        let mut conversion_state_1 = ConversionState::default();
+        conversion_state_1
+            .tokens
+            .insert("dummy2".to_string(), gen_established_address("test"));
         let add_val = vec![1_u8, 0, 0, 0];
         let overwrite_val = vec![1_u8, 1, 1, 1];
         db.batch_write_subspace_val(&mut batch, height_1, &add_key, &add_val)
@@ -1926,7 +1967,15 @@ mod test {
         db.batch_delete_subspace_val(&mut batch, height_1, &delete_key)
             .unwrap();
 
-        add_block_to_batch(&db, &mut batch, height_1).unwrap();
+        add_block_to_batch(
+            &db,
+            &mut batch,
+            height_1,
+            Epoch(2),
+            pred_epochs,
+            &conversion_state_1,
+        )
+        .unwrap();
         db.exec_batch(batch.0).unwrap();
 
         // Check that the values are as expected from second block
@@ -1947,6 +1996,13 @@ mod test {
         assert_eq!(overwritten, Some(to_overwrite_val));
         let deleted = db.read_subspace_val(&delete_key).unwrap();
         assert_eq!(deleted, Some(to_delete_val));
+        // Check the conversion state
+        let state_cf = db.get_column_family(STATE_CF).unwrap();
+        let conversion_state =
+            db.0.get_cf(state_cf, "conversion_state".as_bytes())
+                .unwrap()
+                .unwrap();
+        assert_eq!(conversion_state, types::encode(&conversion_state_0));
     }
 
     /// A test helper to write a block
@@ -1954,19 +2010,19 @@ mod test {
         db: &RocksDB,
         batch: &mut RocksDBWriteBatch,
         height: BlockHeight,
+        epoch: Epoch,
+        pred_epochs: Epochs,
+        conversion_state: &ConversionState,
     ) -> Result<()> {
         let merkle_tree = MerkleTree::<Sha256Hasher>::default();
         let merkle_tree_stores = merkle_tree.stores();
         let hash = BlockHash::default();
         let time = DateTimeUtc::now();
-        let epoch = Epoch::default();
-        let pred_epochs = Epochs::default();
         let next_epoch_min_start_height = BlockHeight::default();
         let next_epoch_min_start_time = DateTimeUtc::now();
         let update_epoch_blocks_delay = None;
         let address_gen = EstablishedAddressGen::new("whatever");
         let tx_queue = TxQueue::default();
-        let conversion_state = ConversionState::default();
         let results = BlockResults::default();
         let eth_events_queue = EthEventsQueue::default();
         let block = BlockStateWrite {
@@ -1977,7 +2033,7 @@ mod test {
             time,
             epoch,
             results: &results,
-            conversion_state: &conversion_state,
+            conversion_state,
             pred_epochs: &pred_epochs,
             next_epoch_min_start_height,
             next_epoch_min_start_time,
