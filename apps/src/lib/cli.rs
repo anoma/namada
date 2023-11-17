@@ -487,6 +487,8 @@ pub mod cmds {
         Masp(WalletMasp),
         /// TODO
         NewGen(WalletNewGen),
+        /// TODO
+        NewDerive(WalletNewDerive),
     }
 
     impl Cmd for NamadaWallet {
@@ -495,6 +497,7 @@ pub mod cmds {
                 .subcommand(WalletAddress::def())
                 .subcommand(WalletMasp::def())
                 .subcommand(WalletNewGen::def())
+                .subcommand(WalletNewDerive::def())
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -502,7 +505,8 @@ pub mod cmds {
             let address = SubCmd::parse(matches).map(Self::Address);
             let masp = SubCmd::parse(matches).map(Self::Masp);
             let gen_new = SubCmd::parse(matches).map(Self::NewGen);
-            key.or(address).or(masp).or(gen_new)
+            let derive_new = SubCmd::parse(matches).map(Self::NewDerive);
+            key.or(address).or(masp).or(gen_new).or(derive_new)
         }
     }
 
@@ -528,7 +532,6 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     #[allow(clippy::large_enum_variant)]
     pub enum WalletKey {
-        Derive(KeyDerive),
         Find(KeyFind),
         List(KeyList),
         Export(Export),
@@ -539,11 +542,10 @@ pub mod cmds {
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
-                let restore = SubCmd::parse(matches).map(Self::Derive);
                 let lookup = SubCmd::parse(matches).map(Self::Find);
                 let list = SubCmd::parse(matches).map(Self::List);
                 let export = SubCmd::parse(matches).map(Self::Export);
-                restore.or(lookup).or(list).or(export)
+                lookup.or(list).or(export)
             })
         }
 
@@ -555,7 +557,6 @@ pub mod cmds {
                 )
                 .subcommand_required(true)
                 .arg_required_else_help(true)
-                .subcommand(KeyDerive::def())
                 .subcommand(KeyFind::def())
                 .subcommand(KeyList::def())
                 .subcommand(Export::def())
@@ -564,7 +565,7 @@ pub mod cmds {
 
     /// Restore a keypair and implicit address from the mnemonic code
     #[derive(Clone, Debug)]
-    pub struct KeyDerive(pub args::KeyAndAddressDerive);
+    pub struct KeyDerive(pub args::KeyDerive);
 
     impl SubCmd for KeyDerive {
         const CMD: &'static str = "derive";
@@ -572,7 +573,7 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .map(|matches| Self(args::KeyAndAddressDerive::parse(matches)))
+                .map(|matches| Self(args::KeyDerive::parse(matches)))
         }
 
         fn def() -> App {
@@ -584,7 +585,7 @@ pub mod cmds {
                      the given alias. A hardware wallet can be used, in which \
                      case a private key is not derivable.",
                 )
-                .add_args::<args::KeyAndAddressDerive>()
+                .add_args::<args::KeyDerive>()
         }
     }
 
@@ -611,6 +612,34 @@ pub mod cmds {
                      be stored with the same alias. TODO shielded",
                 )
                 .add_args::<args::KeyGen>()
+        }
+    }
+
+    /// In the transparent setting, derive a keypair and implicit address from
+    /// the mnemonic code.
+    /// In the shielded setting, derive a spending key from the mnemonic code.
+    #[derive(Clone, Debug)]
+    pub struct WalletNewDerive(pub args::KeyDerive);
+
+    impl SubCmd for WalletNewDerive {
+        const CMD: &'static str = "derive";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::KeyDerive::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Derives a keypair from the given mnemonic code and HD \
+                     derivation path and derives the implicit address from \
+                     its public key. Stores the keypair and the address with \
+                     the given alias. A hardware wallet can be used, in which \
+                     case a private key is not derivable. TODO shielded",
+                )
+                .add_args::<args::KeyDerive>()
         }
     }
 
@@ -834,7 +863,6 @@ pub mod cmds {
 
     #[derive(Clone, Debug)]
     pub enum WalletAddress {
-        Derive(AddressDerive),
         Find(AddressOrAliasFind),
         List,
         Add(AddressAdd),
@@ -845,12 +873,11 @@ pub mod cmds {
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
-                let restore = SubCmd::parse(matches).map(Self::Derive);
                 let find = SubCmd::parse(matches).map(Self::Find);
                 let list =
                     <AddressList as SubCmd>::parse(matches).map(|_| Self::List);
                 let add = SubCmd::parse(matches).map(Self::Add);
-                restore.or(find).or(list).or(add)
+                find.or(list).or(add)
             })
         }
 
@@ -862,36 +889,9 @@ pub mod cmds {
                 )
                 .subcommand_required(true)
                 .arg_required_else_help(true)
-                .subcommand(AddressDerive::def())
                 .subcommand(AddressOrAliasFind::def())
                 .subcommand(AddressList::def())
                 .subcommand(AddressAdd::def())
-        }
-    }
-
-    /// Restore a keypair and an implicit address from the mnemonic code
-    #[derive(Clone, Debug)]
-    pub struct AddressDerive(pub args::KeyAndAddressDerive);
-
-    impl SubCmd for AddressDerive {
-        const CMD: &'static str = "derive";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches.subcommand_matches(Self::CMD).map(|matches| {
-                AddressDerive(args::KeyAndAddressDerive::parse(matches))
-            })
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about(
-                    "Derives a keypair from the given mnemonic code and HD \
-                     derivation path and derives the implicit address from \
-                     its public key. Stores the keypair and the address with \
-                     the given alias. A hardware wallet can be used, in which \
-                     case a private key is not derivable.",
-                )
-                .add_args::<args::KeyAndAddressDerive>()
         }
     }
 
@@ -6247,9 +6247,10 @@ pub mod args {
         }
     }
 
-    impl Args for KeyAndAddressDerive {
+    impl Args for KeyDerive {
         fn parse(matches: &ArgMatches) -> Self {
             let scheme = SCHEME.parse(matches);
+            let shielded = SHIELDED.parse(matches);
             let alias = ALIAS_OPT.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
@@ -6257,6 +6258,7 @@ pub mod args {
             let derivation_path = HD_WALLET_DERIVATION_PATH.parse(matches);
             Self {
                 scheme,
+                shielded,
                 alias,
                 alias_force,
                 unsafe_dont_encrypt,
@@ -6266,11 +6268,17 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(SCHEME.def().help(
-                "The type of key that should be added. Argument must be \
-                 either ed25519 or secp256k1. If none provided, the default \
-                 key scheme is ed25519.",
+            app.arg(SCHEME.def().conflicts_with(SHIELDED.name).help(
+                "For the transparent pool, the type of key that should be \
+                 derived. Argument must be either ed25519 or secp256k1. If \
+                 none provided, the default key scheme is ed25519.\nNot \
+                 applicable for the shielded pool.",
             ))
+            .arg(
+                SHIELDED
+                    .def()
+                    .help("Derive a spending key for the shielded pool."),
+            )
             .arg(ALIAS_OPT.def().help(
                 "The key and address alias. If none provided, the alias will \
                  be the public key hash.",
@@ -6357,8 +6365,7 @@ pub mod args {
                  scheme default path:\n- m/44'/60'/0'/0/0 for secp256k1 \
                  scheme\n- m/44'/877'/0'/0'/0' for ed25519 scheme.\nFor \
                  ed25519, all path indices will be promoted to hardened \
-                 indexes. If none specified, mnemonic code and derivation \
-                 path are not used.",
+                 indexes. TODO",
             ))
         }
     }
