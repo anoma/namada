@@ -993,6 +993,10 @@ mod test_finalize_block {
     use namada::types::uint::Uint;
     use namada::types::vote_extensions::ethereum_events;
     use namada_sdk::eth_bridge::MinimumConfirmations;
+    use namada_sdk::proof_of_stake::{
+        liveness_missed_votes_handle, liveness_sum_missed_votes_handle,
+        read_consensus_validator_set_addresses,
+    };
     use namada_test_utils::tx_data::TxWriteData;
     use namada_test_utils::TestWasms;
     use test_log::test;
@@ -4563,7 +4567,7 @@ mod test_finalize_block {
 
     #[test]
     fn test_jail_validator_for_inactivity() -> storage_api::Result<()> {
-        let num_validators = 4_u64;
+        let num_validators = 5_u64;
         let (mut shell, _recv, _, _) = setup_with_cfg(SetupCfg {
             last_height: 0,
             num_validators,
@@ -4571,108 +4575,303 @@ mod test_finalize_block {
         });
         let params = read_pos_params(&shell.wl_storage).unwrap();
 
-        let consensus_set: Vec<WeightedValidator> =
-            read_consensus_validator_set_addresses_with_stake(
+        let initial_consensus_set: Vec<Address> =
+            read_consensus_validator_set_addresses(
                 &shell.wl_storage,
                 Epoch::default(),
             )
             .unwrap()
             .into_iter()
             .collect();
-        let val1 = consensus_set[0].clone();
+        let val1 = initial_consensus_set[0].clone();
         let pkh1 = get_pkh_from_address(
             &shell.wl_storage,
             &params,
-            val1.address,
+            val1.clone(),
             Epoch::default(),
         );
-        let val2 = consensus_set[1].clone();
+        let val2 = initial_consensus_set[1].clone();
         let pkh2 = get_pkh_from_address(
             &shell.wl_storage,
             &params,
-            val2.address.clone(),
+            val2.clone(),
             Epoch::default(),
         );
 
         let validator_stake = namada_proof_of_stake::read_validator_stake(
             &shell.wl_storage,
             &params,
-            &val2.address,
-            Epoch(3),
+            &val2,
+            Epoch::default(),
         )
         .unwrap();
 
+        let val3 = initial_consensus_set[2].clone();
+        let val4 = initial_consensus_set[3].clone();
+        let val5 = initial_consensus_set[4].clone();
+
         // Finalize block 1
         next_block_for_inflation(&mut shell, pkh1.to_vec(), vec![], None);
-        let pos_params = read_pos_params(&shell.wl_storage).unwrap();
-        // Add one to verify that the logic holds even if the validator has
-        // already been jailed
+
+        // Ensure that there is no liveness data yet since there were no votes
+        let missed_votes = liveness_missed_votes_handle();
+        let sum_missed_votes = liveness_sum_missed_votes_handle();
+        assert!(missed_votes.is_empty(&shell.wl_storage)?);
+        assert!(sum_missed_votes.is_empty(&shell.wl_storage)?);
+
         let minimum_unsigned_blocks = ((Dec::one()
-            - pos_params.liveness_threshold)
-            * pos_params.liveness_window_check)
+            - params.liveness_threshold)
+            * params.liveness_window_check)
             .to_uint()
             .unwrap()
-            .as_u64()
-            + 1;
-        for _height in 0..minimum_unsigned_blocks {
-            let mut votes = get_default_true_votes(
+            .as_u64();
+
+        // Finalize block 2 and ensure that some data has been written
+        let default_all_votes = get_default_true_votes(
+            &shell.wl_storage,
+            shell.wl_storage.storage.block.epoch,
+        );
+        next_block_for_inflation(
+            &mut shell,
+            pkh1.to_vec(),
+            default_all_votes,
+            None,
+        );
+        assert!(missed_votes.is_empty(&shell.wl_storage)?);
+        for val in &initial_consensus_set {
+            let sum = sum_missed_votes.get(&shell.wl_storage, val)?;
+            assert_eq!(sum, Some(0u64));
+        }
+
+        // Completely unbond one of the validator to test the pruning at the
+        // pipeline epoch
+        let mut current_epoch = shell.wl_storage.storage.block.epoch;
+        namada_proof_of_stake::unbond_tokens(
+            &mut shell.wl_storage,
+            None,
+            &val5,
+            validator_stake,
+            current_epoch,
+            false,
+        )?;
+        let pipeline_vals = read_consensus_validator_set_addresses(
+            &shell.wl_storage,
+            current_epoch + params.pipeline_len,
+        )?;
+        assert_eq!(pipeline_vals.len(), initial_consensus_set.len() - 1);
+        let val5_pipeline_state = validator_state_handle(&val5)
+            .get(
+                &shell.wl_storage,
+                current_epoch + params.pipeline_len,
+                &params,
+            )?
+            .unwrap();
+        assert_eq!(val5_pipeline_state, ValidatorState::BelowThreshold);
+
+        // Advance to the next epoch with no votes from validator 2
+        // NOTE: assume the minimum blocks for jailing is larger than remaining
+        // blocks to next epoch!
+        let mut votes_no2 = get_default_true_votes(
+            &shell.wl_storage,
+            shell.wl_storage.storage.block.epoch,
+        );
+        votes_no2.retain(|vote| vote.validator.address != pkh2);
+
+        let first_height_without_vote = 2;
+        let mut val2_num_missed_blocks = 0u64;
+        while current_epoch == Epoch::default() {
+            next_block_for_inflation(
+                &mut shell,
+                pkh1.to_vec(),
+                votes_no2.clone(),
+                None,
+            );
+            current_epoch = shell.wl_storage.storage.block.epoch;
+            val2_num_missed_blocks += 1;
+        }
+
+        // Checks upon the new epoch
+        for val in &initial_consensus_set {
+            let missed_votes = liveness_missed_votes_handle().at(val);
+            let sum = sum_missed_votes.get(&shell.wl_storage, val)?;
+
+            if val == &val2 {
+                assert_eq!(sum, Some(val2_num_missed_blocks));
+                for height in first_height_without_vote
+                    ..first_height_without_vote + val2_num_missed_blocks
+                {
+                    assert!(missed_votes.contains(&shell.wl_storage, &height)?);
+                    assert!(sum.unwrap() < minimum_unsigned_blocks);
+                }
+            } else {
+                assert!(missed_votes.is_empty(&shell.wl_storage)?);
+                assert_eq!(sum, Some(0u64));
+            }
+        }
+
+        // Advance blocks up to just before the next epoch
+        loop {
+            next_block_for_inflation(
+                &mut shell,
+                pkh1.to_vec(),
+                votes_no2.clone(),
+                None,
+            );
+            if shell.wl_storage.storage.update_epoch_blocks_delay == Some(1) {
+                break;
+            }
+        }
+        assert_eq!(shell.wl_storage.storage.block.epoch, current_epoch);
+        let pipeline_vals = read_consensus_validator_set_addresses(
+            &shell.wl_storage,
+            current_epoch + params.pipeline_len,
+        )?;
+        assert_eq!(pipeline_vals.len(), initial_consensus_set.len() - 1);
+        let val2_sum_missed_votes =
+            liveness_sum_missed_votes_handle().get(&shell.wl_storage, &val2)?;
+        assert_eq!(
+            val2_sum_missed_votes,
+            Some(shell.wl_storage.storage.block.height.0 - 2)
+        );
+        for val in &initial_consensus_set {
+            if val == &val2 {
+                continue;
+            }
+            let sum = sum_missed_votes.get(&shell.wl_storage, val)?;
+            assert_eq!(sum, Some(0u64));
+        }
+
+        // Now advance one more block to the next epoch, where validator 2 will
+        // miss its 10th vote and should thus be jailed for liveness
+        next_block_for_inflation(
+            &mut shell,
+            pkh1.to_vec(),
+            votes_no2.clone(),
+            None,
+        );
+        current_epoch = shell.wl_storage.storage.block.epoch;
+        assert_eq!(current_epoch, Epoch(2));
+
+        let val2_sum_missed_votes =
+            liveness_sum_missed_votes_handle().get(&shell.wl_storage, &val2)?;
+        assert_eq!(val2_sum_missed_votes, Some(minimum_unsigned_blocks));
+
+        // Check the validator sets for all epochs up through the pipeline
+        let consensus_vals = read_consensus_validator_set_addresses(
+            &shell.wl_storage,
+            current_epoch,
+        )?;
+        assert_eq!(
+            consensus_vals,
+            HashSet::from_iter([
+                val1.clone(),
+                val2.clone(),
+                val3.clone(),
+                val4.clone()
+            ])
+        );
+        for offset in 1..=params.pipeline_len {
+            let consensus_vals = read_consensus_validator_set_addresses(
+                &shell.wl_storage,
+                current_epoch + offset,
+            )?;
+            assert_eq!(
+                consensus_vals,
+                HashSet::from_iter([val1.clone(), val3.clone(), val4.clone()])
+            );
+            let val2_state = validator_state_handle(&val2)
+                .get(&shell.wl_storage, current_epoch + offset, &params)?
+                .unwrap();
+            assert_eq!(val2_state, ValidatorState::Jailed);
+            let val5_state = validator_state_handle(&val5)
+                .get(&shell.wl_storage, current_epoch + offset, &params)?
+                .unwrap();
+            assert_eq!(val5_state, ValidatorState::BelowThreshold);
+        }
+
+        // Check the liveness data for validators 2 and 5 (2 should still be
+        // there, 5 should be removed)
+        for val in &initial_consensus_set {
+            let missed_votes = liveness_missed_votes_handle().at(val);
+            let sum = sum_missed_votes.get(&shell.wl_storage, val)?;
+
+            if val == &val2 {
+                assert_eq!(
+                    sum,
+                    Some(shell.wl_storage.storage.block.height.0 - 2)
+                );
+                for height in first_height_without_vote
+                    ..shell.wl_storage.storage.block.height.0
+                {
+                    assert!(missed_votes.contains(&shell.wl_storage, &height)?);
+                }
+            } else if val == &val5 {
+                assert!(missed_votes.is_empty(&shell.wl_storage)?);
+                assert!(sum.is_none());
+            } else {
+                assert!(missed_votes.is_empty(&shell.wl_storage)?);
+                assert_eq!(sum, Some(0u64));
+            }
+        }
+
+        // Advance to the next epoch to ensure that the val2 data is removed
+        // from the liveness data
+        let next_epoch = current_epoch.next();
+        loop {
+            let votes = get_default_true_votes(
                 &shell.wl_storage,
                 shell.wl_storage.storage.block.epoch,
             );
-            votes.retain(|vote| vote.validator.address != pkh2);
-            next_block_for_inflation(&mut shell, pkh1.to_vec(), votes, None);
+            current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None).0;
+            if current_epoch == next_epoch {
+                break;
+            }
         }
 
-        // Assert that the validator was jailed
-        let mut target_jail_epoch = shell.wl_storage.storage.block.epoch;
-        let validator_state_current_epoch =
-            validator_state_handle(&val2.address)
-                .get(&shell.wl_storage, target_jail_epoch, &params)
-                .unwrap()
-                .unwrap();
+        // Check that the liveness data only contains data for vals 1, 3, and 4
+        for val in &initial_consensus_set {
+            let missed_votes = liveness_missed_votes_handle().at(val);
+            let sum = sum_missed_votes.get(&shell.wl_storage, val)?;
 
-        if validator_state_current_epoch != ValidatorState::Jailed {
-            // We need to check the next epoch
-            target_jail_epoch = target_jail_epoch.next();
-            assert_eq!(
-                validator_state_handle(&val2.address)
-                    .get(&shell.wl_storage, target_jail_epoch, &params)
-                    .unwrap()
-                    .unwrap(),
-                ValidatorState::Jailed
-            );
+            assert!(missed_votes.is_empty(&shell.wl_storage)?);
+            if val == &val2 || val == &val5 {
+                assert!(sum.is_none());
+            } else {
+                assert_eq!(sum, Some(0u64));
+            }
         }
 
-        // Assert that the stake of the jailed validator hasn't change
-        let validator_stake_after_jail =
-            namada_proof_of_stake::read_validator_stake(
+        // Validator 2 unjail itself
+        namada_proof_of_stake::unjail_validator(
+            &mut shell.wl_storage,
+            &val2,
+            current_epoch,
+        )?;
+        let pipeline_epoch = current_epoch + params.pipeline_len;
+        let val2_pipeline_state = validator_state_handle(&val2).get(
+            &shell.wl_storage,
+            pipeline_epoch,
+            &params,
+        )?;
+        assert_eq!(val2_pipeline_state, Some(ValidatorState::Consensus));
+
+        // Advance to the pipeline epoch
+        loop {
+            let votes = get_default_true_votes(
                 &shell.wl_storage,
-                &params,
-                &val2.address,
-                target_jail_epoch,
-            )
-            .unwrap();
-        assert_eq!(validator_stake, validator_stake_after_jail);
-
-        // Check validator jailed and stake for the entire pipeline length
-        for offset in 1..params.pipeline_len {
-            assert_eq!(
-                validator_state_handle(&val2.address)
-                    .get(&shell.wl_storage, target_jail_epoch + offset, &params)
-                    .unwrap()
-                    .unwrap(),
-                ValidatorState::Jailed
+                shell.wl_storage.storage.block.epoch,
             );
-            let validator_stake_after_jail =
-                namada_proof_of_stake::read_validator_stake(
-                    &shell.wl_storage,
-                    &params,
-                    &val2.address,
-                    target_jail_epoch + offset,
-                )
-                .unwrap();
-            assert_eq!(validator_stake, validator_stake_after_jail);
+            current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None).0;
+            if current_epoch == pipeline_epoch {
+                break;
+            }
         }
+        let sum_liveness = liveness_sum_missed_votes_handle();
+        assert_eq!(sum_liveness.get(&shell.wl_storage, &val1)?, Some(0u64));
+        assert_eq!(sum_liveness.get(&shell.wl_storage, &val2)?, None);
+        assert_eq!(sum_liveness.get(&shell.wl_storage, &val3)?, Some(0u64));
+        assert_eq!(sum_liveness.get(&shell.wl_storage, &val4)?, Some(0u64));
+        assert_eq!(sum_liveness.get(&shell.wl_storage, &val5)?, None);
 
         Ok(())
     }
