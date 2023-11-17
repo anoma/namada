@@ -317,7 +317,6 @@ pub fn make_dev_genesis(
     use namada::types::chain::ChainIdPrefix;
     use namada::types::ethereum_events::EthAddress;
     use namada::types::key::*;
-    use namada::types::token::NATIVE_MAX_DECIMAL_PLACES;
     use namada_sdk::wallet::alias::Alias;
 
     use crate::config::genesis::chain::{finalize, DeriveEstablishedAddress};
@@ -356,23 +355,6 @@ pub fn make_dev_genesis(
         erc20_whitelist: vec![],
     });
 
-    if let Some(vals) = genesis.transactions.validator_account.as_mut() {
-        let tx = vals.get_mut(0).unwrap();
-        // Use the default validator address
-        tx.address = defaults::validator_address();
-
-        // Use the default validator key - have to add it with a sig
-        tx.address = defaults::validator_address();
-        let sk = defaults::validator_keypair();
-        let pk = StringEncoded::new(sk.to_public());
-        let unsigned_tx = UnsignedValidatorAccountTx::from(&tx.tx);
-        let sig = transactions::sign_tx(&unsigned_tx, &sk);
-        tx.tx.account_key = transactions::SignedPk {
-            pk,
-            authorization: sig,
-        };
-    }
-
     // Use the default token address for matching tokens
     let default_tokens: HashMap<Alias, Address> = defaults::tokens()
         .into_iter()
@@ -404,6 +386,35 @@ pub fn make_dev_genesis(
             ));
         bonds.retain(|bond| bond.source != fat_alberts_address);
     };
+    // fetch validator's balances
+    let (first_val_balance, first_val_bonded) = {
+        let nam_balances = genesis
+            .balances
+            .token
+            .get_mut(&Alias::from_str("nam").unwrap())
+            .unwrap();
+
+        let tx = genesis
+            .transactions
+            .validator_account
+            .as_ref()
+            .unwrap()
+            .get(0)
+            .unwrap();
+        let genesis_addr = GenesisAddress::EstablishedAddress(
+            UnsignedValidatorAccountTx::from(&tx.tx)
+                .derive_established_address(),
+        );
+
+        let balance = *nam_balances.0.get(&genesis_addr).unwrap();
+        let bonded = {
+            let bond =
+                genesis.transactions.bond.as_mut().unwrap().get(0).unwrap();
+            bond.amount
+        };
+
+        (balance, bonded)
+    };
     let secp_eth_cold_keypair = secp256k1::SecretKey::try_from_slice(&[
         90, 83, 107, 155, 193, 251, 120, 27, 76, 1, 188, 8, 116, 121, 90, 99,
         65, 17, 187, 6, 238, 141, 63, 188, 76, 38, 102, 7, 47, 185, 28, 52,
@@ -429,7 +440,7 @@ pub fn make_dev_genesis(
             common::SecretKey::try_from_sk(&secp_eth_cold_keypair).unwrap();
         let (protocol_keypair, eth_bridge_keypair) = defaults::validator_keys();
         // add the validator
-        let validator_address = if let Some(vals) =
+        let (validator_address, account_pk) = if let Some(vals) =
             genesis.transactions.validator_account.as_mut()
         {
             let validator_account_tx = transactions::ValidatorAccountTx {
@@ -486,10 +497,26 @@ pub fn make_dev_genesis(
                     eth_cold_key: sign_pk(&eth_cold_keypair),
                 },
             });
-            validator_address
+            (validator_address, account_keypair.ref_to())
         } else {
             unreachable!()
         };
+        // credit nam tokens to validators such that they can bond
+        {
+            let nam_balances = genesis
+                .balances
+                .token
+                .get_mut(&Alias::from_str("nam").unwrap())
+                .unwrap();
+
+            let validator_addr =
+                GenesisAddress::EstablishedAddress(validator_address.clone());
+            let account_pk =
+                GenesisAddress::PublicKey(StringEncoded::new(account_pk));
+
+            nam_balances.0.insert(validator_addr, first_val_balance);
+            nam_balances.0.insert(account_pk, first_val_balance);
+        }
         // self bond
         if let Some(bonds) = genesis.transactions.bond.as_mut() {
             bonds.push(transactions::BondTx {
@@ -497,10 +524,7 @@ pub fn make_dev_genesis(
                     validator_address.clone(),
                 ),
                 validator: Address::Established(validator_address),
-                amount: token::DenominatedAmount {
-                    amount: token::Amount::native_whole(100_000),
-                    denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-                },
+                amount: first_val_bonded,
             })
         }
     }
