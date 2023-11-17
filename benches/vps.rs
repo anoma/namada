@@ -24,12 +24,11 @@ use namada_apps::bench_utils::{
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
     TX_BOND_WASM, TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_REVEAL_PK_WASM,
     TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UPDATE_ACCOUNT_WASM,
-    TX_VOTE_PROPOSAL_WASM, VP_VALIDATOR_WASM,
+    TX_VOTE_PROPOSAL_WASM, VP_USER_WASM, VP_VALIDATOR_WASM,
 };
 use namada_apps::wallet::defaults;
 use sha2::Digest;
 
-const VP_USER_WASM: &str = "vp_user.wasm";
 const VP_IMPLICIT_WASM: &str = "vp_implicit.wasm";
 const VP_MASP_WASM: &str = "vp_masp.wasm";
 

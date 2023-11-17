@@ -114,6 +114,8 @@ pub const TX_RESIGN_STEWARD: &str = "tx_resign_steward.wasm";
 /// Update steward commission WASM path
 pub const TX_UPDATE_STEWARD_COMMISSION: &str =
     "tx_update_steward_commission.wasm";
+/// Redelegate transaction WASM path
+pub const TX_REDELEGATE_WASM: &str = "tx_redelegate.wasm";
 
 /// Default timeout in seconds for requests to the `/accepted`
 /// and `/applied` ABCI query endpoints.

@@ -79,6 +79,18 @@ use namada::{proof_of_stake, tendermint};
 use namada_sdk::masp::{
     self, ShieldedContext, ShieldedTransfer, ShieldedUtils,
 };
+pub use namada_sdk::tx::{
+    TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
+    TX_CHANGE_COMMISSION_WASM as TX_CHANGE_VALIDATOR_COMMISSION_WASM,
+    TX_CHANGE_METADATA_WASM as TX_CHANGE_VALIDATOR_METADATA_WASM,
+    TX_CLAIM_REWARDS_WASM, TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM,
+    TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL as TX_INIT_PROPOSAL_WASM,
+    TX_INIT_VALIDATOR_WASM, TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM,
+    TX_RESIGN_STEWARD, TX_REVEAL_PK as TX_REVEAL_PK_WASM, TX_TRANSFER_WASM,
+    TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
+    TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL as TX_VOTE_PROPOSAL_WASM,
+    TX_WITHDRAW_WASM, VP_USER_WASM, VP_VALIDATOR_WASM,
+};
 use namada_sdk::wallet::Wallet;
 use namada_sdk::NamadaImpl;
 use namada_test_utils::tx_data::TxWriteData;
@@ -97,32 +109,6 @@ use crate::node::ledger::shell::Shell;
 use crate::wallet::{defaults, CliWalletUtils};
 
 pub const WASM_DIR: &str = "../wasm";
-pub const TX_BOND_WASM: &str = "tx_bond.wasm";
-pub const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
-pub const TX_UPDATE_ACCOUNT_WASM: &str = "tx_update_account.wasm";
-pub const TX_VOTE_PROPOSAL_WASM: &str = "tx_vote_proposal.wasm";
-pub const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
-pub const TX_REDELEGATE_WASM: &str = "tx_redelegate.wasm";
-pub const TX_INIT_PROPOSAL_WASM: &str = "tx_init_proposal.wasm";
-pub const TX_REVEAL_PK_WASM: &str = "tx_reveal_pk.wasm";
-pub const TX_CHANGE_VALIDATOR_COMMISSION_WASM: &str =
-    "tx_change_validator_commission.wasm";
-pub const TX_CHANGE_VALIDATOR_METADATA_WASM: &str =
-    "tx_change_validator_metadata.wasm";
-pub const TX_IBC_WASM: &str = "tx_ibc.wasm";
-pub const TX_UNJAIL_VALIDATOR_WASM: &str = "tx_unjail_validator.wasm";
-pub const TX_DEACTIVATE_VALIDATOR_WASM: &str = "tx_deactivate_validator.wasm";
-pub const TX_REACTIVATE_VALIDATOR_WASM: &str = "tx_reactivate_validator.wasm";
-pub const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
-pub const TX_CLAIM_REWARDS_WASM: &str = "tx_claim_rewards.wasm";
-pub const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
-pub const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
-
-pub const TX_RESIGN_STEWARD: &str = "tx_resign_steward.wasm";
-pub const TX_UPDATE_STEWARD_COMMISSION: &str =
-    "tx_update_steward_commission.wasm";
-pub const TX_BRIDGE_POOL_WASM: &str = "tx_bridge_pool.wasm";
-pub const VP_VALIDATOR_WASM: &str = "vp_validator.wasm";
 
 pub const ALBERT_PAYMENT_ADDRESS: &str = "albert_payment";
 pub const ALBERT_SPENDING_KEY: &str = "albert_spending";

@@ -1402,7 +1402,7 @@ where
             let unshield = wrapper
                 .check_and_generate_fee_unshielding(
                     transfer_code_hash,
-                    Some("tx_transfer.wasm".to_string()),
+                    Some(namada_sdk::tx::TX_TRANSFER_WASM.to_string()),
                     descriptions_limit,
                     transaction,
                 )

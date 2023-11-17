@@ -13,6 +13,7 @@ use namada_core::types::hash::Hash;
 use namada_core::types::storage::Key;
 use namada_core::types::token::Amount;
 use namada_core::types::transaction::WrapperTx;
+use namada_sdk::tx::TX_TRANSFER_WASM;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
@@ -208,7 +209,7 @@ where
     S: StorageRead,
 {
     let transfer_code_name_key =
-        Key::wasm_code_name("tx_transfer.wasm".to_string());
+        Key::wasm_code_name(TX_TRANSFER_WASM.to_string());
     storage
         .read(&transfer_code_name_key)
         .expect("Could not read the storage")
@@ -325,7 +326,7 @@ where
         // balance
         match wrapper.generate_fee_unshielding(
             get_transfer_hash_from_storage(*wl_storage),
-            Some("tx_transfer.wasm".to_string()),
+            Some(TX_TRANSFER_WASM.to_string()),
             transaction,
         ) {
             Ok(fee_unshielding_tx) => {
