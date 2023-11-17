@@ -214,7 +214,7 @@ mod tests {
         tx_host_env::init();
 
         let code = vec![];
-        tx::ctx().init_account(code).unwrap();
+        tx::ctx().init_account(code, &None).unwrap();
     }
 
     #[test]
@@ -229,7 +229,7 @@ mod tests {
             let key = Key::wasm_code(&code_hash);
             env.wl_storage.storage.write(&key, code.clone()).unwrap();
         });
-        tx::ctx().init_account(code_hash).unwrap();
+        tx::ctx().init_account(code_hash, &None).unwrap();
     }
 
     #[test]
@@ -463,7 +463,7 @@ mod tests {
             let signed_tx_data = vp_host_env::with(|env| {
                 let chain_id = env.wl_storage.storage.chain_id.clone();
                 let mut tx = Tx::new(chain_id, expiration);
-                tx.add_code(code.clone())
+                tx.add_code(code.clone(), None)
                     .add_serialized_data(data.to_vec())
                     .sign_raw(keypairs.clone(), pks_map.clone(), None)
                     .sign_wrapper(keypair.clone());
@@ -560,7 +560,7 @@ mod tests {
         ]);
 
         let mut tx = Tx::new(ChainId::default(), None);
-        tx.add_code(vec![])
+        tx.add_code(vec![], None)
             .add_serialized_data(input_data.clone())
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
@@ -582,7 +582,7 @@ mod tests {
                 .unwrap();
         });
         let mut tx = Tx::new(ChainId::default(), None);
-        tx.add_code_from_hash(code_hash)
+        tx.add_code_from_hash(code_hash, None)
             .add_serialized_data(input_data.clone())
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
@@ -605,7 +605,7 @@ mod tests {
                 .unwrap();
         });
         let mut tx = Tx::new(ChainId::default(), None);
-        tx.add_code_from_hash(code_hash)
+        tx.add_code_from_hash(code_hash, None)
             .add_serialized_data(input_data)
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
@@ -630,7 +630,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut tx = Tx::new(ChainId::default(), None);
-        tx.add_code(vec![])
+        tx.add_code(vec![], None)
             .add_serialized_data(tx_data.clone())
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
@@ -664,7 +664,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut tx = Tx::new(ChainId::default(), None);
-        tx.add_code(vec![])
+        tx.add_code(vec![], None)
             .add_serialized_data(tx_data.clone())
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
@@ -707,7 +707,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut tx = Tx::new(ChainId::default(), None);
-        tx.add_code(vec![])
+        tx.add_code(vec![], None)
             .add_serialized_data(tx_data.clone())
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
@@ -740,7 +740,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut tx = Tx::new(ChainId::default(), None);
-        tx.add_code(vec![])
+        tx.add_code(vec![], None)
             .add_serialized_data(tx_data.clone())
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
@@ -784,7 +784,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut tx = Tx::new(ChainId::default(), None);
-        tx.add_code(vec![])
+        tx.add_code(vec![], None)
             .add_serialized_data(tx_data.clone())
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
@@ -817,7 +817,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut tx = Tx::new(ChainId::default(), None);
-        tx.add_code(vec![])
+        tx.add_code(vec![], None)
             .add_serialized_data(tx_data.clone())
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
@@ -863,7 +863,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut tx = Tx::new(ChainId::default(), None);
-        tx.add_code(vec![])
+        tx.add_code(vec![], None)
             .add_serialized_data(tx_data.clone())
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
@@ -896,7 +896,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut tx = Tx::new(ChainId::default(), None);
-        tx.add_code(vec![])
+        tx.add_code(vec![], None)
             .add_serialized_data(tx_data.clone())
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
@@ -942,7 +942,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut tx = Tx::new(ChainId::default(), None);
-        tx.add_code(vec![])
+        tx.add_code(vec![], None)
             .add_serialized_data(tx_data.clone())
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
@@ -976,7 +976,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
         let mut tx = Tx::new(ChainId::default(), None);
-        tx.add_code(vec![])
+        tx.add_code(vec![], None)
             .add_serialized_data(tx_data.clone())
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
@@ -1025,7 +1025,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
         let mut tx = Tx::new(ChainId::default(), None);
-        tx.add_code(vec![])
+        tx.add_code(vec![], None)
             .add_serialized_data(tx_data.clone())
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
@@ -1082,7 +1082,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
         let mut tx = Tx::new(ChainId::default(), None);
-        tx.add_code(vec![])
+        tx.add_code(vec![], None)
             .add_serialized_data(tx_data.clone())
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
@@ -1136,7 +1136,7 @@ mod tests {
             .expect("encoding failed");
 
         let mut tx = Tx::new(ChainId::default(), None);
-        tx.add_code(vec![])
+        tx.add_code(vec![], None)
             .add_serialized_data(tx_data.clone())
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
@@ -1183,7 +1183,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
         let mut tx = Tx::new(ChainId::default(), None);
-        tx.add_code(vec![])
+        tx.add_code(vec![], None)
             .add_serialized_data(tx_data.clone())
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
@@ -1267,7 +1267,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
         let mut tx = Tx::new(ChainId::default(), None);
-        tx.add_code(vec![])
+        tx.add_code(vec![], None)
             .add_serialized_data(tx_data.clone())
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
@@ -1340,7 +1340,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
         let mut tx = Tx::new(ChainId::default(), None);
-        tx.add_code(vec![])
+        tx.add_code(vec![], None)
             .add_serialized_data(tx_data.clone())
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
@@ -1419,7 +1419,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
         let mut tx = Tx::new(ChainId::default(), None);
-        tx.add_code(vec![])
+        tx.add_code(vec![], None)
             .add_serialized_data(tx_data.clone())
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
@@ -1522,7 +1522,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut tx = Tx::new(ChainId::default(), None);
-        tx.add_code(vec![])
+        tx.add_code(vec![], None)
             .add_serialized_data(tx_data.clone())
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
@@ -1627,7 +1627,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
         let mut tx = Tx::new(ChainId::default(), None);
-        tx.add_code(vec![])
+        tx.add_code(vec![], None)
             .add_serialized_data(tx_data.clone())
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
@@ -1727,7 +1727,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut tx = Tx::new(ChainId::default(), None);
-        tx.add_code(vec![])
+        tx.add_code(vec![], None)
             .add_serialized_data(tx_data.clone())
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
@@ -1816,7 +1816,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut tx = Tx::new(ChainId::default(), None);
-        tx.add_code(vec![])
+        tx.add_code(vec![], None)
             .add_serialized_data(tx_data.clone())
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);

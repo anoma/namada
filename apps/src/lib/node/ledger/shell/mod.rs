@@ -1403,6 +1403,7 @@ where
             let unshield = wrapper
                 .check_and_generate_fee_unshielding(
                     transfer_code_hash,
+                    Some(namada_sdk::tx::TX_TRANSFER_WASM.to_string()),
                     descriptions_limit,
                     transaction,
                 )
@@ -2073,7 +2074,7 @@ mod test_utils {
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
-        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
 
         shell.wl_storage.storage.tx_queue.push(TxInQueue {
@@ -2492,7 +2493,8 @@ mod shell_tests {
                 None,
             ))));
         unsigned_wrapper.header.chain_id = shell.chain_id.clone();
-        unsigned_wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        unsigned_wrapper
+            .set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         unsigned_wrapper
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
 
@@ -2528,7 +2530,8 @@ mod shell_tests {
                 None,
             ))));
         invalid_wrapper.header.chain_id = shell.chain_id.clone();
-        invalid_wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        invalid_wrapper
+            .set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         invalid_wrapper
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
         invalid_wrapper.add_section(Section::Signature(Signature::new(
@@ -2561,7 +2564,7 @@ mod shell_tests {
         let (shell, _recv, _, _) = test_utils::setup();
 
         let mut tx = Tx::new(shell.chain_id.clone(), None);
-        tx.add_code("wasm_code".as_bytes().to_owned());
+        tx.add_code("wasm_code".as_bytes().to_owned(), None);
 
         let result = shell.mempool_validate(
             tx.to_bytes().as_ref(),
@@ -2596,7 +2599,7 @@ mod shell_tests {
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
-        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
@@ -2696,7 +2699,7 @@ mod shell_tests {
 
         let wrong_chain_id = ChainId("Wrong chain id".to_string());
         let mut tx = Tx::new(wrong_chain_id.clone(), None);
-        tx.add_code("wasm_code".as_bytes().to_owned())
+        tx.add_code("wasm_code".as_bytes().to_owned(), None)
             .add_data("transaction data".as_bytes().to_owned())
             .sign_wrapper(keypair);
 
@@ -2724,7 +2727,7 @@ mod shell_tests {
 
         let mut tx =
             Tx::new(shell.chain_id.clone(), Some(DateTimeUtc::default()));
-        tx.add_code("wasm_code".as_bytes().to_owned())
+        tx.add_code("wasm_code".as_bytes().to_owned(), None)
             .add_data("transaction data".as_bytes().to_owned())
             .sign_wrapper(keypair);
 
@@ -2757,7 +2760,7 @@ mod shell_tests {
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
-        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
@@ -2790,7 +2793,7 @@ mod shell_tests {
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
-        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
@@ -2823,7 +2826,7 @@ mod shell_tests {
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
-        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
@@ -2858,7 +2861,7 @@ mod shell_tests {
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
-        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
@@ -2892,7 +2895,7 @@ mod shell_tests {
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
-        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
@@ -2926,7 +2929,7 @@ mod shell_tests {
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
-        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),

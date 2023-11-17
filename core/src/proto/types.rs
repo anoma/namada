@@ -357,22 +357,29 @@ pub struct Code {
     pub salt: [u8; 8],
     /// Actual transaction code
     pub code: Commitment,
+    /// The tag for the transaction code
+    pub tag: Option<String>,
 }
 
 impl Code {
     /// Make a new code section with the given bytes
-    pub fn new(code: Vec<u8>) -> Self {
+    pub fn new(code: Vec<u8>, tag: Option<String>) -> Self {
         Self {
             salt: DateTimeUtc::now().0.timestamp_millis().to_le_bytes(),
             code: Commitment::Id(code),
+            tag,
         }
     }
 
     /// Make a new code section with the given hash
-    pub fn from_hash(hash: crate::types::hash::Hash) -> Self {
+    pub fn from_hash(
+        hash: crate::types::hash::Hash,
+        tag: Option<String>,
+    ) -> Self {
         Self {
             salt: DateTimeUtc::now().0.timestamp_millis().to_le_bytes(),
             code: Commitment::Hash(hash),
+            tag,
         }
     }
 
@@ -380,6 +387,7 @@ impl Code {
     pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
         hasher.update(self.salt);
         hasher.update(self.code.hash());
+        hasher.update(self.tag.serialize_to_vec());
         hasher
     }
 }
@@ -1456,9 +1464,10 @@ impl Tx {
     pub fn add_extra_section_from_hash(
         &mut self,
         hash: crate::types::hash::Hash,
+        tag: Option<String>,
     ) -> crate::types::hash::Hash {
         let sechash = self
-            .add_section(Section::ExtraData(Code::from_hash(hash)))
+            .add_section(Section::ExtraData(Code::from_hash(hash, tag)))
             .get_hash();
         sechash
     }
@@ -1467,9 +1476,10 @@ impl Tx {
     pub fn add_extra_section(
         &mut self,
         code: Vec<u8>,
+        tag: Option<String>,
     ) -> (&mut Self, crate::types::hash::Hash) {
         let sechash = self
-            .add_section(Section::ExtraData(Code::new(code)))
+            .add_section(Section::ExtraData(Code::new(code, tag)))
             .get_hash();
         (self, sechash)
     }
@@ -1493,14 +1503,19 @@ impl Tx {
     pub fn add_code_from_hash(
         &mut self,
         code_hash: crate::types::hash::Hash,
+        tag: Option<String>,
     ) -> &mut Self {
-        self.set_code(Code::from_hash(code_hash));
+        self.set_code(Code::from_hash(code_hash, tag));
         self
     }
 
     /// Add wasm code to the tx builder
-    pub fn add_code(&mut self, code: Vec<u8>) -> &mut Self {
-        self.set_code(Code::new(code));
+    pub fn add_code(
+        &mut self,
+        code: Vec<u8>,
+        tag: Option<String>,
+    ) -> &mut Self {
+        self.set_code(Code::new(code, tag));
         self
     }
 

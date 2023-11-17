@@ -110,6 +110,41 @@ where
         .and_then(|x| Section::code_sec(x.as_ref()))
         .ok_or(Error::MissingSection(tx.code_sechash().to_string()))?;
 
+    // If the transaction code has a tag, ensure that the tag hash equals the
+    // transaction code's hash.
+    if let Some(tag) = &tx_code.tag {
+        // Get the WASM code hash corresponding to the tag from storage
+        let hash_key = Key::wasm_hash(tag);
+        let hash_value = match storage
+            .read(&hash_key)
+            .map_err(|e| {
+                Error::LoadWasmCode(format!(
+                    "Read wasm code hash failed from storage: key {}, error {}",
+                    hash_key, e
+                ))
+            })?
+            .0
+        {
+            Some(v) => Hash::try_from_slice(&v)
+                .map_err(|e| Error::ConversionError(e.to_string()))?,
+            None => {
+                return Err(Error::LoadWasmCode(format!(
+                    "No wasm code hash in storage: key {}",
+                    hash_key
+                )));
+            }
+        };
+        // Ensure that the queried code hash equals the transaction's code hash
+        let tx_code_hash = tx_code.code.hash();
+        if tx_code_hash != hash_value {
+            return Err(Error::LoadWasmCode(format!(
+                "Transaction code hash does not correspond to tag: tx hash \
+                 {}, tag {}, tag hash {}",
+                tx_code_hash, tag, hash_value,
+            )));
+        }
+    }
+
     let (module, store) = fetch_or_compile(
         tx_wasm_cache,
         &tx_code.code,
@@ -689,7 +724,7 @@ mod tests {
         let (mut tx_cache, _) =
             wasm::compilation_cache::common::testing::cache();
         let mut outer_tx = Tx::from_type(TxType::Raw);
-        outer_tx.set_code(Code::new(tx_code.clone()));
+        outer_tx.set_code(Code::new(tx_code.clone(), None));
         outer_tx.set_data(Data::new(tx_data));
         let result = tx(
             &storage,
@@ -706,7 +741,7 @@ mod tests {
         // should fail
         let tx_data = 2_usize.pow(24).serialize_to_vec();
         let mut outer_tx = Tx::from_type(TxType::Raw);
-        outer_tx.set_code(Code::new(tx_code));
+        outer_tx.set_code(Code::new(tx_code, None));
         outer_tx.set_data(Data::new(tx_data));
         let error = tx(
             &storage,
@@ -764,7 +799,7 @@ mod tests {
         let input = 2_usize.pow(23).serialize_to_vec();
 
         let mut tx = Tx::new(storage.chain_id.clone(), None);
-        tx.add_code(vec![]).add_serialized_data(input);
+        tx.add_code(vec![], None).add_serialized_data(input);
 
         let eval_vp = EvalVp {
             vp_code_hash: limit_code_hash,
@@ -772,7 +807,7 @@ mod tests {
         };
 
         let mut outer_tx = Tx::new(storage.chain_id.clone(), None);
-        outer_tx.add_code(vec![]).add_data(eval_vp);
+        outer_tx.add_code(vec![], None).add_data(eval_vp);
 
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         // When the `eval`ed VP doesn't run out of memory, it should return
@@ -796,7 +831,7 @@ mod tests {
         // should fail
         let input = 2_usize.pow(24).serialize_to_vec();
         let mut tx = Tx::new(storage.chain_id.clone(), None);
-        tx.add_code(vec![]).add_data(input);
+        tx.add_code(vec![], None).add_data(input);
 
         let eval_vp = EvalVp {
             vp_code_hash: limit_code_hash,
@@ -804,7 +839,7 @@ mod tests {
         };
 
         let mut outer_tx = Tx::new(storage.chain_id.clone(), None);
-        outer_tx.add_code(vec![]).add_data(eval_vp);
+        outer_tx.add_code(vec![], None).add_data(eval_vp);
 
         // When the `eval`ed VP runs out of memory, its result should be
         // `false`, hence we should also get back `false` from the VP that
@@ -859,7 +894,7 @@ mod tests {
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.header.chain_id = storage.chain_id.clone();
         outer_tx.set_data(Data::new(tx_data));
-        outer_tx.set_code(Code::new(vec![]));
+        outer_tx.set_code(Code::new(vec![], None));
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let result = vp(
             code_hash,
@@ -928,7 +963,7 @@ mod tests {
         let (mut tx_cache, _) =
             wasm::compilation_cache::common::testing::cache();
         let mut outer_tx = Tx::from_type(TxType::Raw);
-        outer_tx.set_code(Code::new(tx_no_op));
+        outer_tx.set_code(Code::new(tx_no_op, None));
         outer_tx.set_data(Data::new(tx_data));
         let result = tx(
             &storage,
@@ -991,7 +1026,7 @@ mod tests {
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.header.chain_id = storage.chain_id.clone();
         outer_tx.set_data(Data::new(tx_data));
-        outer_tx.set_code(Code::new(vec![]));
+        outer_tx.set_code(Code::new(vec![], None));
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let result = vp(
             code_hash,
@@ -1062,7 +1097,7 @@ mod tests {
         let (mut tx_cache, _) =
             wasm::compilation_cache::common::testing::cache();
         let mut outer_tx = Tx::from_type(TxType::Raw);
-        outer_tx.set_code(Code::new(tx_read_key));
+        outer_tx.set_code(Code::new(tx_read_key, None));
         outer_tx.set_data(Data::new(tx_data));
         let error = tx(
             &storage,
@@ -1117,7 +1152,7 @@ mod tests {
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.header.chain_id = storage.chain_id.clone();
         outer_tx.set_data(Data::new(tx_data));
-        outer_tx.set_code(Code::new(vec![]));
+        outer_tx.set_code(Code::new(vec![], None));
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let error = vp(
             code_hash,
@@ -1185,7 +1220,7 @@ mod tests {
         let input = 2_usize.pow(23).serialize_to_vec();
 
         let mut tx = Tx::new(storage.chain_id.clone(), None);
-        tx.add_code(vec![]).add_serialized_data(input);
+        tx.add_code(vec![], None).add_serialized_data(input);
 
         let eval_vp = EvalVp {
             vp_code_hash: read_code_hash,
@@ -1193,7 +1228,7 @@ mod tests {
         };
 
         let mut outer_tx = Tx::new(storage.chain_id.clone(), None);
-        outer_tx.add_code(vec![]).add_data(eval_vp);
+        outer_tx.add_code(vec![], None).add_data(eval_vp);
 
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let passed = vp(
@@ -1266,7 +1301,7 @@ mod tests {
         write_log.write(&len_key, code_len).unwrap();
 
         let mut outer_tx = Tx::from_type(TxType::Raw);
-        outer_tx.set_code(Code::from_hash(code_hash));
+        outer_tx.set_code(Code::from_hash(code_hash, None));
         outer_tx.set_data(Data::new(tx_data));
 
         tx(

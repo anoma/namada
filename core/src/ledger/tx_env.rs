@@ -40,7 +40,8 @@ pub trait TxEnv: StorageRead + StorageWrite {
     /// writes the given code as its validity predicate into the storage.
     fn init_account(
         &mut self,
-        code: impl AsRef<[u8]>,
+        code_hash: impl AsRef<[u8]>,
+        code_tag: &Option<String>,
     ) -> Result<Address, storage_api::Error>;
 
     /// Update a validity predicate
@@ -48,6 +49,7 @@ pub trait TxEnv: StorageRead + StorageWrite {
         &mut self,
         addr: &Address,
         code: impl AsRef<[u8]>,
+        code_tag: &Option<String>,
     ) -> Result<(), storage_api::Error>;
 
     /// Emit an IBC event. On multiple calls, these emitted event will be added.

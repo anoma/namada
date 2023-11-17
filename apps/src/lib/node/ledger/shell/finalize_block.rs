@@ -973,7 +973,7 @@ mod test_finalize_block {
                 None,
             ))));
         wrapper_tx.header.chain_id = shell.chain_id.clone();
-        wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper_tx.set_data(Data::new(
             "Encrypted transaction data".as_bytes().to_owned(),
         ));
@@ -1014,7 +1014,7 @@ mod test_finalize_block {
                 None,
             ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
-        outer_tx.set_code(Code::new(tx_code));
+        outer_tx.set_code(Code::new(tx_code, None));
         outer_tx.set_data(Data::new(
             "Decrypted transaction data".as_bytes().to_owned(),
         ));
@@ -1129,7 +1129,7 @@ mod test_finalize_block {
                 None,
             ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
-        outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         outer_tx.set_data(Data::new(
             String::from("transaction data").as_bytes().to_owned(),
         ));
@@ -2906,7 +2906,7 @@ mod test_finalize_block {
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
-        wrapper.set_code(Code::new(tx_code));
+        wrapper.set_code(Code::new(tx_code, None));
         wrapper.set_data(Data::new(
             "Decrypted transaction data".as_bytes().to_owned(),
         ));
@@ -3036,7 +3036,7 @@ mod test_finalize_block {
             ))));
         unsigned_wrapper.header.chain_id = shell.chain_id.clone();
         let mut failing_wrapper = unsigned_wrapper.clone();
-        unsigned_wrapper.set_code(Code::new(tx_code));
+        unsigned_wrapper.set_code(Code::new(tx_code, None));
         let addr = Address::from(&keypair.to_public());
         let key = Key::from(addr.to_db_key())
             .join(&Key::from("test".to_string().to_db_key()));
@@ -3051,7 +3051,7 @@ mod test_finalize_block {
         wasm_path.push("wasm_for_tests/tx_fail.wasm");
         let tx_code = std::fs::read(wasm_path)
             .expect("Expected a file at given code path");
-        failing_wrapper.set_code(Code::new(tx_code));
+        failing_wrapper.set_code(Code::new(tx_code, None));
         failing_wrapper.set_data(Data::new(
             "Encrypted transaction data".as_bytes().to_owned(),
         ));
@@ -3211,7 +3211,7 @@ mod test_finalize_block {
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
-        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new(
             "Encrypted transaction data".as_bytes().to_owned(),
         ));
@@ -3290,7 +3290,7 @@ mod test_finalize_block {
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
-        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new(
             "Encrypted transaction data".as_bytes().to_owned(),
         ));
@@ -3373,7 +3373,7 @@ mod test_finalize_block {
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
-        wrapper.set_code(Code::new(tx_code));
+        wrapper.set_code(Code::new(tx_code, None));
         wrapper.set_data(Data::new(
             "Enxrypted transaction data".as_bytes().to_owned(),
         ));
@@ -4900,7 +4900,7 @@ mod test_finalize_block {
             .write(&proposal_execution_key, 0u64)
             .expect("Test failed.");
         let mut tx = Tx::new(shell.chain_id.clone(), None);
-        tx.add_code_from_hash(Hash::default()).add_data(0u64);
+        tx.add_code_from_hash(Hash::default(), None).add_data(0u64);
         let new_min_confirmations = MinimumConfirmations::from(unsafe {
             NonZeroU64::new_unchecked(42)
         });

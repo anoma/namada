@@ -163,21 +163,6 @@ pub mod wrapper_tx {
         }
     }
 
-    /// A degenerate PoW solution type
-    #[derive(
-        Debug,
-        Clone,
-        BorshSerialize,
-        BorshDeserialize,
-        BorshSchema,
-        Serialize,
-        Deserialize,
-    )]
-    pub enum Solution {
-        /// No PoW solution
-        None,
-    }
-
     /// A transaction with an encrypted payload, an optional shielded pool
     /// unshielding tx for fee payment and some non-encrypted metadata for
     /// inclusion and / or verification purposes
@@ -204,8 +189,6 @@ pub mod wrapper_tx {
         /// The hash of the optional, unencrypted, unshielding transaction for
         /// fee payment
         pub unshield_section_hash: Option<Hash>,
-        /// Mandatory 0x00 byte for deprecated field
-        pub pow_solution: Solution,
     }
 
     impl WrapperTx {
@@ -227,7 +210,6 @@ pub mod wrapper_tx {
                 epoch,
                 gas_limit,
                 unshield_section_hash: unshield_hash,
-                pow_solution: Solution::None,
             }
         }
 
@@ -251,6 +233,7 @@ pub mod wrapper_tx {
         pub fn check_and_generate_fee_unshielding(
             &self,
             transfer_code_hash: Hash,
+            transfer_code_tag: Option<String>,
             descriptions_limit: u64,
             unshield: Transaction,
         ) -> Result<Tx, WrapperTxErr> {
@@ -288,13 +271,18 @@ pub mod wrapper_tx {
                         .to_string(),
                 ));
             }
-            self.generate_fee_unshielding(transfer_code_hash, unshield)
+            self.generate_fee_unshielding(
+                transfer_code_hash,
+                transfer_code_tag,
+                unshield,
+            )
         }
 
         /// Generates the fee unshielding tx for execution.
         pub fn generate_fee_unshielding(
             &self,
             transfer_code_hash: Hash,
+            transfer_code_tag: Option<String>,
             unshield: Transaction,
         ) -> Result<Tx, WrapperTxErr> {
             let mut tx =
@@ -322,7 +310,7 @@ pub mod wrapper_tx {
             };
             let data = transfer.serialize_to_vec();
             tx.set_data(Data::new(data));
-            tx.set_code(Code::from_hash(transfer_code_hash));
+            tx.set_code(Code::from_hash(transfer_code_hash, transfer_code_tag));
 
             Ok(tx)
         }

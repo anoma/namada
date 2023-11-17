@@ -21,11 +21,10 @@ mod test_bridge_pool_vp {
         wrapped_erc20s, Contracts, Erc20WhitelistEntry, EthereumBridgeParams,
         UpgradeableContract,
     };
+    use namada_sdk::tx::TX_BRIDGE_POOL_WASM as ADD_TRANSFER_WASM;
 
     use crate::native_vp::TestNativeVpEnv;
     use crate::tx::{tx_host_env, TestTxEnv};
-
-    const ADD_TRANSFER_WASM: &str = "tx_bridge_pool.wasm";
     const ASSET: EthAddress = EthAddress([1; 20]);
     const BERTHA_WEALTH: u64 = 1_000_000;
     const BERTHA_TOKENS: u64 = 10_000;
@@ -130,7 +129,7 @@ mod test_bridge_pool_vp {
             wasm_loader::read_wasm_or_exit(wasm_dir(), ADD_TRANSFER_WASM);
 
         let mut tx = Tx::new(ChainId::default(), None);
-        tx.add_code(wasm_code)
+        tx.add_code(wasm_code, None)
             .add_serialized_data(data)
             .sign_wrapper(keypair.clone());
         tx
