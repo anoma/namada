@@ -90,6 +90,7 @@ where
 
         let pos_params =
             namada_proof_of_stake::read_pos_params(&self.wl_storage)?;
+
         if new_epoch {
             namada::ledger::storage::update_allowed_conversions(
                 &mut self.wl_storage,
@@ -105,27 +106,28 @@ where
                 current_epoch,
                 current_epoch + pos_params.pipeline_len,
             )?;
+
+            // Compute the total stake of the consensus validator set and record
+            // it in storage
             namada_proof_of_stake::store_total_consensus_stake(
                 &mut self.wl_storage,
                 current_epoch,
             )?;
 
-            // Prune old consensus validator from liveness records
-            namada_proof_of_stake::prune_liveness_data_and_record(
+            // Prune liveness data from validators that are no longer in the
+            // consensus set
+            namada_proof_of_stake::prune_liveness_data(
                 &mut self.wl_storage,
                 current_epoch,
             )?;
         }
 
+        let votes = pos_votes_from_abci(&self.wl_storage, &req.votes);
+
         // Invariant: Has to be applied before `record_slashes_from_evidence`
         // because it potentially needs to be able to read validator state from
         // previous epoch and jailing validator removes the historical state
-        let application_votes = self.log_block_rewards(
-            &req.votes,
-            height,
-            current_epoch,
-            new_epoch,
-        )?;
+        self.log_block_rewards(&req.votes, height, current_epoch, new_epoch)?;
 
         // Invariant: This has to be applied after
         // `copy_validator_sets_and_positions` and before `self.update_epoch`.
@@ -142,17 +144,20 @@ where
         // Consensus set liveness check
         namada_proof_of_stake::record_liveness_data(
             &mut self.wl_storage,
-            &application_votes.unwrap_or_default(),
+            &votes,
             current_epoch,
             height,
             &pos_params,
         )?;
+
         let validator_set_update_epoch =
             self.get_validator_set_update_epoch(current_epoch);
+
         // Jail validators for inactivity
         namada_proof_of_stake::jail_for_liveness(
             &mut self.wl_storage,
             &pos_params,
+            current_epoch,
             validator_set_update_epoch,
         )?;
 
@@ -794,7 +799,7 @@ where
         height: BlockHeight,
         current_epoch: Epoch,
         new_epoch: bool,
-    ) -> Result<Option<Vec<namada_proof_of_stake::types::VoteInfo>>> {
+    ) -> Result<()> {
         // Read the block proposer of the previously committed block in storage
         // (n-1 if we are in the process of finalizing n right now).
         match read_last_block_proposer_address(&self.wl_storage)? {
@@ -811,9 +816,8 @@ where
                         current_epoch
                     },
                     &proposer_address,
-                    votes.clone(),
+                    votes,
                 )?;
-                Ok(Some(votes))
             }
             None => {
                 if height > BlockHeight::default().next_height() {
@@ -825,9 +829,9 @@ where
                         "No last block proposer at height {height}"
                     );
                 }
-                Ok(None)
             }
         }
+        Ok(())
     }
 
     // Write the inner tx hash to storage and remove the corresponding wrapper
@@ -4598,14 +4602,14 @@ mod test_finalize_block {
         }
 
         // Assert that the validator was jailed
-        let mut target_jail_epoch = shell.wl_storage.storage.last_epoch;
+        let mut target_jail_epoch = shell.wl_storage.storage.block.epoch;
         let validator_state_current_epoch =
             validator_state_handle(&val2.address)
                 .get(&shell.wl_storage, target_jail_epoch, &params)
                 .unwrap()
                 .unwrap();
 
-        if !matches!(validator_state_current_epoch, ValidatorState::Jailed) {
+        if validator_state_current_epoch != ValidatorState::Jailed {
             // We need to check the next epoch
             target_jail_epoch = target_jail_epoch.next();
             assert_eq!(
