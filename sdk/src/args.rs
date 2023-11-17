@@ -1755,6 +1755,25 @@ pub struct KeyGen {
 
 /// Wallet restore key and implicit address arguments
 #[derive(Clone, Debug)]
+pub struct KeyDerive {
+    /// Scheme type
+    pub scheme: SchemeType,
+    /// Whether to generate a spending key for the shielded pool
+    pub shielded: bool,
+    /// Key alias
+    pub alias: Option<String>,
+    /// Whether to force overwrite the alias, if provided
+    pub alias_force: bool,
+    /// Don't encrypt the keypair
+    pub unsafe_dont_encrypt: bool,
+    /// BIP44 derivation path
+    pub derivation_path: String,
+    /// Use device to generate key and address
+    pub use_device: bool,
+}
+
+/// Wallet restore key and implicit address arguments
+#[derive(Clone, Debug)]
 pub struct KeyAndAddressDerive {
     /// Scheme type
     pub scheme: SchemeType,

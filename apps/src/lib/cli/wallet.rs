@@ -41,14 +41,6 @@ impl CliApi {
     ) -> Result<()> {
         match cmd {
             cmds::NamadaWallet::Key(sub) => match sub {
-                cmds::WalletKey::Derive(cmds::KeyDerive(args)) => {
-                    key_and_address_derive(
-                        &mut ctx.borrow_mut_chain_or_exit().wallet,
-                        io,
-                        args,
-                    )
-                    .await
-                }
                 cmds::WalletKey::Find(cmds::KeyFind(args)) => {
                     key_find(ctx, io, args)
                 }
@@ -60,14 +52,6 @@ impl CliApi {
                 }
             },
             cmds::NamadaWallet::Address(sub) => match sub {
-                cmds::WalletAddress::Derive(cmds::AddressDerive(args)) => {
-                    key_and_address_derive(
-                        &mut ctx.borrow_mut_chain_or_exit().wallet,
-                        io,
-                        args,
-                    )
-                    .await
-                }
                 cmds::WalletAddress::Find(cmds::AddressOrAliasFind(args)) => {
                     address_or_alias_find(ctx, io, args)
                 }
@@ -102,6 +86,9 @@ impl CliApi {
             },
             cmds::NamadaWallet::NewGen(cmds::WalletNewGen(args)) => {
                 key_gen(ctx, io, args)
+            }
+            cmds::NamadaWallet::NewDerive(cmds::WalletNewDerive(args)) => {
+                key_derive(ctx, io, args).await
             }
         }
         Ok(())
@@ -398,14 +385,15 @@ pub fn decode_derivation_path(
 async fn key_and_address_derive(
     wallet: &mut Wallet<impl WalletStorage + WalletIo>,
     io: &impl Io,
-    args::KeyAndAddressDerive {
+    args::KeyDerive {
         scheme,
         alias,
         alias_force,
         unsafe_dont_encrypt,
         derivation_path,
         use_device,
-    }: args::KeyAndAddressDerive,
+        ..
+    }: args::KeyDerive,
 ) {
     let derivation_path = decode_derivation_path(scheme, derivation_path)
         .unwrap_or_else(|err| {
@@ -551,6 +539,24 @@ fn key_and_address_gen(
         "Successfully added a key and an address with alias: \"{}\"",
         alias
     );
+}
+
+/// TODO
+async fn key_derive(
+    mut ctx: Context,
+    io: &impl Io,
+    args_key_derive: args::KeyDerive,
+) {
+    if !args_key_derive.shielded {
+        key_and_address_derive(
+            &mut ctx.borrow_mut_chain_or_exit().wallet,
+            io,
+            args_key_derive,
+        )
+        .await
+    } else {
+        todo!()
+    }
 }
 
 /// Find a keypair in the wallet store.
