@@ -88,7 +88,7 @@ fn governance(c: &mut Criterion) {
                     },
                     None,
                     None,
-                    Some(&defaults::albert_keypair()),
+                    vec![&defaults::albert_keypair()],
                 )
             }
             "validator_vote" => {
@@ -104,7 +104,7 @@ fn governance(c: &mut Criterion) {
                     },
                     None,
                     None,
-                    Some(&defaults::validator_keypair()),
+                    vec![&defaults::albert_keypair()],
                 )
             }
             "minimal_proposal" => {
@@ -131,7 +131,7 @@ fn governance(c: &mut Criterion) {
                     },
                     None,
                     Some(vec![content_section]),
-                    Some(&defaults::albert_keypair()),
+                    vec![&defaults::albert_keypair()],
                 )
             }
             "complete_proposal" => {
@@ -183,7 +183,7 @@ fn governance(c: &mut Criterion) {
                     },
                     None,
                     Some(vec![content_section, wasm_code_section]),
-                    Some(&defaults::albert_keypair()),
+                    vec![&defaults::albert_keypair()],
                 )
             }
             _ => panic!("Unexpected bench test"),
@@ -423,7 +423,7 @@ fn vp_multitoken(c: &mut Criterion) {
         },
         None,
         None,
-        Some(&defaults::albert_keypair()),
+        vec![&defaults::albert_keypair()],
     );
 
     for (signed_tx, bench_name) in [foreign_key_write, transfer]
@@ -624,7 +624,7 @@ fn pgf(c: &mut Criterion) {
                 defaults::albert_address(),
                 None,
                 None,
-                Some(&defaults::albert_keypair()),
+                vec![&defaults::albert_keypair()],
             ),
             "steward_inflation_rate" => {
                 let data =
@@ -640,7 +640,7 @@ fn pgf(c: &mut Criterion) {
                     data,
                     None,
                     None,
-                    Some(&defaults::albert_keypair()),
+                    vec![&defaults::albert_keypair()],
                 )
             }
             _ => panic!("Unexpected bench test"),
@@ -712,7 +712,7 @@ fn eth_bridge_nut(c: &mut Criterion) {
             data,
             None,
             None,
-            Some(&defaults::albert_keypair()),
+            vec![&defaults::albert_keypair()],
         )
     };
 
@@ -781,7 +781,7 @@ fn eth_bridge(c: &mut Criterion) {
             data,
             None,
             None,
-            Some(&defaults::albert_keypair()),
+            vec![&defaults::albert_keypair()],
         )
     };
 
@@ -878,7 +878,7 @@ fn eth_bridge_pool(c: &mut Criterion) {
             data,
             None,
             None,
-            Some(&defaults::albert_keypair()),
+            vec![&defaults::albert_keypair()],
         )
     };
 

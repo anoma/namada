@@ -148,7 +148,7 @@ fn bond(c: &mut Criterion) {
         },
         None,
         None,
-        Some(&defaults::albert_keypair()),
+        vec![&defaults::albert_keypair()],
     );
 
     let self_bond = shell.generate_tx(
@@ -160,7 +160,7 @@ fn bond(c: &mut Criterion) {
         },
         None,
         None,
-        Some(&defaults::validator_keypair()),
+        vec![&defaults::validator_keypair()],
     );
 
     for (signed_tx, bench_name) in
@@ -191,7 +191,7 @@ fn unbond(c: &mut Criterion) {
         },
         None,
         None,
-        Some(&defaults::albert_keypair()),
+        vec![&defaults::albert_keypair()],
     );
 
     let self_unbond = shell.generate_tx(
@@ -203,7 +203,7 @@ fn unbond(c: &mut Criterion) {
         },
         None,
         None,
-        Some(&defaults::validator_keypair()),
+        vec![&defaults::validator_keypair()],
     );
 
     for (signed_tx, bench_name) in
@@ -233,7 +233,7 @@ fn withdraw(c: &mut Criterion) {
         },
         None,
         None,
-        Some(&defaults::albert_keypair()),
+        vec![&defaults::albert_keypair()],
     );
 
     let self_withdraw = shell.generate_tx(
@@ -244,7 +244,7 @@ fn withdraw(c: &mut Criterion) {
         },
         None,
         None,
-        Some(&defaults::validator_keypair()),
+        vec![&defaults::validator_keypair()],
     );
 
     for (signed_tx, bench_name) in [withdraw, self_withdraw]
@@ -267,7 +267,7 @@ fn withdraw(c: &mut Criterion) {
                             },
                             None,
                             None,
-                            Some(&defaults::albert_keypair()),
+                            vec![&defaults::albert_keypair()],
                         ),
                         "self_withdraw" => shell.generate_tx(
                             TX_UNBOND_WASM,
@@ -278,7 +278,7 @@ fn withdraw(c: &mut Criterion) {
                             },
                             None,
                             None,
-                            Some(&defaults::validator_keypair()),
+                            vec![&defaults::validator_keypair()],
                         ),
                         _ => panic!("Unexpected bench test"),
                     };
@@ -322,7 +322,7 @@ fn redelegate(c: &mut Criterion) {
             },
             None,
             None,
-            Some(&defaults::albert_keypair()),
+            vec![&defaults::albert_keypair()],
         )
     };
 
@@ -356,7 +356,7 @@ fn reveal_pk(c: &mut Criterion) {
         new_implicit_account.to_public(),
         None,
         None,
-        None,
+        vec![],
     );
 
     c.bench_function("reveal_pk", |b| {
@@ -390,7 +390,7 @@ fn update_account(c: &mut Criterion) {
         data,
         None,
         Some(vec![extra_section]),
-        Some(&defaults::albert_keypair()),
+        vec![&defaults::albert_keypair()],
     );
 
     c.bench_function("update_account", |b| {
@@ -430,7 +430,7 @@ fn init_account(c: &mut Criterion) {
         data,
         None,
         Some(vec![extra_section]),
-        Some(&defaults::albert_keypair()),
+        vec![&defaults::albert_keypair()],
     );
 
     c.bench_function("init_account", |b| {
@@ -468,7 +468,7 @@ fn init_proposal(c: &mut Criterion) {
                                 },
                                 None,
                                 Some(vec![content_section]),
-                                Some(&defaults::albert_keypair()),
+                                vec![&defaults::albert_keypair()],
                             )
                         }
                         "complete_proposal" => {
@@ -520,7 +520,7 @@ fn init_proposal(c: &mut Criterion) {
                                 },
                                 None,
                                 Some(vec![content_section, wasm_code_section]),
-                                Some(&defaults::albert_keypair()),
+                                vec![&defaults::albert_keypair()],
                             )
                         }
                         _ => panic!("unexpected bench test"),
@@ -550,7 +550,7 @@ fn vote_proposal(c: &mut Criterion) {
         },
         None,
         None,
-        Some(&defaults::albert_keypair()),
+        vec![&defaults::albert_keypair()],
     );
 
     let validator_vote = shell.generate_tx(
@@ -563,7 +563,7 @@ fn vote_proposal(c: &mut Criterion) {
         },
         None,
         None,
-        Some(&defaults::validator_keypair()),
+        vec![&defaults::validator_keypair()],
     );
 
     for (signed_tx, bench_name) in [delegator_vote, validator_vote]
@@ -584,31 +584,28 @@ fn vote_proposal(c: &mut Criterion) {
 
 fn init_validator(c: &mut Criterion) {
     let mut csprng = rand::rngs::OsRng {};
-    let consensus_key: common::PublicKey =
-        secp256k1::SigScheme::generate(&mut csprng)
-            .try_to_sk::<common::SecretKey>()
-            .unwrap()
-            .to_public();
+    let consensus_key_sk = ed25519::SigScheme::generate(&mut csprng)
+        .try_to_sk::<common::SecretKey>()
+        .unwrap();
+    let consensus_key = consensus_key_sk.to_public();
 
-    let eth_cold_key = secp256k1::PublicKey::try_from_pk(
-        &secp256k1::SigScheme::generate(&mut csprng)
-            .try_to_sk::<common::SecretKey>()
-            .unwrap()
-            .to_public(),
-    )
-    .unwrap();
-    let eth_hot_key = secp256k1::PublicKey::try_from_pk(
-        &secp256k1::SigScheme::generate(&mut csprng)
-            .try_to_sk::<common::SecretKey>()
-            .unwrap()
-            .to_public(),
-    )
-    .unwrap();
-    let protocol_key: common::PublicKey =
-        secp256k1::SigScheme::generate(&mut csprng)
-            .try_to_sk::<common::SecretKey>()
-            .unwrap()
-            .to_public();
+    let eth_cold_key_sk = &secp256k1::SigScheme::generate(&mut csprng)
+        .try_to_sk::<common::SecretKey>()
+        .unwrap();
+    let eth_cold_key =
+        secp256k1::PublicKey::try_from_pk(&eth_cold_key_sk.to_public())
+            .unwrap();
+
+    let eth_hot_key_sk = &secp256k1::SigScheme::generate(&mut csprng)
+        .try_to_sk::<common::SecretKey>()
+        .unwrap();
+    let eth_hot_key =
+        secp256k1::PublicKey::try_from_pk(&eth_hot_key_sk.to_public()).unwrap();
+
+    let protocol_key_sk = ed25519::SigScheme::generate(&mut csprng)
+        .try_to_sk::<common::SecretKey>()
+        .unwrap();
+    let protocol_key = protocol_key_sk.to_public();
 
     let shell = BenchShell::default();
     let validator_vp_code_hash: Hash = shell
@@ -642,7 +639,13 @@ fn init_validator(c: &mut Criterion) {
         data,
         None,
         Some(vec![extra_section]),
-        Some(&defaults::albert_keypair()),
+        vec![
+            &defaults::albert_keypair(),
+            &consensus_key_sk,
+            eth_cold_key_sk,
+            eth_hot_key_sk,
+            &protocol_key_sk,
+        ],
     );
 
     c.bench_function("init_validator", |b| {
@@ -664,7 +667,7 @@ fn change_validator_commission(c: &mut Criterion) {
         },
         None,
         None,
-        Some(&defaults::validator_keypair()),
+        vec![&defaults::albert_keypair()],
     );
 
     c.bench_function("change_validator_commission", |b| {
@@ -721,7 +724,7 @@ fn change_validator_metadata(c: &mut Criterion) {
         metadata_change,
         None,
         None,
-        Some(&defaults::validator_keypair()),
+        vec![&defaults::albert_keypair()],
     );
 
     c.bench_function("change_validator_metadata", |b| {
@@ -815,7 +818,7 @@ fn unjail_validator(c: &mut Criterion) {
         defaults::validator_address(),
         None,
         None,
-        Some(&defaults::validator_keypair()),
+        vec![&defaults::albert_keypair()],
     );
 
     c.bench_function("unjail_validator", |b| {
@@ -876,7 +879,7 @@ fn tx_bridge_pool(c: &mut Criterion) {
         data,
         None,
         None,
-        Some(&defaults::albert_keypair()),
+        vec![&defaults::albert_keypair()],
     );
     c.bench_function("bridge pool", |b| {
         b.iter_batched_ref(
@@ -905,7 +908,7 @@ fn resign_steward(c: &mut Criterion) {
                     defaults::albert_address(),
                     None,
                     None,
-                    Some(&defaults::albert_keypair()),
+                    vec![&defaults::albert_keypair()],
                 );
 
                 (shell, tx)
@@ -942,7 +945,7 @@ fn update_steward_commission(c: &mut Criterion) {
                     data,
                     None,
                     None,
-                    Some(&defaults::albert_keypair()),
+                    vec![&defaults::albert_keypair()],
                 );
 
                 (shell, tx)
@@ -960,7 +963,7 @@ fn deactivate_validator(c: &mut Criterion) {
         defaults::validator_address(),
         None,
         None,
-        Some(&defaults::validator_keypair()),
+        vec![&defaults::albert_keypair()],
     );
 
     c.bench_function("deactivate_validator", |b| {
@@ -979,7 +982,7 @@ fn reactivate_validator(c: &mut Criterion) {
         defaults::validator_address(),
         None,
         None,
-        Some(&defaults::validator_keypair()),
+        vec![&defaults::albert_keypair()],
     );
 
     c.bench_function("reactivate_validator", |b| {
@@ -1024,7 +1027,7 @@ fn claim_rewards(c: &mut Criterion) {
         },
         None,
         None,
-        Some(&defaults::albert_keypair()),
+        vec![&defaults::albert_keypair()],
     );
 
     let self_claim = shell.generate_tx(
@@ -1035,7 +1038,7 @@ fn claim_rewards(c: &mut Criterion) {
         },
         None,
         None,
-        Some(&defaults::validator_keypair()),
+        vec![&defaults::albert_keypair()],
     );
 
     for (signed_tx, bench_name) in
