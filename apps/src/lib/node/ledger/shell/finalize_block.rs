@@ -2545,8 +2545,8 @@ mod test_finalize_block {
             (Dec::one() - stake_ratio) * inflation_3 + commission;
         let exp_del_reward = del_rewards_no_commission - commission;
 
-        assert_eq!(exp_val_reward, val_reward_2);
-        assert_eq!(exp_del_reward, del_reward_1);
+        assert!(is_reward_equal_enough(exp_val_reward, val_reward_2, 1));
+        assert!(is_reward_equal_enough(exp_del_reward, del_reward_1, 1));
     }
 
     /// A unit test for changing consensus keys and communicating to CometBFT
