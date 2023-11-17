@@ -43,9 +43,6 @@ impl CliApi {
                 cmds::WalletKey::Derive(cmds::KeyDerive(args)) => {
                     key_and_address_derive(ctx, io, args).await
                 }
-                cmds::WalletKey::Gen(cmds::KeyGen(args)) => {
-                    key_and_address_gen(ctx, io, args)
-                }
                 cmds::WalletKey::Find(cmds::KeyFind(args)) => {
                     key_find(ctx, io, args)
                 }
@@ -57,9 +54,6 @@ impl CliApi {
                 }
             },
             cmds::NamadaWallet::Address(sub) => match sub {
-                cmds::WalletAddress::Gen(cmds::AddressGen(args)) => {
-                    key_and_address_gen(ctx, io, args)
-                }
                 cmds::WalletAddress::Derive(cmds::AddressDerive(args)) => {
                     key_and_address_derive(ctx, io, args).await
                 }
@@ -72,9 +66,6 @@ impl CliApi {
                 }
             },
             cmds::NamadaWallet::Masp(sub) => match sub {
-                cmds::WalletMasp::GenSpendKey(cmds::MaspGenSpendKey(args)) => {
-                    spending_key_gen(ctx, io, args)
-                }
                 cmds::WalletMasp::GenPayAddr(cmds::MaspGenPayAddr(args)) => {
                     let args = args.to_sdk(&mut ctx);
                     payment_address_gen(ctx, io, args)
@@ -92,6 +83,9 @@ impl CliApi {
                     address_key_find(ctx, io, args)
                 }
             },
+            cmds::NamadaWallet::NewGen(cmds::WalletNewGen(args)) => {
+                key_gen(ctx, io, args)
+            }
         }
         Ok(())
     }
@@ -236,18 +230,26 @@ fn payment_addresses_list(ctx: Context, io: &impl Io) {
 fn spending_key_gen(
     ctx: Context,
     io: &impl Io,
-    args::MaspSpendKeyGen {
+    args::KeyGen {
         alias,
         alias_force,
         unsafe_dont_encrypt,
-    }: args::MaspSpendKeyGen,
+        ..
+    }: args::KeyGen,
 ) {
+    let alias = alias.unwrap_or_else(|| {
+        display_line!(io, "Missing alias.");
+        display_line!(io, "No changes are persisted. Exiting.");
+        cli::safe_exit(1)
+    });
     let mut wallet = load_wallet(ctx);
     let alias = alias.to_lowercase();
     let password = read_and_confirm_encryption_password(unsafe_dont_encrypt);
     let (alias, _key) =
         wallet.gen_store_spending_key(alias, password, alias_force, &mut OsRng);
-    wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
+    wallet
+        .save()
+        .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
     display_line!(
         io,
         "Successfully added a spending key with alias: \"{}\"",
@@ -463,18 +465,28 @@ async fn key_and_address_derive(
     );
 }
 
+/// TODO
+fn key_gen(ctx: Context, io: &impl Io, args_key_gen: args::KeyGen) {
+    if !args_key_gen.shielded {
+        key_and_address_gen(ctx, io, args_key_gen)
+    } else {
+        spending_key_gen(ctx, io, args_key_gen)
+    }
+}
+
 /// Generate a new keypair and derive implicit address from it and store them in
 /// the wallet.
 fn key_and_address_gen(
     ctx: Context,
     io: &impl Io,
-    args::KeyAndAddressGen {
+    args::KeyGen {
         scheme,
         alias,
         alias_force,
         unsafe_dont_encrypt,
         derivation_path,
-    }: args::KeyAndAddressGen,
+        ..
+    }: args::KeyGen,
 ) {
     let mut wallet = load_wallet(ctx);
     let encryption_password =

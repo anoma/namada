@@ -2079,9 +2079,13 @@ pub struct MaspPayAddrGen<C: NamadaTypes = SdkTypes> {
 
 /// Wallet generate key and implicit address arguments
 #[derive(Clone, Debug)]
-pub struct KeyAndAddressGen {
+pub struct KeyGen {
     /// Scheme type
     pub scheme: SchemeType,
+    /// Whether to generate a spending key for the shielded pool
+    pub shielded: bool,
+    /// Whether to generate a raw non-hd key
+    pub raw: bool,
     /// Key alias
     pub alias: Option<String>,
     /// Whether to force overwrite the alias, if provided

@@ -485,6 +485,8 @@ pub mod cmds {
         Address(WalletAddress),
         /// MASP key, address management commands
         Masp(WalletMasp),
+        /// TODO
+        NewGen(WalletNewGen),
     }
 
     impl Cmd for NamadaWallet {
@@ -492,13 +494,15 @@ pub mod cmds {
             app.subcommand(WalletKey::def())
                 .subcommand(WalletAddress::def())
                 .subcommand(WalletMasp::def())
+                .subcommand(WalletNewGen::def())
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             let key = SubCmd::parse(matches).map(Self::Key);
             let address = SubCmd::parse(matches).map(Self::Address);
             let masp = SubCmd::parse(matches).map(Self::Masp);
-            key.or(address).or(masp)
+            let gen_new = SubCmd::parse(matches).map(Self::NewGen);
+            key.or(address).or(masp).or(gen_new)
         }
     }
 
@@ -525,7 +529,6 @@ pub mod cmds {
     #[allow(clippy::large_enum_variant)]
     pub enum WalletKey {
         Derive(KeyDerive),
-        Gen(KeyGen),
         Find(KeyFind),
         List(KeyList),
         Export(Export),
@@ -536,12 +539,11 @@ pub mod cmds {
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
-                let generate = SubCmd::parse(matches).map(Self::Gen);
                 let restore = SubCmd::parse(matches).map(Self::Derive);
                 let lookup = SubCmd::parse(matches).map(Self::Find);
                 let list = SubCmd::parse(matches).map(Self::List);
                 let export = SubCmd::parse(matches).map(Self::Export);
-                generate.or(restore).or(lookup).or(list).or(export)
+                restore.or(lookup).or(list).or(export)
             })
         }
 
@@ -554,7 +556,6 @@ pub mod cmds {
                 .subcommand_required(true)
                 .arg_required_else_help(true)
                 .subcommand(KeyDerive::def())
-                .subcommand(KeyGen::def())
                 .subcommand(KeyFind::def())
                 .subcommand(KeyList::def())
                 .subcommand(Export::def())
@@ -587,17 +588,19 @@ pub mod cmds {
         }
     }
 
-    /// Generate a new keypair and an implicit address derived from it
+    /// In the transparent setting, generate a new keypair and an implicit
+    /// address derived from it. In the shielded setting, generate a new
+    /// spending key.
     #[derive(Clone, Debug)]
-    pub struct KeyGen(pub args::KeyAndAddressGen);
+    pub struct WalletNewGen(pub args::KeyGen);
 
-    impl SubCmd for KeyGen {
+    impl SubCmd for WalletNewGen {
         const CMD: &'static str = "gen";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .map(|matches| Self(args::KeyAndAddressGen::parse(matches)))
+                .map(|matches| Self(args::KeyGen::parse(matches)))
         }
 
         fn def() -> App {
@@ -605,9 +608,9 @@ pub mod cmds {
                 .about(
                     "Generates a keypair with a given alias and derives the \
                      implicit address from its public key. The address will \
-                     be stored with the same alias.",
+                     be stored with the same alias. TODO shielded",
                 )
-                .add_args::<args::KeyAndAddressGen>()
+                .add_args::<args::KeyGen>()
         }
     }
 
@@ -672,7 +675,6 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     pub enum WalletMasp {
         GenPayAddr(MaspGenPayAddr),
-        GenSpendKey(MaspGenSpendKey),
         AddAddrKey(MaspAddAddrKey),
         ListPayAddrs,
         ListKeys(MaspListKeys),
@@ -685,13 +687,12 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
                 let genpa = SubCmd::parse(matches).map(Self::GenPayAddr);
-                let gensk = SubCmd::parse(matches).map(Self::GenSpendKey);
                 let addak = SubCmd::parse(matches).map(Self::AddAddrKey);
                 let listpa = <MaspListPayAddrs as SubCmd>::parse(matches)
                     .map(|_| Self::ListPayAddrs);
                 let listsk = SubCmd::parse(matches).map(Self::ListKeys);
                 let findak = SubCmd::parse(matches).map(Self::FindAddrKey);
-                gensk.or(genpa).or(addak).or(listpa).or(listsk).or(findak)
+                genpa.or(addak).or(listpa).or(listsk).or(findak)
             })
         }
 
@@ -704,7 +705,6 @@ pub mod cmds {
                 )
                 .subcommand_required(true)
                 .arg_required_else_help(true)
-                .subcommand(MaspGenSpendKey::def())
                 .subcommand(MaspGenPayAddr::def())
                 .subcommand(MaspAddAddrKey::def())
                 .subcommand(MaspListPayAddrs::def())
@@ -834,7 +834,6 @@ pub mod cmds {
 
     #[derive(Clone, Debug)]
     pub enum WalletAddress {
-        Gen(AddressGen),
         Derive(AddressDerive),
         Find(AddressOrAliasFind),
         List,
@@ -846,13 +845,12 @@ pub mod cmds {
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
-                let gen = SubCmd::parse(matches).map(Self::Gen);
                 let restore = SubCmd::parse(matches).map(Self::Derive);
                 let find = SubCmd::parse(matches).map(Self::Find);
                 let list =
                     <AddressList as SubCmd>::parse(matches).map(|_| Self::List);
                 let add = SubCmd::parse(matches).map(Self::Add);
-                gen.or(restore).or(find).or(list).or(add)
+                restore.or(find).or(list).or(add)
             })
         }
 
@@ -864,35 +862,10 @@ pub mod cmds {
                 )
                 .subcommand_required(true)
                 .arg_required_else_help(true)
-                .subcommand(AddressGen::def())
                 .subcommand(AddressDerive::def())
                 .subcommand(AddressOrAliasFind::def())
                 .subcommand(AddressList::def())
                 .subcommand(AddressAdd::def())
-        }
-    }
-
-    /// Generate a new keypair and an implicit address derived from it
-    #[derive(Clone, Debug)]
-    pub struct AddressGen(pub args::KeyAndAddressGen);
-
-    impl SubCmd for AddressGen {
-        const CMD: &'static str = "gen";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches.subcommand_matches(Self::CMD).map(|matches| {
-                AddressGen(args::KeyAndAddressGen::parse(matches))
-            })
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about(
-                    "Generates a keypair with a given alias and derives the \
-                     implicit address from its public key. The address will \
-                     be stored with the same alias.",
-                )
-                .add_args::<args::KeyAndAddressGen>()
         }
     }
 
@@ -3137,6 +3110,7 @@ pub mod args {
     pub const RAW_ADDRESS: Arg<Address> = arg("address");
     pub const RAW_ADDRESS_ESTABLISHED: Arg<EstablishedAddress> = arg("address");
     pub const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
+    pub const RAW_KEY_GEN: ArgFlag = flag("raw");
     pub const RAW_PUBLIC_KEY: Arg<common::PublicKey> = arg("public-key");
     pub const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> =
         arg_opt("public-key");
@@ -3148,6 +3122,7 @@ pub mod args {
     pub const SELF_BOND_AMOUNT: Arg<token::DenominatedAmount> =
         arg("self-bond-amount");
     pub const SENDER: Arg<String> = arg("sender");
+    pub const SHIELDED: ArgFlag = flag("shielded");
     pub const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
     pub const SIGNING_KEYS: ArgMulti<WalletPublicKey, GlobStar> =
         arg_multi("signing-keys");
@@ -6324,15 +6299,19 @@ pub mod args {
         }
     }
 
-    impl Args for KeyAndAddressGen {
+    impl Args for KeyGen {
         fn parse(matches: &ArgMatches) -> Self {
             let scheme = SCHEME.parse(matches);
+            let shielded = SHIELDED.parse(matches);
+            let raw = RAW_KEY_GEN.parse(matches);
             let alias = ALIAS_OPT.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let derivation_path = HD_WALLET_DERIVATION_PATH.parse(matches);
             Self {
                 scheme,
+                shielded,
+                raw,
                 alias,
                 alias_force,
                 unsafe_dont_encrypt,
@@ -6341,11 +6320,26 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(SCHEME.def().help(
-                "The type of key that should be generated. Argument must be \
-                 either ed25519 or secp256k1. If none provided, the default \
-                 key scheme is ed25519.",
+            app.arg(SCHEME.def().conflicts_with(SHIELDED.name).help(
+                "For the transparent pool, the type of key that should be \
+                 generated. Argument must be either ed25519 or secp256k1. If \
+                 none provided, the default key scheme is ed25519.\nNot \
+                 applicable for the shielded pool.",
             ))
+            .arg(
+                SHIELDED
+                    .def()
+                    .help("Generate a spending key for the shielded pool."),
+            )
+            .arg(
+                RAW_KEY_GEN
+                    .def()
+                    .conflicts_with(HD_WALLET_DERIVATION_PATH.name)
+                    .help(
+                        "Generate a random non-HD secret / spending key. No \
+                         mnemonic code is generated.",
+                    ),
+            )
             .arg(ALIAS_OPT.def().help(
                 "The key and address alias. If none provided, the alias will \
                  be the public key hash.",
