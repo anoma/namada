@@ -51,7 +51,7 @@ pub enum Error {
     TxDecodingError(proto::Error),
     #[error("Transaction runner error: {0}")]
     TxRunnerError(vm::wasm::run::Error),
-    #[error(transparent)]
+    #[error("{0:?}")]
     ProtocolTxError(#[from] eyre::Error),
     #[error("Txs must either be encrypted or a decryption of an encrypted tx")]
     TxTypeError,
@@ -85,15 +85,15 @@ pub enum Error {
     GovernanceNativeVpError(crate::ledger::governance::Error),
     #[error("Pgf native VP error: {0}")]
     PgfNativeVpError(crate::ledger::pgf::Error),
-    #[error("Ethereum bridge native VP error: {0}")]
+    #[error("Ethereum bridge native VP error: {0:?}")]
     EthBridgeNativeVpError(native_vp::ethereum_bridge::vp::Error),
-    #[error("Ethereum bridge pool native VP error: {0}")]
+    #[error("Ethereum bridge pool native VP error: {0:?}")]
     BridgePoolNativeVpError(native_vp::ethereum_bridge::bridge_pool_vp::Error),
-    #[error("Non usable tokens native VP error: {0}")]
+    #[error("Non usable tokens native VP error: {0:?}")]
     NutNativeVpError(native_vp::ethereum_bridge::nut::Error),
     #[error("MASP native VP error: {0}")]
     MaspNativeVpError(native_vp::masp::Error),
-    #[error("Access to an internal address {0} is forbidden")]
+    #[error("Access to an internal address {0:?} is forbidden")]
     AccessForbidden(InternalAddress),
 }
 
