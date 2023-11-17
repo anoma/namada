@@ -487,12 +487,16 @@ mod native_tx_host_env {
     native_host_fn!(tx_update_validity_predicate(
         addr_ptr: u64,
         addr_len: u64,
-        code_ptr: u64,
-        code_len: u64,
+        code_hash_ptr: u64,
+        code_hash_len: u64,
+        code_tag_ptr: u64,
+        code_tag_len: u64,
     ));
     native_host_fn!(tx_init_account(
-        code_ptr: u64,
-        code_len: u64,
+        code_hash_ptr: u64,
+        code_hash_len: u64,
+        code_tag_ptr: u64,
+        code_tag_len: u64,
         result_ptr: u64
     ));
     native_host_fn!(tx_emit_ibc_event(event_ptr: u64, event_len: u64));

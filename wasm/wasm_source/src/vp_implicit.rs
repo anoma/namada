@@ -870,7 +870,7 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
             tx::ctx()
-                .update_validity_predicate(address, vp_hash)
+                .update_validity_predicate(address, vp_hash, &None)
                 .unwrap();
         });
 
@@ -916,7 +916,7 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
             tx::ctx()
-                .update_validity_predicate(address, vp_hash)
+                .update_validity_predicate(address, vp_hash, &None)
                 .unwrap();
         });
 
@@ -971,7 +971,7 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
             tx::ctx()
-                .update_validity_predicate(address, vp_hash)
+                .update_validity_predicate(address, vp_hash, &None)
                 .unwrap();
         });
 

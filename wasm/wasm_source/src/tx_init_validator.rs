@@ -16,7 +16,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     debug_log!("apply_tx called to init a new validator account");
 
     // Get the validator vp code from the extra section
-    let validator_vp_code_hash = signed
+    let validator_vp_code_sec = signed
         .get_section(&init_validator.validator_vp_code_hash)
         .ok_or_err_msg("validator vp section not found")
         .map_err(|err| {
@@ -28,12 +28,14 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         .map_err(|err| {
             ctx.set_commitment_sentinel();
             err
-        })?
-        .code
-        .hash();
+        })?;
 
     // Register the validator in PoS
-    match ctx.init_validator(init_validator, validator_vp_code_hash) {
+    match ctx.init_validator(
+        init_validator,
+        validator_vp_code_sec.code.hash(),
+        &validator_vp_code_sec.tag,
+    ) {
         Ok(validator_address) => {
             debug_log!("Created validator {}", validator_address.encode(),)
         }

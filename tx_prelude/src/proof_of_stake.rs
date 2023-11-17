@@ -120,10 +120,12 @@ impl Ctx {
             validator_vp_code_hash: _,
         }: InitValidator,
         validator_vp_code_hash: Hash,
+        validator_vp_code_tag: &Option<String>,
     ) -> EnvResult<Address> {
         let current_epoch = self.get_block_epoch()?;
         // Init validator account
-        let validator_address = self.init_account(validator_vp_code_hash)?;
+        let validator_address =
+            self.init_account(validator_vp_code_hash, validator_vp_code_tag)?;
         storage_api::account::init_account_storage(
             self,
             &validator_address,

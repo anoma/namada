@@ -214,7 +214,7 @@ mod tests {
         tx_host_env::init();
 
         let code = vec![];
-        tx::ctx().init_account(code).unwrap();
+        tx::ctx().init_account(code, &None).unwrap();
     }
 
     #[test]
@@ -229,7 +229,7 @@ mod tests {
             let key = Key::wasm_code(&code_hash);
             env.wl_storage.storage.write(&key, code.clone()).unwrap();
         });
-        tx::ctx().init_account(code_hash).unwrap();
+        tx::ctx().init_account(code_hash, &None).unwrap();
     }
 
     #[test]
