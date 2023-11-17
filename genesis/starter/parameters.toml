@@ -64,6 +64,12 @@ cubic_slashing_window_length = 1
 # The minimum amount of bonded tokens that a validator needs to be in
 # either the `consensus` or `below_capacity` validator sets
 validator_stake_threshold = "1"
+# The length, in blocks, of the sliding window for consensus validators
+# inactivity verification
+liveness_window_check = 10_000
+# The minimum required activity of consensus validators, in percentage, over 
+# the `liveness_window_check`
+liveness_threshold = "0.9"
 
 # Governance parameters.
 [gov_params]
