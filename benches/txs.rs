@@ -695,7 +695,7 @@ fn change_consensus_key(c: &mut Criterion) {
         },
         None,
         None,
-        Some(&defaults::validator_keypair()),
+        vec![&defaults::validator_keypair()],
     );
 
     c.bench_function("change_consensus_key", |b| {
