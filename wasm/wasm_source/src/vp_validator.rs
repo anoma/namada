@@ -15,6 +15,7 @@
 use namada_vp_prelude::storage::KeySeg;
 use namada_vp_prelude::*;
 use once_cell::unsync::Lazy;
+use proof_of_stake::types::ValidatorState;
 
 enum KeyType<'a> {
     Token { owner: &'a Address },
@@ -29,7 +30,7 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
     fn from(key: &'a storage::Key) -> KeyType<'a> {
         if let Some([_, owner]) = token::is_any_token_balance_key(key) {
             Self::Token { owner }
-        } else if proof_of_stake::is_pos_key(key) {
+        } else if proof_of_stake::storage::is_pos_key(key) {
             Self::PoS
         } else if gov_storage::keys::is_vote_key(key) {
             let voter_address = gov_storage::keys::get_voter_address(key);
@@ -57,7 +58,8 @@ fn validate_tx(
     verifiers: BTreeSet<Address>,
 ) -> VpResult {
     debug_log!(
-        "vp_user called with user addr: {}, key_changed: {:?}, verifiers: {:?}",
+        "vp_validator called with user addr: {}, key_changed: {:?}, \
+         verifiers: {:?}",
         addr,
         keys_changed,
         verifiers
@@ -105,11 +107,11 @@ fn validate_tx(
                 }
             }
             KeyType::PoS => {
-                // Allow the account to be used in PoS
-                let bond_id = proof_of_stake::is_bond_key(key)
+                // Bond or unbond
+                let bond_id = proof_of_stake::storage::is_bond_key(key)
                     .map(|(bond_id, _)| bond_id)
                     .or_else(|| {
-                        proof_of_stake::is_unbond_key(key)
+                        proof_of_stake::storage::is_unbond_key(key)
                             .map(|(bond_id, _, _)| bond_id)
                     });
                 let valid_bond_or_unbond_change = match bond_id {
@@ -123,15 +125,81 @@ fn validate_tx(
                         true
                     }
                 };
+                // Commission rate changes must be signed by the validator
                 let comm =
-                    proof_of_stake::is_validator_commission_rate_key(key);
-                // Validator's commission rate change must be signed
+                    proof_of_stake::storage::is_validator_commission_rate_key(
+                        key,
+                    );
                 let valid_commission_rate_change = match comm {
-                    Some(source) => *source != addr || *valid_sig,
+                    Some((validator, _epoch)) => {
+                        *validator == addr && *valid_sig
+                    }
                     None => true,
                 };
-                let valid =
-                    valid_bond_or_unbond_change && valid_commission_rate_change;
+                // Metadata changes must be signed by the validator whose
+                // metadata is manipulated
+                let metadata =
+                    proof_of_stake::storage::is_validator_metadata_key(key);
+                let valid_metadata_change = match metadata {
+                    Some(address) => *address == addr && *valid_sig,
+                    None => true,
+                };
+
+                // Changes due to unjailing, deactivating, and reactivating are
+                // marked by changes in validator state
+                let state_change =
+                    proof_of_stake::storage::is_validator_state_key(key);
+                let valid_state_change = match state_change {
+                    Some((address, epoch)) => {
+                        let params_pre =
+                            proof_of_stake::read_pos_params(&ctx.pre())?;
+                        let state_pre =
+                            proof_of_stake::validator_state_handle(address)
+                                .get(&ctx.pre(), epoch, &params_pre)?;
+
+                        let params_post =
+                            proof_of_stake::read_pos_params(&ctx.post())?;
+                        let state_post =
+                            proof_of_stake::validator_state_handle(address)
+                                .get(&ctx.post(), epoch, &params_post)?;
+
+                        match (state_pre, state_post) {
+                            (Some(pre), Some(post)) => {
+                                if
+                                // Deactivation case
+                                (matches!(
+                                    pre,
+                                    ValidatorState::Consensus
+                                        | ValidatorState::BelowCapacity
+                                        | ValidatorState::BelowThreshold
+                                ) && post == ValidatorState::Inactive)
+                                // Reactivation case
+                                || pre == ValidatorState::Inactive
+                                    && post != ValidatorState::Inactive
+                                // Unjail case
+                                || pre == ValidatorState::Jailed
+                                    && matches!(
+                                        post,
+                                        ValidatorState::Consensus
+                                            | ValidatorState::BelowCapacity
+                                            | ValidatorState::BelowThreshold
+                                    )
+                                {
+                                    *address == addr && *valid_sig
+                                } else {
+                                    true
+                                }
+                            }
+                            _ => true,
+                        }
+                    }
+                    None => true,
+                };
+
+                let valid = valid_bond_or_unbond_change
+                    && valid_commission_rate_change
+                    && valid_state_change
+                    && valid_metadata_change;
                 debug_log!(
                     "PoS key {} {}",
                     key,
@@ -531,7 +599,6 @@ mod tests {
 
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
-        let vp_owner: Address = address::testing::established_address_2();
         let target = address::testing::established_address_3();
         let token = address::nam();
         let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
@@ -539,12 +606,12 @@ mod tests {
         let unbond_amount = token::Amount::from_uint(3_098_123, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage
-        tx_env.spawn_accounts([&vp_owner, &target, &token]);
-        tx_env.init_account_storage(&vp_owner, vec![public_key.clone()], 1);
+        tx_env.spawn_accounts([&validator, &target, &token]);
+        tx_env.init_account_storage(&validator, vec![public_key.clone()], 1);
 
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
-        tx_env.credit_tokens(&vp_owner, &token, amount);
+        tx_env.credit_tokens(&validator, &token, amount);
         // write the denomination of NAM into storage
         storage_api::token::write_denom(
             &mut tx_env.wl_storage,
@@ -554,18 +621,23 @@ mod tests {
         .unwrap();
 
         // Initialize VP environment from a transaction
-        vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
+        vp_host_env::init_from_tx(validator.clone(), tx_env, |_address| {
             // Bond the tokens, then unbond some of them
             tx::ctx()
-                .bond_tokens(Some(&vp_owner), &validator, bond_amount)
+                .bond_tokens(Some(&validator), &validator, bond_amount)
                 .unwrap();
             tx::ctx()
-                .unbond_tokens(Some(&vp_owner), &validator, unbond_amount)
+                .unbond_tokens(Some(&validator), &validator, unbond_amount)
                 .unwrap();
+            tx::ctx().deactivate_validator(&validator).unwrap();
             tx::ctx()
-                .change_validator_commission_rate(
+                .change_validator_metadata(
                     &validator,
-                    &Dec::new(6, 2).unwrap(),
+                    Some("email".to_owned()),
+                    Some("desc".to_owned()),
+                    Some("website".to_owned()),
+                    Some("discord".to_owned()),
+                    Some(Dec::new(6, 2).unwrap()),
                 )
                 .unwrap();
         });
@@ -588,7 +660,7 @@ mod tests {
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
         assert!(
-            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
+            validate_tx(&CTX, signed_tx, validator, keys_changed, verifiers)
                 .unwrap()
         );
     }
