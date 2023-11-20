@@ -28,7 +28,9 @@ use rand::rngs::OsRng;
 use super::rpc;
 use crate::cli::{args, safe_exit};
 use crate::client::rpc::query_wasm_code_hash;
-use crate::client::tx::signing::{default_sign, SigningTxData};
+use crate::client::tx::signing::{
+    default_sign, init_validator_signing_data, SigningTxData,
+};
 use crate::client::tx::tx::ProcessTxResponse;
 use crate::config::TendermintMode;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
@@ -504,7 +506,7 @@ pub async fn submit_init_validator<'a>(
 
     let validator_key_alias = format!("{}-key", alias);
     let consensus_key_alias = validator_consensus_key(&alias.clone().into());
-    // let consensus_key_alias = format!("{}-consensus-key", alias);
+    let protocol_key_alias = format!("{}-protocol-key", alias);
 
     let threshold = match threshold {
         Some(threshold) => threshold,
@@ -619,7 +621,25 @@ pub async fn submit_init_validator<'a>(
         scheme,
     )
     .unwrap();
-    let protocol_key = validator_keys.get_protocol_keypair().ref_to();
+    let protocol_sk = validator_keys.get_protocol_keypair();
+    let protocol_key = protocol_sk.to_public();
+
+    // Store the protocol key in the wallet so that we can sign the tx with it
+    // to verify ownership
+    display_line!(namada.io(), "Storing protocol key in the wallet...");
+    let password = read_and_confirm_encryption_password(unsafe_dont_encrypt);
+    namada
+        .wallet_mut()
+        .await
+        .insert_keypair(
+            protocol_key_alias,
+            tx_args.wallet_alias_force,
+            protocol_sk.clone(),
+            password,
+            None,
+            None,
+        )
+        .map_err(|err| error::Error::Other(err.to_string()))?;
 
     let validator_vp_code_hash =
         query_wasm_code_hash(namada, validator_vp_code_path.to_str().unwrap())
@@ -688,9 +708,17 @@ pub async fn submit_init_validator<'a>(
         validator_vp_code_hash: extra_section_hash,
     };
 
+    // Put together all the PKs that we have to sign with to verify ownership
+    let mut all_pks = data.account_keys.clone();
+    all_pks.push(consensus_key.to_public());
+    all_pks.push(eth_cold_pk);
+    all_pks.push(eth_hot_pk);
+    all_pks.push(data.protocol_key.clone());
+
     tx.add_code_from_hash(tx_code_hash).add_data(data);
 
-    let signing_data = aux_signing_data(namada, &tx_args, None, None).await?;
+    let signing_data =
+        init_validator_signing_data(namada, &tx_args, all_pks).await?;
 
     tx::prepare_tx(
         namada,
