@@ -11,7 +11,7 @@ use crate::ledger::native_vp::CtxPreStorageRead;
 use crate::ledger::storage::write_log::StorageModification;
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
-use crate::types::address::{self, Address, InternalAddress};
+use crate::types::address::{Address, InternalAddress, MASP};
 use crate::types::ibc::{IbcEvent, IbcShieldedTransfer};
 use crate::types::storage::{
     BlockHash, BlockHeight, Epoch, Header, Key, KeySeg, TxIndex,
@@ -216,7 +216,7 @@ where
     }
 
     fn handle_masp_tx(&mut self, shielded: &IbcShieldedTransfer) -> Result<()> {
-        let masp_addr = address::masp();
+        let masp_addr = MASP;
         let head_tx_key = Key::from(masp_addr.to_db_key())
             .push(&HEAD_TX_KEY.to_owned())
             .expect("Cannot obtain a storage key");

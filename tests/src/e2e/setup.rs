@@ -1092,7 +1092,6 @@ pub mod constants {
     pub const DAEWON_KEY: &str = "Daewon-key";
     pub const ESTER: &str = "Ester";
     pub const MATCHMAKER_KEY: &str = "matchmaker-key";
-    pub const MASP: &str = "tnam1q9lm5pvkxhnw9wwwhu33vkvtylwfkn5kw53xwud8";
 
     // Shielded spending and viewing keys and payment addresses
     pub const A_SPENDING_KEY: &str = "zsknam1qqqqqqqqqqqqqq9v0sls5r5de7njx8ehu49pqgmqr9ygelg87l5x8y4s9r0pjlvu69au6gn3su5ewneas486hdccyayx32hxvt64p3d0hfuprpgcgv2q9gdx3jvxrn02f0nnp3jtdd6f5vwscfuyum083cvfv4jun75ak5sdgrm2pthzj3sflxc0jx0edrakx3vdcngrfjmru8ywkguru8mxss2uuqxdlglaz6undx5h8w7g70t2es850g48xzdkqay5qs0yw06rtxc9q0cqr";
@@ -1115,6 +1114,7 @@ pub mod constants {
 
     //  Native VP aliases
     pub const GOVERNANCE_ADDRESS: &str = "governance";
+    pub const MASP: &str = "masp";
 
     // Fungible token addresses
     pub const NAM: &str = "NAM";

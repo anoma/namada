@@ -22,6 +22,7 @@ use crate::ledger::native_vp::ethereum_bridge::bridge_pool_vp::BridgePoolVp;
 use crate::ledger::native_vp::ethereum_bridge::nut::NonUsableTokens;
 use crate::ledger::native_vp::ethereum_bridge::vp::EthBridge;
 use crate::ledger::native_vp::ibc::Ibc;
+use crate::ledger::native_vp::masp::MaspVp;
 use crate::ledger::native_vp::multitoken::MultitokenVp;
 use crate::ledger::native_vp::parameters::{self, ParametersVp};
 use crate::ledger::native_vp::{self, NativeVp};
@@ -90,6 +91,8 @@ pub enum Error {
     BridgePoolNativeVpError(native_vp::ethereum_bridge::bridge_pool_vp::Error),
     #[error("Non usable tokens native VP error: {0}")]
     NutNativeVpError(native_vp::ethereum_bridge::nut::Error),
+    #[error("MASP native VP error: {0}")]
+    MaspNativeVpError(native_vp::masp::Error),
     #[error("Access to an internal address {0} is forbidden")]
     AccessForbidden(InternalAddress),
 }
@@ -1004,6 +1007,16 @@ where
                                     ))),
                                     ctx.sentinel.into_inner(),
                                 )
+                            }
+                            InternalAddress::Masp => {
+                                let masp = MaspVp { ctx };
+                                let result = masp
+                                    .validate_tx(tx, &keys_changed, &verifiers)
+                                    .map_err(Error::MaspNativeVpError);
+                                // Take the gas meter and the sentinel back out
+                                // of the context
+                                gas_meter = masp.ctx.gas_meter.into_inner();
+                                (result, masp.ctx.sentinel.into_inner())
                             }
                         };
 

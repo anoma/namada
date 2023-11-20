@@ -13,7 +13,7 @@ use crate::ledger::inflation::{RewardsController, ValsToUpdate};
 use crate::ledger::parameters;
 use crate::ledger::storage_api::token::read_denom;
 use crate::ledger::storage_api::{StorageRead, StorageWrite};
-use crate::types::address::Address;
+use crate::types::address::{Address, MASP};
 use crate::types::dec::Dec;
 use crate::types::storage::Epoch;
 use crate::types::token::MaspDenom;
@@ -58,7 +58,7 @@ where
     // a thousandth of the given asset.
     let precision = 10u128.pow(std::cmp::max(u32::from(denomination.0), 3) - 3);
 
-    let masp_addr = address::masp();
+    let masp_addr = MASP;
     // Query the storage for information
 
     //// information about the amount of tokens on the chain
@@ -213,7 +213,7 @@ where
     use crate::types::storage::{self, KeySeg};
 
     // The derived conversions will be placed in MASP address space
-    let masp_addr = address::masp();
+    let masp_addr = MASP;
     let key_prefix: storage::Key = masp_addr.to_db_key().into();
 
     let tokens = address::tokens();
