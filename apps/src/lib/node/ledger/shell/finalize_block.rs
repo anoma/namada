@@ -2,6 +2,7 @@
 
 use data_encoding::HEXUPPER;
 use namada::core::ledger::inflation;
+use namada::core::ledger::masp_conversions::update_allowed_conversions;
 use namada::core::ledger::pgf::ADDRESS as pgf_address;
 use namada::ledger::events::EventType;
 use namada::ledger::gas::{GasMetering, TxGasMeter};
@@ -92,9 +93,7 @@ where
             namada_proof_of_stake::read_pos_params(&self.wl_storage)?;
 
         if new_epoch {
-            namada::ledger::storage::update_allowed_conversions(
-                &mut self.wl_storage,
-            )?;
+            update_allowed_conversions(&mut self.wl_storage)?;
 
             execute_governance_proposals(self, &mut response)?;
 
