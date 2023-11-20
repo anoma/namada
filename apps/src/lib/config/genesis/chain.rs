@@ -262,6 +262,7 @@ impl Finalized {
             fee_unshielding_descriptions_limit,
             max_block_gas,
             minimum_gas_price,
+            max_tx_bytes,
             ..
         } = self.parameters.parameters.clone();
 
@@ -291,6 +292,7 @@ impl Finalized {
         let pos_inflation_amount = 0;
 
         namada::ledger::parameters::Parameters {
+            max_tx_bytes,
             epoch_duration,
             max_expected_time_per_block,
             vp_whitelist,
@@ -334,8 +336,6 @@ impl Finalized {
             light_client_attack_min_slash_rate,
             cubic_slashing_window_length,
             validator_stake_threshold,
-            liveness_window_check,
-            liveness_threshold,
         } = self.parameters.pos_params.clone();
 
         namada::proof_of_stake::parameters::PosParams {
@@ -352,8 +352,6 @@ impl Finalized {
                 light_client_attack_min_slash_rate,
                 cubic_slashing_window_length,
                 validator_stake_threshold,
-                liveness_window_check,
-                liveness_threshold,
             },
             max_proposal_period: self.parameters.gov_params.max_proposal_period,
         }

@@ -252,15 +252,6 @@ pub type DelegatorRedelegatedUnbonded =
 pub type EagerRedelegatedBondsMap =
     BTreeMap<Address, BTreeMap<Epoch, token::Amount>>;
 
-/// Liveness record of the consensus validator set. Records the block heights at
-/// which the consensus validator missed a vote.
-pub type LivenessMissedVotes = NestedMap<Address, LazySet<u64>>;
-
-/// The sum of missed votes within some interval for each of the consensus
-/// validators. The value in this map should in principle be the number of
-/// elements in the correspoding inner LazySet of [`LivenessMissedVotes`].
-pub type LivenessSumMissedVotes = LazyMap<Address, u64>;
-
 #[derive(
     Debug, Clone, BorshSerialize, BorshDeserialize, Eq, Hash, PartialEq,
 )]

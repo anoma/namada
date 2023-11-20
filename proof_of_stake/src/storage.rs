@@ -54,9 +54,6 @@ const VALIDATOR_EMAIL_KEY: &str = "email";
 const VALIDATOR_DESCRIPTION_KEY: &str = "description";
 const VALIDATOR_WEBSITE_KEY: &str = "website";
 const VALIDATOR_DISCORD_KEY: &str = "discord_handle";
-const LIVENESS_PREFIX: &str = "liveness";
-const LIVENESS_MISSED_VOTES: &str = "missed_votes";
-const LIVENESS_MISSED_VOTES_SUM: &str = "sum_missed_votes";
 
 /// Is the given key a PoS storage key?
 pub fn is_pos_key(key: &Key) -> bool {
@@ -794,26 +791,5 @@ pub fn validator_website_key(validator: &Address) -> Key {
 pub fn validator_discord_key(validator: &Address) -> Key {
     validator_prefix(validator)
         .push(&VALIDATOR_DISCORD_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Storage prefix for the liveness data of the cosnensus validator set.
-pub fn liveness_data_prefix() -> Key {
-    Key::from(ADDRESS.to_db_key())
-        .push(&LIVENESS_PREFIX.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Storage key for the liveness records.
-pub fn liveness_missed_votes_key() -> Key {
-    liveness_data_prefix()
-        .push(&LIVENESS_MISSED_VOTES.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Storage key for the liveness data.
-pub fn liveness_sum_missed_votes_key() -> Key {
-    liveness_data_prefix()
-        .push(&LIVENESS_MISSED_VOTES_SUM.to_owned())
         .expect("Cannot obtain a storage key")
 }

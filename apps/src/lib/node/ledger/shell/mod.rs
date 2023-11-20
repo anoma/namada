@@ -48,6 +48,7 @@ use namada::ledger::storage::{
     DBIter, Sha256Hasher, Storage, StorageHasher, TempWlStorage, WlStorage, DB,
     EPOCH_SWITCH_BLOCKS_DELAY,
 };
+use namada::ledger::storage_api::tx::validate_tx_bytes;
 use namada::ledger::storage_api::{self, StorageRead};
 use namada::ledger::{parameters, pos, protocol};
 use namada::proof_of_stake::{self, process_slashes, read_pos_params, slash};
@@ -154,6 +155,7 @@ pub enum ErrorCodes {
     TxGasLimit = 11,
     FeeError = 12,
     InvalidVoteExtension = 13,
+    TooLarge = 14,
 }
 
 impl ErrorCodes {
@@ -167,7 +169,8 @@ impl ErrorCodes {
             Ok | WasmRuntimeError => true,
             InvalidTx | InvalidSig | InvalidOrder | ExtraTxs
             | Undecryptable | AllocationError | ReplayTx | InvalidChainId
-            | ExpiredTx | TxGasLimit | FeeError | InvalidVoteExtension => false,
+            | ExpiredTx | TxGasLimit | FeeError | InvalidVoteExtension
+            | TooLarge => false,
         }
     }
 }
@@ -750,8 +753,23 @@ where
                         }
                     };
                 // Check if we're gonna switch to a new epoch after a delay
-                let validator_set_update_epoch =
-                    self.get_validator_set_update_epoch(current_epoch);
+                let validator_set_update_epoch = if let Some(delay) =
+                    self.wl_storage.storage.update_epoch_blocks_delay
+                {
+                    if delay == EPOCH_SWITCH_BLOCKS_DELAY {
+                        // If we're about to update validator sets for the
+                        // upcoming epoch, we can still remove the validator
+                        current_epoch.next()
+                    } else {
+                        // If we're waiting to switch to a new epoch, it's too
+                        // late to update validator sets
+                        // on the next epoch, so we need to
+                        // wait for the one after.
+                        current_epoch.next().next()
+                    }
+                } else {
+                    current_epoch.next()
+                };
                 tracing::info!(
                     "Slashing {} for {} in epoch {}, block height {} (current \
                      epoch = {}, validator set update epoch = \
@@ -775,28 +793,6 @@ where
                     tracing::error!("Error in slashing: {}", err);
                 }
             }
-        }
-    }
-
-    /// Get the next epoch for which we can request validator set changed
-    pub fn get_validator_set_update_epoch(
-        &self,
-        current_epoch: namada_sdk::core::types::storage::Epoch,
-    ) -> namada_sdk::core::types::storage::Epoch {
-        if let Some(delay) = self.wl_storage.storage.update_epoch_blocks_delay {
-            if delay == EPOCH_SWITCH_BLOCKS_DELAY {
-                // If we're about to update validator sets for the
-                // upcoming epoch, we can still remove the validator
-                current_epoch.next()
-            } else {
-                // If we're waiting to switch to a new epoch, it's too
-                // late to update validator sets
-                // on the next epoch, so we need to
-                // wait for the one after.
-                current_epoch.next().next()
-            }
-        } else {
-            current_epoch.next()
         }
     }
 
@@ -1079,6 +1075,18 @@ where
 
         const VALID_MSG: &str = "Mempool validation passed";
         const INVALID_MSG: &str = "Mempool validation failed";
+
+        // check tx bytes
+        //
+        // NB: always keep this as the first tx check,
+        // as it is a pretty cheap one
+        if !validate_tx_bytes(&self.wl_storage, tx_bytes.len())
+            .expect("Failed to get max tx bytes param from storage")
+        {
+            response.code = ErrorCodes::TooLarge.into();
+            response.log = format!("{INVALID_MSG}: Tx too large");
+            return response;
+        }
 
         // Tx format check
         let tx = match Tx::try_from(tx_bytes).map_err(Error::TxDecoding) {
@@ -2098,6 +2106,7 @@ mod test_utils {
             .new_epoch(BlockHeight(1));
         // initialize parameter storage
         let params = Parameters {
+            max_tx_bytes: 1024 * 1024,
             epoch_duration: EpochDuration {
                 min_num_of_blocks: 1,
                 min_duration: DurationSecs(3600),
@@ -2951,5 +2960,58 @@ mod shell_tests {
             MempoolTxType::NewTransaction,
         );
         assert_eq!(result.code, ErrorCodes::FeeError.into());
+    }
+
+    /// Test max tx bytes parameter in CheckTx
+    #[test]
+    fn test_max_tx_bytes_check_tx() {
+        let (shell, _recv, _, _) = test_utils::setup();
+
+        let max_tx_bytes: u32 = {
+            let key = parameters::storage::get_max_tx_bytes_key();
+            shell
+                .wl_storage
+                .read(&key)
+                .expect("Failed to read from storage")
+                .expect("Max tx bytes should have been written to storage")
+        };
+
+        let new_tx = |size: u32| {
+            let keypair = super::test_utils::gen_keypair();
+            let mut wrapper =
+                Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                    Fee {
+                        amount_per_gas_unit: 100.into(),
+                        token: shell.wl_storage.storage.native_token.clone(),
+                    },
+                    keypair.ref_to(),
+                    Epoch(0),
+                    GAS_LIMIT_MULTIPLIER.into(),
+                    None,
+                ))));
+            wrapper.header.chain_id = shell.chain_id.clone();
+            wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+            wrapper.set_data(Data::new(vec![0; size as usize]));
+            wrapper.add_section(Section::Signature(Signature::new(
+                wrapper.sechashes(),
+                [(0, keypair)].into_iter().collect(),
+                None,
+            )));
+            wrapper
+        };
+
+        // test a small tx
+        let result = shell.mempool_validate(
+            new_tx(50).to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert!(result.code != ErrorCodes::TooLarge.into());
+
+        // max tx bytes + 1, on the other hand, is not
+        let result = shell.mempool_validate(
+            new_tx(max_tx_bytes + 1).to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert_eq!(result.code, ErrorCodes::TooLarge.into());
     }
 }
