@@ -347,11 +347,10 @@ pub fn id_from_pk(pk: &common::PublicKey) -> TendermintNodeId {
 
 async fn update_tendermint_config(
     home_dir: impl AsRef<Path>,
-    config: TendermintConfig,
+    mut config: TendermintConfig,
 ) -> Result<()> {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("config.toml");
-    let mut config = config.clone();
 
     config.moniker =
         Moniker::from_str(&format!("{}-{}", config.moniker, namada_version()))
@@ -359,10 +358,34 @@ async fn update_tendermint_config(
 
     config.consensus.create_empty_blocks = true;
 
-    // We set this to true as we don't want any invalid tx be re-applied. This
-    // also implies that it's not possible for an invalid tx to become valid
-    // again in the future.
-    config.mempool.keep_invalid_txs_in_cache = false;
+    // mempool config
+    // https://forum.cosmos.network/t/our-understanding-of-the-cosmos-hub-mempool-issues/12040
+    {
+        // We set this to true as we don't want any invalid tx be re-applied.
+        // This also implies that it's not possible for an invalid tx to
+        // become valid again in the future.
+        config.mempool.keep_invalid_txs_in_cache = false;
+
+        // Drop txs from the mempool that are larger than 1 MiB
+        //
+        // The application (Namada) can assign arbitrary max tx sizes,
+        // which are subject to consensus. Either way, nodes are able to
+        // configure their local mempool however they please.
+        //
+        // 1 MiB is a reasonable value that allows governance proposal txs
+        // containing wasm code to be proposed by a leading validator
+        // during some round's start
+        config.mempool.max_tx_bytes = 1024 * 1024;
+
+        // Hold 50x the max amount of txs in a block
+        //
+        // 6 MiB is the default Namada max proposal size governance
+        // parameter -> 50 * 6 MiB
+        config.mempool.max_txs_bytes = 50 * 6 * 1024 * 1024;
+
+        // Hold up to 4k txs in the mempool
+        config.mempool.size = 4000;
+    }
 
     // Bumped from the default `1_000_000`, because some WASMs can be
     // quite large
@@ -408,11 +431,11 @@ async fn write_tm_genesis(
         .try_into()
         .expect("Couldn't convert DateTimeUtc to Tendermint Time");
     let size = block::Size {
-        // maximum size of a serialized Tendermint block
-        // cannot go over 100 MiB
-        max_bytes: (100 << 20) - 1, /* unsure if we are dealing with an open
-                                     * range, so it's better to subtract one,
-                                     * here */
+        // maximum size of a serialized Tendermint block.
+        // on Namada, we have a hard-cap of 16 MiB (6 MiB max
+        // txs in a block + 10 MiB reserved for evidence data,
+        // block headers and protobuf serialization overhead)
+        max_bytes: 16 * 1024 * 1024,
         // gas is metered app-side, so we disable it
         // at the Tendermint level
         max_gas: -1,

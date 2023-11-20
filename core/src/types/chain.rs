@@ -131,23 +131,19 @@ impl ProposalBytes {
     };
     /// The (raw) default value for a [`ProposalBytes`].
     ///
-    /// This value must be within the range `[1 B, 90 MiB]`.
-    const RAW_DEFAULT: NonZeroU64 = unsafe {
-        // SAFETY: We are constructing a greater than zero
-        // value, so the API contract is never violated.
-        // Moreover, 21 MiB <= 90 MiB.
-        NonZeroU64::new_unchecked(21 << 20)
-    };
+    /// This value must be within the range `[1 B, RAW_MAX MiB]`.
+    const RAW_DEFAULT: NonZeroU64 = Self::RAW_MAX;
     /// The (raw) upper bound of a [`ProposalBytes`] value.
     ///
     /// The maximum space a serialized Tendermint block can
     /// occupy is 100 MiB. We reserve 10 MiB for serialization
-    /// overhead, evidence and header data, and 90 MiB for
-    /// tx data.
+    /// overhead, evidence and header data. For P2P safety
+    /// reasons (i.e. DoS protection) we hardcap the size of
+    /// tx data to 6 MiB.
     const RAW_MAX: NonZeroU64 = unsafe {
         // SAFETY: We are constructing a greater than zero
         // value, so the API contract is never violated.
-        NonZeroU64::new_unchecked(90 << 20)
+        NonZeroU64::new_unchecked(6 * 1024 * 1024)
     };
 }
 
