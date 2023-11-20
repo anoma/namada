@@ -127,7 +127,7 @@ fn masp_incentives() -> Result<()> {
     });
 
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.022"));
+    assert!(captured.contains("nam: 0.023"));
 
     // Assert NAM balance at MASP pool is exclusively the
     // rewards from the shielded BTC
@@ -147,7 +147,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.022"));
+    assert!(captured.contains("nam: 0.023"));
 
     // Wait till epoch boundary
     node.next_epoch();
@@ -189,7 +189,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.08729"));
+    assert!(captured.contains("nam: 0.09189"));
 
     // Assert NAM balance at MASP pool is exclusively the
     // rewards from the shielded BTC
@@ -209,7 +209,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.08729"));
+    assert!(captured.contains("nam: 0.09189"));
 
     // Wait till epoch boundary
     node.next_epoch();
@@ -312,7 +312,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.0207"));
+    assert!(captured.contains("nam: 0.02085"));
 
     // Assert NAM balance at MASP pool is an accumulation of
     // rewards from both the shielded BTC and shielded ETH
@@ -332,7 +332,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.3726"));
+    assert!(captured.contains("nam: 0.39198"));
 
     // Wait till epoch boundary
     node.next_epoch();
@@ -398,7 +398,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.085204"));
+    assert!(captured.contains("nam: 0.085834"));
 
     node.next_epoch();
 
@@ -420,7 +420,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1.134567"));
+    assert!(captured.contains("nam: 1.198717"));
 
     // Wait till epoch boundary
     node.next_epoch();
@@ -483,7 +483,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1.355211"));
+    assert!(captured.contains("nam: 1.428567"));
 
     // Assert NAM balance at MASP pool is
     // the accumulation of rewards from the shielded assets (BTC and ETH)
@@ -503,7 +503,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1.459458"));
+    assert!(captured.contains("nam: 1.541561"));
 
     // Wait till epoch boundary
     node.next_epoch();
@@ -527,7 +527,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1.520493"));
+    assert!(captured.contains("nam: 1.602735"));
 
     // Assert NAM balance at VK(B) is the rewards dispensed earlier
     // (since VK(A) has no shielded assets, no further rewards should
@@ -548,7 +548,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.125958"));
+    assert!(captured.contains("nam: 0.12677"));
 
     // Assert NAM balance at MASP pool is
     // the accumulation of rewards from the shielded assets (BTC and ETH)
@@ -568,7 +568,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1.637454"));
+    assert!(captured.contains("nam: 1.729505"));
 
     // Wait till epoch boundary to prevent conversion expiry during transaction
     // construction
@@ -677,7 +677,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0"));
+    assert!(captured.contains("nam: 0.115575"));
 
     Ok(())
 }
