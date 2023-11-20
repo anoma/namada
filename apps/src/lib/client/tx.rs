@@ -230,6 +230,8 @@ pub async fn submit_reveal_aux<'a>(
 
             sign(context, &mut tx, &args, signing_data).await?;
 
+            signing::generate_test_vector(context, &tx).await?;
+
             context.submit(tx, &args).await?;
         }
     }
@@ -252,6 +254,8 @@ pub async fn submit_bridge_pool_tx<'a, N: Namada<'a>>(
         submit_reveal_aux(namada, tx_args.clone(), &args.sender).await?;
 
         sign(namada, &mut tx, &tx_args, signing_data).await?;
+
+        signing::generate_test_vector(namada, &tx).await?;
 
         namada.submit(tx, &tx_args).await?;
     }
@@ -277,6 +281,8 @@ where
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
 
+        signing::generate_test_vector(namada, &tx).await?;
+
         namada.submit(tx, &args.tx).await?;
     }
 
@@ -298,6 +304,8 @@ where
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
+
+        signing::generate_test_vector(namada, &tx).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -321,6 +329,8 @@ where
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
+
+        signing::generate_test_vector(namada, &tx).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -419,7 +429,11 @@ pub async fn submit_change_consensus_key<'a>(
         consensus_key: new_ck,
     };
 
-    tx.add_code_from_hash(tx_code_hash).add_data(data);
+    tx.add_code_from_hash(
+        tx_code_hash,
+        Some(args::TX_CHANGE_CONSENSUS_KEY_WASM.to_string()),
+    )
+    .add_data(data);
     let signing_data = aux_signing_data(namada, &tx_args, None, None).await?;
 
     tx::prepare_tx(
@@ -687,8 +701,10 @@ pub async fn submit_init_validator<'a>(
 
     let chain_id = tx_args.chain_id.clone().unwrap();
     let mut tx = Tx::new(chain_id, tx_args.expiration);
-    let extra_section_hash =
-        tx.add_extra_section_from_hash(validator_vp_code_hash);
+    let extra_section_hash = tx.add_extra_section_from_hash(
+        validator_vp_code_hash,
+        Some(validator_vp_code_path.to_string_lossy().into_owned()),
+    );
 
     let data = InitValidator {
         account_keys,
@@ -715,7 +731,11 @@ pub async fn submit_init_validator<'a>(
     all_pks.push(eth_hot_pk);
     all_pks.push(data.protocol_key.clone());
 
-    tx.add_code_from_hash(tx_code_hash).add_data(data);
+    tx.add_code_from_hash(
+        tx_code_hash,
+        Some(args::TX_INIT_VALIDATOR_WASM.to_string()),
+    )
+    .add_data(data);
 
     let signing_data =
         init_validator_signing_data(namada, &tx_args, all_pks).await?;
@@ -735,6 +755,8 @@ pub async fn submit_init_validator<'a>(
         tx::dump_tx(namada.io(), &tx_args, tx);
     } else {
         sign(namada, &mut tx, &tx_args, signing_data).await?;
+
+        signing::generate_test_vector(namada, &tx).await?;
 
         let result = namada.submit(tx, &tx_args).await?.initialized_accounts();
 
@@ -857,6 +879,8 @@ pub async fn submit_transfer<'a>(
         } else {
             sign(namada, &mut tx, &args.tx, signing_data).await?;
 
+            signing::generate_test_vector(namada, &tx).await?;
+
             let result = namada.submit(tx, &args.tx).await?;
 
             let submission_epoch = rpc::query_and_print_epoch(namada).await;
@@ -902,6 +926,8 @@ where
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
+
+        signing::generate_test_vector(namada, &tx).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -1030,6 +1056,8 @@ where
     } else {
         sign(namada, &mut tx_builder, &args.tx, signing_data).await?;
 
+        signing::generate_test_vector(namada, &tx_builder).await?;
+
         namada.submit(tx_builder, &args.tx).await?;
     }
 
@@ -1107,6 +1135,8 @@ where
         tx::dump_tx(namada.io(), &args.tx, tx_builder);
     } else {
         sign(namada, &mut tx_builder, &args.tx, signing_data).await?;
+
+        signing::generate_test_vector(namada, &tx_builder).await?;
 
         namada.submit(tx_builder, &args.tx).await?;
     }
@@ -1226,6 +1256,8 @@ where
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
 
+        signing::generate_test_vector(namada, &tx).await?;
+
         namada.submit(tx, &args.tx).await?;
     }
 
@@ -1247,6 +1279,8 @@ where
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
+
+        signing::generate_test_vector(namada, &tx).await?;
 
         namada.submit(tx, &args.tx).await?;
 
@@ -1272,6 +1306,8 @@ where
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
 
+        signing::generate_test_vector(namada, &tx).await?;
+
         namada.submit(tx, &args.tx).await?;
     }
 
@@ -1294,6 +1330,8 @@ where
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
 
+        signing::generate_test_vector(namada, &tx).await?;
+
         namada.submit(tx, &args.tx).await?;
     }
 
@@ -1314,6 +1352,8 @@ where
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
+
+        signing::generate_test_vector(namada, &tx).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -1337,6 +1377,8 @@ where
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
 
+        signing::generate_test_vector(namada, &tx).await?;
+
         namada.submit(tx, &args.tx).await?;
     }
 
@@ -1358,6 +1400,8 @@ where
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
+
+        signing::generate_test_vector(namada, &tx).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -1403,6 +1447,8 @@ where
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
 
+        signing::generate_test_vector(namada, &tx).await?;
+
         namada.submit(tx, &args.tx).await?;
     }
 
@@ -1425,6 +1471,8 @@ where
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
 
+        signing::generate_test_vector(namada, &tx).await?;
+
         namada.submit(tx, &args.tx).await?;
     }
 
@@ -1446,6 +1494,8 @@ where
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
+
+        signing::generate_test_vector(namada, &tx).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -1470,6 +1520,8 @@ where
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
 
+        signing::generate_test_vector(namada, &tx).await?;
+
         namada.submit(tx, &args.tx).await?;
     }
 
@@ -1491,6 +1543,8 @@ where
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
+
+        signing::generate_test_vector(namada, &tx).await?;
 
         namada.submit(tx, &args.tx).await?;
     }

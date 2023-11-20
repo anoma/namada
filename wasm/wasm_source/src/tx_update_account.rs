@@ -20,7 +20,7 @@ fn apply_tx(ctx: &mut Ctx, tx: Tx) -> TxResult {
     debug_log!("update VP for: {:#?}", tx_data.addr);
 
     if let Some(hash) = tx_data.vp_code_hash {
-        let vp_code_hash = signed
+        let vp_code_sec = signed
             .get_section(&hash)
             .ok_or_err_msg("vp code section not found")
             .map_err(|err| {
@@ -32,11 +32,13 @@ fn apply_tx(ctx: &mut Ctx, tx: Tx) -> TxResult {
             .map_err(|err| {
                 ctx.set_commitment_sentinel();
                 err
-            })?
-            .code
-            .hash();
+            })?;
 
-        ctx.update_validity_predicate(owner, vp_code_hash)?;
+        ctx.update_validity_predicate(
+            owner,
+            vp_code_sec.code.hash(),
+            &vp_code_sec.tag,
+        )?;
     }
 
     if let Some(threshold) = tx_data.threshold {

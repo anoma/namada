@@ -167,7 +167,7 @@ mod tests {
         let tx_data = vec![];
         let mut tx = Tx::from_type(TxType::Raw);
         tx.header.chain_id = wl_storage.storage.chain_id.clone();
-        tx.set_code(Code::new(tx_code));
+        tx.set_code(Code::new(tx_code, None));
         tx.set_data(Data::new(tx_data));
         tx.add_section(Section::Signature(Signature::new(
             tx.sechashes(),

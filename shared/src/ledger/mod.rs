@@ -291,7 +291,7 @@ mod test {
         let mut outer_tx =
             Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
         outer_tx.header.chain_id = client.wl_storage.storage.chain_id.clone();
-        outer_tx.set_code(Code::from_hash(tx_hash));
+        outer_tx.set_code(Code::from_hash(tx_hash, None));
         outer_tx.set_data(Data::new(vec![]));
         let tx_bytes = outer_tx.to_bytes();
         let result = RPC

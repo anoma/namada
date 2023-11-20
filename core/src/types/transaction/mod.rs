@@ -209,7 +209,7 @@ mod test_process_tx {
     fn test_process_tx_raw_tx_no_data() {
         let mut outer_tx = Tx::from_type(TxType::Raw);
         let code_sec = outer_tx
-            .set_code(Code::new("wasm code".as_bytes().to_owned()))
+            .set_code(Code::new("wasm code".as_bytes().to_owned(), None))
             .clone();
         outer_tx.validate_tx().expect("Test failed");
         match outer_tx.header().tx_type {
@@ -227,7 +227,7 @@ mod test_process_tx {
     fn test_process_tx_raw_tx_some_data() {
         let mut tx = Tx::from_type(TxType::Raw);
         let code_sec = tx
-            .set_code(Code::new("wasm code".as_bytes().to_owned()))
+            .set_code(Code::new("wasm code".as_bytes().to_owned(), None))
             .clone();
         let data_sec = tx
             .set_data(Data::new("transaction data".as_bytes().to_owned()))
@@ -249,7 +249,7 @@ mod test_process_tx {
     fn test_process_tx_raw_tx_some_signed_data() {
         let mut tx = Tx::from_type(TxType::Raw);
         let code_sec = tx
-            .set_code(Code::new("wasm code".as_bytes().to_owned()))
+            .set_code(Code::new("wasm code".as_bytes().to_owned(), None))
             .clone();
         let data_sec = tx
             .set_data(Data::new("transaction data".as_bytes().to_owned()))
@@ -287,7 +287,7 @@ mod test_process_tx {
             Default::default(),
             None,
         ))));
-        tx.set_code(Code::new("wasm code".as_bytes().to_owned()));
+        tx.set_code(Code::new("wasm code".as_bytes().to_owned(), None));
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         tx.add_section(Section::Signature(Signature::new(
             tx.sechashes(),
@@ -315,7 +315,7 @@ mod test_process_tx {
             Default::default(),
             None,
         ))));
-        tx.set_code(Code::new("wasm code".as_bytes().to_owned()));
+        tx.set_code(Code::new("wasm code".as_bytes().to_owned(), None));
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         let result = tx.validate_tx().expect_err("Test failed");
         assert_matches!(result, TxError::SigError(_));
@@ -329,7 +329,7 @@ fn test_process_tx_decrypted_unsigned() {
     use crate::proto::{Code, Data, Tx};
     let mut tx = Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
     let code_sec = tx
-        .set_code(Code::new("transaction data".as_bytes().to_owned()))
+        .set_code(Code::new("transaction data".as_bytes().to_owned(), None))
         .clone();
     let data_sec = tx
         .set_data(Data::new("transaction data".as_bytes().to_owned()))
@@ -377,7 +377,7 @@ fn test_process_tx_decrypted_signed() {
     decrypted.add_section(Section::Signature(sig_sec));
     // create the tx with signed decrypted data
     let code_sec = decrypted
-        .set_code(Code::new("transaction data".as_bytes().to_owned()))
+        .set_code(Code::new("transaction data".as_bytes().to_owned(), None))
         .clone();
     let data_sec = decrypted
         .set_data(Data::new("transaction data".as_bytes().to_owned()))
