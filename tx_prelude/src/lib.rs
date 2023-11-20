@@ -283,14 +283,18 @@ impl TxEnv for Ctx {
 
     fn init_account(
         &mut self,
-        code: impl AsRef<[u8]>,
+        code_hash: impl AsRef<[u8]>,
+        code_tag: &Option<String>,
     ) -> Result<Address, Error> {
-        let code = code.as_ref();
+        let code_hash = code_hash.as_ref();
+        let code_tag = code_tag.serialize_to_vec();
         let result = Vec::with_capacity(address::ESTABLISHED_ADDRESS_BYTES_LEN);
         unsafe {
             namada_tx_init_account(
-                code.as_ptr() as _,
-                code.len() as _,
+                code_hash.as_ptr() as _,
+                code_hash.len() as _,
+                code_tag.as_ptr() as _,
+                code_tag.len() as _,
                 result.as_ptr() as _,
             )
         };
@@ -307,16 +311,20 @@ impl TxEnv for Ctx {
     fn update_validity_predicate(
         &mut self,
         addr: &Address,
-        code: impl AsRef<[u8]>,
+        code_hash: impl AsRef<[u8]>,
+        code_tag: &Option<String>,
     ) -> Result<(), Error> {
         let addr = addr.encode();
-        let code = code.as_ref();
+        let code_hash = code_hash.as_ref();
+        let code_tag = code_tag.serialize_to_vec();
         unsafe {
             namada_tx_update_validity_predicate(
                 addr.as_ptr() as _,
                 addr.len() as _,
-                code.as_ptr() as _,
-                code.len() as _,
+                code_hash.as_ptr() as _,
+                code_hash.len() as _,
+                code_tag.as_ptr() as _,
+                code_tag.len() as _,
             )
         };
         Ok(())

@@ -727,7 +727,7 @@ mod tests {
         let verifiers = BTreeSet::new();
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.header.chain_id = wl_storage.storage.chain_id.clone();
-        outer_tx.set_code(Code::new(tx_code));
+        outer_tx.set_code(Code::new(tx_code, None));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
             vec![outer_tx.header_hash()],
@@ -801,7 +801,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
         let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
-        tx.add_code(tx_code)
+        tx.add_code(tx_code, None)
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
@@ -929,7 +929,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
         let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
-        tx.add_code(tx_code)
+        tx.add_code(tx_code, None)
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
@@ -1037,7 +1037,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.header.chain_id = wl_storage.storage.chain_id.clone();
-        outer_tx.set_code(Code::new(tx_code));
+        outer_tx.set_code(Code::new(tx_code, None));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
             vec![outer_tx.header_hash()],
@@ -1136,7 +1136,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
         let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
-        tx.add_code(tx_code)
+        tx.add_code(tx_code, None)
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
@@ -1264,7 +1264,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
-        tx.add_code(tx_code)
+        tx.add_code(tx_code, None)
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
@@ -1373,7 +1373,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.header.chain_id = wl_storage.storage.chain_id.clone();
-        outer_tx.set_code(Code::new(tx_code));
+        outer_tx.set_code(Code::new(tx_code, None));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
             vec![outer_tx.header_hash()],
@@ -1470,7 +1470,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.header.chain_id = wl_storage.storage.chain_id.clone();
-        outer_tx.set_code(Code::new(tx_code));
+        outer_tx.set_code(Code::new(tx_code, None));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
             vec![outer_tx.header_hash()],
@@ -1595,7 +1595,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.header.chain_id = wl_storage.storage.chain_id.clone();
-        outer_tx.set_code(Code::new(tx_code));
+        outer_tx.set_code(Code::new(tx_code, None));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
             vec![outer_tx.header_hash()],
@@ -1719,7 +1719,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.header.chain_id = wl_storage.storage.chain_id.clone();
-        outer_tx.set_code(Code::new(tx_code));
+        outer_tx.set_code(Code::new(tx_code, None));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
             vec![outer_tx.header_hash()],
@@ -1828,7 +1828,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.header.chain_id = wl_storage.storage.chain_id.clone();
-        outer_tx.set_code(Code::new(tx_code));
+        outer_tx.set_code(Code::new(tx_code, None));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
             vec![outer_tx.header_hash()],
@@ -1935,7 +1935,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
         let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
-        tx.add_code(tx_code)
+        tx.add_code(tx_code, None)
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
@@ -2077,7 +2077,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
         let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
-        tx.add_code(tx_code)
+        tx.add_code(tx_code, None)
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
@@ -2272,7 +2272,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
         let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
-        tx.add_code(tx_code)
+        tx.add_code(tx_code, None)
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
@@ -2419,7 +2419,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
         let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
-        tx.add_code(tx_code)
+        tx.add_code(tx_code, None)
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
@@ -2570,7 +2570,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
         let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
-        tx.add_code(tx_code)
+        tx.add_code(tx_code, None)
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
@@ -2722,7 +2722,7 @@ mod tests {
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
         let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
-        tx.add_code(tx_code)
+        tx.add_code(tx_code, None)
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 

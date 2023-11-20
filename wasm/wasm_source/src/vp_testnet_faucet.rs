@@ -214,7 +214,7 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
             tx::ctx()
-                .update_validity_predicate(address, vp_hash)
+                .update_validity_predicate(address, vp_hash, &None)
                 .unwrap();
         });
 
@@ -254,7 +254,7 @@ mod tests {
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
             tx::ctx()
-                .update_validity_predicate(address, vp_hash)
+                .update_validity_predicate(address, vp_hash, &None)
                 .unwrap();
         });
 
@@ -263,7 +263,7 @@ mod tests {
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
-        tx.set_code(Code::new(vec![]));
+        tx.set_code(Code::new(vec![], None));
         tx.add_section(Section::Signature(Signature::new(
             vec![tx.raw_header_hash()],
             pks_map.index_secret_keys(vec![keypair]),
@@ -400,7 +400,7 @@ mod tests {
         vp_env.has_valid_pow = true;
         let mut tx_data = Tx::from_type(TxType::Raw);
         tx_data.set_data(Data::new(solution_bytes));
-        tx_data.set_code(Code::new(vec![]));
+        tx_data.set_code(Code::new(vec![], None));
         tx_data.add_section(Section::Signature(Signature::new(
             vec![tx_data.raw_header_hash()],
             [(0, target_key)].into_iter().collect(),
@@ -454,7 +454,7 @@ mod tests {
             let mut vp_env = vp_host_env::take();
             let mut tx = vp_env.tx.clone();
             tx.set_data(Data::new(vec![]));
-            tx.set_code(Code::new(vec![]));
+            tx.set_code(Code::new(vec![], None));
             tx.add_section(Section::Signature(Signature::new(
                 vec![tx.raw_header_hash()],
                 pks_map.index_secret_keys(vec![keypair]),

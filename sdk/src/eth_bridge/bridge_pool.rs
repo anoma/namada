@@ -92,7 +92,11 @@ pub async fn build_bridge_pool_tx(
         .ok_or_else(|| Error::Other("No chain id available".into()))?;
 
     let mut tx = Tx::new(chain_id, tx_args.expiration);
-    tx.add_code_from_hash(tx_code_hash).add_data(transfer);
+    tx.add_code_from_hash(
+        tx_code_hash,
+        Some(code_path.to_string_lossy().into_owned()),
+    )
+    .add_data(transfer);
 
     let epoch = prepare_tx(
         context,

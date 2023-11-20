@@ -108,7 +108,8 @@ fn governance(c: &mut Criterion) {
                 )
             }
             "minimal_proposal" => {
-                let content_section = Section::ExtraData(Code::new(vec![]));
+                let content_section =
+                    Section::ExtraData(Code::new(vec![], None));
                 let params =
                     proof_of_stake::read_pos_params(&shell.wl_storage).unwrap();
                 let voting_start_epoch =
@@ -151,13 +152,14 @@ fn governance(c: &mut Criterion) {
                     .expect(
                         "Missing max_proposal_content parameter in storage",
                     );
-                let content_section = Section::ExtraData(Code::new(vec![
-                        0;
-                        max_proposal_content_size
-                            as _
-                    ]));
-                let wasm_code_section =
-                    Section::ExtraData(Code::new(vec![0; max_code_size as _]));
+                let content_section = Section::ExtraData(Code::new(
+                    vec![0; max_proposal_content_size as _],
+                    None,
+                ));
+                let wasm_code_section = Section::ExtraData(Code::new(
+                    vec![0; max_code_size as _],
+                    None,
+                ));
 
                 let params =
                     proof_of_stake::read_pos_params(&shell.wl_storage).unwrap();

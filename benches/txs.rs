@@ -47,16 +47,14 @@ use namada_apps::bench_utils::{
     TX_CHANGE_CONSENSUS_KEY_WASM, TX_CHANGE_VALIDATOR_COMMISSION_WASM,
     TX_CHANGE_VALIDATOR_METADATA_WASM, TX_CLAIM_REWARDS_WASM,
     TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
-    TX_INIT_PROPOSAL_WASM, TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM,
-    TX_RESIGN_STEWARD, TX_REVEAL_PK_WASM, TX_UNBOND_WASM,
-    TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
-    TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL_WASM, TX_WITHDRAW_WASM,
-    VP_VALIDATOR_WASM,
+    TX_INIT_PROPOSAL_WASM, TX_INIT_VALIDATOR_WASM,
+    TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM, TX_RESIGN_STEWARD,
+    TX_REVEAL_PK_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
+    TX_UPDATE_ACCOUNT_WASM, TX_UPDATE_STEWARD_COMMISSION,
+    TX_VOTE_PROPOSAL_WASM, TX_WITHDRAW_WASM, VP_VALIDATOR_WASM,
 };
 use namada_apps::wallet::defaults;
 use sha2::Digest;
-
-const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
 
 fn transfer(c: &mut Criterion) {
     let mut group = c.benchmark_group("transfer");
@@ -373,7 +371,10 @@ fn update_account(c: &mut Criterion) {
     let vp_code_hash: Hash = shell
         .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
         .unwrap();
-    let extra_section = Section::ExtraData(Code::from_hash(vp_code_hash));
+    let extra_section = Section::ExtraData(Code::from_hash(
+        vp_code_hash,
+        Some(VP_VALIDATOR_WASM.to_string()),
+    ));
     let data = UpdateAccount {
         addr: defaults::albert_address(),
         vp_code_hash: Some(Hash(
@@ -413,7 +414,10 @@ fn init_account(c: &mut Criterion) {
     let vp_code_hash: Hash = shell
         .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
         .unwrap();
-    let extra_section = Section::ExtraData(Code::from_hash(vp_code_hash));
+    let extra_section = Section::ExtraData(Code::from_hash(
+        vp_code_hash,
+        Some(VP_VALIDATOR_WASM.to_string()),
+    ));
     let extra_hash = Hash(
         extra_section
             .hash(&mut sha2::Sha256::new())
@@ -454,7 +458,7 @@ fn init_proposal(c: &mut Criterion) {
                     let signed_tx = match bench_name {
                         "minimal_proposal" => {
                             let content_section =
-                                Section::ExtraData(Code::new(vec![]));
+                                Section::ExtraData(Code::new(vec![], None));
                             shell.generate_tx(
                                 TX_INIT_PROPOSAL_WASM,
                                 InitProposalData {
@@ -497,13 +501,13 @@ fn init_proposal(c: &mut Criterion) {
                                     0;
                                     max_proposal_content_size
                                         as _
-                                ]));
+                                ], None));
                             let wasm_code_section =
                                 Section::ExtraData(Code::new(vec![
                                     0;
                                     max_code_size
                                         as _
-                                ]));
+                                ], None));
 
                             shell.generate_tx(
                                 TX_INIT_PROPOSAL_WASM,
@@ -611,8 +615,10 @@ fn init_validator(c: &mut Criterion) {
     let validator_vp_code_hash: Hash = shell
         .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
         .unwrap();
-    let extra_section =
-        Section::ExtraData(Code::from_hash(validator_vp_code_hash));
+    let extra_section = Section::ExtraData(Code::from_hash(
+        validator_vp_code_hash,
+        Some(VP_VALIDATOR_WASM.to_string()),
+    ));
     let extra_hash = Hash(
         extra_section
             .hash(&mut sha2::Sha256::new())
