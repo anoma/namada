@@ -191,19 +191,28 @@ pub fn validator_commission_rate_key(validator: &Address) -> Key {
         .expect("Cannot obtain a storage key")
 }
 
-/// Is storage key for validator's commissionr ate?
-pub fn is_validator_commission_rate_key(key: &Key) -> Option<&Address> {
+/// Is storage key for validator's commission rate?
+pub fn is_validator_commission_rate_key(
+    key: &Key,
+) -> Option<(&Address, Epoch)> {
     match &key.segments[..] {
         [
             DbKeySeg::AddressSeg(addr),
             DbKeySeg::StringSeg(prefix),
             DbKeySeg::AddressSeg(validator),
             DbKeySeg::StringSeg(key),
+            DbKeySeg::StringSeg(lazy_map),
+            DbKeySeg::StringSeg(data),
+            DbKeySeg::StringSeg(epoch),
         ] if addr == &ADDRESS
             && prefix == VALIDATOR_STORAGE_PREFIX
-            && key == VALIDATOR_COMMISSION_RATE_STORAGE_KEY =>
+            && key == VALIDATOR_COMMISSION_RATE_STORAGE_KEY
+            && lazy_map == LAZY_MAP_SUB_KEY
+            && data == lazy_map::DATA_SUBKEY =>
         {
-            Some(validator)
+            let epoch = Epoch::parse(epoch.clone())
+                .expect("Should be able to parse the epoch");
+            Some((validator, epoch))
         }
         _ => None,
     }
@@ -229,6 +238,30 @@ pub fn is_validator_max_commission_rate_change_key(
         ] if addr == &ADDRESS
             && prefix == VALIDATOR_STORAGE_PREFIX
             && key == VALIDATOR_MAX_COMMISSION_CHANGE_STORAGE_KEY =>
+        {
+            Some(validator)
+        }
+        _ => None,
+    }
+}
+
+/// Is storage key for some piece of validator metadata?
+pub fn is_validator_metadata_key(key: &Key) -> Option<&Address> {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::AddressSeg(validator),
+            DbKeySeg::StringSeg(metadata),
+        ] if addr == &ADDRESS
+            && prefix == VALIDATOR_STORAGE_PREFIX
+            && matches!(
+                metadata.as_str(),
+                VALIDATOR_EMAIL_KEY
+                    | VALIDATOR_DESCRIPTION_KEY
+                    | VALIDATOR_WEBSITE_KEY
+                    | VALIDATOR_DISCORD_KEY
+            ) =>
         {
             Some(validator)
         }
