@@ -804,7 +804,7 @@ impl Default for BenchShieldedCtx {
         }
 
         crate::wallet::save(&chain_ctx.wallet).unwrap();
-        namada::ledger::storage::update_allowed_conversions(
+        namada::core::ledger::masp_conversions::update_allowed_conversions(
             &mut shell.wl_storage,
         )
         .unwrap();

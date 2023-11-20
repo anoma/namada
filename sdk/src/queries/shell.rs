@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 pub(super) mod eth_bridge;
 
 use borsh::BorshDeserialize;
@@ -27,6 +29,12 @@ use crate::ibc::core::ics24_host::identifier::{ChannelId, ClientId, PortId};
 use crate::queries::types::{RequestCtx, RequestQuery};
 use crate::queries::{require_latest_height, EncodedResponseQuery};
 use crate::tendermint::merkle::proof::ProofOps;
+
+type ConversionWithoutPath = (
+    Address,
+    Epoch,
+    masp_primitives::transaction::components::I128Sum,
+);
 
 type Conversion = (
     Address,
@@ -71,6 +79,9 @@ router! {SHELL,
 
     // Conversion state access - read conversion
     ( "conv" / [asset_type: AssetType] ) -> Conversion = read_conversion,
+
+    // Conversion state access - read conversion
+    ( "conversions" ) -> BTreeMap<AssetType, ConversionWithoutPath> = read_conversions,
 
     // Block results access - read bit-vec
     ( "results" ) -> Vec<BlockResults> = read_results,
@@ -142,6 +153,26 @@ where
         results[idx] = value;
     }
     Ok(results)
+}
+
+/// Query to read the conversion state
+fn read_conversions<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+) -> storage_api::Result<BTreeMap<AssetType, ConversionWithoutPath>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    Ok(ctx
+        .wl_storage
+        .storage
+        .conversion_state
+        .assets
+        .iter()
+        .map(|(&asset_type, ((ref addr, _), epoch, ref conv, _))| {
+            (asset_type, (addr.clone(), *epoch, conv.clone().into()))
+        })
+        .collect())
 }
 
 /// Query to read a conversion from storage
