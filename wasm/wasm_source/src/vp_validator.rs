@@ -132,7 +132,7 @@ fn validate_tx(
                     );
                 let valid_commission_rate_change = match comm {
                     Some((validator, _epoch)) => {
-                        *valid_sig && *validator == addr
+                        *validator == addr && *valid_sig
                     }
                     None => true,
                 };
@@ -149,11 +149,7 @@ fn validate_tx(
                 // marked by changes in validator state
                 let state_change =
                     proof_of_stake::storage::is_validator_state_key(key);
-                let (
-                    valid_unjail_change,
-                    valid_deactivation_change,
-                    valid_reactionation_change,
-                ) = match state_change {
+                let valid_state_change = match state_change {
                     Some((address, epoch)) => {
                         let params_pre =
                             proof_of_stake::read_pos_params(&ctx.pre())?;
@@ -169,24 +165,19 @@ fn validate_tx(
 
                         match (state_pre, state_post) {
                             (Some(pre), Some(post)) => {
+                                if
                                 // Deactivation case
-                                if matches!(
+                                (matches!(
                                     pre,
                                     ValidatorState::Consensus
                                         | ValidatorState::BelowCapacity
                                         | ValidatorState::BelowThreshold
-                                ) && post == ValidatorState::Inactive
-                                {
-                                    (true, *address == addr && *valid_sig, true)
-                                }
+                                ) && post == ValidatorState::Inactive)
                                 // Reactivation case
-                                else if pre == ValidatorState::Inactive
+                                || pre == ValidatorState::Inactive
                                     && post != ValidatorState::Inactive
-                                {
-                                    (true, true, *address == addr && *valid_sig)
-                                }
                                 // Unjail case
-                                else if pre == ValidatorState::Jailed
+                                || pre == ValidatorState::Jailed
                                     && matches!(
                                         post,
                                         ValidatorState::Consensus
@@ -194,22 +185,20 @@ fn validate_tx(
                                             | ValidatorState::BelowThreshold
                                     )
                                 {
-                                    (*address == addr && *valid_sig, true, true)
+                                    *address == addr && *valid_sig
                                 } else {
-                                    (true, true, true)
+                                    true
                                 }
                             }
-                            _ => (true, true, true),
+                            _ => true,
                         }
                     }
-                    None => (true, true, true),
+                    None => true,
                 };
 
                 let valid = valid_bond_or_unbond_change
                     && valid_commission_rate_change
-                    && valid_deactivation_change
-                    && valid_reactionation_change
-                    && valid_unjail_change
+                    && valid_state_change
                     && valid_metadata_change;
                 debug_log!(
                     "PoS key {} {}",
