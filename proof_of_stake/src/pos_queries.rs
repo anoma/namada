@@ -2,12 +2,9 @@
 //! data. This includes validator and epoch related data.
 
 use namada_core::ledger::parameters::storage::get_max_proposal_bytes_key;
-use namada_core::ledger::parameters::EpochDuration;
 use namada_core::ledger::storage::WlStorage;
 use namada_core::ledger::storage_api::collections::lazy_map::NestedSubKey;
 use namada_core::ledger::{storage, storage_api};
-use namada_core::tendermint_proto::google::protobuf;
-use namada_core::tendermint_proto::types::EvidenceParams;
 use namada_core::types::address::Address;
 use namada_core::types::chain::ProposalBytes;
 use namada_core::types::storage::{BlockHeight, Epoch};
@@ -138,31 +135,6 @@ where
             // an epoch that hasn't been reached yet. let's "fail" by
             // returning a total stake of 0 NAM
             .unwrap_or_default()
-    }
-
-    /// Return evidence parameters.
-    // TODO: impove this docstring
-    pub fn get_evidence_params(
-        self,
-        epoch_duration: &EpochDuration,
-        pos_params: &PosParams,
-    ) -> EvidenceParams {
-        // Minimum number of epochs before tokens are unbonded and can be
-        // withdrawn
-        let len_before_unbonded =
-            std::cmp::max(pos_params.unbonding_len as i64 - 1, 0);
-        let max_age_num_blocks: i64 =
-            epoch_duration.min_num_of_blocks as i64 * len_before_unbonded;
-        let min_duration_secs = epoch_duration.min_duration.0 as i64;
-        let max_age_duration = Some(protobuf::Duration {
-            seconds: min_duration_secs * len_before_unbonded,
-            nanos: 0,
-        });
-        EvidenceParams {
-            max_age_num_blocks,
-            max_age_duration,
-            ..EvidenceParams::default()
-        }
     }
 
     /// Lookup data about a validator from their protocol signing key.

@@ -105,7 +105,7 @@ where
                 current_epoch,
                 current_epoch + pos_params.pipeline_len,
             )?;
-            namada_proof_of_stake::store_total_consensus_stake(
+            namada_proof_of_stake::compute_and_store_total_consensus_stake(
                 &mut self.wl_storage,
                 current_epoch,
             )?;

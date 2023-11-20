@@ -1,10 +1,4 @@
 //! Proof of Stake system.
-//!
-//! TODO: We might need to storage both active and total validator set voting
-//! power. For consensus, we only consider active validator set voting power,
-//! but for other activities in which inactive validators can participate (e.g.
-//! voting on a protocol parameter changes, upgrades, default VP changes) we
-//! should use the total validator set voting power.
 
 #![doc(html_favicon_url = "https://dev.namada.net/master/favicon.png")]
 #![doc(html_logo_url = "https://dev.namada.net/master/rustdoc-logo.png")]
@@ -308,7 +302,8 @@ where
     Ok(())
 }
 
-/// new init genesis
+/// Copies the validator sets into all epochs up through the pipeline epoch at
+/// genesis. Also computes the total
 pub fn copy_genesis_validator_sets<S>(
     storage: &mut S,
     params: &OwnedPosParams,
@@ -327,7 +322,7 @@ where
             current_epoch,
             epoch,
         )?;
-        store_total_consensus_stake(storage, epoch)?;
+        // compute_and_store_total_consensus_stake(storage, epoch)?;
     }
     Ok(())
 }
@@ -523,7 +518,13 @@ where
     let val = handle
         .get_delta_val(storage, current_epoch + offset)?
         .unwrap_or_default();
-    handle.set(storage, val + delta, current_epoch, offset)
+    handle.set(
+        storage,
+        val.checked_add(&delta)
+            .expect("Validator deltas updated amount should not overflow"),
+        current_epoch,
+        offset,
+    )
 }
 
 /// Read PoS total stake (sum of deltas).
@@ -673,8 +674,6 @@ where
 }
 
 /// Read all validator addresses.
-/// TODO: expand this to include the jailed validators as well, as it currently
-/// only does consensus and bc
 pub fn read_all_validator_addresses<S>(
     storage: &S,
     epoch: namada_core::types::storage::Epoch,
@@ -705,7 +704,13 @@ where
     let val = handle
         .get_delta_val(storage, current_epoch + offset)?
         .unwrap_or_default();
-    handle.set(storage, val + delta, current_epoch, offset)
+    handle.set(
+        storage,
+        val.checked_add(&delta)
+            .expect("Total deltas updated amount should not overflow"),
+        current_epoch,
+        offset,
+    )
 }
 
 /// Check if the provided address is a validator address
@@ -716,6 +721,8 @@ pub fn is_validator<S>(
 where
     S: StorageRead,
 {
+    // TODO: should this check be made different? I suppose it does work but
+    // feels weird...
     let rate = read_validator_max_commission_rate_change(storage, address)?;
     Ok(rate.is_some())
 }
@@ -746,9 +753,18 @@ where
             }
             Ok(false)
         }
-        None => Ok(storage_api::iter_prefix_bytes(storage, &prefix)?
-            .next()
-            .is_some()),
+        None => {
+            let iter = storage_api::iter_prefix_bytes(storage, &prefix)?;
+            for res in iter {
+                let (key, _) = res?;
+                if let Some((bond_id, _epoch)) = is_bond_key(&key) {
+                    if bond_id.source != bond_id.validator {
+                        return Ok(true);
+                    }
+                }
+            }
+            Ok(false)
+        }
     }
 }
 
@@ -992,7 +1008,10 @@ where
 
     // tracing::debug!("VALIDATOR STAKE BEFORE UPDATE: {}", tokens_pre);
 
-    let tokens_post = tokens_pre.change() + token_change;
+    let tokens_post = tokens_pre
+        .change()
+        .checked_add(&token_change)
+        .expect("Post-validator set update token amount has overflowed");
     debug_assert!(tokens_post.non_negative());
     let tokens_post = token::Amount::from_change(tokens_post);
 
@@ -1343,7 +1362,9 @@ where
     Ok(())
 }
 
-/// Validator sets and positions copying into a future epoch
+/// Copy the consensus and below-capacity validator sets and positions into a
+/// future epoch. Also copies the epoched set of all known validators in the
+/// network.
 pub fn copy_validator_sets_and_positions<S>(
     storage: &mut S,
     params: &PosParams,
@@ -1478,12 +1499,14 @@ where
                 },
                 _validator,
             ) = entry?;
-            Ok(acc + amount)
+            Ok(acc.checked_add(amount).expect(
+                "Total consensus stake computation should not overflow.",
+            ))
         })
 }
 
-/// Store total consensus stake
-pub fn store_total_consensus_stake<S>(
+/// Compute and then store the total consensus stake
+pub fn compute_and_store_total_consensus_stake<S>(
     storage: &mut S,
     epoch: Epoch,
 ) -> storage_api::Result<()>
@@ -1492,7 +1515,7 @@ where
 {
     let total = compute_total_consensus_stake(storage, epoch)?;
     tracing::debug!(
-        "Computed total consensus stake for epoch {}: {}",
+        "Total consensus stake for epoch {}: {}",
         epoch,
         total.to_string_native()
     );
@@ -2361,7 +2384,6 @@ where
 /// - redelegation end epoch where redeleg stops contributing to src validator
 /// - src validator address
 /// - src bond start epoch where it started contributing to src validator
-// TODO: refactor out
 type EagerRedelegatedUnbonds = BTreeMap<Epoch, EagerRedelegatedBondsMap>;
 
 /// Computes a map of redelegated unbonds from a set of redelegated bonds.
@@ -2378,7 +2400,6 @@ type EagerRedelegatedUnbonds = BTreeMap<Epoch, EagerRedelegatedBondsMap>;
 /// 1. `modified.epoch` is not in the `epochs_to_remove` set.
 /// 2. `modified.validator_to_modify` is in `modified.vals_to_remove`.
 /// 3. `modified.epoch_to_modify` is in in `modified.epochs_to_remove`.
-// TODO: try to optimize this by only writing to storage via Lazy!
 // `def computeNewRedelegatedUnbonds` from Quint
 fn compute_new_redelegated_unbonds<S>(
     storage: &S,
@@ -3366,7 +3387,6 @@ where
                     );
                     return None;
                 }
-                // TODO: maybe debug_assert that the new stake is >= threshold?
             }
             let consensus_key = validator_consensus_key_handle(&address)
                 .get(storage, next_epoch, params)
@@ -4044,10 +4064,6 @@ where
             address,
         ) = validator?;
 
-        // TODO:
-        // When below-threshold validator set is added, this shouldn't be needed
-        // anymore since some minimal stake will be required to be in at least
-        // the consensus set
         if stake.is_zero() {
             continue;
         }
@@ -4108,8 +4124,6 @@ where
 {
     // Read the rewards accumulator and calculate the new rewards products
     // for the previous epoch
-    //
-    // TODO: think about changing the reward to Decimal
     let mut reward_tokens_remaining = inflation;
     let mut new_rewards_products: HashMap<Address, Rewards> = HashMap::new();
     let mut accumulators_sum = Dec::zero();
@@ -4218,7 +4232,10 @@ pub fn compute_cubic_slash_rate<S>(
 where
     S: StorageRead,
 {
-    // tracing::debug!("COMPUTING CUBIC SLASH RATE");
+    tracing::debug!(
+        "Computing the cubic slash rate for infraction epoch \
+         {infraction_epoch}."
+    );
     let mut sum_vp_fraction = Dec::zero();
     let (start_epoch, end_epoch) =
         params.cubic_slash_epoch_window(infraction_epoch);
@@ -4251,15 +4268,14 @@ where
                 // validator_stake);
 
                 Ok(acc + Dec::from(validator_stake))
-                // TODO: does something more complex need to be done
-                // here in the event some of these slashes correspond to
-                // the same validator?
             },
         )?;
         sum_vp_fraction += infracting_stake / consensus_stake;
     }
-    // tracing::debug!("sum_vp_fraction: {}", sum_vp_fraction);
-    Ok(Dec::new(9, 0).unwrap() * sum_vp_fraction * sum_vp_fraction)
+    let cubic_rate =
+        Dec::new(9, 0).unwrap() * sum_vp_fraction * sum_vp_fraction;
+    tracing::debug!("Cubic slash rate: {}", cubic_rate);
+    Ok(cubic_rate)
 }
 
 /// Record a slash for a misbehavior that has been received from Tendermint and
@@ -4460,7 +4476,7 @@ where
 
     // Collect the enqueued slashes and update their rates
     let mut eager_validator_slashes: BTreeMap<Address, Vec<Slash>> =
-        BTreeMap::new(); // TODO: will need to update this in storage later
+        BTreeMap::new();
     let mut eager_validator_slash_rates: HashMap<Address, Dec> = HashMap::new();
 
     // `slashPerValidator` and `slashesMap` while also updating in storage
@@ -4806,10 +4822,7 @@ where
                     redel_bond_start,
                 ) && bond_start <= slash.epoch
                     && slash.epoch + params.slash_processing_epoch_offset()
-                    // TODO this may need to be `<=` as in `fn compute_total_unbonded`
-                    //
-                    // NOTE(Tomas): Agreed and changed to `<=`. We're looking 
-                    // for slashes that were processed before or in the epoch
+                    // We're looking for slashes that were processed before or in the epoch
                     // in which slashes that are currently being processed
                     // occurred. Because we're slashing in the beginning of an
                     // epoch, we're also taking slashes that were processed in
@@ -5007,7 +5020,6 @@ where
         .iter(storage)?
         .map(Result::unwrap)
         .filter(|slash| {
-            // TODO: check bounds on second arg
             start <= slash.epoch
                 && slash.epoch + params.slash_processing_epoch_offset() <= epoch
         })
@@ -5119,7 +5131,6 @@ where
         )
         .into());
     }
-    // TODO: any other checks that are needed? (deltas, etc)?
 
     // Re-insert the validator into the validator set and update its state
     let pipeline_epoch = current_epoch + params.pipeline_len;
@@ -5258,7 +5269,6 @@ where
     // started contributing to the src validator's voting power, these tokens
     // cannot be slashed anymore
     let is_not_chained = if let Some(end_epoch) = src_redel_end_epoch {
-        // TODO: check bounds for correctness (> and presence of cubic offset)
         let last_contrib_epoch = end_epoch.prev();
         // If the source validator's slashes that would cause slash on
         // redelegation are now outdated (would have to be processed before or
@@ -5409,7 +5419,8 @@ where
     Ok(())
 }
 
-/// De-activate a validator by removing it from any validator sets
+/// Deactivate a validator by removing it from any validator sets. A validator
+/// can only be deactivated if it is not jailed or already inactive.
 pub fn deactivate_validator<S>(
     storage: &mut S,
     validator: &Address,
@@ -5546,8 +5557,6 @@ pub fn reactivate_validator<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    // TODO: need to additionally check for past slashes, in case a jailed
-    // validator tries to deactivate and then reactivate
     let params = read_pos_params(storage)?;
     let pipeline_epoch = current_epoch + params.pipeline_len;
 
@@ -5572,7 +5581,9 @@ where
         }
     }
 
-    // Check to see if the validator should still be jailed upon a reactivation
+    // Check to see if the validator should be jailed upon a reactivation. This
+    // may occur if a validator is deactivated but then an infraction is
+    // discovered later.
     let last_slash_epoch = read_validator_last_slash_epoch(storage, validator)?;
     if let Some(last_slash_epoch) = last_slash_epoch {
         let eligible_epoch =
@@ -5585,7 +5596,6 @@ where
                 pipeline_epoch,
                 0,
             )?;
-            // End execution here?
             return Ok(());
         }
     }
@@ -5670,7 +5680,7 @@ pub mod test_utils {
             )?;
         }
         // Store the total consensus validator stake to storage
-        store_total_consensus_stake(storage, current_epoch)?;
+        compute_and_store_total_consensus_stake(storage, current_epoch)?;
 
         // Copy validator sets and positions
         copy_genesis_validator_sets(storage, params, current_epoch)?;
