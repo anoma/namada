@@ -610,7 +610,6 @@ mod tests {
 
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
-        let vp_owner: Address = address::testing::established_address_2();
         let target = address::testing::established_address_3();
         let token = address::nam();
         let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
@@ -618,12 +617,12 @@ mod tests {
         let unbond_amount = token::Amount::from_uint(3_098_123, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage
-        tx_env.spawn_accounts([&vp_owner, &target, &token]);
-        tx_env.init_account_storage(&vp_owner, vec![public_key.clone()], 1);
+        tx_env.spawn_accounts([&validator, &target, &token]);
+        tx_env.init_account_storage(&validator, vec![public_key.clone()], 1);
 
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
-        tx_env.credit_tokens(&vp_owner, &token, amount);
+        tx_env.credit_tokens(&validator, &token, amount);
         // write the denomination of NAM into storage
         storage_api::token::write_denom(
             &mut tx_env.wl_storage,
@@ -633,21 +632,25 @@ mod tests {
         .unwrap();
 
         // Initialize VP environment from a transaction
-        vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
+        vp_host_env::init_from_tx(validator.clone(), tx_env, |_address| {
             // Bond the tokens, then unbond some of them
             tx::ctx()
-                .bond_tokens(Some(&vp_owner), &validator, bond_amount)
+                .bond_tokens(Some(&validator), &validator, bond_amount)
                 .unwrap();
             tx::ctx()
-                .unbond_tokens(Some(&vp_owner), &validator, unbond_amount)
+                .unbond_tokens(Some(&validator), &validator, unbond_amount)
                 .unwrap();
-            // tx::ctx()
-            //     .change_validator_commission_rate(
-            //         &validator,
-            //         &Dec::new(6, 2).unwrap(),
-            //     )
-            //     .unwrap();
-            // tx::ctx().deactivate_validator(&validator).unwrap();
+            tx::ctx().deactivate_validator(&validator).unwrap();
+            tx::ctx()
+                .change_validator_metadata(
+                    &validator,
+                    Some("email".to_owned()),
+                    Some("desc".to_owned()),
+                    Some("website".to_owned()),
+                    Some("discord".to_owned()),
+                    Some(Dec::new(6, 2).unwrap()),
+                )
+                .unwrap();
         });
 
         let pks_map = AccountPublicKeysMap::from_iter(vec![public_key]);
@@ -668,7 +671,7 @@ mod tests {
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
         assert!(
-            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
+            validate_tx(&CTX, signed_tx, validator, keys_changed, verifiers)
                 .unwrap()
         );
     }
