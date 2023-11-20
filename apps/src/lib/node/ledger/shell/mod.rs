@@ -2990,7 +2990,8 @@ mod shell_tests {
                     None,
                 ))));
             wrapper.header.chain_id = shell.chain_id.clone();
-            wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+            wrapper
+                .set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
             wrapper.set_data(Data::new(vec![0; size as usize]));
             wrapper.add_section(Section::Signature(Signature::new(
                 wrapper.sechashes(),
