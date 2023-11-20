@@ -14,7 +14,7 @@ use crate::ledger::parameters;
 use crate::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
 use crate::ledger::storage_api::token::read_denom;
 use crate::ledger::storage_api::{StorageRead, StorageWrite};
-use crate::types::address::{Address, MASP};
+use crate::types::address::{tokens, Address, MASP};
 use crate::types::dec::Dec;
 use crate::types::storage::Epoch;
 use crate::types::token;
@@ -213,7 +213,7 @@ where
     // The derived conversions will be placed in MASP address space
     let masp_addr = MASP;
 
-    let tokens = address::tokens();
+    let tokens = tokens();
     let mut masp_reward_keys: Vec<_> = tokens
         .into_keys()
         .map(|k| {
