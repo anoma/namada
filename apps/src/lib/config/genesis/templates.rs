@@ -669,7 +669,7 @@ pub fn load_and_validate(templates_dir: &Path) -> Option<All<Validated>> {
     let transactions = read_transactions(&transactions_file);
 
     let eprintln_invalid_file = |err: &eyre::Report, name: &str| {
-        eprintln!("{name} file is NOT valid. Failed to read with: {err}");
+        eprintln!("{name} file is NOT valid. Failed to read with: {err:?}");
     };
 
     // Check the parsing results

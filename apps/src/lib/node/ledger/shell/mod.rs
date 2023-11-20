@@ -116,7 +116,7 @@ pub enum Error {
     Broadcaster(tokio::sync::mpsc::error::TryRecvError),
     #[error("Error executing proposal {0}: {1}")]
     BadProposal(u64, String),
-    #[error("Error reading wasm: {0}")]
+    #[error("Error reading wasm: {0:?}")]
     ReadingWasm(#[from] eyre::Error),
     #[error("Error loading wasm: {0}")]
     LoadingWasm(String),
