@@ -324,6 +324,12 @@ pub enum TxError {
     /// An empty string was provided as a new email
     #[error("An empty string cannot be provided as a new email")]
     InvalidEmail,
+    /// The consensus key is not Ed25519
+    #[error("The consensus key must be an ed25519 key")]
+    ConsensusKeyNotEd25519,
+    /// The consensus key is not unique
+    #[error("The consensus key has already been registered and is not unique")]
+    ConsensusKeyNotUnique,
     /// Other Errors that may show up when using the interface
     #[error("{0}")]
     Other(String),
