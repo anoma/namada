@@ -2040,7 +2040,7 @@ pub struct MaspKeysList {
 /// Wallet list shielded payment addresses arguments
 #[derive(Clone, Debug)]
 pub struct MaspListPayAddrs {
-    /// List sheilded payment address pre-genesis instead
+    /// List shielded payment address pre-genesis instead
     /// of a current chain
     pub is_pre_genesis: bool,
 }
