@@ -2048,7 +2048,9 @@ pub struct MaspListPayAddrs {
 /// Wallet list keys arguments
 #[derive(Clone, Debug)]
 pub struct KeyList {
-    /// Don't decrypt keypairs
+    /// Whether to list spending keys of the shielded pool
+    pub shielded: bool,
+    /// Don't decrypt keys
     pub decrypt: bool,
     /// List keys pre-genesis instead of a current chain
     pub is_pre_genesis: bool,
