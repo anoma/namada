@@ -123,7 +123,7 @@ pub enum VerifySigError {
     #[error("Signature belongs to a different scheme from the public key.")]
     MismatchedScheme,
     #[error("Signature verification went out of gas: {0}")]
-    OutOfGas(crate::ledger::gas::Error),
+    OutOfGas(#[from] crate::ledger::gas::Error),
 }
 
 #[allow(missing_docs)]

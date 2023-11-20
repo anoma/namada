@@ -36,7 +36,6 @@ mod tests {
     use namada::types::time::DateTimeUtc;
     use namada::types::token::{self, Amount};
     use namada::types::{address, key};
-    use namada_core::ledger::gas::{TxGasMeter, VpGasMeter};
     use namada_core::ledger::ibc::context::transfer_mod::testing::DummyTransferModule;
     use namada_core::ledger::ibc::Error as IbcActionError;
     use namada_test_utils::TestWasms;
@@ -479,9 +478,7 @@ mod tests {
                         &None,
                         1,
                         None,
-                        &mut Some(&mut VpGasMeter::new_from_tx_meter(
-                            &TxGasMeter::new_from_sub_limit(u64::MAX.into())
-                        ))
+                        || Ok(())
                     )
                     .is_ok()
             );
@@ -497,9 +494,7 @@ mod tests {
                         &None,
                         1,
                         None,
-                        &mut Some(&mut VpGasMeter::new_from_tx_meter(
-                            &TxGasMeter::new_from_sub_limit(u64::MAX.into())
-                        ))
+                        || Ok(())
                     )
                     .is_err()
             );

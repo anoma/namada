@@ -507,4 +507,13 @@ mod native_tx_host_env {
     native_host_fn!(tx_log_string(str_ptr: u64, str_len: u64));
     native_host_fn!(tx_charge_gas(used_gas: u64));
     native_host_fn!("non-result", tx_set_commitment_sentinel());
+    native_host_fn!(tx_verify_tx_section_signature(
+        hash_list_ptr: u64,
+        hash_list_len: u64,
+        public_keys_map_ptr: u64,
+        public_keys_map_len: u64,
+        threshold: u8,
+        max_signatures_ptr: u64,
+        max_signatures_len: u64,
+    ) -> i64);
 }
