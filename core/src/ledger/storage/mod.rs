@@ -489,9 +489,7 @@ where
             // Rebuild Merkle tree
             self.block.tree = MerkleTree::new(merkle_tree_stores)
                 .or_else(|_| self.rebuild_full_merkle_tree(height))?;
-            if self.last_epoch.0 > 0 {
-                self.conversion_state = conversion_state;
-            }
+            self.conversion_state = conversion_state;
             self.tx_queue = tx_queue;
             self.ethereum_height = ethereum_height;
             self.eth_events_queue = eth_events_queue;
