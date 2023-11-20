@@ -53,6 +53,8 @@ pub const WASM_MEMORY_PAGE_GAS: u32 =
 pub const IBC_ACTION_VALIDATE_GAS: u64 = 7_511;
 /// The cost to execute an Ibc action
 pub const IBC_ACTION_EXECUTE_GAS: u64 = 47_452;
+/// The cost to execute a masp tx verification
+pub const MASP_VERIFY_SHIELDED_TX_GAS: u64 = 62_381_957;
 
 /// Gas module result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;

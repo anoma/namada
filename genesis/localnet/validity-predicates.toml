@@ -12,6 +12,3 @@ filename = "vp_user.wasm"
 [wasm.vp_validator]
 filename = "vp_validator.wasm"
 
-# MASP VP
-[wasm.vp_masp]
-filename = "vp_masp.wasm"
