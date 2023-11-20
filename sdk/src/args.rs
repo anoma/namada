@@ -1018,6 +1018,49 @@ impl Redelegate {
     }
 }
 
+impl<C: NamadaTypes> Redelegate<C> {
+    /// Src validator address
+    pub fn src_validator(self, src_validator: C::Address) -> Self {
+        Self {
+            src_validator,
+            ..self
+        }
+    }
+
+    /// Dest validator address
+    pub fn dest_validator(self, dest_validator: C::Address) -> Self {
+        Self {
+            dest_validator,
+            ..self
+        }
+    }
+
+    /// Owner (or delegator or source) of the redelegation
+    pub fn owner(self, owner: C::Address) -> Self {
+        Self { owner, ..self }
+    }
+
+    /// Path to the TX WASM code file
+    pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
+        Self {
+            tx_code_path,
+            ..self
+        }
+    }
+}
+
+impl<C: NamadaTypes> TxBuilder<C> for Redelegate<C> {
+    fn tx<F>(self, func: F) -> Self
+    where
+        F: FnOnce(Tx<C>) -> Tx<C>,
+    {
+        Redelegate {
+            tx: func(self.tx),
+            ..self
+        }
+    }
+}
+
 /// Reveal public key
 #[derive(Clone, Debug)]
 pub struct RevealPk<C: NamadaTypes = SdkTypes> {
