@@ -19,8 +19,9 @@ use namada::types::address::{Address, ImplicitAddress};
 use namada::types::dec::Dec;
 use namada::types::io::Io;
 use namada::types::key::{self, *};
-use namada::types::transaction::pos::InitValidator;
+use namada::types::transaction::pos::{ConsensusKeyChange, InitValidator};
 use namada_sdk::rpc::{TxBroadcastData, TxResponse};
+use namada_sdk::wallet::alias::validator_consensus_key;
 use namada_sdk::{display_line, edisplay_line, error, signing, tx, Namada};
 use rand::rngs::OsRng;
 
@@ -325,6 +326,146 @@ where
     Ok(())
 }
 
+pub async fn submit_change_consensus_key<'a>(
+    namada: &impl Namada<'a>,
+    config: &mut crate::config::Config,
+    args::ConsensusKeyChange {
+        tx: tx_args,
+        validator,
+        consensus_key,
+        tx_code_path: _,
+    }: args::ConsensusKeyChange,
+) -> Result<(), error::Error> {
+    let tx_args = args::Tx {
+        chain_id: tx_args
+            .clone()
+            .chain_id
+            .or_else(|| Some(config.ledger.chain_id.clone())),
+        ..tx_args.clone()
+    };
+
+    // TODO: do I need to get the validator alias from somewhere, if it exists?
+    // // Don't think I should generate a new one... Should get the alias
+    // for the consensus key though...
+
+    let wallet = namada.wallet().await;
+
+    let alias = wallet.find_alias(&validator).cloned();
+    let base_consensus_key_alias = alias
+        .map(|al| validator_consensus_key(&al))
+        .unwrap_or_else(|| {
+            validator_consensus_key(&validator.to_string().into())
+        });
+    let mut consensus_key_alias = base_consensus_key_alias.to_string();
+    let all_keys = wallet.get_secret_keys();
+    let mut key_counter = 0;
+    while all_keys.contains_key(&consensus_key_alias) {
+        key_counter += 1;
+        consensus_key_alias =
+            format!("{base_consensus_key_alias}-{key_counter}");
+    }
+
+    let mut wallet = namada.wallet_mut().await;
+    let consensus_key = consensus_key
+        .map(|key| match key {
+            common::SecretKey::Ed25519(_) => key,
+            common::SecretKey::Secp256k1(_) => {
+                edisplay_line!(
+                    namada.io(),
+                    "Consensus key can only be ed25519"
+                );
+                safe_exit(1)
+            }
+        })
+        .unwrap_or_else(|| {
+            display_line!(namada.io(), "Generating new consensus key...");
+            let password = read_and_confirm_encryption_password(false);
+            wallet
+                .gen_store_secret_key(
+                    // Note that TM only allows ed25519 for consensus key
+                    SchemeType::Ed25519,
+                    Some(consensus_key_alias.clone()),
+                    tx_args.wallet_alias_force,
+                    password,
+                    &mut OsRng,
+                )
+                .expect("Key generation should not fail.")
+                .1
+        });
+    // To avoid wallet deadlocks in following operations
+    drop(wallet);
+
+    // Check that the new consensus key is unique
+    let consensus_keys = rpc::query_consensus_keys(namada.client()).await;
+
+    let new_ck = consensus_key.ref_to();
+    if consensus_keys.contains(&new_ck) {
+        edisplay_line!(namada.io(), "Consensus key can only be ed25519");
+        safe_exit(1)
+    }
+
+    let tx_code_hash =
+        query_wasm_code_hash(namada, args::TX_CHANGE_CONSENSUS_KEY_WASM)
+            .await
+            .unwrap();
+
+    let chain_id = tx_args.chain_id.clone().unwrap();
+    let mut tx = Tx::new(chain_id, tx_args.expiration);
+
+    let data = ConsensusKeyChange {
+        validator: validator.clone(),
+        consensus_key: new_ck,
+    };
+
+    tx.add_code_from_hash(tx_code_hash).add_data(data);
+    let signing_data = aux_signing_data(namada, &tx_args, None, None).await?;
+
+    tx::prepare_tx(
+        namada,
+        &tx_args,
+        &mut tx,
+        signing_data.fee_payer.clone(),
+        None,
+    )
+    .await?;
+
+    signing::generate_test_vector(namada, &tx).await?;
+
+    if tx_args.dump_tx {
+        tx::dump_tx(namada.io(), &tx_args, tx);
+    } else {
+        sign(namada, &mut tx, &tx_args, signing_data).await?;
+        namada.submit(tx, &tx_args).await?;
+
+        if !tx_args.dry_run {
+            namada
+                .wallet_mut()
+                .await
+                .save()
+                .unwrap_or_else(|err| edisplay_line!(namada.io(), "{}", err));
+
+            // let tendermint_home = config.ledger.cometbft_dir();
+            // tendermint_node::write_validator_key(
+            //     &tendermint_home,
+            //     &consensus_key,
+            // );
+            // tendermint_node::write_validator_state(tendermint_home);
+
+            display_line!(
+                namada.io(),
+                "  Consensus key \"{}\"",
+                consensus_key_alias
+            );
+        } else {
+            display_line!(
+                namada.io(),
+                "Transaction dry run. No new consensus key has been saved."
+            );
+        }
+    }
+    Ok(())
+}
+
 pub async fn submit_init_validator<'a>(
     namada: &impl Namada<'a>,
     config: &mut crate::config::Config,
@@ -362,7 +503,8 @@ pub async fn submit_init_validator<'a>(
         .unwrap_or_else(|| "validator".to_string());
 
     let validator_key_alias = format!("{}-key", alias);
-    let consensus_key_alias = format!("{}-consensus-key", alias);
+    let consensus_key_alias = validator_consensus_key(&alias.clone().into());
+    // let consensus_key_alias = format!("{}-consensus-key", alias);
 
     let threshold = match threshold {
         Some(threshold) => threshold,
@@ -397,7 +539,7 @@ pub async fn submit_init_validator<'a>(
                 .gen_store_secret_key(
                     // Note that TM only allows ed25519 for consensus key
                     SchemeType::Ed25519,
-                    Some(consensus_key_alias.clone()),
+                    Some(consensus_key_alias.clone().into()),
                     tx_args.wallet_alias_force,
                     password,
                     &mut OsRng,
@@ -1194,6 +1336,28 @@ where
 
     Ok(())
 }
+
+// pub async fn submit_change_consensus_key<'a, N: Namada<'a>>(
+//     namada: &N,
+//     args: args::ConsensusKeyChange,
+// ) -> Result<(), error::Error>
+// where
+//     <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
+// {
+//     let (mut tx, signing_data, _fee_unshield_epoch) =
+//         args.build(namada).await?;
+//     signing::generate_test_vector(namada, &tx).await?;
+
+//     if args.tx.dump_tx {
+//         tx::dump_tx(namada.io(), &args.tx, tx);
+//     } else {
+//         namada.sign(&mut tx, &args.tx, signing_data).await?;
+
+//         namada.submit(tx, &args.tx).await?;
+//     }
+
+//     Ok(())
+// }
 
 pub async fn submit_unjail_validator<'a, N: Namada<'a>>(
     namada: &N,

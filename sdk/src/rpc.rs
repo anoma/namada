@@ -1,7 +1,7 @@
 //! SDK RPC queries
 
 use std::cell::Cell;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::ops::ControlFlow;
 
 use borsh::BorshDeserialize;
@@ -210,6 +210,15 @@ pub async fn is_delegator_at<C: crate::queries::Client + Sync>(
             .pos()
             .is_delegator(client, address, &Some(epoch))
             .await,
+    )
+}
+
+/// Get the set of consensus keys registered in the network
+pub async fn get_consensus_keys<C: crate::queries::Client + Sync>(
+    client: &C,
+) -> Result<BTreeSet<common::PublicKey>, error::Error> {
+    convert_response::<C, BTreeSet<common::PublicKey>>(
+        RPC.vp().pos().consensus_key_set(client).await,
     )
 }
 
