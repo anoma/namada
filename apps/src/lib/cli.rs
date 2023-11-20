@@ -489,6 +489,8 @@ pub mod cmds {
         NewGen(WalletNewGen),
         /// TODO
         NewDerive(WalletNewDerive),
+        /// TODO
+        NewKeyList(WalletNewKeyList),
     }
 
     impl Cmd for NamadaWallet {
@@ -498,6 +500,7 @@ pub mod cmds {
                 .subcommand(WalletMasp::def())
                 .subcommand(WalletNewGen::def())
                 .subcommand(WalletNewDerive::def())
+                .subcommand(WalletNewKeyList::def())
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -506,7 +509,12 @@ pub mod cmds {
             let masp = SubCmd::parse(matches).map(Self::Masp);
             let gen_new = SubCmd::parse(matches).map(Self::NewGen);
             let derive_new = SubCmd::parse(matches).map(Self::NewDerive);
-            key.or(address).or(masp).or(gen_new).or(derive_new)
+            let key_list_new = SubCmd::parse(matches).map(Self::NewKeyList);
+            key.or(address)
+                .or(masp)
+                .or(gen_new)
+                .or(derive_new)
+                .or(key_list_new)
         }
     }
 
@@ -533,7 +541,6 @@ pub mod cmds {
     #[allow(clippy::large_enum_variant)]
     pub enum WalletKey {
         Find(KeyFind),
-        List(KeyList),
         Export(Export),
     }
 
@@ -543,9 +550,8 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
                 let lookup = SubCmd::parse(matches).map(Self::Find);
-                let list = SubCmd::parse(matches).map(Self::List);
                 let export = SubCmd::parse(matches).map(Self::Export);
-                lookup.or(list).or(export)
+                lookup.or(export)
             })
         }
 
@@ -558,7 +564,6 @@ pub mod cmds {
                 .subcommand_required(true)
                 .arg_required_else_help(true)
                 .subcommand(KeyFind::def())
-                .subcommand(KeyList::def())
                 .subcommand(Export::def())
         }
     }
@@ -663,6 +668,25 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct WalletNewKeyList(pub args::KeyList);
+
+    impl SubCmd for WalletNewKeyList {
+        const CMD: &'static str = "list";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| (Self(args::KeyList::parse(matches))))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("List all known keys.")
+                .add_args::<args::KeyList>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct KeyList(pub args::KeyList);
 
     impl SubCmd for KeyList {
@@ -706,7 +730,6 @@ pub mod cmds {
         GenPayAddr(MaspGenPayAddr),
         AddAddrKey(MaspAddAddrKey),
         ListPayAddrs,
-        ListKeys(MaspListKeys),
         FindAddrKey(MaspFindAddrKey),
     }
 
@@ -719,9 +742,8 @@ pub mod cmds {
                 let addak = SubCmd::parse(matches).map(Self::AddAddrKey);
                 let listpa = <MaspListPayAddrs as SubCmd>::parse(matches)
                     .map(|_| Self::ListPayAddrs);
-                let listsk = SubCmd::parse(matches).map(Self::ListKeys);
                 let findak = SubCmd::parse(matches).map(Self::FindAddrKey);
-                genpa.or(addak).or(listpa).or(listsk).or(findak)
+                genpa.or(addak).or(listpa).or(findak)
             })
         }
 
@@ -737,7 +759,6 @@ pub mod cmds {
                 .subcommand(MaspGenPayAddr::def())
                 .subcommand(MaspAddAddrKey::def())
                 .subcommand(MaspListPayAddrs::def())
-                .subcommand(MaspListKeys::def())
                 .subcommand(MaspFindAddrKey::def())
         }
     }
@@ -6453,21 +6474,28 @@ pub mod args {
 
     impl Args for KeyList {
         fn parse(matches: &ArgMatches) -> Self {
+            let shielded = SHIELDED.parse(matches);
             let decrypt = DECRYPT.parse(matches);
             let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
             Self {
+                shielded,
                 decrypt,
                 unsafe_show_secret,
             }
         }
 
         fn def(app: App) -> App {
-            app.arg(DECRYPT.def().help("Decrypt keys that are encrypted."))
-                .arg(
-                    UNSAFE_SHOW_SECRET
-                        .def()
-                        .help("UNSAFE: Print the secret keys."),
-                )
+            app.arg(
+                SHIELDED
+                    .def()
+                    .help("List spending keys for the shielded pool."),
+            )
+            .arg(DECRYPT.def().help("Decrypt keys that are encrypted."))
+            .arg(
+                UNSAFE_SHOW_SECRET
+                    .def()
+                    .help("UNSAFE: Print the secret keys."),
+            )
         }
     }
 

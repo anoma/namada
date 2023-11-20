@@ -2166,7 +2166,9 @@ pub struct MaspKeysList {
 /// Wallet list keys arguments
 #[derive(Clone, Debug)]
 pub struct KeyList {
-    /// Don't decrypt keypairs
+    /// Whether to list spending keys of the shielded pool
+    pub shielded: bool,
+    /// Don't decrypt keys
     pub decrypt: bool,
     /// Show secret keys to user
     pub unsafe_show_secret: bool,

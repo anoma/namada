@@ -43,9 +43,6 @@ impl CliApi {
                 cmds::WalletKey::Find(cmds::KeyFind(args)) => {
                     key_find(ctx, io, args)
                 }
-                cmds::WalletKey::List(cmds::KeyList(args)) => {
-                    key_list(ctx, io, args)
-                }
                 cmds::WalletKey::Export(cmds::Export(args)) => {
                     key_export(ctx, io, args)
                 }
@@ -70,9 +67,6 @@ impl CliApi {
                 cmds::WalletMasp::ListPayAddrs => {
                     payment_addresses_list(ctx, io)
                 }
-                cmds::WalletMasp::ListKeys(cmds::MaspListKeys(args)) => {
-                    spending_keys_list(ctx, io, args)
-                }
                 cmds::WalletMasp::FindAddrKey(cmds::MaspFindAddrKey(args)) => {
                     address_key_find(ctx, io, args)
                 }
@@ -82,6 +76,9 @@ impl CliApi {
             }
             cmds::NamadaWallet::NewDerive(cmds::WalletNewDerive(args)) => {
                 key_derive(ctx, io, args).await
+            }
+            cmds::NamadaWallet::NewKeyList(cmds::WalletNewKeyList(args)) => {
+                key_list(ctx, io, args)
             }
         }
         Ok(())
@@ -131,10 +128,11 @@ fn address_key_find(
 fn spending_keys_list(
     ctx: Context,
     io: &impl Io,
-    args::MaspKeysList {
+    args::KeyList {
         decrypt,
         unsafe_show_secret,
-    }: args::MaspKeysList,
+        ..
+    }: args::KeyList,
 ) {
     let wallet = load_wallet(ctx);
     let known_view_keys = wallet.get_viewing_keys();
@@ -542,6 +540,15 @@ async fn key_derive(
     }
 }
 
+/// TODO
+fn key_list(ctx: Context, io: &impl Io, args_key_list: args::KeyList) {
+    if !args_key_list.shielded {
+        transparent_keys_list(ctx, io, args_key_list)
+    } else {
+        spending_keys_list(ctx, io, args_key_list)
+    }
+}
+
 /// Find a keypair in the wallet store.
 fn key_find(
     ctx: Context,
@@ -589,12 +596,13 @@ fn key_find(
 }
 
 /// List all known keys.
-fn key_list(
+fn transparent_keys_list(
     ctx: Context,
     io: &impl Io,
     args::KeyList {
         decrypt,
         unsafe_show_secret,
+        ..
     }: args::KeyList,
 ) {
     let wallet = load_wallet(ctx);
@@ -602,8 +610,7 @@ fn key_list(
     if known_public_keys.is_empty() {
         display_line!(
             io,
-            "No known keys. Try `key gen --alias my-key` to generate a new \
-             key.",
+            "No known keys. Try `gen --alias my-key` to generate a new key.",
         );
     } else {
         let stdout = io::stdout();
