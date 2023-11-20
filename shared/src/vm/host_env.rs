@@ -1928,7 +1928,7 @@ where
         &Some(signer),
         threshold,
         max_signatures,
-        &mut Some(gas_meter),
+        || gas_meter.consume(gas::VERIFY_TX_SIG_GAS),
     ) {
         Ok(_) => Ok(HostEnvResult::Success.to_i64()),
         Err(err) => match err {
@@ -2040,6 +2040,80 @@ where
 {
     let sentinel = unsafe { env.ctx.sentinel.get() };
     sentinel.set_invalid_commitment();
+}
+
+/// Verify a transaction signature
+#[allow(clippy::too_many_arguments)]
+pub fn tx_verify_tx_section_signature<MEM, DB, H, CA>(
+    env: &TxVmEnv<MEM, DB, H, CA>,
+    hash_list_ptr: u64,
+    hash_list_len: u64,
+    public_keys_map_ptr: u64,
+    public_keys_map_len: u64,
+    threshold: u8,
+    max_signatures_ptr: u64,
+    max_signatures_len: u64,
+) -> TxResult<i64>
+where
+    MEM: VmMemory,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    CA: WasmCacheAccess,
+{
+    let (hash_list, gas) = env
+        .memory
+        .read_bytes(hash_list_ptr, hash_list_len as _)
+        .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
+
+    let sentinel = unsafe { env.ctx.sentinel.get() };
+    let gas_meter = unsafe { env.ctx.gas_meter.get() };
+    tx_charge_gas(env, gas)?;
+    let hashes = <[Hash; 1]>::try_from_slice(&hash_list)
+        .map_err(TxRuntimeError::EncodingError)?;
+
+    let (public_keys_map, gas) = env
+        .memory
+        .read_bytes(public_keys_map_ptr, public_keys_map_len as _)
+        .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
+    tx_charge_gas(env, gas)?;
+    let public_keys_map =
+        namada_core::types::account::AccountPublicKeysMap::try_from_slice(
+            &public_keys_map,
+        )
+        .map_err(TxRuntimeError::EncodingError)?;
+
+    tx_charge_gas(env, gas)?;
+
+    let (max_signatures, gas) = env
+        .memory
+        .read_bytes(max_signatures_ptr, max_signatures_len as _)
+        .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
+    tx_charge_gas(env, gas)?;
+    let max_signatures = Option::<u8>::try_from_slice(&max_signatures)
+        .map_err(TxRuntimeError::EncodingError)?;
+
+    let tx = unsafe { env.ctx.tx.get() };
+
+    match tx.verify_signatures(
+        &hashes,
+        public_keys_map,
+        &None,
+        threshold,
+        max_signatures,
+        || gas_meter.consume(gas::VERIFY_TX_SIG_GAS),
+    ) {
+        Ok(_) => Ok(HostEnvResult::Success.to_i64()),
+        Err(err) => match err {
+            namada_core::proto::Error::OutOfGas(inner) => {
+                sentinel.set_out_of_gas();
+                Err(TxRuntimeError::OutOfGas(inner))
+            }
+            namada_core::proto::Error::InvalidSectionSignature(_) => {
+                Ok(HostEnvResult::Fail.to_i64())
+            }
+            _ => Ok(HostEnvResult::Fail.to_i64()),
+        },
+    }
 }
 
 /// Evaluate a validity predicate with the given input data.
