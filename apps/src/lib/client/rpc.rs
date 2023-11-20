@@ -37,7 +37,6 @@ use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::types::{CommissionPair, Slash};
 use namada::ledger::pos::PosParams;
 use namada::ledger::queries::RPC;
-use namada::ledger::storage::ConversionState;
 use namada::proof_of_stake::types::{ValidatorState, WeightedValidator};
 use namada::types::address::{Address, InternalAddress, MASP};
 use namada::types::hash::Hash;
@@ -2343,20 +2342,12 @@ pub async fn query_conversions<'a>(
         .wallet()
         .await
         .get_addresses_with_vp_type(AddressVpType::Token);
-    let masp_addr = MASP;
-    let key_prefix: Key = masp_addr.to_db_key().into();
-    let state_key = key_prefix
-        .push(&(token::CONVERSION_KEY_PREFIX.to_owned()))
-        .unwrap();
-    let conv_state: ConversionState =
-        query_storage_value(context.client(), &state_key)
-            .await
-            .expect("Conversions should be defined");
+    let conversions = rpc::query_conversions(context.client())
+        .await
+        .expect("Conversions should be defined");
     // Track whether any non-sentinel conversions are found
     let mut conversions_found = false;
-    for ((addr, _), epoch, conv, _) in conv_state.assets.values() {
-        let amt: masp_primitives::transaction::components::I128Sum =
-            conv.clone().into();
+    for (addr, epoch, amt) in conversions.values() {
         // If the user has specified any targets, then meet them
         // If we have a sentinel conversion, then skip printing
         if matches!(&target_token, Some(target) if target != addr)
@@ -2378,7 +2369,7 @@ pub async fn query_conversions<'a>(
         for (asset_type, val) in amt.components() {
             // Look up the address and epoch of asset to facilitate pretty
             // printing
-            let ((addr, _), epoch, _, _) = &conv_state.assets[asset_type];
+            let (addr, epoch, _) = &conversions[asset_type];
             // Now print out this component of the conversion
             display!(
                 context.io(),

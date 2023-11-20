@@ -16,6 +16,7 @@ use super::merkle_tree::{
 use super::{
     BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error, Result, DB,
 };
+use crate::ledger::masp_conversions::ConversionState;
 use crate::ledger::storage::types::{self, KVBytes, PrefixIterator};
 use crate::types::ethereum_structs;
 use crate::types::hash::Hash;
@@ -90,6 +91,13 @@ impl DB for MockDB {
             };
         let update_epoch_blocks_delay: Option<u32> =
             match self.0.borrow().get("update_epoch_blocks_delay") {
+                Some(bytes) => {
+                    types::decode(bytes).map_err(Error::CodingError)?
+                }
+                None => return Ok(None),
+            };
+        let conversion_state: ConversionState =
+            match self.0.borrow().get("conversion_state") {
                 Some(bytes) => {
                     types::decode(bytes).map_err(Error::CodingError)?
                 }
@@ -222,6 +230,7 @@ impl DB for MockDB {
                 update_epoch_blocks_delay,
                 address_gen,
                 results,
+                conversion_state,
                 tx_queue,
                 ethereum_height,
                 eth_events_queue,
@@ -252,6 +261,7 @@ impl DB for MockDB {
             update_epoch_blocks_delay,
             address_gen,
             results,
+            conversion_state,
             ethereum_height,
             eth_events_queue,
             tx_queue,
@@ -280,6 +290,9 @@ impl DB for MockDB {
         self.0
             .borrow_mut()
             .insert("tx_queue".into(), types::encode(&tx_queue));
+        self.0
+            .borrow_mut()
+            .insert("conversion_state".into(), types::encode(conversion_state));
 
         let prefix_key = Key::from(height.to_db_key());
         // Merkle tree

@@ -1543,12 +1543,11 @@ mod test_utils {
     use std::path::PathBuf;
 
     use data_encoding::HEXUPPER;
+    use namada::core::ledger::masp_conversions::update_allowed_conversions;
     use namada::core::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
     use namada::ledger::parameters::{EpochDuration, Parameters};
     use namada::ledger::storage::mockdb::MockDB;
-    use namada::ledger::storage::{
-        update_allowed_conversions, LastBlock, Sha256Hasher,
-    };
+    use namada::ledger::storage::{LastBlock, Sha256Hasher};
     use namada::ledger::storage_api::StorageWrite;
     use namada::proof_of_stake::parameters::PosParams;
     use namada::proof_of_stake::validator_consensus_key_handle;

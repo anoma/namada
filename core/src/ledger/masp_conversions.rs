@@ -11,6 +11,7 @@ use masp_primitives::sapling::Node;
 
 use crate::ledger::inflation::{RewardsController, ValsToUpdate};
 use crate::ledger::parameters;
+use crate::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
 use crate::ledger::storage_api::token::read_denom;
 use crate::ledger::storage_api::{StorageRead, StorageWrite};
 use crate::types::address::{Address, MASP};
@@ -40,12 +41,12 @@ pub struct ConversionState {
 /// Compute the MASP rewards by applying the PD-controller to the genesis
 /// parameters and the last inflation and last locked rewards ratio values.
 pub fn calculate_masp_rewards<D, H>(
-    wl_storage: &mut super::WlStorage<D, H>,
+    wl_storage: &mut WlStorage<D, H>,
     addr: &Address,
 ) -> crate::ledger::storage_api::Result<(u128, u128)>
 where
-    D: 'static + super::DB + for<'iter> super::DBIter<'iter>,
-    H: 'static + super::StorageHasher,
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
 {
     let denomination = read_denom(wl_storage, addr)?
         .expect("failed to read token denomination");
@@ -194,11 +195,11 @@ where
 #[cfg(feature = "wasm-runtime")]
 /// Update the MASP's allowed conversions
 pub fn update_allowed_conversions<D, H>(
-    wl_storage: &mut super::WlStorage<D, H>,
+    wl_storage: &mut WlStorage<D, H>,
 ) -> crate::ledger::storage_api::Result<()>
 where
-    D: 'static + super::DB + for<'iter> super::DBIter<'iter>,
-    H: 'static + super::StorageHasher,
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
 {
     use std::cmp::Ordering;
 
@@ -209,13 +210,8 @@ where
     };
     use rayon::prelude::ParallelSlice;
 
-    use crate::ledger::storage_api::ResultExt;
-    use crate::types::address;
-    use crate::types::storage::{self, KeySeg};
-
     // The derived conversions will be placed in MASP address space
     let masp_addr = MASP;
-    let key_prefix: storage::Key = masp_addr.to_db_key().into();
 
     let tokens = address::tokens();
     let mut masp_reward_keys: Vec<_> = tokens
@@ -480,15 +476,6 @@ where
         }
     }
 
-    // Save the current conversion state in order to avoid computing
-    // conversion commitments from scratch in the next epoch
-    let state_key = key_prefix
-        .push(&(token::CONVERSION_KEY_PREFIX.to_owned()))
-        .into_storage_result()?;
-    // We cannot borrow `conversion_state` at the same time as when we call
-    // `wl_storage.write`, so we encode it manually first
-    let conv_bytes = wl_storage.storage.conversion_state.serialize_to_vec();
-    wl_storage.write_bytes(&state_key, conv_bytes)?;
     Ok(())
 }
 

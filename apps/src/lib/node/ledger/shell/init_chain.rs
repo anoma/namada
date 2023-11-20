@@ -293,14 +293,6 @@ where
                     .insert(alias, address.clone());
             }
         }
-        let key_prefix: Key = address::MASP.to_db_key().into();
-        // Save the current conversion state
-        let state_key = key_prefix
-            .push(&(token::CONVERSION_KEY_PREFIX.to_owned()))
-            .unwrap();
-        let conv_bytes =
-            self.wl_storage.storage.conversion_state.serialize_to_vec();
-        self.wl_storage.write_bytes(&state_key, conv_bytes).unwrap();
     }
 
     /// Init genesis token balances

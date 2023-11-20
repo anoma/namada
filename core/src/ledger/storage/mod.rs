@@ -1,7 +1,6 @@
 //! Ledger's state storage with key-value backed store and a merkle tree
 
 pub mod ics23_specs;
-mod masp_conversions;
 pub mod merkle_tree;
 #[cfg(any(test, feature = "testing"))]
 pub mod mockdb;
@@ -25,25 +24,22 @@ pub use wl_storage::{
     iter_prefix_post, iter_prefix_pre, PrefixIter, TempWlStorage, WlStorage,
 };
 
-#[cfg(feature = "wasm-runtime")]
-pub use self::masp_conversions::update_allowed_conversions;
-pub use self::masp_conversions::{
-    calculate_masp_rewards, encode_asset_type, ConversionState,
-};
 use super::gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use crate::ledger::eth_bridge::storage::bridge_pool::is_pending_transfer_key;
 use crate::ledger::gas::{
     STORAGE_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE,
+};
+pub use crate::ledger::masp_conversions::{
+    calculate_masp_rewards, encode_asset_type, ConversionState,
 };
 use crate::ledger::parameters::{self, EpochDuration, Parameters};
 use crate::ledger::storage::merkle_tree::{
     Error as MerkleTreeError, MerkleRoot,
 };
 use crate::tendermint::merkle::proof::ProofOps;
-use crate::types::address::{
-    Address, EstablishedAddressGen, InternalAddress, MASP,
-};
+use crate::types::address::{Address, EstablishedAddressGen, InternalAddress};
 use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
+use crate::types::ethereum_structs;
 use crate::types::hash::{Error as HashError, Hash};
 use crate::types::internal::{ExpiredTxsQueue, TxQueue};
 use crate::types::storage::{
@@ -52,7 +48,6 @@ use crate::types::storage::{
     BLOCK_HEIGHT_LENGTH, EPOCH_TYPE_LENGTH,
 };
 use crate::types::time::DateTimeUtc;
-use crate::types::{ethereum_structs, token};
 
 /// A result of a function that may fail
 pub type Result<T> = std::result::Result<T, Error>;
@@ -202,6 +197,8 @@ pub struct BlockStateRead {
     pub address_gen: EstablishedAddressGen,
     /// Results of applying transactions
     pub results: BlockResults,
+    /// The conversion state
+    pub conversion_state: ConversionState,
     /// Wrapper txs to be decrypted in the next block proposal
     pub tx_queue: TxQueue,
     /// The latest block height on Ethereum processed, if
@@ -237,6 +234,8 @@ pub struct BlockStateWrite<'a> {
     pub address_gen: &'a EstablishedAddressGen,
     /// Results of applying transactions
     pub results: &'a BlockResults,
+    /// The conversion state
+    pub conversion_state: &'a ConversionState,
     /// Wrapper txs to be decrypted in the next block proposal
     pub tx_queue: &'a TxQueue,
     /// The latest block height on Ethereum processed, if
@@ -470,6 +469,7 @@ where
             update_epoch_blocks_delay,
             results,
             address_gen,
+            conversion_state,
             tx_queue,
             ethereum_height,
             eth_events_queue,
@@ -489,34 +489,7 @@ where
             // Rebuild Merkle tree
             self.block.tree = MerkleTree::new(merkle_tree_stores)
                 .or_else(|_| self.rebuild_full_merkle_tree(height))?;
-            if self.block.height.0 > 0 {
-                // The derived conversions will be placed in MASP address space
-                let masp_addr = MASP;
-                let key_prefix: Key = masp_addr.to_db_key().into();
-                // Load up the conversions currently being given as query
-                // results
-                let state_key = key_prefix
-                    .push(&(token::CONVERSION_KEY_PREFIX.to_owned()))
-                    .map_err(Error::KeyError)?;
-                let ConversionState {
-                    normed_inflation,
-                    tree,
-                    tokens,
-                    assets,
-                } = types::decode(
-                    self.read(&state_key)
-                        .expect("unable to read conversion state")
-                        .0
-                        .expect("unable to find conversion state"),
-                )
-                .expect("unable to decode conversion state");
-                self.conversion_state.tokens = tokens;
-                if self.last_epoch.0 > 0 {
-                    self.conversion_state.normed_inflation = normed_inflation;
-                    self.conversion_state.tree = tree;
-                    self.conversion_state.assets = assets;
-                }
-            }
+            self.conversion_state = conversion_state;
             self.tx_queue = tx_queue;
             self.ethereum_height = ethereum_height;
             self.eth_events_queue = eth_events_queue;
@@ -573,6 +546,7 @@ where
             next_epoch_min_start_time: self.next_epoch_min_start_time,
             update_epoch_blocks_delay: self.update_epoch_blocks_delay,
             address_gen: &self.address_gen,
+            conversion_state: &self.conversion_state,
             tx_queue: &self.tx_queue,
             ethereum_height: self.ethereum_height.as_ref(),
             eth_events_queue: &self.eth_events_queue,
@@ -1330,6 +1304,7 @@ mod tests {
     use crate::ledger::parameters::{self, Parameters};
     use crate::types::dec::Dec;
     use crate::types::time::{self, Duration};
+    use crate::types::token;
 
     prop_compose! {
         /// Setup test input data with arbitrary epoch duration, epoch start
