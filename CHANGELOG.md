@@ -1,5 +1,59 @@
 # CHANGELOG
 
+## v0.27.0
+
+Namada 0.27.0 is a minor release that incorporates the remaining essential proof-of-stake features, updates the MASP and transaction functionality, and provides some additions to the SDK.
+
+### BUG FIXES
+
+- Fix a feature flag to compile namada_sdk
+  ([\#2164](https://github.com/anoma/namada/issues/2164))
+- Fix to get the proof even if no height is specified
+  ([\#2166](https://github.com/anoma/namada/issues/2166))
+- Fix ABCI queries at the last committed height
+  ([\#2184](https://github.com/anoma/namada/pull/2184))
+
+### FEATURES
+
+- Tx that allows a validator to change its consensus key
+  ([\#2137](https://github.com/anoma/namada/pull/2137))
+
+### IMPROVEMENTS
+
+- Moved the masp vp to native.
+  ([\#2051](https://github.com/anoma/namada/pull/2051))
+- Tighten security around potential P2P issues
+  ([\#2131](https://github.com/anoma/namada/pull/2131))
+- Print more context from eyre error types.
+  ([\#2132](https://github.com/anoma/namada/pull/2132))
+- Require to verify ownership of all validator keys when initialized on-chain.
+  ([\#2163](https://github.com/anoma/namada/pull/2163))
+- Improve the validator VP to ensure that only the validator themself
+  can execute transactions that manipulate its own validator data
+  ([\#2169](https://github.com/anoma/namada/pull/2169))
+- Various improvements to the PoS code, including adding a panic on a slashing
+  failure, some more checked arithmetics, aesthetic code cleanup, and fixing a
+  bug in is_delegator. ([\#2178](https://github.com/anoma/namada/pull/2178))
+- Added type tags to transactions to enable hardware wallets
+  to fully decode transactions even after minor Namada updates.
+  ([\#2182](https://github.com/anoma/namada/pull/2182))
+- Save MASP conversion state to the state storage instead of the diffs
+  ([\#2189](https://github.com/anoma/namada/issues/2189))
+
+### MISCELLANEOUS
+
+- Removed catching of panics from PoS VP.
+  ([\#2145](https://github.com/anoma/namada/pull/2145))
+
+### SDK
+
+- Masp as internal address. Updated `aux_signing_data`
+  to return no key and 0 threshold if owner is masp.
+  ([\#2051](https://github.com/anoma/namada/pull/2051))
+- A high level function new_redelegate is added to the sdk to allow developers
+  to make and submit redelegation functions from the minimum number of arguments
+  required ([\#2140](https://github.com/anoma/namada/pull/2140))
+
 ## v0.26.0
 
 Namada 0.26.0 is a minor release on the way to mainnet with updates to PoS and governance as well as its upstream dependencies.
