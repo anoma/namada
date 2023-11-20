@@ -808,6 +808,13 @@ where
         height: BlockHeight,
         store_type: Option<StoreType>,
     ) -> Result<MerkleTree<H>> {
+        // `0` means last committed height
+        let height = if height == BlockHeight(0) {
+            self.get_last_block_height()
+        } else {
+            height
+        };
+
         let epoch = self
             .block
             .pred_epochs
@@ -935,6 +942,13 @@ where
     ) -> Result<ProofOps> {
         use std::array;
 
+        // `0` means last committed height
+        let height = if height == BlockHeight(0) {
+            self.get_last_block_height()
+        } else {
+            height
+        };
+
         if height > self.get_last_block_height() {
             if let MembershipProof::ICS23(proof) = self
                 .block
@@ -972,6 +986,13 @@ where
         key: &Key,
         height: BlockHeight,
     ) -> Result<ProofOps> {
+        // `0` means last committed height
+        let height = if height == BlockHeight(0) {
+            self.get_last_block_height()
+        } else {
+            height
+        };
+
         if height > self.get_last_block_height() {
             Err(Error::Temporary {
                 error: format!(
