@@ -3,6 +3,7 @@
 
 pub mod ethereum_bridge;
 pub mod ibc;
+pub mod masp;
 pub mod multitoken;
 pub mod parameters;
 
@@ -562,10 +563,6 @@ where
                  `eval` function."
             )
         }
-    }
-
-    fn verify_masp(&self, _tx: Vec<u8>) -> Result<bool, storage_api::Error> {
-        unimplemented!("no masp native vp")
     }
 
     fn charge_gas(&self, used_gas: u64) -> Result<(), storage_api::Error> {

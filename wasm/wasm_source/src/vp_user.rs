@@ -8,7 +8,6 @@
 //!
 //! Any other storage key changes are allowed only with a valid signature.
 
-use namada_vp_prelude::address::masp;
 use namada_vp_prelude::storage::KeySeg;
 use namada_vp_prelude::*;
 use once_cell::unsync::Lazy;
@@ -82,8 +81,7 @@ fn validate_tx(
                         ctx.read_post(key)?.unwrap_or_default();
                     let change = post.change() - pre.change();
                     // debit has to signed, credit doesn't
-                    let valid =
-                        change.non_negative() || addr == masp() || *valid_sig;
+                    let valid = change.non_negative() || *valid_sig;
                     debug_log!(
                         "token key: {}, change: {:?}, valid_sig: {}, valid \
                          modification: {}",

@@ -229,8 +229,6 @@ pub mod vp {
             input_data_len: u64,
         ) -> i64;
 
-        pub fn namada_vp_verify_masp(tx_ptr: u64, tx_len: u64) -> i64;
-
         /// Charge the provided amount of gas for the current vp
         pub fn namada_vp_charge_gas(used_gas: u64);
     }
