@@ -211,6 +211,7 @@ fn spending_keys_list(
 }
 
 /// List payment addresses.
+/// TODO make alias obligatory
 fn payment_addresses_list(
     ctx: Context,
     io: &impl Io,
@@ -235,6 +236,7 @@ fn payment_addresses_list(
 }
 
 /// Generate a spending key.
+/// TODO make alias obligatory
 fn spending_key_gen(
     ctx: Context,
     io: &impl Io,
