@@ -1081,6 +1081,9 @@ pub fn sleep(seconds: u64) {
 
 #[allow(dead_code)]
 pub mod constants {
+    // Paths to the WASMs used for tests
+    pub use namada_sdk::tx::{TX_IBC_WASM, TX_TRANSFER_WASM, VP_USER_WASM};
+
     // User addresses aliases
     pub const ALBERT: &str = "Albert";
     pub const ALBERT_KEY: &str = "Albert-key";
@@ -1126,11 +1129,6 @@ pub mod constants {
     pub const SCHNITZEL: &str = "Schnitzel";
     pub const APFEL: &str = "Apfel";
     pub const KARTOFFEL: &str = "Kartoffel";
-
-    // Paths to the WASMs used for tests
-    pub const VP_USER_WASM: &str = "vp_user.wasm";
-    pub const TX_IBC_WASM: &str = "tx_ibc.wasm";
-    pub const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
 }
 
 /// Copy WASM files from the `wasm` directory to every node's chain dir.

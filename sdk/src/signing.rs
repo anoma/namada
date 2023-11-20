@@ -46,7 +46,7 @@ use crate::ibc_proto::google::protobuf::Any;
 use crate::io::*;
 use crate::masp::make_asset_type;
 use crate::proto::{MaspBuilder, Section, Tx};
-use crate::rpc::{query_wasm_code_hash, validate_amount};
+use crate::rpc::validate_amount;
 use crate::tx::{
     TX_BOND_WASM, TX_CHANGE_COMMISSION_WASM, TX_CHANGE_CONSENSUS_KEY_WASM,
     TX_CHANGE_METADATA_WASM, TX_CLAIM_REWARDS_WASM,
@@ -54,6 +54,7 @@ use crate::tx::{
     TX_INIT_PROPOSAL, TX_INIT_VALIDATOR_WASM, TX_REACTIVATE_VALIDATOR_WASM,
     TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
     TX_UPDATE_ACCOUNT_WASM, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM, VP_USER_WASM,
+    VP_VALIDATOR_WASM,
 };
 pub use crate::wallet::store::AddressVpType;
 use crate::wallet::{Wallet, WalletIo};
@@ -1017,38 +1018,6 @@ pub async fn to_ledger_vector<'a>(
     context: &impl Namada<'a>,
     tx: &Tx,
 ) -> Result<LedgerVector, Error> {
-    let init_account_hash =
-        query_wasm_code_hash(context, TX_INIT_ACCOUNT_WASM).await?;
-    let init_validator_hash =
-        query_wasm_code_hash(context, TX_INIT_VALIDATOR_WASM).await?;
-    let init_proposal_hash =
-        query_wasm_code_hash(context, TX_INIT_PROPOSAL).await?;
-    let vote_proposal_hash =
-        query_wasm_code_hash(context, TX_VOTE_PROPOSAL).await?;
-    let reveal_pk_hash = query_wasm_code_hash(context, TX_REVEAL_PK).await?;
-    let update_account_hash =
-        query_wasm_code_hash(context, TX_UPDATE_ACCOUNT_WASM).await?;
-    let transfer_hash = query_wasm_code_hash(context, TX_TRANSFER_WASM).await?;
-    let ibc_hash = query_wasm_code_hash(context, TX_IBC_WASM).await?;
-    let bond_hash = query_wasm_code_hash(context, TX_BOND_WASM).await?;
-    let unbond_hash = query_wasm_code_hash(context, TX_UNBOND_WASM).await?;
-    let withdraw_hash = query_wasm_code_hash(context, TX_WITHDRAW_WASM).await?;
-    let change_commission_hash =
-        query_wasm_code_hash(context, TX_CHANGE_COMMISSION_WASM).await?;
-    let change_consensus_key_hash =
-        query_wasm_code_hash(context, TX_CHANGE_CONSENSUS_KEY_WASM).await?;
-    let change_metadata_hash =
-        query_wasm_code_hash(context, TX_CHANGE_METADATA_WASM).await?;
-    let user_hash = query_wasm_code_hash(context, VP_USER_WASM).await?;
-    let unjail_validator_hash =
-        query_wasm_code_hash(context, TX_UNJAIL_VALIDATOR_WASM).await?;
-    let deactivate_validator_hash =
-        query_wasm_code_hash(context, TX_DEACTIVATE_VALIDATOR_WASM).await?;
-    let reactivate_validator_hash =
-        query_wasm_code_hash(context, TX_REACTIVATE_VALIDATOR_WASM).await?;
-    let claim_rewards_hash =
-        query_wasm_code_hash(context, TX_CLAIM_REWARDS_WASM).await?;
-
     // To facilitate lookups of human-readable token names
     let tokens: HashMap<Address, String> = context
         .wallet()
@@ -1066,7 +1035,7 @@ pub async fn to_ledger_vector<'a>(
         ..Default::default()
     };
 
-    let code_hash = tx
+    let code_sec = tx
         .get_section(tx.code_sechash())
         .ok_or_else(|| {
             Error::Other("expected tx code section to be present".to_string())
@@ -1074,13 +1043,13 @@ pub async fn to_ledger_vector<'a>(
         .code_sec()
         .ok_or_else(|| {
             Error::Other("expected section to have code tag".to_string())
-        })?
-        .code
-        .hash();
-    tv.output_expert
-        .push(format!("Code hash : {}", HEXLOWER.encode(&code_hash.0)));
+        })?;
+    tv.output_expert.push(format!(
+        "Code hash : {}",
+        HEXLOWER.encode(&code_sec.code.hash().0)
+    ));
 
-    if code_hash == init_account_hash {
+    if code_sec.tag == Some(TX_INIT_ACCOUNT_WASM.to_string()) {
         let init_account = InitAccount::try_from_slice(
             &tx.data()
                 .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
@@ -1093,13 +1062,15 @@ pub async fn to_ledger_vector<'a>(
         let extra = tx
             .get_section(&init_account.vp_code_hash)
             .and_then(|x| Section::extra_data_sec(x.as_ref()))
-            .ok_or_else(|| Error::Other("unable to load vp code".to_string()))?
-            .code
-            .hash();
-        let vp_code = if extra == user_hash {
+            .ok_or_else(|| {
+                Error::Other("unable to load vp code".to_string())
+            })?;
+        let vp_code = if extra.tag == Some(VP_USER_WASM.to_string()) {
             "User".to_string()
+        } else if extra.tag == Some(VP_VALIDATOR_WASM.to_string()) {
+            "Validator".to_string()
         } else {
-            HEXLOWER.encode(&extra.0)
+            HEXLOWER.encode(&extra.code.hash().0)
         };
         tv.output.extend(vec![format!("Type : Init Account")]);
         tv.output.extend(
@@ -1121,9 +1092,9 @@ pub async fn to_ledger_vector<'a>(
         );
         tv.output_expert.extend(vec![
             format!("Threshold : {}", init_account.threshold),
-            format!("VP type : {}", HEXLOWER.encode(&extra.0)),
+            format!("VP type : {}", HEXLOWER.encode(&extra.code.hash().0)),
         ]);
-    } else if code_hash == init_validator_hash {
+    } else if code_sec.tag == Some(TX_INIT_VALIDATOR_WASM.to_string()) {
         let init_validator = InitValidator::try_from_slice(
             &tx.data()
                 .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
@@ -1137,13 +1108,15 @@ pub async fn to_ledger_vector<'a>(
         let extra = tx
             .get_section(&init_validator.validator_vp_code_hash)
             .and_then(|x| Section::extra_data_sec(x.as_ref()))
-            .ok_or_else(|| Error::Other("unable to load vp code".to_string()))?
-            .code
-            .hash();
-        let vp_code = if extra == user_hash {
+            .ok_or_else(|| {
+                Error::Other("unable to load vp code".to_string())
+            })?;
+        let vp_code = if extra.tag == Some(VP_USER_WASM.to_string()) {
             "User".to_string()
+        } else if extra.tag == Some(VP_VALIDATOR_WASM.to_string()) {
+            "Validator".to_string()
         } else {
-            HEXLOWER.encode(&extra.0)
+            HEXLOWER.encode(&extra.code.hash().0)
         };
 
         tv.output.extend(vec!["Type : Init Validator".to_string()]);
@@ -1162,10 +1135,21 @@ pub async fn to_ledger_vector<'a>(
             format!("Commission rate : {}", init_validator.commission_rate),
             format!(
                 "Maximum commission rate change : {}",
-                init_validator.max_commission_rate_change
+                init_validator.max_commission_rate_change,
             ),
-            format!("Validator VP type : {}", vp_code,),
+            format!("Email : {}", init_validator.email),
         ]);
+        if let Some(description) = &init_validator.description {
+            tv.output.push(format!("Description : {}", description));
+        }
+        if let Some(website) = &init_validator.website {
+            tv.output.push(format!("Website : {}", website));
+        }
+        if let Some(discord_handle) = &init_validator.discord_handle {
+            tv.output
+                .push(format!("Discord handle : {}", discord_handle));
+        }
+        tv.output.push(format!("Validator VP type : {}", vp_code));
 
         tv.output_expert.extend(
             init_validator
@@ -1184,9 +1168,24 @@ pub async fn to_ledger_vector<'a>(
                 "Maximum commission rate change : {}",
                 init_validator.max_commission_rate_change
             ),
-            format!("Validator VP type : {}", HEXLOWER.encode(&extra.0)),
+            format!("Email : {}", init_validator.email),
         ]);
-    } else if code_hash == init_proposal_hash {
+        if let Some(description) = &init_validator.description {
+            tv.output_expert
+                .push(format!("Description : {}", description));
+        }
+        if let Some(website) = &init_validator.website {
+            tv.output_expert.push(format!("Website : {}", website));
+        }
+        if let Some(discord_handle) = &init_validator.discord_handle {
+            tv.output_expert
+                .push(format!("Discord handle : {}", discord_handle));
+        }
+        tv.output_expert.push(format!(
+            "Validator VP type : {}",
+            HEXLOWER.encode(&extra.code.hash().0)
+        ));
+    } else if code_sec.tag == Some(TX_INIT_PROPOSAL.to_string()) {
         let init_proposal_data = InitProposalData::try_from_slice(
             &tx.data()
                 .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
@@ -1246,7 +1245,7 @@ pub async fn to_ledger_vector<'a>(
             format!("Grace epoch : {}", init_proposal_data.grace_epoch),
             format!("Content : {}", HEXLOWER.encode(&extra.0)),
         ]);
-    } else if code_hash == vote_proposal_hash {
+    } else if code_sec.tag == Some(TX_VOTE_PROPOSAL.to_string()) {
         let vote_proposal = VoteProposalData::try_from_slice(
             &tx.data()
                 .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
@@ -1276,7 +1275,7 @@ pub async fn to_ledger_vector<'a>(
             tv.output_expert
                 .push(format!("Delegation : {}", delegation));
         }
-    } else if code_hash == reveal_pk_hash {
+    } else if code_sec.tag == Some(TX_REVEAL_PK.to_string()) {
         let public_key = common::PublicKey::try_from_slice(
             &tx.data()
                 .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
@@ -1294,7 +1293,7 @@ pub async fn to_ledger_vector<'a>(
 
         tv.output_expert
             .extend(vec![format!("Public key : {}", public_key)]);
-    } else if code_hash == update_account_hash {
+    } else if code_sec.tag == Some(TX_UPDATE_ACCOUNT_WASM.to_string()) {
         let update_account = UpdateAccount::try_from_slice(
             &tx.data()
                 .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
@@ -1312,13 +1311,13 @@ pub async fn to_ledger_vector<'a>(
                     .and_then(|x| Section::extra_data_sec(x.as_ref()))
                     .ok_or_else(|| {
                         Error::Other("unable to load vp code".to_string())
-                    })?
-                    .code
-                    .hash();
-                let vp_code = if extra == user_hash {
+                    })?;
+                let vp_code = if extra.tag == Some(VP_USER_WASM.to_string()) {
                     "User".to_string()
+                } else if extra.tag == Some(VP_VALIDATOR_WASM.to_string()) {
+                    "Validator".to_string()
                 } else {
-                    HEXLOWER.encode(&extra.0)
+                    HEXLOWER.encode(&extra.code.hash().0)
                 };
                 tv.output.extend(vec![
                     format!("Type : Update VP"),
@@ -1354,12 +1353,12 @@ pub async fn to_ledger_vector<'a>(
                 }
                 tv.output_expert.extend(vec![format!(
                     "VP type : {}",
-                    HEXLOWER.encode(&extra.0)
+                    HEXLOWER.encode(&extra.code.hash().0)
                 )]);
             }
             None => (),
         };
-    } else if code_hash == transfer_hash {
+    } else if code_sec.tag == Some(TX_TRANSFER_WASM.to_string()) {
         let transfer = Transfer::try_from_slice(
             &tx.data()
                 .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
@@ -1415,7 +1414,7 @@ pub async fn to_ledger_vector<'a>(
             &asset_types,
         )
         .await;
-    } else if code_hash == ibc_hash {
+    } else if code_sec.tag == Some(TX_IBC_WASM.to_string()) {
         let any_msg = Any::decode(
             tx.data()
                 .ok_or_else(|| Error::Other("Invalid Data".to_string()))?
@@ -1480,7 +1479,7 @@ pub async fn to_ledger_vector<'a>(
                 }
             }
         }
-    } else if code_hash == bond_hash {
+    } else if code_sec.tag == Some(TX_BOND_WASM.to_string()) {
         let bond = pos::Bond::try_from_slice(
             &tx.data()
                 .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
@@ -1513,7 +1512,7 @@ pub async fn to_ledger_vector<'a>(
                 to_ledger_decimal(&bond.amount.to_string_native())
             ),
         ]);
-    } else if code_hash == unbond_hash {
+    } else if code_sec.tag == Some(TX_UNBOND_WASM.to_string()) {
         let unbond = pos::Unbond::try_from_slice(
             &tx.data()
                 .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
@@ -1546,7 +1545,7 @@ pub async fn to_ledger_vector<'a>(
                 to_ledger_decimal(&unbond.amount.to_string_native())
             ),
         ]);
-    } else if code_hash == withdraw_hash {
+    } else if code_sec.tag == Some(TX_WITHDRAW_WASM.to_string()) {
         let withdraw = pos::Withdraw::try_from_slice(
             &tx.data()
                 .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
@@ -1569,7 +1568,7 @@ pub async fn to_ledger_vector<'a>(
         }
         tv.output_expert
             .push(format!("Validator : {}", withdraw.validator));
-    } else if code_hash == claim_rewards_hash {
+    } else if code_sec.tag == Some(TX_CLAIM_REWARDS_WASM.to_string()) {
         let claim = pos::Withdraw::try_from_slice(
             &tx.data()
                 .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
@@ -1591,7 +1590,7 @@ pub async fn to_ledger_vector<'a>(
         }
         tv.output_expert
             .push(format!("Validator : {}", claim.validator));
-    } else if code_hash == change_commission_hash {
+    } else if code_sec.tag == Some(TX_CHANGE_COMMISSION_WASM.to_string()) {
         let commission_change = pos::CommissionChange::try_from_slice(
             &tx.data()
                 .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
@@ -1612,7 +1611,7 @@ pub async fn to_ledger_vector<'a>(
             format!("New rate : {}", commission_change.new_rate),
             format!("Validator : {}", commission_change.validator),
         ]);
-    } else if code_hash == change_metadata_hash {
+    } else if code_sec.tag == Some(TX_CHANGE_METADATA_WASM.to_string()) {
         let metadata_change = pos::MetaDataChange::try_from_slice(
             &tx.data()
                 .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
@@ -1654,7 +1653,7 @@ pub async fn to_ledger_vector<'a>(
 
         tv.output.extend(other_items.clone());
         tv.output_expert.extend(other_items);
-    } else if code_hash == change_consensus_key_hash {
+    } else if code_sec.tag == Some(TX_CHANGE_CONSENSUS_KEY_WASM.to_string()) {
         let consensus_key_change = pos::ConsensusKeyChange::try_from_slice(
             &tx.data()
                 .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
@@ -1681,7 +1680,7 @@ pub async fn to_ledger_vector<'a>(
             ),
             format!("Validator : {}", consensus_key_change.validator),
         ]);
-    } else if code_hash == unjail_validator_hash {
+    } else if code_sec.tag == Some(TX_UNJAIL_VALIDATOR_WASM.to_string()) {
         let address = Address::try_from_slice(
             &tx.data()
                 .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
@@ -1698,7 +1697,7 @@ pub async fn to_ledger_vector<'a>(
         ]);
 
         tv.output_expert.push(format!("Validator : {}", address));
-    } else if code_hash == deactivate_validator_hash {
+    } else if code_sec.tag == Some(TX_DEACTIVATE_VALIDATOR_WASM.to_string()) {
         let address = Address::try_from_slice(
             &tx.data()
                 .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
@@ -1715,7 +1714,7 @@ pub async fn to_ledger_vector<'a>(
         ]);
 
         tv.output_expert.push(format!("Validator : {}", address));
-    } else if code_hash == reactivate_validator_hash {
+    } else if code_sec.tag == Some(TX_REACTIVATE_VALIDATOR_WASM.to_string()) {
         let address = Address::try_from_slice(
             &tx.data()
                 .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
