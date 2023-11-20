@@ -257,7 +257,10 @@ pub fn is_validator_metadata_key(key: &Key) -> Option<&Address> {
             && prefix == VALIDATOR_STORAGE_PREFIX
             && matches!(
                 metadata.as_str(),
-                "email" | "description" | "website" | "discord_handle"
+                VALIDATOR_EMAIL_KEY
+                    | VALIDATOR_DESCRIPTION_KEY
+                    | VALIDATOR_WEBSITE_KEY
+                    | VALIDATOR_DISCORD_KEY
             ) =>
         {
             Some(validator)
