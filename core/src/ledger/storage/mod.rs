@@ -1400,6 +1400,7 @@ mod tests {
                 ..Default::default()
             };
             let mut parameters = Parameters {
+                max_tx_bytes: 1024 * 1024,
                 max_proposal_bytes: Default::default(),
                 max_block_gas: 20_000_000,
                 epoch_duration: epoch_duration.clone(),

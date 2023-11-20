@@ -40,6 +40,7 @@ struct Keys {
     tx_whitelist: &'static str,
     vp_whitelist: &'static str,
     max_proposal_bytes: &'static str,
+    max_tx_bytes: &'static str,
     max_block_gas: &'static str,
     minimum_gas_price: &'static str,
     fee_unshielding_gas_limit: &'static str,
@@ -120,6 +121,11 @@ pub fn is_max_proposal_bytes_key(key: &Key) -> bool {
     is_max_proposal_bytes_key_at_addr(key, &ADDRESS)
 }
 
+/// Returns if the key is the max tx bytes key.
+pub fn is_max_tx_bytes_key(key: &Key) -> bool {
+    is_max_tx_bytes_key_at_addr(key, &ADDRESS)
+}
+
 /// Storage key used for epoch parameter.
 pub fn get_epoch_duration_storage_key() -> Key {
     get_epoch_duration_key_at_addr(ADDRESS)
@@ -183,6 +189,11 @@ pub fn get_pos_inflation_amount_key() -> Key {
 /// Storage key used for the max proposal bytes.
 pub fn get_max_proposal_bytes_key() -> Key {
     get_max_proposal_bytes_key_at_addr(ADDRESS)
+}
+
+/// Storage key used for the max tx bytes.
+pub fn get_max_tx_bytes_key() -> Key {
+    get_max_tx_bytes_key_at_addr(ADDRESS)
 }
 
 /// Storage key used for the max block gas.

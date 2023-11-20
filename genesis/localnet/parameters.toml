@@ -5,8 +5,10 @@ native_token = "NAM"
 min_num_of_blocks = 4
 # Maximum expected time per block (in seconds).
 max_expected_time_per_block = 30
+# Max payload size, in bytes, for a tx.
+max_tx_bytes = 1048576
 # Max payload size, in bytes, for a tx batch proposal.
-max_proposal_bytes = 22020096
+max_proposal_bytes = 6291456
 # vp whitelist
 vp_whitelist = []
 # tx whitelist
