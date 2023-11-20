@@ -273,7 +273,7 @@ where
         let mut tx = Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
         tx.header.chain_id = shell.chain_id.clone();
         tx.set_data(Data::new(encode(&id)));
-        tx.set_code(Code::new(code));
+        tx.set_code(Code::new(code, None));
 
         let tx_result = protocol::dispatch_tx(
             tx,

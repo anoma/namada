@@ -833,7 +833,7 @@ where
 
     let key = Key::parse(key).map_err(TxRuntimeError::StorageDataError)?;
     if key.is_validity_predicate().is_some() {
-        tx_validate_vp_code_hash(env, &value)?;
+        tx_validate_vp_code_hash(env, &value, &None)?;
     }
 
     check_address_existence(env, &key)?;
@@ -1432,6 +1432,8 @@ pub fn tx_update_validity_predicate<MEM, DB, H, CA>(
     addr_len: u64,
     code_hash_ptr: u64,
     code_hash_len: u64,
+    code_tag_ptr: u64,
+    code_tag_len: u64,
 ) -> TxResult<()>
 where
     MEM: VmMemory,
@@ -1448,6 +1450,14 @@ where
     let addr = Address::decode(addr).map_err(TxRuntimeError::AddressError)?;
     tracing::debug!("tx_update_validity_predicate for addr {}", addr);
 
+    let (code_tag, gas) = env
+        .memory
+        .read_bytes(code_tag_ptr, code_tag_len as _)
+        .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
+    tx_charge_gas(env, gas)?;
+    let code_tag = Option::<String>::try_from_slice(&code_tag)
+        .map_err(TxRuntimeError::EncodingError)?;
+
     let key = Key::validity_predicate(&addr);
     let (code_hash, gas) = env
         .memory
@@ -1455,7 +1465,7 @@ where
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas(env, gas)?;
 
-    tx_validate_vp_code_hash(env, &code_hash)?;
+    tx_validate_vp_code_hash(env, &code_hash, &code_tag)?;
 
     let write_log = unsafe { env.ctx.write_log.get() };
     let (gas, _size_diff) = write_log
@@ -1469,6 +1479,8 @@ pub fn tx_init_account<MEM, DB, H, CA>(
     env: &TxVmEnv<MEM, DB, H, CA>,
     code_hash_ptr: u64,
     code_hash_len: u64,
+    code_tag_ptr: u64,
+    code_tag_len: u64,
     result_ptr: u64,
 ) -> TxResult<()>
 where
@@ -1483,7 +1495,15 @@ where
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas(env, gas)?;
 
-    tx_validate_vp_code_hash(env, &code_hash)?;
+    let (code_tag, gas) = env
+        .memory
+        .read_bytes(code_tag_ptr, code_tag_len as _)
+        .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
+    tx_charge_gas(env, gas)?;
+    let code_tag = Option::<String>::try_from_slice(&code_tag)
+        .map_err(TxRuntimeError::EncodingError)?;
+
+    tx_validate_vp_code_hash(env, &code_hash, &code_tag)?;
 
     tracing::debug!("tx_init_account");
 
@@ -2002,6 +2022,7 @@ where
 fn tx_validate_vp_code_hash<MEM, DB, H, CA>(
     env: &TxVmEnv<MEM, DB, H, CA>,
     code_hash: &[u8],
+    code_tag: &Option<String>,
 ) -> TxResult<()>
 where
     MEM: VmMemory,
@@ -2009,16 +2030,44 @@ where
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
-    let hash = Hash::try_from(code_hash)
+    let code_hash = Hash::try_from(code_hash)
         .map_err(|e| TxRuntimeError::InvalidVpCodeHash(e.to_string()))?;
-    let key = Key::wasm_code(&hash);
+
+    // First check that code hash corresponds to the code tag if it is present
+    if let Some(tag) = code_tag {
+        let storage = unsafe { env.ctx.storage.get() };
+        let hash_key = Key::wasm_hash(tag);
+        let (result, gas) = storage
+            .read(&hash_key)
+            .map_err(TxRuntimeError::StorageError)?;
+        tx_charge_gas(env, gas)?;
+        if let Some(tag_hash) = result {
+            let tag_hash = Hash::try_from(&tag_hash[..]).map_err(|e| {
+                TxRuntimeError::InvalidVpCodeHash(e.to_string())
+            })?;
+            if tag_hash != code_hash {
+                return Err(TxRuntimeError::InvalidVpCodeHash(
+                    "The VP code tag does not correspond to the given code \
+                     hash"
+                        .to_string(),
+                ));
+            }
+        } else {
+            return Err(TxRuntimeError::InvalidVpCodeHash(
+                "The VP code tag doesn't exist".to_string(),
+            ));
+        }
+    }
+
+    // Then check that the corresponding VP code does indeed exist
+    let code_key = Key::wasm_code(&code_hash);
     let write_log = unsafe { env.ctx.write_log.get() };
-    let (result, gas) = write_log.read(&key);
+    let (result, gas) = write_log.read(&code_key);
     tx_charge_gas(env, gas)?;
     if result.is_none() {
         let storage = unsafe { env.ctx.storage.get() };
         let (is_present, gas) = storage
-            .has_key(&key)
+            .has_key(&code_key)
             .map_err(TxRuntimeError::StorageError)?;
         tx_charge_gas(env, gas)?;
         if !is_present {
