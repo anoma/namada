@@ -1,7 +1,7 @@
 //! SDK RPC queries
 
 use std::cell::Cell;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ops::ControlFlow;
 
 use borsh::BorshDeserialize;
@@ -256,6 +256,23 @@ pub async fn query_conversion<C: crate::queries::Client + Sync>(
     Some(unwrap_client_response::<C, _>(
         RPC.shell().read_conversion(client, &asset_type).await,
     ))
+}
+
+/// Query conversions
+pub async fn query_conversions<C: crate::queries::Client + Sync>(
+    client: &C,
+) -> Result<
+    BTreeMap<
+        AssetType,
+        (
+            Address,
+            Epoch,
+            masp_primitives::transaction::components::I128Sum,
+        ),
+    >,
+    error::Error,
+> {
+    convert_response::<C, _>(RPC.shell().read_conversions(client).await)
 }
 
 /// Query a wasm code hash
