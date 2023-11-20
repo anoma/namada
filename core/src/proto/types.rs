@@ -20,7 +20,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use super::generated::types;
-use crate::ledger::gas::{self, GasMetering, VpGasMeter, VERIFY_TX_SIG_GAS};
+use crate::ledger::gas;
 use crate::ledger::storage::{KeccakHasher, Sha256Hasher, StorageHasher};
 use crate::types::account::AccountPublicKeysMap;
 use crate::types::address::Address;
@@ -552,13 +552,16 @@ impl Signature {
     }
 
     /// Verify that the signature contained in this section is valid
-    pub fn verify_signature(
+    pub fn verify_signature<F>(
         &self,
         verified_pks: &mut HashSet<u8>,
         public_keys_index_map: &AccountPublicKeysMap,
         signer: &Option<Address>,
-        gas_meter: &mut Option<&mut VpGasMeter>,
-    ) -> std::result::Result<u8, VerifySigError> {
+        consume_verify_sig_gas: &mut F,
+    ) -> std::result::Result<u8, VerifySigError>
+    where
+        F: FnMut() -> std::result::Result<(), crate::ledger::gas::Error>,
+    {
         // Records whether there are any successful verifications
         let mut verifications = 0;
         match &self.signer {
@@ -569,11 +572,7 @@ impl Signature {
                     if let Some(pk) =
                         public_keys_index_map.get_public_key_from_index(*idx)
                     {
-                        if let Some(meter) = gas_meter {
-                            meter
-                                .consume(VERIFY_TX_SIG_GAS)
-                                .map_err(VerifySigError::OutOfGas)?;
-                        }
+                        consume_verify_sig_gas()?;
                         common::SigScheme::verify_signature(
                             &pk,
                             &self.get_raw_hash(),
@@ -594,11 +593,7 @@ impl Signature {
                     if let Some(map_idx) =
                         public_keys_index_map.get_index_from_public_key(pk)
                     {
-                        if let Some(meter) = gas_meter {
-                            meter
-                                .consume(VERIFY_TX_SIG_GAS)
-                                .map_err(VerifySigError::OutOfGas)?;
-                        }
+                        consume_verify_sig_gas()?;
                         common::SigScheme::verify_signature(
                             pk,
                             &self.get_raw_hash(),
@@ -1245,15 +1240,18 @@ impl Tx {
 
     /// Verify that the section with the given hash has been signed by the given
     /// public key
-    pub fn verify_signatures(
+    pub fn verify_signatures<F>(
         &self,
         hashes: &[crate::types::hash::Hash],
         public_keys_index_map: AccountPublicKeysMap,
         signer: &Option<Address>,
         threshold: u8,
         max_signatures: Option<u8>,
-        gas_meter: &mut Option<&mut VpGasMeter>,
-    ) -> std::result::Result<Vec<&Signature>, Error> {
+        mut consume_verify_sig_gas: F,
+    ) -> std::result::Result<Vec<&Signature>, Error>
+    where
+        F: FnMut() -> std::result::Result<(), crate::ledger::gas::Error>,
+    {
         let max_signatures = max_signatures.unwrap_or(u8::MAX);
         // Records the public key indices used in successful signatures
         let mut verified_pks = HashSet::new();
@@ -1284,7 +1282,7 @@ impl Tx {
                             &mut verified_pks,
                             &public_keys_index_map,
                             signer,
-                            gas_meter,
+                            &mut consume_verify_sig_gas,
                         )
                         .map_err(|e| {
                             if let VerifySigError::OutOfGas(inner) = e {
@@ -1314,6 +1312,8 @@ impl Tx {
     /// Verify that the sections with the given hashes have been signed together
     /// by the given public key. I.e. this function looks for one signature that
     /// covers over the given slice of hashes.
+    /// Note that this method doesn't consider gas cost and hence it shouldn't
+    /// be used from txs or VPs.
     pub fn verify_signature(
         &self,
         public_key: &common::PublicKey,
@@ -1325,7 +1325,7 @@ impl Tx {
             &None,
             1,
             None,
-            &mut None,
+            || Ok(()),
         )
         .map(|x| *x.first().unwrap())
         .map_err(|_| Error::InvalidWrapperSignature)

@@ -48,7 +48,12 @@ fn tx_section_signature_validation(c: &mut Criterion) {
     c.bench_function("tx_section_signature_validation", |b| {
         b.iter(|| {
             multisig
-                .verify_signature(&mut HashSet::new(), &pkim, &None, &mut None)
+                .verify_signature(
+                    &mut HashSet::new(),
+                    &pkim,
+                    &None,
+                    &mut || Ok(()),
+                )
                 .unwrap()
         })
     });

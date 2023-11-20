@@ -1928,7 +1928,7 @@ where
         &Some(signer),
         threshold,
         max_signatures,
-        &mut Some(gas_meter),
+        || gas_meter.consume(gas::VERIFY_TX_SIG_GAS),
     ) {
         Ok(_) => Ok(HostEnvResult::Success.to_i64()),
         Err(err) => match err {
@@ -2100,6 +2100,7 @@ where
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
 
     let sentinel = unsafe { env.ctx.sentinel.get() };
+    let gas_meter = unsafe { env.ctx.gas_meter.get() };
     tx_charge_gas(env, gas)?;
     let hashes = <[Hash; 1]>::try_from_slice(&hash_list)
         .map_err(TxRuntimeError::EncodingError)?;
@@ -2127,19 +2128,13 @@ where
 
     let tx = unsafe { env.ctx.tx.get() };
 
-    tx_charge_gas(
-        env,
-        gas::VERIFY_TX_SIG_GAS * public_keys_map.idx_to_pk.len() as u64,
-    )?;
     match tx.verify_signatures(
         &hashes,
         public_keys_map,
         &None,
         threshold,
         max_signatures,
-        // This uses VpGasMeter, so we're charging the gas here manually
-        // instead
-        &mut None,
+        || gas_meter.consume(gas::VERIFY_TX_SIG_GAS),
     ) {
         Ok(_) => Ok(HostEnvResult::Success.to_i64()),
         Err(err) => match err {
