@@ -16,9 +16,9 @@ use crate::ledger::storage_api::{StorageRead, StorageWrite};
 use crate::types::address::{Address, MASP};
 use crate::types::dec::Dec;
 use crate::types::storage::Epoch;
+use crate::types::token;
 use crate::types::token::MaspDenom;
 use crate::types::uint::Uint;
-use crate::types::{address, token};
 
 /// A representation of the conversion state
 #[derive(Debug, Default, BorshSerialize, BorshDeserialize)]
@@ -210,6 +210,7 @@ where
     use rayon::prelude::ParallelSlice;
 
     use crate::ledger::storage_api::ResultExt;
+    use crate::types::address;
     use crate::types::storage::{self, KeySeg};
 
     // The derived conversions will be placed in MASP address space
