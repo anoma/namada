@@ -5,6 +5,7 @@ use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
+use namada_core::hints;
 use namada_core::ledger::storage::traits::StorageHasher;
 use namada_core::ledger::storage::{DBIter, LastBlock, DB};
 use namada_core::ledger::storage_api::{self, ResultExt, StorageRead};
@@ -233,10 +234,20 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
+    let last_committed_height = ctx.wl_storage.storage.get_last_block_height();
+    let queried_height = {
+        let height: BlockHeight = request.height.into();
+        let is_last_height_query = height.0 == 0;
+
+        if hints::likely(is_last_height_query) {
+            last_committed_height
+        } else {
+            height
+        }
+    };
+
     if let Some(past_height_limit) = ctx.storage_read_past_height_limit {
-        if request.height.value() + past_height_limit
-            < ctx.wl_storage.storage.get_last_block_height().0
-        {
+        if queried_height + past_height_limit < last_committed_height {
             return Err(storage_api::Error::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 format!(
@@ -251,7 +262,7 @@ where
     match ctx
         .wl_storage
         .storage
-        .read_with_height(&storage_key, request.height.into())
+        .read_with_height(&storage_key, queried_height)
         .into_storage_result()?
     {
         (Some(value), _gas) => {
@@ -259,11 +270,7 @@ where
                 let proof = ctx
                     .wl_storage
                     .storage
-                    .get_existence_proof(
-                        &storage_key,
-                        &value,
-                        request.height.into(),
-                    )
+                    .get_existence_proof(&storage_key, &value, queried_height)
                     .into_storage_result()?;
                 Some(proof)
             } else {
@@ -280,10 +287,7 @@ where
                 let proof = ctx
                     .wl_storage
                     .storage
-                    .get_non_existence_proof(
-                        &storage_key,
-                        request.height.into(),
-                    )
+                    .get_non_existence_proof(&storage_key, queried_height)
                     .into_storage_result()?;
                 Some(proof)
             } else {
@@ -318,12 +322,25 @@ where
         .collect();
     let data = data?;
     let proof = if request.prove {
+        let queried_height = {
+            let last_committed_height =
+                ctx.wl_storage.storage.get_last_block_height();
+
+            let height: BlockHeight = request.height.into();
+            let is_last_height_query = height.0 == 0;
+
+            if hints::likely(is_last_height_query) {
+                last_committed_height
+            } else {
+                height
+            }
+        };
         let mut ops = vec![];
         for PrefixValue { key, value } in &data {
             let mut proof = ctx
                 .wl_storage
                 .storage
-                .get_existence_proof(key, value, request.height.into())
+                .get_existence_proof(key, value, queried_height)
                 .into_storage_result()?;
             ops.append(&mut proof.ops);
         }
