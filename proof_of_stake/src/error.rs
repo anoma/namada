@@ -170,6 +170,13 @@ pub enum MetadataError {
     CannotRemoveEmail,
 }
 
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum ConsensusKeyChangeError {
+    #[error("The consensus key is required to be an Ed25519 key")]
+    MustBeEd25519,
+}
+
 impl From<BecomeValidatorError> for storage_api::Error {
     fn from(err: BecomeValidatorError) -> Self {
         Self::new(err)
@@ -232,6 +239,12 @@ impl From<ReactivationError> for storage_api::Error {
 
 impl From<MetadataError> for storage_api::Error {
     fn from(err: MetadataError) -> Self {
+        Self::new(err)
+    }
+}
+
+impl From<ConsensusKeyChangeError> for storage_api::Error {
+    fn from(err: ConsensusKeyChangeError) -> Self {
         Self::new(err)
     }
 }

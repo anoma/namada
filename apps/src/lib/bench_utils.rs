@@ -105,6 +105,7 @@ pub const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
 pub const TX_REDELEGATE_WASM: &str = "tx_redelegate.wasm";
 pub const TX_INIT_PROPOSAL_WASM: &str = "tx_init_proposal.wasm";
 pub const TX_REVEAL_PK_WASM: &str = "tx_reveal_pk.wasm";
+pub const TX_CHANGE_CONSENSUS_KEY_WASM: &str = "tx_change_consensus_key.wasm";
 pub const TX_CHANGE_VALIDATOR_COMMISSION_WASM: &str =
     "tx_change_validator_commission.wasm";
 pub const TX_CHANGE_VALIDATOR_METADATA_WASM: &str =

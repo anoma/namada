@@ -53,7 +53,8 @@ use crate::signing::SigningTxData;
 use crate::token::DenominatedAmount;
 use crate::tx::{
     ProcessTxResponse, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
-    TX_CHANGE_COMMISSION_WASM, TX_CHANGE_METADATA_WASM, TX_CLAIM_REWARDS_WASM,
+    TX_CHANGE_COMMISSION_WASM, TX_CHANGE_CONSENSUS_KEY_WASM,
+    TX_CHANGE_METADATA_WASM, TX_CLAIM_REWARDS_WASM,
     TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM, TX_INIT_PROPOSAL,
     TX_INIT_VALIDATOR_WASM, TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM,
     TX_RESIGN_STEWARD, TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM,
@@ -307,6 +308,19 @@ pub trait Namada<'a>: Sized {
             rate,
             validator,
             tx_code_path: PathBuf::from(TX_CHANGE_COMMISSION_WASM),
+            tx: self.tx_builder(),
+        }
+    }
+
+    /// Make ConsensusKeyChange builder from the given minimum set of arguments
+    fn new_change_consensus_key(
+        &self,
+        validator: Address,
+    ) -> args::ConsensusKeyChange {
+        args::ConsensusKeyChange {
+            validator,
+            consensus_key: None,
+            tx_code_path: PathBuf::from(TX_CHANGE_CONSENSUS_KEY_WASM),
             tx: self.tx_builder(),
         }
     }
