@@ -58,6 +58,12 @@ pub struct OwnedPosParams {
     /// The minimum amount of bonded tokens that a validator needs to be in
     /// either the `consensus` or `below_capacity` validator sets
     pub validator_stake_threshold: token::Amount,
+    /// The length, in blocks, of the sliding window for consensus validators
+    /// inactivity verification
+    pub liveness_window_check: u64,
+    /// The minimum required activity of consesus validators, in percentage,
+    /// over the `liveness_window_check`
+    pub liveness_threshold: Dec,
 }
 
 impl Default for PosParams {
@@ -93,6 +99,8 @@ impl Default for OwnedPosParams {
                 .expect("Test failed"),
             cubic_slashing_window_length: 1,
             validator_stake_threshold: token::Amount::native_whole(1_u64),
+            liveness_window_check: 10_000,
+            liveness_threshold: Dec::new(9, 1).expect("Test failed"),
         }
     }
 }

@@ -334,6 +334,8 @@ impl Finalized {
             light_client_attack_min_slash_rate,
             cubic_slashing_window_length,
             validator_stake_threshold,
+            liveness_window_check,
+            liveness_threshold,
         } = self.parameters.pos_params.clone();
 
         namada::proof_of_stake::parameters::PosParams {
@@ -350,6 +352,8 @@ impl Finalized {
                 light_client_attack_min_slash_rate,
                 cubic_slashing_window_length,
                 validator_stake_threshold,
+                liveness_window_check,
+                liveness_threshold,
             },
             max_proposal_period: self.parameters.gov_params.max_proposal_period,
         }
