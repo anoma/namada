@@ -465,8 +465,6 @@ pub mod cmds {
     #[allow(clippy::large_enum_variant)]
     #[derive(Clone, Debug)]
     pub enum NamadaWallet {
-        /// Key management commands
-        Key(WalletKey),
         /// Address management commands
         Address(WalletAddress),
         /// MASP key, address management commands
@@ -483,12 +481,13 @@ pub mod cmds {
         NewAddrList(WalletNewAddressList),
         /// TODO
         NewAddrFind(WalletNewAddressFind),
+        /// TODO
+        NewKeyExport(WalletNewExportKey),
     }
 
     impl Cmd for NamadaWallet {
         fn add_sub(app: App) -> App {
-            app.subcommand(WalletKey::def())
-                .subcommand(WalletAddress::def())
+            app.subcommand(WalletAddress::def())
                 .subcommand(WalletMasp::def())
                 .subcommand(WalletNewGen::def())
                 .subcommand(WalletNewDerive::def())
@@ -496,10 +495,10 @@ pub mod cmds {
                 .subcommand(WalletNewKeyFind::def())
                 .subcommand(WalletNewAddressList::def())
                 .subcommand(WalletNewAddressFind::def())
+                .subcommand(WalletNewExportKey::def())
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            let key = SubCmd::parse(matches).map(Self::Key);
             let address = SubCmd::parse(matches).map(Self::Address);
             let masp = SubCmd::parse(matches).map(Self::Masp);
             let gen_new = SubCmd::parse(matches).map(Self::NewGen);
@@ -508,7 +507,8 @@ pub mod cmds {
             let key_find_new = SubCmd::parse(matches).map(Self::NewKeyFind);
             let addr_list_new = SubCmd::parse(matches).map(Self::NewAddrList);
             let addr_find_new = SubCmd::parse(matches).map(Self::NewAddrFind);
-            key.or(address)
+            let export_new = SubCmd::parse(matches).map(Self::NewKeyExport);
+            address
                 .or(masp)
                 .or(gen_new)
                 .or(derive_new)
@@ -516,6 +516,7 @@ pub mod cmds {
                 .or(key_find_new)
                 .or(addr_list_new)
                 .or(addr_find_new)
+                .or(export_new)
         }
     }
 
@@ -535,34 +536,6 @@ pub mod cmds {
                     .subcommand_required(true)
                     .arg_required_else_help(true),
             )
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    #[allow(clippy::large_enum_variant)]
-    pub enum WalletKey {
-        Export(Export),
-    }
-
-    impl SubCmd for WalletKey {
-        const CMD: &'static str = "key";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches.subcommand_matches(Self::CMD).and_then(|matches| {
-                let export = SubCmd::parse(matches).map(Self::Export);
-                export
-            })
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about(
-                    "Keypair management, including methods to generate and \
-                     look-up keys.",
-                )
-                .subcommand_required(true)
-                .arg_required_else_help(true)
-                .subcommand(Export::def())
         }
     }
 
@@ -718,10 +691,11 @@ pub mod cmds {
         }
     }
 
+    /// Export key
     #[derive(Clone, Debug)]
-    pub struct Export(pub args::KeyExport);
+    pub struct WalletNewExportKey(pub args::KeyExport);
 
-    impl SubCmd for Export {
+    impl SubCmd for WalletNewExportKey {
         const CMD: &'static str = "export";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
