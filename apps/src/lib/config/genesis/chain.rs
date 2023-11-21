@@ -653,10 +653,7 @@ impl FinalizedTransactions {
         let validator_account = validator_account.map(|txs| {
             txs.into_iter()
                 .map(|tx| FinalizedValidatorAccountTx {
-                    address: transactions::UnsignedValidatorAccountTx::from(
-                        &tx,
-                    )
-                    .derive_address(),
+                    address: Address::Established(tx.address.clone()),
                     tx,
                 })
                 .collect()

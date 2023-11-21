@@ -6,8 +6,9 @@ use std::net::SocketAddr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
-use namada::core::types::address::Address;
+use namada::core::types::address::{Address, EstablishedAddress};
 use namada::core::types::string_encoding::StringEncoded;
+use namada::ledger::pos::types::ValidatorMetaData;
 use namada::proto::{
     standalone_signature, verify_standalone_sig, SerializeWithBorsh,
 };
@@ -98,6 +99,7 @@ pub fn parse_unsigned(
 /// Create signed [`Transactions`] for a genesis validator.
 pub fn init_validator(
     GenesisValidatorData {
+        address,
         commission_rate,
         max_commission_rate_change,
         net_address,
@@ -110,6 +112,7 @@ pub fn init_validator(
     validator_wallet: &ValidatorWallet,
 ) -> (Address, Transactions<Unvalidated>) {
     let unsigned_validator_account_tx = UnsignedValidatorAccountTx {
+        address,
         account_key: StringEncoded::new(validator_wallet.account_key.ref_to()),
         consensus_key: StringEncoded::new(
             validator_wallet.consensus_key.ref_to(),
@@ -139,8 +142,7 @@ pub fn init_validator(
         discord_handle,
         net_address,
     };
-    let unsigned_validator_addr =
-        unsigned_validator_account_tx.derive_established_address();
+    let unsigned_validator_addr = unsigned_validator_account_tx.address.clone();
     let validator_account = Some(vec![sign_validator_account_tx(
         unsigned_validator_account_tx,
         validator_wallet,
@@ -189,6 +191,7 @@ pub fn sign_validator_account_tx(
         sign_tx(&unsigned_tx, &validator_wallet.tendermint_node_key);
 
     let ValidatorAccountTx {
+        address,
         account_key,
         consensus_key,
         protocol_key,
@@ -233,6 +236,7 @@ pub fn sign_validator_account_tx(
     };
 
     SignedValidatorAccountTx {
+        address,
         account_key,
         consensus_key,
         protocol_key,
@@ -408,17 +412,15 @@ pub type SignedValidatorAccountTx = ValidatorAccountTx<SignedPk>;
     Eq,
 )]
 pub struct ValidatorAccountTx<PK> {
+    /// The address of the validator.
+    pub address: StringEncoded<EstablishedAddress>,
+    // TODO: remove the vp field
     pub vp: String,
     /// Commission rate charged on rewards for delegators (bounded inside
     /// 0-1)
     pub commission_rate: Dec,
     /// Maximum change in commission rate permitted per epoch
     pub max_commission_rate_change: Dec,
-    /// Validator metadata
-    pub email: String,
-    pub description: Option<String>,
-    pub website: Option<String>,
-    pub discord_handle: Option<String>,
     /// P2P IP:port
     pub net_address: SocketAddr,
     /// PKs have to come last in TOML to avoid `ValueAfterTable` error
@@ -428,10 +430,8 @@ pub struct ValidatorAccountTx<PK> {
     pub tendermint_node_key: PK,
     pub eth_hot_key: PK,
     pub eth_cold_key: PK,
-}
-
-impl DeriveEstablishedAddress for UnsignedValidatorAccountTx {
-    const SALT: &'static str = "validator-account-tx";
+    /// Validator metadata
+    pub metadata: ValidatorMetaData,
 }
 
 #[derive(
@@ -658,7 +658,7 @@ pub fn validate(
             if !validate_validator_account(
                 tx,
                 vps,
-                &mut all_used_addresses,
+                &all_used_addresses,
                 &mut validator_accounts,
             ) {
                 is_valid = false;
@@ -732,14 +732,11 @@ pub fn validate(
                 validator_accounts
                     .into_iter()
                     .map(|acct| ValidatorAccountTx {
+                        address: acct.address,
                         vp: acct.vp,
                         commission_rate: acct.commission_rate,
                         max_commission_rate_change: acct
                             .max_commission_rate_change,
-                        email: acct.email,
-                        description: acct.description,
-                        website: acct.website,
-                        discord_handle: acct.discord_handle,
                         net_address: acct.net_address,
                         account_key: acct.account_key,
                         consensus_key: acct.consensus_key,
@@ -747,6 +744,7 @@ pub fn validate(
                         tendermint_node_key: acct.tendermint_node_key,
                         eth_hot_key: acct.eth_hot_key,
                         eth_cold_key: acct.eth_cold_key,
+                        metadata: acct.metadata,
                     })
                     .collect()
             },
@@ -924,25 +922,33 @@ pub fn validate_established_account(
 pub fn validate_validator_account(
     tx: &ValidatorAccountTx<SignedPk>,
     vps: Option<&ValidityPredicates>,
-    all_used_addresses: &mut BTreeSet<Address>,
-    validator_accounts: &mut BTreeMap<Address, common::PublicKey>,
+    all_used_addresses: &BTreeSet<Address>,
+    validator_accounts: &mut BTreeSet<Address>,
 ) -> bool {
     let mut is_valid = true;
 
-    let established_address = ValidatorAccountTx::from(tx).derive_address();
-    validator_accounts
-        .insert(established_address.clone(), tx.account_key.pk.raw.clone());
-
-    // Check that address is unique
-    if all_used_addresses.contains(&established_address) {
-        eprintln!(
-            "A duplicate address \"{}\" found in a `validator_account` tx.",
-            established_address
-        );
-        is_valid = false;
-    } else {
-        all_used_addresses.insert(established_address.clone());
-    }
+    let established_address = {
+        let established_address = Address::Established(tx.address.clone());
+        if !all_used_addresses.contains(&established_address) {
+            eprintln!(
+                "Unable to find established account with address \"{}\" in a \
+                 `validator_account` tx, to initialize a new validator with.",
+                established_address
+            );
+            is_valid = false;
+        }
+        if validator_accounts.contains(&established_address) {
+            eprintln!(
+                "A duplicate validator \"{}\" found in a `validator_account` \
+                 tx.",
+                established_address
+            );
+            is_valid = false;
+        } else {
+            validator_accounts.insert(established_address.clone());
+        }
+        established_address
+    };
 
     // Check the VP exists
     if !vps
@@ -1056,6 +1062,7 @@ fn validate_signature<T: BorshSerialize + Debug>(
 impl From<&SignedValidatorAccountTx> for UnsignedValidatorAccountTx {
     fn from(tx: &SignedValidatorAccountTx) -> Self {
         let SignedValidatorAccountTx {
+            address,
             vp,
             commission_rate,
             max_commission_rate_change,
@@ -1074,6 +1081,7 @@ impl From<&SignedValidatorAccountTx> for UnsignedValidatorAccountTx {
         } = tx;
 
         Self {
+            address: address.clone(),
             vp: vp.clone(),
             commission_rate: *commission_rate,
             max_commission_rate_change: *max_commission_rate_change,
