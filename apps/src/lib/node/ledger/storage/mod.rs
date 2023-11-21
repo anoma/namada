@@ -586,9 +586,10 @@ mod tests {
             None,
             Some(5),
         );
-        let key = bridge_pool::get_nonce_key();
-        let bytes = types::encode(&Uint::default());
-        storage.write(&key, bytes).unwrap();
+        let bp_nonce_key = bridge_pool::get_nonce_key();
+        let nonce = Uint::default();
+        let bytes = types::encode(&nonce);
+        storage.write(&bp_nonce_key, bytes).unwrap();
 
         storage
             .begin_block(BlockHash::default(), BlockHeight(1))
@@ -615,6 +616,13 @@ mod tests {
             .write(&key, types::encode(&value))
             .expect("write failed");
 
+        let nonce = nonce + 1;
+        let bytes = types::encode(&nonce);
+        storage.write(&bp_nonce_key, bytes).unwrap();
+
+        let bytes = types::encode(&Uint::default());
+        storage.write(&bp_nonce_key, bytes).unwrap();
+
         storage.block.epoch = storage.block.epoch.next();
         storage.block.pred_epochs.new_epoch(BlockHeight(6));
         let batch = PersistentStorage::batch();
@@ -626,6 +634,11 @@ mod tests {
         storage
             .begin_block(BlockHash::default(), BlockHeight(11))
             .expect("begin_block failed");
+
+        let nonce = nonce + 1;
+        let bytes = types::encode(&nonce);
+        storage.write(&bp_nonce_key, bytes).unwrap();
+
         storage.block.epoch = storage.block.epoch.next();
         storage.block.pred_epochs.new_epoch(BlockHeight(11));
         let batch = PersistentStorage::batch();
@@ -639,7 +652,30 @@ mod tests {
             "The tree at Height 5 shouldn't be able to be restored"
         );
         let result = storage.get_merkle_tree(6.into(), Some(StoreType::Ibc));
-        assert!(result.is_ok(), "The tree should be restored");
+        assert!(result.is_ok(), "The ibc tree should be restored");
+        let result =
+            storage.get_merkle_tree(6.into(), Some(StoreType::BridgePool));
+        assert!(result.is_ok(), "The bridge pool tree should be restored");
+
+        storage
+            .begin_block(BlockHash::default(), BlockHeight(12))
+            .expect("begin_block failed");
+
+        let nonce = nonce + 1;
+        let bytes = types::encode(&nonce);
+        storage.write(&bp_nonce_key, bytes).unwrap();
+        storage.block.epoch = storage.block.epoch.next();
+        storage.block.pred_epochs.new_epoch(BlockHeight(12));
+        let batch = PersistentStorage::batch();
+        storage.commit_block(batch).expect("commit failed");
+
+        // ibc tree should be able to be restored
+        let result = storage.get_merkle_tree(6.into(), Some(StoreType::Ibc));
+        assert!(result.is_ok(), "The ibc tree should be restored");
+        // bridge pool tree should be pruned because of the nonce
+        let result =
+            storage.get_merkle_tree(6.into(), Some(StoreType::BridgePool));
+        assert!(result.is_err(), "The bridge pool tree should be pruned");
     }
 
     /// Test the prefix iterator with RocksDB.
