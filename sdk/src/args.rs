@@ -2115,53 +2115,29 @@ pub struct KeyDerive {
     pub use_device: bool,
 }
 
-/// Wallet restore key and implicit address arguments
-#[derive(Clone, Debug)]
-pub struct KeyAndAddressDerive {
-    /// Scheme type
-    pub scheme: SchemeType,
-    /// Key alias
-    pub alias: Option<String>,
-    /// Whether to force overwrite the alias, if provided
-    pub alias_force: bool,
-    /// Don't encrypt the keypair
-    pub unsafe_dont_encrypt: bool,
-    /// BIP44 derivation path
-    pub derivation_path: String,
-    /// Use device to generate key and address
-    pub use_device: bool,
-}
-
-/// Wallet key lookup arguments
+/// Wallet find shielded address or key arguments
+/// TODO Wallet key lookup arguments
 #[derive(Clone, Debug)]
 pub struct KeyFind {
-    /// Public key to lookup keypair with
-    pub public_key: Option<common::PublicKey>,
+    /// Whether to find shielded address by alias
+    pub shielded: bool,
     /// Key alias to lookup keypair with
     pub alias: Option<String>,
+    /// Public key to lookup keypair with
+    pub public_key: Option<common::PublicKey>,
     /// Public key hash to lookup keypair with
     pub value: Option<String>,
     /// Show secret keys to user
     pub unsafe_show_secret: bool,
 }
 
-/// Wallet find shielded address or key arguments
-#[derive(Clone, Debug)]
-pub struct AddrKeyFind {
-    /// Address/key alias
-    pub alias: String,
-    /// Show secret keys to user
-    pub unsafe_show_secret: bool,
-}
-
-/// Wallet list shielded keys arguments
-#[derive(Clone, Debug)]
-pub struct MaspKeysList {
-    /// Don't decrypt spending keys
-    pub decrypt: bool,
-    /// Show secret keys to user
-    pub unsafe_show_secret: bool,
-}
+/// Wallet list shielded payment addresses arguments
+// #[derive(Clone, Debug)]
+// pub struct MaspListPayAddrs {
+//     /// List shielded payment address pre-genesis instead
+//     /// of a current chain
+//     pub is_pre_genesis: bool,
+// }
 
 /// Wallet list keys arguments
 #[derive(Clone, Debug)]
@@ -2174,20 +2150,27 @@ pub struct KeyList {
     pub unsafe_show_secret: bool,
 }
 
+/// List transparent wallet addresses / shielded payment addresses
+#[derive(Clone, Debug)]
+pub struct AddressList {
+    /// Whether to list payment addresses of the shielded pool
+    pub shielded: bool,
+}
+
+/// Wallet address lookup arguments
+#[derive(Clone, Debug)]
+pub struct AddressFind {
+    /// Alias to find
+    pub alias: Option<String>,
+    /// Address to find
+    pub address: Option<Address>,
+}
+
 /// Wallet key export arguments
 #[derive(Clone, Debug)]
 pub struct KeyExport {
     /// Key alias
     pub alias: String,
-}
-
-/// Wallet address lookup arguments
-#[derive(Clone, Debug)]
-pub struct AddressOrAliasFind {
-    /// Alias to find
-    pub alias: Option<String>,
-    /// Address to find
-    pub address: Option<Address>,
 }
 
 /// Wallet address add arguments
