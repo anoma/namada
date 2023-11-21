@@ -18,10 +18,7 @@ use namada::types::token::{
 use serde::{Deserialize, Serialize};
 
 use super::toml_utils::{read_toml, write_toml};
-use super::transactions::{
-    self, Transactions, UnsignedEstablishedAccountTx,
-    UnsignedValidatorAccountTx,
-};
+use super::transactions::{self, Transactions, UnsignedValidatorAccountTx};
 use crate::config::genesis::chain::DeriveEstablishedAddress;
 use crate::config::genesis::transactions::{BondTx, SignedBondTx};
 use crate::config::genesis::GenesisAddress;

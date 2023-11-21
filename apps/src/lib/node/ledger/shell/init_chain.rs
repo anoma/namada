@@ -11,7 +11,6 @@ use namada::ledger::{ibc, pos};
 use namada::proof_of_stake::BecomeValidator;
 use namada::types::hash::Hash as CodeHash;
 use namada::types::key::*;
-use namada::types::storage::KeySeg;
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::vm::validate_untrusted_wasm;
 use namada_sdk::eth_bridge::EthBridgeStatus;
@@ -350,7 +349,11 @@ where
         if let Some(txs) = genesis.transactions.established_account.as_ref() {
             for FinalizedEstablishedAccountTx {
                 address,
-                tx: EstablishedAccountTx { vp, public_key },
+                tx:
+                    EstablishedAccountTx {
+                        vp,
+                        public_keys: public_key,
+                    },
             } in txs
             {
                 tracing::debug!(

@@ -230,7 +230,7 @@ pub fn get_established_addr_from_pregenesis<P: AsRef<Path>>(
     let established_accounts =
         genesis.transactions.established_account.as_ref()?;
     let acct = established_accounts.iter().find(|&acct| {
-        acct.public_key.as_ref().expect("the unexpected").pk.raw == pk
+        acct.public_keys.as_ref().expect("the unexpected").pk.raw == pk
     })?;
     Some(
         transactions::UnsignedEstablishedAccountTx::from(acct).derive_address(),

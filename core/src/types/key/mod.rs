@@ -124,6 +124,13 @@ pub enum VerifySigError {
     MismatchedScheme,
     #[error("Signature verification went out of gas: {0}")]
     OutOfGas(#[from] crate::ledger::gas::Error),
+    #[error(
+        "The number of valid signatures did not meet the required threshold, \
+         required {0} got {1}"
+    )]
+    ThresholdNotMet(u8, u8),
+    #[error("Too many fucking sigs")]
+    TooGoddamnBig,
 }
 
 #[allow(missing_docs)]

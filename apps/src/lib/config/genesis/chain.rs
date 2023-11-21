@@ -645,10 +645,7 @@ impl FinalizedTransactions {
         let established_account = established_account.map(|txs| {
             txs.into_iter()
                 .map(|tx| FinalizedEstablishedAccountTx {
-                    address: transactions::UnsignedEstablishedAccountTx::from(
-                        &tx,
-                    )
-                    .derive_address(),
+                    address: tx.derive_address(),
                     tx,
                 })
                 .collect()
@@ -739,7 +736,7 @@ impl FinalizedParameters {
 pub struct FinalizedEstablishedAccountTx {
     pub address: Address,
     #[serde(flatten)]
-    pub tx: transactions::SignedEstablishedAccountTx,
+    pub tx: transactions::EstablishedAccountTx,
 }
 
 #[derive(

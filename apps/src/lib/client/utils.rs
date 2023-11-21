@@ -609,29 +609,24 @@ pub fn derive_genesis_addresses(
         .into_iter()
         .flatten()
     {
-        let address = {
-            let unsigned =
-                genesis::transactions::UnsignedEstablishedAccountTx::from(tx);
-            unsigned.derive_address()
-        };
-        let pk = if let Some(public_key) = tx.public_key.as_ref() {
-            &public_key.pk.raw
-        } else {
-            continue;
-        };
+        let address = tx.derive_address();
 
         println!();
         println!("{} {address}", "Address:".bold().bright_green());
-        println!("{} {pk}", "Public key:".bold().bright_green());
 
-        let maybe_alias =
-            maybe_pre_genesis_wallet.as_ref().and_then(|wallet| {
-                let implicit_address = pk.into();
-                wallet.find_alias(&implicit_address)
-            });
+        println!("{}", "Public key(s):".bold().bright_green());
+        for (ix, pk) in tx.public_keys.iter().enumerate() {
+            println!("    {}. {}", ix, pk);
 
-        if let Some(alias) = maybe_alias {
-            println!("{} {alias}", "Wallet alias:".bold().bright_green());
+            let maybe_alias =
+                maybe_pre_genesis_wallet.as_ref().and_then(|wallet| {
+                    let implicit_address = (&pk.raw).into();
+                    wallet.find_alias(&implicit_address)
+                });
+
+            if let Some(alias) = maybe_alias {
+                println!("{} {alias}", "Wallet alias:".bold().bright_green());
+            }
         }
     }
     if genesis_txs

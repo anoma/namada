@@ -3475,15 +3475,13 @@ fn test_invalid_validator_txs() -> Result<()> {
                 base_dir,
                 default_port_offset,
             );
-            let bonds = genesis.transactions.bond.unwrap();
-            genesis.transactions.bond = Some(
+            genesis.transactions.bond = Some({
+                let mut bonds = genesis.transactions.bond.unwrap();
+                // NB: the last bond should be from `validator-1`.
+                // we will filter it out from the list of bonds
+                bonds.pop();
                 bonds
-                    .into_iter()
-                    .filter(|bond| {
-                        (&bond.data.validator).as_ref() != "validator-1"
-                    })
-                    .collect(),
-            );
+            });
             genesis
         },
         None,
