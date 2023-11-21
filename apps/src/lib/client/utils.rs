@@ -643,13 +643,8 @@ pub fn derive_genesis_addresses(
 
     println!("{}", "Validator account txs:".underline().bold());
     for tx in genesis_txs.validator_account.as_ref().into_iter().flatten() {
-        let address = {
-            let unsigned =
-                genesis::transactions::UnsignedValidatorAccountTx::from(tx);
-            unsigned.derive_address()
-        };
         println!();
-        println!("{} {address}", "Address:".bold().bright_green());
+        println!("{} {}", "Address:".bold().bright_green(), tx.address);
         let keys = [
             ("Account key:", &tx.account_key.pk.raw),
             ("Consensus key:", &tx.consensus_key.pk.raw),
