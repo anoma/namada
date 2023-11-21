@@ -818,8 +818,7 @@ pub fn validate_parameters(
         let mut found_steward = false;
         if let Some(accs) = &txs.established_account {
             if accs.iter().any(|acct| {
-                let addr =
-                    UnsignedEstablishedAccountTx::from(acct).derive_address();
+                let addr = acct.derive_address();
                 &addr == steward
             }) {
                 found_steward = true;

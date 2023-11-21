@@ -20,7 +20,7 @@ use namada::types::key::*;
 use namada::types::storage::Epoch;
 use namada::types::token;
 use namada_apps::config::genesis::chain::DeriveEstablishedAddress;
-use namada_apps::config::genesis::{templates, transactions};
+use namada_apps::config::genesis::templates;
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps::config::{Config, TendermintMode};
 use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
@@ -230,11 +230,9 @@ pub fn get_established_addr_from_pregenesis<P: AsRef<Path>>(
     let established_accounts =
         genesis.transactions.established_account.as_ref()?;
     let acct = established_accounts.iter().find(|&acct| {
-        acct.public_keys.as_ref().expect("the unexpected").pk.raw == pk
+        acct.public_keys.len() == 1 && acct.public_keys[0].raw == pk
     })?;
-    Some(
-        transactions::UnsignedEstablishedAccountTx::from(acct).derive_address(),
-    )
+    Some(acct.derive_address())
 }
 
 /// Find the address of an account by its alias from the wallet

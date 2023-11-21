@@ -307,11 +307,11 @@ where
             let mut total_token_balance = token::Amount::zero();
             for (owner, balance) in balances {
                 if let genesis::GenesisAddress::PublicKey(pk) = owner {
-                    storage_api::account::set_public_key_at(
+                    storage_api::account::init_account_storage(
                         &mut self.wl_storage,
                         &owner.address(),
-                        &pk.raw,
-                        0,
+                        std::slice::from_ref(&pk.raw),
+                        1,
                     )
                     .unwrap();
                 }
@@ -352,7 +352,8 @@ where
                 tx:
                     EstablishedAccountTx {
                         vp,
-                        public_keys: public_key,
+                        threshold,
+                        public_keys,
                     },
             } in txs
             {
@@ -366,15 +367,15 @@ where
                     .write_bytes(&Key::validity_predicate(address), code_hash)
                     .unwrap();
 
-                if let Some(pk) = public_key {
-                    storage_api::account::set_public_key_at(
-                        &mut self.wl_storage,
-                        address,
-                        &pk.pk.raw,
-                        0,
-                    )
-                    .unwrap();
-                }
+                let public_keys: Vec<_> =
+                    public_keys.iter().map(|pk| pk.raw.clone()).collect();
+                storage_api::account::init_account_storage(
+                    &mut self.wl_storage,
+                    address,
+                    &public_keys,
+                    *threshold,
+                )
+                .unwrap();
             }
         }
     }

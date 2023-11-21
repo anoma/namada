@@ -6,7 +6,6 @@ use std::net::SocketAddr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
-use itertools::Itertools;
 use namada::core::types::address::Address;
 use namada::core::types::string_encoding::StringEncoded;
 use namada::proto::{
@@ -75,11 +74,6 @@ pub fn sign_txs(
     }
 
     // Sign all the transactions
-    let established_account = established_account.map(|tx| {
-        tx.into_iter()
-            .map(|tx| sign_established_account_tx(tx, wallet))
-            .collect()
-    });
     let validator_account = None;
     let bond = bond.map(|tx| {
         tx.into_iter()
@@ -260,7 +254,9 @@ pub fn sign_self_bond_tx(
     unsigned_tx: BondTx<Unvalidated>,
     validator_wallet: &ValidatorWallet,
 ) -> SignedBondTx<Unvalidated> {
-    unsigned_tx.sign(&validator_wallet.account_key)
+    let mut signed = SignedBondTx::from(unsigned_tx);
+    signed.sign(std::slice::from_ref(&validator_wallet.account_key));
+    signed
 }
 
 pub fn sign_delegation_bond_tx(
@@ -268,9 +264,11 @@ pub fn sign_delegation_bond_tx(
     wallet: &mut Wallet<CliWalletUtils>,
     established_accounts: &Option<Vec<EstablishedAccountTx>>,
 ) -> SignedBondTx<Unvalidated> {
-    let source_key =
+    let source_keys =
         look_up_sk_from(&unsigned_tx.source, wallet, established_accounts);
-    unsigned_tx.sign(&source_key)
+    let mut signed = SignedBondTx::from(unsigned_tx);
+    signed.sign(&source_keys);
+    signed
 }
 
 pub fn sign_tx<T: BorshSerialize>(
@@ -450,25 +448,12 @@ pub struct EstablishedAccountTx {
     pub vp: String,
     #[serde(default = "default_threshold")]
     pub threshold: u8,
-    #[serde(deserialize_with = "deserialize_single_or_vec")]
     /// PKs have to come last in TOML to avoid `ValueAfterTable` error
     pub public_keys: Vec<StringEncoded<common::PublicKey>>,
 }
 
 const fn default_threshold() -> u8 {
     1
-}
-
-/// Deserialize a vec of type `T`, or if a single `T` is provided,
-/// deserialize that and place in a vector.
-fn deserialize_single_or_vec<'de, D, T>(d: D) -> Result<Vec<T>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-    T: Deserialize<'de>,
-{
-    T::deserialize(d.clone())
-        .map(|t| vec![t])
-        .or_else(|_| Vec::<T>::deserialize(d))
 }
 
 impl DeriveEstablishedAddress for EstablishedAccountTx {
@@ -492,17 +477,14 @@ where
         pks: &[common::PublicKey],
         threshold: u8,
     ) -> Result<(), VerifySigError> {
-        let Self {
-            data,
-            signatures: signature,
-        } = self;
+        let Self { data, signatures } = self;
         if pks.len() > u8::MAX as usize {
             eprintln!("You're multisig is too facking big");
             return Err(VerifySigError::TooGoddamnBig);
         }
         let mut valid_sigs = 0;
-        for pk in &pks {
-            valid_sigs += self.signatures.iter().any(|sig| {
+        for pk in pks {
+            valid_sigs += signatures.iter().any(|sig| {
                 verify_standalone_sig::<_, SerializeWithBorsh>(
                     &data.data_to_sign(),
                     pk,
@@ -530,16 +512,12 @@ impl SignedBondTx<Unvalidated> {
     /// types. Thus we only allow signing of [`BondTx<Unvalidated>`]
     /// types.
     pub fn sign(&mut self, key: &[common::SecretKey]) {
-        self.signatures.extend(
-            key.iter()
-                .map(|sk| {
-                    standalone_signature::<_, SerializeWithBorsh>(
-                        sk,
-                        &self.data.data_to_sign(),
-                    )
-                })
-                .collect(),
-        )
+        self.signatures.extend(key.iter().map(|sk| {
+            StringEncoded::new(standalone_signature::<_, SerializeWithBorsh>(
+                sk,
+                &self.data.data_to_sign(),
+            ))
+        }))
     }
 }
 
@@ -806,7 +784,7 @@ fn validate_bond(
             }
         };
         if let Some((source_pks, threshold)) = maybe_source {
-            if tx.verify_sig(&source_pks, threshold).is_err() {
+            if tx.verify_sig(source_pks, threshold).is_err() {
                 eprintln!("Invalid bond tx signature.",);
                 false
             } else {
@@ -1149,7 +1127,7 @@ fn look_up_sk_from(
             .find_map(|account| match source {
                 GenesisAddress::EstablishedAddress(address) => {
                     // delegation from established account
-                    if account.derive_established_address() == address {
+                    if &account.derive_established_address() == address {
                         Some(
                             account
                                 .public_keys
