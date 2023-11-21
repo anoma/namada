@@ -9,7 +9,6 @@ use std::fmt::Display;
 use std::hash::Hash;
 use std::ops::Sub;
 
-use serde::{Serialize, Deserialize};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::ledger::storage_api::collections::lazy_map::NestedMap;
 use namada_core::ledger::storage_api::collections::{
@@ -22,6 +21,7 @@ use namada_core::types::storage::{Epoch, KeySeg};
 use namada_core::types::token;
 use namada_core::types::token::Amount;
 pub use rev_order::ReverseOrdTokenAmount;
+use serde::{Deserialize, Serialize};
 
 use crate::parameters::PosParams;
 
