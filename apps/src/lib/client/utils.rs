@@ -673,56 +673,6 @@ pub fn derive_genesis_addresses(
     }
 }
 
-/// Initialize a genesis established account.
-/// key into a special "pre-genesis" wallet.
-pub fn init_genesis_established_account(
-    global_args: args::Global,
-    args: args::InitGenesisEstablishedAccount,
-) {
-    let (mut pre_genesis_wallet, _) =
-        load_pre_genesis_wallet_or_exit(&global_args.base_dir);
-
-    let alias = args.wallet_alias.as_str();
-    let public_key = {
-        let sk = pre_genesis_wallet
-            .find_secret_key(alias, None)
-            .unwrap_or_else(|err| {
-                eprintln!(
-                    "Failed to look-up `{alias}` in the pre-genesis wallet: \
-                     {err}",
-                );
-                safe_exit(1)
-            });
-        sk.ref_to()
-    };
-
-    let (address, txs) = genesis::transactions::init_established_account(
-        args.vp,
-        public_key,
-        &mut pre_genesis_wallet,
-    );
-    let toml_path = {
-        let pre_genesis_dir = global_args.base_dir.join(PRE_GENESIS_DIR);
-        established_acc_pre_genesis_txs_file(alias, &pre_genesis_dir)
-    };
-    let toml_path_str = toml_path.to_string_lossy();
-
-    let genesis_part = toml::to_string(&txs).unwrap();
-    fs::write(&toml_path, genesis_part).unwrap_or_else(|err| {
-        eprintln!(
-            "Couldn't write pre-genesis transactions file to {toml_path_str}. \
-             Failed with: {err}",
-        );
-        safe_exit(1)
-    });
-
-    println!(
-        "{}: {address}",
-        "Derived established account address".bold()
-    );
-    println!("{}: {toml_path_str}", "Wrote genesis tx to".bold());
-}
-
 /// Initialize genesis validator's address, consensus key and validator account
 /// key into a special "pre-genesis" wallet.
 pub fn init_genesis_validator(
@@ -892,15 +842,6 @@ pub fn write_tendermint_node_key(
 /// The default path to a validator pre-genesis txs file.
 pub fn validator_pre_genesis_txs_file(pre_genesis_path: &Path) -> PathBuf {
     pre_genesis_path.join("transactions.toml")
-}
-
-/// The default path to an established account txs file.
-pub fn established_acc_pre_genesis_txs_file(
-    wallet_key_alias: &str,
-    pre_genesis_path: &Path,
-) -> PathBuf {
-    pre_genesis_path
-        .join(format!("established-account-tx-{wallet_key_alias}.toml"))
 }
 
 /// The default validator pre-genesis directory
