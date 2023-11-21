@@ -513,6 +513,79 @@ pub async fn submit_become_validator<'a>(
             .or_else(|| Some(config.ledger.chain_id.clone())),
         ..tx_args.clone()
     };
+
+    // Check that the address is established
+    if !address.is_established() {
+        edisplay_line!(
+            namada.io(),
+            "The given address {address} is not established. Only established \
+             address can become a validator.",
+        );
+        if !tx_args.force {
+            safe_exit(1)
+        }
+    };
+
+    // Check that the address is not already a validator
+    if rpc::is_validator(namada.client(), &address).await {
+        edisplay_line!(
+            namada.io(),
+            "The given address {address} is already a validator",
+        );
+        if !tx_args.force {
+            safe_exit(1)
+        }
+    };
+
+    // If the address is not yet a validator, it cannot have self-bonds, but it
+    // may have delegations. It has to unbond those before it can become a
+    // validator.
+    if rpc::has_bonds(namada.client(), &address).await {
+        edisplay_line!(
+            namada.io(),
+            "The given address {address} has delegations and therefore cannot \
+             become a validator. To become a validator, you have to unbond \
+             your delegations first.",
+        );
+        if !tx_args.force {
+            safe_exit(1)
+        }
+    }
+
+    // Validate the commission rate data
+    if commission_rate > Dec::one() || commission_rate < Dec::zero() {
+        edisplay_line!(
+            namada.io(),
+            "The validator commission rate must not exceed 1.0 or 100%, and \
+             it must be 0 or positive"
+        );
+        if !tx_args.force {
+            safe_exit(1)
+        }
+    }
+    if max_commission_rate_change > Dec::one()
+        || max_commission_rate_change < Dec::zero()
+    {
+        edisplay_line!(
+            namada.io(),
+            "The validator maximum change in commission rate per epoch must \
+             not exceed 1.0 or 100%"
+        );
+        if !tx_args.force {
+            safe_exit(1)
+        }
+    }
+    // Validate the email
+    if email.is_empty() {
+        edisplay_line!(
+            namada.io(),
+            "The validator email must not be an empty string"
+        );
+        if !tx_args.force {
+            safe_exit(1)
+        }
+    }
+
     let alias = tx_args
         .initialized_account_alias
         .as_ref()
@@ -644,40 +717,6 @@ pub async fn submit_become_validator<'a>(
             None,
         )
         .map_err(|err| error::Error::Other(err.to_string()))?;
-
-    // Validate the commission rate data
-    if commission_rate > Dec::one() || commission_rate < Dec::zero() {
-        edisplay_line!(
-            namada.io(),
-            "The validator commission rate must not exceed 1.0 or 100%, and \
-             it must be 0 or positive"
-        );
-        if !tx_args.force {
-            safe_exit(1)
-        }
-    }
-    if max_commission_rate_change > Dec::one()
-        || max_commission_rate_change < Dec::zero()
-    {
-        edisplay_line!(
-            namada.io(),
-            "The validator maximum change in commission rate per epoch must \
-             not exceed 1.0 or 100%"
-        );
-        if !tx_args.force {
-            safe_exit(1)
-        }
-    }
-    // Validate the email
-    if email.is_empty() {
-        edisplay_line!(
-            namada.io(),
-            "The validator email must not be an empty string"
-        );
-        if !tx_args.force {
-            safe_exit(1)
-        }
-    }
 
     let tx_code_hash =
         query_wasm_code_hash(namada, tx_code_path.to_string_lossy())

@@ -2318,6 +2318,14 @@ pub async fn is_delegator_at<C: namada::ledger::queries::Client + Sync>(
         .unwrap()
 }
 
+/// Check if the given address is a known validator.
+pub async fn has_bonds<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
+    address: &Address,
+) -> bool {
+    namada_sdk::rpc::has_bonds(client, address).await.unwrap()
+}
+
 /// Check if the address exists on chain. Established address exists if it has a
 /// stored validity predicate. Implicit and internal addresses always return
 /// true.
