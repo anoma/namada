@@ -5,11 +5,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::types::address::Address;
 use crate::types::dec::Dec;
-use crate::types::hash::Hash;
 use crate::types::key::{common, secp256k1};
 use crate::types::token;
 
-/// A tx data type to initialize a new validator account.
+/// A tx data type to become a validator account.
 #[derive(
     Debug,
     Clone,
@@ -20,13 +19,9 @@ use crate::types::token;
     Serialize,
     Deserialize,
 )]
-pub struct InitValidator {
-    /// Public key to be written into the account's storage. This can be used
-    /// for signature verification of transactions for the newly created
-    /// account.
-    pub account_keys: Vec<common::PublicKey>,
-    /// The minimum number of signatures needed
-    pub threshold: u8,
+pub struct BecomeValidator {
+    /// Address of an account that will become a validator.
+    pub address: Address,
     /// A key to be used for signing blocks and votes on blocks.
     pub consensus_key: common::PublicKey,
     /// An Eth bridge governance public key
@@ -49,8 +44,6 @@ pub struct InitValidator {
     pub website: Option<String>,
     /// The validator's discord handle
     pub discord_handle: Option<String>,
-    /// The VP code for validator account
-    pub validator_vp_code_hash: Hash,
 }
 
 /// A bond is a validator's self-bond or a delegation from non-validator to a

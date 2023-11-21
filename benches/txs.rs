@@ -12,7 +12,7 @@ use namada::core::types::key::{
 };
 use namada::core::types::token::Amount;
 use namada::core::types::transaction::account::{InitAccount, UpdateAccount};
-use namada::core::types::transaction::pos::{InitValidator, MetaDataChange};
+use namada::core::types::transaction::pos::{BecomeValidator, MetaDataChange};
 use namada::ibc::core::ics02_client::client_type::ClientType;
 use namada::ibc::core::ics03_connection::connection::Counterparty;
 use namada::ibc::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
@@ -43,15 +43,15 @@ use namada::types::transaction::pos::{
 };
 use namada_apps::bench_utils::{
     BenchShell, BenchShieldedCtx, ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY,
-    BERTHA_PAYMENT_ADDRESS, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
-    TX_CHANGE_CONSENSUS_KEY_WASM, TX_CHANGE_VALIDATOR_COMMISSION_WASM,
-    TX_CHANGE_VALIDATOR_METADATA_WASM, TX_CLAIM_REWARDS_WASM,
-    TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
-    TX_INIT_PROPOSAL_WASM, TX_INIT_VALIDATOR_WASM,
-    TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM, TX_RESIGN_STEWARD,
-    TX_REVEAL_PK_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
-    TX_UPDATE_ACCOUNT_WASM, TX_UPDATE_STEWARD_COMMISSION,
-    TX_VOTE_PROPOSAL_WASM, TX_WITHDRAW_WASM, VP_USER_WASM,
+    BERTHA_PAYMENT_ADDRESS, TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM,
+    TX_BRIDGE_POOL_WASM, TX_CHANGE_CONSENSUS_KEY_WASM,
+    TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_CHANGE_VALIDATOR_METADATA_WASM,
+    TX_CLAIM_REWARDS_WASM, TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM,
+    TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL_WASM, TX_REACTIVATE_VALIDATOR_WASM,
+    TX_REDELEGATE_WASM, TX_RESIGN_STEWARD, TX_REVEAL_PK_WASM, TX_UNBOND_WASM,
+    TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
+    TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL_WASM, TX_WITHDRAW_WASM,
+    VP_USER_WASM,
 };
 use namada_apps::wallet::defaults;
 use sha2::Digest;
@@ -625,7 +625,7 @@ fn init_validator(c: &mut Criterion) {
             .finalize_reset()
             .into(),
     );
-    let data = InitValidator {
+    let data = BecomeValidator {
         account_keys: vec![defaults::albert_keypair().to_public()],
         threshold: 1,
         consensus_key,
@@ -641,7 +641,7 @@ fn init_validator(c: &mut Criterion) {
         validator_vp_code_hash: extra_hash,
     };
     let tx = shell.generate_tx(
-        TX_INIT_VALIDATOR_WASM,
+        TX_BECOME_VALIDATOR_WASM,
         data,
         None,
         Some(vec![extra_section]),

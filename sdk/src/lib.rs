@@ -51,11 +51,11 @@ use crate::rpc::{
 use crate::signing::SigningTxData;
 use crate::token::DenominatedAmount;
 use crate::tx::{
-    ProcessTxResponse, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
-    TX_CHANGE_COMMISSION_WASM, TX_CHANGE_CONSENSUS_KEY_WASM,
-    TX_CHANGE_METADATA_WASM, TX_CLAIM_REWARDS_WASM,
-    TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
-    TX_INIT_PROPOSAL, TX_INIT_VALIDATOR_WASM, TX_REACTIVATE_VALIDATOR_WASM,
+    ProcessTxResponse, TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM,
+    TX_BRIDGE_POOL_WASM, TX_CHANGE_COMMISSION_WASM,
+    TX_CHANGE_CONSENSUS_KEY_WASM, TX_CHANGE_METADATA_WASM,
+    TX_CLAIM_REWARDS_WASM, TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM,
+    TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL, TX_REACTIVATE_VALIDATOR_WASM,
     TX_REDELEGATE_WASM, TX_RESIGN_STEWARD, TX_REVEAL_PK, TX_TRANSFER_WASM,
     TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
     TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
@@ -348,6 +348,33 @@ pub trait Namada<'a>: Sized {
         }
     }
 
+    /// Make a TxBecomeValidator builder from the given minimum set of arguments
+    fn new_become_validator(
+        &self,
+        address: Address,
+        commission_rate: Dec,
+        max_commission_rate_change: Dec,
+        email: String,
+    ) -> args::TxBecomeValidator {
+        args::TxBecomeValidator {
+            address,
+            commission_rate,
+            max_commission_rate_change,
+            scheme: SchemeType::Ed25519,
+            consensus_key: None,
+            eth_cold_key: None,
+            eth_hot_key: None,
+            protocol_key: None,
+            unsafe_dont_encrypt: false,
+            tx_code_path: PathBuf::from(TX_BECOME_VALIDATOR_WASM),
+            tx: self.tx_builder(),
+            email,
+            description: None,
+            website: None,
+            discord_handle: None,
+        }
+    }
+
     /// Make a TxInitValidator builder from the given minimum set of arguments
     fn new_init_validator(
         &self,
@@ -367,7 +394,10 @@ pub trait Namada<'a>: Sized {
             protocol_key: None,
             validator_vp_code_path: PathBuf::from(VP_USER_WASM),
             unsafe_dont_encrypt: false,
-            tx_code_path: PathBuf::from(TX_INIT_VALIDATOR_WASM),
+            tx_init_account_code_path: PathBuf::from(TX_INIT_ACCOUNT_WASM),
+            tx_become_validator_code_path: PathBuf::from(
+                TX_BECOME_VALIDATOR_WASM,
+            ),
             tx: self.tx_builder(),
             email,
             description: None,

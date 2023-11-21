@@ -27,7 +27,7 @@ use namada_core::types::transaction::account::{InitAccount, UpdateAccount};
 use namada_core::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
-use namada_core::types::transaction::pos::InitValidator;
+use namada_core::types::transaction::pos::BecomeValidator;
 use namada_core::types::transaction::{pos, Fee};
 use prost::Message;
 use rand::rngs::OsRng;
@@ -48,10 +48,10 @@ use crate::masp::make_asset_type;
 use crate::proto::{MaspBuilder, Section, Tx};
 use crate::rpc::validate_amount;
 use crate::tx::{
-    TX_BOND_WASM, TX_CHANGE_COMMISSION_WASM, TX_CHANGE_CONSENSUS_KEY_WASM,
-    TX_CHANGE_METADATA_WASM, TX_CLAIM_REWARDS_WASM,
-    TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
-    TX_INIT_PROPOSAL, TX_INIT_VALIDATOR_WASM, TX_REACTIVATE_VALIDATOR_WASM,
+    TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_CHANGE_COMMISSION_WASM,
+    TX_CHANGE_CONSENSUS_KEY_WASM, TX_CHANGE_METADATA_WASM,
+    TX_CLAIM_REWARDS_WASM, TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM,
+    TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL, TX_REACTIVATE_VALIDATOR_WASM,
     TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
     TX_UPDATE_ACCOUNT_WASM, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM, VP_USER_WASM,
 };
@@ -1091,8 +1091,8 @@ pub async fn to_ledger_vector<'a>(
             format!("Threshold : {}", init_account.threshold),
             format!("VP type : {}", HEXLOWER.encode(&extra.code.hash().0)),
         ]);
-    } else if code_sec.tag == Some(TX_INIT_VALIDATOR_WASM.to_string()) {
-        let init_validator = InitValidator::try_from_slice(
+    } else if code_sec.tag == Some(TX_BECOME_VALIDATOR_WASM.to_string()) {
+        let init_validator = BecomeValidator::try_from_slice(
             &tx.data()
                 .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
         )
@@ -1102,27 +1102,9 @@ pub async fn to_ledger_vector<'a>(
 
         tv.name = "Init_Validator_0".to_string();
 
-        let extra = tx
-            .get_section(&init_validator.validator_vp_code_hash)
-            .and_then(|x| Section::extra_data_sec(x.as_ref()))
-            .ok_or_else(|| {
-                Error::Other("unable to load vp code".to_string())
-            })?;
-        let vp_code = if extra.tag == Some(VP_USER_WASM.to_string()) {
-            "User".to_string()
-        } else {
-            HEXLOWER.encode(&extra.code.hash().0)
-        };
-
         tv.output.extend(vec!["Type : Init Validator".to_string()]);
-        tv.output.extend(
-            init_validator
-                .account_keys
-                .iter()
-                .map(|k| format!("Account key : {}", k)),
-        );
         tv.output.extend(vec![
-            format!("Threshold : {}", init_validator.threshold),
+            format!("Address : {}", init_validator.address),
             format!("Consensus key : {}", init_validator.consensus_key),
             format!("Ethereum cold key : {}", init_validator.eth_cold_key),
             format!("Ethereum hot key : {}", init_validator.eth_hot_key),
@@ -1144,16 +1126,9 @@ pub async fn to_ledger_vector<'a>(
             tv.output
                 .push(format!("Discord handle : {}", discord_handle));
         }
-        tv.output.push(format!("Validator VP type : {}", vp_code));
 
-        tv.output_expert.extend(
-            init_validator
-                .account_keys
-                .iter()
-                .map(|k| format!("Account key : {}", k)),
-        );
         tv.output_expert.extend(vec![
-            format!("Threshold : {}", init_validator.threshold),
+            format!("Address : {}", init_validator.address),
             format!("Consensus key : {}", init_validator.consensus_key),
             format!("Ethereum cold key : {}", init_validator.eth_cold_key),
             format!("Ethereum hot key : {}", init_validator.eth_hot_key),
@@ -1176,10 +1151,6 @@ pub async fn to_ledger_vector<'a>(
             tv.output_expert
                 .push(format!("Discord handle : {}", discord_handle));
         }
-        tv.output_expert.push(format!(
-            "Validator VP type : {}",
-            HEXLOWER.encode(&extra.code.hash().0)
-        ));
     } else if code_sec.tag == Some(TX_INIT_PROPOSAL.to_string()) {
         let init_proposal_data = InitProposalData::try_from_slice(
             &tx.data()

@@ -725,6 +725,41 @@ impl TxInitAccount {
 
 /// Transaction to initialize a new account
 #[derive(Clone, Debug)]
+pub struct TxBecomeValidator<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
+    pub tx: Tx<C>,
+    /// Address of an account that will become a validator.
+    pub address: C::Address,
+    /// Signature scheme
+    pub scheme: SchemeType,
+    /// Consensus key
+    pub consensus_key: Option<C::Keypair>,
+    /// Ethereum cold key
+    pub eth_cold_key: Option<C::Keypair>,
+    /// Ethereum hot key
+    pub eth_hot_key: Option<C::Keypair>,
+    /// Protocol key
+    pub protocol_key: Option<C::PublicKey>,
+    /// Commission rate
+    pub commission_rate: Dec,
+    /// Maximum commission rate change
+    pub max_commission_rate_change: Dec,
+    /// The validator email
+    pub email: String,
+    /// The validator description
+    pub description: Option<String>,
+    /// The validator website
+    pub website: Option<String>,
+    /// The validator's discord handle
+    pub discord_handle: Option<String>,
+    /// Path to the TX WASM code file
+    pub tx_code_path: PathBuf,
+    /// Don't encrypt the keypair
+    pub unsafe_dont_encrypt: bool,
+}
+
+/// Transaction to initialize a new account
+#[derive(Clone, Debug)]
 pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
@@ -757,7 +792,9 @@ pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
     /// Path to the VP WASM code file
     pub validator_vp_code_path: PathBuf,
     /// Path to the TX WASM code file
-    pub tx_code_path: PathBuf,
+    pub tx_init_account_code_path: PathBuf,
+    /// Path to the TX WASM code file
+    pub tx_become_validator_code_path: PathBuf,
     /// Don't encrypt the keypair
     pub unsafe_dont_encrypt: bool,
 }

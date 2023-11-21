@@ -1,9 +1,8 @@
 //! Proof of Stake system integration with functions for transactions
 
 use namada_core::types::dec::Dec;
-use namada_core::types::hash::Hash;
 use namada_core::types::key::common;
-use namada_core::types::transaction::pos::InitValidator;
+use namada_core::types::transaction::pos::BecomeValidator;
 use namada_core::types::{key, token};
 pub use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::ValidatorMetaData;
@@ -12,7 +11,7 @@ use namada_proof_of_stake::{
     change_validator_commission_rate, change_validator_metadata,
     claim_reward_tokens, deactivate_validator, reactivate_validator,
     read_pos_params, redelegate_tokens, unbond_tokens, unjail_validator,
-    withdraw_tokens, BecomeValidator,
+    withdraw_tokens,
 };
 pub use namada_proof_of_stake::{parameters, types, ResultSlashing};
 
@@ -114,11 +113,10 @@ impl Ctx {
 
     /// Attempt to initialize a validator account. On success, returns the
     /// initialized validator account's address.
-    pub fn init_validator(
+    pub fn become_validator(
         &mut self,
-        InitValidator {
-            account_keys,
-            threshold,
+        BecomeValidator {
+            address,
             consensus_key,
             eth_cold_key,
             eth_hot_key,
@@ -129,29 +127,17 @@ impl Ctx {
             description,
             website,
             discord_handle,
-            validator_vp_code_hash: _,
-        }: InitValidator,
-        validator_vp_code_hash: Hash,
-        validator_vp_code_tag: &Option<String>,
+        }: BecomeValidator,
     ) -> EnvResult<Address> {
         let current_epoch = self.get_block_epoch()?;
-        // Init validator account
-        let validator_address =
-            self.init_account(validator_vp_code_hash, validator_vp_code_tag)?;
-        storage_api::account::init_account_storage(
-            self,
-            &validator_address,
-            &account_keys,
-            threshold,
-        )?;
         let eth_cold_key = key::common::PublicKey::Secp256k1(eth_cold_key);
         let eth_hot_key = key::common::PublicKey::Secp256k1(eth_hot_key);
-
         let params = read_pos_params(self)?;
-        become_validator(BecomeValidator {
+
+        become_validator(namada_proof_of_stake::BecomeValidator {
             storage: self,
             params: &params,
-            address: &validator_address,
+            address: &address,
             consensus_key: &consensus_key,
             protocol_key: &protocol_key,
             eth_cold_key: &eth_cold_key,
@@ -168,7 +154,7 @@ impl Ctx {
             offset_opt: None,
         })?;
 
-        Ok(validator_address)
+        Ok(address)
     }
 
     /// Deactivate validator

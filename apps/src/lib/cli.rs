@@ -223,6 +223,7 @@ pub mod cmds {
                 .subcommand(TxInitProposal::def().display_order(1))
                 .subcommand(TxVoteProposal::def().display_order(1))
                 // PoS transactions
+                .subcommand(TxBecomeValidator::def().display_order(2))
                 .subcommand(TxInitValidator::def().display_order(2))
                 .subcommand(TxUnjailValidator::def().display_order(2))
                 .subcommand(TxDeactivateValidator::def().display_order(2))
@@ -276,6 +277,8 @@ pub mod cmds {
             let tx_update_account =
                 Self::parse_with_ctx(matches, TxUpdateAccount);
             let tx_init_account = Self::parse_with_ctx(matches, TxInitAccount);
+            let tx_become_validator =
+                Self::parse_with_ctx(matches, TxBecomeValidator);
             let tx_init_validator =
                 Self::parse_with_ctx(matches, TxInitValidator);
             let tx_unjail_validator =
@@ -346,6 +349,7 @@ pub mod cmds {
                 .or(tx_reveal_pk)
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
+                .or(tx_become_validator)
                 .or(tx_init_validator)
                 .or(tx_commission_rate_change)
                 .or(tx_change_consensus_key)
@@ -426,6 +430,7 @@ pub mod cmds {
         QueryResult(QueryResult),
         TxUpdateAccount(TxUpdateAccount),
         TxInitAccount(TxInitAccount),
+        TxBecomeValidator(TxBecomeValidator),
         TxInitValidator(TxInitValidator),
         TxCommissionRateChange(TxCommissionRateChange),
         TxChangeConsensusKey(TxChangeConsensusKey),
@@ -1396,6 +1401,25 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct TxBecomeValidator(pub args::TxBecomeValidator<args::CliTypes>);
+
+    impl SubCmd for TxBecomeValidator {
+        const CMD: &'static str = "become-validator";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxBecomeValidator(args::TxBecomeValidator::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Send a signed transaction to become a validator.")
+                .add_args::<args::TxBecomeValidator<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct TxInitValidator(pub args::TxInitValidator<args::CliTypes>);
 
     impl SubCmd for TxInitValidator {
@@ -1410,8 +1434,8 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "Send a signed transaction to create a new validator \
-                     account.",
+                    "Send a signed transaction to create a established \
+                     account and then become a validator.",
                 )
                 .add_args::<args::TxInitValidator<args::CliTypes>>()
         }
@@ -2833,12 +2857,12 @@ pub mod args {
     use namada::types::transaction::GasLimit;
     pub use namada_sdk::args::*;
     pub use namada_sdk::tx::{
-        TX_BOND_WASM, TX_BRIDGE_POOL_WASM, TX_CHANGE_COMMISSION_WASM,
-        TX_CHANGE_CONSENSUS_KEY_WASM, TX_CHANGE_METADATA_WASM,
-        TX_CLAIM_REWARDS_WASM, TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM,
-        TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL, TX_INIT_VALIDATOR_WASM,
-        TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM, TX_RESIGN_STEWARD,
-        TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM,
+        TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
+        TX_CHANGE_COMMISSION_WASM, TX_CHANGE_CONSENSUS_KEY_WASM,
+        TX_CHANGE_METADATA_WASM, TX_CLAIM_REWARDS_WASM,
+        TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
+        TX_INIT_PROPOSAL, TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM,
+        TX_RESIGN_STEWARD, TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM,
         TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
         TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
         VP_USER_WASM,
@@ -4019,6 +4043,140 @@ pub mod args {
         }
     }
 
+    impl CliToSdk<TxBecomeValidator<SdkTypes>> for TxBecomeValidator<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> TxBecomeValidator<SdkTypes> {
+            let tx = self.tx.to_sdk(ctx);
+            let chain_ctx = ctx.borrow_mut_chain_or_exit();
+            TxBecomeValidator::<SdkTypes> {
+                tx,
+                scheme: self.scheme,
+                address: chain_ctx.get(&self.address),
+                consensus_key: self
+                    .consensus_key
+                    .map(|x| chain_ctx.get_cached(&x)),
+                eth_cold_key: self
+                    .eth_cold_key
+                    .map(|x| chain_ctx.get_cached(&x)),
+                eth_hot_key: self.eth_hot_key.map(|x| chain_ctx.get_cached(&x)),
+                protocol_key: self.protocol_key.map(|x| chain_ctx.get(&x)),
+                commission_rate: self.commission_rate,
+                max_commission_rate_change: self.max_commission_rate_change,
+                email: self.email,
+                description: self.description,
+                website: self.website,
+                discord_handle: self.discord_handle,
+                unsafe_dont_encrypt: self.unsafe_dont_encrypt,
+                tx_code_path: self.tx_code_path.to_path_buf(),
+            }
+        }
+    }
+
+    impl Args for TxBecomeValidator<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let address = ADDRESS.parse(matches);
+            let scheme = SCHEME.parse(matches);
+            let consensus_key = VALIDATOR_CONSENSUS_KEY.parse(matches);
+            let eth_cold_key = VALIDATOR_ETH_COLD_KEY.parse(matches);
+            let eth_hot_key = VALIDATOR_ETH_HOT_KEY.parse(matches);
+            let protocol_key = PROTOCOL_KEY.parse(matches);
+            let commission_rate = COMMISSION_RATE.parse(matches);
+            let max_commission_rate_change =
+                MAX_COMMISSION_RATE_CHANGE.parse(matches);
+            let email = EMAIL.parse(matches);
+            let description = DESCRIPTION_OPT.parse(matches);
+            let website = WEBSITE_OPT.parse(matches);
+            let discord_handle = DISCORD_OPT.parse(matches);
+            let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
+            let tx_code_path = PathBuf::from(TX_BECOME_VALIDATOR_WASM);
+            Self {
+                tx,
+                address,
+                scheme,
+                consensus_key,
+                eth_cold_key,
+                eth_hot_key,
+                protocol_key,
+                commission_rate,
+                max_commission_rate_change,
+                email,
+                description,
+                website,
+                discord_handle,
+                unsafe_dont_encrypt,
+                tx_code_path,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx<CliTypes>>()
+                .arg(ADDRESS.def().help(
+                    "Address of an account that will become a validator.",
+                ))
+                .arg(SCHEME.def().help(
+                    "The key scheme/type used for the validator keys. \
+                     Currently supports ed25519 and secp256k1.",
+                ))
+                .arg(VALIDATOR_CONSENSUS_KEY.def().help(
+                    "A consensus key for the validator account. A new one \
+                     will be generated if none given. Note that this must be \
+                     ed25519.",
+                ))
+                .arg(VALIDATOR_ETH_COLD_KEY.def().help(
+                    "An Eth cold key for the validator account. A new one \
+                     will be generated if none given. Note that this must be \
+                     secp256k1.",
+                ))
+                .arg(VALIDATOR_ETH_HOT_KEY.def().help(
+                    "An Eth hot key for the validator account. A new one will \
+                     be generated if none given. Note that this must be \
+                     secp256k1.",
+                ))
+                .arg(PROTOCOL_KEY.def().help(
+                    "A public key for signing protocol transactions. A new \
+                     one will be generated if none given.",
+                ))
+                .arg(COMMISSION_RATE.def().help(
+                    "The commission rate charged by the validator for \
+                     delegation rewards. Expressed as a decimal between 0 and \
+                     1. This is a required parameter.",
+                ))
+                .arg(MAX_COMMISSION_RATE_CHANGE.def().help(
+                    "The maximum change per epoch in the commission rate \
+                     charged by the validator for delegation rewards. \
+                     Expressed as a decimal between 0 and 1. This is a \
+                     required parameter.",
+                ))
+                .arg(EMAIL_OPT.def().help(
+                    "The desired new validator email. To remove the existing \
+                     email, pass an empty string to this argument.",
+                ))
+                .arg(DESCRIPTION_OPT.def().help(
+                    "The desired new validator description. To remove the \
+                     existing description, pass an empty string to this \
+                     argument.",
+                ))
+                .arg(WEBSITE_OPT.def().help(
+                    "The desired new validator website. To remove the \
+                     existing website, pass an empty string to this argument.",
+                ))
+                .arg(DISCORD_OPT.def().help(
+                    "The desired new validator discord handle. To remove the \
+                     existing discord handle, pass an empty string to this \
+                     argument.",
+                ))
+                .arg(VALIDATOR_CODE_PATH.def().help(
+                    "The path to the validity predicate WASM code to be used \
+                     for the validator account. Uses the default validator VP \
+                     if none specified.",
+                ))
+                .arg(UNSAFE_DONT_ENCRYPT.def().help(
+                    "UNSAFE: Do not encrypt the generated keypairs. Do not \
+                     use this for keys used in a live network.",
+                ))
+        }
+    }
+
     impl CliToSdk<TxInitValidator<SdkTypes>> for TxInitValidator<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> TxInitValidator<SdkTypes> {
             let tx = self.tx.to_sdk(ctx);
@@ -4050,7 +4208,12 @@ pub mod args {
                     .validator_vp_code_path
                     .to_path_buf(),
                 unsafe_dont_encrypt: self.unsafe_dont_encrypt,
-                tx_code_path: self.tx_code_path.to_path_buf(),
+                tx_init_account_code_path: self
+                    .tx_init_account_code_path
+                    .to_path_buf(),
+                tx_become_validator_code_path: self
+                    .tx_become_validator_code_path
+                    .to_path_buf(),
             }
         }
     }
@@ -4075,7 +4238,9 @@ pub mod args {
                 .parse(matches)
                 .unwrap_or_else(|| PathBuf::from(VP_USER_WASM));
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
-            let tx_code_path = PathBuf::from(TX_INIT_VALIDATOR_WASM);
+            let tx_init_account_code_path = PathBuf::from(TX_INIT_ACCOUNT_WASM);
+            let tx_become_validator_code_path =
+                PathBuf::from(TX_BECOME_VALIDATOR_WASM);
             let threshold = THRESOLD.parse(matches);
             Self {
                 tx,
@@ -4094,7 +4259,8 @@ pub mod args {
                 discord_handle,
                 validator_vp_code_path,
                 unsafe_dont_encrypt,
-                tx_code_path,
+                tx_init_account_code_path,
+                tx_become_validator_code_path,
             }
         }
 
