@@ -55,6 +55,7 @@ mod tests {
 
     use itertools::Itertools;
     use namada::core::ledger::masp_conversions::update_allowed_conversions;
+    use namada::ledger::eth_bridge::storage::bridge_pool;
     use namada::ledger::gas::STORAGE_ACCESS_GAS_PER_BYTE;
     use namada::ledger::ibc::storage::ibc_key;
     use namada::ledger::parameters::{EpochDuration, Parameters};
@@ -62,6 +63,7 @@ mod tests {
     use namada::ledger::storage::{types, StoreType, WlStorage};
     use namada::ledger::storage_api::{self, StorageWrite};
     use namada::types::chain::ChainId;
+    use namada::types::ethereum_events::Uint;
     use namada::types::hash::Hash;
     use namada::types::storage::{BlockHash, BlockHeight, Key};
     use namada::types::time::DurationSecs;
@@ -487,6 +489,9 @@ mod tests {
             let value_bytes = types::encode(&storage.block.height);
             storage.write(&key, value_bytes)?;
         }
+        let key = bridge_pool::get_nonce_key();
+        let bytes = types::encode(&Uint::default());
+        storage.write(&key, bytes)?;
 
         // Update and commit
         let hash = BlockHash::default();
@@ -581,6 +586,10 @@ mod tests {
             None,
             Some(5),
         );
+        let key = bridge_pool::get_nonce_key();
+        let bytes = types::encode(&Uint::default());
+        storage.write(&key, bytes).unwrap();
+
         storage
             .begin_block(BlockHash::default(), BlockHeight(1))
             .expect("begin_block failed");
