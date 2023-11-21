@@ -477,6 +477,12 @@ pub mod cmds {
         NewDerive(WalletNewDerive),
         /// TODO
         NewKeyList(WalletNewKeyList),
+        /// TODO
+        NewKeyFind(WalletNewKeyFind),
+        /// TODO
+        NewAddrList(WalletNewAddressList),
+        /// TODO
+        NewAddrFind(WalletNewAddressFind),
     }
 
     impl Cmd for NamadaWallet {
@@ -487,6 +493,9 @@ pub mod cmds {
                 .subcommand(WalletNewGen::def())
                 .subcommand(WalletNewDerive::def())
                 .subcommand(WalletNewKeyList::def())
+                .subcommand(WalletNewKeyFind::def())
+                .subcommand(WalletNewAddressList::def())
+                .subcommand(WalletNewAddressFind::def())
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -496,11 +505,17 @@ pub mod cmds {
             let gen_new = SubCmd::parse(matches).map(Self::NewGen);
             let derive_new = SubCmd::parse(matches).map(Self::NewDerive);
             let key_list_new = SubCmd::parse(matches).map(Self::NewKeyList);
+            let key_find_new = SubCmd::parse(matches).map(Self::NewKeyFind);
+            let addr_list_new = SubCmd::parse(matches).map(Self::NewAddrList);
+            let addr_find_new = SubCmd::parse(matches).map(Self::NewAddrFind);
             key.or(address)
                 .or(masp)
                 .or(gen_new)
                 .or(derive_new)
                 .or(key_list_new)
+                .or(key_find_new)
+                .or(addr_list_new)
+                .or(addr_find_new)
         }
     }
 
@@ -526,7 +541,6 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     #[allow(clippy::large_enum_variant)]
     pub enum WalletKey {
-        Find(KeyFind),
         Export(Export),
     }
 
@@ -535,9 +549,8 @@ pub mod cmds {
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
-                let lookup = SubCmd::parse(matches).map(Self::Find);
                 let export = SubCmd::parse(matches).map(Self::Export);
-                lookup.or(export)
+                export
             })
         }
 
@@ -549,34 +562,7 @@ pub mod cmds {
                 )
                 .subcommand_required(true)
                 .arg_required_else_help(true)
-                .subcommand(KeyFind::def())
                 .subcommand(Export::def())
-        }
-    }
-
-    /// Restore a keypair and implicit address from the mnemonic code
-    #[derive(Clone, Debug)]
-    pub struct KeyDerive(pub args::KeyDerive);
-
-    impl SubCmd for KeyDerive {
-        const CMD: &'static str = "derive";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| Self(args::KeyDerive::parse(matches)))
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about(
-                    "Derives a keypair from the given mnemonic code and HD \
-                     derivation path and derives the implicit address from \
-                     its public key. Stores the keypair and the address with \
-                     the given alias. A hardware wallet can be used, in which \
-                     case a private key is not derivable.",
-                )
-                .add_args::<args::KeyDerive>()
         }
     }
 
@@ -597,7 +583,8 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about(
+                .about("Generates a new transparent / shielded secret key.")
+                .long_about(
                     "Generates a keypair with a given alias and derives the \
                      implicit address from its public key. The address will \
                      be stored with the same alias. TODO shielded",
@@ -624,6 +611,9 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
+                    "Derive transparent / shielded key from the mnemonic code.",
+                )
+                .long_about(
                     "Derives a keypair from the given mnemonic code and HD \
                      derivation path and derives the implicit address from \
                      its public key. Stores the keypair and the address with \
@@ -634,11 +624,36 @@ pub mod cmds {
         }
     }
 
+    /// TODO List all known shielded keys
     #[derive(Clone, Debug)]
-    pub struct KeyFind(pub args::KeyFind);
+    pub struct WalletNewKeyList(pub args::KeyList);
 
-    impl SubCmd for KeyFind {
-        const CMD: &'static str = "find";
+    impl SubCmd for WalletNewKeyList {
+        const CMD: &'static str = "list-keys";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| (Self(args::KeyList::parse(matches))))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "TODO List all known keys. Lists all shielded keys in the \
+                     wallet.",
+                )
+                .add_args::<args::KeyList>()
+        }
+    }
+
+    /// TODO Find a keypair in the wallet store
+    /// TODO Find the given shielded address or key
+    #[derive(Clone, Debug)]
+    pub struct WalletNewKeyFind(pub args::KeyFind);
+
+    impl SubCmd for WalletNewKeyFind {
+        const CMD: &'static str = "find-key";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches
@@ -648,46 +663,58 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Searches for a keypair from a public key or an alias.")
-                .add_args::<args::KeyFind>()
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct WalletNewKeyList(pub args::KeyList);
-
-    impl SubCmd for WalletNewKeyList {
-        const CMD: &'static str = "list";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| (Self(args::KeyList::parse(matches))))
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("List all known keys.")
+                .about(
+                    "TODO Searches for a keypair from a public key or an \
+                     alias. Find the given shielded address or key in the \
+                     wallet.",
+                )
                 .add_args::<args::KeyList>()
         }
     }
 
+    /// List known addresses
+    /// TODO List all known payment addresses
     #[derive(Clone, Debug)]
-    pub struct KeyList(pub args::KeyList);
+    pub struct WalletNewAddressList(pub args::AddressList);
 
-    impl SubCmd for KeyList {
-        const CMD: &'static str = "list";
+    impl SubCmd for WalletNewAddressList {
+        const CMD: &'static str = "list-addr";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .map(|matches| (Self(args::KeyList::parse(matches))))
+                .map(|matches| Self(args::AddressList::parse(matches)))
         }
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("List all known keys.")
-                .add_args::<args::KeyList>()
+                .about(
+                    "TODO List all known addresses. Lists all payment \
+                     addresses in the wallet",
+                )
+                .add_args::<args::AddressList>()
+        }
+    }
+
+    /// Find an address by its alias
+    #[derive(Clone, Debug)]
+    pub struct WalletNewAddressFind(pub args::AddressFind);
+
+    impl SubCmd for WalletNewAddressFind {
+        const CMD: &'static str = "find-addr";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::AddressFind::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Find an address by its alias or an alias by its address.",
+                )
+                .add_args::<args::AddressFind>()
         }
     }
 
@@ -715,8 +742,6 @@ pub mod cmds {
     pub enum WalletMasp {
         GenPayAddr(MaspGenPayAddr),
         AddAddrKey(MaspAddAddrKey),
-        ListPayAddrs(MaspListPayAddrs),
-        FindAddrKey(MaspFindAddrKey),
     }
 
     impl SubCmd for WalletMasp {
@@ -726,9 +751,7 @@ pub mod cmds {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
                 let genpa = SubCmd::parse(matches).map(Self::GenPayAddr);
                 let addak = SubCmd::parse(matches).map(Self::AddAddrKey);
-                let listpa = SubCmd::parse(matches).map(Self::ListPayAddrs);
-                let findak = SubCmd::parse(matches).map(Self::FindAddrKey);
-                genpa.or(addak).or(listpa).or(findak)
+                genpa.or(addak)
             })
         }
 
@@ -743,68 +766,6 @@ pub mod cmds {
                 .arg_required_else_help(true)
                 .subcommand(MaspGenPayAddr::def())
                 .subcommand(MaspAddAddrKey::def())
-                .subcommand(MaspListPayAddrs::def())
-                .subcommand(MaspFindAddrKey::def())
-        }
-    }
-
-    /// Find the given shielded address or key
-    #[derive(Clone, Debug)]
-    pub struct MaspFindAddrKey(pub args::AddrKeyFind);
-
-    impl SubCmd for MaspFindAddrKey {
-        const CMD: &'static str = "find";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| Self(args::AddrKeyFind::parse(matches)))
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Find the given shielded address or key in the wallet")
-                .add_args::<args::AddrKeyFind>()
-        }
-    }
-
-    /// List all known shielded keys
-    #[derive(Clone, Debug)]
-    pub struct MaspListKeys(pub args::MaspKeysList);
-
-    impl SubCmd for MaspListKeys {
-        const CMD: &'static str = "list-keys";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| Self(args::MaspKeysList::parse(matches)))
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Lists all shielded keys in the wallet")
-                .add_args::<args::MaspKeysList>()
-        }
-    }
-
-    /// List all known payment addresses
-    #[derive(Clone, Debug)]
-    pub struct MaspListPayAddrs(pub args::MaspListPayAddrs);
-
-    impl SubCmd for MaspListPayAddrs {
-        const CMD: &'static str = "list-addrs";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| Self(args::MaspListPayAddrs::parse(matches)))
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Lists all payment addresses in the wallet")
-                .add_args::<args::MaspListPayAddrs>()
         }
     }
 
@@ -872,8 +833,6 @@ pub mod cmds {
 
     #[derive(Clone, Debug)]
     pub enum WalletAddress {
-        Find(AddressOrAliasFind),
-        List(AddressList),
         Add(AddressAdd),
     }
 
@@ -882,10 +841,8 @@ pub mod cmds {
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
-                let find = SubCmd::parse(matches).map(Self::Find);
-                let list = SubCmd::parse(matches).map(Self::List);
                 let add = SubCmd::parse(matches).map(Self::Add);
-                find.or(list).or(add)
+                add
             })
         }
 
@@ -897,31 +854,7 @@ pub mod cmds {
                 )
                 .subcommand_required(true)
                 .arg_required_else_help(true)
-                .subcommand(AddressOrAliasFind::def())
-                .subcommand(AddressList::def())
                 .subcommand(AddressAdd::def())
-        }
-    }
-
-    /// Find an address by its alias
-    #[derive(Clone, Debug)]
-    pub struct AddressOrAliasFind(pub args::AddressOrAliasFind);
-
-    impl SubCmd for AddressOrAliasFind {
-        const CMD: &'static str = "find";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches.subcommand_matches(Self::CMD).map(|matches| {
-                AddressOrAliasFind(args::AddressOrAliasFind::parse(matches))
-            })
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about(
-                    "Find an address by its alias or an alias by its address.",
-                )
-                .add_args::<args::AddressOrAliasFind>()
         }
     }
 
@@ -6114,119 +6047,6 @@ pub mod args {
         }
     }
 
-    impl Args for KeyFind {
-        fn parse(matches: &ArgMatches) -> Self {
-            let public_key = RAW_PUBLIC_KEY_OPT.parse(matches);
-            let alias = ALIAS_OPT.parse(matches);
-            let value = VALUE.parse(matches);
-            let is_pre_genesis = PRE_GENESIS.parse(matches);
-            let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
-
-            Self {
-                public_key,
-                alias,
-                value,
-                is_pre_genesis,
-                unsafe_show_secret,
-            }
-        }
-
-        fn def(app: App) -> App {
-            app.arg(
-                RAW_PUBLIC_KEY_OPT
-                    .def()
-                    .help("A public key associated with the keypair.")
-                    .conflicts_with_all([ALIAS_OPT.name, VALUE.name]),
-            )
-            .arg(
-                ALIAS_OPT
-                    .def()
-                    .help("An alias associated with the keypair.")
-                    .conflicts_with(VALUE.name),
-            )
-            .arg(
-                VALUE
-                    .def()
-                    .help("A public key or alias associated with the keypair."),
-            )
-            .arg(PRE_GENESIS.def().help(
-                "Use pre-genesis wallet, instead of for the current chain, if \
-                 any.",
-            ))
-            .arg(
-                UNSAFE_SHOW_SECRET
-                    .def()
-                    .help("UNSAFE: Print the secret key."),
-            )
-        }
-    }
-
-    impl Args for AddrKeyFind {
-        fn parse(matches: &ArgMatches) -> Self {
-            let alias = ALIAS.parse(matches);
-            let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
-            let is_pre_genesis = PRE_GENESIS.parse(matches);
-            Self {
-                alias,
-                unsafe_show_secret,
-                is_pre_genesis,
-            }
-        }
-
-        fn def(app: App) -> App {
-            app.arg(ALIAS.def().help("The alias that is to be found."))
-                .arg(
-                    UNSAFE_SHOW_SECRET
-                        .def()
-                        .help("UNSAFE: Print the spending key values."),
-                )
-                .arg(PRE_GENESIS.def().help(
-                    "Use pre-genesis wallet, instead of for the current \
-                     chain, if any.",
-                ))
-        }
-    }
-
-    impl Args for MaspKeysList {
-        fn parse(matches: &ArgMatches) -> Self {
-            let decrypt = DECRYPT.parse(matches);
-            let is_pre_genesis = PRE_GENESIS.parse(matches);
-            let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
-            Self {
-                decrypt,
-                is_pre_genesis,
-                unsafe_show_secret,
-            }
-        }
-
-        fn def(app: App) -> App {
-            app.arg(DECRYPT.def().help("Decrypt keys that are encrypted."))
-                .arg(PRE_GENESIS.def().help(
-                    "Use pre-genesis wallet, instead of for the current \
-                     chain, if any.",
-                ))
-                .arg(
-                    UNSAFE_SHOW_SECRET
-                        .def()
-                        .help("UNSAFE: Print the spending key values."),
-                )
-        }
-    }
-
-    impl Args for MaspListPayAddrs {
-        fn parse(matches: &ArgMatches) -> Self {
-            let is_pre_genesis = PRE_GENESIS.parse(matches);
-            Self { is_pre_genesis }
-        }
-
-        fn def(app: App) -> App {
-            app.arg(PRE_GENESIS.def().help(
-                "Use pre-genesis wallet, instead of for the current chain, if \
-                 any.",
-            ))
-        }
-    }
-
     impl Args for KeyList {
         fn parse(matches: &ArgMatches) -> Self {
             let shielded = SHIELDED.parse(matches);
@@ -6255,33 +6075,91 @@ pub mod args {
             .arg(
                 UNSAFE_SHOW_SECRET
                     .def()
-                    .help("UNSAFE: Print the secret keys."),
+                    .help("UNSAFE: Print the secret / spending keys."),
             )
         }
     }
 
-    impl Args for KeyExport {
+    impl Args for KeyFind {
         fn parse(matches: &ArgMatches) -> Self {
-            let alias = ALIAS.parse(matches);
+            let shielded = SHIELDED.parse(matches);
+            let alias = ALIAS_OPT.parse(matches);
+            let public_key = RAW_PUBLIC_KEY_OPT.parse(matches);
+            let value = VALUE.parse(matches);
             let is_pre_genesis = PRE_GENESIS.parse(matches);
+            let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
+
             Self {
+                shielded,
                 alias,
+                public_key,
+                value,
                 is_pre_genesis,
+                unsafe_show_secret,
             }
         }
 
         fn def(app: App) -> App {
             app.arg(
-                ALIAS.def().help("The alias of the key you wish to export."),
+                SHIELDED
+                    .def()
+                    .help("Find spending key for the shielded pool.")
+                    .conflicts_with_all([VALUE.name, RAW_PUBLIC_KEY_OPT.name]),
+            )
+            .arg(
+                ALIAS_OPT
+                    .def()
+                    .help(
+                        "TODO An alias associated with the keypair. The alias \
+                         that is to be found.",
+                    )
+                    .conflicts_with(VALUE.name),
+            )
+            .arg(
+                RAW_PUBLIC_KEY_OPT
+                    .def()
+                    .help("A public key associated with the keypair."),
+            )
+            .arg(
+                VALUE
+                    .def()
+                    .help("A public key or alias associated with the keypair."),
+            )
+            .group(
+                ArgGroup::new("key_find_flags")
+                    .args([ALIAS_OPT.name, RAW_PUBLIC_KEY_OPT.name, VALUE.name])
+                    .required(true),
             )
             .arg(PRE_GENESIS.def().help(
+                "Use pre-genesis wallet, instead of for the current chain, if \
+                 any.",
+            ))
+            .arg(UNSAFE_SHOW_SECRET.def().help(
+                "TODO UNSAFE: Print the secret key.Print the spending key \
+                 values.",
+            ))
+        }
+    }
+
+    impl Args for AddressList {
+        fn parse(matches: &ArgMatches) -> Self {
+            let shielded = SHIELDED.parse(matches);
+            let is_pre_genesis = PRE_GENESIS.parse(matches);
+            Self {
+                shielded,
+                is_pre_genesis,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(PRE_GENESIS.def().help(
                 "Use pre-genesis wallet, instead of for the current chain, if \
                  any.",
             ))
         }
     }
 
-    impl Args for AddressOrAliasFind {
+    impl Args for AddressFind {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS_OPT.parse(matches);
             let address = RAW_ADDRESS_OPT.parse(matches);
@@ -6316,20 +6194,6 @@ pub mod args {
         }
     }
 
-    impl Args for AddressList {
-        fn parse(matches: &ArgMatches) -> Self {
-            let is_pre_genesis = PRE_GENESIS.parse(matches);
-            Self { is_pre_genesis }
-        }
-
-        fn def(app: App) -> App {
-            app.arg(PRE_GENESIS.def().help(
-                "Use pre-genesis wallet, instead of for the current chain, if \
-                 any.",
-            ))
-        }
-    }
-
     impl Args for AddressAdd {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
@@ -6357,6 +6221,27 @@ pub mod args {
                 RAW_ADDRESS
                     .def()
                     .help("The bech32m encoded address string."),
+            )
+            .arg(PRE_GENESIS.def().help(
+                "Use pre-genesis wallet, instead of for the current chain, if \
+                 any.",
+            ))
+        }
+    }
+
+    impl Args for KeyExport {
+        fn parse(matches: &ArgMatches) -> Self {
+            let alias = ALIAS.parse(matches);
+            let is_pre_genesis = PRE_GENESIS.parse(matches);
+            Self {
+                alias,
+                is_pre_genesis,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                ALIAS.def().help("The alias of the key you wish to export."),
             )
             .arg(PRE_GENESIS.def().help(
                 "Use pre-genesis wallet, instead of for the current chain, if \

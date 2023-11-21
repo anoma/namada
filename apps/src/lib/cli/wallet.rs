@@ -41,20 +41,11 @@ impl CliApi {
     ) -> Result<()> {
         match cmd {
             cmds::NamadaWallet::Key(sub) => match sub {
-                cmds::WalletKey::Find(cmds::KeyFind(args)) => {
-                    key_find(ctx, io, args)
-                }
                 cmds::WalletKey::Export(cmds::Export(args)) => {
                     key_export(ctx, io, args)
                 }
             },
             cmds::NamadaWallet::Address(sub) => match sub {
-                cmds::WalletAddress::Find(cmds::AddressOrAliasFind(args)) => {
-                    address_or_alias_find(ctx, io, args)
-                }
-                cmds::WalletAddress::List(cmds::AddressList(args)) => {
-                    address_list(ctx, io, args)
-                }
                 cmds::WalletAddress::Add(cmds::AddressAdd(args)) => {
                     address_add(ctx, io, args)
                 }
@@ -71,12 +62,6 @@ impl CliApi {
                 cmds::WalletMasp::AddAddrKey(cmds::MaspAddAddrKey(args)) => {
                     address_key_add(ctx, io, args)
                 }
-                cmds::WalletMasp::ListPayAddrs(cmds::MaspListPayAddrs(
-                    args,
-                )) => payment_addresses_list(ctx, io, args),
-                cmds::WalletMasp::FindAddrKey(cmds::MaspFindAddrKey(args)) => {
-                    address_key_find(ctx, io, args)
-                }
             },
             cmds::NamadaWallet::NewGen(cmds::WalletNewGen(args)) => {
                 key_gen(ctx, io, args)
@@ -87,48 +72,17 @@ impl CliApi {
             cmds::NamadaWallet::NewKeyList(cmds::WalletNewKeyList(args)) => {
                 key_list(ctx, io, args)
             }
+            cmds::NamadaWallet::NewKeyFind(cmds::WalletNewKeyFind(args)) => {
+                key_find(ctx, io, args)
+            }
+            cmds::NamadaWallet::NewAddrList(cmds::WalletNewAddressList(
+                args,
+            )) => address_list(ctx, io, args),
+            cmds::NamadaWallet::NewAddrFind(cmds::WalletNewAddressFind(
+                args,
+            )) => address_or_alias_find(ctx, io, args),
         }
         Ok(())
-    }
-}
-
-/// Find shielded address or key
-fn address_key_find(
-    ctx: Context,
-    io: &impl Io,
-    args::AddrKeyFind {
-        alias,
-        unsafe_show_secret,
-        is_pre_genesis,
-    }: args::AddrKeyFind,
-) {
-    let mut wallet = load_wallet(ctx, is_pre_genesis);
-    let alias = alias.to_lowercase();
-    if let Ok(viewing_key) = wallet.find_viewing_key(&alias) {
-        // Check if alias is a viewing key
-        display_line!(io, "Viewing key: {}", viewing_key);
-        if unsafe_show_secret {
-            // Check if alias is also a spending key
-            match wallet.find_spending_key(&alias, None) {
-                Ok(spending_key) => {
-                    display_line!(io, "Spending key: {}", spending_key)
-                }
-                Err(FindKeyError::KeyNotFound) => {}
-                Err(err) => edisplay_line!(io, "{}", err),
-            }
-        }
-    } else if let Some(payment_addr) = wallet.find_payment_addr(&alias) {
-        // Failing that, check if alias is a payment address
-        display_line!(io, "Payment address: {}", payment_addr);
-    } else {
-        // Otherwise alias cannot be referring to any shielded value
-        display_line!(
-            io,
-            "No shielded address or key with alias {} found. Use the commands \
-             `masp list-addrs` and `masp list-keys` to see all the known \
-             addresses and keys.",
-            alias.to_lowercase()
-        );
     }
 }
 
@@ -149,8 +103,8 @@ fn spending_keys_list(
     if known_view_keys.is_empty() {
         display_line!(
             io,
-            "No known keys. Try `masp add --alias my-addr --value ...` to add \
-             a new key to the wallet.",
+            "TODO No known keys. Try `masp add --alias my-addr --value ...` \
+             to add a new key to the wallet.",
         );
     } else {
         let stdout = io::stdout();
@@ -214,7 +168,7 @@ fn spending_keys_list(
 fn payment_addresses_list(
     ctx: Context,
     io: &impl Io,
-    args::MaspListPayAddrs { is_pre_genesis }: args::MaspListPayAddrs,
+    args::AddressList { is_pre_genesis, .. }: args::AddressList,
 ) {
     let wallet = load_wallet(ctx, is_pre_genesis);
     let known_addresses = wallet.get_payment_addrs();
@@ -380,7 +334,7 @@ pub fn decode_derivation_path(
 
 /// Derives a keypair and an implicit address from the mnemonic code in the
 /// wallet.
-async fn key_and_address_derive(
+async fn transparent_key_and_address_derive(
     wallet: &mut Wallet<impl WalletStorage + WalletIo>,
     io: &impl Io,
     args::KeyDerive {
@@ -474,18 +428,9 @@ async fn key_and_address_derive(
     );
 }
 
-/// TODO
-fn key_gen(ctx: Context, io: &impl Io, args_key_gen: args::KeyGen) {
-    if !args_key_gen.shielded {
-        key_and_address_gen(ctx, io, args_key_gen)
-    } else {
-        spending_key_gen(ctx, io, args_key_gen)
-    }
-}
-
 /// Generate a new keypair and derive implicit address from it and store them in
 /// the wallet.
-fn key_and_address_gen(
+fn transparent_key_and_address_gen(
     ctx: Context,
     io: &impl Io,
     args::KeyGen {
@@ -540,13 +485,22 @@ fn key_and_address_gen(
 }
 
 /// TODO
+fn key_gen(ctx: Context, io: &impl Io, args_key_gen: args::KeyGen) {
+    if !args_key_gen.shielded {
+        transparent_key_and_address_gen(ctx, io, args_key_gen)
+    } else {
+        spending_key_gen(ctx, io, args_key_gen)
+    }
+}
+
+/// TODO
 async fn key_derive(
     mut ctx: Context,
     io: &impl Io,
     args_key_derive: args::KeyDerive,
 ) {
     if !args_key_derive.shielded {
-        key_and_address_derive(
+        transparent_key_and_address_derive(
             &mut ctx.borrow_mut_chain_or_exit().wallet,
             io,
             args_key_derive,
@@ -566,8 +520,26 @@ fn key_list(ctx: Context, io: &impl Io, args_key_list: args::KeyList) {
     }
 }
 
+/// TODO
+fn key_find(ctx: Context, io: &impl Io, args_key_find: args::KeyFind) {
+    if !args_key_find.shielded {
+        transparent_key_address_find(ctx, io, args_key_find)
+    } else {
+        shielded_key_address_find(ctx, io, args_key_find)
+    }
+}
+
+/// TODO
+fn address_list(ctx: Context, io: &impl Io, args_key_list: args::AddressList) {
+    if !args_key_list.shielded {
+        transparent_addresses_list(ctx, io, args_key_list)
+    } else {
+        payment_addresses_list(ctx, io, args_key_list)
+    }
+}
+
 /// Find a keypair in the wallet store.
-fn key_find(
+fn transparent_key_address_find(
     ctx: Context,
     io: &impl Io,
     args::KeyFind {
@@ -576,6 +548,7 @@ fn key_find(
         value,
         is_pre_genesis,
         unsafe_show_secret,
+        ..
     }: args::KeyFind,
 ) {
     let mut wallet = load_wallet(ctx, is_pre_genesis);
@@ -610,6 +583,54 @@ fn key_find(
         Err(err) => {
             edisplay_line!(io, "{}", err);
         }
+    }
+}
+
+/// Find shielded address or key
+/// TODO this works for both keys and addresses
+/// TODO split to enable finding alias by payment key
+fn shielded_key_address_find(
+    ctx: Context,
+    io: &impl Io,
+    args::KeyFind {
+        alias,
+        unsafe_show_secret,
+        is_pre_genesis,
+        ..
+    }: args::KeyFind,
+) {
+    let mut wallet = load_wallet(ctx, is_pre_genesis);
+    let alias = alias.unwrap_or_else(|| {
+        display_line!(io, "Missing alias.");
+        display_line!(io, "No changes are persisted. Exiting.");
+        cli::safe_exit(1)
+    });
+    let alias = alias.to_lowercase();
+    if let Ok(viewing_key) = wallet.find_viewing_key(&alias) {
+        // Check if alias is a viewing key
+        display_line!(io, "Viewing key: {}", viewing_key);
+        if unsafe_show_secret {
+            // Check if alias is also a spending key
+            match wallet.find_spending_key(&alias, None) {
+                Ok(spending_key) => {
+                    display_line!(io, "Spending key: {}", spending_key)
+                }
+                Err(FindKeyError::KeyNotFound) => {}
+                Err(err) => edisplay_line!(io, "{}", err),
+            }
+        }
+    } else if let Some(payment_addr) = wallet.find_payment_addr(&alias) {
+        // Failing that, check if alias is a payment address
+        display_line!(io, "Payment address: {}", payment_addr);
+    } else {
+        // Otherwise alias cannot be referring to any shielded value
+        display_line!(
+            io,
+            "TODO No shielded address or key with alias {} found. Use the \
+             commands `masp list-addrs` and `masp list-keys` to see all the \
+             known addresses and keys.",
+            alias.to_lowercase()
+        );
     }
 }
 
@@ -708,11 +729,11 @@ fn key_export(
         })
 }
 
-/// List all known addresses.
-fn address_list(
+/// List all known transparent addresses.
+fn transparent_addresses_list(
     ctx: Context,
     io: &impl Io,
-    args::AddressList { is_pre_genesis }: args::AddressList,
+    args::AddressList { is_pre_genesis, .. }: args::AddressList,
 ) {
     let wallet = load_wallet(ctx, is_pre_genesis);
     let known_addresses = wallet.get_addresses();
@@ -740,11 +761,11 @@ fn address_list(
 fn address_or_alias_find(
     ctx: Context,
     io: &impl Io,
-    args::AddressOrAliasFind {
+    args::AddressFind {
         alias,
         address,
         is_pre_genesis,
-    }: args::AddressOrAliasFind,
+    }: args::AddressFind,
 ) {
     let wallet = load_wallet(ctx, is_pre_genesis);
     if address.is_some() && alias.is_some() {
