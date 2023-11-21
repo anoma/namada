@@ -406,6 +406,29 @@ impl From<[u8; SHA_HASH_LEN]> for EstablishedAddress {
     }
 }
 
+impl string_encoding::Format for EstablishedAddress {
+    type EncodedBytes<'a> = [u8; raw::ADDR_ENCODING_LEN];
+
+    const HRP: &'static str = string_encoding::ADDRESS_HRP;
+
+    #[inline]
+    fn to_bytes(&self) -> [u8; raw::ADDR_ENCODING_LEN] {
+        Address::Established(self.hash.into()).to_bytes()
+    }
+
+    #[inline]
+    fn decode_bytes(bytes: &[u8]) -> Result<Self> {
+        match Address::decode_bytes(bytes)? {
+            Address::Established(established) => Ok(established),
+            address => Err(DecodeError::InvalidInnerEncoding(format!(
+                "Expected established address, got {address:?}"
+            ))),
+        }
+    }
+}
+
+impl_display_and_from_str_via_format!(EstablishedAddress);
+
 /// A generator of established addresses
 #[derive(
     Debug,
