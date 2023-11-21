@@ -9,6 +9,7 @@ use std::fmt::Display;
 use std::hash::Hash;
 use std::ops::Sub;
 
+use serde::{Serialize, Deserialize};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::ledger::storage_api::collections::lazy_map::NestedMap;
 use namada_core::ledger::storage_api::collections::{
@@ -345,6 +346,8 @@ pub struct GenesisValidator {
     BorshSerialize,
     BorshSchema,
     BorshDeserialize,
+    Deserialize,
+    Serialize,
     Eq,
     Ord,
     PartialOrd,
