@@ -2,7 +2,7 @@
 
 Thank you for the interest in contributing to Namada!
 
-All contributors are expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+All contributors are expected to adhere to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 Any contributions such as issue reports, pull requests  for code or documentation, or feature requests are welcome. Please note that the code should be kept up-to-date with the documentation.
 
