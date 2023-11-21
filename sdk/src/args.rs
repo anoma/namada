@@ -2043,17 +2043,21 @@ pub struct KeyExport {
     pub is_pre_genesis: bool,
 }
 
-/// Wallet address add arguments
+/// Wallet key / address add arguments
 #[derive(Clone, Debug)]
-pub struct AddressAdd {
+pub struct KeyAddressAdd {
     /// Address alias
     pub alias: String,
     /// Whether to force overwrite the alias
     pub alias_force: bool,
-    /// Address to add
-    pub address: Address,
-    /// Add an address pre-genesis instead of current chain
+    /// Transparent address to add
+    pub address: Option<Address>,
+    /// Any shielded value
+    pub value: Option<MaspValue>,
+    /// Add key / address pre-genesis instead of current chain
     pub is_pre_genesis: bool,
+    /// Don't encrypt the keys
+    pub unsafe_dont_encrypt: bool,
 }
 
 /// Bridge pool batch recommendation.

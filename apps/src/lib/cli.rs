@@ -465,30 +465,29 @@ pub mod cmds {
     #[allow(clippy::large_enum_variant)]
     #[derive(Clone, Debug)]
     pub enum NamadaWallet {
-        /// Address management commands
-        Address(WalletAddress),
         /// MASP key, address management commands
         Masp(WalletMasp),
-        /// TODO
+        /// Key generation
         NewGen(WalletNewGen),
-        /// TODO
+        /// Key derivation
         NewDerive(WalletNewDerive),
-        /// TODO
+        /// Key list
         NewKeyList(WalletNewKeyList),
-        /// TODO
+        /// Key search
         NewKeyFind(WalletNewKeyFind),
-        /// TODO
+        /// Address list
         NewAddrList(WalletNewAddressList),
-        /// TODO
+        /// Address search
         NewAddrFind(WalletNewAddressFind),
-        /// TODO
+        /// Key export
         NewKeyExport(WalletNewExportKey),
+        /// Key import
+        NewKeyAddrAdd(WalletNewKeyAddressAdd),
     }
 
     impl Cmd for NamadaWallet {
         fn add_sub(app: App) -> App {
-            app.subcommand(WalletAddress::def())
-                .subcommand(WalletMasp::def())
+            app.subcommand(WalletMasp::def())
                 .subcommand(WalletNewGen::def())
                 .subcommand(WalletNewDerive::def())
                 .subcommand(WalletNewKeyList::def())
@@ -496,10 +495,10 @@ pub mod cmds {
                 .subcommand(WalletNewAddressList::def())
                 .subcommand(WalletNewAddressFind::def())
                 .subcommand(WalletNewExportKey::def())
+                .subcommand(WalletNewKeyAddressAdd::def())
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            let address = SubCmd::parse(matches).map(Self::Address);
             let masp = SubCmd::parse(matches).map(Self::Masp);
             let gen_new = SubCmd::parse(matches).map(Self::NewGen);
             let derive_new = SubCmd::parse(matches).map(Self::NewDerive);
@@ -508,15 +507,15 @@ pub mod cmds {
             let addr_list_new = SubCmd::parse(matches).map(Self::NewAddrList);
             let addr_find_new = SubCmd::parse(matches).map(Self::NewAddrFind);
             let export_new = SubCmd::parse(matches).map(Self::NewKeyExport);
-            address
-                .or(masp)
-                .or(gen_new)
+            let key_addr_add = SubCmd::parse(matches).map(Self::NewKeyAddrAdd);
+            masp.or(gen_new)
                 .or(derive_new)
                 .or(key_list_new)
                 .or(key_find_new)
                 .or(addr_list_new)
                 .or(addr_find_new)
                 .or(export_new)
+                .or(key_addr_add)
         }
     }
 
@@ -711,11 +710,33 @@ pub mod cmds {
         }
     }
 
+    /// Add public / payment address to the wallet
+    #[derive(Clone, Debug)]
+    pub struct WalletNewKeyAddressAdd(pub args::KeyAddressAdd);
+
+    impl SubCmd for WalletNewKeyAddressAdd {
+        const CMD: &'static str = "add";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| (Self(args::KeyAddressAdd::parse(matches))))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Adds the given transparent / payment address or key to \
+                     the wallet.",
+                )
+                .add_args::<args::KeyAddressAdd>()
+        }
+    }
+
     #[allow(clippy::large_enum_variant)]
     #[derive(Clone, Debug)]
     pub enum WalletMasp {
         GenPayAddr(MaspGenPayAddr),
-        AddAddrKey(MaspAddAddrKey),
     }
 
     impl SubCmd for WalletMasp {
@@ -724,8 +745,7 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
                 let genpa = SubCmd::parse(matches).map(Self::GenPayAddr);
-                let addak = SubCmd::parse(matches).map(Self::AddAddrKey);
-                genpa.or(addak)
+                genpa
             })
         }
 
@@ -739,27 +759,6 @@ pub mod cmds {
                 .subcommand_required(true)
                 .arg_required_else_help(true)
                 .subcommand(MaspGenPayAddr::def())
-                .subcommand(MaspAddAddrKey::def())
-        }
-    }
-
-    /// Add a key or an address
-    #[derive(Clone, Debug)]
-    pub struct MaspAddAddrKey(pub args::MaspAddrKeyAdd);
-
-    impl SubCmd for MaspAddAddrKey {
-        const CMD: &'static str = "add";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches.subcommand_matches(Self::CMD).map(|matches| {
-                MaspAddAddrKey(args::MaspAddrKeyAdd::parse(matches))
-            })
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Adds the given payment address or key to the wallet")
-                .add_args::<args::MaspAddrKeyAdd>()
         }
     }
 
@@ -805,33 +804,6 @@ pub mod cmds {
         }
     }
 
-    #[derive(Clone, Debug)]
-    pub enum WalletAddress {
-        Add(AddressAdd),
-    }
-
-    impl SubCmd for WalletAddress {
-        const CMD: &'static str = "address";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches.subcommand_matches(Self::CMD).and_then(|matches| {
-                let add = SubCmd::parse(matches).map(Self::Add);
-                add
-            })
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about(
-                    "Address management, including methods to generate and \
-                     look-up addresses.",
-                )
-                .subcommand_required(true)
-                .arg_required_else_help(true)
-                .subcommand(AddressAdd::def())
-        }
-    }
-
     /// List known addresses
     #[derive(Clone, Debug)]
     pub struct AddressList(pub args::AddressList);
@@ -849,26 +821,6 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("List all known addresses.")
                 .add_args::<args::AddressList>()
-        }
-    }
-
-    /// Generate a new keypair and an implicit address derived from it
-    #[derive(Clone, Debug)]
-    pub struct AddressAdd(pub args::AddressAdd);
-
-    impl SubCmd for AddressAdd {
-        const CMD: &'static str = "add";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| AddressAdd(args::AddressAdd::parse(matches)))
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Store an alias for an address in the wallet.")
-                .add_args::<args::AddressAdd>()
         }
     }
 
@@ -2860,7 +2812,7 @@ pub mod args {
 
     pub const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("node");
     pub const LOCALHOST: ArgFlag = flag("localhost");
-    pub const MASP_VALUE: Arg<MaspValue> = arg("value");
+    pub const MASP_VALUE_OPT: ArgOpt<MaspValue> = arg_opt("shielded-value");
     pub const MAX_COMMISSION_RATE_CHANGE: Arg<Dec> =
         arg("max-commission-rate-change");
     pub const MAX_ETH_GAS: ArgOpt<u64> = arg_opt("max_eth-gas");
@@ -5745,47 +5697,6 @@ pub mod args {
         }
     }
 
-    impl Args for MaspAddrKeyAdd {
-        fn parse(matches: &ArgMatches) -> Self {
-            let alias = ALIAS.parse(matches);
-            let alias_force = ALIAS_FORCE.parse(matches);
-            let value = MASP_VALUE.parse(matches);
-            let is_pre_genesis = PRE_GENESIS.parse(matches);
-            let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
-            Self {
-                alias,
-                alias_force,
-                value,
-                is_pre_genesis,
-                unsafe_dont_encrypt,
-            }
-        }
-
-        fn def(app: App) -> App {
-            app.arg(
-                ALIAS
-                    .def()
-                    .help("An alias to be associated with the new entry."),
-            )
-            .arg(ALIAS_FORCE.def().help(
-                "Override the alias without confirmation if it already exists.",
-            ))
-            .arg(
-                MASP_VALUE
-                    .def()
-                    .help("A spending key, viewing key, or payment address."),
-            )
-            .arg(PRE_GENESIS.def().help(
-                "Use pre-genesis wallet, instead of for the current chain, if \
-                 any.",
-            ))
-            .arg(UNSAFE_DONT_ENCRYPT.def().help(
-                "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
-                 used in a live network.",
-            ))
-        }
-    }
-
     impl Args for MaspSpendKeyGen {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
@@ -6100,7 +6011,7 @@ pub mod args {
                     .help("A public key or alias associated with the keypair."),
             )
             .group(
-                ArgGroup::new("key_find_flags")
+                ArgGroup::new("key_find_args")
                     .args([ALIAS_OPT.name, RAW_PUBLIC_KEY_OPT.name, VALUE.name])
                     .required(true),
             )
@@ -6168,17 +6079,21 @@ pub mod args {
         }
     }
 
-    impl Args for AddressAdd {
+    impl Args for KeyAddressAdd {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
-            let address = RAW_ADDRESS.parse(matches);
+            let address = RAW_ADDRESS_OPT.parse(matches);
+            let value = MASP_VALUE_OPT.parse(matches);
             let is_pre_genesis = PRE_GENESIS.parse(matches);
+            let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
                 alias,
                 alias_force,
                 address,
+                value,
                 is_pre_genesis,
+                unsafe_dont_encrypt,
             }
         }
 
@@ -6186,19 +6101,32 @@ pub mod args {
             app.arg(
                 ALIAS
                     .def()
-                    .help("An alias to be associated with the address."),
+                    .help("An alias to be associated with the new entry."),
             )
             .arg(ALIAS_FORCE.def().help(
                 "Override the alias without confirmation if it already exists.",
             ))
             .arg(
-                RAW_ADDRESS
+                RAW_ADDRESS_OPT
                     .def()
-                    .help("The bech32m encoded address string."),
+                    .help("The bech32m encoded transparent address string."),
+            )
+            .arg(MASP_VALUE_OPT.def().help(
+                "A spending key, viewing key, or payment address of the \
+                 shielded pool.",
+            ))
+            .group(
+                ArgGroup::new("key_address_add_args")
+                    .args([RAW_ADDRESS_OPT.name, MASP_VALUE_OPT.name])
+                    .required(true),
             )
             .arg(PRE_GENESIS.def().help(
                 "Use pre-genesis wallet, instead of for the current chain, if \
                  any.",
+            ))
+            .arg(UNSAFE_DONT_ENCRYPT.def().help(
+                "UNSAFE: Do not encrypt the added keys. Do not use this for \
+                 keys used in a live network.",
             ))
         }
     }
