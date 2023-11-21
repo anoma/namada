@@ -15,7 +15,7 @@ Configuration for threads usage can be changed via environment variables:
 
 - `NAMADA_TOKIO_THREADS`: Defaults to 1/2 logical cores
 - `NAMADA_RAYON_THREADS`: Defaults to 1/2 logical cores.
-- `NAMADA_ROCKSDB_COMPACTION_THREADS`: Defauls to 1/4 logical core. RocksDB also uses 1 more background thread for flushing.
+- `NAMADA_ROCKSDB_COMPACTION_THREADS`: Defaults to 1/4 logical core. RocksDB also uses 1 more background thread for flushing.
 
 ## Tendermint ABCI
 
