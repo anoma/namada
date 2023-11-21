@@ -2173,15 +2173,19 @@ pub struct KeyExport {
     pub alias: String,
 }
 
-/// Wallet address add arguments
+/// Wallet key / address add arguments
 #[derive(Clone, Debug)]
-pub struct AddressAdd {
+pub struct KeyAddressAdd {
     /// Address alias
     pub alias: String,
     /// Whether to force overwrite the alias
     pub alias_force: bool,
-    /// Address to add
-    pub address: Address,
+    /// Transparent address to add
+    pub address: Option<Address>,
+    /// Any shielded value
+    pub value: Option<MaspValue>,
+    /// Don't encrypt the keys
+    pub unsafe_dont_encrypt: bool,
 }
 
 /// Bridge pool batch recommendation.

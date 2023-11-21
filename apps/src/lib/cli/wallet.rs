@@ -39,23 +39,10 @@ impl CliApi {
         io: &impl Io,
     ) -> Result<()> {
         match cmd {
-            cmds::NamadaWallet::Key(sub) => match sub {
-                cmds::WalletKey::Export(cmds::Export(args)) => {
-                    key_export(ctx, io, args)
-                }
-            },
-            cmds::NamadaWallet::Address(sub) => match sub {
-                cmds::WalletAddress::Add(cmds::AddressAdd(args)) => {
-                    address_add(ctx, io, args)
-                }
-            },
             cmds::NamadaWallet::Masp(sub) => match sub {
                 cmds::WalletMasp::GenPayAddr(cmds::MaspGenPayAddr(args)) => {
                     let args = args.to_sdk(&mut ctx);
                     payment_address_gen(ctx, io, args)
-                }
-                cmds::WalletMasp::AddAddrKey(cmds::MaspAddAddrKey(args)) => {
-                    address_key_add(ctx, io, args)
                 }
             },
             cmds::NamadaWallet::NewGen(cmds::WalletNewGen(args)) => {
@@ -76,6 +63,12 @@ impl CliApi {
             cmds::NamadaWallet::NewAddrFind(cmds::WalletNewAddressFind(
                 args,
             )) => address_or_alias_find(ctx, io, args),
+            cmds::NamadaWallet::NewKeyExport(cmds::WalletNewExportKey(
+                args,
+            )) => key_export(ctx, io, args),
+            cmds::NamadaWallet::NewKeyAddrAdd(
+                cmds::WalletNewKeyAddressAdd(args),
+            ) => key_address_add(ctx, io, args),
         }
         Ok(())
     }
@@ -251,16 +244,18 @@ fn payment_address_gen(
 }
 
 /// Add a viewing key, spending key, or payment address to wallet.
-fn address_key_add(
+fn shielded_key_address_add(
     ctx: Context,
     io: &impl Io,
-    args::MaspAddrKeyAdd {
+    args::KeyAddressAdd {
         alias,
         alias_force,
         value,
         unsafe_dont_encrypt,
-    }: args::MaspAddrKeyAdd,
+        ..
+    }: args::KeyAddressAdd,
 ) {
+    let value = value.unwrap(); // this should not fail
     let alias = alias.to_lowercase();
     let mut wallet = load_wallet(ctx);
     let (alias, typ) = match value {
@@ -528,6 +523,24 @@ fn address_list(ctx: Context, io: &impl Io, args_key_list: args::AddressList) {
     }
 }
 
+/// TODO
+fn key_address_add(
+    ctx: Context,
+    io: &impl Io,
+    args_key_addr_add: args::KeyAddressAdd,
+) {
+    if args_key_addr_add.address.is_some() {
+        transparent_address_add(ctx, io, args_key_addr_add)
+    } else if args_key_addr_add.value.is_some() {
+        shielded_key_address_add(ctx, io, args_key_addr_add)
+    } else {
+        unreachable!(
+            "This should not happen as the group of address and value is \
+             required."
+        )
+    }
+}
+
 /// Find a keypair in the wallet store.
 fn transparent_key_address_find(
     ctx: Context,
@@ -690,7 +703,7 @@ fn transparent_keys_list(
     }
 }
 
-/// Export a keypair to a file.
+/// Export a transparent keypair to a file.
 fn key_export(
     ctx: Context,
     io: &impl Io,
@@ -780,15 +793,17 @@ fn address_or_alias_find(
 }
 
 /// Add an address to the wallet.
-fn address_add(
+fn transparent_address_add(
     ctx: Context,
     io: &impl Io,
-    args::AddressAdd {
+    args::KeyAddressAdd {
         alias,
         alias_force,
         address,
-    }: args::AddressAdd,
+        ..
+    }: args::KeyAddressAdd,
 ) {
+    let address = address.unwrap(); // this should not fail
     let mut wallet = load_wallet(ctx);
     if wallet
         .insert_address(alias.to_lowercase(), address, alias_force)
