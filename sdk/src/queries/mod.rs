@@ -257,7 +257,7 @@ pub trait Client {
     /// from `CheckTx`.
     async fn broadcast_tx_sync(
         &self,
-        tx: impl Into<Vec<u8>>,
+        tx: impl Into<Vec<u8>> + Send,
     ) -> Result<tendermint_rpc::endpoint::broadcast::tx_sync::Response, RpcError>
     {
         self.perform(
