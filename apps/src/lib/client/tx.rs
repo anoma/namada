@@ -965,8 +965,14 @@ where
         )
         .await?;
 
+        let mut wallet = namada.wallet_mut().await;
         let signed_offline_proposal = proposal.sign(
-            args.tx.signing_keys,
+            args.tx
+                .signing_keys
+                .iter()
+                .map(|pk| wallet.find_key_by_pk(pk, None))
+                .collect::<Result<_, _>>()
+                .expect("secret keys corresponding to public keys not found"),
             &signing_data.account_public_keys_map.unwrap(),
         );
         let output_file_path = signed_offline_proposal
@@ -1112,8 +1118,14 @@ where
             delegations,
         );
 
+        let mut wallet = namada.wallet_mut().await;
         let offline_signed_vote = offline_vote.sign(
-            args.tx.signing_keys,
+            args.tx
+                .signing_keys
+                .iter()
+                .map(|pk| wallet.find_key_by_pk(pk, None))
+                .collect::<Result<_, _>>()
+                .expect("secret keys corresponding to public keys not found"),
             &signing_data.account_public_keys_map.unwrap(),
         );
         let output_file_path = offline_signed_vote

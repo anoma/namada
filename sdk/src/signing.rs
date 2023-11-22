@@ -135,21 +135,6 @@ pub fn find_key_by_pk<U: WalletIo>(
         // We already know the secret key corresponding to the MASP sentinal key
         Ok(masp_tx_key())
     } else {
-        // Try to get the signer from the signing-keys argument
-        for signing_key in &args.signing_keys {
-            if signing_key.ref_to() == *public_key {
-                return Ok(signing_key.clone());
-            }
-        }
-        // Try to get the signer from the wrapper-fee-payer argument
-        match &args.wrapper_fee_payer {
-            Some(wrapper_fee_payer)
-                if &wrapper_fee_payer.ref_to() == public_key =>
-            {
-                return Ok(wrapper_fee_payer.clone());
-            }
-            _ => {}
-        }
         // Otherwise we need to search the wallet for the secret key
         wallet
             .find_key_by_pk(public_key, args.password.clone())
@@ -173,9 +158,7 @@ pub async fn tx_signers<'a>(
     default: Option<Address>,
 ) -> Result<Vec<common::PublicKey>, Error> {
     let signer = if !&args.signing_keys.is_empty() {
-        let public_keys =
-            args.signing_keys.iter().map(|key| key.ref_to()).collect();
-        return Ok(public_keys);
+        return Ok(args.signing_keys.clone());
     } else if let Some(verification_key) = &args.verification_key {
         return Ok(vec![verification_key.clone()]);
     } else {
@@ -368,7 +351,7 @@ pub async fn aux_signing_data<'a>(
             .to_public()
     } else {
         match &args.wrapper_fee_payer {
-            Some(keypair) => keypair.to_public(),
+            Some(keypair) => keypair.clone(),
             None => public_keys.get(0).ok_or(TxError::InvalidFeePayer)?.clone(),
         }
     };
@@ -413,7 +396,7 @@ pub async fn init_validator_signing_data<'a>(
             .to_public()
     } else {
         match &args.wrapper_fee_payer {
-            Some(keypair) => keypair.to_public(),
+            Some(keypair) => keypair.clone(),
             None => public_keys.get(0).ok_or(TxError::InvalidFeePayer)?.clone(),
         }
     };

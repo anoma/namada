@@ -1817,7 +1817,7 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// The amount being payed (for gas unit) to include the transaction
     pub fee_amount: Option<InputAmount>,
     /// The fee payer signing key
-    pub wrapper_fee_payer: Option<C::Keypair>,
+    pub wrapper_fee_payer: Option<C::PublicKey>,
     /// The token in which the fee is being paid
     pub fee_token: C::Address,
     /// The optional spending key for fee unshielding
@@ -1832,7 +1832,7 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// The chain id for which the transaction is intended
     pub chain_id: Option<ChainId>,
     /// Sign the tx with the key for the given alias from your wallet
-    pub signing_keys: Vec<C::Keypair>,
+    pub signing_keys: Vec<C::PublicKey>,
     /// List of signatures to attach to the transaction
     pub signatures: Vec<C::Data>,
     /// Path to the TX WASM code file to reveal PK
@@ -1918,7 +1918,7 @@ pub trait TxBuilder<C: NamadaTypes>: Sized {
         })
     }
     /// The fee payer signing key
-    fn wrapper_fee_payer(self, wrapper_fee_payer: C::Keypair) -> Self {
+    fn wrapper_fee_payer(self, wrapper_fee_payer: C::PublicKey) -> Self {
         self.tx(|x| Tx {
             wrapper_fee_payer: Some(wrapper_fee_payer),
             ..x
@@ -1962,7 +1962,7 @@ pub trait TxBuilder<C: NamadaTypes>: Sized {
         })
     }
     /// Sign the tx with the key for the given alias from your wallet
-    fn signing_keys(self, signing_keys: Vec<C::Keypair>) -> Self {
+    fn signing_keys(self, signing_keys: Vec<C::PublicKey>) -> Self {
         self.tx(|x| Tx { signing_keys, ..x })
     }
     /// List of signatures to attach to the transaction

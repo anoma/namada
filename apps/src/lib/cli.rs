@@ -2935,7 +2935,7 @@ pub mod args {
         arg_opt("gas-spending-key");
     pub const FEE_AMOUNT_OPT: ArgOpt<token::DenominatedAmount> =
         arg_opt("gas-price");
-    pub const FEE_PAYER_OPT: ArgOpt<WalletKeypair> = arg_opt("gas-payer");
+    pub const FEE_PAYER_OPT: ArgOpt<WalletPublicKey> = arg_opt("gas-payer");
     pub const FORCE: ArgFlag = flag("force");
     pub const GAS_LIMIT: ArgDefault<GasLimit> =
         arg_default("gas-limit", DefaultFn(|| GasLimit::from(25_000)));
@@ -3020,9 +3020,7 @@ pub mod args {
         arg("self-bond-amount");
     pub const SENDER: Arg<String> = arg("sender");
     pub const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
-    pub const SIGNING_KEY_OPT: ArgOpt<WalletKeypair> = SIGNING_KEY.opt();
-    pub const SIGNING_KEY: Arg<WalletKeypair> = arg("signing-key");
-    pub const SIGNING_KEYS: ArgMulti<WalletKeypair> = arg_multi("signing-keys");
+    pub const SIGNING_KEYS: ArgMulti<WalletPublicKey> = arg_multi("signing-keys");
     pub const SIGNATURES: ArgMulti<PathBuf> = arg_multi("signatures");
     pub const SOURCE: Arg<WalletAddress> = arg("source");
     pub const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
@@ -5665,7 +5663,7 @@ pub mod args {
                 signing_keys: self
                     .signing_keys
                     .iter()
-                    .map(|key| ctx.get_cached(key))
+                    .map(|key| ctx.get(key))
                     .collect(),
                 signatures: self
                     .signatures
@@ -5684,7 +5682,7 @@ pub mod args {
                     .or_else(|| Some(ctx.config.ledger.chain_id.clone())),
                 wrapper_fee_payer: self
                     .wrapper_fee_payer
-                    .map(|x| ctx.get_cached(&x)),
+                    .map(|x| ctx.get(&x)),
                 use_device: self.use_device,
             }
         }
