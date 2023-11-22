@@ -3059,8 +3059,6 @@ pub mod args {
     pub const VALIDATOR_ETH_HOT_KEY: ArgOpt<WalletPublicKey> =
         arg_opt("eth-hot-key");
     pub const VALUE: ArgOpt<String> = arg_opt("value");
-    pub const VERIFICATION_KEY: ArgOpt<WalletPublicKey> =
-        arg_opt("verification-key");
     pub const VIEWING_KEY: Arg<WalletViewingKey> = arg("key");
     pub const WALLET_ALIAS_FORCE: ArgFlag = flag("wallet-alias-force");
     pub const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
@@ -5665,9 +5663,6 @@ pub mod args {
                     .iter()
                     .map(|path| std::fs::read(path).unwrap())
                     .collect(),
-                verification_key: self
-                    .verification_key
-                    .map(|public_key| ctx.get(&public_key)),
                 disposable_signing_key: self.disposable_signing_key,
                 tx_reveal_code_path: self.tx_reveal_code_path,
                 password: self.password,
@@ -5759,10 +5754,7 @@ pub mod args {
                          public key, public key hash or alias from your \
                          wallet.",
                     )
-                    .conflicts_with_all([
-                        SIGNATURES.name,
-                        VERIFICATION_KEY.name,
-                    ]),
+                    .conflicts_with_all([SIGNATURES.name]),
             )
             .arg(
                 SIGNATURES
@@ -5772,25 +5764,12 @@ pub mod args {
                          to be attached to a transaction. Requires to provide \
                          a gas payer.",
                     )
-                    .conflicts_with_all([
-                        SIGNING_KEYS.name,
-                        VERIFICATION_KEY.name,
-                    ])
+                    .conflicts_with_all([SIGNING_KEYS.name])
                     .requires(FEE_PAYER_OPT.name),
             )
             .arg(OUTPUT_FOLDER_PATH.def().help(
                 "The output folder path where the artifact will be stored.",
             ))
-            .arg(
-                VERIFICATION_KEY
-                    .def()
-                    .help(
-                        "Sign the transaction with the key for the given \
-                         public key, public key hash or alias from your \
-                         wallet.",
-                    )
-                    .conflicts_with_all([SIGNING_KEYS.name, SIGNATURES.name]),
-            )
             .arg(CHAIN_ID_OPT.def().help("The chain ID."))
             .arg(
                 FEE_PAYER_OPT
@@ -5827,7 +5806,6 @@ pub mod args {
             let disposable_signing_key = DISPOSABLE_SIGNING_KEY.parse(matches);
             let signing_keys = SIGNING_KEYS.parse(matches);
             let signatures = SIGNATURES.parse(matches);
-            let verification_key = VERIFICATION_KEY.parse(matches);
             let tx_reveal_code_path = PathBuf::from(TX_REVEAL_PK);
             let chain_id = CHAIN_ID_OPT.parse(matches);
             let password = None;
@@ -5851,7 +5829,6 @@ pub mod args {
                 disposable_signing_key,
                 signing_keys,
                 signatures,
-                verification_key,
                 tx_reveal_code_path,
                 password,
                 chain_id,

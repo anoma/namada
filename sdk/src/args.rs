@@ -1837,8 +1837,6 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub signatures: Vec<C::Data>,
     /// Path to the TX WASM code file to reveal PK
     pub tx_reveal_code_path: PathBuf,
-    /// Sign the tx with the public key for the given alias from your wallet
-    pub verification_key: Option<C::PublicKey>,
     /// Password to decrypt key
     pub password: Option<Zeroizing<String>>,
     /// Use device to sign the transaction
@@ -1973,13 +1971,6 @@ pub trait TxBuilder<C: NamadaTypes>: Sized {
     fn tx_reveal_code_path(self, tx_reveal_code_path: PathBuf) -> Self {
         self.tx(|x| Tx {
             tx_reveal_code_path,
-            ..x
-        })
-    }
-    /// Sign the tx with the public key for the given alias from your wallet
-    fn verification_key(self, verification_key: C::PublicKey) -> Self {
-        self.tx(|x| Tx {
-            verification_key: Some(verification_key),
             ..x
         })
     }

@@ -159,8 +159,6 @@ pub async fn tx_signers<'a>(
 ) -> Result<Vec<common::PublicKey>, Error> {
     let signer = if !&args.signing_keys.is_empty() {
         return Ok(args.signing_keys.clone());
-    } else if let Some(verification_key) = &args.verification_key {
-        return Ok(vec![verification_key.clone()]);
     } else {
         // Otherwise use the signer determined by the caller
         default
