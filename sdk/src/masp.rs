@@ -388,7 +388,7 @@ impl<P1, R1, N1>
 #[cfg_attr(feature = "async-send", async_trait::async_trait)]
 #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
 pub trait ShieldedUtils:
-    Sized + BorshDeserialize + BorshSerialize + Default + Clone + std::marker::Send
+    Sized + BorshDeserialize + BorshSerialize + Default + Clone + std::marker::Send + std::marker::Sync
 {
     /// Get a MASP transaction prover
     fn local_tx_prover(&self) -> LocalTxProver;
