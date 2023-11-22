@@ -168,8 +168,8 @@ fn payment_addresses_list(
     if known_addresses.is_empty() {
         display_line!(
             io,
-            "No known payment addresses. Try `masp gen-addr --alias my-addr` \
-             to generate a new payment address.",
+            "TODO No known payment addresses. Try `masp gen-addr --alias \
+             my-addr` to generate a new payment address.",
         );
     } else {
         let stdout = io::stdout();
