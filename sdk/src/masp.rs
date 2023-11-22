@@ -388,7 +388,7 @@ impl<P1, R1, N1>
 #[cfg_attr(feature = "async-send", async_trait::async_trait)]
 #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
 pub trait ShieldedUtils:
-    Sized + BorshDeserialize + BorshSerialize + Default + Clone
+    Sized + BorshDeserialize + BorshSerialize + Default + Clone + std::marker::Send
 {
     /// Get a MASP transaction prover
     fn local_tx_prover(&self) -> LocalTxProver;
@@ -2186,7 +2186,7 @@ pub mod fs {
 
         /// Try to load the last saved shielded context from the given context
         /// directory. If this fails, then leave the current context unchanged.
-        async fn load<U: ShieldedUtils>(
+        async fn load<U: ShieldedUtils + std::marker::Send>(
             &self,
             ctx: &mut ShieldedContext<U>,
         ) -> std::io::Result<()> {
@@ -2203,7 +2203,7 @@ pub mod fs {
         }
 
         /// Save this shielded context into its associated context directory
-        async fn save<U: ShieldedUtils>(
+        async fn save<U: ShieldedUtils + std::marker::Send>(
             &self,
             ctx: &ShieldedContext<U>,
         ) -> std::io::Result<()> {
