@@ -745,8 +745,8 @@ fn transparent_addresses_list(
     if known_addresses.is_empty() {
         display_line!(
             io,
-            "No known addresses. Try `address gen --alias my-addr` to \
-             generate a new implicit address.",
+            "No known addresses. Try `gen --alias my-addr` to generate a new \
+             implicit address.",
         );
     } else {
         let stdout = io::stdout();
