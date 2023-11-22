@@ -1020,13 +1020,7 @@ pub async fn to_ledger_vector<'a>(
     tx: &Tx,
 ) -> Result<LedgerVector, Error> {
     // To facilitate lookups of human-readable token names
-    let tokens: HashMap<Address, String> = context
-        .wallet()
-        .await
-        .get_addresses()
-        .into_iter()
-        .map(|(alias, addr)| (addr, alias))
-        .collect();
+    let tokens: HashMap<Address, String> = HashMap::new();
 
     let mut tv = LedgerVector {
         blob: HEXLOWER.encode(&tx.serialize_to_vec()),
