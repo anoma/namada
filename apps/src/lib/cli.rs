@@ -560,8 +560,10 @@ pub mod cmds {
                     "In the transparent setting, generates a keypair with a \
                      given alias and derives the implicit address from its \
                      public key. The address will be stored with the same \
-                     alias. In the shielded setting, generates a new spending \
-                     key.",
+                     alias.\nIn the shielded setting, generates a new \
+                     spending key with a given alias.\nIn both settings, by \
+                     default, an HD-key with a default derivation path is \
+                     generated, with a random mnemonic code.",
                 )
                 .add_args::<args::KeyGen>()
         }
@@ -585,14 +587,17 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "Derive transparent / shielded key from the mnemonic code.",
+                    "Derive transparent / shielded key from the mnemonic code \
+                     or a seed stored on the hardware wallet device.",
                 )
                 .long_about(
-                    "Derives a keypair from the given mnemonic code and HD \
-                     derivation path and derives the implicit address from \
-                     its public key. Stores the keypair and the address with \
-                     the given alias. A hardware wallet can be used, in which \
-                     case a private key is not derivable. TODO shielded",
+                    "In the transparent setting, derives a keypair from the \
+                     given mnemonic code and HD derivation path and derives \
+                     the implicit address from its public key. Stores the \
+                     keypair and the address with the given alias.\nIn the \
+                     shielded setting, derives a spending key.\nA hardware \
+                     wallet can be used, in which case the private key is not \
+                     derivable.",
                 )
                 .add_args::<args::KeyDerive>()
         }
@@ -5734,10 +5739,7 @@ pub mod args {
                     .def()
                     .help("Derive a spending key for the shielded pool."),
             )
-            .arg(ALIAS.def().help(
-                "The key and address alias. If none provided, the alias will \
-                 be the public key hash.",
-            ))
+            .arg(ALIAS.def().help("The key and address alias."))
             .arg(
                 ALIAS_FORCE
                     .def()
@@ -5805,10 +5807,7 @@ pub mod args {
                          mnemonic code is generated.",
                     ),
             )
-            .arg(ALIAS.def().help(
-                "The key and address alias. If none provided, the alias will \
-                 be the public key hash.",
-            ))
+            .arg(ALIAS.def().help("The key and address alias."))
             .arg(ALIAS_FORCE.def().help(
                 "Override the alias without confirmation if it already exists.",
             ))
@@ -5821,12 +5820,12 @@ pub mod args {
                  used in a live network.",
             ))
             .arg(HD_WALLET_DERIVATION_PATH.def().help(
-                "Generate a new key and wallet using BIP39 mnemonic code and \
-                 HD derivation path. Use keyword `default` to refer to a \
+                "HD key derivation path. Use keyword `default` to refer to a \
                  scheme default path:\n- m/44'/60'/0'/0/0 for secp256k1 \
                  scheme\n- m/44'/877'/0'/0'/0' for ed25519 scheme.\nFor \
                  ed25519, all path indices will be promoted to hardened \
-                 indexes. TODO",
+                 indexes. If none is specified, the scheme default path is \
+                 used.",
             ))
         }
     }
