@@ -2180,6 +2180,7 @@ pub mod cmds {
         ValidateWasm(ValidateWasm),
         InitNetwork(InitNetwork),
         DeriveGenesisAddresses(DeriveGenesisAddresses),
+        InitGenesisEstablishedAccount(InitGenesisEstablishedAccount),
         InitGenesisValidator(InitGenesisValidator),
         PkToTmAddress(PkToTmAddress),
         DefaultBaseDir(DefaultBaseDir),
@@ -2202,6 +2203,8 @@ pub mod cmds {
                     SubCmd::parse(matches).map(Self::InitNetwork);
                 let derive_addresses =
                     SubCmd::parse(matches).map(Self::DeriveGenesisAddresses);
+                let init_established = SubCmd::parse(matches)
+                    .map(Self::InitGenesisEstablishedAccount);
                 let init_genesis =
                     SubCmd::parse(matches).map(Self::InitGenesisValidator);
                 let pk_to_tm_address =
@@ -2218,6 +2221,7 @@ pub mod cmds {
                     .or(validate_wasm)
                     .or(init_network)
                     .or(derive_addresses)
+                    .or(init_established)
                     .or(init_genesis)
                     .or(pk_to_tm_address)
                     .or(default_base_dir)
@@ -2235,6 +2239,7 @@ pub mod cmds {
                 .subcommand(ValidateWasm::def())
                 .subcommand(InitNetwork::def())
                 .subcommand(DeriveGenesisAddresses::def())
+                .subcommand(InitGenesisEstablishedAccount::def())
                 .subcommand(InitGenesisValidator::def())
                 .subcommand(PkToTmAddress::def())
                 .subcommand(DefaultBaseDir::def())
@@ -2341,6 +2346,29 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Derive account addresses from a genesis txs toml file.")
                 .add_args::<args::DeriveGenesisAddresses>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct InitGenesisEstablishedAccount(
+        pub args::InitGenesisEstablishedAccount,
+    );
+
+    impl SubCmd for InitGenesisEstablishedAccount {
+        const CMD: &'static str = "init-genesis-established-account";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                Self(args::InitGenesisEstablishedAccount::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Initialize an established account available at genesis.",
+                )
+                .add_args::<args::InitGenesisEstablishedAccount>()
         }
     }
 
@@ -2904,6 +2932,7 @@ pub mod args {
     pub const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
     pub const ALIAS: Arg<String> = arg("alias");
     pub const ALIAS_FORCE: ArgFlag = flag("alias-force");
+    pub const ALIAS_MANY: ArgMulti<String> = arg_multi("alias");
     pub const ALLOW_DUPLICATE_IP: ArgFlag = flag("allow-duplicate-ip");
     pub const AMOUNT: Arg<token::DenominatedAmount> = arg("amount");
     pub const ARCHIVE_DIR: ArgOpt<PathBuf> = arg_opt("archive-dir");
@@ -6736,6 +6765,42 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.arg(PATH.def().help("Path to the genesis txs toml file."))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct InitGenesisEstablishedAccount {
+        pub vp: String,
+        pub wallet_aliases: Vec<String>,
+        pub threshold: u8,
+    }
+
+    impl Args for InitGenesisEstablishedAccount {
+        fn parse(matches: &ArgMatches) -> Self {
+            let wallet_aliases = ALIAS_MANY.parse(matches);
+            let vp = VP.parse(matches).unwrap_or_else(|| "vp_user".to_string());
+            let threshold = THRESOLD.parse(matches).unwrap_or(1);
+            Self {
+                wallet_aliases,
+                vp,
+                threshold,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                ALIAS_MANY
+                    .def()
+                    .help("The aliases of the keys to use from the wallet."),
+            )
+            .arg(THRESOLD.def().help(
+                "The minimum number of signatures to be provided for \
+                 authorization. Must be less than or equal to the maximum \
+                 number of key aliases provided.",
+            ))
+            .arg(VP.def().help(
+                "The validity predicate of the account. Defaults to `vp_user`.",
+            ))
         }
     }
 

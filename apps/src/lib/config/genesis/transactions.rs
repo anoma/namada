@@ -88,6 +88,25 @@ pub fn parse_unsigned(
     toml::from_slice(bytes)
 }
 
+/// Create signed [`Transactions`] for an established account.
+pub fn init_established_account(
+    vp: String,
+    public_keys: Vec<StringEncoded<common::PublicKey>>,
+    threshold: u8,
+) -> (Address, Transactions<Unvalidated>) {
+    let unsigned_tx = EstablishedAccountTx {
+        vp,
+        threshold,
+        public_keys,
+    };
+    let address = unsigned_tx.derive_address();
+    let txs = Transactions {
+        established_account: Some(vec![unsigned_tx]),
+        ..Default::default()
+    };
+    (address, txs)
+}
+
 /// Create [`UnsignedTransactions`] for a genesis validator.
 pub fn init_validator(
     GenesisValidatorData {
@@ -835,6 +854,21 @@ pub fn validate_established_account(
     let established_address = tx.derive_address();
     if tx.threshold == 0 {
         eprintln!("An established account may not have zero thresold");
+        is_valid = false;
+    }
+    if tx.threshold as usize > tx.public_keys.len() {
+        eprintln!(
+            "An established account may not have a threshold ({}) greater \
+             than the number of public keys associated with it ({})",
+            tx.threshold,
+            tx.public_keys.len()
+        );
+        is_valid = false;
+    }
+    if tx.public_keys.len() > u8::MAX as usize {
+        eprintln!(
+            "The number of configured public keys is way too fucking big"
+        );
         is_valid = false;
     }
     established_accounts.insert(
