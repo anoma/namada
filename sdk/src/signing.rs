@@ -743,9 +743,10 @@ async fn make_ledger_amount_asset<'a>(
     assets: &HashMap<AssetType, (Address, MaspDenom, Epoch)>,
     prefix: &str,
 ) {
-    if let Some((token, _, _epoch)) = assets.get(token) {
+    if let Some((token, denom, _epoch)) = assets.get(token) {
         // If the AssetType can be decoded, then at least display Addressees
-        let formatted_amt = context.format_amount(token, amount.into()).await;
+        let amount = token::Amount::from_masp_denominated(amount, *denom);
+        let formatted_amt = context.format_amount(token, amount).await;
         if let Some(token) = tokens.get(token) {
             output.push(format!(
                 "{}Amount : {} {}",
@@ -1759,7 +1760,10 @@ pub async fn to_ledger_vector<'a>(
         } else {
             tv.output_expert.extend(vec![
                 format!("Fee token : {}", gas_token),
-                format!("Fees/gas unit : {}", fee_amount_per_gas_unit),
+                format!(
+                    "Fees/gas unit : {}",
+                    to_ledger_decimal(&fee_amount_per_gas_unit)
+                ),
             ]);
         }
     }
