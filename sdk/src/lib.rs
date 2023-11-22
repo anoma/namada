@@ -64,9 +64,10 @@ use crate::tx::{
 };
 use crate::wallet::{Wallet, WalletIo, WalletStorage};
 
-#[async_trait::async_trait(?Send)]
+#[cfg_attr(feature = "async-send", async_trait::async_trait)]
+#[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
 /// An interface for high-level interaction with the Namada SDK
-pub trait Namada<'a>: Sized {
+pub trait Namada<'a>: Sized + Sync {
     /// A client with async request dispatcher method
     type Client: 'a + queries::Client + Sync;
     /// Captures the interactive parts of the wallet's functioning
@@ -75,7 +76,7 @@ pub trait Namada<'a>: Sized {
     /// operations.
     type ShieldedUtils: 'a + ShieldedUtils;
     /// Captures the input/output streams used by this object
-    type Io: 'a + Io;
+    type Io: 'a + Io + Sync;
 
     /// Obtain the client for communicating with the ledger
     fn client(&self) -> &'a Self::Client;
@@ -625,13 +626,14 @@ where
     }
 }
 
-#[async_trait::async_trait(?Send)]
+#[cfg_attr(feature = "async-send", async_trait::async_trait)]
+#[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
 impl<'a, C, U, V, I> Namada<'a> for NamadaImpl<'a, C, U, V, I>
 where
     C: queries::Client + Sync,
-    U: WalletIo + WalletStorage,
+    U: WalletIo + WalletStorage + Send + Sync,
     V: ShieldedUtils,
-    I: Io,
+    I: Io + Sync,
 {
     type Client = C;
     type Io = I;
