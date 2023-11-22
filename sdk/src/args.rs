@@ -1899,50 +1899,6 @@ impl<C: NamadaTypes> TxBuilder<C> for Tx<C> {
     }
 }
 
-/// MASP add key or address arguments
-#[derive(Clone, Debug)]
-pub struct MaspAddrKeyAdd {
-    /// Key alias
-    pub alias: String,
-    /// Whether to force overwrite the alias
-    pub alias_force: bool,
-    /// Any MASP value
-    pub value: MaspValue,
-    /// Add a MASP key / address pre-genesis instead
-    /// of a current chain
-    pub is_pre_genesis: bool,
-    /// Don't encrypt the keypair
-    pub unsafe_dont_encrypt: bool,
-}
-
-/// MASP generate spending key arguments
-#[derive(Clone, Debug)]
-pub struct MaspSpendKeyGen {
-    /// Key alias
-    pub alias: String,
-    /// Whether to force overwrite the alias
-    pub alias_force: bool,
-    /// Generate spending key pre-genesis instead of a current chain
-    pub is_pre_genesis: bool,
-    /// Don't encrypt the keypair
-    pub unsafe_dont_encrypt: bool,
-}
-
-/// MASP generate payment address arguments
-#[derive(Clone, Debug)]
-pub struct MaspPayAddrGen<C: NamadaTypes = SdkTypes> {
-    /// Key alias
-    pub alias: String,
-    /// Whether to force overwrite the alias
-    pub alias_force: bool,
-    /// Viewing key
-    pub viewing_key: C::ViewingKey,
-    /// Pin
-    pub pin: bool,
-    /// Generate an address pre-genesis instead of a current chain
-    pub is_pre_genesis: bool,
-}
-
 /// Wallet generate key and implicit address arguments
 #[derive(Clone, Debug)]
 pub struct KeyGen {
@@ -1983,8 +1939,7 @@ pub struct KeyDerive {
     pub use_device: bool,
 }
 
-/// Wallet find shielded address or key arguments
-/// TODO Wallet key lookup arguments
+/// Wallet key lookup arguments
 #[derive(Clone, Debug)]
 pub struct KeyFind {
     /// Whether to find shielded address by alias
@@ -2014,7 +1969,7 @@ pub struct KeyList {
     pub unsafe_show_secret: bool,
 }
 
-/// List transparent wallet addresses / shielded payment addresses
+/// List addresses arguments
 #[derive(Clone, Debug)]
 pub struct AddressList {
     /// Whether to list payment addresses of the shielded pool
@@ -2058,6 +2013,21 @@ pub struct KeyAddressAdd {
     pub is_pre_genesis: bool,
     /// Don't encrypt the keys
     pub unsafe_dont_encrypt: bool,
+}
+
+/// Generate payment address arguments
+#[derive(Clone, Debug)]
+pub struct PayAddressGen<C: NamadaTypes = SdkTypes> {
+    /// Key alias
+    pub alias: String,
+    /// Whether to force overwrite the alias
+    pub alias_force: bool,
+    /// Viewing key
+    pub viewing_key: C::ViewingKey,
+    /// Pin
+    pub pin: bool,
+    /// Generate an address pre-genesis instead of a current chain
+    pub is_pre_genesis: bool,
 }
 
 /// Bridge pool batch recommendation.
