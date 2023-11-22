@@ -336,6 +336,7 @@ async fn transparent_key_and_address_derive(
             edisplay_line!(io, "{}", err);
             cli::safe_exit(1)
         });
+    let alias = alias.to_lowercase();
     let alias = if !use_device {
         let encryption_password =
             read_and_confirm_encryption_password(unsafe_dont_encrypt);
@@ -426,6 +427,7 @@ fn transparent_key_and_address_gen(
         ..
     }: args::KeyGen,
 ) {
+    let alias = alias.to_lowercase();
     let mut wallet = load_wallet(ctx);
     let encryption_password =
         read_and_confirm_encryption_password(unsafe_dont_encrypt);
@@ -604,6 +606,7 @@ fn shielded_key_address_find(
     }: args::KeyFind,
 ) {
     let mut wallet = load_wallet(ctx);
+    // TODO
     let alias = alias.unwrap_or_else(|| {
         display_line!(io, "Missing alias.");
         display_line!(io, "No changes are persisted. Exiting.");
@@ -712,12 +715,13 @@ fn key_export(
     io: &impl Io,
     args::KeyExport { alias }: args::KeyExport,
 ) {
+    let alias = alias.to_lowercase();
     let mut wallet = load_wallet(ctx);
     wallet
-        .find_secret_key(alias.to_lowercase(), None)
+        .find_secret_key(&alias, None)
         .map(|keypair| {
             let file_data = keypair.serialize_to_vec();
-            let file_name = format!("key_{}", alias.to_lowercase());
+            let file_name = format!("key_{}", alias);
             let mut file = File::create(&file_name).unwrap();
 
             file.write_all(file_data.as_ref()).unwrap();
@@ -771,14 +775,15 @@ fn address_or_alias_find(
              message."
         );
     } else if alias.is_some() {
-        if let Some(address) = wallet.find_address(alias.as_ref().unwrap()) {
+        let alias = alias.unwrap().to_lowercase();
+        if let Some(address) = wallet.find_address(&alias) {
             display_line!(io, "Found address {}", address.to_pretty_string());
         } else {
             display_line!(
                 io,
                 "No address with alias {} found. Use the command `address \
                  list` to see all the known addresses.",
-                alias.unwrap().to_lowercase()
+                alias
             );
         }
     } else if address.is_some() {
@@ -806,10 +811,11 @@ fn transparent_address_add(
         ..
     }: args::KeyAddressAdd,
 ) {
+    let alias = alias.to_lowercase();
     let address = address.unwrap(); // this should not fail
     let mut wallet = load_wallet(ctx);
     if wallet
-        .insert_address(alias.to_lowercase(), address, alias_force)
+        .insert_address(&alias, address, alias_force)
         .is_none()
     {
         edisplay_line!(io, "Address not added");
@@ -821,7 +827,7 @@ fn transparent_address_add(
     display_line!(
         io,
         "Successfully added a key and an address with alias: \"{}\"",
-        alias.to_lowercase()
+        alias
     );
 }
 
