@@ -91,17 +91,17 @@ pub fn parse_unsigned(
 /// Create signed [`Transactions`] for an established account.
 pub fn init_established_account(
     vp: String,
-    public_key: common::PublicKey,
-    wallet: &mut Wallet<CliWalletUtils>,
+    public_keys: Vec<StringEncoded<common::PublicKey>>,
+    threshold: u8,
 ) -> (Address, Transactions<Unvalidated>) {
     let unsigned_tx = EstablishedAccountTx {
         vp,
-        public_keys: Some(StringEncoded::new(public_key)),
+        threshold,
+        public_keys,
     };
     let address = unsigned_tx.derive_address();
-    let signed_tx = sign_established_account_tx(unsigned_tx, wallet);
     let txs = Transactions {
-        established_account: Some(vec![signed_tx]),
+        established_account: Some(vec![unsigned_tx]),
         ..Default::default()
     };
     (address, txs)
@@ -854,6 +854,21 @@ pub fn validate_established_account(
     let established_address = tx.derive_address();
     if tx.threshold == 0 {
         eprintln!("An established account may not have zero thresold");
+        is_valid = false;
+    }
+    if tx.threshold as usize > tx.public_keys.len() {
+        eprintln!(
+            "An established account may not have a threshold ({}) greater \
+             than the number of public keys associated with it ({})",
+            tx.threshold,
+            tx.public_keys.len()
+        );
+        is_valid = false;
+    }
+    if tx.public_keys.len() > u8::MAX as usize {
+        eprintln!(
+            "The number of configured public keys is way too fucking big"
+        );
         is_valid = false;
     }
     established_accounts.insert(

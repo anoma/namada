@@ -2932,6 +2932,7 @@ pub mod args {
     pub const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
     pub const ALIAS: Arg<String> = arg("alias");
     pub const ALIAS_FORCE: ArgFlag = flag("alias-force");
+    pub const ALIAS_MANY: ArgMulti<String> = arg_multi("alias");
     pub const ALLOW_DUPLICATE_IP: ArgFlag = flag("allow-duplicate-ip");
     pub const AMOUNT: Arg<token::DenominatedAmount> = arg("amount");
     pub const ARCHIVE_DIR: ArgOpt<PathBuf> = arg_opt("archive-dir");
@@ -6770,22 +6771,33 @@ pub mod args {
     #[derive(Clone, Debug)]
     pub struct InitGenesisEstablishedAccount {
         pub vp: String,
-        pub wallet_alias: String,
+        pub wallet_aliases: Vec<String>,
+        pub threshold: u8,
     }
 
     impl Args for InitGenesisEstablishedAccount {
         fn parse(matches: &ArgMatches) -> Self {
-            let wallet_alias = ALIAS.parse(matches);
+            let wallet_aliases = ALIAS_MANY.parse(matches);
             let vp = VP.parse(matches).unwrap_or_else(|| "vp_user".to_string());
-            Self { wallet_alias, vp }
+            let threshold = THRESOLD.parse(matches).unwrap_or(1);
+            Self {
+                wallet_aliases,
+                vp,
+                threshold,
+            }
         }
 
         fn def(app: App) -> App {
             app.arg(
-                ALIAS
+                ALIAS_MANY
                     .def()
-                    .help("The alias of the key to use from the wallet."),
+                    .help("The aliases of the keys to use from the wallet."),
             )
+            .arg(THRESOLD.def().help(
+                "The minimum number of signatures to be provided for \
+                 authorization. Must be less than or equal to the maximum \
+                 number of key aliases provided.",
+            ))
             .arg(VP.def().help(
                 "The validity predicate of the account. Defaults to `vp_user`.",
             ))

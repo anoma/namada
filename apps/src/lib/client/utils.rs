@@ -9,6 +9,8 @@ use color_eyre::owo_colors::OwoColorize;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
+use itertools::Itertools;
+use namada::core::types::string_encoding::StringEncoded;
 use namada::types::chain::ChainId;
 use namada::types::dec::Dec;
 use namada::types::key::*;
@@ -674,28 +676,34 @@ pub fn init_genesis_established_account(
     let (mut pre_genesis_wallet, _) =
         load_pre_genesis_wallet_or_exit(&global_args.base_dir);
 
-    let alias = args.wallet_alias.as_str();
-    let public_key = {
-        let sk = pre_genesis_wallet
-            .find_secret_key(alias, None)
-            .unwrap_or_else(|err| {
-                eprintln!(
-                    "Failed to look-up `{alias}` in the pre-genesis wallet: \
-                     {err}",
-                );
-                safe_exit(1)
-            });
-        sk.ref_to()
-    };
+    let public_keys: Vec<_> = args
+        .wallet_aliases
+        .iter()
+        .map(|alias| {
+            let sk = pre_genesis_wallet
+                .find_secret_key(alias, None)
+                .unwrap_or_else(|err| {
+                    eprintln!(
+                        "Failed to look-up `{alias}` in the pre-genesis \
+                         wallet: {err}",
+                    );
+                    safe_exit(1)
+                });
+            StringEncoded::new(sk.ref_to())
+        })
+        .collect();
 
     let (address, txs) = genesis::transactions::init_established_account(
         args.vp,
-        public_key,
-        &mut pre_genesis_wallet,
+        public_keys,
+        args.threshold,
     );
     let toml_path = {
         let pre_genesis_dir = global_args.base_dir.join(PRE_GENESIS_DIR);
-        established_acc_pre_genesis_txs_file(alias, &pre_genesis_dir)
+        established_acc_pre_genesis_txs_file(
+            &args.wallet_aliases.iter().join("_"),
+            &pre_genesis_dir,
+        )
     };
     let toml_path_str = toml_path.to_string_lossy();
 
