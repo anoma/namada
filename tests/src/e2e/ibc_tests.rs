@@ -73,6 +73,7 @@ use namada_apps::facade::tendermint::block::Header as TmHeader;
 use namada_apps::facade::tendermint::merkle::proof::ProofOps as TmProof;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
 use namada_apps::facade::tendermint_rpc::{Client, HttpClient, Url};
+use namada_core::types::string_encoding::StringEncoded;
 use namada_sdk::masp::fs::FsShieldedUtils;
 use prost::Message;
 use setup::constants::*;
@@ -263,13 +264,26 @@ fn setup_two_single_node_nets() -> Result<(Test, Test)> {
     // chain b's validator needs to listen on a different port than chain a's
     // validator
     let validator_pk = get_validator_pk(&test_b, &Who::Validator(0)).unwrap();
+    let validator_addr = genesis_b
+        .transactions
+        .established_account
+        .as_ref()
+        .unwrap()
+        .iter()
+        .find_map(|acct| {
+            acct.tx
+                .public_keys
+                .contains(&StringEncoded::new(validator_pk.clone()))
+                .then(|| acct.address.clone())
+        })
+        .unwrap();
     let validator_tx = genesis_b
         .transactions
         .validator_account
         .as_mut()
         .unwrap()
         .iter_mut()
-        .find(|val| val.tx.account_key.pk.raw == validator_pk)
+        .find(|val| val.address == validator_addr)
         .unwrap();
     let new_port =
         validator_tx.tx.net_address.port() + setup::ANOTHER_CHAIN_PORT_OFFSET;

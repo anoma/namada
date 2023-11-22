@@ -25,7 +25,7 @@ use namada::types::{storage, token};
 use serde::{Deserialize, Serialize};
 
 #[cfg(all(any(test, feature = "benches"), not(feature = "integration")))]
-use crate::config::genesis::chain::Finalized;
+use crate::config::genesis::chain::{Finalized, FinalizedEstablishedAccountTx};
 
 #[derive(
     Clone,
@@ -312,6 +312,7 @@ pub fn make_dev_genesis(
     use std::time::Duration;
 
     use namada::ledger::eth_bridge::{Contracts, UpgradeableContract};
+    use namada::ledger::pos::types::ValidatorMetaData;
     use namada::proto::{standalone_signature, SerializeWithBorsh};
     use namada::types::address::wnam;
     use namada::types::chain::ChainIdPrefix;
@@ -320,7 +321,6 @@ pub fn make_dev_genesis(
     use namada_sdk::wallet::alias::Alias;
 
     use crate::config::genesis::chain::{finalize, DeriveEstablishedAddress};
-    use crate::config::genesis::transactions::UnsignedValidatorAccountTx;
     use crate::wallet::defaults;
 
     let mut current_path = std::env::current_dir()
@@ -401,10 +401,8 @@ pub fn make_dev_genesis(
             .unwrap()
             .get(0)
             .unwrap();
-        let genesis_addr = GenesisAddress::EstablishedAddress(
-            UnsignedValidatorAccountTx::from(&tx.tx)
-                .derive_established_address(),
-        );
+        let genesis_addr =
+            GenesisAddress::EstablishedAddress(tx.tx.address.raw.clone());
 
         let balance = *nam_balances.0.get(&genesis_addr).unwrap();
         let bonded = {
@@ -435,30 +433,45 @@ pub fn make_dev_genesis(
             testing::gen_keypair::<ed25519::SigScheme>()
                 .try_to_sk()
                 .unwrap();
-        let account_keypair = consensus_keypair.clone();
         let eth_cold_keypair =
             common::SecretKey::try_from_sk(&secp_eth_cold_keypair).unwrap();
         let (protocol_keypair, eth_bridge_keypair) = defaults::validator_keys();
         // add the validator
-        let (validator_address, account_pk) = if let Some(vals) =
-            genesis.transactions.validator_account.as_mut()
-        {
+        let validator_address = {
+            let vals = genesis.transactions.validator_account.as_mut().unwrap();
+            let established_accounts =
+                genesis.transactions.established_account.as_mut().unwrap();
+
+            let tx = transactions::EstablishedAccountTx {
+                vp: "vp_user".to_string(),
+                public_keys: vec![StringEncoded::new(
+                    consensus_keypair.ref_to(),
+                )],
+                threshold: 1,
+            };
+            let address = tx.derive_established_address();
+            let established_account_tx = FinalizedEstablishedAccountTx {
+                address: Address::Established(address.clone()),
+                tx,
+            };
+            established_accounts.push(established_account_tx);
+
             let validator_account_tx = transactions::ValidatorAccountTx {
+                address: StringEncoded::new(address.clone()),
                 vp: "vp_validator".to_string(),
                 commission_rate: Dec::new(5, 2).expect("This can't fail"),
                 max_commission_rate_change: Dec::new(1, 2)
                     .expect("This can't fail"),
-                email: "null@null.net".to_string(),
-                description: None,
-                website: None,
-                discord_handle: None,
+                metadata: ValidatorMetaData {
+                    email: "null@null.net".to_string(),
+                    description: None,
+                    website: None,
+                    discord_handle: None,
+                },
                 net_address: SocketAddr::new(
                     IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
                     8080,
                 ),
-                account_key: StringEncoded {
-                    raw: account_keypair.to_public(),
-                },
                 consensus_key: StringEncoded {
                     raw: consensus_keypair.to_public(),
                 },
@@ -475,21 +488,16 @@ pub fn make_dev_genesis(
                     raw: eth_cold_keypair.to_public(),
                 },
             };
-            let validator_address =
-                validator_account_tx.derive_established_address();
             vals.push(chain::FinalizedValidatorAccountTx {
-                address: Address::Established(validator_address.clone()),
+                address: Address::Established(address.clone()),
                 tx: transactions::ValidatorAccountTx {
+                    address: StringEncoded::new(address.clone()),
                     vp: validator_account_tx.vp,
                     commission_rate: validator_account_tx.commission_rate,
                     max_commission_rate_change: validator_account_tx
                         .max_commission_rate_change,
-                    email: validator_account_tx.email,
-                    description: validator_account_tx.description,
-                    website: validator_account_tx.website,
-                    discord_handle: validator_account_tx.discord_handle,
+                    metadata: validator_account_tx.metadata,
                     net_address: validator_account_tx.net_address,
-                    account_key: sign_pk(&account_keypair),
                     consensus_key: sign_pk(&consensus_keypair),
                     protocol_key: sign_pk(&protocol_keypair),
                     tendermint_node_key: sign_pk(&consensus_keypair),
@@ -497,9 +505,7 @@ pub fn make_dev_genesis(
                     eth_cold_key: sign_pk(&eth_cold_keypair),
                 },
             });
-            (validator_address, account_keypair.ref_to())
-        } else {
-            unreachable!()
+            address
         };
         // credit nam tokens to validators such that they can bond
         {
@@ -511,8 +517,9 @@ pub fn make_dev_genesis(
 
             let validator_addr =
                 GenesisAddress::EstablishedAddress(validator_address.clone());
-            let account_pk =
-                GenesisAddress::PublicKey(StringEncoded::new(account_pk));
+            let account_pk = GenesisAddress::PublicKey(StringEncoded::new(
+                consensus_keypair.ref_to(),
+            ));
 
             nam_balances.0.insert(validator_addr, first_val_balance);
             nam_balances.0.insert(account_pk, first_val_balance);

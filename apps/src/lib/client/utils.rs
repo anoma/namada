@@ -234,12 +234,10 @@ pub async fn join_network(
         .map(|(alias, _wallet)| alias.clone());
     let validator_keys = validator_alias_and_pre_genesis_wallet.as_ref().map(
         |(_alias, wallet)| {
-            let validator_account_pk: common::PublicKey =
-                wallet.account_key.ref_to();
             let tendermint_node_key: common::SecretKey =
                 wallet.tendermint_node_key.clone();
             let consensus_key: common::SecretKey = wallet.consensus_key.clone();
-            (validator_account_pk, tendermint_node_key, consensus_key)
+            (tendermint_node_key, consensus_key)
         },
     );
     let node_mode = if validator_alias.is_some() {
@@ -252,7 +250,7 @@ pub async fn join_network(
     let config = genesis.derive_config(
         &chain_dir,
         node_mode,
-        validator_keys.as_ref().map(|(pk, _, _)| pk),
+        validator_keys.as_ref().map(|(sk, _)| sk.ref_to()).as_ref(),
         allow_duplicate_ip,
     );
 
@@ -271,7 +269,7 @@ pub async fn join_network(
     crate::wallet::save(&wallet).unwrap();
 
     // Setup the node for a genesis validator, if used
-    if let Some((_, tendermint_node_key, consensus_key)) = validator_keys {
+    if let Some((tendermint_node_key, consensus_key)) = validator_keys {
         println!(
             "Setting up validator keys in CometBFT. Consensus key: {}.",
             consensus_key.to_public()
@@ -646,7 +644,6 @@ pub fn derive_genesis_addresses(
         println!();
         println!("{} {}", "Address:".bold().bright_green(), tx.address);
         let keys = [
-            ("Account key:", &tx.account_key.pk.raw),
             ("Consensus key:", &tx.consensus_key.pk.raw),
             ("Protocol key:", &tx.protocol_key.pk.raw),
             ("Tendermint node key:", &tx.tendermint_node_key.pk.raw),
@@ -684,6 +681,7 @@ pub fn init_genesis_validator(
         description,
         website,
         discord_handle,
+        address,
     }: args::InitGenesisValidator,
 ) {
     // Validate the commission rate data
@@ -725,6 +723,7 @@ pub fn init_genesis_validator(
 
     let (address, transactions) = genesis::transactions::init_validator(
         genesis::transactions::GenesisValidatorData {
+            address,
             commission_rate,
             max_commission_rate_change,
             net_address,

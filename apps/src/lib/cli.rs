@@ -2867,7 +2867,7 @@ pub mod args {
     use std::str::FromStr;
 
     use namada::ibc::core::ics24_host::identifier::{ChannelId, PortId};
-    use namada::types::address::Address;
+    use namada::types::address::{Address, EstablishedAddress};
     use namada::types::chain::{ChainId, ChainIdPrefix};
     use namada::types::dec::Dec;
     use namada::types::ethereum_events::EthAddress;
@@ -3054,6 +3054,7 @@ pub mod args {
     pub const PROPOSAL_VOTE_ETH_OPT: ArgOpt<String> = arg_opt("eth");
     pub const PROPOSAL_VOTE: Arg<String> = arg("vote");
     pub const RAW_ADDRESS: Arg<Address> = arg("address");
+    pub const RAW_ADDRESS_ESTABLISHED: Arg<EstablishedAddress> = arg("address");
     pub const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
     pub const RAW_PUBLIC_KEY: Arg<common::PublicKey> = arg("public-key");
     pub const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> =
@@ -6751,6 +6752,7 @@ pub mod args {
         pub description: Option<String>,
         pub website: Option<String>,
         pub discord_handle: Option<String>,
+        pub address: EstablishedAddress,
     }
 
     impl Args for InitGenesisValidator {
@@ -6768,6 +6770,7 @@ pub mod args {
             let description = DESCRIPTION_OPT.parse(matches);
             let website = WEBSITE_OPT.parse(matches);
             let discord_handle = DISCORD_OPT.parse(matches);
+            let address = RAW_ADDRESS_ESTABLISHED.parse(matches);
             Self {
                 alias,
                 net_address,
@@ -6780,6 +6783,7 @@ pub mod args {
                 description,
                 website,
                 discord_handle,
+                address,
             }
         }
 
