@@ -480,48 +480,48 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     pub enum NamadaWallet {
         /// Key generation
-        NewGen(WalletNewGen),
+        KeyGen(WalletGen),
         /// Key derivation
-        NewDerive(WalletNewDerive),
+        KeyDerive(WalletDerive),
         /// Key list
-        NewKeyList(WalletNewKeyList),
+        KeyList(WalletListKeys),
         /// Key search
-        NewKeyFind(WalletNewKeyFind),
+        KeyFind(WalletFindKeys),
         /// Address list
-        NewAddrList(WalletNewAddressList),
+        AddrList(WalletListAddresses),
         /// Address search
-        NewAddrFind(WalletNewAddressFind),
+        AddrFind(WalletFindAddresses),
         /// Key export
-        NewKeyExport(WalletNewExportKey),
+        KeyExport(WalletExportKey),
         /// Key import
-        NewKeyAddrAdd(WalletNewKeyAddressAdd),
+        KeyAddrAdd(WalletAddKeyAddress),
         /// Payment address generation
-        NewPayAddrGen(WalletNewPaymentAddressGen),
+        PayAddrGen(WalletGenPaymentAddress),
     }
 
     impl Cmd for NamadaWallet {
         fn add_sub(app: App) -> App {
-            app.subcommand(WalletNewGen::def())
-                .subcommand(WalletNewDerive::def())
-                .subcommand(WalletNewKeyList::def())
-                .subcommand(WalletNewKeyFind::def())
-                .subcommand(WalletNewAddressList::def())
-                .subcommand(WalletNewAddressFind::def())
-                .subcommand(WalletNewExportKey::def())
-                .subcommand(WalletNewKeyAddressAdd::def())
-                .subcommand(WalletNewPaymentAddressGen::def())
+            app.subcommand(WalletGen::def())
+                .subcommand(WalletDerive::def())
+                .subcommand(WalletListKeys::def())
+                .subcommand(WalletFindKeys::def())
+                .subcommand(WalletListAddresses::def())
+                .subcommand(WalletFindAddresses::def())
+                .subcommand(WalletExportKey::def())
+                .subcommand(WalletAddKeyAddress::def())
+                .subcommand(WalletGenPaymentAddress::def())
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            let gen_new = SubCmd::parse(matches).map(Self::NewGen);
-            let derive_new = SubCmd::parse(matches).map(Self::NewDerive);
-            let key_list_new = SubCmd::parse(matches).map(Self::NewKeyList);
-            let key_find_new = SubCmd::parse(matches).map(Self::NewKeyFind);
-            let addr_list_new = SubCmd::parse(matches).map(Self::NewAddrList);
-            let addr_find_new = SubCmd::parse(matches).map(Self::NewAddrFind);
-            let export_new = SubCmd::parse(matches).map(Self::NewKeyExport);
-            let key_addr_add = SubCmd::parse(matches).map(Self::NewKeyAddrAdd);
-            let pay_addr_gen = SubCmd::parse(matches).map(Self::NewPayAddrGen);
+            let gen_new = SubCmd::parse(matches).map(Self::KeyGen);
+            let derive_new = SubCmd::parse(matches).map(Self::KeyDerive);
+            let key_list_new = SubCmd::parse(matches).map(Self::KeyList);
+            let key_find_new = SubCmd::parse(matches).map(Self::KeyFind);
+            let addr_list_new = SubCmd::parse(matches).map(Self::AddrList);
+            let addr_find_new = SubCmd::parse(matches).map(Self::AddrFind);
+            let export_new = SubCmd::parse(matches).map(Self::KeyExport);
+            let key_addr_add = SubCmd::parse(matches).map(Self::KeyAddrAdd);
+            let pay_addr_gen = SubCmd::parse(matches).map(Self::PayAddrGen);
             gen_new
                 .or(derive_new)
                 .or(key_list_new)
@@ -557,9 +557,9 @@ pub mod cmds {
     /// address derived from it. In the shielded setting, generate a new
     /// spending key.
     #[derive(Clone, Debug)]
-    pub struct WalletNewGen(pub args::KeyGen);
+    pub struct WalletGen(pub args::KeyGen);
 
-    impl SubCmd for WalletNewGen {
+    impl SubCmd for WalletGen {
         const CMD: &'static str = "gen";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -584,9 +584,9 @@ pub mod cmds {
     /// the mnemonic code.
     /// In the shielded setting, derive a spending key from the mnemonic code.
     #[derive(Clone, Debug)]
-    pub struct WalletNewDerive(pub args::KeyDerive);
+    pub struct WalletDerive(pub args::KeyDerive);
 
-    impl SubCmd for WalletNewDerive {
+    impl SubCmd for WalletDerive {
         const CMD: &'static str = "derive";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -613,9 +613,9 @@ pub mod cmds {
 
     /// TODO List all known shielded keys
     #[derive(Clone, Debug)]
-    pub struct WalletNewKeyList(pub args::KeyList);
+    pub struct WalletListKeys(pub args::KeyList);
 
-    impl SubCmd for WalletNewKeyList {
+    impl SubCmd for WalletListKeys {
         const CMD: &'static str = "list-keys";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -637,10 +637,10 @@ pub mod cmds {
     /// TODO Find a keypair in the wallet store
     /// TODO Find the given shielded address or key
     #[derive(Clone, Debug)]
-    pub struct WalletNewKeyFind(pub args::KeyFind);
+    pub struct WalletFindKeys(pub args::KeyFind);
 
-    impl SubCmd for WalletNewKeyFind {
-        const CMD: &'static str = "find-key";
+    impl SubCmd for WalletFindKeys {
+        const CMD: &'static str = "find-keys";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches
@@ -662,9 +662,9 @@ pub mod cmds {
     /// List known addresses
     /// TODO List all known payment addresses
     #[derive(Clone, Debug)]
-    pub struct WalletNewAddressList(pub args::AddressList);
+    pub struct WalletListAddresses(pub args::AddressList);
 
-    impl SubCmd for WalletNewAddressList {
+    impl SubCmd for WalletListAddresses {
         const CMD: &'static str = "list-addr";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -685,9 +685,9 @@ pub mod cmds {
 
     /// Find an address by its alias
     #[derive(Clone, Debug)]
-    pub struct WalletNewAddressFind(pub args::AddressFind);
+    pub struct WalletFindAddresses(pub args::AddressFind);
 
-    impl SubCmd for WalletNewAddressFind {
+    impl SubCmd for WalletFindAddresses {
         const CMD: &'static str = "find-addr";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -707,9 +707,9 @@ pub mod cmds {
 
     /// Export key
     #[derive(Clone, Debug)]
-    pub struct WalletNewExportKey(pub args::KeyExport);
+    pub struct WalletExportKey(pub args::KeyExport);
 
-    impl SubCmd for WalletNewExportKey {
+    impl SubCmd for WalletExportKey {
         const CMD: &'static str = "export";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -727,9 +727,9 @@ pub mod cmds {
 
     /// Add public / payment address to the wallet
     #[derive(Clone, Debug)]
-    pub struct WalletNewKeyAddressAdd(pub args::KeyAddressAdd);
+    pub struct WalletAddKeyAddress(pub args::KeyAddressAdd);
 
-    impl SubCmd for WalletNewKeyAddressAdd {
+    impl SubCmd for WalletAddKeyAddress {
         const CMD: &'static str = "add";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -750,11 +750,9 @@ pub mod cmds {
 
     /// Generate a payment address from a viewing key or payment address
     #[derive(Clone, Debug)]
-    pub struct WalletNewPaymentAddressGen(
-        pub args::PayAddressGen<args::CliTypes>,
-    );
+    pub struct WalletGenPaymentAddress(pub args::PayAddressGen<args::CliTypes>);
 
-    impl SubCmd for WalletNewPaymentAddressGen {
+    impl SubCmd for WalletGenPaymentAddress {
         const CMD: &'static str = "gen-payment-addr";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {

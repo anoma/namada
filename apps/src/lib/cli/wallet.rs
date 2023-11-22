@@ -39,33 +39,33 @@ impl CliApi {
         io: &impl Io,
     ) -> Result<()> {
         match cmd {
-            cmds::NamadaWallet::NewGen(cmds::WalletNewGen(args)) => {
+            cmds::NamadaWallet::KeyGen(cmds::WalletGen(args)) => {
                 key_gen(ctx, io, args)
             }
-            cmds::NamadaWallet::NewDerive(cmds::WalletNewDerive(args)) => {
+            cmds::NamadaWallet::KeyDerive(cmds::WalletDerive(args)) => {
                 key_derive(ctx, io, args).await
             }
-            cmds::NamadaWallet::NewKeyList(cmds::WalletNewKeyList(args)) => {
+            cmds::NamadaWallet::KeyList(cmds::WalletListKeys(args)) => {
                 key_list(ctx, io, args)
             }
-            cmds::NamadaWallet::NewKeyFind(cmds::WalletNewKeyFind(args)) => {
+            cmds::NamadaWallet::KeyFind(cmds::WalletFindKeys(args)) => {
                 key_find(ctx, io, args)
             }
-            cmds::NamadaWallet::NewAddrList(cmds::WalletNewAddressList(
+            cmds::NamadaWallet::AddrList(cmds::WalletListAddresses(args)) => {
+                address_list(ctx, io, args)
+            }
+            cmds::NamadaWallet::AddrFind(cmds::WalletFindAddresses(args)) => {
+                address_or_alias_find(ctx, io, args)
+            }
+            cmds::NamadaWallet::KeyExport(cmds::WalletExportKey(args)) => {
+                key_export(ctx, io, args)
+            }
+            cmds::NamadaWallet::KeyAddrAdd(cmds::WalletAddKeyAddress(args)) => {
+                key_address_add(ctx, io, args)
+            }
+            cmds::NamadaWallet::PayAddrGen(cmds::WalletGenPaymentAddress(
                 args,
-            )) => address_list(ctx, io, args),
-            cmds::NamadaWallet::NewAddrFind(cmds::WalletNewAddressFind(
-                args,
-            )) => address_or_alias_find(ctx, io, args),
-            cmds::NamadaWallet::NewKeyExport(cmds::WalletNewExportKey(
-                args,
-            )) => key_export(ctx, io, args),
-            cmds::NamadaWallet::NewKeyAddrAdd(
-                cmds::WalletNewKeyAddressAdd(args),
-            ) => key_address_add(ctx, io, args),
-            cmds::NamadaWallet::NewPayAddrGen(
-                cmds::WalletNewPaymentAddressGen(args),
-            ) => {
+            )) => {
                 let args = args.to_sdk(&mut ctx);
                 payment_address_gen(ctx, io, args)
             }
