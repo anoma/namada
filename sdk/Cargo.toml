@@ -39,8 +39,9 @@ wasm-runtime = [
 # Enable queries support for an async client
 async-client = [
   "async-trait",
-  "async-send"
 ]
+
+async-send = []
 
 ibc-mocks = [
   "namada_core/ibc-mocks",
