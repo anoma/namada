@@ -3020,7 +3020,8 @@ pub mod args {
         arg("self-bond-amount");
     pub const SENDER: Arg<String> = arg("sender");
     pub const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
-    pub const SIGNING_KEYS: ArgMulti<WalletPublicKey> = arg_multi("signing-keys");
+    pub const SIGNING_KEYS: ArgMulti<WalletPublicKey> =
+        arg_multi("signing-keys");
     pub const SIGNATURES: ArgMulti<PathBuf> = arg_multi("signatures");
     pub const SOURCE: Arg<WalletAddress> = arg("source");
     pub const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
@@ -3049,13 +3050,13 @@ pub mod args {
         arg_opt("account-key");
     pub const VALIDATOR_ACCOUNT_KEYS: ArgMulti<WalletPublicKey> =
         arg_multi("account-keys");
-    pub const VALIDATOR_CONSENSUS_KEY: ArgOpt<WalletKeypair> =
+    pub const VALIDATOR_CONSENSUS_KEY: ArgOpt<WalletPublicKey> =
         arg_opt("consensus-key");
     pub const VALIDATOR_CODE_PATH: ArgOpt<PathBuf> =
         arg_opt("validator-code-path");
-    pub const VALIDATOR_ETH_COLD_KEY: ArgOpt<WalletKeypair> =
+    pub const VALIDATOR_ETH_COLD_KEY: ArgOpt<WalletPublicKey> =
         arg_opt("eth-cold-key");
-    pub const VALIDATOR_ETH_HOT_KEY: ArgOpt<WalletKeypair> =
+    pub const VALIDATOR_ETH_HOT_KEY: ArgOpt<WalletPublicKey> =
         arg_opt("eth-hot-key");
     pub const VALUE: ArgOpt<String> = arg_opt("value");
     pub const VERIFICATION_KEY: ArgOpt<WalletPublicKey> =
@@ -4030,13 +4031,9 @@ pub mod args {
                     .map(|x| chain_ctx.get(x))
                     .collect(),
                 threshold: self.threshold,
-                consensus_key: self
-                    .consensus_key
-                    .map(|x| chain_ctx.get_cached(&x)),
-                eth_cold_key: self
-                    .eth_cold_key
-                    .map(|x| chain_ctx.get_cached(&x)),
-                eth_hot_key: self.eth_hot_key.map(|x| chain_ctx.get_cached(&x)),
+                consensus_key: self.consensus_key.map(|x| chain_ctx.get(&x)),
+                eth_cold_key: self.eth_cold_key.map(|x| chain_ctx.get(&x)),
+                eth_hot_key: self.eth_hot_key.map(|x| chain_ctx.get(&x)),
                 protocol_key: self.protocol_key.map(|x| chain_ctx.get(&x)),
                 commission_rate: self.commission_rate,
                 max_commission_rate_change: self.max_commission_rate_change,
@@ -5170,9 +5167,7 @@ pub mod args {
             ConsensusKeyChange::<SdkTypes> {
                 tx,
                 validator: chain_ctx.get(&self.validator),
-                consensus_key: self
-                    .consensus_key
-                    .map(|x| chain_ctx.get_cached(&x)),
+                consensus_key: self.consensus_key.map(|x| chain_ctx.get(&x)),
                 tx_code_path: self.tx_code_path.to_path_buf(),
             }
         }
@@ -5680,9 +5675,7 @@ pub mod args {
                 chain_id: self
                     .chain_id
                     .or_else(|| Some(ctx.config.ledger.chain_id.clone())),
-                wrapper_fee_payer: self
-                    .wrapper_fee_payer
-                    .map(|x| ctx.get(&x)),
+                wrapper_fee_payer: self.wrapper_fee_payer.map(|x| ctx.get(&x)),
                 use_device: self.use_device,
             }
         }

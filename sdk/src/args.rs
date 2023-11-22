@@ -735,11 +735,11 @@ pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
     /// The account multisignature threshold
     pub threshold: Option<u8>,
     /// Consensus key
-    pub consensus_key: Option<C::Keypair>,
+    pub consensus_key: Option<C::PublicKey>,
     /// Ethereum cold key
-    pub eth_cold_key: Option<C::Keypair>,
+    pub eth_cold_key: Option<C::PublicKey>,
     /// Ethereum hot key
-    pub eth_hot_key: Option<C::Keypair>,
+    pub eth_hot_key: Option<C::PublicKey>,
     /// Protocol key
     pub protocol_key: Option<C::PublicKey>,
     /// Commission rate
@@ -1362,7 +1362,7 @@ pub struct ConsensusKeyChange<C: NamadaTypes = SdkTypes> {
     /// Validator address (should be self)
     pub validator: C::Address,
     /// New consensus key
-    pub consensus_key: Option<C::Keypair>,
+    pub consensus_key: Option<C::PublicKey>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }

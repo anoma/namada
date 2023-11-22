@@ -380,8 +380,8 @@ pub async fn submit_change_consensus_key<'a>(
     let mut wallet = namada.wallet_mut().await;
     let consensus_key = consensus_key
         .map(|key| match key {
-            common::SecretKey::Ed25519(_) => key,
-            common::SecretKey::Secp256k1(_) => {
+            common::PublicKey::Ed25519(_) => key,
+            common::PublicKey::Secp256k1(_) => {
                 edisplay_line!(
                     namada.io(),
                     "Consensus key can only be ed25519"
@@ -403,6 +403,7 @@ pub async fn submit_change_consensus_key<'a>(
                 )
                 .expect("Key generation should not fail.")
                 .1
+                .ref_to()
         });
     // To avoid wallet deadlocks in following operations
     drop(wallet);
@@ -410,7 +411,7 @@ pub async fn submit_change_consensus_key<'a>(
     // Check that the new consensus key is unique
     let consensus_keys = rpc::query_consensus_keys(namada.client()).await;
 
-    let new_ck = consensus_key.ref_to();
+    let new_ck = consensus_key;
     if consensus_keys.contains(&new_ck) {
         edisplay_line!(namada.io(), "Consensus key can only be ed25519");
         safe_exit(1)
@@ -538,8 +539,8 @@ pub async fn submit_init_validator<'a>(
     let mut wallet = namada.wallet_mut().await;
     let consensus_key = consensus_key
         .map(|key| match key {
-            common::SecretKey::Ed25519(_) => key,
-            common::SecretKey::Secp256k1(_) => {
+            common::PublicKey::Ed25519(_) => key,
+            common::PublicKey::Secp256k1(_) => {
                 edisplay_line!(
                     namada.io(),
                     "Consensus key can only be ed25519"
@@ -562,12 +563,13 @@ pub async fn submit_init_validator<'a>(
                 )
                 .expect("Key generation should not fail.")
                 .1
+                .ref_to()
         });
 
     let eth_cold_pk = eth_cold_key
         .map(|key| match key {
-            common::SecretKey::Secp256k1(_) => key.ref_to(),
-            common::SecretKey::Ed25519(_) => {
+            common::PublicKey::Secp256k1(_) => key,
+            common::PublicKey::Ed25519(_) => {
                 edisplay_line!(
                     namada.io(),
                     "Eth cold key can only be secp256k1"
@@ -595,8 +597,8 @@ pub async fn submit_init_validator<'a>(
 
     let eth_hot_pk = eth_hot_key
         .map(|key| match key {
-            common::SecretKey::Secp256k1(_) => key.ref_to(),
-            common::SecretKey::Ed25519(_) => {
+            common::PublicKey::Secp256k1(_) => key,
+            common::PublicKey::Ed25519(_) => {
                 edisplay_line!(
                     namada.io(),
                     "Eth hot key can only be secp256k1"
@@ -709,7 +711,7 @@ pub async fn submit_init_validator<'a>(
     let data = InitValidator {
         account_keys,
         threshold,
-        consensus_key: consensus_key.ref_to(),
+        consensus_key: consensus_key.clone(),
         eth_cold_key: key::secp256k1::PublicKey::try_from_pk(&eth_cold_pk)
             .unwrap(),
         eth_hot_key: key::secp256k1::PublicKey::try_from_pk(&eth_hot_pk)
@@ -726,7 +728,7 @@ pub async fn submit_init_validator<'a>(
 
     // Put together all the PKs that we have to sign with to verify ownership
     let mut all_pks = data.account_keys.clone();
-    all_pks.push(consensus_key.to_public());
+    all_pks.push(consensus_key.clone());
     all_pks.push(eth_cold_pk);
     all_pks.push(eth_hot_pk);
     all_pks.push(data.protocol_key.clone());
@@ -786,21 +788,21 @@ pub async fn submit_init_validator<'a>(
                 }
             };
             // add validator address and keys to the wallet
-            namada
-                .wallet_mut()
-                .await
-                .add_validator_data(validator_address, validator_keys);
-            namada
-                .wallet_mut()
-                .await
+            let mut wallet = namada.wallet_mut().await;
+            wallet.add_validator_data(validator_address, validator_keys);
+            wallet
                 .save()
                 .unwrap_or_else(|err| edisplay_line!(namada.io(), "{}", err));
 
             let tendermint_home = config.ledger.cometbft_dir();
             tendermint_node::write_validator_key(
                 &tendermint_home,
-                &consensus_key,
+                &wallet
+                    .find_key_by_pk(&consensus_key, None)
+                    .expect("unable to find consensus key pair in the wallet"),
             );
+            // To avoid wallet deadlocks in following operations
+            drop(wallet);
             tendermint_node::write_validator_state(tendermint_home);
 
             // Write Namada config stuff or figure out how to do the above
