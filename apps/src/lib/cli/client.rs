@@ -637,6 +637,9 @@ impl CliApi {
                 Utils::DeriveGenesisAddresses(DeriveGenesisAddresses(args)) => {
                     utils::derive_genesis_addresses(global_args, args)
                 }
+                Utils::InitGenesisEstablishedAccount(
+                    InitGenesisEstablishedAccount(args),
+                ) => utils::init_genesis_established_account(global_args, args),
                 Utils::InitGenesisValidator(InitGenesisValidator(args)) => {
                     utils::init_genesis_validator(global_args, args)
                 }
