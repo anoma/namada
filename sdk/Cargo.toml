@@ -39,6 +39,7 @@ wasm-runtime = [
 # Enable queries support for an async client
 async-client = [
   "async-trait",
+  "async-send"
 ]
 
 ibc-mocks = [
