@@ -97,7 +97,7 @@ pub fn parse_unsigned(
     toml::from_slice(bytes)
 }
 
-/// Create signed [`Transactions`] for a genesis validator.
+/// Create [`UnsignedTransactions`] for a genesis validator.
 pub fn init_validator(
     GenesisValidatorData {
         address,
