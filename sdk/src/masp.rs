@@ -2203,7 +2203,7 @@ pub mod fs {
         }
 
         /// Save this shielded context into its associated context directory
-        async fn save<U: ShieldedUtils + std::marker::Send>(
+        async fn save<U: ShieldedUtils + std::marker::Send + std::marker::Sync>(
             &self,
             ctx: &ShieldedContext<U>,
         ) -> std::io::Result<()> {
