@@ -4147,24 +4147,10 @@ pub mod args {
                      Expressed as a decimal between 0 and 1. This is a \
                      required parameter.",
                 ))
-                .arg(EMAIL_OPT.def().help(
-                    "The desired new validator email. To remove the existing \
-                     email, pass an empty string to this argument.",
-                ))
-                .arg(DESCRIPTION_OPT.def().help(
-                    "The desired new validator description. To remove the \
-                     existing description, pass an empty string to this \
-                     argument.",
-                ))
-                .arg(WEBSITE_OPT.def().help(
-                    "The desired new validator website. To remove the \
-                     existing website, pass an empty string to this argument.",
-                ))
-                .arg(DISCORD_OPT.def().help(
-                    "The desired new validator discord handle. To remove the \
-                     existing discord handle, pass an empty string to this \
-                     argument.",
-                ))
+                .arg(EMAIL.def().help("The validator's email."))
+                .arg(DESCRIPTION_OPT.def().help("The validator's description."))
+                .arg(WEBSITE_OPT.def().help("The validator's website."))
+                .arg(DISCORD_OPT.def().help("The validator's discord handle."))
                 .arg(VALIDATOR_CODE_PATH.def().help(
                     "The path to the validity predicate WASM code to be used \
                      for the validator account. Uses the default validator VP \
@@ -4305,24 +4291,10 @@ pub mod args {
                      Expressed as a decimal between 0 and 1. This is a \
                      required parameter.",
                 ))
-                .arg(EMAIL_OPT.def().help(
-                    "The desired new validator email. To remove the existing \
-                     email, pass an empty string to this argument.",
-                ))
-                .arg(DESCRIPTION_OPT.def().help(
-                    "The desired new validator description. To remove the \
-                     existing description, pass an empty string to this \
-                     argument.",
-                ))
-                .arg(WEBSITE_OPT.def().help(
-                    "The desired new validator website. To remove the \
-                     existing website, pass an empty string to this argument.",
-                ))
-                .arg(DISCORD_OPT.def().help(
-                    "The desired new validator discord handle. To remove the \
-                     existing discord handle, pass an empty string to this \
-                     argument.",
-                ))
+                .arg(EMAIL.def().help("The validator's email."))
+                .arg(DESCRIPTION_OPT.def().help("The validator's description."))
+                .arg(WEBSITE_OPT.def().help("The validator's website."))
+                .arg(DISCORD_OPT.def().help("The validator's discord handle."))
                 .arg(VALIDATOR_CODE_PATH.def().help(
                     "The path to the validity predicate WASM code to be used \
                      for the validator account. Uses the default validator VP \
