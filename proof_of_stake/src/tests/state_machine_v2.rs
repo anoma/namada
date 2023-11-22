@@ -1992,20 +1992,22 @@ impl StateMachineTest for ConcretePosState {
                 tracing::debug!("\nCONCRETE Init validator");
                 let current_epoch = state.current_epoch();
 
-                super::become_validator(super::BecomeValidator {
-                    storage: &mut state.s,
-                    params: &params,
-                    address: &address,
-                    consensus_key: &consensus_key,
-                    protocol_key: &protocol_key,
-                    eth_cold_key: &eth_cold_key,
-                    eth_hot_key: &eth_hot_key,
-                    current_epoch,
-                    commission_rate,
-                    max_commission_rate_change,
-                    metadata: Default::default(),
-                    offset_opt: None,
-                })
+                super::become_validator(
+                    &mut state.s,
+                    super::BecomeValidator {
+                        params: &params,
+                        address: &address,
+                        consensus_key: &consensus_key,
+                        protocol_key: &protocol_key,
+                        eth_cold_key: &eth_cold_key,
+                        eth_hot_key: &eth_hot_key,
+                        current_epoch,
+                        commission_rate,
+                        max_commission_rate_change,
+                        metadata: Default::default(),
+                        offset_opt: None,
+                    },
+                )
                 .unwrap();
 
                 let params = read_pos_params(&state.s).unwrap();

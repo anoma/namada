@@ -134,25 +134,27 @@ impl Ctx {
         let eth_hot_key = key::common::PublicKey::Secp256k1(eth_hot_key);
         let params = read_pos_params(self)?;
 
-        become_validator(namada_proof_of_stake::BecomeValidator {
-            storage: self,
-            params: &params,
-            address: &address,
-            consensus_key: &consensus_key,
-            protocol_key: &protocol_key,
-            eth_cold_key: &eth_cold_key,
-            eth_hot_key: &eth_hot_key,
-            current_epoch,
-            commission_rate,
-            max_commission_rate_change,
-            metadata: ValidatorMetaData {
-                email,
-                description,
-                website,
-                discord_handle,
+        become_validator(
+            self,
+            namada_proof_of_stake::BecomeValidator {
+                params: &params,
+                address: &address,
+                consensus_key: &consensus_key,
+                protocol_key: &protocol_key,
+                eth_cold_key: &eth_cold_key,
+                eth_hot_key: &eth_hot_key,
+                current_epoch,
+                commission_rate,
+                max_commission_rate_change,
+                metadata: ValidatorMetaData {
+                    email,
+                    description,
+                    website,
+                    discord_handle,
+                },
+                offset_opt: None,
             },
-            offset_opt: None,
-        })?;
+        )?;
 
         Ok(address)
     }

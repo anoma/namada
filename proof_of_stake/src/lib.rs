@@ -2714,9 +2714,7 @@ where
 }
 
 /// Arguments to [`become_validator`].
-pub struct BecomeValidator<'a, S> {
-    /// Storage implementation.
-    pub storage: &'a mut S,
+pub struct BecomeValidator<'a> {
     /// Proof-of-stake parameters.
     pub params: &'a PosParams,
     /// The validator's address.
@@ -2743,13 +2741,13 @@ pub struct BecomeValidator<'a, S> {
 
 /// Initialize data for a new validator.
 pub fn become_validator<S>(
-    args: BecomeValidator<'_, S>,
+    storage: &mut S,
+    args: BecomeValidator<'_>,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
     let BecomeValidator {
-        storage,
         params,
         address,
         consensus_key,
@@ -5861,20 +5859,22 @@ pub mod test_utils {
             metadata,
         } in validators
         {
-            become_validator(BecomeValidator {
+            become_validator(
                 storage,
-                params,
-                address: &address,
-                consensus_key: &consensus_key,
-                protocol_key: &protocol_key,
-                eth_cold_key: &eth_cold_key,
-                eth_hot_key: &eth_hot_key,
-                current_epoch,
-                commission_rate,
-                max_commission_rate_change,
-                metadata,
-                offset_opt: Some(0),
-            })?;
+                BecomeValidator {
+                    params,
+                    address: &address,
+                    consensus_key: &consensus_key,
+                    protocol_key: &protocol_key,
+                    eth_cold_key: &eth_cold_key,
+                    eth_hot_key: &eth_hot_key,
+                    current_epoch,
+                    commission_rate,
+                    max_commission_rate_change,
+                    metadata,
+                    offset_opt: Some(0),
+                },
+            )?;
             // Credit token amount to be bonded to the validator address so it
             // can be bonded
             let staking_token = staking_token_address(storage);
