@@ -513,22 +513,21 @@ pub mod cmds {
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            let gen_new = SubCmd::parse(matches).map(Self::KeyGen);
-            let derive_new = SubCmd::parse(matches).map(Self::KeyDerive);
-            let key_list_new = SubCmd::parse(matches).map(Self::KeyList);
-            let key_find_new = SubCmd::parse(matches).map(Self::KeyFind);
-            let addr_list_new = SubCmd::parse(matches).map(Self::AddrList);
-            let addr_find_new = SubCmd::parse(matches).map(Self::AddrFind);
-            let export_new = SubCmd::parse(matches).map(Self::KeyExport);
+            let gen = SubCmd::parse(matches).map(Self::KeyGen);
+            let derive = SubCmd::parse(matches).map(Self::KeyDerive);
+            let key_list = SubCmd::parse(matches).map(Self::KeyList);
+            let key_find = SubCmd::parse(matches).map(Self::KeyFind);
+            let addr_list = SubCmd::parse(matches).map(Self::AddrList);
+            let addr_find = SubCmd::parse(matches).map(Self::AddrFind);
+            let export = SubCmd::parse(matches).map(Self::KeyExport);
             let key_addr_add = SubCmd::parse(matches).map(Self::KeyAddrAdd);
             let pay_addr_gen = SubCmd::parse(matches).map(Self::PayAddrGen);
-            gen_new
-                .or(derive_new)
-                .or(key_list_new)
-                .or(key_find_new)
-                .or(addr_list_new)
-                .or(addr_find_new)
-                .or(export_new)
+            gen.or(derive)
+                .or(key_list)
+                .or(key_find)
+                .or(addr_list)
+                .or(addr_find)
+                .or(export)
                 .or(key_addr_add)
                 .or(pay_addr_gen)
         }
