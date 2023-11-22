@@ -479,8 +479,6 @@ pub mod cmds {
     #[allow(clippy::large_enum_variant)]
     #[derive(Clone, Debug)]
     pub enum NamadaWallet {
-        /// MASP key, address management commands
-        Masp(WalletMasp),
         /// Key generation
         NewGen(WalletNewGen),
         /// Key derivation
@@ -497,12 +495,13 @@ pub mod cmds {
         NewKeyExport(WalletNewExportKey),
         /// Key import
         NewKeyAddrAdd(WalletNewKeyAddressAdd),
+        /// Payment address generation
+        NewPayAddrGen(WalletNewPaymentAddressGen),
     }
 
     impl Cmd for NamadaWallet {
         fn add_sub(app: App) -> App {
-            app.subcommand(WalletMasp::def())
-                .subcommand(WalletNewGen::def())
+            app.subcommand(WalletNewGen::def())
                 .subcommand(WalletNewDerive::def())
                 .subcommand(WalletNewKeyList::def())
                 .subcommand(WalletNewKeyFind::def())
@@ -510,10 +509,10 @@ pub mod cmds {
                 .subcommand(WalletNewAddressFind::def())
                 .subcommand(WalletNewExportKey::def())
                 .subcommand(WalletNewKeyAddressAdd::def())
+                .subcommand(WalletNewPaymentAddressGen::def())
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            let masp = SubCmd::parse(matches).map(Self::Masp);
             let gen_new = SubCmd::parse(matches).map(Self::NewGen);
             let derive_new = SubCmd::parse(matches).map(Self::NewDerive);
             let key_list_new = SubCmd::parse(matches).map(Self::NewKeyList);
@@ -522,7 +521,8 @@ pub mod cmds {
             let addr_find_new = SubCmd::parse(matches).map(Self::NewAddrFind);
             let export_new = SubCmd::parse(matches).map(Self::NewKeyExport);
             let key_addr_add = SubCmd::parse(matches).map(Self::NewKeyAddrAdd);
-            masp.or(gen_new)
+            let pay_addr_gen = SubCmd::parse(matches).map(Self::NewPayAddrGen);
+            gen_new
                 .or(derive_new)
                 .or(key_list_new)
                 .or(key_find_new)
@@ -530,6 +530,7 @@ pub mod cmds {
                 .or(addr_find_new)
                 .or(export_new)
                 .or(key_addr_add)
+                .or(pay_addr_gen)
         }
     }
 
@@ -747,66 +748,19 @@ pub mod cmds {
         }
     }
 
-    #[allow(clippy::large_enum_variant)]
-    #[derive(Clone, Debug)]
-    pub enum WalletMasp {
-        GenPayAddr(MaspGenPayAddr),
-    }
-
-    impl SubCmd for WalletMasp {
-        const CMD: &'static str = "masp";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches.subcommand_matches(Self::CMD).and_then(|matches| {
-                let genpa = SubCmd::parse(matches).map(Self::GenPayAddr);
-                genpa
-            })
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about(
-                    "Multi-asset shielded pool address and keypair management \
-                     including methods to generate and look-up addresses and \
-                     keys.",
-                )
-                .subcommand_required(true)
-                .arg_required_else_help(true)
-                .subcommand(MaspGenPayAddr::def())
-        }
-    }
-
-    /// Generate a spending key
-    #[derive(Clone, Debug)]
-    pub struct MaspGenSpendKey(pub args::MaspSpendKeyGen);
-
-    impl SubCmd for MaspGenSpendKey {
-        const CMD: &'static str = "gen-key";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches.subcommand_matches(Self::CMD).map(|matches| {
-                MaspGenSpendKey(args::MaspSpendKeyGen::parse(matches))
-            })
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Generates a random spending key")
-                .add_args::<args::MaspSpendKeyGen>()
-        }
-    }
-
     /// Generate a payment address from a viewing key or payment address
     #[derive(Clone, Debug)]
-    pub struct MaspGenPayAddr(pub args::MaspPayAddrGen<args::CliTypes>);
+    pub struct WalletNewPaymentAddressGen(
+        pub args::PayAddressGen<args::CliTypes>,
+    );
 
-    impl SubCmd for MaspGenPayAddr {
-        const CMD: &'static str = "gen-addr";
+    impl SubCmd for WalletNewPaymentAddressGen {
+        const CMD: &'static str = "gen-payment-addr";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches.subcommand_matches(Self::CMD).map(|matches| {
-                MaspGenPayAddr(args::MaspPayAddrGen::parse(matches))
-            })
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::PayAddressGen::parse(matches)))
         }
 
         fn def() -> App {
@@ -814,23 +768,7 @@ pub mod cmds {
                 .about(
                     "Generates a payment address from the given spending key",
                 )
-                .add_args::<args::MaspPayAddrGen<args::CliTypes>>()
-        }
-    }
-
-    /// List known addresses
-    #[derive(Clone, Debug)]
-    pub struct AddressList;
-
-    impl SubCmd for AddressList {
-        const CMD: &'static str = "list";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches.subcommand_matches(Self::CMD).map(|_| Self)
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD).about("List all known addresses.")
+                .add_args::<args::PayAddressGen<args::CliTypes>>()
         }
     }
 
@@ -6000,36 +5938,8 @@ pub mod args {
         }
     }
 
-    impl Args for MaspSpendKeyGen {
-        fn parse(matches: &ArgMatches) -> Self {
-            let alias = ALIAS.parse(matches);
-            let alias_force = ALIAS_FORCE.parse(matches);
-            let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
-            Self {
-                alias,
-                alias_force,
-                unsafe_dont_encrypt,
-            }
-        }
-
-        fn def(app: App) -> App {
-            app.arg(
-                ALIAS
-                    .def()
-                    .help("An alias to be associated with the spending key."),
-            )
-            .arg(ALIAS_FORCE.def().help(
-                "Override the alias without confirmation if it already exists.",
-            ))
-            .arg(UNSAFE_DONT_ENCRYPT.def().help(
-                "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
-                 used in a live network.",
-            ))
-        }
-    }
-
-    impl CliToSdk<MaspPayAddrGen<SdkTypes>> for MaspPayAddrGen<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> MaspPayAddrGen<SdkTypes> {
+    impl CliToSdk<PayAddressGen<SdkTypes>> for PayAddressGen<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> PayAddressGen<SdkTypes> {
             use namada_sdk::wallet::Wallet;
 
             use crate::wallet::CliWalletUtils;
@@ -6053,7 +5963,7 @@ pub mod args {
             } else {
                 find_viewing_key(&mut ctx.borrow_mut_chain_or_exit().wallet)
             };
-            MaspPayAddrGen::<SdkTypes> {
+            PayAddressGen::<SdkTypes> {
                 alias: self.alias,
                 alias_force: self.alias_force,
                 viewing_key,
@@ -6062,7 +5972,7 @@ pub mod args {
         }
     }
 
-    impl Args for MaspPayAddrGen<CliTypes> {
+    impl Args for PayAddressGen<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
@@ -6335,7 +6245,7 @@ pub mod args {
                     .help("The bech32m encoded address string."),
             )
             .group(
-                ArgGroup::new("find_flags")
+                ArgGroup::new("addr_find_args")
                     .args([ALIAS_OPT.name, RAW_ADDRESS_OPT.name])
                     .required(true),
             )

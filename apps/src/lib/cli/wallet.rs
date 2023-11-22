@@ -39,12 +39,6 @@ impl CliApi {
         io: &impl Io,
     ) -> Result<()> {
         match cmd {
-            cmds::NamadaWallet::Masp(sub) => match sub {
-                cmds::WalletMasp::GenPayAddr(cmds::MaspGenPayAddr(args)) => {
-                    let args = args.to_sdk(&mut ctx);
-                    payment_address_gen(ctx, io, args)
-                }
-            },
             cmds::NamadaWallet::NewGen(cmds::WalletNewGen(args)) => {
                 key_gen(ctx, io, args)
             }
@@ -69,6 +63,12 @@ impl CliApi {
             cmds::NamadaWallet::NewKeyAddrAdd(
                 cmds::WalletNewKeyAddressAdd(args),
             ) => key_address_add(ctx, io, args),
+            cmds::NamadaWallet::NewPayAddrGen(
+                cmds::WalletNewPaymentAddressGen(args),
+            ) => {
+                let args = args.to_sdk(&mut ctx);
+                payment_address_gen(ctx, io, args)
+            }
         }
         Ok(())
     }
@@ -210,13 +210,13 @@ fn spending_key_gen(
 fn payment_address_gen(
     ctx: Context,
     io: &impl Io,
-    args::MaspPayAddrGen {
+    args::PayAddressGen {
         alias,
         alias_force,
         viewing_key,
         pin,
         ..
-    }: args::MaspPayAddrGen,
+    }: args::PayAddressGen,
 ) {
     let mut wallet = load_wallet(ctx);
     let alias = alias.to_lowercase();
