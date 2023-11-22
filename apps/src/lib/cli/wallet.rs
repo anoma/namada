@@ -424,6 +424,7 @@ fn transparent_key_and_address_gen(
     io: &impl Io,
     args::KeyGen {
         scheme,
+        raw,
         alias,
         alias_force,
         unsafe_dont_encrypt,
@@ -434,23 +435,30 @@ fn transparent_key_and_address_gen(
     let mut wallet = load_wallet(ctx);
     let encryption_password =
         read_and_confirm_encryption_password(unsafe_dont_encrypt);
-    let derivation_path = decode_derivation_path(scheme, derivation_path)
+    let alias = if raw {
+        wallet.gen_store_secret_key(
+            scheme,
+            alias,
+            alias_force,
+            encryption_password,
+            &mut OsRng,
+        )
+    } else {
+        let derivation_path = decode_derivation_path(scheme, derivation_path)
+            .unwrap_or_else(|err| {
+                edisplay_line!(io, "{}", err);
+                cli::safe_exit(1)
+            });
+        let (_mnemonic, seed) = Wallet::<CliWalletUtils>::gen_hd_seed(
+            None,
+            &mut OsRng,
+            unsafe_dont_encrypt,
+        )
         .unwrap_or_else(|err| {
             edisplay_line!(io, "{}", err);
             cli::safe_exit(1)
         });
-    let mut rng = OsRng;
-    let (_mnemonic, seed) = Wallet::<CliWalletUtils>::gen_hd_seed(
-        None,
-        &mut rng,
-        unsafe_dont_encrypt,
-    )
-    .unwrap_or_else(|err| {
-        edisplay_line!(io, "{}", err);
-        cli::safe_exit(1)
-    });
-    let alias = wallet
-        .derive_store_hd_secret_key(
+        wallet.derive_store_hd_secret_key(
             scheme,
             alias,
             alias_force,
@@ -458,12 +466,13 @@ fn transparent_key_and_address_gen(
             derivation_path,
             encryption_password,
         )
-        .map(|x| x.0)
-        .unwrap_or_else(|err| {
-            eprintln!("{}", err);
-            println!("No changes are persisted. Exiting.");
-            cli::safe_exit(0);
-        });
+    }
+    .map(|x| x.0)
+    .unwrap_or_else(|err| {
+        eprintln!("{}", err);
+        println!("No changes are persisted. Exiting.");
+        cli::safe_exit(0);
+    });
     wallet
         .save()
         .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
@@ -474,7 +483,7 @@ fn transparent_key_and_address_gen(
     );
 }
 
-/// TODO
+/// Key generation
 fn key_gen(ctx: Context, io: &impl Io, args_key_gen: args::KeyGen) {
     if !args_key_gen.shielded {
         transparent_key_and_address_gen(ctx, io, args_key_gen)
