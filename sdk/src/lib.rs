@@ -502,7 +502,7 @@ pub trait Namada<'a>: Sized + Sync {
         tx: &mut Tx,
         args: &args::Tx,
         signing_data: SigningTxData,
-        with: impl Fn(Tx, common::PublicKey, HashSet<signing::Signable>) -> F,
+        with: impl Fn(Tx, common::PublicKey, HashSet<signing::Signable>) -> F + Send + Sync,
     ) -> crate::error::Result<()> {
         signing::sign_tx(self, args, tx, signing_data, with).await
     }
