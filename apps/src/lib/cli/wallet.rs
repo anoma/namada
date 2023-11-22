@@ -709,28 +709,34 @@ fn transparent_keys_list(
     }
 }
 
-/// Export a transparent keypair to a file.
+/// Export a transparent keypair / MASP spending key to a file.
 fn key_export(
     ctx: Context,
     io: &impl Io,
-    args::KeyExport { alias }: args::KeyExport,
+    args::KeyExport { shielded, alias }: args::KeyExport,
 ) {
     let alias = alias.to_lowercase();
     let mut wallet = load_wallet(ctx);
-    wallet
-        .find_secret_key(&alias, None)
-        .map(|keypair| {
-            let file_data = keypair.serialize_to_vec();
-            let file_name = format!("key_{}", alias);
-            let mut file = File::create(&file_name).unwrap();
-
-            file.write_all(file_data.as_ref()).unwrap();
-            display_line!(io, "Exported to file {}", file_name);
-        })
-        .unwrap_or_else(|err| {
-            edisplay_line!(io, "{}", err);
-            cli::safe_exit(1)
-        })
+    if !shielded {
+        wallet
+            .find_secret_key(&alias, None)
+            .map(|sk| Box::new(sk) as Box<dyn BorshSerializeExt>)
+    } else {
+        wallet
+            .find_spending_key(&alias, None)
+            .map(|spk| Box::new(spk) as Box<dyn BorshSerializeExt>)
+    }
+    .map(|key| {
+        let file_data = key.serialize_to_vec();
+        let file_name = format!("key_{}", alias);
+        let mut file = File::create(&file_name).unwrap();
+        file.write_all(file_data.as_ref()).unwrap();
+        display_line!(io, "Exported to file {}", file_name);
+    })
+    .unwrap_or_else(|err| {
+        edisplay_line!(io, "{}", err);
+        cli::safe_exit(1)
+    })
 }
 
 /// List all known transparent addresses.
