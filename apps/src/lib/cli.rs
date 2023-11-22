@@ -712,7 +712,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Exports a keypair to a file.")
+                .about("Exports a keypair / spending key to a file.")
                 .add_args::<args::KeyExport>()
         }
     }
@@ -6031,9 +6031,11 @@ pub mod args {
 
     impl Args for KeyExport {
         fn parse(matches: &ArgMatches) -> Self {
+            let shielded = SHIELDED.parse(matches);
             let alias = ALIAS.parse(matches);
             let is_pre_genesis = PRE_GENESIS.parse(matches);
             Self {
+                shielded,
                 alias,
                 is_pre_genesis,
             }
@@ -6041,8 +6043,11 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.arg(
-                ALIAS.def().help("The alias of the key you wish to export."),
+                SHIELDED
+                    .def()
+                    .help("Whether to export the shielded spending key."),
             )
+            .arg(ALIAS.def().help("The alias of the key you wish to export."))
             .arg(PRE_GENESIS.def().help(
                 "Use pre-genesis wallet, instead of for the current chain, if \
                  any.",

@@ -1992,6 +1992,8 @@ pub struct AddressFind {
 /// Wallet key export arguments
 #[derive(Clone, Debug)]
 pub struct KeyExport {
+    /// Whether to export a MASP spending key
+    pub shielded: bool,
     /// Key alias
     pub alias: String,
     /// Export key pre-genesis instead of a current chain
