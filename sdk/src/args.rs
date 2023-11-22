@@ -1909,7 +1909,7 @@ pub struct KeyGen {
     /// Whether to generate a raw non-hd key
     pub raw: bool,
     /// Key alias
-    pub alias: Option<String>,
+    pub alias: String,
     /// Whether to force overwrite the alias, if provided
     pub alias_force: bool,
     /// Generate a key for pre-genesis, instead of a current chain
@@ -1928,7 +1928,7 @@ pub struct KeyDerive {
     /// Whether to generate a spending key for the shielded pool
     pub shielded: bool,
     /// Key alias
-    pub alias: Option<String>,
+    pub alias: String,
     /// Whether to force overwrite the alias, if provided
     pub alias_force: bool,
     /// Don't encrypt the keypair

@@ -193,11 +193,6 @@ fn spending_key_gen(
         ..
     }: args::KeyGen,
 ) {
-    let alias = alias.unwrap_or_else(|| {
-        display_line!(io, "Missing alias.");
-        display_line!(io, "No changes are persisted. Exiting.");
-        cli::safe_exit(1)
-    });
     let mut wallet = load_wallet(ctx, is_pre_genesis);
     let alias = alias.to_lowercase();
     let password = read_and_confirm_encryption_password(unsafe_dont_encrypt);
@@ -353,7 +348,7 @@ async fn transparent_key_and_address_derive(
         wallet
             .derive_key_from_mnemonic_code(
                 scheme,
-                alias,
+                Some(alias),
                 alias_force,
                 derivation_path,
                 None,
@@ -396,13 +391,12 @@ async fn transparent_key_and_address_derive(
 
         let pubkey = common::PublicKey::try_from_slice(&response.public_key)
             .expect("unable to decode public key from hardware wallet");
-        let pkh = PublicKeyHash::from(&pubkey);
         let address = Address::from_str(&response.address_str)
             .expect("unable to decode address from hardware wallet");
 
         wallet
             .insert_public_key(
-                alias.unwrap_or_else(|| pkh.to_string()),
+                alias,
                 pubkey,
                 Some(address),
                 Some(derivation_path),
@@ -445,7 +439,7 @@ fn transparent_key_and_address_gen(
     let alias = if raw {
         wallet.gen_store_secret_key(
             scheme,
-            alias,
+            Some(alias),
             alias_force,
             encryption_password,
             &mut OsRng,
@@ -464,7 +458,7 @@ fn transparent_key_and_address_gen(
                 });
         wallet.derive_store_hd_secret_key(
             scheme,
-            alias,
+            Some(alias),
             alias_force,
             seed,
             derivation_path,
