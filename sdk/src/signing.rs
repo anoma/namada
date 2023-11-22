@@ -231,7 +231,7 @@ pub async fn sign_tx<'a, F: std::future::Future<Output = Result<Tx, Error>>>(
     args: &args::Tx,
     tx: &mut Tx,
     signing_data: SigningTxData,
-    sign: impl Fn(Tx, common::PublicKey, HashSet<Signable>) -> F,
+    sign: impl Fn(Tx, common::PublicKey, HashSet<Signable>) -> F + Sync + Send,
 ) -> Result<(), Error> {
     let mut used_pubkeys = HashSet::new();
 
