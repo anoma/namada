@@ -6789,6 +6789,10 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.arg(ALIAS.def().help("The validator address alias."))
+                .arg(RAW_ADDRESS_ESTABLISHED.def().help(
+                    "The address of an established account to be promoted to \
+                     a validator.",
+                ))
                 .arg(NET_ADDRESS.def().help(
                     "Static {host:port} of your validator node's P2P address. \
                      Namada uses port `26656` for P2P connections by default, \
@@ -6858,13 +6862,19 @@ pub mod args {
     pub struct SignGenesisTx {
         pub path: PathBuf,
         pub output: Option<PathBuf>,
+        pub validator_alias: Option<String>,
     }
 
     impl Args for SignGenesisTx {
         fn parse(matches: &ArgMatches) -> Self {
             let path = PATH.parse(matches);
             let output = OUTPUT.parse(matches);
-            Self { path, output }
+            let validator_alias = ALIAS_OPT.parse(matches);
+            Self {
+                path,
+                output,
+                validator_alias,
+            }
         }
 
         fn def(app: App) -> App {
@@ -6876,6 +6886,11 @@ pub mod args {
                 "Save the output to a TOML file. When not supplied, the \
                  signed transactions will be printed to stdout instead.",
             ))
+            .arg(
+                ALIAS_OPT
+                    .def()
+                    .help("Optional alias to a validator wallet."),
+            )
         }
     }
 }

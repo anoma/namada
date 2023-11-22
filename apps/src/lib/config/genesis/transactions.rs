@@ -50,6 +50,7 @@ pub struct GenesisValidatorData {
 pub fn sign_txs(
     txs: UnsignedTransactions,
     wallet: &mut Wallet<CliWalletUtils>,
+    validator_wallet: Option<&ValidatorWallet>,
 ) -> Transactions<Unvalidated> {
     let UnsignedTransactions {
         established_account,
@@ -57,29 +58,19 @@ pub fn sign_txs(
         bond,
     } = txs;
 
-    // Validate input first
-    if validator_account.is_some() && !validator_account.unwrap().is_empty() {
-        panic!(
-            "Validator transactions must be signed with a validator wallet."
-        );
-    }
-
-    if let Some(bonds) = bond.as_ref() {
-        for bond in bonds {
-            if bond.source.address() == bond.validator {
-                panic!(
-                    "Validator self-bonds must be signed with a validator \
-                     wallet."
-                )
-            }
-        }
-    }
-
-    // Sign all the transactions
-    let validator_account = None;
-    let bond = bond.map(|tx| {
-        tx.into_iter()
+    // Sign bond txs
+    let bond = bond.map(|txs| {
+        txs.into_iter()
             .map(|tx| sign_delegation_bond_tx(tx, wallet, &established_account))
+            .collect()
+    });
+
+    // Sign validator account txs
+    let validator_account = validator_account.map(|txs| {
+        let validator_wallet = validator_wallet
+            .expect("Validator wallet required to sign validator account txs");
+        txs.into_iter()
+            .map(|tx| sign_validator_account_tx(tx, validator_wallet))
             .collect()
     });
 
@@ -239,15 +230,6 @@ pub fn sign_validator_account_tx(
         metadata,
     }
 }
-
-// pub fn sign_self_bond_tx(
-// unsigned_tx: BondTx<Unvalidated>,
-// validator_wallet: &ValidatorWallet,
-// ) -> SignedBondTx<Unvalidated> {
-// let mut signed = SignedBondTx::from(unsigned_tx);
-// signed.sign(std::slice::from_ref(&validator_wallet.account_key));
-// signed
-// }
 
 pub fn sign_delegation_bond_tx(
     unsigned_tx: BondTx<Unvalidated>,

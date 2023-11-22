@@ -856,7 +856,11 @@ pub fn validate_genesis_templates(
 /// Sign genesis transactions.
 pub fn sign_genesis_tx(
     global_args: args::Global,
-    args::SignGenesisTx { path, output }: args::SignGenesisTx,
+    args::SignGenesisTx {
+        path,
+        output,
+        validator_alias,
+    }: args::SignGenesisTx,
 ) {
     let (mut wallet, _wallet_file) =
         load_pre_genesis_wallet_or_exit(&global_args.base_dir);
@@ -876,18 +880,16 @@ pub fn sign_genesis_tx(
             );
             safe_exit(1);
         });
-    if unsigned.validator_account.is_some()
-        && !unsigned.validator_account.as_ref().unwrap().is_empty()
-    {
-        eprintln!(
-            "Validator transactions must be signed with a validator wallet. \
-             You can use `namada client utils init-genesis-validator` \
-             supplied with the required arguments to generate a validator \
-             wallet and sign the validator genesis transactions."
-        );
-        safe_exit(1);
-    }
-    let signed = genesis::transactions::sign_txs(unsigned, &mut wallet);
+    let maybe_pre_genesis_wallet = validator_alias.and_then(|alias| {
+        let pre_genesis_dir =
+            validator_pre_genesis_dir(&global_args.base_dir, &alias);
+        crate::wallet::pre_genesis::load(&pre_genesis_dir).ok()
+    });
+    let signed = genesis::transactions::sign_txs(
+        unsigned,
+        &mut wallet,
+        maybe_pre_genesis_wallet.as_ref(),
+    );
 
     match output {
         Some(output_path) => {
