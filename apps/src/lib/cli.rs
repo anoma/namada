@@ -712,7 +712,10 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Exports a keypair / spending key to a file.")
+                .about(
+                    "Exports a transparent keypair / shielded spending key to \
+                     a file.",
+                )
                 .add_args::<args::KeyExport>()
         }
     }

@@ -1925,7 +1925,7 @@ pub struct KeyGen {
 pub struct KeyDerive {
     /// Scheme type
     pub scheme: SchemeType,
-    /// Whether to generate a spending key for the shielded pool
+    /// Whether to generate a MASP spending key
     pub shielded: bool,
     /// Key alias
     pub alias: String,
@@ -1942,7 +1942,7 @@ pub struct KeyDerive {
 /// Wallet key lookup arguments
 #[derive(Clone, Debug)]
 pub struct KeyFind {
-    /// Whether to find shielded address by alias
+    /// Whether to find a MASP address by alias
     pub shielded: bool,
     /// Key alias to lookup keypair with
     pub alias: Option<String>,
@@ -1959,7 +1959,7 @@ pub struct KeyFind {
 /// Wallet list keys arguments
 #[derive(Clone, Debug)]
 pub struct KeyList {
-    /// Whether to list spending keys of the shielded pool
+    /// Whether to list MASP spending keys
     pub shielded: bool,
     /// Don't decrypt keys
     pub decrypt: bool,
@@ -1972,7 +1972,7 @@ pub struct KeyList {
 /// List addresses arguments
 #[derive(Clone, Debug)]
 pub struct AddressList {
-    /// Whether to list payment addresses of the shielded pool
+    /// Whether to list MASP payment addresses
     pub shielded: bool,
     /// List addresses pre-genesis instead of current chain
     pub is_pre_genesis: bool,

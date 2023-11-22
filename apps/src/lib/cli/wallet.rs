@@ -363,7 +363,7 @@ async fn transparent_key_and_address_derive(
             .0
     } else {
         let hidapi = HidApi::new().unwrap_or_else(|err| {
-            edisplay_line!(io, "Failed to create Hidapi: {}", err);
+            edisplay_line!(io, "Failed to create HidApi: {}", err);
             cli::safe_exit(1)
         });
         let app = NamadaApp::new(
