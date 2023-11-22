@@ -33,6 +33,7 @@ use crate::wallet::CliWalletUtils;
 pub const PRE_GENESIS_TX_TIMESTAMP: DateTimeUtc = MIN_UTC;
 
 pub struct GenesisValidatorData {
+    pub address: EstablishedAddress,
     pub commission_rate: Dec,
     pub max_commission_rate_change: Dec,
     pub net_address: SocketAddr,
@@ -49,6 +50,7 @@ pub struct GenesisValidatorData {
 pub fn sign_txs(
     txs: UnsignedTransactions,
     wallet: &mut Wallet<CliWalletUtils>,
+    validator_wallet: Option<&ValidatorWallet>,
 ) -> Transactions<Unvalidated> {
     let UnsignedTransactions {
         established_account,
@@ -56,29 +58,19 @@ pub fn sign_txs(
         bond,
     } = txs;
 
-    // Validate input first
-    if validator_account.is_some() && !validator_account.unwrap().is_empty() {
-        panic!(
-            "Validator transactions must be signed with a validator wallet."
-        );
-    }
-
-    if let Some(bonds) = bond.as_ref() {
-        for bond in bonds {
-            if bond.source.address() == bond.validator {
-                panic!(
-                    "Validator self-bonds must be signed with a validator \
-                     wallet."
-                )
-            }
-        }
-    }
-
-    // Sign all the transactions
-    let validator_account = None;
-    let bond = bond.map(|tx| {
-        tx.into_iter()
+    // Sign bond txs
+    let bond = bond.map(|txs| {
+        txs.into_iter()
             .map(|tx| sign_delegation_bond_tx(tx, wallet, &established_account))
+            .collect()
+    });
+
+    // Sign validator account txs
+    let validator_account = validator_account.map(|txs| {
+        let validator_wallet = validator_wallet
+            .expect("Validator wallet required to sign validator account txs");
+        txs.into_iter()
+            .map(|tx| sign_validator_account_tx(tx, validator_wallet))
             .collect()
     });
 
@@ -96,7 +88,7 @@ pub fn parse_unsigned(
     toml::from_slice(bytes)
 }
 
-/// Create signed [`Transactions`] for a genesis validator.
+/// Create [`UnsignedTransactions`] for a genesis validator.
 pub fn init_validator(
     GenesisValidatorData {
         address,
@@ -110,10 +102,9 @@ pub fn init_validator(
         discord_handle,
     }: GenesisValidatorData,
     validator_wallet: &ValidatorWallet,
-) -> (Address, Transactions<Unvalidated>) {
+) -> (Address, UnsignedTransactions) {
     let unsigned_validator_account_tx = UnsignedValidatorAccountTx {
-        address,
-        account_key: StringEncoded::new(validator_wallet.account_key.ref_to()),
+        address: StringEncoded::new(address),
         consensus_key: StringEncoded::new(
             validator_wallet.consensus_key.ref_to(),
         ),
@@ -136,17 +127,17 @@ pub fn init_validator(
         vp: "vp_user".to_string(),
         commission_rate,
         max_commission_rate_change,
-        email,
-        description,
-        website,
-        discord_handle,
         net_address,
+        metadata: ValidatorMetaData {
+            email,
+            description,
+            website,
+            discord_handle,
+        },
     };
-    let unsigned_validator_addr = unsigned_validator_account_tx.address.clone();
-    let validator_account = Some(vec![sign_validator_account_tx(
-        unsigned_validator_account_tx,
-        validator_wallet,
-    )]);
+    let unsigned_validator_addr =
+        unsigned_validator_account_tx.address.raw.clone();
+    let validator_account = Some(vec![unsigned_validator_account_tx]);
 
     let bond = if self_bond_amount.amount.is_zero() {
         None
@@ -158,12 +149,11 @@ pub fn init_validator(
             validator: Address::Established(unsigned_validator_addr.clone()),
             amount: self_bond_amount,
         };
-        let bond_tx = sign_self_bond_tx(unsigned_bond_tx, validator_wallet);
-        Some(vec![bond_tx])
+        Some(vec![unsigned_bond_tx])
     };
 
     let address = Address::Established(unsigned_validator_addr);
-    let txs = Transactions {
+    let txs = UnsignedTransactions {
         validator_account,
         bond,
         ..Default::default()
@@ -177,7 +167,6 @@ pub fn sign_validator_account_tx(
     validator_wallet: &ValidatorWallet,
 ) -> SignedValidatorAccountTx {
     // Sign the tx with every validator key to authorize their usage
-    let account_key_sig = sign_tx(&unsigned_tx, &validator_wallet.account_key);
     let consensus_key_sig =
         sign_tx(&unsigned_tx, &validator_wallet.consensus_key);
     let protocol_key_sig = sign_tx(
@@ -192,26 +181,18 @@ pub fn sign_validator_account_tx(
 
     let ValidatorAccountTx {
         address,
-        account_key,
         consensus_key,
         protocol_key,
         tendermint_node_key,
         vp,
         commission_rate,
         max_commission_rate_change,
-        email,
-        description,
-        website,
-        discord_handle,
         net_address,
         eth_hot_key,
         eth_cold_key,
+        metadata,
     } = unsigned_tx;
 
-    let account_key = SignedPk {
-        pk: account_key,
-        authorization: account_key_sig,
-    };
     let consensus_key = SignedPk {
         pk: consensus_key,
         authorization: consensus_key_sig,
@@ -237,30 +218,17 @@ pub fn sign_validator_account_tx(
 
     SignedValidatorAccountTx {
         address,
-        account_key,
         consensus_key,
         protocol_key,
         tendermint_node_key,
         vp,
         commission_rate,
         max_commission_rate_change,
-        email,
-        description,
-        website,
-        discord_handle,
         net_address,
         eth_hot_key,
         eth_cold_key,
+        metadata,
     }
-}
-
-pub fn sign_self_bond_tx(
-    unsigned_tx: BondTx<Unvalidated>,
-    validator_wallet: &ValidatorWallet,
-) -> SignedBondTx<Unvalidated> {
-    let mut signed = SignedBondTx::from(unsigned_tx);
-    signed.sign(std::slice::from_ref(&validator_wallet.account_key));
-    signed
 }
 
 pub fn sign_delegation_bond_tx(
@@ -424,7 +392,6 @@ pub struct ValidatorAccountTx<PK> {
     /// P2P IP:port
     pub net_address: SocketAddr,
     /// PKs have to come last in TOML to avoid `ValueAfterTable` error
-    pub account_key: PK,
     pub consensus_key: PK,
     pub protocol_key: PK,
     pub tendermint_node_key: PK,
@@ -460,7 +427,21 @@ impl DeriveEstablishedAddress for EstablishedAccountTx {
     const SALT: &'static str = "established-account-tx";
 }
 
-pub type SignedBondTx<T> = Signed<BondTx<T>>;
+#[derive(
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshSerialize,
+    BorshDeserialize,
+    PartialEq,
+    Eq,
+)]
+pub struct SignedBondTx<T: TemplateValidation> {
+    #[serde(flatten)]
+    pub data: BondTx<T>,
+    pub signatures: Vec<StringEncoded<common::Signature>>,
+}
 
 impl<T> SignedBondTx<T>
 where
@@ -597,22 +578,6 @@ impl<T: TemplateValidation> From<BondTx<T>> for SignedBondTx<T> {
     PartialEq,
     Eq,
 )]
-pub struct Signed<T> {
-    #[serde(flatten)]
-    pub data: T,
-    pub signatures: Vec<StringEncoded<common::Signature>>,
-}
-
-#[derive(
-    Clone,
-    Debug,
-    Deserialize,
-    Serialize,
-    BorshSerialize,
-    BorshDeserialize,
-    PartialEq,
-    Eq,
-)]
 pub struct SignedPk {
     pub pk: StringEncoded<common::PublicKey>,
     pub authorization: StringEncoded<common::Signature>,
@@ -631,8 +596,7 @@ pub fn validate(
         Address,
         (Vec<common::PublicKey>, u8),
     > = BTreeMap::default();
-    let mut validator_accounts: BTreeMap<Address, common::PublicKey> =
-        BTreeMap::default();
+    let mut validator_accounts = BTreeSet::new();
 
     let Transactions {
         ref established_account,
@@ -738,7 +702,6 @@ pub fn validate(
                         max_commission_rate_change: acct
                             .max_commission_rate_change,
                         net_address: acct.net_address,
-                        account_key: acct.account_key,
                         consensus_key: acct.consensus_key,
                         protocol_key: acct.protocol_key,
                         tendermint_node_key: acct.tendermint_node_key,
@@ -757,7 +720,7 @@ fn validate_bond(
     tx: SignedBondTx<Unvalidated>,
     balances: &mut BTreeMap<Alias, TokenBalancesForValidation>,
     established_accounts: &BTreeMap<Address, (Vec<common::PublicKey>, u8)>,
-    validator_accounts: &BTreeMap<Address, common::PublicKey>,
+    validator_accounts: &BTreeSet<Address>,
     parameters: &Parameters<Validated>,
 ) -> Option<BondTx<Validated>> {
     // Check signature
@@ -771,11 +734,6 @@ fn validate_bond(
                 established_accounts
                     .get(&established_addr)
                     .map(|(pks, t)| (pks.as_slice(), *t))
-                    .or_else(|| {
-                        validator_accounts
-                            .get(&established_addr)
-                            .map(|addr| (std::slice::from_ref(addr), 1))
-                    })
             }
             GenesisAddress::PublicKey(pk) => {
                 Some((std::slice::from_ref(&pk.raw), 1))
@@ -807,7 +765,7 @@ fn validate_bond(
     } = &validated_bond;
 
     // Check that the validator exists
-    if !validator_accounts.contains_key(validator) {
+    if !validator_accounts.contains(validator) {
         eprintln!(
             "Invalid bond tx. The target validator \"{validator}\" account \
              not found."
@@ -928,7 +886,7 @@ pub fn validate_validator_account(
     let mut is_valid = true;
 
     let established_address = {
-        let established_address = Address::Established(tx.address.clone());
+        let established_address = Address::Established(tx.address.raw.clone());
         if !all_used_addresses.contains(&established_address) {
             eprintln!(
                 "Unable to find established account with address \"{}\" in a \
@@ -965,18 +923,6 @@ pub fn validate_validator_account(
 
     // Check keys authorizations
     let unsigned = UnsignedValidatorAccountTx::from(tx);
-    if !validate_signature(
-        &unsigned,
-        &tx.account_key.pk.raw,
-        &tx.account_key.authorization.raw,
-    ) {
-        eprintln!(
-            "Invalid `account_key` authorization for `validator_account` tx \
-             with address \"{}\".",
-            established_address
-        );
-        is_valid = false;
-    }
     if !validate_signature(
         &unsigned,
         &tx.consensus_key.pk.raw,
@@ -1066,12 +1012,8 @@ impl From<&SignedValidatorAccountTx> for UnsignedValidatorAccountTx {
             vp,
             commission_rate,
             max_commission_rate_change,
-            email,
-            description,
-            website,
-            discord_handle,
+            metadata,
             net_address,
-            account_key,
             consensus_key,
             protocol_key,
             tendermint_node_key,
@@ -1085,12 +1027,8 @@ impl From<&SignedValidatorAccountTx> for UnsignedValidatorAccountTx {
             vp: vp.clone(),
             commission_rate: *commission_rate,
             max_commission_rate_change: *max_commission_rate_change,
-            email: email.clone(),
-            description: description.clone(),
-            website: website.clone(),
-            discord_handle: discord_handle.clone(),
+            metadata: metadata.clone(),
             net_address: *net_address,
-            account_key: account_key.pk.clone(),
             consensus_key: consensus_key.pk.clone(),
             protocol_key: protocol_key.pk.clone(),
             tendermint_node_key: tendermint_node_key.pk.clone(),

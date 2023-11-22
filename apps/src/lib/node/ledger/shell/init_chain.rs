@@ -14,7 +14,6 @@ use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::vm::validate_untrusted_wasm;
 use namada_sdk::eth_bridge::EthBridgeStatus;
-use namada_sdk::proof_of_stake::types::ValidatorMetaData;
 use namada_sdk::proof_of_stake::PosParams;
 
 use super::*;
@@ -396,12 +395,8 @@ where
                         vp,
                         commission_rate,
                         max_commission_rate_change,
-                        email,
-                        description,
-                        website,
-                        discord_handle,
+                        metadata,
                         net_address: _,
-                        account_key,
                         consensus_key,
                         protocol_key,
                         tendermint_node_key: _,
@@ -420,14 +415,6 @@ where
                 self.wl_storage
                     .write_bytes(&Key::validity_predicate(address), code_hash)
                     .expect("Unable to write user VP");
-                // Validator account key
-                storage_api::account::set_public_key_at(
-                    &mut self.wl_storage,
-                    address,
-                    &account_key.pk.raw,
-                    0,
-                )
-                .unwrap();
 
                 self.wl_storage
                     .write(&protocol_pk_key(address), &protocol_key.pk.raw)
@@ -447,12 +434,7 @@ where
                         current_epoch,
                         commission_rate: *commission_rate,
                         max_commission_rate_change: *max_commission_rate_change,
-                        metadata: ValidatorMetaData {
-                            email: email.clone(),
-                            description: description.clone(),
-                            website: website.clone(),
-                            discord_handle: discord_handle.clone(),
-                        },
+                        metadata: metadata.clone(),
                         offset_opt: Some(0),
                     },
                 ) {

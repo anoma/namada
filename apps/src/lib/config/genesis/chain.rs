@@ -142,10 +142,10 @@ impl Finalized {
             wallet.extend(pre_genesis_wallet);
         }
         if let Some((alias, validator_wallet)) = validator {
-            let account_pk = validator_wallet.account_key.ref_to();
+            let tendermint_pk = validator_wallet.tendermint_node_key.ref_to();
             let address = self
                 .transactions
-                .find_validator(&account_pk)
+                .find_validator(&tendermint_pk)
                 .map(|tx| tx.address.clone())
                 .expect("Validator alias not found in genesis transactions.");
             wallet.extend_from_pre_genesis_validator(
@@ -162,12 +162,10 @@ impl Finalized {
         &self,
         base_dir: &Path,
         node_mode: TendermintMode,
-        validator_account_pk: Option<&common::PublicKey>,
+        tendermint_pk: Option<&common::PublicKey>,
         allow_duplicate_ip: bool,
     ) -> Config {
-        if node_mode != TendermintMode::Validator
-            && validator_account_pk.is_some()
-        {
+        if node_mode != TendermintMode::Validator && tendermint_pk.is_some() {
             println!(
                 "Warning: Validator alias used to derive config, but node \
                  mode is not validator, it is {node_mode:?}!"
@@ -178,10 +176,10 @@ impl Finalized {
 
         // Derive persistent peers from genesis
         let persistent_peers = self.derive_persistent_peers();
-        // If `validator_account_pk` is given, find its net_address
+        // If `tendermint_pk` is given, find its net_address
         let validator_net_and_tm_address =
-            if let Some(account_pk) = validator_account_pk {
-                self.transactions.find_validator(account_pk).map(
+            if let Some(tendermint_pk) = tendermint_pk {
+                self.transactions.find_validator(tendermint_pk).map(
                     |validator_tx| {
                         (
                             validator_tx.tx.net_address,
@@ -653,7 +651,7 @@ impl FinalizedTransactions {
         let validator_account = validator_account.map(|txs| {
             txs.into_iter()
                 .map(|tx| FinalizedValidatorAccountTx {
-                    address: Address::Established(tx.address.clone()),
+                    address: Address::Established(tx.address.raw.clone()),
                     tx,
                 })
                 .collect()
@@ -667,12 +665,12 @@ impl FinalizedTransactions {
 
     fn find_validator(
         &self,
-        validator_account_pk: &common::PublicKey,
+        tendermint_pk: &common::PublicKey,
     ) -> Option<&FinalizedValidatorAccountTx> {
         let validator_accounts = self.validator_account.as_ref()?;
         validator_accounts
             .iter()
-            .find(|tx| &tx.tx.account_key.pk.raw == validator_account_pk)
+            .find(|tx| &tx.tx.tendermint_node_key.pk.raw == tendermint_pk)
     }
 }
 

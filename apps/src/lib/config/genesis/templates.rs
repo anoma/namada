@@ -18,7 +18,7 @@ use namada::types::token::{
 use serde::{Deserialize, Serialize};
 
 use super::toml_utils::{read_toml, write_toml};
-use super::transactions::{self, Transactions, UnsignedValidatorAccountTx};
+use super::transactions::{self, Transactions};
 use crate::config::genesis::chain::DeriveEstablishedAddress;
 use crate::config::genesis::transactions::{BondTx, SignedBondTx};
 use crate::config::genesis::GenesisAddress;
@@ -825,15 +825,6 @@ pub fn validate_parameters(
             }
         }
 
-        if let Some(accs) = &txs.validator_account {
-            if accs.iter().any(|acct| {
-                let addr =
-                    UnsignedValidatorAccountTx::from(acct).derive_address();
-                &addr == steward
-            }) {
-                found_steward = true;
-            }
-        }
         is_valid = found_steward && is_valid;
         if !is_valid {
             eprintln!(

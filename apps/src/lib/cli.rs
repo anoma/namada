@@ -2867,7 +2867,7 @@ pub mod args {
     use std::str::FromStr;
 
     use namada::ibc::core::ics24_host::identifier::{ChannelId, PortId};
-    use namada::types::address::Address;
+    use namada::types::address::{Address, EstablishedAddress};
     use namada::types::chain::{ChainId, ChainIdPrefix};
     use namada::types::dec::Dec;
     use namada::types::ethereum_events::EthAddress;
@@ -3054,6 +3054,7 @@ pub mod args {
     pub const PROPOSAL_VOTE_ETH_OPT: ArgOpt<String> = arg_opt("eth");
     pub const PROPOSAL_VOTE: Arg<String> = arg("vote");
     pub const RAW_ADDRESS: Arg<Address> = arg("address");
+    pub const RAW_ADDRESS_ESTABLISHED: Arg<EstablishedAddress> = arg("address");
     pub const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
     pub const RAW_PUBLIC_KEY: Arg<common::PublicKey> = arg("public-key");
     pub const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> =
@@ -6751,6 +6752,7 @@ pub mod args {
         pub description: Option<String>,
         pub website: Option<String>,
         pub discord_handle: Option<String>,
+        pub address: EstablishedAddress,
     }
 
     impl Args for InitGenesisValidator {
@@ -6768,6 +6770,7 @@ pub mod args {
             let description = DESCRIPTION_OPT.parse(matches);
             let website = WEBSITE_OPT.parse(matches);
             let discord_handle = DISCORD_OPT.parse(matches);
+            let address = RAW_ADDRESS_ESTABLISHED.parse(matches);
             Self {
                 alias,
                 net_address,
@@ -6780,11 +6783,16 @@ pub mod args {
                 description,
                 website,
                 discord_handle,
+                address,
             }
         }
 
         fn def(app: App) -> App {
             app.arg(ALIAS.def().help("The validator address alias."))
+                .arg(RAW_ADDRESS_ESTABLISHED.def().help(
+                    "The address of an established account to be promoted to \
+                     a validator.",
+                ))
                 .arg(NET_ADDRESS.def().help(
                     "Static {host:port} of your validator node's P2P address. \
                      Namada uses port `26656` for P2P connections by default, \
@@ -6854,13 +6862,19 @@ pub mod args {
     pub struct SignGenesisTx {
         pub path: PathBuf,
         pub output: Option<PathBuf>,
+        pub validator_alias: Option<String>,
     }
 
     impl Args for SignGenesisTx {
         fn parse(matches: &ArgMatches) -> Self {
             let path = PATH.parse(matches);
             let output = OUTPUT.parse(matches);
-            Self { path, output }
+            let validator_alias = ALIAS_OPT.parse(matches);
+            Self {
+                path,
+                output,
+                validator_alias,
+            }
         }
 
         fn def(app: App) -> App {
@@ -6872,6 +6886,11 @@ pub mod args {
                 "Save the output to a TOML file. When not supplied, the \
                  signed transactions will be printed to stdout instead.",
             ))
+            .arg(
+                ALIAS_OPT
+                    .def()
+                    .help("Optional alias to a validator wallet."),
+            )
         }
     }
 }

@@ -30,8 +30,6 @@ pub enum ReadError {
 pub struct ValidatorWallet {
     /// The wallet store that can be written/read to/from TOML
     pub store: ValidatorStore,
-    /// Cryptographic keypair for validator account key
-    pub account_key: common::SecretKey,
     /// Cryptographic keypair for consensus key
     pub consensus_key: common::SecretKey,
     /// Cryptographic keypair for eth cold key
@@ -46,8 +44,6 @@ pub struct ValidatorWallet {
 /// genesis setup.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ValidatorStore {
-    /// Cryptographic keypair for validator account key
-    pub account_key: wallet::StoredKeypair<common::SecretKey>,
     /// Cryptographic keypair for consensus key
     pub consensus_key: wallet::StoredKeypair<common::SecretKey>,
     /// Cryptographic keypair for eth cold key
