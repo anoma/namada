@@ -571,9 +571,11 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Generates a new transparent / shielded secret key.")
                 .long_about(
-                    "Generates a keypair with a given alias and derives the \
-                     implicit address from its public key. The address will \
-                     be stored with the same alias. TODO shielded",
+                    "In the transparent setting, generates a keypair with a \
+                     given alias and derives the implicit address from its \
+                     public key. The address will be stored with the same \
+                     alias. In the shielded setting, generates a new spending \
+                     key.",
                 )
                 .add_args::<args::KeyGen>()
         }
@@ -6004,7 +6006,7 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let scheme = SCHEME.parse(matches);
             let shielded = SHIELDED.parse(matches);
-            let alias = ALIAS_OPT.parse(matches);
+            let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let use_device = USE_DEVICE.parse(matches);
@@ -6032,7 +6034,7 @@ pub mod args {
                     .def()
                     .help("Derive a spending key for the shielded pool."),
             )
-            .arg(ALIAS_OPT.def().help(
+            .arg(ALIAS.def().help(
                 "The key and address alias. If none provided, the alias will \
                  be the public key hash.",
             ))
@@ -6065,7 +6067,7 @@ pub mod args {
             let scheme = SCHEME.parse(matches);
             let shielded = SHIELDED.parse(matches);
             let raw = RAW_KEY_GEN.parse(matches);
-            let alias = ALIAS_OPT.parse(matches);
+            let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let derivation_path = HD_WALLET_DERIVATION_PATH.parse(matches);
@@ -6101,7 +6103,7 @@ pub mod args {
                          mnemonic code is generated.",
                     ),
             )
-            .arg(ALIAS_OPT.def().help(
+            .arg(ALIAS.def().help(
                 "The key and address alias. If none provided, the alias will \
                  be the public key hash.",
             ))
