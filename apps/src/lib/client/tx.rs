@@ -518,8 +518,8 @@ pub async fn submit_become_validator<'a>(
     if !address.is_established() {
         edisplay_line!(
             namada.io(),
-            "The given address {address} is not established. Only established \
-             address can become a validator.",
+            "The given address {address} is not established. Only an \
+             established address can become a validator.",
         );
         if !tx_args.force {
             safe_exit(1)
@@ -557,7 +557,7 @@ pub async fn submit_become_validator<'a>(
         edisplay_line!(
             namada.io(),
             "The validator commission rate must not exceed 1.0 or 100%, and \
-             it must be 0 or positive"
+             it must be 0 or positive."
         );
         if !tx_args.force {
             safe_exit(1)
@@ -569,7 +569,7 @@ pub async fn submit_become_validator<'a>(
         edisplay_line!(
             namada.io(),
             "The validator maximum change in commission rate per epoch must \
-             not exceed 1.0 or 100%"
+             not exceed 1.0 or 100%, and it must be 0 or positive."
         );
         if !tx_args.force {
             safe_exit(1)
@@ -579,7 +579,7 @@ pub async fn submit_become_validator<'a>(
     if email.is_empty() {
         edisplay_line!(
             namada.io(),
-            "The validator email must not be an empty string"
+            "The validator email must not be an empty string."
         );
         if !tx_args.force {
             safe_exit(1)

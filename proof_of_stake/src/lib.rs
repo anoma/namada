@@ -2764,8 +2764,8 @@ where
 
     if !address.is_established() {
         return Err(storage_api::Error::new_const(
-            "The given address {address} is not established. Only established \
-             address can become a validator.",
+            "The given address {address} is not established. Only an \
+             established address can become a validator.",
         ));
     }
 

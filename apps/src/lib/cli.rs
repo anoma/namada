@@ -1434,7 +1434,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "Send a signed transaction to create a established \
+                    "Send a signed transaction to create an established \
                      account and then become a validator.",
                 )
                 .add_args::<args::TxInitValidator<args::CliTypes>>()
