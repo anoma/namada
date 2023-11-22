@@ -2168,7 +2168,8 @@ pub mod fs {
         }
     }
 
-    #[async_trait(?Send)]
+    #[cfg_attr(feature = "async-send", async_trait::async_trait)]
+    #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
     impl ShieldedUtils for FsShieldedUtils {
         fn local_tx_prover(&self) -> LocalTxProver {
             if let Ok(params_dir) = env::var(ENV_VAR_MASP_PARAMS_DIR) {
