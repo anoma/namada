@@ -2187,6 +2187,7 @@ pub mod cmds {
         EpochSleep(EpochSleep),
         ValidateGenesisTemplates(ValidateGenesisTemplates),
         SignGenesisTx(SignGenesisTx),
+        UnifyGenesisTemplates(UnifyGenesisTemplates),
     }
 
     impl SubCmd for Utils {
@@ -2216,6 +2217,8 @@ pub mod cmds {
                     SubCmd::parse(matches).map(Self::ValidateGenesisTemplates);
                 let genesis_tx =
                     SubCmd::parse(matches).map(Self::SignGenesisTx);
+                let unify_genesis_templates =
+                    SubCmd::parse(matches).map(Self::UnifyGenesisTemplates);
                 join_network
                     .or(fetch_wasms)
                     .or(validate_wasm)
@@ -2228,6 +2231,7 @@ pub mod cmds {
                     .or(epoch_sleep)
                     .or(validate_genesis_templates)
                     .or(genesis_tx)
+                    .or(unify_genesis_templates)
             })
         }
 
@@ -2246,6 +2250,7 @@ pub mod cmds {
                 .subcommand(EpochSleep::def())
                 .subcommand(ValidateGenesisTemplates::def())
                 .subcommand(SignGenesisTx::def())
+                .subcommand(UnifyGenesisTemplates::def())
                 .subcommand_required(true)
                 .arg_required_else_help(true)
         }
@@ -2346,6 +2351,28 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Derive account addresses from a genesis txs toml file.")
                 .add_args::<args::DeriveGenesisAddresses>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct UnifyGenesisTemplates(pub args::UnifyGenesisTemplates);
+
+    impl SubCmd for UnifyGenesisTemplates {
+        const CMD: &'static str = "unify-genesis-templates";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                Self(args::UnifyGenesisTemplates::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Concatenate all the given genesis templates into a \
+                     single (unified) genesis transactions file.",
+                )
+                .add_args::<args::UnifyGenesisTemplates>()
         }
     }
 
@@ -3063,6 +3090,7 @@ pub mod args {
     pub const OWNER: Arg<WalletAddress> = arg("owner");
     pub const OWNER_OPT: ArgOpt<WalletAddress> = OWNER.opt();
     pub const PATH: Arg<PathBuf> = arg("path");
+    pub const PATH_MANY: ArgMulti<PathBuf> = arg_multi("path");
     pub const PIN: ArgFlag = flag("pin");
     pub const PORT_ID: ArgDefault<PortId> = arg_default(
         "port-id",
@@ -3101,6 +3129,7 @@ pub mod args {
     pub const SIGNING_KEY: Arg<WalletKeypair> = arg("signing-key");
     pub const SIGNING_KEYS: ArgMulti<WalletKeypair> = arg_multi("signing-keys");
     pub const SIGNATURES: ArgMulti<PathBuf> = arg_multi("signatures");
+    pub const SIGNED: ArgFlag = flag("signed");
     pub const SOURCE: Arg<WalletAddress> = arg("source");
     pub const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
     pub const STEWARD: Arg<WalletAddress> = arg("steward");
@@ -6801,6 +6830,32 @@ pub mod args {
             .arg(VP.def().help(
                 "The validity predicate of the account. Defaults to `vp_user`.",
             ))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct UnifyGenesisTemplates {
+        pub paths: Vec<PathBuf>,
+        pub signed: bool,
+    }
+
+    impl Args for UnifyGenesisTemplates {
+        fn parse(matches: &ArgMatches) -> Self {
+            let paths = PATH_MANY.parse(matches);
+            let signed = SIGNED.parse(matches);
+            Self { paths, signed }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(PATH_MANY.def().help(
+                "Paths to genesis transaction toml files. Repeat as many \
+                 times as needed.",
+            ))
+            .arg(
+                SIGNED.def().help(
+                    "Whether the genesis tx toml files are signed or not.",
+                ),
+            )
         }
     }
 
