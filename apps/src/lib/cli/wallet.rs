@@ -488,7 +488,7 @@ fn key_gen(ctx: Context, io: &impl Io, args_key_gen: args::KeyGen) {
     }
 }
 
-/// TODO
+/// HD key derivation from mnemonic code
 async fn key_derive(
     ctx: Context,
     io: &impl Io,

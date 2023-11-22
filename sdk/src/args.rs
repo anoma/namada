@@ -2055,7 +2055,7 @@ pub struct KeyGen {
     pub alias_force: bool,
     /// Don't encrypt the keypair
     pub unsafe_dont_encrypt: bool,
-    /// BIP44 derivation path
+    /// BIP44 / ZIP32 derivation path
     pub derivation_path: String,
 }
 
