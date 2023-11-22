@@ -497,7 +497,7 @@ pub trait Namada<'a>: Sized + Sync {
     }
 
     /// Sign the given transaction using the given signing data
-    async fn sign<F: std::future::Future<Output = crate::error::Result<Tx>>>(
+    async fn sign<F: std::future::Future<Output = crate::error::Result<Tx>> + Send + Sync>(
         &self,
         tx: &mut Tx,
         args: &args::Tx,

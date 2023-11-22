@@ -226,7 +226,7 @@ pub async fn default_sign(
 /// hashes needed for monitoring the tx on chain.
 ///
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
-pub async fn sign_tx<'a, F: std::future::Future<Output = Result<Tx, Error>>>(
+pub async fn sign_tx<'a, F: std::future::Future<Output = Result<Tx, Error>> + Send + Sync>(
     context: &impl Namada<'a>,
     args: &args::Tx,
     tx: &mut Tx,
