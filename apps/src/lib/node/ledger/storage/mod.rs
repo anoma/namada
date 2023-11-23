@@ -620,9 +620,6 @@ mod tests {
         let bytes = types::encode(&nonce);
         storage.write(&bp_nonce_key, bytes).unwrap();
 
-        let bytes = types::encode(&Uint::default());
-        storage.write(&bp_nonce_key, bytes).unwrap();
-
         storage.block.epoch = storage.block.epoch.next();
         storage.block.pred_epochs.new_epoch(BlockHeight(6));
         let batch = PersistentStorage::batch();
