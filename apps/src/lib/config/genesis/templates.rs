@@ -502,6 +502,8 @@ impl TokenBalances {
     BorshSerialize,
     PartialEq,
     Eq,
+    PartialOrd,
+    Ord,
 )]
 pub struct Unvalidated {}
 
@@ -514,6 +516,8 @@ pub struct Unvalidated {}
     BorshSerialize,
     PartialEq,
     Eq,
+    PartialOrd,
+    Ord,
 )]
 pub struct Validated {}
 
@@ -525,7 +529,9 @@ pub trait TemplateValidation: Serialize {
         + BorshSerialize
         + BorshDeserialize
         + PartialEq
-        + Eq;
+        + Eq
+        + PartialOrd
+        + Ord;
     type Balances: for<'a> Deserialize<'a>
         + Serialize
         + Clone
@@ -541,7 +547,9 @@ pub trait TemplateValidation: Serialize {
         + BorshSerialize
         + BorshDeserialize
         + PartialEq
-        + Eq;
+        + Eq
+        + PartialOrd
+        + Ord;
     type GasMinimums: for<'a> Deserialize<'a>
         + Serialize
         + Clone

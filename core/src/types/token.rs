@@ -504,6 +504,12 @@ impl PartialOrd for DenominatedAmount {
     }
 }
 
+impl Ord for DenominatedAmount {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+
 impl serde::Serialize for Amount {
     fn serialize<S>(
         &self,

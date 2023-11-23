@@ -9,7 +9,6 @@ use color_eyre::owo_colors::OwoColorize;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use itertools::Itertools;
 use namada::core::types::string_encoding::StringEncoded;
 use namada::types::chain::ChainId;
 use namada::types::dec::Dec;
@@ -25,6 +24,9 @@ use sha2::{Digest, Sha256};
 use crate::cli::args;
 use crate::cli::context::ENV_VAR_WASM_DIR;
 use crate::config::genesis::chain::DeriveEstablishedAddress;
+use crate::config::genesis::transactions::{
+    sign_delegation_bond_tx, UnsignedTransactions,
+};
 use crate::config::global::GlobalConfig;
 use crate::config::{
     self, genesis, get_default_namada_folder, Config, TendermintMode,
@@ -598,21 +600,51 @@ pub fn derive_genesis_addresses(
     let maybe_pre_genesis_wallet =
         try_load_pre_genesis_wallet(&global_args.base_dir)
             .map(|(wallet, _)| wallet);
-
-    let genesis_txs =
-        genesis::templates::read_transactions(&args.genesis_txs_path).unwrap();
+    let contents =
+        fs::read_to_string(&args.genesis_txs_path).unwrap_or_else(|err| {
+            eprintln!(
+                "Unable to read from file {}. Failed with error {err}.",
+                args.genesis_txs_path.to_string_lossy()
+            );
+            safe_exit(1)
+        });
+    let (estbd_txs, validator_addrs) =
+        toml::from_str::<'_, UnsignedTransactions>(&contents)
+            .ok()
+            .map(|txs| {
+                (
+                    txs.established_account.unwrap_or_default(),
+                    txs.validator_account
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|acct| acct.address)
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .unwrap_or_else(|| {
+                let genesis_txs = genesis::templates::read_transactions(
+                    &args.genesis_txs_path,
+                )
+                .unwrap();
+                (
+                    genesis_txs.established_account.unwrap_or_default(),
+                    genesis_txs
+                        .validator_account
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|acct| acct.address)
+                        .collect(),
+                )
+            });
 
     println!("{}", "Established account txs:".underline().bold());
-    for tx in genesis_txs
-        .established_account
-        .as_ref()
-        .into_iter()
-        .flatten()
-    {
-        let address = tx.derive_address();
-
+    for tx in &estbd_txs {
         println!();
-        println!("{} {address}", "Address:".bold().bright_green());
+        println!(
+            "{} {}",
+            "Address:".bold().bright_green(),
+            tx.derive_address()
+        );
 
         println!("{}", "Public key(s):".bold().bright_green());
         for (ix, pk) in tx.public_keys.iter().enumerate() {
@@ -629,39 +661,18 @@ pub fn derive_genesis_addresses(
             }
         }
     }
-    if genesis_txs
-        .established_account
-        .as_ref()
-        .map(|txs| txs.is_empty())
-        .unwrap_or(true)
-    {
+    if estbd_txs.is_empty() {
         println!();
         println!("{}", "<nil>".dimmed());
     }
-
     println!();
 
     println!("{}", "Validator account txs:".underline().bold());
-    for tx in genesis_txs.validator_account.as_ref().into_iter().flatten() {
+    for addr in &validator_addrs {
         println!();
-        println!("{} {}", "Address:".bold().bright_green(), tx.address);
-        let keys = [
-            ("Consensus key:", &tx.consensus_key.pk.raw),
-            ("Protocol key:", &tx.protocol_key.pk.raw),
-            ("Tendermint node key:", &tx.tendermint_node_key.pk.raw),
-            ("Ethereum hot key:", &tx.eth_hot_key.pk.raw),
-            ("Ethereum cold key:", &tx.eth_cold_key.pk.raw),
-        ];
-        for (description, key) in keys {
-            println!("{} {key}", description.bold().bright_green());
-        }
+        println!("{} {}", "Address:".bold().bright_green(), addr.raw);
     }
-    if genesis_txs
-        .validator_account
-        .as_ref()
-        .map(|txs| txs.is_empty())
-        .unwrap_or(true)
-    {
+    if validator_addrs.is_empty() {
         println!();
         println!("{}", "<nil>".dimmed());
     }
@@ -673,23 +684,23 @@ pub fn init_genesis_established_account(
     global_args: args::Global,
     args: args::InitGenesisEstablishedAccount,
 ) {
-    let (mut pre_genesis_wallet, _) =
+    let (pre_genesis_wallet, _) =
         load_pre_genesis_wallet_or_exit(&global_args.base_dir);
 
     let public_keys: Vec<_> = args
         .wallet_aliases
         .iter()
         .map(|alias| {
-            let sk = pre_genesis_wallet
-                .find_secret_key(alias, None)
-                .unwrap_or_else(|err| {
+            let pk = pre_genesis_wallet.find_public_key(alias).unwrap_or_else(
+                |err| {
                     eprintln!(
                         "Failed to look-up `{alias}` in the pre-genesis \
                          wallet: {err}",
                     );
                     safe_exit(1)
-                });
-            StringEncoded::new(sk.ref_to())
+                },
+            );
+            StringEncoded::new(pk)
         })
         .collect();
 
@@ -698,13 +709,7 @@ pub fn init_genesis_established_account(
         public_keys,
         args.threshold,
     );
-    let toml_path = {
-        let pre_genesis_dir = global_args.base_dir.join(PRE_GENESIS_DIR);
-        established_acc_pre_genesis_txs_file(
-            &args.wallet_aliases.iter().join("_"),
-            &pre_genesis_dir,
-        )
-    };
+    let toml_path = args.output_path;
     let toml_path_str = toml_path.to_string_lossy();
 
     let genesis_part = toml::to_string(&txs).unwrap();
@@ -717,8 +722,9 @@ pub fn init_genesis_established_account(
     });
 
     println!(
-        "{}: {address}",
-        "Derived established account address".bold()
+        "{}: {}",
+        "Derived established account address".bold(),
+        address.green(),
     );
     println!("{}: {toml_path_str}", "Wrote genesis tx to".bold());
 }
@@ -739,9 +745,36 @@ pub fn init_genesis_validator(
         description,
         website,
         discord_handle,
+        tx_path,
         address,
     }: args::InitGenesisValidator,
 ) {
+    let contents = fs::read_to_string(&tx_path).unwrap_or_else(|err| {
+        eprintln!(
+            "Unable to read from file {}. Failed with error {err}.",
+            tx_path.to_string_lossy()
+        );
+        safe_exit(1)
+    });
+    let prev_txs: UnsignedTransactions = toml::from_str(&contents).unwrap();
+    if prev_txs
+        .established_account
+        .as_ref()
+        .and_then(|accts| {
+            accts
+                .iter()
+                .find(|acct| acct.derive_established_address() == address)
+        })
+        .is_none()
+    {
+        eprintln!(
+            "The provided file did not contain an established account tx with \
+             the provided address {}",
+            address
+        );
+        safe_exit(1);
+    }
+
     // Validate the commission rate data
     if commission_rate > Dec::one() {
         eprintln!("The validator commission rate must not exceed 1.0 or 100%");
@@ -779,7 +812,7 @@ pub fn init_genesis_validator(
         pre_genesis::validator_file_name(&pre_genesis_dir).to_string_lossy()
     );
 
-    let (address, transactions) = genesis::transactions::init_validator(
+    let (address, mut transactions) = genesis::transactions::init_validator(
         genesis::transactions::GenesisValidatorData {
             address,
             commission_rate,
@@ -793,8 +826,20 @@ pub fn init_genesis_validator(
         },
         &validator_wallet,
     );
-    let toml_path = validator_pre_genesis_txs_file(&pre_genesis_dir);
+    let toml_path = tx_path;
     let toml_path_str = toml_path.to_string_lossy();
+    // append new transactions to the previous txs from the provided file.
+    transactions.established_account = prev_txs.established_account;
+    transactions
+        .validator_account
+        .as_mut()
+        .unwrap()
+        .append(&mut prev_txs.validator_account.unwrap_or_default());
+    transactions
+        .bond
+        .as_mut()
+        .unwrap()
+        .append(&mut prev_txs.bond.unwrap_or_default());
 
     let genesis_part = toml::to_string(&transactions).unwrap();
     fs::write(&toml_path, genesis_part).unwrap_or_else(|err| {
@@ -805,7 +850,11 @@ pub fn init_genesis_validator(
         safe_exit(1)
     });
 
-    println!("{}: {address}", "Derived validator account address".bold());
+    println!(
+        "{}: {}",
+        "Validator account address".bold(),
+        address.green()
+    );
     println!("{}: {toml_path_str}", "Wrote genesis tx to".bold());
 }
 
@@ -896,15 +945,6 @@ pub fn validator_pre_genesis_txs_file(pre_genesis_path: &Path) -> PathBuf {
     pre_genesis_path.join("transactions.toml")
 }
 
-/// The default path to an established account txs file.
-pub fn established_acc_pre_genesis_txs_file(
-    wallet_key_alias: &str,
-    pre_genesis_path: &Path,
-) -> PathBuf {
-    pre_genesis_path
-        .join(format!("established-account-tx-{wallet_key_alias}.toml"))
-}
-
 /// The default validator pre-genesis directory
 pub fn validator_pre_genesis_dir(base_dir: &Path, alias: &str) -> PathBuf {
     base_dir.join(PRE_GENESIS_DIR).join(alias)
@@ -931,35 +971,67 @@ pub fn sign_genesis_tx(
 ) {
     let (mut wallet, _wallet_file) =
         load_pre_genesis_wallet_or_exit(&global_args.base_dir);
-
+    let maybe_pre_genesis_wallet = validator_alias.and_then(|alias| {
+        let pre_genesis_dir =
+            validator_pre_genesis_dir(&global_args.base_dir, &alias);
+        pre_genesis::load(&pre_genesis_dir).ok()
+    });
     let contents = fs::read(&path).unwrap_or_else(|err| {
         eprintln!(
             "Unable to read from file {}. Failed with {err}.",
             path.to_string_lossy()
         );
-        safe_exit(1);
+        safe_exit(1)
     });
-    let unsigned = genesis::transactions::parse_unsigned(&contents)
+    let (signed, append) = genesis::transactions::parse_unsigned(&contents)
+        .map(|unsigned| {
+            (
+                genesis::transactions::sign_txs(
+                    unsigned,
+                    &mut wallet,
+                    maybe_pre_genesis_wallet.as_ref(),
+                ),
+                true,
+            )
+        })
         .unwrap_or_else(|err| {
-            eprintln!(
-                "Unable to parse the TOML from {}. Failed with {err}.",
-                path.to_string_lossy()
-            );
-            safe_exit(1);
+            let mut genesis_txs = genesis::templates::read_transactions(&path)
+                .unwrap_or_else(|e| {
+                    eprintln!(
+                        "Unable to parse the TOML from {}. Could not parse as \
+                         unsigned with {err}. Could not parse as signed with \
+                         {e}.",
+                        path.to_string_lossy()
+                    );
+                    safe_exit(1)
+                });
+            // Sign bond txs
+            let bond = genesis_txs.bond.map(|txs| {
+                txs.into_iter()
+                    .map(|tx| {
+                        sign_delegation_bond_tx(
+                            tx,
+                            &mut wallet,
+                            &genesis_txs.established_account,
+                        )
+                    })
+                    .collect()
+            });
+            genesis_txs.bond = bond;
+            (genesis_txs, false)
         });
-    let maybe_pre_genesis_wallet = validator_alias.and_then(|alias| {
-        let pre_genesis_dir =
-            validator_pre_genesis_dir(&global_args.base_dir, &alias);
-        crate::wallet::pre_genesis::load(&pre_genesis_dir).ok()
-    });
-    let signed = genesis::transactions::sign_txs(
-        unsigned,
-        &mut wallet,
-        maybe_pre_genesis_wallet.as_ref(),
-    );
 
     match output {
         Some(output_path) => {
+            let signed = if append {
+                let mut prev_txs =
+                    genesis::templates::read_transactions(&output_path)
+                        .unwrap_or_default();
+                prev_txs.merge(signed);
+                prev_txs
+            } else {
+                signed
+            };
             let transactions = toml::to_vec(&signed).unwrap();
             fs::write(&output_path, transactions).unwrap_or_else(|err| {
                 eprintln!(
