@@ -2389,7 +2389,8 @@ pub mod cmds {
                 .about(
                     "Initialize genesis validator's address, consensus key \
                      and validator account key and use it in the ledger's \
-                     node.",
+                     node. Appends validator creation and self-bond txs to a \
+                     .toml file containing an established account tx.",
                 )
                 .add_args::<args::InitGenesisValidator>()
         }
@@ -6773,6 +6774,7 @@ pub mod args {
         pub vp: String,
         pub wallet_aliases: Vec<String>,
         pub threshold: u8,
+        pub output_path: PathBuf,
     }
 
     impl Args for InitGenesisEstablishedAccount {
@@ -6780,10 +6782,12 @@ pub mod args {
             let wallet_aliases = ALIAS_MANY.parse(matches);
             let vp = VP.parse(matches).unwrap_or_else(|| "vp_user".to_string());
             let threshold = THRESOLD.parse(matches).unwrap_or(1);
+            let output_path = PATH.parse(matches);
             Self {
                 wallet_aliases,
                 vp,
                 threshold,
+                output_path,
             }
         }
 
@@ -6800,6 +6804,10 @@ pub mod args {
             ))
             .arg(VP.def().help(
                 "The validity predicate of the account. Defaults to `vp_user`.",
+            ))
+            .arg(PATH.def().help(
+                "The path of the .toml file to write the established account \
+                 transaction to. Overwrites the file if it exists.",
             ))
         }
     }
@@ -6818,6 +6826,7 @@ pub mod args {
         pub website: Option<String>,
         pub discord_handle: Option<String>,
         pub address: EstablishedAddress,
+        pub tx_path: PathBuf,
     }
 
     impl Args for InitGenesisValidator {
@@ -6836,6 +6845,7 @@ pub mod args {
             let website = WEBSITE_OPT.parse(matches);
             let discord_handle = DISCORD_OPT.parse(matches);
             let address = RAW_ADDRESS_ESTABLISHED.parse(matches);
+            let tx_path = PATH.parse(matches);
             Self {
                 alias,
                 net_address,
@@ -6848,6 +6858,7 @@ pub mod args {
                 description,
                 website,
                 discord_handle,
+                tx_path,
                 address,
             }
         }
@@ -6857,6 +6868,10 @@ pub mod args {
                 .arg(RAW_ADDRESS_ESTABLISHED.def().help(
                     "The address of an established account to be promoted to \
                      a validator.",
+                ))
+                .arg(PATH.def().help(
+                    "The .toml file containing an established account tx from \
+                     which to create a validator.",
                 ))
                 .arg(NET_ADDRESS.def().help(
                     "Static {host:port} of your validator node's P2P address. \

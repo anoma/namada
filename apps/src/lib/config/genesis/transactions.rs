@@ -6,6 +6,7 @@ use std::net::SocketAddr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
+use itertools::Itertools;
 use namada::core::types::address::{Address, EstablishedAddress};
 use namada::core::types::string_encoding::StringEncoded;
 use namada::ledger::pos::types::ValidatorMetaData;
@@ -61,7 +62,9 @@ pub fn sign_txs(
     // Sign bond txs
     let bond = bond.map(|txs| {
         txs.into_iter()
-            .map(|tx| sign_delegation_bond_tx(tx, wallet, &established_account))
+            .map(|tx| {
+                sign_delegation_bond_tx(tx.into(), wallet, &established_account)
+            })
             .collect()
     });
 
@@ -69,8 +72,15 @@ pub fn sign_txs(
     let validator_account = validator_account.map(|txs| {
         let validator_wallet = validator_wallet
             .expect("Validator wallet required to sign validator account txs");
+        let tnk = validator_wallet.tendermint_node_key.ref_to();
         txs.into_iter()
-            .map(|tx| sign_validator_account_tx(tx, validator_wallet))
+            .filter_map(|tx| {
+                if tx.tendermint_node_key.raw == tnk {
+                    Some(sign_validator_account_tx(tx, validator_wallet))
+                } else {
+                    None
+                }
+            })
             .collect()
     });
 
@@ -251,15 +261,14 @@ pub fn sign_validator_account_tx(
 }
 
 pub fn sign_delegation_bond_tx(
-    unsigned_tx: BondTx<Unvalidated>,
+    mut to_sign: SignedBondTx<Unvalidated>,
     wallet: &mut Wallet<CliWalletUtils>,
     established_accounts: &Option<Vec<EstablishedAccountTx>>,
 ) -> SignedBondTx<Unvalidated> {
     let source_keys =
-        look_up_sk_from(&unsigned_tx.source, wallet, established_accounts);
-    let mut signed = SignedBondTx::from(unsigned_tx);
-    signed.sign(&source_keys);
-    signed
+        look_up_sk_from(&to_sign.data.source, wallet, established_accounts);
+    to_sign.sign(&source_keys);
+    to_sign
 }
 
 pub fn sign_tx<T: BorshSerialize>(
@@ -300,7 +309,8 @@ impl<T: TemplateValidation> Transactions<T> {
                 }
                 txs
             })
-            .or(other.established_account);
+            .or(other.established_account)
+            .map(|txs| txs.into_iter().sorted().dedup().collect());
         self.validator_account = self
             .validator_account
             .take()
@@ -310,7 +320,8 @@ impl<T: TemplateValidation> Transactions<T> {
                 }
                 txs
             })
-            .or(other.validator_account);
+            .or(other.validator_account)
+            .map(|txs| txs.into_iter().sorted().dedup().collect());
         self.bond = self
             .bond
             .take()
@@ -320,7 +331,8 @@ impl<T: TemplateValidation> Transactions<T> {
                 }
                 txs
             })
-            .or(other.bond);
+            .or(other.bond)
+            .map(|txs| txs.into_iter().sorted().dedup().collect());
     }
 }
 
@@ -397,8 +409,10 @@ pub type SignedValidatorAccountTx = ValidatorAccountTx<SignedPk>;
     BorshDeserialize,
     PartialEq,
     Eq,
+    PartialOrd,
+    Ord,
 )]
-pub struct ValidatorAccountTx<PK> {
+pub struct ValidatorAccountTx<PK: Ord> {
     /// The address of the validator.
     pub address: StringEncoded<EstablishedAddress>,
     // TODO: remove the vp field
@@ -429,6 +443,8 @@ pub struct ValidatorAccountTx<PK> {
     BorshDeserialize,
     PartialEq,
     Eq,
+    PartialOrd,
+    Ord,
 )]
 pub struct EstablishedAccountTx {
     pub vp: String,
@@ -455,6 +471,8 @@ impl DeriveEstablishedAddress for EstablishedAccountTx {
     BorshDeserialize,
     PartialEq,
     Eq,
+    PartialOrd,
+    Ord,
 )]
 pub struct SignedBondTx<T: TemplateValidation> {
     #[serde(flatten)]
@@ -517,7 +535,10 @@ impl SignedBondTx<Unvalidated> {
                 sk,
                 &self.data.data_to_sign(),
             ))
-        }))
+        }));
+        let mut sigs = vec![];
+        std::mem::swap(&mut self.signatures, &mut sigs);
+        self.signatures = sigs.into_iter().sorted().dedup().collect();
     }
 }
 
@@ -530,6 +551,8 @@ impl SignedBondTx<Unvalidated> {
     BorshDeserialize,
     PartialEq,
     Eq,
+    PartialOrd,
+    Ord,
 )]
 pub struct BondTx<T: TemplateValidation> {
     pub source: GenesisAddress,
@@ -596,6 +619,8 @@ impl<T: TemplateValidation> From<BondTx<T>> for SignedBondTx<T> {
     BorshDeserialize,
     PartialEq,
     Eq,
+    PartialOrd,
+    Ord,
 )]
 pub struct SignedPk {
     pub pk: StringEncoded<common::PublicKey>,
@@ -1095,14 +1120,12 @@ fn look_up_sk_from(
     .unwrap_or_else(|| {
         // If it's not in the wallet, it must be an established account
         // so we need to look-up its public key first
+        if established_accounts.is_none() {
+            return vec![];
+        }
         established_accounts
             .as_ref()
-            .unwrap_or_else(|| {
-                panic!(
-                    "Signing failed. Cannot find \"{source}\" in the wallet \
-                     and there are no established accounts."
-                );
-            })
+            .unwrap()
             .iter()
             .find_map(|account| match source {
                 GenesisAddress::EstablishedAddress(address) => {
