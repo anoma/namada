@@ -94,7 +94,8 @@ impl PosRewardsCalculator {
             .total_stake
             .checked_mul(2.into())
             .expect("Amount overflow while computing minimum required votes")
-            + (3u64 - 1u64))
+            .checked_add((3u64 - 1u64).into())
+            .expect("Amount overflow while computing minimum required votes"))
             / 3u64
     }
 }
