@@ -11,7 +11,6 @@
 //!
 //! Any other storage key changes are allowed only with a valid signature.
 
-use namada_vp_prelude::storage::KeySeg;
 use namada_vp_prelude::*;
 use once_cell::unsync::Lazy;
 
@@ -144,48 +143,26 @@ fn validate_tx(
                         proof_of_stake::storage::is_unbond_key(key)
                             .map(|(bond_id, _, _)| bond_id)
                     });
-                let valid = match bond_id {
+                let is_valid_bond_or_unbond_change = match bond_id {
                     Some(bond_id) => {
                         // Bonds and unbonds changes for this address
                         // must be signed
                         bond_id.source != addr || *valid_sig
                     }
                     None => {
-                        // Any other PoS changes are allowed without signature
-                        true
+                        // Unknown changes are not allowed
+                        false
                     }
                 };
-                debug_log!(
-                    "PoS key {} {}",
-                    key,
-                    if valid { "accepted" } else { "rejected" }
-                );
-                valid
+
+                is_valid_bond_or_unbond_change || *valid_sig
             }
-            KeyType::PgfSteward(address) => {
-                if address == &addr {
-                    *valid_sig
-                } else {
-                    true
-                }
-            }
-            KeyType::GovernanceVote(voter) => {
-                if voter == &addr {
-                    *valid_sig
-                } else {
-                    true
-                }
-            }
+            KeyType::PgfSteward(address) => address != &addr || *valid_sig,
+            KeyType::GovernanceVote(voter) => voter != &addr || *valid_sig,
             KeyType::Masp => true,
             KeyType::Unknown => {
-                if key.segments.get(0) == Some(&addr.to_db_key()) {
-                    // Unknown changes to this address space require a valid
-                    // signature
-                    *valid_sig
-                } else {
-                    // Unknown changes anywhere else are permitted
-                    true
-                }
+                // Unknown changes require a valid signature
+                *valid_sig
             }
         };
         if !is_valid {
