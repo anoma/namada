@@ -13,7 +13,6 @@ use namada_core::types::dec::Dec;
 use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::keccak::KeccakHash;
 use namada_core::types::key::{common, SchemeType};
-use namada_core::types::masp::MaspValue;
 use namada_core::types::storage::Epoch;
 use namada_core::types::time::DateTimeUtc;
 use namada_core::types::transaction::GasLimit;
@@ -2144,10 +2143,8 @@ pub struct KeyAddressAdd {
     pub alias: String,
     /// Whether to force overwrite the alias
     pub alias_force: bool,
-    /// Transparent address to add
-    pub address: Option<Address>,
-    /// Any shielded value
-    pub value: Option<MaspValue>,
+    /// Any supported value
+    pub value: String,
     /// Don't encrypt the keys
     pub unsafe_dont_encrypt: bool,
 }

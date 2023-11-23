@@ -12,7 +12,7 @@ use ledger_namada_rs::{BIP44Path, NamadaApp};
 use ledger_transport_hid::hidapi::HidApi;
 use ledger_transport_hid::TransportNativeHID;
 use masp_primitives::zip32::ExtendedFullViewingKey;
-use namada::types::address::Address;
+use namada::types::address::{Address, DecodeError};
 use namada::types::io::Io;
 use namada::types::key::*;
 use namada::types::masp::{MaspValue, PaymentAddress};
@@ -242,18 +242,14 @@ fn payment_address_gen(
 fn shielded_key_address_add(
     ctx: Context,
     io: &impl Io,
-    args::KeyAddressAdd {
-        alias,
-        alias_force,
-        value,
-        unsafe_dont_encrypt,
-        ..
-    }: args::KeyAddressAdd,
+    alias: String,
+    alias_force: bool,
+    masp_value: MaspValue,
+    unsafe_dont_encrypt: bool,
 ) {
-    let value = value.unwrap(); // this should not fail
     let alias = alias.to_lowercase();
     let mut wallet = load_wallet(ctx);
-    let (alias, typ) = match value {
+    let (alias, typ) = match masp_value {
         MaspValue::FullViewingKey(viewing_key) => {
             let alias = wallet
                 .insert_viewing_key(alias, viewing_key, alias_force)
@@ -501,7 +497,7 @@ async fn key_derive(
     }
 }
 
-/// TODO
+/// List keys
 fn key_list(ctx: Context, io: &impl Io, args_key_list: args::KeyList) {
     if !args_key_list.shielded {
         transparent_keys_list(ctx, io, args_key_list)
@@ -510,7 +506,7 @@ fn key_list(ctx: Context, io: &impl Io, args_key_list: args::KeyList) {
     }
 }
 
-/// TODO
+/// Find key or address
 fn key_find(ctx: Context, io: &impl Io, args_key_find: args::KeyFind) {
     if !args_key_find.shielded {
         transparent_key_address_find(ctx, io, args_key_find)
@@ -519,7 +515,7 @@ fn key_find(ctx: Context, io: &impl Io, args_key_find: args::KeyFind) {
     }
 }
 
-/// TODO
+/// List addresses
 fn address_list(ctx: Context, io: &impl Io, args_key_list: args::AddressList) {
     if !args_key_list.shielded {
         transparent_addresses_list(ctx, io, args_key_list)
@@ -528,21 +524,78 @@ fn address_list(ctx: Context, io: &impl Io, args_key_list: args::AddressList) {
     }
 }
 
-/// TODO
+/// Value for add command
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug)]
+pub enum KeyAddrAddValue {
+    /// Transparent secret key
+    TranspSecretKey(common::SecretKey),
+    /// Transparent address
+    TranspAddress(Address),
+    /// Masp value
+    MASPValue(MaspValue),
+}
+
+impl FromStr for KeyAddrAddValue {
+    type Err = DecodeError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // Try to decode this value first as a secret key, then as an address,
+        // then as a MASP value
+        common::SecretKey::from_str(s)
+            .map(Self::TranspSecretKey)
+            .or_else(|_| Address::from_str(s).map(Self::TranspAddress))
+            .or_else(|_| MaspValue::from_str(s).map(Self::MASPValue))
+    }
+}
+
+/// Add key or address
 fn key_address_add(
     ctx: Context,
     io: &impl Io,
-    args_key_addr_add: args::KeyAddressAdd,
+    args::KeyAddressAdd {
+        alias,
+        alias_force,
+        value,
+        unsafe_dont_encrypt,
+        ..
+    }: args::KeyAddressAdd,
 ) {
-    if args_key_addr_add.address.is_some() {
-        transparent_address_add(ctx, io, args_key_addr_add)
-    } else if args_key_addr_add.value.is_some() {
-        shielded_key_address_add(ctx, io, args_key_addr_add)
-    } else {
-        unreachable!(
-            "This should not happen as the group of address and value is \
-             required."
-        )
+    match KeyAddrAddValue::from_str(&value).unwrap_or_else(|err| {
+        edisplay_line!(io, "{}", err);
+        display_line!(io, "No changes are persisted. Exiting.");
+        cli::safe_exit(1)
+    }) {
+        KeyAddrAddValue::TranspSecretKey(sk) => {
+            let mut wallet = load_wallet(ctx);
+            let encryption_password =
+                read_and_confirm_encryption_password(unsafe_dont_encrypt);
+            wallet
+                .insert_keypair(
+                    alias,
+                    alias_force,
+                    sk,
+                    encryption_password,
+                    None,
+                    None,
+                )
+                .unwrap_or_else(|err| {
+                    edisplay_line!(io, "{}", err);
+                    display_line!(io, "No changes are persisted. Exiting.");
+                    cli::safe_exit(1);
+                });
+        }
+        KeyAddrAddValue::TranspAddress(address) => {
+            transparent_address_add(ctx, io, alias, alias_force, address)
+        }
+        KeyAddrAddValue::MASPValue(masp_value) => shielded_key_address_add(
+            ctx,
+            io,
+            alias,
+            alias_force,
+            masp_value,
+            unsafe_dont_encrypt,
+        ),
     }
 }
 
@@ -810,15 +863,11 @@ fn address_or_alias_find(
 fn transparent_address_add(
     ctx: Context,
     io: &impl Io,
-    args::KeyAddressAdd {
-        alias,
-        alias_force,
-        address,
-        ..
-    }: args::KeyAddressAdd,
+    alias: String,
+    alias_force: bool,
+    address: Address,
 ) {
     let alias = alias.to_lowercase();
-    let address = address.unwrap(); // this should not fail
     let mut wallet = load_wallet(ctx);
     if wallet
         .insert_address(&alias, address, alias_force)
