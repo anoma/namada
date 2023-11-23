@@ -21,7 +21,7 @@ enum KeyType<'a> {
     PoS,
     Vp(&'a Address),
     Masp,
-    PgfStward(&'a Address),
+    PgfSteward(&'a Address),
     GovernanceVote(&'a Address),
     Unknown,
 }
@@ -40,7 +40,7 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
                 Self::Unknown
             }
         } else if let Some(address) = pgf_storage::keys::is_stewards_key(key) {
-            Self::PgfStward(address)
+            Self::PgfSteward(address)
         } else if let Some(address) = key.is_validity_predicate() {
             Self::Vp(address)
         } else if token::is_masp_key(key) {
@@ -213,7 +213,7 @@ fn validate_tx(
                     true
                 }
             }
-            KeyType::PgfStward(address) => {
+            KeyType::PgfSteward(address) => {
                 if address == &addr {
                     *valid_sig
                 } else {
