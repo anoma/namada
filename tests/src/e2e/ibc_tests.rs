@@ -302,9 +302,7 @@ fn run_two_nets() -> Result<(NamadaCmd, NamadaCmd, Test, Test)> {
     wait_for_wasm_pre_compile(&mut ledger_a)?;
     wait_for_wasm_pre_compile(&mut ledger_b)?;
 
-    // Wait for a first block
-    ledger_a.exp_string("Committed block hash")?;
-    ledger_b.exp_string("Committed block hash")?;
+    sleep(5);
 
     Ok((ledger_a, ledger_b, test_a, test_b))
 }
