@@ -29,7 +29,6 @@ wasms += tx_update_steward_commission
 wasms += tx_resign_steward
 wasms += vp_implicit
 wasms += vp_user
-wasms += vp_validator
 
 # Build all wasms in release mode
 all: $(wasms)

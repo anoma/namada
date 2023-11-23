@@ -380,7 +380,7 @@ pub fn make_dev_genesis(
                 address,
                 tx: transactions::ValidatorAccountTx {
                     alias: alias.clone(),
-                    vp: "vp_validator".to_string(),
+                    vp: "vp_user".to_string(),
                     commission_rate: Dec::new(5, 2).expect("This can't fail"),
                     max_commission_rate_change: Dec::new(1, 2)
                         .expect("This can't fail"),

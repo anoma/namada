@@ -92,8 +92,6 @@ pub const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
 pub const TX_IBC_WASM: &str = "tx_ibc.wasm";
 /// User validity predicate WASM path
 pub const VP_USER_WASM: &str = "vp_user.wasm";
-/// Validator validity predicate WASM path
-pub const VP_VALIDATOR_WASM: &str = "vp_validator.wasm";
 /// Bond WASM path
 pub const TX_BOND_WASM: &str = "tx_bond.wasm";
 /// Unbond WASM path
