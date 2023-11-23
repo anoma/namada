@@ -316,7 +316,7 @@ where
 }
 
 /// Copies the validator sets into all epochs up through the pipeline epoch at
-/// genesis. Also computes the total
+/// genesis.
 pub fn copy_genesis_validator_sets<S>(
     storage: &mut S,
     params: &OwnedPosParams,
@@ -335,7 +335,6 @@ where
             current_epoch,
             epoch,
         )?;
-        // compute_and_store_total_consensus_stake(storage, epoch)?;
     }
     Ok(())
 }
