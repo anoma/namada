@@ -22,6 +22,8 @@ enum KeyType<'a> {
         owner: &'a Address,
     },
     PoS,
+    Masp,
+    PgfSteward(&'a Address),
     GovernanceVote(&'a Address),
     Unknown,
 }
@@ -34,6 +36,8 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
             Self::Token { owner }
         } else if proof_of_stake::storage::is_pos_key(key) {
             Self::PoS
+        } else if let Some(address) = pgf_storage::keys::is_stewards_key(key) {
+            Self::PgfSteward(address)
         } else if gov_storage::keys::is_vote_key(key) {
             let voter_address = gov_storage::keys::get_voter_address(key);
             if let Some(address) = voter_address {
@@ -41,6 +45,8 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
             } else {
                 Self::Unknown
             }
+        } else if token::is_masp_key(key) {
+            Self::Masp
         } else {
             Self::Unknown
         }
@@ -156,6 +162,13 @@ fn validate_tx(
                 );
                 valid
             }
+            KeyType::PgfSteward(address) => {
+                if address == &addr {
+                    *valid_sig
+                } else {
+                    true
+                }
+            }
             KeyType::GovernanceVote(voter) => {
                 if voter == &addr {
                     *valid_sig
@@ -163,6 +176,7 @@ fn validate_tx(
                     true
                 }
             }
+            KeyType::Masp => true,
             KeyType::Unknown => {
                 if key.segments.get(0) == Some(&addr.to_db_key()) {
                     // Unknown changes to this address space require a valid
