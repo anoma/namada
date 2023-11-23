@@ -961,7 +961,7 @@ pub fn validate_genesis_templates(
 }
 
 /// Sign genesis transactions.
-pub fn sign_genesis_tx(
+pub async fn sign_genesis_tx(
     global_args: args::Global,
     args::SignGenesisTx {
         path,
@@ -983,44 +983,47 @@ pub fn sign_genesis_tx(
         );
         safe_exit(1)
     });
-    let (signed, append) = genesis::transactions::parse_unsigned(&contents)
-        .map(|unsigned| {
-            (
+    let (signed, append) =
+        match genesis::transactions::parse_unsigned(&contents) {
+            Ok(unsigned) => (
                 genesis::transactions::sign_txs(
                     unsigned,
                     &mut wallet,
                     maybe_pre_genesis_wallet.as_ref(),
-                ),
+                )
+                .await,
                 true,
-            )
-        })
-        .unwrap_or_else(|err| {
-            let mut genesis_txs = genesis::templates::read_transactions(&path)
-                .unwrap_or_else(|e| {
-                    eprintln!(
-                        "Unable to parse the TOML from {}. Could not parse as \
-                         unsigned with {err}. Could not parse as signed with \
-                         {e}.",
-                        path.to_string_lossy()
-                    );
-                    safe_exit(1)
-                });
-            // Sign bond txs
-            let bond = genesis_txs.bond.map(|txs| {
-                txs.into_iter()
-                    .map(|tx| {
-                        sign_delegation_bond_tx(
-                            tx,
-                            &mut wallet,
-                            &genesis_txs.established_account,
-                        )
-                    })
-                    .collect()
-            });
-            genesis_txs.bond = bond;
-            (genesis_txs, false)
-        });
-
+            ),
+            Err(err) => {
+                let mut genesis_txs =
+                    genesis::templates::read_transactions(&path)
+                        .unwrap_or_else(|e| {
+                            eprintln!(
+                                "Unable to parse the TOML from {}. Could not \
+                                 parse as unsigned with {err}. Could not \
+                                 parse as signed with {e}.",
+                                path.to_string_lossy()
+                            );
+                            safe_exit(1)
+                        });
+                // Sign bond txs
+                if let Some(txs) = genesis_txs.bond {
+                    let mut bonds = vec![];
+                    for tx in txs {
+                        bonds.push(
+                            sign_delegation_bond_tx(
+                                tx,
+                                &mut wallet,
+                                &genesis_txs.established_account,
+                            )
+                            .await,
+                        );
+                    }
+                    genesis_txs.bond = Some(bonds);
+                }
+                (genesis_txs, false)
+            }
+        };
     match output {
         Some(output_path) => {
             let signed = if append {
