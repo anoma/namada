@@ -11,7 +11,6 @@
 //!
 //! Any other storage key changes are allowed only with a valid signature.
 
-use namada_vp_prelude::storage::KeySeg;
 use namada_vp_prelude::*;
 use once_cell::unsync::Lazy;
 use proof_of_stake::types::ValidatorState;
@@ -115,15 +114,15 @@ fn validate_tx(
                         proof_of_stake::storage::is_unbond_key(key)
                             .map(|(bond_id, _, _)| bond_id)
                     });
-                let valid_bond_or_unbond_change = match bond_id {
+                let is_valid_bond_or_unbond_change = match bond_id {
                     Some(bond_id) => {
                         // Bonds and unbonds changes for this address
                         // must be signed
                         bond_id.source != addr || *valid_sig
                     }
                     None => {
-                        // Any other PoS changes are allowed without signature
-                        true
+                        // Unknown changes are not allowed
+                        false
                     }
                 };
                 // Commission rate changes must be signed by the validator
@@ -131,26 +130,26 @@ fn validate_tx(
                     proof_of_stake::storage::is_validator_commission_rate_key(
                         key,
                     );
-                let valid_commission_rate_change = match comm {
+                let is_valid_commission_rate_change = match comm {
                     Some((validator, _epoch)) => {
                         *validator == addr && *valid_sig
                     }
-                    None => true,
+                    None => false,
                 };
                 // Metadata changes must be signed by the validator whose
                 // metadata is manipulated
                 let metadata =
                     proof_of_stake::storage::is_validator_metadata_key(key);
-                let valid_metadata_change = match metadata {
+                let is_valid_metadata_change = match metadata {
                     Some(address) => *address == addr && *valid_sig,
-                    None => true,
+                    None => false,
                 };
 
                 // Changes due to unjailing, deactivating, and reactivating are
                 // marked by changes in validator state
                 let state_change =
                     proof_of_stake::storage::is_validator_state_key(key);
-                let valid_state_change = match state_change {
+                let is_valid_state_change = match state_change {
                     Some((address, epoch)) => {
                         let params_pre =
                             proof_of_stake::read_pos_params(&ctx.pre())?;
@@ -188,38 +187,28 @@ fn validate_tx(
                                 {
                                     *address == addr && *valid_sig
                                 } else {
-                                    true
+                                    // Unknown state changes are not allowed
+                                    false
                                 }
                             }
                             (None, Some(_post)) => {
                                 // Becoming a validator must be authorized
                                 *valid_sig
                             }
-                            _ => true,
+                            _ => false,
                         }
                     }
-                    None => true,
+                    None => false,
                 };
 
-                valid_bond_or_unbond_change
-                    && valid_commission_rate_change
-                    && valid_state_change
-                    && valid_metadata_change
+                is_valid_bond_or_unbond_change
+                    || is_valid_commission_rate_change
+                    || is_valid_state_change
+                    || is_valid_metadata_change
+                    || *valid_sig
             }
-            KeyType::GovernanceVote(voter) => {
-                if voter == &addr {
-                    *valid_sig
-                } else {
-                    true
-                }
-            }
-            KeyType::PgfSteward(address) => {
-                if address == &addr {
-                    *valid_sig
-                } else {
-                    true
-                }
-            }
+            KeyType::PgfSteward(address) => address != &addr || *valid_sig,
+            KeyType::GovernanceVote(voter) => voter != &addr || *valid_sig,
             KeyType::Vp(owner) => {
                 let has_post: bool = ctx.has_key_post(key)?;
                 if owner == &addr {
@@ -237,14 +226,8 @@ fn validate_tx(
             }
             KeyType::Masp => true,
             KeyType::Unknown => {
-                if key.segments.get(0) == Some(&addr.to_db_key()) {
-                    // Unknown changes to this address space require a valid
-                    // signature
-                    *valid_sig
-                } else {
-                    // Unknown changes anywhere else are permitted
-                    true
-                }
+                // Unknown changes require a valid signature
+                *valid_sig
             }
         };
         if !is_valid {
