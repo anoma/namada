@@ -735,10 +735,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about(
-                    "Adds the given transparent / payment address or key to \
-                     the wallet.",
-                )
+                .about("Adds the given key or address to the wallet.")
                 .add_args::<args::KeyAddressAdd>()
         }
     }
@@ -2844,7 +2841,8 @@ pub mod args {
         arg_opt("eth-cold-key");
     pub const VALIDATOR_ETH_HOT_KEY: ArgOpt<WalletKeypair> =
         arg_opt("eth-hot-key");
-    pub const VALUE: ArgOpt<String> = arg_opt("value");
+    pub const VALUE: Arg<String> = arg("value");
+    pub const VALUE_OPT: ArgOpt<String> = VALUE.opt();
     pub const VERIFICATION_KEY: ArgOpt<WalletPublicKey> =
         arg_opt("verification-key");
     pub const VIEWING_KEY: Arg<WalletViewingKey> = arg("key");
@@ -5871,7 +5869,7 @@ pub mod args {
             let shielded = SHIELDED.parse(matches);
             let alias = ALIAS_OPT.parse(matches);
             let public_key = RAW_PUBLIC_KEY_OPT.parse(matches);
-            let value = VALUE.parse(matches);
+            let value = VALUE_OPT.parse(matches);
             let is_pre_genesis = PRE_GENESIS.parse(matches);
             let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
 
@@ -5890,7 +5888,10 @@ pub mod args {
                 SHIELDED
                     .def()
                     .help("Find spending key for the shielded pool.")
-                    .conflicts_with_all([VALUE.name, RAW_PUBLIC_KEY_OPT.name]),
+                    .conflicts_with_all([
+                        VALUE_OPT.name,
+                        RAW_PUBLIC_KEY_OPT.name,
+                    ]),
             )
             .arg(
                 ALIAS_OPT
@@ -5899,7 +5900,7 @@ pub mod args {
                         "TODO An alias associated with the keypair. The alias \
                          that is to be found.",
                     )
-                    .conflicts_with(VALUE.name),
+                    .conflicts_with(VALUE_OPT.name),
             )
             .arg(
                 RAW_PUBLIC_KEY_OPT
@@ -5907,13 +5908,17 @@ pub mod args {
                     .help("A public key associated with the keypair."),
             )
             .arg(
-                VALUE
+                VALUE_OPT
                     .def()
                     .help("A public key or alias associated with the keypair."),
             )
             .group(
                 ArgGroup::new("key_find_args")
-                    .args([ALIAS_OPT.name, RAW_PUBLIC_KEY_OPT.name, VALUE.name])
+                    .args([
+                        ALIAS_OPT.name,
+                        RAW_PUBLIC_KEY_OPT.name,
+                        VALUE_OPT.name,
+                    ])
                     .required(true),
             )
             .arg(PRE_GENESIS.def().help(
@@ -5984,14 +5989,12 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
-            let address = RAW_ADDRESS_OPT.parse(matches);
-            let value = MASP_VALUE_OPT.parse(matches);
+            let value = VALUE.parse(matches);
             let is_pre_genesis = PRE_GENESIS.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
                 alias,
                 alias_force,
-                address,
                 value,
                 is_pre_genesis,
                 unsafe_dont_encrypt,
@@ -6007,20 +6010,12 @@ pub mod args {
             .arg(ALIAS_FORCE.def().help(
                 "Override the alias without confirmation if it already exists.",
             ))
-            .arg(
-                RAW_ADDRESS_OPT
-                    .def()
-                    .help("The bech32m encoded transparent address string."),
-            )
-            .arg(MASP_VALUE_OPT.def().help(
-                "A spending key, viewing key, or payment address of the \
-                 shielded pool.",
+            .arg(VALUE.def().help(
+                "Any value of the following:\n- transparent pool secret key \
+                 string\n- the bech32m encoded transparent address string\n- \
+                 shielded pool spending key\n- shielded pool viewing key\n- \
+                 shielded pool payment address ",
             ))
-            .group(
-                ArgGroup::new("key_address_add_args")
-                    .args([RAW_ADDRESS_OPT.name, MASP_VALUE_OPT.name])
-                    .required(true),
-            )
             .arg(PRE_GENESIS.def().help(
                 "Use pre-genesis wallet, instead of for the current chain, if \
                  any.",
