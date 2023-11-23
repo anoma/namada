@@ -666,9 +666,6 @@ impl CliApi {
                 Utils::SignGenesisTx(SignGenesisTx(args)) => {
                     utils::sign_genesis_tx(global_args, args)
                 }
-                Utils::UnifyGenesisTemplates(UnifyGenesisTemplates(args)) => {
-                    utils::unify_genesis_templates(args)
-                }
             },
         }
         Ok(())

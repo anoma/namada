@@ -88,13 +88,6 @@ pub fn parse_unsigned(
     toml::from_slice(bytes)
 }
 
-/// Parse [`Transactions`] from bytes.
-pub fn parse_signed(
-    bytes: &[u8],
-) -> Result<Transactions<Unvalidated>, toml::de::Error> {
-    toml::from_slice(bytes)
-}
-
 /// Create signed [`Transactions`] for an established account.
 pub fn init_established_account(
     vp: String,
