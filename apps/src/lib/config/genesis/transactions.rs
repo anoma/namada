@@ -3,6 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Debug;
 use std::net::SocketAddr;
+use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
@@ -11,13 +12,14 @@ use namada::core::types::address::{Address, EstablishedAddress};
 use namada::core::types::string_encoding::StringEncoded;
 use namada::ledger::pos::types::ValidatorMetaData;
 use namada::proto::{
-    standalone_signature, verify_standalone_sig, SerializeWithBorsh,
+    standalone_signature, verify_standalone_sig, SerializeWithBorsh, Tx,
 };
 use namada::types::dec::Dec;
 use namada::types::key::{common, RefTo, VerifySigError};
 use namada::types::time::{DateTimeUtc, MIN_UTC};
 use namada::types::token;
 use namada::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
+use namada::types::transaction::{pos, Fee, TxType};
 use namada_sdk::wallet::alias::Alias;
 use namada_sdk::wallet::pre_genesis::ValidatorWallet;
 use namada_sdk::wallet::Wallet;
@@ -48,7 +50,7 @@ pub struct GenesisValidatorData {
 /// Panics if given `txs.validator_accounts` is not empty, because validator
 /// transactions must be signed with a validator wallet (see
 /// `init-genesis-validator` command).
-pub fn sign_txs(
+pub async fn sign_txs(
     txs: UnsignedTransactions,
     wallet: &mut Wallet<CliWalletUtils>,
     validator_wallet: Option<&ValidatorWallet>,
@@ -60,13 +62,22 @@ pub fn sign_txs(
     } = txs;
 
     // Sign bond txs
-    let bond = bond.map(|txs| {
-        txs.into_iter()
-            .map(|tx| {
-                sign_delegation_bond_tx(tx.into(), wallet, &established_account)
-            })
-            .collect()
-    });
+    let bond = if let Some(txs) = bond {
+        let mut bonds = vec![];
+        for tx in txs {
+            bonds.push(
+                sign_delegation_bond_tx(
+                    tx.into(),
+                    wallet,
+                    &established_account,
+                )
+                .await,
+            );
+        }
+        Some(bonds)
+    } else {
+        None
+    };
 
     // Sign validator account txs
     let validator_account = validator_account.map(|txs| {
@@ -260,14 +271,14 @@ pub fn sign_validator_account_tx(
     }
 }
 
-pub fn sign_delegation_bond_tx(
+pub async fn sign_delegation_bond_tx(
     mut to_sign: SignedBondTx<Unvalidated>,
     wallet: &mut Wallet<CliWalletUtils>,
     established_accounts: &Option<Vec<EstablishedAccountTx>>,
 ) -> SignedBondTx<Unvalidated> {
     let source_keys =
         look_up_sk_from(&to_sign.data.source, wallet, established_accounts);
-    to_sign.sign(&source_keys);
+    to_sign.sign(&source_keys).await;
     to_sign
 }
 
@@ -529,7 +540,7 @@ impl SignedBondTx<Unvalidated> {
     /// only verify signatures on [`SignedBondTx`]
     /// types. Thus we only allow signing of [`BondTx<Unvalidated>`]
     /// types.
-    pub fn sign(&mut self, key: &[common::SecretKey]) {
+    pub async fn sign(&mut self, key: &[common::SecretKey]) {
         self.signatures.extend(key.iter().map(|sk| {
             StringEncoded::new(standalone_signature::<_, SerializeWithBorsh>(
                 sk,
@@ -566,12 +577,25 @@ where
 {
     /// The signable data. This does not include the phantom data.
     fn data_to_sign(&self) -> Vec<u8> {
-        [
-            self.source.serialize_to_vec(),
-            self.validator.serialize_to_vec(),
-            self.amount.serialize_to_vec(),
-        ]
-        .concat()
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.add_code_from_hash(Default::default(), None);
+        tx.add_data(pos::Bond {
+            validator: self.validator.clone(),
+            amount: self.amount.clone(),
+            source: Some(self.source.address()),
+        });
+        let pk = common::PublicKey::from_str("tpknam1qp4jyqv4d2uh4zw2g64nl77knllqat4esw2mw94ypp8eq624am5hkf5uvjd").unwrap();
+        tx.add_wrapper(
+            Fee {
+                amount_per_gas_unit: Default::default(),
+                token: Address::from(&pk),
+            },
+            pk,
+            Default::default(),
+            Default::default(),
+            None,
+        );
+        tx.serialize_to_vec()
     }
 }
 
