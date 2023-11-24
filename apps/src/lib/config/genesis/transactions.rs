@@ -676,7 +676,7 @@ where
 {
     fn tx_to_sign(&self) -> Vec<u8> {
         get_tx_to_sign(
-            TX_BOND_WASM.to_string(),
+            TX_BOND_WASM,
             pos::Bond {
                 validator: self.validator.clone(),
                 amount: self.amount.clone().into(),
