@@ -494,6 +494,8 @@ pub mod cmds {
         /// Key export
         KeyExport(WalletExportKey),
         /// Key import
+        KeyImport(WalletImportKey),
+        /// Key / address add
         KeyAddrAdd(WalletAddKeyAddress),
         /// Payment address generation
         PayAddrGen(WalletGenPaymentAddress),
@@ -508,6 +510,7 @@ pub mod cmds {
                 .subcommand(WalletListAddresses::def())
                 .subcommand(WalletFindAddresses::def())
                 .subcommand(WalletExportKey::def())
+                .subcommand(WalletImportKey::def())
                 .subcommand(WalletAddKeyAddress::def())
                 .subcommand(WalletGenPaymentAddress::def())
         }
@@ -520,6 +523,7 @@ pub mod cmds {
             let addr_list = SubCmd::parse(matches).map(Self::AddrList);
             let addr_find = SubCmd::parse(matches).map(Self::AddrFind);
             let export = SubCmd::parse(matches).map(Self::KeyExport);
+            let import = SubCmd::parse(matches).map(Self::KeyImport);
             let key_addr_add = SubCmd::parse(matches).map(Self::KeyAddrAdd);
             let pay_addr_gen = SubCmd::parse(matches).map(Self::PayAddrGen);
             gen.or(derive)
@@ -528,6 +532,7 @@ pub mod cmds {
                 .or(addr_list)
                 .or(addr_find)
                 .or(export)
+                .or(import)
                 .or(key_addr_add)
                 .or(pay_addr_gen)
         }
@@ -731,6 +736,29 @@ pub mod cmds {
                      a file.",
                 )
                 .add_args::<args::KeyExport>()
+        }
+    }
+
+    /// Import key from a file
+    #[derive(Clone, Debug)]
+    pub struct WalletImportKey(pub args::KeyImport);
+
+    impl SubCmd for WalletImportKey {
+        const CMD: &'static str = "import";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| (Self(args::KeyImport::parse(matches))))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Imports a transparent keypair / shielded spending key \
+                     from a file.",
+                )
+                .add_args::<args::KeyImport>()
         }
     }
 
@@ -2856,6 +2884,7 @@ pub mod args {
     pub const FEE_AMOUNT_OPT: ArgOpt<token::DenominatedAmount> =
         arg_opt("gas-price");
     pub const FEE_PAYER_OPT: ArgOpt<WalletPublicKey> = arg_opt("gas-payer");
+    pub const FILE_PATH: Arg<String> = arg("file");
     pub const FORCE: ArgFlag = flag("force");
     pub const GAS_LIMIT: ArgDefault<GasLimit> =
         arg_default("gas-limit", DefaultFn(|| GasLimit::from(25_000)));
@@ -6308,6 +6337,37 @@ pub mod args {
                     .help("Whether to export the shielded spending key."),
             )
             .arg(ALIAS.def().help("The alias of the key you wish to export."))
+        }
+    }
+
+    impl Args for KeyImport {
+        fn parse(matches: &ArgMatches) -> Self {
+            let file_path = FILE_PATH.parse(matches);
+            let alias = ALIAS.parse(matches);
+            let alias_force = ALIAS_FORCE.parse(matches);
+            let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
+            Self {
+                alias,
+                alias_force,
+                file_path,
+                unsafe_dont_encrypt,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(FILE_PATH.def().help(
+                "Path to the file containing the key you wish to import.",
+            ))
+            .arg(ALIAS.def().help("The alias assigned to the."))
+            .arg(
+                ALIAS_FORCE
+                    .def()
+                    .help("An alias to be associated with the imported entry."),
+            )
+            .arg(UNSAFE_DONT_ENCRYPT.def().help(
+                "UNSAFE: Do not encrypt the added keys. Do not use this for \
+                 keys used in a live network.",
+            ))
         }
     }
 
