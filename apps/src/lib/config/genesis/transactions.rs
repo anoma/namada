@@ -39,6 +39,27 @@ pub trait TxToSign {
     fn tx_to_sign(&self) -> Vec<u8>;
 }
 
+/// Return a ready to sign genesis [`Tx`].
+fn get_tx_to_sign(tag: impl AsRef<str>, data: impl BorshSerialize) -> Tx {
+    let mut tx = Tx::from_type(TxType::Raw);
+    tx.add_code_from_hash(Default::default(), Some(tag.as_ref().to_string()));
+    tx.add_data(data);
+    let pk =
+        common::SecretKey::Ed25519(ed25519::SigScheme::from_bytes([0; 32]))
+            .ref_to();
+    tx.add_wrapper(
+        Fee {
+            amount_per_gas_unit: Default::default(),
+            token: Address::from(&pk),
+        },
+        pk,
+        Default::default(),
+        Default::default(),
+        None,
+    );
+    tx
+}
+
 pub const PRE_GENESIS_TX_TIMESTAMP: DateTimeUtc = MIN_UTC;
 
 pub struct GenesisValidatorData {
@@ -646,30 +667,15 @@ where
     T: TemplateValidation + BorshSerialize,
 {
     fn tx_to_sign(&self) -> Vec<u8> {
-        let mut tx = Tx::from_type(TxType::Raw);
-        tx.add_code_from_hash(
-            Default::default(),
-            Some(TX_BOND_WASM.to_string()),
-        );
-        tx.add_data(pos::Bond {
-            validator: self.validator.clone(),
-            amount: self.amount.clone().into(),
-            source: Some(self.source.address()),
-        });
-        let pk =
-            common::SecretKey::Ed25519(ed25519::SigScheme::from_bytes([0; 32]))
-                .ref_to();
-        tx.add_wrapper(
-            Fee {
-                amount_per_gas_unit: Default::default(),
-                token: Address::from(&pk),
+        get_tx_to_sign(
+            TX_BOND_WASM.to_string(),
+            pos::Bond {
+                validator: self.validator.clone(),
+                amount: self.amount.clone().into(),
+                source: Some(self.source.address()),
             },
-            pk,
-            Default::default(),
-            Default::default(),
-            None,
-        );
-        tx.to_bytes()
+        )
+        .to_bytes()
     }
 }
 
