@@ -402,7 +402,7 @@ pub fn make_dev_genesis(
             .get(0)
             .unwrap();
         let genesis_addr =
-            GenesisAddress::EstablishedAddress(tx.tx.address.raw.clone());
+            GenesisAddress::EstablishedAddress(tx.tx.data.address.raw.clone());
 
         let balance = *nam_balances.0.get(&genesis_addr).unwrap();
         let bonded = {

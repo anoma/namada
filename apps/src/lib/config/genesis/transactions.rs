@@ -32,7 +32,7 @@ use crate::config::genesis::GenesisAddress;
 use crate::wallet::CliWalletUtils;
 
 /// Helper trait to fetch tx data to sign.
-trait TxToSign {
+pub trait TxToSign {
     /// Return tx data to sign.
     fn tx_to_sign(&self) -> Vec<u8>;
 }
@@ -561,7 +561,7 @@ impl<T> Signed<T> {
     }
 
     /// Return the inner wrapped `T`.
-    pub const fn into_inner(self) -> T {
+    pub fn into_inner(self) -> T {
         let Signed { data, .. } = self;
         data
     }
@@ -601,7 +601,7 @@ impl<T> Signed<T> {
         let mut valid_sigs = 0;
         let tx_to_sign = data.tx_to_sign();
         for pk in pks {
-            if let Some(sig) = signatures.get(&pk.raw) {
+            if let Some(sig) = signatures.get(&StringEncoded::new(pk.clone())) {
                 valid_sigs += verify_standalone_sig::<_, SerializeWithBorsh>(
                     &tx_to_sign,
                     pk,
@@ -816,19 +816,23 @@ pub fn validate(
             |validator_accounts| {
                 validator_accounts
                     .into_iter()
-                    .map(|acct| ValidatorAccountTx {
-                        address: acct.address,
-                        vp: acct.vp,
-                        commission_rate: acct.commission_rate,
-                        max_commission_rate_change: acct
-                            .max_commission_rate_change,
-                        net_address: acct.net_address,
-                        consensus_key: acct.consensus_key,
-                        protocol_key: acct.protocol_key,
-                        tendermint_node_key: acct.tendermint_node_key,
-                        eth_hot_key: acct.eth_hot_key,
-                        eth_cold_key: acct.eth_cold_key,
-                        metadata: acct.metadata,
+                    .map(|acct| SignedValidatorAccountTx {
+                        signatures: acct.signatures,
+                        data: ValidatorAccountTx {
+                            address: acct.data.address,
+                            vp: acct.data.vp,
+                            commission_rate: acct.data.commission_rate,
+                            max_commission_rate_change: acct
+                                .data
+                                .max_commission_rate_change,
+                            net_address: acct.data.net_address,
+                            consensus_key: acct.data.consensus_key,
+                            protocol_key: acct.data.protocol_key,
+                            tendermint_node_key: acct.data.tendermint_node_key,
+                            eth_hot_key: acct.data.eth_hot_key,
+                            eth_cold_key: acct.data.eth_cold_key,
+                            metadata: acct.data.metadata,
+                        },
                     })
                     .collect()
             },
@@ -1038,7 +1042,7 @@ pub fn validate_validator_account(
                 true
             }
         } else {
-            let source = &tx.addr;
+            let source = &tx.address.raw;
             eprintln!(
                 "Invalid validator account tx. Couldn't verify the underlying \
                  established account signatures, because the source account's \

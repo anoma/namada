@@ -633,7 +633,7 @@ pub fn derive_genesis_addresses(
                         .validator_account
                         .unwrap_or_default()
                         .into_iter()
-                        .map(|acct| acct.address)
+                        .map(|acct| acct.data.address)
                         .collect(),
                 )
             });
