@@ -147,7 +147,7 @@ fn validate_tx(
             }
         };
         if !is_valid {
-            debug_log!("key {} modification failed vp", key);
+            log_string(format!("key {} modification failed vp_implicit", key));
             return reject();
         }
     }
