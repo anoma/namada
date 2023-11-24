@@ -5,7 +5,6 @@ use std::fmt::Debug;
 use std::net::SocketAddr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
 use itertools::{Either, Itertools};
 use namada::core::types::address::{Address, EstablishedAddress};
 use namada::core::types::string_encoding::StringEncoded;
@@ -19,7 +18,7 @@ use namada::types::time::{DateTimeUtc, MIN_UTC};
 use namada::types::token;
 use namada::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
 use namada::types::transaction::{pos, Fee, TxType};
-use namada_sdk::tx::TX_BOND_WASM;
+use namada_sdk::tx::{TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM};
 use namada_sdk::wallet::alias::Alias;
 use namada_sdk::wallet::pre_genesis::ValidatorWallet;
 use namada_sdk::wallet::Wallet;
@@ -508,20 +507,29 @@ pub struct ValidatorAccountTx<PK: Ord> {
 
 impl TxToSign for ValidatorAccountTx<SignedPk> {
     fn tx_to_sign(&self) -> Vec<u8> {
-        [
-            self.address.serialize_to_vec(),
-            self.vp.serialize_to_vec(),
-            self.commission_rate.serialize_to_vec(),
-            self.max_commission_rate_change.serialize_to_vec(),
-            self.net_address.serialize_to_vec(),
-            self.consensus_key.pk.raw.serialize_to_vec(),
-            self.protocol_key.pk.raw.serialize_to_vec(),
-            self.tendermint_node_key.pk.raw.serialize_to_vec(),
-            self.eth_hot_key.pk.raw.serialize_to_vec(),
-            self.eth_cold_key.pk.raw.serialize_to_vec(),
-            self.metadata.serialize_to_vec(),
-        ]
-        .concat()
+        get_tx_to_sign(
+            TX_BECOME_VALIDATOR_WASM,
+            pos::BecomeValidator {
+                address: Address::Established(self.address.raw.clone()),
+                consensus_key: self.consensus_key.pk.raw.clone(),
+                eth_hot_key: match &self.eth_hot_key.pk.raw {
+                    common::PublicKey::Secp256k1(key) => key.clone(),
+                    _ => unreachable!(),
+                },
+                eth_cold_key: match &self.eth_cold_key.pk.raw {
+                    common::PublicKey::Secp256k1(key) => key.clone(),
+                    _ => unreachable!(),
+                },
+                protocol_key: self.protocol_key.pk.raw.clone(),
+                commission_rate: self.commission_rate,
+                max_commission_rate_change: self.max_commission_rate_change,
+                email: self.metadata.email.clone(),
+                description: self.metadata.description.clone(),
+                website: self.metadata.website.clone(),
+                discord_handle: self.metadata.discord_handle.clone(),
+            },
+        )
+        .to_bytes()
     }
 }
 
