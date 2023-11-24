@@ -1,6 +1,6 @@
 extern crate alloc;
 
-pub use namada_core::{ibc, ibc_proto, proto, tendermint, tendermint_proto};
+pub use namada_core::{ibc, proto, tendermint, tendermint_proto};
 #[cfg(feature = "tendermint-rpc")]
 pub use tendermint_rpc;
 use tx::{TX_INIT_ACCOUNT_WASM, VP_VALIDATOR_WASM};

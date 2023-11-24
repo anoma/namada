@@ -6,7 +6,7 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
-pub use namada_core::{ibc, ibc_proto, tendermint, tendermint_proto};
+pub use namada_core::{ibc, tendermint, tendermint_proto};
 #[cfg(feature = "tendermint-rpc")]
 pub use tendermint_rpc;
 pub use {bip39, namada_core as core, namada_proof_of_stake as proof_of_stake};

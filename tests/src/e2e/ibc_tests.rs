@@ -1385,19 +1385,15 @@ fn query_value_with_proof(
 }
 
 fn convert_proof(tm_proof: TmProof) -> Result<CommitmentProofBytes> {
-    use namada::ibc_proto::ibc::core::commitment::v1::MerkleProof as RawMerkleProof;
-    use namada::ibc_proto::ics23::CommitmentProof;
-
     let mut proofs = Vec::new();
-
     for op in &tm_proof.ops {
-        let mut parsed = CommitmentProof { proof: None };
+        let mut parsed = ics23::CommitmentProof { proof: None };
         prost::Message::merge(&mut parsed, op.data.as_slice())
             .expect("merging CommitmentProof failed");
         proofs.push(parsed);
     }
 
-    let merkle_proof = MerkleProof::from(RawMerkleProof { proofs });
+    let merkle_proof = MerkleProof { proofs };
     CommitmentProofBytes::try_from(merkle_proof).map_err(|e| {
         eyre!("Proof conversion to CommitmentProofBytes failed: {}", e)
     })
