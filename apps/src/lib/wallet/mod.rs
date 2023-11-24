@@ -223,12 +223,13 @@ where
 {
     maybe_pk
         .map(|pk| {
+            let pkh = PublicKeyHash::from(&pk);
             wallet
                 // TODO: optionally encrypt validator keys
-                .find_key_by_pkh(&PublicKeyHash::from(&pk), None)
+                .find_key_by_pkh(&pkh, None)
                 .ok()
                 .or_else(|| wallet.get_validator_data().map(extract_key))
-                .ok_or(FindKeyError::KeyNotFound)
+                .ok_or_else(|| FindKeyError::KeyNotFound(pkh.to_string()))
         })
         .transpose()
 }

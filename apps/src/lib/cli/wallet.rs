@@ -135,7 +135,7 @@ fn address_key_find(
                 Ok(spending_key) => {
                     display_line!(io, "Spending key: {}", spending_key)
                 }
-                Err(FindKeyError::KeyNotFound) => {}
+                Err(FindKeyError::KeyNotFound(_)) => {}
                 Err(err) => edisplay_line!(io, "{}", err),
             }
         }

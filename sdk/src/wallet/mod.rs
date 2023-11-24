@@ -254,8 +254,8 @@ fn gen_spending_key(
 #[derive(Error, Debug)]
 pub enum FindKeyError {
     /// Could not find a given key in the wallet
-    #[error("No matching key found")]
-    KeyNotFound,
+    #[error("No key matching {0} found")]
+    KeyNotFound(String),
     /// Could not decrypt a given key in the wallet
     #[error("{0}")]
     KeyDecryptionError(keys::DecryptionError),
@@ -403,9 +403,9 @@ impl<U> Wallet<U> {
         &mut self,
         alias: impl AsRef<str>,
     ) -> Result<&ExtendedViewingKey, FindKeyError> {
-        self.store
-            .find_viewing_key(alias.as_ref())
-            .ok_or(FindKeyError::KeyNotFound)
+        self.store.find_viewing_key(alias.as_ref()).ok_or_else(|| {
+            FindKeyError::KeyNotFound(alias.as_ref().to_string())
+        })
     }
 
     /// Find the payment address with the given alias in the wallet and return
@@ -688,7 +688,9 @@ impl<U: WalletIo> Wallet<U> {
         let stored_key = self
             .store
             .find_secret_key(alias_pkh_or_pk.as_ref())
-            .ok_or(FindKeyError::KeyNotFound)?;
+            .ok_or_else(|| {
+            FindKeyError::KeyNotFound(alias_pkh_or_pk.as_ref().to_string())
+        })?;
         Self::decrypt_stored_key::<_>(
             &mut self.decrypted_key_cache,
             stored_key,
@@ -705,7 +707,9 @@ impl<U: WalletIo> Wallet<U> {
         self.store
             .find_public_key(alias_or_pkh.as_ref())
             .cloned()
-            .ok_or(FindKeyError::KeyNotFound)
+            .ok_or_else(|| {
+                FindKeyError::KeyNotFound(alias_or_pkh.as_ref().to_string())
+            })
     }
 
     /// Find the spending key with the given alias in the wallet and return it.
@@ -726,7 +730,9 @@ impl<U: WalletIo> Wallet<U> {
         let stored_spendkey = self
             .store
             .find_spending_key(alias.as_ref())
-            .ok_or(FindKeyError::KeyNotFound)?;
+            .ok_or_else(|| {
+                FindKeyError::KeyNotFound(alias.as_ref().to_string())
+            })?;
         Self::decrypt_stored_key::<_>(
             &mut self.decrypted_spendkey_cache,
             stored_spendkey,
@@ -756,7 +762,7 @@ impl<U: WalletIo> Wallet<U> {
     ) -> Result<DerivationPath, FindKeyError> {
         self.store
             .find_path_by_pkh(pkh)
-            .ok_or(FindKeyError::KeyNotFound)
+            .ok_or_else(|| FindKeyError::KeyNotFound(pkh.to_string()))
     }
 
     /// Find the public key by a public key hash.
@@ -770,7 +776,7 @@ impl<U: WalletIo> Wallet<U> {
         self.store
             .find_public_key_by_pkh(pkh)
             .cloned()
-            .ok_or(FindKeyError::KeyNotFound)
+            .ok_or_else(|| FindKeyError::KeyNotFound(pkh.to_string()))
     }
 
     /// Find the stored key by a public key hash.
@@ -795,7 +801,7 @@ impl<U: WalletIo> Wallet<U> {
         let stored_key = self
             .store
             .find_key_by_pkh(pkh)
-            .ok_or(FindKeyError::KeyNotFound)?;
+            .ok_or_else(|| FindKeyError::KeyNotFound(pkh.to_string()))?;
         Self::decrypt_stored_key(
             &mut self.decrypted_key_cache,
             stored_key,
@@ -830,7 +836,7 @@ impl<U: WalletIo> Wallet<U> {
                 decrypted_key_cache
                     .get(&alias)
                     .cloned()
-                    .ok_or(FindKeyError::KeyNotFound)
+                    .ok_or_else(|| FindKeyError::KeyNotFound(alias.to_string()))
             }
             StoredKeypair::Raw(raw) => Ok(raw.clone()),
         }
