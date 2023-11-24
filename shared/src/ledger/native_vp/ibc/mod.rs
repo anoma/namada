@@ -22,7 +22,7 @@ use namada_core::types::storage::Key;
 use namada_proof_of_stake::read_pos_params;
 use thiserror::Error;
 
-use crate::ibc::core::ics24_host::identifier::ChainId as IbcChainId;
+use crate::ibc::core::host::types::identifiers::ChainId as IbcChainId;
 use crate::ledger::ibc::storage::{calc_hash, is_ibc_denom_key, is_ibc_key};
 use crate::ledger::native_vp::{self, Ctx, NativeVp, VpEnv};
 use crate::ledger::parameters::read_epoch_duration_parameter;
@@ -313,6 +313,11 @@ mod tests {
 
     use borsh::BorshDeserialize;
     use borsh_ext::BorshSerializeExt;
+    use ibc_testkit::testapp::ibc::clients::mock::client_state::{
+        client_type, MockClientState, MOCK_CLIENT_TYPE,
+    };
+    use ibc_testkit::testapp::ibc::clients::mock::consensus_state::MockConsensusState;
+    use ibc_testkit::testapp::ibc::clients::mock::header::MockHeader;
     use namada_core::ledger::gas::TxGasMeter;
     use namada_core::ledger::governance::parameters::GovernanceParameters;
     use prost::Message;
@@ -333,72 +338,64 @@ mod tests {
     };
     use crate::core::types::address::{nam, InternalAddress};
     use crate::core::types::storage::Epoch;
-    use crate::ibc::applications::transfer::coin::PrefixedCoin;
-    use crate::ibc::applications::transfer::denom::TracePrefix;
-    use crate::ibc::applications::transfer::events::{
+    use crate::ibc::apps::transfer::types::events::{
         AckEvent, DenomTraceEvent, RecvEvent, TimeoutEvent, TransferEvent,
     };
-    use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
-    use crate::ibc::applications::transfer::packet::PacketData;
-    use crate::ibc::applications::transfer::{ack_success_b64, VERSION};
-    use crate::ibc::core::events::{
-        IbcEvent as RawIbcEvent, MessageEvent, ModuleEvent,
+    use crate::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
+    use crate::ibc::apps::transfer::types::packet::PacketData;
+    use crate::ibc::apps::transfer::types::{
+        ack_success_b64, PrefixedCoin, TracePrefix, VERSION,
     };
-    use crate::ibc::core::ics02_client::events::{CreateClient, UpdateClient};
-    use crate::ibc::core::ics02_client::msgs::create_client::MsgCreateClient;
-    use crate::ibc::core::ics02_client::msgs::update_client::MsgUpdateClient;
-    use crate::ibc::core::ics03_connection::connection::{
-        ConnectionEnd, Counterparty as ConnCounterparty, State as ConnState,
-    };
-    use crate::ibc::core::ics03_connection::events::{
-        OpenAck as ConnOpenAck, OpenConfirm as ConnOpenConfirm,
-        OpenInit as ConnOpenInit, OpenTry as ConnOpenTry,
-    };
-    use crate::ibc::core::ics03_connection::msgs::conn_open_ack::MsgConnectionOpenAck;
-    use crate::ibc::core::ics03_connection::msgs::conn_open_confirm::MsgConnectionOpenConfirm;
-    use crate::ibc::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
-    use crate::ibc::core::ics03_connection::msgs::conn_open_try::MsgConnectionOpenTry;
-    use crate::ibc::core::ics03_connection::version::{
-        get_compatible_versions, Version as ConnVersion,
-    };
-    use crate::ibc::core::ics04_channel::acknowledgement::{
+    use crate::ibc::core::channel::types::acknowledgement::{
         Acknowledgement, AcknowledgementStatus,
     };
-    use crate::ibc::core::ics04_channel::channel::{
+    use crate::ibc::core::channel::types::channel::{
         ChannelEnd, Counterparty as ChanCounterparty, Order, State as ChanState,
     };
-    use crate::ibc::core::ics04_channel::commitment::PacketCommitment;
-    use crate::ibc::core::ics04_channel::events::{
+    use crate::ibc::core::channel::types::commitment::PacketCommitment;
+    use crate::ibc::core::channel::types::events::{
         AcknowledgePacket, OpenAck as ChanOpenAck,
         OpenConfirm as ChanOpenConfirm, OpenInit as ChanOpenInit,
         OpenTry as ChanOpenTry, ReceivePacket, SendPacket, TimeoutPacket,
         WriteAcknowledgement,
     };
-    use crate::ibc::core::ics04_channel::msgs::{
+    use crate::ibc::core::channel::types::msgs::{
         MsgAcknowledgement, MsgChannelOpenAck, MsgChannelOpenConfirm,
         MsgChannelOpenInit, MsgChannelOpenTry, MsgRecvPacket, MsgTimeout,
         MsgTimeoutOnClose,
     };
-    use crate::ibc::core::ics04_channel::packet::{Packet, Sequence};
-    use crate::ibc::core::ics04_channel::timeout::TimeoutHeight;
-    use crate::ibc::core::ics04_channel::Version as ChanVersion;
-    use crate::ibc::core::ics23_commitment::commitment::{
+    use crate::ibc::core::channel::types::packet::Packet;
+    use crate::ibc::core::channel::types::timeout::TimeoutHeight;
+    use crate::ibc::core::channel::types::Version as ChanVersion;
+    use crate::ibc::core::client::types::events::{CreateClient, UpdateClient};
+    use crate::ibc::core::client::types::msgs::{
+        MsgCreateClient, MsgUpdateClient,
+    };
+    use crate::ibc::core::client::types::Height;
+    use crate::ibc::core::commitment_types::commitment::{
         CommitmentPrefix, CommitmentProofBytes,
     };
-    use crate::ibc::core::ics24_host::identifier::{
-        ChannelId, ClientId, ConnectionId, PortId,
+    use crate::ibc::core::connection::types::events::{
+        OpenAck as ConnOpenAck, OpenConfirm as ConnOpenConfirm,
+        OpenInit as ConnOpenInit, OpenTry as ConnOpenTry,
     };
-    use crate::ibc::core::timestamp::Timestamp;
-    use crate::ibc::core::Msg;
-    use crate::ibc::mock::client_state::{
-        client_type, MockClientState, MOCK_CLIENT_TYPE,
+    use crate::ibc::core::connection::types::msgs::{
+        MsgConnectionOpenAck, MsgConnectionOpenConfirm, MsgConnectionOpenInit,
+        MsgConnectionOpenTry,
     };
-    use crate::ibc::mock::consensus_state::MockConsensusState;
-    use crate::ibc::mock::header::MockHeader;
-    use crate::ibc::Height;
-    use crate::ibc_proto::google::protobuf::Any;
-    use crate::ibc_proto::ibc::core::connection::v1::MsgConnectionOpenTry as RawMsgConnectionOpenTry;
-    use crate::ibc_proto::protobuf::Protobuf;
+    use crate::ibc::core::connection::types::version::Version as ConnVersion;
+    use crate::ibc::core::connection::types::{
+        ConnectionEnd, Counterparty as ConnCounterparty, State as ConnState,
+    };
+    use crate::ibc::core::handler::types::events::{
+        IbcEvent as RawIbcEvent, MessageEvent,
+    };
+    use crate::ibc::core::host::types::identifiers::{
+        ChannelId, ClientId, ConnectionId, PortId, Sequence,
+    };
+    use crate::ibc::core::router::types::event::ModuleEvent;
+    use crate::ibc::primitives::proto::{Any, Protobuf};
+    use crate::ibc::primitives::{Msg, Timestamp};
     use crate::ledger::gas::VpGasMeter;
     use crate::ledger::parameters::storage::{
         get_epoch_duration_storage_key, get_max_expected_time_per_block_key,
@@ -408,7 +405,6 @@ mod tests {
     use crate::ledger::{ibc, pos};
     use crate::proto::{Code, Data, Section, Signature, Tx};
     use crate::tendermint::time::Time as TmTime;
-    use crate::tendermint_proto::Protobuf as TmProtobuf;
     use crate::types::key::testing::keypair_1;
     use crate::types::storage::{BlockHash, BlockHeight, TxIndex};
     use crate::types::time::DurationSecs;
@@ -480,7 +476,7 @@ mod tests {
             timestamp: Timestamp::now(),
         };
         let client_state = MockClientState::new(header);
-        let bytes = Protobuf::<Any>::encode_vec(&client_state);
+        let bytes = Protobuf::<Any>::encode_vec(client_state);
         wl_storage
             .write_log
             .write(&client_state_key, bytes)
@@ -488,7 +484,7 @@ mod tests {
         // insert a mock consensus state
         let consensus_key = consensus_state_key(&client_id, height);
         let consensus_state = MockConsensusState::new(header);
-        let bytes = Protobuf::<Any>::encode_vec(&consensus_state);
+        let bytes = Protobuf::<Any>::encode_vec(consensus_state);
         wl_storage
             .write_log
             .write(&consensus_key, bytes)
@@ -682,7 +678,7 @@ mod tests {
         };
         // client state
         let client_state_key = client_state_key(&get_client_id());
-        let bytes = Protobuf::<Any>::encode_vec(&client_state);
+        let bytes = Protobuf::<Any>::encode_vec(client_state);
         wl_storage
             .write_log
             .write(&client_state_key, bytes)
@@ -690,7 +686,7 @@ mod tests {
         keys_changed.insert(client_state_key);
         // client consensus
         let consensus_key = consensus_state_key(&client_id, height);
-        let bytes = Protobuf::<Any>::encode_vec(&consensus_state);
+        let bytes = Protobuf::<Any>::encode_vec(consensus_state);
         wl_storage
             .write_log
             .write(&consensus_key, bytes)
@@ -780,7 +776,7 @@ mod tests {
         // insert only client state
         let client_state = MockClientState::new(header);
         let client_state_key = client_state_key(&get_client_id());
-        let bytes = Protobuf::<Any>::encode_vec(&client_state);
+        let bytes = Protobuf::<Any>::encode_vec(client_state);
         wl_storage
             .write_log
             .write(&client_state_key, bytes)
@@ -866,7 +862,7 @@ mod tests {
         };
         // client state
         let client_state = MockClientState::new(header);
-        let bytes = Protobuf::<Any>::encode_vec(&client_state);
+        let bytes = Protobuf::<Any>::encode_vec(client_state);
         wl_storage
             .write_log
             .write(&client_state_key, bytes)
@@ -875,7 +871,7 @@ mod tests {
         // consensus state
         let consensus_key = consensus_state_key(&client_id, height);
         let consensus_state = MockConsensusState::new(header);
-        let bytes = Protobuf::<Any>::encode_vec(&consensus_state);
+        let bytes = Protobuf::<Any>::encode_vec(consensus_state);
         wl_storage
             .write_log
             .write(&consensus_key, bytes)
@@ -913,7 +909,7 @@ mod tests {
             client_type(),
             consensus_height,
             vec![consensus_height],
-            Protobuf::<Any>::encode_vec(&header),
+            Protobuf::<Any>::encode_vec(header),
         ));
         let message_event = RawIbcEvent::Message(MessageEvent::Client);
         wl_storage
@@ -1190,29 +1186,22 @@ mod tests {
         };
         let client_state = MockClientState::new(header);
         let proof_height = Height::new(0, 1).unwrap();
-        // Convert a message from RawMsgConnectionOpenTry
-        // because MsgConnectionOpenTry cannot be created directly
         #[allow(deprecated)]
-        let msg: MsgConnectionOpenTry = RawMsgConnectionOpenTry {
-            client_id: get_client_id().as_str().to_string(),
-            client_state: Some(client_state.into()),
-            counterparty: Some(get_conn_counterparty().into()),
-            delay_period: 0,
-            counterparty_versions: get_compatible_versions()
-                .iter()
-                .map(|v| v.clone().into())
-                .collect(),
-            proof_init: dummy_proof().into(),
-            proof_height: Some(proof_height.into()),
-            proof_consensus: dummy_proof().into(),
-            consensus_height: Some(client_state.latest_height().into()),
-            proof_client: dummy_proof().into(),
-            signer: "account0".to_string(),
+        let msg = MsgConnectionOpenTry {
+            client_id_on_b: get_client_id(),
+            client_state_of_b_on_a: client_state.into(),
+            counterparty: get_conn_counterparty(),
+            versions_on_a: vec![ConnVersion::default()],
+            proofs_height_on_a: proof_height,
+            proof_conn_end_on_a: dummy_proof(),
+            proof_client_state_of_b_on_a: dummy_proof(),
+            proof_consensus_state_of_b_on_a: dummy_proof(),
+            consensus_height_of_b_on_a: client_state.latest_height(),
+            delay_period: Duration::from_secs(0),
+            signer: "account0".to_string().into(),
+            proof_consensus_state_of_b: Some(dummy_proof()),
             previous_connection_id: ConnectionId::default().to_string(),
-            host_consensus_state_proof: dummy_proof().into(),
-        }
-        .try_into()
-        .expect("invalid message");
+        };
 
         // insert a TryOpen connection
         let conn_id = get_connection_id();

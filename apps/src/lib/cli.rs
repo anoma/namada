@@ -2818,7 +2818,7 @@ pub mod args {
     use std::path::PathBuf;
     use std::str::FromStr;
 
-    use namada::ibc::core::ics24_host::identifier::{ChannelId, PortId};
+    use namada::ibc::core::host::types::identifiers::{ChannelId, PortId};
     use namada::types::address::Address;
     use namada::types::chain::{ChainId, ChainIdPrefix};
     use namada::types::dec::Dec;

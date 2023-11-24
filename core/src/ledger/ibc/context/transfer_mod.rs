@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use super::common::IbcCommonContext;
 use super::token_transfer::TokenTransferContext;
-use crate::ibc::applications::transfer::context::{
+use crate::ibc::apps::transfer::module::{
     on_acknowledgement_packet_execute, on_acknowledgement_packet_validate,
     on_chan_close_confirm_execute, on_chan_close_confirm_validate,
     on_chan_close_init_execute, on_chan_close_init_validate,
@@ -17,18 +17,19 @@ use crate::ibc::applications::transfer::context::{
     on_recv_packet_execute, on_timeout_packet_execute,
     on_timeout_packet_validate,
 };
-use crate::ibc::applications::transfer::error::TokenTransferError;
-use crate::ibc::applications::transfer::MODULE_ID_STR;
-use crate::ibc::core::ics04_channel::acknowledgement::Acknowledgement;
-use crate::ibc::core::ics04_channel::channel::{Counterparty, Order};
-use crate::ibc::core::ics04_channel::error::{ChannelError, PacketError};
-use crate::ibc::core::ics04_channel::packet::Packet;
-use crate::ibc::core::ics04_channel::Version;
-use crate::ibc::core::ics24_host::identifier::{
+use crate::ibc::apps::transfer::types::error::TokenTransferError;
+use crate::ibc::apps::transfer::types::MODULE_ID_STR;
+use crate::ibc::core::channel::types::acknowledgement::Acknowledgement;
+use crate::ibc::core::channel::types::channel::{Counterparty, Order};
+use crate::ibc::core::channel::types::error::{ChannelError, PacketError};
+use crate::ibc::core::channel::types::packet::Packet;
+use crate::ibc::core::channel::types::Version;
+use crate::ibc::core::host::types::identifiers::{
     ChannelId, ConnectionId, PortId,
 };
-use crate::ibc::core::router::{Module, ModuleExtras, ModuleId};
-use crate::ibc::Signer;
+use crate::ibc::core::router::module::Module;
+use crate::ibc::core::router::types::module::{ModuleExtras, ModuleId};
+use crate::ibc::primitives::Signer;
 
 /// IBC module wrapper for getting the reference of the module
 pub trait ModuleWrapper: Module {
@@ -331,8 +332,8 @@ fn into_packet_error(error: TokenTransferError) -> PacketError {
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
     use super::*;
-    use crate::ibc::applications::transfer::ack_success_b64;
-    use crate::ibc::core::ics04_channel::acknowledgement::AcknowledgementStatus;
+    use crate::ibc::apps::transfer::types::ack_success_b64;
+    use crate::ibc::core::channel::types::acknowledgement::AcknowledgementStatus;
 
     /// Dummy IBC module for token transfer
     #[derive(Debug)]

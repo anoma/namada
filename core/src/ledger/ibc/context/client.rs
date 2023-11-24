@@ -1,37 +1,35 @@
 //! AnyClientState and AnyConsensusState for IBC context
 
 use ibc_derive::ConsensusState;
+#[cfg(feature = "testing")]
+use ibc_testkit::testapp::ibc::clients::mock::client_state::MockClientContext;
+#[cfg(feature = "testing")]
+use ibc_testkit::testapp::ibc::clients::mock::client_state::MockClientState;
+#[cfg(feature = "testing")]
+use ibc_testkit::testapp::ibc::clients::mock::consensus_state::MockConsensusState;
 use prost::Message;
 
-use crate::ibc::clients::ics07_tendermint::client_state::ClientState as TmClientState;
-use crate::ibc::clients::ics07_tendermint::consensus_state::ConsensusState as TmConsensusState;
-use crate::ibc::clients::ics07_tendermint::{
+use crate::ibc::clients::tendermint::client_state::ClientState as TmClientState;
+use crate::ibc::clients::tendermint::consensus_state::ConsensusState as TmConsensusState;
+use crate::ibc::clients::tendermint::context::{
     CommonContext, ExecutionContext as TmExecutionContext,
     ValidationContext as TmValidationContext,
 };
-use crate::ibc::core::ics02_client::client_state::{
-    ClientStateCommon, ClientStateExecution, ClientStateValidation, Status,
-    UpdateKind,
+use crate::ibc::core::client::context::client_state::{
+    ClientStateCommon, ClientStateExecution, ClientStateValidation,
 };
-use crate::ibc::core::ics02_client::client_type::ClientType;
-use crate::ibc::core::ics02_client::error::ClientError;
-use crate::ibc::core::ics02_client::{
+use crate::ibc::core::client::context::{
     ClientExecutionContext, ClientValidationContext,
 };
-use crate::ibc::core::ics23_commitment::commitment::{
+use crate::ibc::core::client::types::error::ClientError;
+use crate::ibc::core::client::types::{Height, Status, UpdateKind};
+use crate::ibc::core::commitment_types::commitment::{
     CommitmentPrefix, CommitmentProofBytes, CommitmentRoot,
 };
-use crate::ibc::core::ics24_host::identifier::ClientId;
-use crate::ibc::core::ics24_host::path::Path;
-use crate::ibc::core::ExecutionContext;
-#[cfg(feature = "ibc-mocks")]
-use crate::ibc::mock::client_state::MockClientContext;
-#[cfg(feature = "ibc-mocks")]
-use crate::ibc::mock::client_state::MockClientState;
-#[cfg(feature = "ibc-mocks")]
-use crate::ibc::mock::consensus_state::MockConsensusState;
-use crate::ibc::Height;
-use crate::ibc_proto::google::protobuf::Any;
+use crate::ibc::core::host::types::identifiers::{ClientId, ClientType};
+use crate::ibc::core::host::types::path::Path;
+use crate::ibc::core::host::ExecutionContext;
+use crate::ibc::primitives::proto::Any;
 
 // TODO: #[derive(ClientState)] doesn't support contexts with contexts generic
 // for now
@@ -41,7 +39,7 @@ pub enum AnyClientState {
     /// Tendermint client state
     Tendermint(TmClientState),
 
-    #[cfg(feature = "ibc-mocks")]
+    #[cfg(feature = "testing")]
     /// Mock client state for testing
     Mock(MockClientState),
 }
@@ -52,7 +50,7 @@ impl From<TmClientState> for AnyClientState {
     }
 }
 
-#[cfg(feature = "ibc-mocks")]
+#[cfg(feature = "testing")]
 impl From<MockClientState> for AnyClientState {
     fn from(cs: MockClientState) -> Self {
         Self::Mock(cs)
@@ -63,7 +61,7 @@ impl From<AnyClientState> for Any {
     fn from(client_state: AnyClientState) -> Self {
         match client_state {
             AnyClientState::Tendermint(cs) => cs.into(),
-            #[cfg(feature = "ibc-mocks")]
+            #[cfg(feature = "testing")]
             AnyClientState::Mock(cs) => cs.into(),
         }
     }
@@ -73,7 +71,7 @@ impl TryFrom<Any> for AnyClientState {
     type Error = ClientError;
 
     fn try_from(client_state: Any) -> Result<Self, Self::Error> {
-        #[cfg(feature = "ibc-mocks")]
+        #[cfg(feature = "testing")]
         if let Ok(cs) = MockClientState::try_from(client_state.clone()) {
             return Ok(cs.into());
         }
@@ -93,7 +91,7 @@ pub enum AnyConsensusState {
     /// Tendermint consensus state
     Tendermint(TmConsensusState),
 
-    #[cfg(feature = "ibc-mocks")]
+    #[cfg(feature = "testing")]
     /// Mock consensus state for testing
     Mock(MockConsensusState),
 }
@@ -104,7 +102,7 @@ impl From<TmConsensusState> for AnyConsensusState {
     }
 }
 
-#[cfg(feature = "ibc-mocks")]
+#[cfg(feature = "testing")]
 impl From<MockConsensusState> for AnyConsensusState {
     fn from(cs: MockConsensusState) -> Self {
         Self::Mock(cs)
@@ -117,7 +115,7 @@ impl TryFrom<AnyConsensusState> for TmConsensusState {
     fn try_from(any: AnyConsensusState) -> Result<Self, Self::Error> {
         match any {
             AnyConsensusState::Tendermint(cs) => Ok(cs),
-            #[cfg(feature = "ibc-mocks")]
+            #[cfg(feature = "testing")]
             _ => Err(ClientError::UnknownConsensusStateType {
                 consensus_state_type: "Only Tendermint client state type is \
                                        supported"
@@ -127,7 +125,7 @@ impl TryFrom<AnyConsensusState> for TmConsensusState {
     }
 }
 
-#[cfg(feature = "ibc-mocks")]
+#[cfg(feature = "testing")]
 impl TryFrom<AnyConsensusState> for MockConsensusState {
     type Error = ClientError;
 
@@ -146,7 +144,7 @@ impl TryFrom<Any> for AnyConsensusState {
     type Error = ClientError;
 
     fn try_from(consensus_state: Any) -> Result<Self, Self::Error> {
-        #[cfg(feature = "ibc-mocks")]
+        #[cfg(feature = "testing")]
         if let Ok(cs) = MockConsensusState::try_from(consensus_state.clone()) {
             return Ok(cs.into());
         }
@@ -179,7 +177,7 @@ impl ClientStateCommon for AnyClientState {
             AnyClientState::Tendermint(cs) => {
                 cs.verify_consensus_state(consensus_state)
             }
-            #[cfg(feature = "ibc-mocks")]
+            #[cfg(feature = "testing")]
             AnyClientState::Mock(cs) => {
                 cs.verify_consensus_state(consensus_state)
             }
@@ -189,7 +187,7 @@ impl ClientStateCommon for AnyClientState {
     fn client_type(&self) -> ClientType {
         match self {
             AnyClientState::Tendermint(cs) => cs.client_type(),
-            #[cfg(feature = "ibc-mocks")]
+            #[cfg(feature = "testing")]
             AnyClientState::Mock(cs) => cs.client_type(),
         }
     }
@@ -197,7 +195,7 @@ impl ClientStateCommon for AnyClientState {
     fn latest_height(&self) -> Height {
         match self {
             AnyClientState::Tendermint(cs) => cs.latest_height(),
-            #[cfg(feature = "ibc-mocks")]
+            #[cfg(feature = "testing")]
             AnyClientState::Mock(cs) => cs.latest_height(),
         }
     }
@@ -210,7 +208,7 @@ impl ClientStateCommon for AnyClientState {
             AnyClientState::Tendermint(cs) => {
                 cs.validate_proof_height(proof_height)
             }
-            #[cfg(feature = "ibc-mocks")]
+            #[cfg(feature = "testing")]
             AnyClientState::Mock(cs) => cs.validate_proof_height(proof_height),
         }
     }
@@ -231,7 +229,7 @@ impl ClientStateCommon for AnyClientState {
                 proof_upgrade_consensus_state,
                 root,
             ),
-            #[cfg(feature = "ibc-mocks")]
+            #[cfg(feature = "testing")]
             AnyClientState::Mock(cs) => cs.verify_upgrade_client(
                 upgraded_client_state,
                 upgraded_consensus_state,
@@ -254,7 +252,7 @@ impl ClientStateCommon for AnyClientState {
             AnyClientState::Tendermint(cs) => {
                 cs.verify_membership(prefix, proof, root, path, value)
             }
-            #[cfg(feature = "ibc-mocks")]
+            #[cfg(feature = "testing")]
             AnyClientState::Mock(cs) => {
                 cs.verify_membership(prefix, proof, root, path, value)
             }
@@ -272,7 +270,7 @@ impl ClientStateCommon for AnyClientState {
             AnyClientState::Tendermint(cs) => {
                 cs.verify_non_membership(prefix, proof, root, path)
             }
-            #[cfg(feature = "ibc-mocks")]
+            #[cfg(feature = "testing")]
             AnyClientState::Mock(cs) => {
                 cs.verify_non_membership(prefix, proof, root, path)
             }
@@ -280,7 +278,7 @@ impl ClientStateCommon for AnyClientState {
     }
 }
 
-#[cfg(not(feature = "ibc-mocks"))]
+#[cfg(not(feature = "testing"))]
 impl<V> ClientStateValidation<V> for AnyClientState
 where
     V: ClientValidationContext + TmValidationContext,
@@ -331,7 +329,7 @@ where
     }
 }
 
-#[cfg(feature = "ibc-mocks")]
+#[cfg(feature = "testing")]
 impl<V> ClientStateValidation<V> for AnyClientState
 where
     V: ClientValidationContext + TmValidationContext + MockClientContext,
@@ -400,7 +398,7 @@ where
     }
 }
 
-#[cfg(not(feature = "ibc-mocks"))]
+#[cfg(not(feature = "testing"))]
 impl<E> ClientStateExecution<E> for AnyClientState
 where
     E: ExecutionContext + TmExecutionContext,
@@ -468,7 +466,7 @@ where
     }
 }
 
-#[cfg(feature = "ibc-mocks")]
+#[cfg(feature = "testing")]
 impl<E> ClientStateExecution<E> for AnyClientState
 where
     E: ExecutionContext + TmExecutionContext + MockClientContext,

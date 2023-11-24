@@ -1,50 +1,51 @@
 use core::time::Duration;
 use std::collections::HashMap;
 
-use namada::ibc::applications::transfer::coin::PrefixedCoin;
-use namada::ibc::applications::transfer::error::TokenTransferError;
-use namada::ibc::applications::transfer::msgs::transfer::MsgTransfer;
-use namada::ibc::applications::transfer::packet::PacketData;
-use namada::ibc::applications::transfer::{ack_success_b64, VERSION};
-use namada::ibc::core::ics02_client::msgs::create_client::MsgCreateClient;
-use namada::ibc::core::ics02_client::msgs::update_client::MsgUpdateClient;
-use namada::ibc::core::ics02_client::msgs::upgrade_client::MsgUpgradeClient;
-use namada::ibc::core::ics03_connection::connection::{
-    ConnectionEnd, Counterparty as ConnCounterparty, State as ConnState,
+use ibc_testkit::testapp::ibc::clients::mock::client_state::{
+    client_type, MockClientState,
 };
-use namada::ibc::core::ics03_connection::msgs::conn_open_ack::MsgConnectionOpenAck;
-use namada::ibc::core::ics03_connection::msgs::conn_open_confirm::MsgConnectionOpenConfirm;
-use namada::ibc::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
-use namada::ibc::core::ics03_connection::msgs::conn_open_try::MsgConnectionOpenTry;
-use namada::ibc::core::ics03_connection::version::Version as ConnVersion;
-use namada::ibc::core::ics04_channel::acknowledgement::{
+use ibc_testkit::testapp::ibc::clients::mock::consensus_state::MockConsensusState;
+use ibc_testkit::testapp::ibc::clients::mock::header::MockHeader;
+use namada::ibc::apps::transfer::types::error::TokenTransferError;
+use namada::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
+use namada::ibc::apps::transfer::types::packet::PacketData;
+use namada::ibc::apps::transfer::types::{
+    ack_success_b64, PrefixedCoin, VERSION,
+};
+use namada::ibc::core::channel::types::acknowledgement::{
     AcknowledgementStatus, StatusValue,
 };
-use namada::ibc::core::ics04_channel::channel::{
+use namada::ibc::core::channel::types::channel::{
     ChannelEnd, Counterparty as ChanCounterparty, Order, State as ChanState,
 };
-use namada::ibc::core::ics04_channel::msgs::{
+use namada::ibc::core::channel::types::msgs::{
     MsgAcknowledgement, MsgChannelCloseConfirm, MsgChannelCloseInit,
     MsgChannelOpenAck, MsgChannelOpenConfirm, MsgChannelOpenInit,
     MsgChannelOpenTry, MsgRecvPacket, MsgTimeout, MsgTimeoutOnClose,
 };
-pub use namada::ibc::core::ics04_channel::packet::{Packet, Sequence};
-use namada::ibc::core::ics04_channel::timeout::TimeoutHeight;
-use namada::ibc::core::ics04_channel::Version as ChanVersion;
-use namada::ibc::core::ics23_commitment::commitment::{
+pub use namada::ibc::core::channel::types::packet::Packet;
+use namada::ibc::core::channel::types::timeout::TimeoutHeight;
+use namada::ibc::core::channel::types::Version as ChanVersion;
+use namada::ibc::core::client::types::msgs::{
+    MsgCreateClient, MsgUpdateClient, MsgUpgradeClient,
+};
+use namada::ibc::core::client::types::Height;
+use namada::ibc::core::commitment_types::commitment::{
     CommitmentPrefix, CommitmentProofBytes,
 };
-pub use namada::ibc::core::ics24_host::identifier::{
-    ChannelId, ClientId, ConnectionId, PortId,
+use namada::ibc::core::connection::types::msgs::{
+    MsgConnectionOpenAck, MsgConnectionOpenConfirm, MsgConnectionOpenInit,
+    MsgConnectionOpenTry,
 };
-use namada::ibc::core::timestamp::Timestamp;
-use namada::ibc::mock::client_state::{client_type, MockClientState};
-use namada::ibc::mock::consensus_state::MockConsensusState;
-use namada::ibc::mock::header::MockHeader;
-use namada::ibc::Height;
-use namada::ibc_proto::google::protobuf::Any;
-use namada::ibc_proto::ibc::core::connection::v1::MsgConnectionOpenTry as RawMsgConnectionOpenTry;
-use namada::ibc_proto::protobuf::Protobuf;
+use namada::ibc::core::connection::types::version::Version as ConnVersion;
+use namada::ibc::core::connection::types::{
+    ConnectionEnd, Counterparty as ConnCounterparty, State as ConnState,
+};
+pub use namada::ibc::core::host::types::identifiers::{
+    ChannelId, ClientId, ConnectionId, PortId, Sequence,
+};
+use namada::ibc::primitives::proto::{Any, Protobuf};
+use namada::ibc::primitives::Timestamp;
 use namada::ledger::gas::VpGasMeter;
 pub use namada::ledger::ibc::storage::{
     ack_key, channel_counter_key, channel_key, client_counter_key,
@@ -71,7 +72,6 @@ use namada::ledger::{ibc, pos};
 use namada::proof_of_stake::OwnedPosParams;
 use namada::proto::Tx;
 use namada::tendermint::time::Time as TmTime;
-use namada::tendermint_proto::Protobuf as TmProtobuf;
 use namada::types::address::{self, Address, InternalAddress};
 use namada::types::hash::Hash;
 use namada::types::storage::{
@@ -301,12 +301,12 @@ pub fn prepare_client() -> (ClientId, Any, HashMap<storage::Key, Vec<u8>>) {
     // client state
     let client_id = client_id();
     let key = client_state_key(&client_id);
-    let bytes = Protobuf::<Any>::encode_vec(&client_state);
+    let bytes = Protobuf::<Any>::encode_vec(client_state);
     writes.insert(key, bytes);
     // consensus state
     let height = client_state.latest_height();
     let key = consensus_state_key(&client_id, height);
-    let bytes = Protobuf::<Any>::encode_vec(&consensus_state);
+    let bytes = Protobuf::<Any>::encode_vec(consensus_state);
     writes.insert(key, bytes);
     // client update time
     let key = client_update_timestamp_key(&client_id);
@@ -463,26 +463,22 @@ pub fn msg_connection_open_try(
     client_state: Any,
 ) -> MsgConnectionOpenTry {
     let consensus_height = Height::new(0, 1).expect("invalid height");
-    // Convert a message from RawMsgConnectionOpenTry
-    // because MsgConnectionOpenTry cannot be created directly
     #[allow(deprecated)]
-    RawMsgConnectionOpenTry {
-        client_id: client_id.as_str().to_string(),
+    MsgConnectionOpenTry {
+        client_id_on_b: client_id,
+        client_state_of_b_on_a: client_state.into(),
+        counterparty: dummy_connection_counterparty(),
+        versions_on_a: vec![ConnVersion::default()],
+        proofs_height_on_a: dummy_proof_height(),
+        proof_conn_end_on_a: dummy_proof(),
+        proof_client_state_of_b_on_a: dummy_proof(),
+        proof_consensus_state_of_b_on_a: dummy_proof(),
+        consensus_height_of_b_on_a: consensus_height,
+        delay_period: Duration::from_secs(0),
+        signer: "test".to_string().into(),
+        proof_consensus_state_of_b: Some(dummy_proof()),
         previous_connection_id: ConnectionId::default().to_string(),
-        client_state: Some(client_state),
-        counterparty: Some(dummy_connection_counterparty().into()),
-        delay_period: 0,
-        counterparty_versions: vec![ConnVersion::default().into()],
-        proof_height: Some(dummy_proof_height().into()),
-        proof_init: dummy_proof().into(),
-        proof_client: dummy_proof().into(),
-        proof_consensus: dummy_proof().into(),
-        consensus_height: Some(consensus_height.into()),
-        signer: "test".to_string(),
-        host_consensus_state_proof: dummy_proof().into(),
     }
-    .try_into()
-    .expect("invalid message")
 }
 
 pub fn msg_connection_open_ack(

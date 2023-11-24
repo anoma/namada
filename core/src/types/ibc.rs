@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::address::HASH_LEN;
-use crate::ibc::applications::transfer::{Memo, PrefixedDenom, TracePath};
-use crate::ibc::core::events::{
+use crate::ibc::apps::transfer::types::{Memo, PrefixedDenom, TracePath};
+use crate::ibc::core::handler::types::events::{
     Error as IbcEventError, IbcEvent as RawIbcEvent,
 };
 use crate::tendermint::abci::Event as AbciEvent;

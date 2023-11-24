@@ -23,7 +23,7 @@ mod tests {
 
     use borsh_ext::BorshSerializeExt;
     use itertools::Itertools;
-    use namada::ibc::core::Msg;
+    use namada::ibc::primitives::Msg;
     use namada::ledger::ibc::storage as ibc_storage;
     use namada::ledger::native_vp::ibc::{
         get_dummy_header as tm_dummy_header, Error as IbcError,
