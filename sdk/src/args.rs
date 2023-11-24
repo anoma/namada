@@ -2050,7 +2050,7 @@ pub struct KeyGen {
     pub raw: bool,
     /// Key alias
     pub alias: String,
-    /// Whether to force overwrite the alias, if provided
+    /// Whether to force overwrite the alias
     pub alias_force: bool,
     /// Don't encrypt the keypair
     pub unsafe_dont_encrypt: bool,
@@ -2067,7 +2067,7 @@ pub struct KeyDerive {
     pub shielded: bool,
     /// Key alias
     pub alias: String,
-    /// Whether to force overwrite the alias, if provided
+    /// Whether to force overwrite the alias
     pub alias_force: bool,
     /// Don't encrypt the keypair
     pub unsafe_dont_encrypt: bool,
@@ -2158,7 +2158,7 @@ pub struct KeyAddressAdd {
     pub alias_force: bool,
     /// Any supported value
     pub value: String,
-    /// Don't encrypt the keys
+    /// Don't encrypt the key
     pub unsafe_dont_encrypt: bool,
 }
 

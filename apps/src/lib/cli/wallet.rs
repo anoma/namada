@@ -93,8 +93,8 @@ fn spending_keys_list(
     if known_view_keys.is_empty() {
         display_line!(
             io,
-            "TODO No known keys. Try `masp add --alias my-addr --value ...` \
-             to add a new key to the wallet.",
+            "No known keys. Try `add --alias my-addr --value ...` to add a \
+             new key to the wallet, or `gen --shielded` to generate a new key.",
         );
     } else {
         let stdout = io::stdout();
@@ -165,7 +165,7 @@ fn payment_addresses_list(
     if known_addresses.is_empty() {
         display_line!(
             io,
-            "TODO No known payment addresses. Try `masp gen-addr --alias \
+            "No known payment addresses. Try `masp gen-payment-addr --alias \
              my-addr` to generate a new payment address.",
         );
     } else {
@@ -527,7 +527,7 @@ fn address_list(ctx: Context, io: &impl Io, args_key_list: args::AddressList) {
     }
 }
 
-/// Value for add command
+/// Value for wallet `add` command
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum KeyAddrAddValue {
@@ -709,9 +709,9 @@ fn shielded_key_address_find(
         // Otherwise alias cannot be referring to any shielded value
         display_line!(
             io,
-            "TODO No shielded address or key with alias {} found. Use the \
-             commands `masp list-addrs` and `masp list-keys` to see all the \
-             known addresses and keys.",
+            "No shielded address or key with alias {} found. Use the commands \
+             `list-addr --shielded` and `list-keys --shielded` to see all the \
+             known shielded addresses and keys.",
             alias.to_lowercase()
         );
     }
