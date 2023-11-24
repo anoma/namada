@@ -1999,6 +1999,21 @@ pub struct KeyExport {
     pub is_pre_genesis: bool,
 }
 
+/// Wallet key import arguments
+#[derive(Clone, Debug)]
+pub struct KeyImport {
+    /// File name
+    pub file_path: String,
+    /// Key alias
+    pub alias: String,
+    /// Whether to force overwrite the alias
+    pub alias_force: bool,
+    /// Export key pre-genesis instead of a current chain
+    pub is_pre_genesis: bool,
+    /// Don't encrypt the key
+    pub unsafe_dont_encrypt: bool,
+}
+
 /// Wallet key / address add arguments
 #[derive(Clone, Debug)]
 pub struct KeyAddressAdd {

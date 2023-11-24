@@ -61,6 +61,9 @@ impl CliApi {
             cmds::NamadaWallet::KeyExport(cmds::WalletExportKey(args)) => {
                 key_export(ctx, io, args)
             }
+            cmds::NamadaWallet::KeyImport(cmds::WalletImportKey(args)) => {
+                key_import(ctx, io, args)
+            }
             cmds::NamadaWallet::KeyAddrAdd(cmds::WalletAddKeyAddress(args)) => {
                 key_address_add(ctx, io, args)
             }
@@ -558,29 +561,21 @@ impl FromStr for KeyAddrAddValue {
     }
 }
 
-/// Add key or address
-fn key_address_add(
+fn add_key_or_address(
     ctx: Context,
     io: &impl Io,
-    args::KeyAddressAdd {
-        alias,
-        alias_force,
-        value,
-        is_pre_genesis,
-        unsafe_dont_encrypt,
-        ..
-    }: args::KeyAddressAdd,
+    alias: String,
+    alias_force: bool,
+    value: KeyAddrAddValue,
+    is_pre_genesis: bool,
+    unsafe_dont_encrypt: bool,
 ) {
-    match KeyAddrAddValue::from_str(&value).unwrap_or_else(|err| {
-        edisplay_line!(io, "{}", err);
-        display_line!(io, "No changes are persisted. Exiting.");
-        cli::safe_exit(1)
-    }) {
+    match value {
         KeyAddrAddValue::TranspSecretKey(sk) => {
             let mut wallet = load_wallet(ctx, is_pre_genesis);
             let encryption_password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
-            wallet
+            let alias = wallet
                 .insert_keypair(
                     alias,
                     alias_force,
@@ -594,6 +589,14 @@ fn key_address_add(
                     display_line!(io, "No changes are persisted. Exiting.");
                     cli::safe_exit(1);
                 });
+            wallet
+                .save()
+                .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
+            display_line!(
+                io,
+                "Successfully added a key and an address with alias: \"{}\"",
+                alias
+            );
         }
         KeyAddrAddValue::TranspAddress(address) => transparent_address_add(
             ctx,
@@ -613,6 +616,35 @@ fn key_address_add(
             unsafe_dont_encrypt,
         ),
     }
+}
+
+/// Add key or address
+fn key_address_add(
+    ctx: Context,
+    io: &impl Io,
+    args::KeyAddressAdd {
+        alias,
+        alias_force,
+        value,
+        is_pre_genesis,
+        unsafe_dont_encrypt,
+        ..
+    }: args::KeyAddressAdd,
+) {
+    let value = KeyAddrAddValue::from_str(&value).unwrap_or_else(|err| {
+        edisplay_line!(io, "{}", err);
+        display_line!(io, "No changes are persisted. Exiting.");
+        cli::safe_exit(1)
+    });
+    add_key_or_address(
+        ctx,
+        io,
+        alias,
+        alias_force,
+        value,
+        is_pre_genesis,
+        unsafe_dont_encrypt,
+    )
 }
 
 /// Find a keypair in the wallet store.
@@ -813,6 +845,39 @@ fn key_export(
         edisplay_line!(io, "{}", err);
         cli::safe_exit(1)
     })
+}
+
+/// Import a transparent keypair / MASP spending key from a file.
+fn key_import(
+    ctx: Context,
+    io: &impl Io,
+    args::KeyImport {
+        file_path,
+        alias,
+        alias_force,
+        is_pre_genesis,
+        unsafe_dont_encrypt,
+    }: args::KeyImport,
+) {
+    let file_data = std::fs::read_to_string(file_path).unwrap_or_else(|err| {
+        edisplay_line!(io, "{}", err);
+        display_line!(io, "No changes are persisted. Exiting.");
+        cli::safe_exit(1)
+    });
+    let value = KeyAddrAddValue::from_str(&file_data).unwrap_or_else(|err| {
+        edisplay_line!(io, "{}", err);
+        display_line!(io, "No changes are persisted. Exiting.");
+        cli::safe_exit(1)
+    });
+    add_key_or_address(
+        ctx,
+        io,
+        alias,
+        alias_force,
+        value,
+        is_pre_genesis,
+        unsafe_dont_encrypt,
+    )
 }
 
 /// List all known transparent addresses.
