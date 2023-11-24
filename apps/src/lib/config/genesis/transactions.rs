@@ -1060,13 +1060,44 @@ pub fn validate_validator_account(
 ) -> bool {
     let tx = &signed_tx.data;
 
+    // Check eth keys are secp256k1 keys
+    if !matches!(
+        &signed_tx.data.eth_cold_key.pk.raw,
+        common::PublicKey::Secp256k1(_)
+    ) {
+        panic!(
+            "The validator with address {} has a non Secp256k1 Ethereum cold \
+             key",
+            signed_tx.data.address
+        );
+    }
+    if !matches!(
+        &signed_tx.data.eth_hot_key.pk.raw,
+        common::PublicKey::Secp256k1(_)
+    ) {
+        panic!(
+            "The validator with address {} has a non Secp256k1 Ethereum hot \
+             key",
+            signed_tx.data.address
+        );
+    }
+
     // Check signature
     let mut is_valid = {
         let maybe_source = {
             let established_addr = Address::Established(tx.address.raw.clone());
-            established_accounts
-                .get(&established_addr)
-                .map(|(pks, t)| (pks.as_slice(), *t))
+            established_accounts.get(&established_addr).map(|(pks, t)| {
+                let all_ed25519_keys = pks
+                    .iter()
+                    .all(|key| matches!(key, common::PublicKey::Ed25519(_)));
+                if !all_ed25519_keys {
+                    panic!(
+                        "Not all account keys of the validator with address \
+                         {established_addr} are Ed25519 keys"
+                    );
+                }
+                (pks.as_slice(), *t)
+            })
         };
         if let Some((source_pks, threshold)) = maybe_source {
             if signed_tx.verify_sig(source_pks, threshold).is_err() {
