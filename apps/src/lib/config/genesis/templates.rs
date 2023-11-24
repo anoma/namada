@@ -524,6 +524,7 @@ pub struct Validated {}
 pub trait TemplateValidation: Serialize {
     type Amount: for<'a> Deserialize<'a>
         + Serialize
+        + Into<token::Amount>
         + Clone
         + std::fmt::Debug
         + BorshSerialize
