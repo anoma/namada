@@ -182,7 +182,7 @@ impl Finalized {
                 self.transactions.find_validator(tendermint_pk).map(
                     |validator_tx| {
                         (
-                            validator_tx.tx.net_address,
+                            validator_tx.tx.data.net_address,
                             validator_tx.derive_tendermint_address(),
                         )
                     },
@@ -651,7 +651,7 @@ impl FinalizedTransactions {
         let validator_account = validator_account.map(|txs| {
             txs.into_iter()
                 .map(|tx| FinalizedValidatorAccountTx {
-                    address: Address::Established(tx.address.raw.clone()),
+                    address: Address::Established(tx.data.address.raw.clone()),
                     tx,
                 })
                 .collect()
@@ -670,7 +670,7 @@ impl FinalizedTransactions {
         let validator_accounts = self.validator_account.as_ref()?;
         validator_accounts
             .iter()
-            .find(|tx| &tx.tx.tendermint_node_key.pk.raw == tendermint_pk)
+            .find(|tx| &tx.tx.data.tendermint_node_key.pk.raw == tendermint_pk)
     }
 }
 
@@ -754,12 +754,12 @@ impl FinalizedValidatorAccountTx {
     pub fn derive_tendermint_address(&self) -> TendermintAddress {
         // Derive the node ID from the node key
         let node_id: TendermintNodeId =
-            id_from_pk(&self.tx.tendermint_node_key.pk.raw);
+            id_from_pk(&self.tx.data.tendermint_node_key.pk.raw);
 
         // Build the list of persistent peers from the validators' node IDs
         TendermintAddress::from_str(&format!(
             "{}@{}",
-            node_id, self.tx.net_address,
+            node_id, self.tx.data.net_address,
         ))
         .expect("Validator address must be valid")
     }

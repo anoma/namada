@@ -23,7 +23,7 @@ use crate::config::genesis::chain::{
 };
 use crate::config::genesis::templates::{TokenBalances, TokenConfig};
 use crate::config::genesis::transactions::{
-    BondTx, EstablishedAccountTx, ValidatorAccountTx,
+    BondTx, EstablishedAccountTx, Signed as SignedTx, ValidatorAccountTx,
 };
 use crate::facade::tendermint::v0_37::abci::{request, response};
 use crate::facade::tendermint_proto::google::protobuf;
@@ -391,17 +391,21 @@ where
             for FinalizedValidatorAccountTx {
                 address,
                 tx:
-                    ValidatorAccountTx {
-                        vp,
-                        commission_rate,
-                        max_commission_rate_change,
-                        metadata,
-                        net_address: _,
-                        consensus_key,
-                        protocol_key,
-                        tendermint_node_key: _,
-                        eth_hot_key,
-                        eth_cold_key,
+                    SignedTx {
+                        data:
+                            ValidatorAccountTx {
+                                vp,
+                                commission_rate,
+                                max_commission_rate_change,
+                                metadata,
+                                net_address: _,
+                                consensus_key,
+                                protocol_key,
+                                tendermint_node_key: _,
+                                eth_hot_key,
+                                eth_cold_key,
+                                ..
+                            },
                         ..
                     },
             } in txs

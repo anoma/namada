@@ -9,6 +9,7 @@ use color_eyre::owo_colors::OwoColorize;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
+use itertools::Either;
 use namada::core::types::string_encoding::StringEncoded;
 use namada::types::chain::ChainId;
 use namada::types::dec::Dec;
@@ -25,7 +26,7 @@ use crate::cli::args;
 use crate::cli::context::ENV_VAR_WASM_DIR;
 use crate::config::genesis::chain::DeriveEstablishedAddress;
 use crate::config::genesis::transactions::{
-    sign_delegation_bond_tx, UnsignedTransactions,
+    sign_delegation_bond_tx, sign_validator_account_tx, UnsignedTransactions,
 };
 use crate::config::global::GlobalConfig;
 use crate::config::{
@@ -632,7 +633,7 @@ pub fn derive_genesis_addresses(
                         .validator_account
                         .unwrap_or_default()
                         .into_iter()
-                        .map(|acct| acct.address)
+                        .map(|acct| acct.data.address)
                         .collect(),
                 )
             });
@@ -1020,6 +1021,27 @@ pub async fn sign_genesis_tx(
                         );
                     }
                     genesis_txs.bond = Some(bonds);
+                }
+                // Sign validator txs
+                if let Some(txs) = genesis_txs.validator_account {
+                    let mut validator_accounts = vec![];
+                    for tx in txs {
+                        validator_accounts.push(
+                            sign_validator_account_tx(
+                                Either::Right(tx),
+                                &mut wallet,
+                                genesis_txs
+                                    .established_account
+                                    .as_ref()
+                                    .expect(
+                                        "Established account txs required \
+                                         when signing validator account txs",
+                                    ),
+                            )
+                            .await,
+                        );
+                    }
+                    genesis_txs.validator_account = Some(validator_accounts);
                 }
                 (genesis_txs, false)
             }

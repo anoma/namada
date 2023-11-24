@@ -285,9 +285,9 @@ fn setup_two_single_node_nets() -> Result<(Test, Test)> {
         .iter_mut()
         .find(|val| val.address == validator_addr)
         .unwrap();
-    let new_port =
-        validator_tx.tx.net_address.port() + setup::ANOTHER_CHAIN_PORT_OFFSET;
-    validator_tx.tx.net_address.set_port(new_port);
+    let new_port = validator_tx.tx.data.net_address.port()
+        + setup::ANOTHER_CHAIN_PORT_OFFSET;
+    validator_tx.tx.data.net_address.set_port(new_port);
     genesis_b
         .write_toml_files(&genesis_b_dir.join(test_a.net.chain_id.as_str()))
         .map_err(|_| eyre!("Could not write genesis toml files for test_b"))?;

@@ -402,7 +402,7 @@ pub fn make_dev_genesis(
             .get(0)
             .unwrap();
         let genesis_addr =
-            GenesisAddress::EstablishedAddress(tx.tx.address.raw.clone());
+            GenesisAddress::EstablishedAddress(tx.tx.data.address.raw.clone());
 
         let balance = *nam_balances.0.get(&genesis_addr).unwrap();
         let bonded = {
@@ -490,20 +490,22 @@ pub fn make_dev_genesis(
             };
             vals.push(chain::FinalizedValidatorAccountTx {
                 address: Address::Established(address.clone()),
-                tx: transactions::ValidatorAccountTx {
-                    address: StringEncoded::new(address.clone()),
-                    vp: validator_account_tx.vp,
-                    commission_rate: validator_account_tx.commission_rate,
-                    max_commission_rate_change: validator_account_tx
-                        .max_commission_rate_change,
-                    metadata: validator_account_tx.metadata,
-                    net_address: validator_account_tx.net_address,
-                    consensus_key: sign_pk(&consensus_keypair),
-                    protocol_key: sign_pk(&protocol_keypair),
-                    tendermint_node_key: sign_pk(&consensus_keypair),
-                    eth_hot_key: sign_pk(&eth_bridge_keypair),
-                    eth_cold_key: sign_pk(&eth_cold_keypair),
-                },
+                tx: transactions::Signed::new(
+                    transactions::ValidatorAccountTx {
+                        address: StringEncoded::new(address.clone()),
+                        vp: validator_account_tx.vp,
+                        commission_rate: validator_account_tx.commission_rate,
+                        max_commission_rate_change: validator_account_tx
+                            .max_commission_rate_change,
+                        metadata: validator_account_tx.metadata,
+                        net_address: validator_account_tx.net_address,
+                        consensus_key: sign_pk(&consensus_keypair),
+                        protocol_key: sign_pk(&protocol_keypair),
+                        tendermint_node_key: sign_pk(&consensus_keypair),
+                        eth_hot_key: sign_pk(&eth_bridge_keypair),
+                        eth_cold_key: sign_pk(&eth_cold_keypair),
+                    },
+                ),
             });
             address
         };
