@@ -1787,7 +1787,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Change commission raate.")
+                .about("Change commission rate.")
                 .add_args::<args::CommissionRateChange<args::CliTypes>>()
         }
     }
