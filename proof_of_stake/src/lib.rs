@@ -2714,9 +2714,7 @@ where
 }
 
 /// Arguments to [`become_validator`].
-pub struct BecomeValidator<'a, S> {
-    /// Storage implementation.
-    pub storage: &'a mut S,
+pub struct BecomeValidator<'a> {
     /// Proof-of-stake parameters.
     pub params: &'a PosParams,
     /// The validator's address.
@@ -2743,13 +2741,13 @@ pub struct BecomeValidator<'a, S> {
 
 /// Initialize data for a new validator.
 pub fn become_validator<S>(
-    args: BecomeValidator<'_, S>,
+    storage: &mut S,
+    args: BecomeValidator<'_>,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
     let BecomeValidator {
-        storage,
         params,
         address,
         consensus_key,
@@ -2763,6 +2761,28 @@ where
         offset_opt,
     } = args;
     let offset = offset_opt.unwrap_or(params.pipeline_len);
+
+    if !address.is_established() {
+        return Err(storage_api::Error::new_const(
+            "The given address {address} is not established. Only an \
+             established address can become a validator.",
+        ));
+    }
+
+    if is_validator(storage, address)? {
+        return Err(storage_api::Error::new_const(
+            "The given address is already a validator",
+        ));
+    }
+
+    // If the address is not yet a validator, it cannot have self-bonds, but it
+    // may have delegations.
+    if has_bonds(storage, address)? {
+        return Err(storage_api::Error::new_const(
+            "The given address has delegations and therefore cannot become a \
+             validator. Unbond first.",
+        ));
+    }
 
     // This will fail if the key is already being used
     try_insert_consensus_key(storage, consensus_key)?;
@@ -3621,6 +3641,20 @@ where
         delegations.insert(validator_address, deltas_sum);
     }
     Ok(delegations)
+}
+
+/// Find if the given source address has any bonds.
+pub fn has_bonds<S>(storage: &S, source: &Address) -> storage_api::Result<bool>
+where
+    S: StorageRead,
+{
+    let max_epoch = Epoch(u64::MAX);
+    let delegations = find_delegations(storage, source, &max_epoch)?;
+    Ok(!delegations
+        .values()
+        .cloned()
+        .sum::<token::Amount>()
+        .is_zero())
 }
 
 /// Find PoS slashes applied to a validator, if any
@@ -5825,20 +5859,22 @@ pub mod test_utils {
             metadata,
         } in validators
         {
-            become_validator(BecomeValidator {
+            become_validator(
                 storage,
-                params,
-                address: &address,
-                consensus_key: &consensus_key,
-                protocol_key: &protocol_key,
-                eth_cold_key: &eth_cold_key,
-                eth_hot_key: &eth_hot_key,
-                current_epoch,
-                commission_rate,
-                max_commission_rate_change,
-                metadata,
-                offset_opt: Some(0),
-            })?;
+                BecomeValidator {
+                    params,
+                    address: &address,
+                    consensus_key: &consensus_key,
+                    protocol_key: &protocol_key,
+                    eth_cold_key: &eth_cold_key,
+                    eth_hot_key: &eth_hot_key,
+                    current_epoch,
+                    commission_rate,
+                    max_commission_rate_change,
+                    metadata,
+                    offset_opt: Some(0),
+                },
+            )?;
             // Credit token amount to be bonded to the validator address so it
             // can be bonded
             let staking_token = staking_token_address(storage);

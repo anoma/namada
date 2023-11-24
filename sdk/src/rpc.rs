@@ -213,6 +213,14 @@ pub async fn is_delegator_at<C: crate::queries::Client + Sync>(
     )
 }
 
+/// Find if the given source address has any bonds.
+pub async fn has_bonds<C: crate::queries::Client + Sync>(
+    client: &C,
+    source: &Address,
+) -> Result<bool, error::Error> {
+    convert_response::<C, bool>(RPC.vp().pos().has_bonds(client, source).await)
+}
+
 /// Get the set of consensus keys registered in the network
 pub async fn get_consensus_keys<C: crate::queries::Client + Sync>(
     client: &C,

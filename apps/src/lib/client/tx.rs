@@ -19,7 +19,7 @@ use namada::types::address::{Address, ImplicitAddress};
 use namada::types::dec::Dec;
 use namada::types::io::Io;
 use namada::types::key::{self, *};
-use namada::types::transaction::pos::{ConsensusKeyChange, InitValidator};
+use namada::types::transaction::pos::{BecomeValidator, ConsensusKeyChange};
 use namada_sdk::rpc::{TxBroadcastData, TxResponse};
 use namada_sdk::wallet::alias::validator_consensus_key;
 use namada_sdk::{display_line, edisplay_line, error, signing, tx, Namada};
@@ -316,7 +316,7 @@ where
 pub async fn submit_init_account<'a, N: Namada<'a>>(
     namada: &N,
     args: args::TxInitAccount,
-) -> Result<(), error::Error>
+) -> Result<Option<Address>, error::Error>
 where
     <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
 {
@@ -332,10 +332,13 @@ where
 
         signing::generate_test_vector(namada, &tx).await?;
 
-        namada.submit(tx, &args.tx).await?;
+        let result = namada.submit(tx, &args.tx).await?;
+        if let ProcessTxResponse::Applied(response) = result {
+            return Ok(response.initialized_accounts.first().cloned());
+        }
     }
 
-    Ok(())
+    Ok(None)
 }
 
 pub async fn submit_change_consensus_key<'a>(
@@ -482,14 +485,13 @@ pub async fn submit_change_consensus_key<'a>(
     Ok(())
 }
 
-pub async fn submit_init_validator<'a>(
+pub async fn submit_become_validator<'a>(
     namada: &impl Namada<'a>,
     config: &mut crate::config::Config,
-    args::TxInitValidator {
+    args::TxBecomeValidator {
         tx: tx_args,
+        address,
         scheme,
-        account_keys,
-        threshold,
         consensus_key,
         eth_cold_key,
         eth_hot_key,
@@ -500,10 +502,9 @@ pub async fn submit_init_validator<'a>(
         website,
         description,
         discord_handle,
-        validator_vp_code_path,
         unsafe_dont_encrypt,
-        tx_code_path: _,
-    }: args::TxInitValidator,
+        tx_code_path,
+    }: args::TxBecomeValidator,
 ) -> Result<(), error::Error> {
     let tx_args = args::Tx {
         chain_id: tx_args
@@ -512,6 +513,79 @@ pub async fn submit_init_validator<'a>(
             .or_else(|| Some(config.ledger.chain_id.clone())),
         ..tx_args.clone()
     };
+
+    // Check that the address is established
+    if !address.is_established() {
+        edisplay_line!(
+            namada.io(),
+            "The given address {address} is not established. Only an \
+             established address can become a validator.",
+        );
+        if !tx_args.force {
+            safe_exit(1)
+        }
+    };
+
+    // Check that the address is not already a validator
+    if rpc::is_validator(namada.client(), &address).await {
+        edisplay_line!(
+            namada.io(),
+            "The given address {address} is already a validator",
+        );
+        if !tx_args.force {
+            safe_exit(1)
+        }
+    };
+
+    // If the address is not yet a validator, it cannot have self-bonds, but it
+    // may have delegations. It has to unbond those before it can become a
+    // validator.
+    if rpc::has_bonds(namada.client(), &address).await {
+        edisplay_line!(
+            namada.io(),
+            "The given address {address} has delegations and therefore cannot \
+             become a validator. To become a validator, you have to unbond \
+             your delegations first.",
+        );
+        if !tx_args.force {
+            safe_exit(1)
+        }
+    }
+
+    // Validate the commission rate data
+    if commission_rate > Dec::one() || commission_rate < Dec::zero() {
+        edisplay_line!(
+            namada.io(),
+            "The validator commission rate must not exceed 1.0 or 100%, and \
+             it must be 0 or positive."
+        );
+        if !tx_args.force {
+            safe_exit(1)
+        }
+    }
+    if max_commission_rate_change > Dec::one()
+        || max_commission_rate_change < Dec::zero()
+    {
+        edisplay_line!(
+            namada.io(),
+            "The validator maximum change in commission rate per epoch must \
+             not exceed 1.0 or 100%, and it must be 0 or positive."
+        );
+        if !tx_args.force {
+            safe_exit(1)
+        }
+    }
+    // Validate the email
+    if email.is_empty() {
+        edisplay_line!(
+            namada.io(),
+            "The validator email must not be an empty string."
+        );
+        if !tx_args.force {
+            safe_exit(1)
+        }
+    }
+
     let alias = tx_args
         .initialized_account_alias
         .as_ref()
@@ -521,17 +595,6 @@ pub async fn submit_init_validator<'a>(
     let validator_key_alias = format!("{}-key", alias);
     let consensus_key_alias = validator_consensus_key(&alias.clone().into());
     let protocol_key_alias = format!("{}-protocol-key", alias);
-
-    let threshold = match threshold {
-        Some(threshold) => threshold,
-        None => {
-            if account_keys.len() == 1 {
-                1u8
-            } else {
-                safe_exit(1)
-            }
-        }
-    };
     let eth_hot_key_alias = format!("{}-eth-hot-key", alias);
     let eth_cold_key_alias = format!("{}-eth-cold-key", alias);
 
@@ -655,60 +718,15 @@ pub async fn submit_init_validator<'a>(
         )
         .map_err(|err| error::Error::Other(err.to_string()))?;
 
-    let validator_vp_code_hash =
-        query_wasm_code_hash(namada, validator_vp_code_path.to_str().unwrap())
-            .await
-            .unwrap();
-
-    // Validate the commission rate data
-    if commission_rate > Dec::one() || commission_rate < Dec::zero() {
-        edisplay_line!(
-            namada.io(),
-            "The validator commission rate must not exceed 1.0 or 100%, and \
-             it must be 0 or positive"
-        );
-        if !tx_args.force {
-            safe_exit(1)
-        }
-    }
-    if max_commission_rate_change > Dec::one()
-        || max_commission_rate_change < Dec::zero()
-    {
-        edisplay_line!(
-            namada.io(),
-            "The validator maximum change in commission rate per epoch must \
-             not exceed 1.0 or 100%"
-        );
-        if !tx_args.force {
-            safe_exit(1)
-        }
-    }
-    // Validate the email
-    if email.is_empty() {
-        edisplay_line!(
-            namada.io(),
-            "The validator email must not be an empty string"
-        );
-        if !tx_args.force {
-            safe_exit(1)
-        }
-    }
-
     let tx_code_hash =
-        query_wasm_code_hash(namada, args::TX_INIT_VALIDATOR_WASM)
+        query_wasm_code_hash(namada, tx_code_path.to_string_lossy())
             .await
             .unwrap();
 
     let chain_id = tx_args.chain_id.clone().unwrap();
     let mut tx = Tx::new(chain_id, tx_args.expiration);
-    let extra_section_hash = tx.add_extra_section_from_hash(
-        validator_vp_code_hash,
-        Some(validator_vp_code_path.to_string_lossy().into_owned()),
-    );
-
-    let data = InitValidator {
-        account_keys,
-        threshold,
+    let data = BecomeValidator {
+        address: address.clone(),
         consensus_key: consensus_key.ref_to(),
         eth_cold_key: key::secp256k1::PublicKey::try_from_pk(&eth_cold_pk)
             .unwrap(),
@@ -721,11 +739,20 @@ pub async fn submit_init_validator<'a>(
         description,
         website,
         discord_handle,
-        validator_vp_code_hash: extra_section_hash,
     };
 
     // Put together all the PKs that we have to sign with to verify ownership
-    let mut all_pks = data.account_keys.clone();
+    let account = namada_sdk::rpc::get_account_info(namada.client(), &address)
+        .await?
+        .unwrap_or_else(|| {
+            edisplay_line!(
+                namada.io(),
+                "Unable to query account keys for address {address}."
+            );
+            safe_exit(1)
+        });
+    let mut all_pks: Vec<_> =
+        account.public_keys_map.pk_to_idx.into_keys().collect();
     all_pks.push(consensus_key.to_public());
     all_pks.push(eth_cold_pk);
     all_pks.push(eth_hot_pk);
@@ -733,7 +760,7 @@ pub async fn submit_init_validator<'a>(
 
     tx.add_code_from_hash(
         tx_code_hash,
-        Some(args::TX_INIT_VALIDATOR_WASM.to_string()),
+        Some(args::TX_BECOME_VALIDATOR_WASM.to_string()),
     )
     .add_data(data);
 
@@ -758,38 +785,14 @@ pub async fn submit_init_validator<'a>(
 
         signing::generate_test_vector(namada, &tx).await?;
 
-        let result = namada.submit(tx, &tx_args).await?.initialized_accounts();
+        namada.submit(tx, &tx_args).await?.initialized_accounts();
 
         if !tx_args.dry_run {
-            let (validator_address_alias, validator_address) = match &result[..]
-            {
-                // There should be 1 account for the validator itself
-                [validator_address] => {
-                    if let Some(alias) =
-                        namada.wallet().await.find_alias(validator_address)
-                    {
-                        (alias.clone(), validator_address.clone())
-                    } else {
-                        edisplay_line!(
-                            namada.io(),
-                            "Expected one account to be created"
-                        );
-                        safe_exit(1)
-                    }
-                }
-                _ => {
-                    edisplay_line!(
-                        namada.io(),
-                        "Expected one account to be created"
-                    );
-                    safe_exit(1)
-                }
-            };
             // add validator address and keys to the wallet
             namada
                 .wallet_mut()
                 .await
-                .add_validator_data(validator_address, validator_keys);
+                .add_validator_data(address.clone(), validator_keys);
             namada
                 .wallet_mut()
                 .await
@@ -819,12 +822,7 @@ pub async fn submit_init_validator<'a>(
             display_line!(namada.io(), "");
             display_line!(
                 namada.io(),
-                "The validator's addresses and keys were stored in the wallet:"
-            );
-            display_line!(
-                namada.io(),
-                "  Validator address \"{}\"",
-                validator_address_alias
+                "The keys for validator \"{alias}\" were stored in the wallet:"
             );
             display_line!(
                 namada.io(),
@@ -855,6 +853,82 @@ pub async fn submit_init_validator<'a>(
         }
     }
     Ok(())
+}
+
+pub async fn submit_init_validator<'a>(
+    namada: &impl Namada<'a>,
+    config: &mut crate::config::Config,
+    args::TxInitValidator {
+        tx: tx_args,
+        scheme,
+        account_keys,
+        threshold,
+        consensus_key,
+        eth_cold_key,
+        eth_hot_key,
+        protocol_key,
+        commission_rate,
+        max_commission_rate_change,
+        email,
+        website,
+        description,
+        discord_handle,
+        validator_vp_code_path,
+        unsafe_dont_encrypt,
+        tx_init_account_code_path,
+        tx_become_validator_code_path,
+    }: args::TxInitValidator,
+) -> Result<(), error::Error> {
+    let address = submit_init_account(
+        namada,
+        args::TxInitAccount {
+            tx: tx_args.clone(),
+            vp_code_path: validator_vp_code_path,
+            tx_code_path: tx_init_account_code_path,
+            public_keys: account_keys,
+            threshold,
+        },
+    )
+    .await?;
+
+    if tx_args.dry_run {
+        eprintln!(
+            "Cannot proceed to become validator in dry-run as no account has \
+             been created"
+        );
+        safe_exit(1);
+    }
+    let address = address.unwrap_or_else(|| {
+        eprintln!(
+            "Something went wrong with transaction to initialize an account \
+             as no address has been created. Cannot proceed to become \
+             validator."
+        );
+        safe_exit(1);
+    });
+
+    submit_become_validator(
+        namada,
+        config,
+        args::TxBecomeValidator {
+            tx: tx_args,
+            address,
+            scheme,
+            consensus_key,
+            eth_cold_key,
+            eth_hot_key,
+            protocol_key,
+            commission_rate,
+            max_commission_rate_change,
+            email,
+            description,
+            website,
+            discord_handle,
+            tx_code_path: tx_become_validator_code_path,
+            unsafe_dont_encrypt,
+        },
+    )
+    .await
 }
 
 pub async fn submit_transfer<'a>(

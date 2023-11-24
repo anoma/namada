@@ -106,6 +106,30 @@ impl CliApi {
                             )
                         }
                     }
+                    Sub::TxBecomeValidator(TxBecomeValidator(mut args)) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.tx.ledger_address,
+                            )
+                        });
+                        client.wait_until_node_is_synced(io).await?;
+                        let args = args.to_sdk(&mut ctx);
+                        let cli::context::ChainContext {
+                            mut wallet,
+                            mut config,
+                            mut shielded,
+                            native_token,
+                        } = ctx.take_chain_or_exit();
+                        let namada = NamadaImpl::native_new(
+                            &client,
+                            &mut wallet,
+                            &mut shielded,
+                            io,
+                            native_token,
+                        );
+                        tx::submit_become_validator(&namada, &mut config, args)
+                            .await?;
+                    }
                     Sub::TxInitValidator(TxInitValidator(mut args)) => {
                         let client = client.unwrap_or_else(|| {
                             C::from_tendermint_address(
