@@ -608,7 +608,7 @@ pub mod cmds {
         }
     }
 
-    /// TODO List all known shielded keys
+    /// List all known keys
     #[derive(Clone, Debug)]
     pub struct WalletListKeys(pub args::KeyList);
 
@@ -623,10 +623,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about(
-                    "TODO List all known keys. Lists all shielded keys in the \
-                     wallet.",
-                )
+                .about("List all known secret / shielded keys in the wallet.")
                 .add_args::<args::KeyList>()
         }
     }
@@ -647,9 +644,11 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about(
-                    "TODO Searches for a keypair from a public key or an \
-                     alias. Find the given shielded address or key in the \
+                .about("Key search")
+                .long_about(
+                    "In the transparent setting, searches for a keypair from \
+                     a public key or an alias.\nIn the shielded setting, \
+                     searches for the given payment address or key in the \
                      wallet.",
                 )
                 .add_args::<args::KeyList>()
@@ -657,7 +656,6 @@ pub mod cmds {
     }
 
     /// List known addresses
-    /// TODO List all known payment addresses
     #[derive(Clone, Debug)]
     pub struct WalletListAddresses(pub args::AddressList);
 
@@ -673,7 +671,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "TODO List all known addresses. Lists all payment \
+                    "List all known transparent addresses / shielded payment \
                      addresses in the wallet",
                 )
                 .add_args::<args::AddressList>()
@@ -702,7 +700,7 @@ pub mod cmds {
         }
     }
 
-    /// Export key
+    /// Export key to a file
     #[derive(Clone, Debug)]
     pub struct WalletExportKey(pub args::KeyExport);
 
@@ -5954,10 +5952,11 @@ pub mod args {
                 "Use pre-genesis wallet, instead of for the current chain, if \
                  any.",
             ))
-            .arg(UNSAFE_SHOW_SECRET.def().help(
-                "TODO UNSAFE: Print the secret key.Print the spending key \
-                 values.",
-            ))
+            .arg(
+                UNSAFE_SHOW_SECRET
+                    .def()
+                    .help("UNSAFE: Print the secret / spending key."),
+            )
         }
     }
 
