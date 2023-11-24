@@ -1955,26 +1955,21 @@ pub struct KeyFind {
     pub unsafe_show_secret: bool,
 }
 
-/// Wallet list keys arguments
+/// Wallet list arguments
 #[derive(Clone, Debug)]
-pub struct KeyList {
+pub struct KeyAddressList {
     /// Whether to list MASP spending keys
     pub shielded: bool,
     /// Don't decrypt keys
     pub decrypt: bool,
     /// List keys pre-genesis instead of a current chain
     pub is_pre_genesis: bool,
+    /// List keys only
+    pub keys_only: bool,
+    /// List addresses only
+    pub addresses_only: bool,
     /// Show secret keys to user
     pub unsafe_show_secret: bool,
-}
-
-/// List addresses arguments
-#[derive(Clone, Debug)]
-pub struct AddressList {
-    /// Whether to list MASP payment addresses
-    pub shielded: bool,
-    /// List addresses pre-genesis instead of current chain
-    pub is_pre_genesis: bool,
 }
 
 /// Wallet address lookup arguments

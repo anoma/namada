@@ -469,12 +469,10 @@ pub mod cmds {
         KeyGen(WalletGen),
         /// Key derivation
         KeyDerive(WalletDerive),
-        /// Key list
-        KeyList(WalletListKeys),
+        /// Key / address list
+        KeyAddrList(WalletListKeysAddresses),
         /// Key search
         KeyFind(WalletFindKeys),
-        /// Address list
-        AddrList(WalletListAddresses),
         /// Address search
         AddrFind(WalletFindAddresses),
         /// Key export
@@ -491,9 +489,8 @@ pub mod cmds {
         fn add_sub(app: App) -> App {
             app.subcommand(WalletGen::def())
                 .subcommand(WalletDerive::def())
-                .subcommand(WalletListKeys::def())
+                .subcommand(WalletListKeysAddresses::def())
                 .subcommand(WalletFindKeys::def())
-                .subcommand(WalletListAddresses::def())
                 .subcommand(WalletFindAddresses::def())
                 .subcommand(WalletExportKey::def())
                 .subcommand(WalletImportKey::def())
@@ -504,18 +501,16 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             let gen = SubCmd::parse(matches).map(Self::KeyGen);
             let derive = SubCmd::parse(matches).map(Self::KeyDerive);
-            let key_list = SubCmd::parse(matches).map(Self::KeyList);
+            let key_addr_list = SubCmd::parse(matches).map(Self::KeyAddrList);
             let key_find = SubCmd::parse(matches).map(Self::KeyFind);
-            let addr_list = SubCmd::parse(matches).map(Self::AddrList);
             let addr_find = SubCmd::parse(matches).map(Self::AddrFind);
             let export = SubCmd::parse(matches).map(Self::KeyExport);
             let import = SubCmd::parse(matches).map(Self::KeyImport);
             let key_addr_add = SubCmd::parse(matches).map(Self::KeyAddrAdd);
             let pay_addr_gen = SubCmd::parse(matches).map(Self::PayAddrGen);
             gen.or(derive)
-                .or(key_list)
+                .or(key_addr_list)
                 .or(key_find)
-                .or(addr_list)
                 .or(addr_find)
                 .or(export)
                 .or(import)
@@ -608,23 +603,28 @@ pub mod cmds {
         }
     }
 
-    /// List all known keys
+    /// List known keys and addresses
     #[derive(Clone, Debug)]
-    pub struct WalletListKeys(pub args::KeyList);
+    pub struct WalletListKeysAddresses(pub args::KeyAddressList);
 
-    impl SubCmd for WalletListKeys {
-        const CMD: &'static str = "list-keys";
+    impl SubCmd for WalletListKeysAddresses {
+        const CMD: &'static str = "list";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .map(|matches| (Self(args::KeyList::parse(matches))))
+                .map(|matches| (Self(args::KeyAddressList::parse(matches))))
         }
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("List all known secret / shielded keys in the wallet.")
-                .add_args::<args::KeyList>()
+                .about("List known keys and addresses in the wallet.")
+                .long_about(
+                    "In the transparent setting, list known keypairs and \
+                     addresses.\nIn the shielded setting, list known spending \
+                     keys and payment addresses.",
+                )
+                .add_args::<args::KeyAddressList>()
         }
     }
 
@@ -651,30 +651,7 @@ pub mod cmds {
                      searches for the given payment address or key in the \
                      wallet.",
                 )
-                .add_args::<args::KeyList>()
-        }
-    }
-
-    /// List known addresses
-    #[derive(Clone, Debug)]
-    pub struct WalletListAddresses(pub args::AddressList);
-
-    impl SubCmd for WalletListAddresses {
-        const CMD: &'static str = "list-addr";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| Self(args::AddressList::parse(matches)))
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about(
-                    "List all known transparent addresses / shielded payment \
-                     addresses in the wallet",
-                )
-                .add_args::<args::AddressList>()
+                .add_args::<args::KeyAddressList>()
         }
     }
 
@@ -2774,8 +2751,9 @@ pub mod args {
             let raw = "127.0.0.1:26657";
             TendermintAddress::from_str(raw).unwrap()
         }));
-
     pub const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("node");
+    pub const LIST_ADDRESSES_ONLY: ArgFlag = flag("addr");
+    pub const LIST_KEYS_ONLY: ArgFlag = flag("keys");
     pub const LOCALHOST: ArgFlag = flag("localhost");
     pub const MASP_VALUE_OPT: ArgOpt<MaspValue> = arg_opt("shielded-value");
     pub const MAX_COMMISSION_RATE_CHANGE: Arg<Dec> =
@@ -5858,31 +5836,36 @@ pub mod args {
         }
     }
 
-    impl Args for KeyList {
+    impl Args for KeyAddressList {
         fn parse(matches: &ArgMatches) -> Self {
             let shielded = SHIELDED.parse(matches);
             let decrypt = DECRYPT.parse(matches);
             let is_pre_genesis = PRE_GENESIS.parse(matches);
+            let keys_only = LIST_KEYS_ONLY.parse(matches);
+            let addresses_only = LIST_ADDRESSES_ONLY.parse(matches);
             let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
             Self {
                 shielded,
                 decrypt,
                 is_pre_genesis,
+                keys_only,
+                addresses_only,
                 unsafe_show_secret,
             }
         }
 
         fn def(app: App) -> App {
-            app.arg(
-                SHIELDED
-                    .def()
-                    .help("List spending keys for the shielded pool."),
-            )
+            app.arg(SHIELDED.def().help(
+                "List spending keys and payment addresses for the shielded \
+                 pool.",
+            ))
             .arg(DECRYPT.def().help("Decrypt keys that are encrypted."))
             .arg(PRE_GENESIS.def().help(
                 "Use pre-genesis wallet, instead of for the current chain, if \
                  any.",
             ))
+            .arg(LIST_KEYS_ONLY.def().help("List only keys."))
+            .arg(LIST_ADDRESSES_ONLY.def().help("List only addresses."))
             .arg(
                 UNSAFE_SHOW_SECRET
                     .def()
@@ -5957,24 +5940,6 @@ pub mod args {
                     .def()
                     .help("UNSAFE: Print the secret / spending key."),
             )
-        }
-    }
-
-    impl Args for AddressList {
-        fn parse(matches: &ArgMatches) -> Self {
-            let shielded = SHIELDED.parse(matches);
-            let is_pre_genesis = PRE_GENESIS.parse(matches);
-            Self {
-                shielded,
-                is_pre_genesis,
-            }
-        }
-
-        fn def(app: App) -> App {
-            app.arg(PRE_GENESIS.def().help(
-                "Use pre-genesis wallet, instead of for the current chain, if \
-                 any.",
-            ))
         }
     }
 

@@ -46,14 +46,11 @@ impl CliApi {
             cmds::NamadaWallet::KeyDerive(cmds::WalletDerive(args)) => {
                 key_derive(ctx, io, args).await
             }
-            cmds::NamadaWallet::KeyList(cmds::WalletListKeys(args)) => {
-                key_list(ctx, io, args)
-            }
+            cmds::NamadaWallet::KeyAddrList(cmds::WalletListKeysAddresses(
+                args,
+            )) => key_address_list(ctx, io, args),
             cmds::NamadaWallet::KeyFind(cmds::WalletFindKeys(args)) => {
                 key_find(ctx, io, args)
-            }
-            cmds::NamadaWallet::AddrList(cmds::WalletListAddresses(args)) => {
-                address_list(ctx, io, args)
             }
             cmds::NamadaWallet::AddrFind(cmds::WalletFindAddresses(args)) => {
                 address_or_alias_find(ctx, io, args)
@@ -86,12 +83,9 @@ impl CliApi {
 fn spending_keys_list(
     ctx: Context,
     io: &impl Io,
-    args::KeyList {
-        decrypt,
-        is_pre_genesis,
-        unsafe_show_secret,
-        ..
-    }: args::KeyList,
+    decrypt: bool,
+    is_pre_genesis: bool,
+    unsafe_show_secret: bool,
 ) {
     let wallet = load_wallet(ctx, is_pre_genesis);
     let known_view_keys = wallet.get_viewing_keys();
@@ -161,17 +155,13 @@ fn spending_keys_list(
 }
 
 /// List payment addresses.
-fn payment_addresses_list(
-    ctx: Context,
-    io: &impl Io,
-    args::AddressList { is_pre_genesis, .. }: args::AddressList,
-) {
+fn payment_addresses_list(ctx: Context, io: &impl Io, is_pre_genesis: bool) {
     let wallet = load_wallet(ctx, is_pre_genesis);
     let known_addresses = wallet.get_payment_addrs();
     if known_addresses.is_empty() {
         display_line!(
             io,
-            "No known payment addresses. Try `masp gen-payment-addr --alias \
+            "No known payment addresses. Try `gen-payment-addr --alias \
              my-addr` to generate a new payment address.",
         );
     } else {
@@ -510,11 +500,57 @@ async fn key_derive(
 }
 
 /// List keys
-fn key_list(ctx: Context, io: &impl Io, args_key_list: args::KeyList) {
-    if !args_key_list.shielded {
-        transparent_keys_list(ctx, io, args_key_list)
+fn key_list(
+    ctx: Context,
+    io: &impl Io,
+    args::KeyAddressList {
+        shielded,
+        decrypt,
+        is_pre_genesis,
+        unsafe_show_secret,
+        ..
+    }: args::KeyAddressList,
+) {
+    if !shielded {
+        transparent_keys_list(
+            ctx,
+            io,
+            decrypt,
+            is_pre_genesis,
+            unsafe_show_secret,
+        )
     } else {
-        spending_keys_list(ctx, io, args_key_list)
+        spending_keys_list(ctx, io, decrypt, is_pre_genesis, unsafe_show_secret)
+    }
+}
+
+/// List addresses
+fn address_list(
+    ctx: Context,
+    io: &impl Io,
+    args::KeyAddressList {
+        shielded,
+        is_pre_genesis,
+        ..
+    }: args::KeyAddressList,
+) {
+    if !shielded {
+        transparent_addresses_list(ctx, io, is_pre_genesis)
+    } else {
+        payment_addresses_list(ctx, io, is_pre_genesis)
+    }
+}
+
+/// List keys and addresses
+fn key_address_list(
+    ctx: Context,
+    io: &impl Io,
+    args_key_address_list: args::KeyAddressList,
+) {
+    if !args_key_address_list.addresses_only {
+        key_list(ctx, io, args_key_address_list)
+    } else if !args_key_address_list.keys_only {
+        address_list(ctx, io, args_key_address_list)
     }
 }
 
@@ -524,15 +560,6 @@ fn key_find(ctx: Context, io: &impl Io, args_key_find: args::KeyFind) {
         transparent_key_address_find(ctx, io, args_key_find)
     } else {
         shielded_key_address_find(ctx, io, args_key_find)
-    }
-}
-
-/// List addresses
-fn address_list(ctx: Context, io: &impl Io, args_key_list: args::AddressList) {
-    if !args_key_list.shielded {
-        transparent_addresses_list(ctx, io, args_key_list)
-    } else {
-        payment_addresses_list(ctx, io, args_key_list)
     }
 }
 
@@ -748,12 +775,9 @@ fn shielded_key_address_find(
 fn transparent_keys_list(
     ctx: Context,
     io: &impl Io,
-    args::KeyList {
-        decrypt,
-        is_pre_genesis,
-        unsafe_show_secret,
-        ..
-    }: args::KeyList,
+    decrypt: bool,
+    is_pre_genesis: bool,
+    unsafe_show_secret: bool,
 ) {
     let wallet = load_wallet(ctx, is_pre_genesis);
     let known_public_keys = wallet.get_public_keys();
@@ -884,7 +908,7 @@ fn key_import(
 fn transparent_addresses_list(
     ctx: Context,
     io: &impl Io,
-    args::AddressList { is_pre_genesis, .. }: args::AddressList,
+    is_pre_genesis: bool,
 ) {
     let wallet = load_wallet(ctx, is_pre_genesis);
     let known_addresses = wallet.get_addresses();
