@@ -11,13 +11,15 @@ use namada::core::types::address::{Address, EstablishedAddress};
 use namada::core::types::string_encoding::StringEncoded;
 use namada::ledger::pos::types::ValidatorMetaData;
 use namada::proto::{
-    standalone_signature, verify_standalone_sig, SerializeWithBorsh,
+    standalone_signature, verify_standalone_sig, SerializeWithBorsh, Tx,
 };
 use namada::types::dec::Dec;
-use namada::types::key::{common, RefTo, VerifySigError};
+use namada::types::key::{common, ed25519, RefTo, SigScheme, VerifySigError};
 use namada::types::time::{DateTimeUtc, MIN_UTC};
 use namada::types::token;
 use namada::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
+use namada::types::transaction::{pos, Fee, TxType};
+use namada_sdk::tx::TX_BOND_WASM;
 use namada_sdk::wallet::alias::Alias;
 use namada_sdk::wallet::pre_genesis::ValidatorWallet;
 use namada_sdk::wallet::Wallet;
@@ -644,12 +646,30 @@ where
     T: TemplateValidation + BorshSerialize,
 {
     fn tx_to_sign(&self) -> Vec<u8> {
-        [
-            self.source.serialize_to_vec(),
-            self.validator.serialize_to_vec(),
-            self.amount.serialize_to_vec(),
-        ]
-        .concat()
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.add_code_from_hash(
+            Default::default(),
+            Some(TX_BOND_WASM.to_string()),
+        );
+        tx.add_data(pos::Bond {
+            validator: self.validator.clone(),
+            amount: self.amount.clone().into(),
+            source: Some(self.source.address()),
+        });
+        let pk =
+            common::SecretKey::Ed25519(ed25519::SigScheme::from_bytes([0; 32]))
+                .ref_to();
+        tx.add_wrapper(
+            Fee {
+                amount_per_gas_unit: Default::default(),
+                token: Address::from(&pk),
+            },
+            pk,
+            Default::default(),
+            Default::default(),
+            None,
+        );
+        tx.to_bytes()
     }
 }
 
