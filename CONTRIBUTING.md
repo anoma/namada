@@ -52,7 +52,7 @@ for i in $(ls -d .changelog/*/*/); do basename "$i"; done | sort | uniq
 
 The Namada SDK is exposed to any developer building upon Namada. Thus, any change made to a public facing function is a breaking change, and therefore should be documented in the Changelog under the `SDK` section.
 
-The message should outline the exact API change, along with a small section describing *how* and *why* the componenet was change. This should give motivation and context to any developer building upon Namada on how they can update their code to the next version.
+The message should outline the exact API change, along with a small section describing *how* and *why* the component was changed. This should give motivation and context to any developer building upon Namada on how they can update their code to the next version.
 
 ## Development priorities
 
