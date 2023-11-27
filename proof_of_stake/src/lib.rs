@@ -3301,6 +3301,9 @@ where
 
     if !amounts.is_empty() {
         let slashes = find_validator_slashes(storage, &bond_id.validator)?;
+        let redelegated_bonded =
+            delegator_redelegated_bonds_handle(&bond_id.source)
+                .at(&bond_id.validator);
 
         // Apply slashes
         for (&ep, amounts) in amounts.iter_mut() {
@@ -3318,7 +3321,32 @@ where
                     .cloned()
                     .collect::<Vec<_>>();
 
-                *amount = apply_list_slashes(&params, &list_slashes, *amount);
+                let slash_epoch_filter =
+                    |e: Epoch| e + params.slash_processing_epoch_offset() <= ep;
+
+                let redelegated_bonds =
+                    redelegated_bonded.at(&start).collect_map(storage)?;
+
+                let result_fold = fold_and_slash_redelegated_bonds(
+                    storage,
+                    &params,
+                    &redelegated_bonds,
+                    start,
+                    &list_slashes,
+                    slash_epoch_filter,
+                );
+
+                let total_not_redelegated =
+                    *amount - result_fold.total_redelegated;
+
+                let after_not_redelegated = apply_list_slashes(
+                    &params,
+                    &list_slashes,
+                    total_not_redelegated,
+                );
+
+                *amount =
+                    after_not_redelegated + result_fold.total_after_slashing;
             }
         }
     }
