@@ -1573,9 +1573,15 @@ impl Tx {
         let hashes = vec![self.raw_header_hash()];
         self.protocol_filter();
 
+        let secret_keys = if signer.is_some() {
+            account_public_keys_map.index_secret_keys(keypairs)
+        } else {
+            (0..).zip(keypairs.into_iter()).collect()
+        };
+
         self.add_section(Section::Signature(Signature::new(
             hashes,
-            account_public_keys_map.index_secret_keys(keypairs),
+            secret_keys,
             signer,
         )));
         self
