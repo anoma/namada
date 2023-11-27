@@ -88,7 +88,8 @@ fn spending_keys_list(
         display_line!(
             io,
             "No known keys. Try `add --alias my-addr --value ...` to add a \
-             new key to the wallet, or `gen --shielded` to generate a new key.",
+             new key to the wallet, or `gen --shielded --alias my-key` to \
+             generate a new key.",
         );
     } else {
         let stdout = io::stdout();

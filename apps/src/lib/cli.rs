@@ -636,7 +636,7 @@ pub mod cmds {
                 .long_about(
                     "In the transparent setting, list known keypairs and \
                      addresses.\nIn the shielded setting, list known spending \
-                     keys and payment addresses.",
+                     / viewing keys and payment addresses.",
                 )
                 .add_args::<args::KeyAddressList>()
         }
@@ -773,7 +773,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "Generates a payment address from the given spending key",
+                    "Generates a payment address from the given spending key.",
                 )
                 .add_args::<args::PayAddressGen<args::CliTypes>>()
         }
@@ -6148,8 +6148,8 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.arg(SHIELDED.def().help(
-                "List spending keys and payment addresses for the shielded \
-                 pool.",
+                "List viewing / spending keys and payment addresses for the \
+                 shielded pool.",
             ))
             .arg(DECRYPT.def().help("Decrypt keys that are encrypted."))
             .arg(LIST_KEYS_ONLY.def().help("List only keys."))
