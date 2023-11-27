@@ -1895,6 +1895,17 @@ pub async fn query_validator_state<
     )
 }
 
+/// Query and return the available reward tokens corresponding to the bond
+pub async fn query_rewards<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
+    source: &Option<Address>,
+    validator: &Address,
+) -> token::Amount {
+    unwrap_client_response::<C, token::Amount>(
+        RPC.vp().pos().rewards(client, validator, source).await,
+    )
+}
+
 /// Query a validator's state information
 pub async fn query_and_print_validator_state<'a>(
     context: &impl Namada<'a>,
@@ -2204,6 +2215,20 @@ pub async fn query_slashes<'a, N: Namada<'a>>(
             }
         }
     }
+}
+
+pub async fn query_and_print_rewards<'a, N: Namada<'a>>(
+    context: &N,
+    args: args::QueryRewards,
+) {
+    let (source, validator) = (args.source, args.validator);
+
+    let rewards = query_rewards(context.client(), &source, &validator).await;
+    display_line!(
+        context.io(),
+        "Current rewards available for claim: {} NAM",
+        rewards.to_string_native()
+    );
 }
 
 pub async fn query_delegations<'a, N: Namada<'a>>(

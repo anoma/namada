@@ -260,6 +260,7 @@ pub mod cmds {
                 .subcommand(QueryPgf::def().display_order(5))
                 .subcommand(QueryValidatorState::def().display_order(5))
                 .subcommand(QueryCommissionRate::def().display_order(5))
+                .subcommand(QueryRewards::def().display_order(5))
                 .subcommand(QueryMetaData::def().display_order(5))
                 // Actions
                 .subcommand(SignTx::def().display_order(6))
@@ -315,6 +316,7 @@ pub mod cmds {
             let query_bonded_stake =
                 Self::parse_with_ctx(matches, QueryBondedStake);
             let query_slashes = Self::parse_with_ctx(matches, QuerySlashes);
+            let query_rewards = Self::parse_with_ctx(matches, QueryRewards);
             let query_delegations =
                 Self::parse_with_ctx(matches, QueryDelegations);
             let query_find_validator =
@@ -369,6 +371,7 @@ pub mod cmds {
                 .or(query_bonds)
                 .or(query_bonded_stake)
                 .or(query_slashes)
+                .or(query_rewards)
                 .or(query_delegations)
                 .or(query_find_validator)
                 .or(query_result)
@@ -463,6 +466,7 @@ pub mod cmds {
         QueryProtocolParameters(QueryProtocolParameters),
         QueryPgf(QueryPgf),
         QueryValidatorState(QueryValidatorState),
+        QueryRewards(QueryRewards),
         SignTx(SignTx),
         GenIbcShieldedTransafer(GenIbcShieldedTransafer),
     }
@@ -1841,6 +1845,28 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Query PoS applied slashes.")
                 .add_args::<args::QuerySlashes<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryRewards(pub args::QueryRewards<args::CliTypes>);
+
+    impl SubCmd for QueryRewards {
+        const CMD: &'static str = "rewards";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| QueryRewards(args::QueryRewards::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Query the latest rewards available to claim for a given \
+                     delegation (or self-bond).",
+                )
+                .add_args::<args::QueryRewards<args::CliTypes>>()
         }
     }
 
@@ -4826,8 +4852,8 @@ pub mod args {
                 .arg(VALIDATOR.def().help("Validator address."))
                 .arg(SOURCE_OPT.def().help(
                     "Source address for withdrawing from delegations. For \
-                     withdrawing from self-bonds, the validator is also the \
-                     source.",
+                     withdrawing from self-bonds, this arg does not need to \
+                     be supplied.",
                 ))
         }
     }
@@ -5549,6 +5575,42 @@ pub mod args {
                     .def()
                     .help("The validator's address whose slashes to query."),
             )
+        }
+    }
+
+    impl CliToSdk<QueryRewards<SdkTypes>> for QueryRewards<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryRewards<SdkTypes> {
+            QueryRewards::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                validator: ctx.borrow_chain_or_exit().get(&self.validator),
+                source: self.source.map(|x| ctx.borrow_chain_or_exit().get(&x)),
+            }
+        }
+    }
+
+    impl Args for QueryRewards<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let source = SOURCE_OPT.parse(matches);
+            let validator = VALIDATOR.parse(matches);
+            Self {
+                query,
+                source,
+                validator,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query<CliTypes>>()
+                .arg(SOURCE_OPT.def().help(
+                    "Source address for the rewards query. For self-bonds, \
+                     this arg does not need to be supplied.",
+                ))
+                .arg(
+                    VALIDATOR
+                        .def()
+                        .help("Validator address for the rewards query."),
+                )
         }
     }
 

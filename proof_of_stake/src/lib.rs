@@ -6089,29 +6089,25 @@ where
     Ok(())
 }
 
-/// Claim rewards
-pub fn claim_reward_tokens<S>(
-    storage: &mut S,
-    source: Option<&Address>,
+/// Compute the current available rewards amount due only to existing bonds.
+/// This does not include pending rewards held in the rewards counter due to
+/// unbonds and redelegations.
+pub fn compute_current_rewards_from_bonds<S>(
+    storage: &S,
+    source: &Address,
     validator: &Address,
     current_epoch: Epoch,
 ) -> storage_api::Result<token::Amount>
 where
-    S: StorageRead + StorageWrite,
+    S: StorageRead,
 {
-    tracing::debug!("Claiming rewards in epoch {current_epoch}");
-
-    let rewards_products = validator_rewards_products_handle(validator);
-    let source = source.cloned().unwrap_or_else(|| validator.clone());
-    tracing::debug!("Source {} --> Validator {}", source, validator);
-
     if current_epoch == Epoch::default() {
         // Nothing to claim in the first epoch
         return Ok(token::Amount::zero());
     }
 
     let last_claim_epoch =
-        get_last_reward_claim_epoch(storage, &source, validator)?;
+        get_last_reward_claim_epoch(storage, source, validator)?;
     if let Some(last_epoch) = last_claim_epoch {
         if last_epoch == current_epoch {
             // Already claimed in this epoch
@@ -6137,6 +6133,8 @@ where
         claim_start,
         claim_end,
     )?;
+
+    let rewards_products = validator_rewards_products_handle(validator);
     for (ep, bond_amount) in bond_amounts {
         debug_assert!(ep >= claim_start);
         debug_assert!(ep <= claim_end);
@@ -6144,6 +6142,32 @@ where
         let reward = rp * bond_amount;
         reward_tokens += reward;
     }
+
+    Ok(reward_tokens)
+}
+
+/// Claim available rewards, triggering an immediate transfer of tokens from the
+/// PoS account to the source address.
+pub fn claim_reward_tokens<S>(
+    storage: &mut S,
+    source: Option<&Address>,
+    validator: &Address,
+    current_epoch: Epoch,
+) -> storage_api::Result<token::Amount>
+where
+    S: StorageRead + StorageWrite,
+{
+    tracing::debug!("Claiming rewards in epoch {current_epoch}");
+
+    let source = source.cloned().unwrap_or_else(|| validator.clone());
+    tracing::debug!("Source {} --> Validator {}", source, validator);
+
+    let mut reward_tokens = compute_current_rewards_from_bonds(
+        storage,
+        &source,
+        validator,
+        current_epoch,
+    )?;
 
     // Add reward tokens tallied during previous withdrawals
     reward_tokens += take_rewards_from_counter(storage, &source, validator)?;
@@ -6156,6 +6180,30 @@ where
     token::transfer(storage, &staking_token, &ADDRESS, &source, reward_tokens)?;
 
     Ok(reward_tokens)
+}
+
+/// Query the amount of available reward tokens for a given bond.
+pub fn query_reward_tokens<S>(
+    storage: &S,
+    source: Option<&Address>,
+    validator: &Address,
+    current_epoch: Epoch,
+) -> storage_api::Result<token::Amount>
+where
+    S: StorageRead,
+{
+    let source = source.cloned().unwrap_or_else(|| validator.clone());
+    let rewards_from_bonds = compute_current_rewards_from_bonds(
+        storage,
+        &source,
+        validator,
+        current_epoch,
+    )?;
+
+    let rewards_from_counter =
+        read_rewards_counter(storage, &source, validator)?;
+
+    Ok(rewards_from_bonds + rewards_from_counter)
 }
 
 /// Get the last epoch in which rewards were claimed from storage, if any
@@ -6182,6 +6230,19 @@ where
 {
     let key = last_pos_reward_claim_epoch_key(delegator, validator);
     storage.write(&key, epoch)
+}
+
+/// Read the current token value in the rewards counter.
+fn read_rewards_counter<S>(
+    storage: &S,
+    source: &Address,
+    validator: &Address,
+) -> storage_api::Result<token::Amount>
+where
+    S: StorageRead,
+{
+    let key = rewards_counter_key(source, validator);
+    Ok(storage.read::<token::Amount>(&key)?.unwrap_or_default())
 }
 
 /// Add tokens to a rewards counter.

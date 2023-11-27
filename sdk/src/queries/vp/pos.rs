@@ -19,7 +19,7 @@ use namada_proof_of_stake::types::{
 use namada_proof_of_stake::{
     self, bond_amount, bond_handle, find_all_enqueued_slashes,
     find_all_slashes, find_delegation_validators, find_delegations,
-    read_all_validator_addresses,
+    query_reward_tokens, read_all_validator_addresses,
     read_below_capacity_validator_set_addresses_with_stake,
     read_consensus_validator_set_addresses_with_stake, read_pos_params,
     read_total_stake, read_validator_description,
@@ -85,6 +85,9 @@ router! {POS,
 
     ( "bond" / [source: Address] / [validator: Address] / [epoch: opt Epoch] )
         -> token::Amount = bond,
+
+    ( "rewards" / [validator: Address] / [source: opt Address] )
+        -> token::Amount = rewards,
 
     ( "bond_with_slashing" / [source: Address] / [validator: Address] / [epoch: opt Epoch] )
         -> token::Amount = bond_with_slashing,
@@ -496,6 +499,24 @@ where
         }
     }
     Ok(total)
+}
+
+fn rewards<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+    validator: Address,
+    source: Option<Address>,
+) -> storage_api::Result<token::Amount>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let current_epoch = ctx.wl_storage.storage.last_epoch;
+    query_reward_tokens(
+        ctx.wl_storage,
+        source.as_ref(),
+        &validator,
+        current_epoch,
+    )
 }
 
 fn bonds_and_unbonds<D, H, V, T>(
