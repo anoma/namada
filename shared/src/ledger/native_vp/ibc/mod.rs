@@ -41,8 +41,6 @@ pub enum Error {
     IbcAction(ActionError),
     #[error("State change error: {0}")]
     StateChange(String),
-    #[error("Denom error: {0}")]
-    Denom(String),
     #[error("IBC event error: {0}")]
     IbcEvent(String),
 }
@@ -175,7 +173,7 @@ where
             pipeline_len * epoch_duration.min_duration.0;
         Ok(ValidationParams {
             chain_id: IbcChainId::from_str(&chain_id)
-                .map_err(|e| Error::IbcAction(ActionError::ChainId(e)))?,
+                .map_err(ActionError::ChainId)?,
             proof_specs: proof_specs.into(),
             unbonding_period: Duration::from_secs(unbonding_period_secs),
             upgrade_path: Vec::new(),
@@ -186,24 +184,26 @@ where
         for key in keys_changed {
             if let Some((_, hash)) = is_ibc_denom_key(key) {
                 match self.ctx.read_post::<String>(key).map_err(|e| {
-                    Error::Denom(format!(
+                    ActionError::Denom(format!(
                         "Getting the denom failed: Key {}, Error {}",
                         key, e
                     ))
                 })? {
                     Some(denom) => {
                         if calc_hash(&denom) != hash {
-                            return Err(Error::Denom(format!(
+                            return Err(ActionError::Denom(format!(
                                 "The denom is invalid: Key {}, Denom {}",
                                 key, denom
-                            )));
+                            ))
+                            .into());
                         }
                     }
                     None => {
-                        return Err(Error::Denom(format!(
+                        return Err(ActionError::Denom(format!(
                             "The corresponding denom wasn't stored: Key {}",
                             key
-                        )));
+                        ))
+                        .into());
                     }
                 }
             }

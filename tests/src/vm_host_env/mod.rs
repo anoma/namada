@@ -1039,7 +1039,7 @@ mod tests {
         // VP should fail because the transfer channel cannot be closed
         assert!(matches!(
             result.expect_err("validation succeeded unexpectedly"),
-            IbcError::IbcAction(IbcActionError::Execution(_)),
+            IbcError::IbcAction(IbcActionError::Context(_)),
         ));
     }
 

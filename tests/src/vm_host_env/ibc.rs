@@ -466,7 +466,7 @@ pub fn msg_connection_open_try(
     #[allow(deprecated)]
     MsgConnectionOpenTry {
         client_id_on_b: client_id,
-        client_state_of_b_on_a: client_state.into(),
+        client_state_of_b_on_a: client_state,
         counterparty: dummy_connection_counterparty(),
         versions_on_a: vec![ConnVersion::default()],
         proofs_height_on_a: dummy_proof_height(),

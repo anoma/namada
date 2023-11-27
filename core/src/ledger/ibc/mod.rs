@@ -49,14 +49,10 @@ pub enum Error {
     DecodingData(prost::DecodeError),
     #[error("Decoding message error: {0}")]
     DecodingMessage(RouterError),
-    #[error("IBC execution error: {0}")]
-    Execution(ContextError),
+    #[error("IBC context error: {0}")]
+    Context(Box<ContextError>),
     #[error("IBC token transfer error: {0}")]
     TokenTransfer(TokenTransferError),
-    #[error("IBC validation error: {0}")]
-    Validation(ContextError),
-    #[error("IBC module doesn't exist")]
-    NoModule,
     #[error("Denom error: {0}")]
     Denom(String),
     #[error("Invalid chain ID: {0}")]
@@ -119,7 +115,7 @@ where
                 let envelope = MsgEnvelope::try_from(any_msg)
                     .map_err(Error::DecodingMessage)?;
                 execute(&mut self.ctx, &mut self.router, envelope.clone())
-                    .map_err(Error::Execution)?;
+                    .map_err(|e| Error::Context(Box::new(e)))?;
                 // For receiving the token to a shielded address
                 self.handle_masp_tx(&envelope)?;
                 // the current ibc-rs execution doesn't store the denom for the
@@ -234,7 +230,7 @@ where
                 let envelope = MsgEnvelope::try_from(any_msg)
                     .map_err(Error::DecodingMessage)?;
                 validate(&self.ctx, &self.router, envelope)
-                    .map_err(Error::Validation)
+                    .map_err(|e| Error::Context(Box::new(e)))
             }
         }
     }
