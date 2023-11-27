@@ -22,7 +22,7 @@ use namada::types::chain::ChainId;
 use namada_apps::client::utils::{
     self, validator_pre_genesis_dir, validator_pre_genesis_txs_file,
 };
-use namada_apps::config::genesis::toml_utils::read_toml;
+use namada_apps::config::genesis::utils::read_toml;
 use namada_apps::config::genesis::{templates, GenesisAddress};
 use namada_apps::config::{ethereum_bridge, genesis, Config};
 use namada_apps::{config, wallet};

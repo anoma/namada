@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 use std::fs::File;
+use std::future::Future;
 use std::io::Write;
+use std::pin::Pin;
 
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
@@ -22,8 +24,10 @@ use namada::types::key::{self, *};
 use namada::types::transaction::pos::{BecomeValidator, ConsensusKeyChange};
 use namada_sdk::rpc::{TxBroadcastData, TxResponse};
 use namada_sdk::wallet::alias::validator_consensus_key;
+use namada_sdk::wallet::{Wallet, WalletIo};
 use namada_sdk::{display_line, edisplay_line, error, signing, tx, Namada};
 use rand::rngs::OsRng;
+use tokio::sync::RwLock;
 
 use super::rpc;
 use crate::cli::{args, safe_exit};
@@ -35,7 +39,9 @@ use crate::client::tx::tx::ProcessTxResponse;
 use crate::config::TendermintMode;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::node::ledger::tendermint_node;
-use crate::wallet::{gen_validator_keys, read_and_confirm_encryption_password};
+use crate::wallet::{
+    gen_validator_keys, read_and_confirm_encryption_password,
+};
 
 /// Wrapper around `signing::aux_signing_data` that stores the optional
 /// disposable address to the wallet
@@ -68,9 +74,102 @@ pub async fn aux_signing_data<'a>(
     Ok(signing_data)
 }
 
+pub fn with_hardware_wallet<'a, 'b, U: WalletIo + Clone>(
+    wallet: &RwLock<&'b mut Wallet<U>>,
+    app: &NamadaApp<TransportNativeHID>,
+) -> impl Fn(Tx, common::PublicKey, HashSet<signing::Signable>) -> Pin<Box<dyn Future<Output = Result<Tx, error::Error>>>>
+{
+    let wallet = wallet.read();
+    move |mut tx: Tx,
+     pubkey: common::PublicKey,
+     parts: HashSet<signing::Signable>| {
+        Box::pin(async move {
+            // Obtain derivation path
+            let path = wallet
+                .await
+                .find_path_by_pkh(&(&pubkey).into())
+                .map_err(|_| {
+                    error::Error::Other(
+                        "Unable to find derivation path for key".to_string(),
+                    )
+                })?;
+            let path = BIP44Path {
+                path: path.to_string(),
+            };
+            // Now check that the public key at this path in the Ledger
+            // matches
+            let response_pubkey = app
+                .get_address_and_pubkey(&path, false)
+                .await
+                .map_err(|err| error::Error::Other(err.to_string()))?;
+            let response_pubkey =
+                common::PublicKey::try_from_slice(&response_pubkey.public_key)
+                    .map_err(|err| {
+                        error::Error::Other(format!(
+                            "unable to decode public key from hardware \
+                             wallet: {}",
+                            err
+                        ))
+                    })?;
+            if response_pubkey != pubkey {
+                return Err(error::Error::Other(format!(
+                    "Unrecognized public key fetched fom Ledger: {}. Expected \
+                     {}.",
+                    response_pubkey, pubkey,
+                )));
+            }
+            // Get the Ledger to sign using our obtained derivation path
+            let response = app
+                .sign(&path, &tx.serialize_to_vec())
+                .await
+                .map_err(|err| error::Error::Other(err.to_string()))?;
+            // Sign the raw header if that is requested
+            if parts.contains(&signing::Signable::RawHeader) {
+                let pubkey =
+                    common::PublicKey::try_from_slice(&response.pubkey)
+                        .expect("unable to parse public key from Ledger");
+                let signature =
+                    common::Signature::try_from_slice(&response.raw_signature)
+                        .expect("unable to parse signature from Ledger");
+                // Signatures from the Ledger come back in compressed
+                // form
+                let compressed = CompressedSignature {
+                    targets: response.raw_indices,
+                    signer: Signer::PubKeys(vec![pubkey]),
+                    signatures: [(0, signature)].into(),
+                };
+                // Expand out the signature before adding it to the
+                // transaction
+                tx.add_section(Section::Signature(compressed.expand(&tx)));
+            }
+            // Sign the fee header if that is requested
+            if parts.contains(&signing::Signable::FeeHeader) {
+                let pubkey =
+                    common::PublicKey::try_from_slice(&response.pubkey)
+                        .expect("unable to parse public key from Ledger");
+                let signature = common::Signature::try_from_slice(
+                    &response.wrapper_signature,
+                )
+                .expect("unable to parse signature from Ledger");
+                // Signatures from the Ledger come back in compressed
+                // form
+                let compressed = CompressedSignature {
+                    targets: response.wrapper_indices,
+                    signer: Signer::PubKeys(vec![pubkey]),
+                    signatures: [(0, signature)].into(),
+                };
+                // Expand out the signature before adding it to the
+                // transaction
+                tx.add_section(Section::Signature(compressed.expand(&tx)));
+            }
+            Ok(tx)
+        })
+    }
+}
+
 // Sign the given transaction using a hardware wallet as a backup
-pub async fn sign<'a>(
-    context: &impl Namada<'a>,
+pub async fn sign<'a, N: Namada<'a>>(
+    context: &N,
     tx: &mut Tx,
     args: &args::Tx,
     signing_data: SigningTxData,
@@ -84,112 +183,13 @@ pub async fn sign<'a>(
         let app = NamadaApp::new(TransportNativeHID::new(&hidapi).map_err(
             |err| {
                 error::Error::Other(format!(
-                    "Unable to connect to Ledger: {}",
+                    "Unble to connect to Ledger: {}",
                     err
                 ))
             },
         )?);
         // A closure to facilitate signing transactions also using the Ledger
-        let with_hw =
-            |mut tx: Tx,
-             pubkey: common::PublicKey,
-             parts: HashSet<signing::Signable>| {
-                let app = &app;
-                async move {
-                    // Obtain derivation path corresponding to the signing
-                    // public key
-                    let path = context
-                        .wallet()
-                        .await
-                        .find_path_by_pkh(&(&pubkey).into())
-                        .map_err(|_| {
-                            error::Error::Other(
-                                "Unable to find derivation path for key"
-                                    .to_string(),
-                            )
-                        })?;
-                    let path = BIP44Path {
-                        path: path.to_string(),
-                    };
-                    // Now check that the public key at this path in the Ledger
-                    // matches
-                    let response_pubkey = app
-                        .get_address_and_pubkey(&path, false)
-                        .await
-                        .map_err(|err| error::Error::Other(err.to_string()))?;
-                    let response_pubkey = common::PublicKey::try_from_slice(
-                        &response_pubkey.public_key,
-                    )
-                    .map_err(|err| {
-                        error::Error::Other(format!(
-                            "unable to decode public key from hardware \
-                             wallet: {}",
-                            err
-                        ))
-                    })?;
-                    if response_pubkey != pubkey {
-                        return Err(error::Error::Other(format!(
-                            "Unrecognized public key fetched fom Ledger: {}. \
-                             Expected {}.",
-                            response_pubkey, pubkey,
-                        )));
-                    }
-                    // Get the Ledger to sign using our obtained derivation path
-                    let response = app
-                        .sign(&path, &tx.serialize_to_vec())
-                        .await
-                        .map_err(|err| error::Error::Other(err.to_string()))?;
-                    // Sign the raw header if that is requested
-                    if parts.contains(&signing::Signable::RawHeader) {
-                        let pubkey =
-                            common::PublicKey::try_from_slice(&response.pubkey)
-                                .expect(
-                                    "unable to parse public key from Ledger",
-                                );
-                        let signature = common::Signature::try_from_slice(
-                            &response.raw_signature,
-                        )
-                        .expect("unable to parse signature from Ledger");
-                        // Signatures from the Ledger come back in compressed
-                        // form
-                        let compressed = CompressedSignature {
-                            targets: response.raw_indices,
-                            signer: Signer::PubKeys(vec![pubkey]),
-                            signatures: [(0, signature)].into(),
-                        };
-                        // Expand out the signature before adding it to the
-                        // transaction
-                        tx.add_section(Section::Signature(
-                            compressed.expand(&tx),
-                        ));
-                    }
-                    // Sign the fee header if that is requested
-                    if parts.contains(&signing::Signable::FeeHeader) {
-                        let pubkey =
-                            common::PublicKey::try_from_slice(&response.pubkey)
-                                .expect(
-                                    "unable to parse public key from Ledger",
-                                );
-                        let signature = common::Signature::try_from_slice(
-                            &response.wrapper_signature,
-                        )
-                        .expect("unable to parse signature from Ledger");
-                        // Signatures from the Ledger come back in compressed
-                        // form
-                        let compressed = CompressedSignature {
-                            targets: response.wrapper_indices,
-                            signer: Signer::PubKeys(vec![pubkey]),
-                            signatures: [(0, signature)].into(),
-                        };
-                        // Expand out the signature before adding it to the
-                        // transaction
-                        tx.add_section(Section::Signature(
-                            compressed.expand(&tx),
-                        ));
-                    }
-                    Ok(tx)
-                }
-            };
+        let with_hw = with_hardware_wallet::<N::WalletUtils>(context.wallet_lock(), &app);
         // Finally, begin the signing with the Ledger as backup
         context.sign(tx, args, signing_data, with_hw).await?;
     } else {

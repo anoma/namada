@@ -92,6 +92,9 @@ pub trait Namada<'a>: Sized {
         &self,
     ) -> RwLockWriteGuard<&'a mut Wallet<Self::WalletUtils>>;
 
+    /// Obtain the wallet lock
+    fn wallet_lock(&self) -> &RwLock<&'a mut Wallet<Self::WalletUtils>>;
+
     /// Obtain read guard on the shielded context
     async fn shielded(
         &self,
@@ -531,8 +534,9 @@ pub trait Namada<'a>: Sized {
         args: &args::Tx,
         signing_data: SigningTxData,
         with: impl Fn(Tx, common::PublicKey, HashSet<signing::Signable>) -> F,
-    ) -> crate::error::Result<()> {
-        signing::sign_tx(self, args, tx, signing_data, with).await
+    ) -> crate::error::Result<()>
+    {
+        signing::sign_tx(self.wallet_lock(), args, tx, signing_data, with).await
     }
 
     /// Process the given transaction using the given flags
@@ -706,6 +710,10 @@ where
         &self,
     ) -> RwLockWriteGuard<&'a mut ShieldedContext<Self::ShieldedUtils>> {
         self.shielded.write().await
+    }
+
+    fn wallet_lock(&self) -> &RwLock<&'a mut Wallet<Self::WalletUtils>> {
+        &self.wallet
     }
 }
 

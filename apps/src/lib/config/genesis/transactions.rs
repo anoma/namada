@@ -8,9 +8,11 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use itertools::{Either, Itertools};
 use namada::core::types::address::{Address, EstablishedAddress};
 use namada::core::types::string_encoding::StringEncoded;
+use namada::ledger::pos::common::PublicKey;
 use namada::ledger::pos::types::ValidatorMetaData;
 use namada::proto::{
-    standalone_signature, verify_standalone_sig, SerializeWithBorsh, Tx,
+verify_standalone_sig, Section, SerializeWithBorsh,
+    Tx,
 };
 use namada::types::dec::Dec;
 use namada::types::key::{common, ed25519, RefTo, SigScheme, VerifySigError};
@@ -18,24 +20,35 @@ use namada::types::time::{DateTimeUtc, MIN_UTC};
 use namada::types::token;
 use namada::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
 use namada::types::transaction::{pos, Fee, TxType};
+use namada_sdk::signing::{sign_tx, SigningTxData};
 use namada_sdk::tx::{TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM};
 use namada_sdk::wallet::alias::Alias;
 use namada_sdk::wallet::pre_genesis::ValidatorWallet;
 use namada_sdk::wallet::Wallet;
 use serde::{Deserialize, Serialize};
+use tokio::sync::RwLock;
 
 use super::templates::{DenominatedBalances, Parameters, ValidityPredicates};
+use crate::cli::args;
 use crate::config::genesis::chain::DeriveEstablishedAddress;
 use crate::config::genesis::templates::{
     TemplateValidation, Unvalidated, Validated,
 };
-use crate::config::genesis::GenesisAddress;
+use crate::config::genesis::{utils, GenesisAddress};
 use crate::wallet::CliWalletUtils;
 
 /// Helper trait to fetch tx data to sign.
 pub trait TxToSign {
     /// Return tx data to sign.
-    fn tx_to_sign(&self) -> Vec<u8>;
+    fn tx_to_sign(&self) -> Tx;
+
+    /// Get public keys that may sign this transaction from a genesis address
+    fn get_pks(
+        &self,
+        accounts: &[EstablishedAccountTx],
+    ) -> (Vec<common::PublicKey>, u8);
+
+    fn get_owner(&self) -> GenesisAddress;
 }
 
 /// Return a ready to sign genesis [`Tx`].
@@ -245,23 +258,33 @@ pub async fn sign_validator_account_tx(
     >,
     wallet: &mut Wallet<CliWalletUtils>,
     established_accounts: &[EstablishedAccountTx],
+    args: args::Tx,
 ) -> SignedValidatorAccountTx {
     let mut to_sign = match to_sign {
         Either::Right(signed_tx) => signed_tx,
         Either::Left((unsigned_tx, validator_wallet)) => {
+            fn sign_key<T: BorshSerialize>(
+                tx_data: &T,
+                keypair: &common::SecretKey,
+            ) -> StringEncoded<common::Signature> {
+                StringEncoded::new(namada::proto::standalone_signature::<
+                    T,
+                    SerializeWithBorsh,
+                >(keypair, tx_data))
+            }
             // Sign the tx with every validator key to authorize their usage
             let consensus_key_sig =
-                sign_tx(&unsigned_tx, &validator_wallet.consensus_key);
-            let protocol_key_sig = sign_tx(
+                sign_key(&unsigned_tx, &validator_wallet.consensus_key);
+            let protocol_key_sig = sign_key(
                 &unsigned_tx,
                 &validator_wallet.store.validator_keys.protocol_keypair,
             );
             let eth_hot_key_sig =
-                sign_tx(&unsigned_tx, &validator_wallet.eth_hot_key);
+                sign_key(&unsigned_tx, &validator_wallet.eth_hot_key);
             let eth_cold_key_sig =
-                sign_tx(&unsigned_tx, &validator_wallet.eth_cold_key);
+                sign_key(&unsigned_tx, &validator_wallet.eth_cold_key);
             let tendermint_node_key_sig =
-                sign_tx(&unsigned_tx, &validator_wallet.tendermint_node_key);
+                sign_key(&unsigned_tx, &validator_wallet.tendermint_node_key);
 
             let ValidatorAccountTx {
                 address,
@@ -316,13 +339,8 @@ pub async fn sign_validator_account_tx(
         }
     };
 
-    let source_keys = look_up_sks_from(
-        &GenesisAddress::EstablishedAddress(to_sign.data.address.raw.clone()),
-        wallet,
-        Some(established_accounts),
-    );
 
-    to_sign.sign(&source_keys).await;
+    to_sign.sign(established_accounts, wallet, args).await;
     to_sign
 }
 
@@ -330,24 +348,13 @@ pub async fn sign_delegation_bond_tx(
     mut to_sign: SignedBondTx<Unvalidated>,
     wallet: &mut Wallet<CliWalletUtils>,
     established_accounts: &Option<Vec<EstablishedAccountTx>>,
+    args: args::Tx,
 ) -> SignedBondTx<Unvalidated> {
-    let source_keys = look_up_sks_from(
-        &to_sign.data.source,
-        wallet,
-        established_accounts.as_ref().map(|txs| txs.as_slice()),
-    );
-    to_sign.sign(&source_keys).await;
+    let default = vec![];
+    let established_accounts = established_accounts.as_ref()
+        .unwrap_or(&default);
+    to_sign.sign(established_accounts, wallet, &mut args).await;
     to_sign
-}
-
-pub fn sign_tx<T: BorshSerialize>(
-    tx_data: &T,
-    keypair: &common::SecretKey,
-) -> StringEncoded<common::Signature> {
-    StringEncoded::new(namada::proto::standalone_signature::<
-        T,
-        SerializeWithBorsh,
-    >(keypair, tx_data))
 }
 
 #[derive(
@@ -506,7 +513,7 @@ pub struct ValidatorAccountTx<PK: Ord> {
 }
 
 impl TxToSign for ValidatorAccountTx<SignedPk> {
-    fn tx_to_sign(&self) -> Vec<u8> {
+    fn tx_to_sign(&self) -> Tx {
         get_tx_to_sign(
             TX_BECOME_VALIDATOR_WASM,
             pos::BecomeValidator {
@@ -529,7 +536,39 @@ impl TxToSign for ValidatorAccountTx<SignedPk> {
                 discord_handle: self.metadata.discord_handle.clone(),
             },
         )
-        .to_bytes()
+    }
+
+    fn get_pks(
+        &self,
+        established_accounts: &[EstablishedAccountTx],
+    ) -> (Vec<PublicKey>, u8) {
+        established_accounts
+            .iter()
+            .find_map(|account| {
+                if &account.derive_established_address() == self.address.raw {
+                    Some((
+                        account
+                            .public_keys
+                            .iter()
+                            .map(|pk| pk.raw.clone())
+                            .collect::<Vec<_>>(),
+                        account.threshold,
+                    ))
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_else(|| {
+                panic!(
+                    "Cannot sign a pre-genesis tx because the established \
+                     address {} could not be found",
+                    self.address
+                )
+            })
+    }
+
+    fn get_owner(&self) -> GenesisAddress {
+        GenesisAddress::EstablishedAddress(self.address.raw.clone())
     }
 }
 
@@ -598,19 +637,59 @@ impl<T> Signed<T> {
     }
 
     /// Sign the underlying data and add to the list of signatures.
-    pub async fn sign(&mut self, keys: &[common::SecretKey])
-    where
+    pub async fn sign(
+        &mut self,
+        established_accounts: &[EstablishedAccountTx],
+        wallet: &mut Wallet<CliWalletUtils>,
+        args: args::Tx,
+    ) where
         T: BorshSerialize + TxToSign,
     {
-        for sk in keys {
+        let wallet_lock = RwLock::new(wallet);
+        let (pks, threshold) = self.data.get_pks(established_accounts);
+        let owner = self.data.get_owner().address();
+        let signing_data = SigningTxData {
+            owner: Some(owner),
+            account_public_keys_map: Some(pks.iter().cloned().collect()),
+            public_keys: pks.clone(),
+            threshold,
+            fee_payer: common::SecretKey::Ed25519(
+                ed25519::SigScheme::from_bytes([0; 32]),
+            )
+            .ref_to(),
+        };
+
+        let mut tx = self.data.tx_to_sign();
+        sign_tx(
+            wallet,
+            &args,
+            &mut tx,
+            signing_data,
+            utils::with_hardware_wallet(&wallet_lock),
+        )
+        .await
+        .expect("Failed to sign pre-genesis transaction.");
+
+        let raw_header_hash = tx.raw_header_hash();
+        let sigs = tx
+            .sections
+            .iter()
+            .find_map(|sec| {
+                if let Section::Signature(signatures) = sec {
+                    if &[raw_header_hash] == signatures.targets.as_slice() {
+                        Some(signatures)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+        for (ix, sig) in sigs.signatures.into_iter() {
             self.signatures.insert(
-                StringEncoded::new(sk.ref_to()),
-                StringEncoded::new(
-                    standalone_signature::<_, SerializeWithBorsh>(
-                        sk,
-                        &self.data.tx_to_sign(),
-                    ),
-                ),
+                StringEncoded::new(pks[ix as usize].clone()),
+                StringEncoded::new(sig),
             );
         }
     }
@@ -674,7 +753,7 @@ impl<T> TxToSign for BondTx<T>
 where
     T: TemplateValidation + BorshSerialize,
 {
-    fn tx_to_sign(&self) -> Vec<u8> {
+    fn tx_to_sign(&self) -> Tx {
         get_tx_to_sign(
             TX_BOND_WASM,
             pos::Bond {
@@ -683,7 +762,42 @@ where
                 source: Some(self.source.address()),
             },
         )
-        .to_bytes()
+    }
+
+    fn get_pks(
+        &self,
+        established_accounts: &[EstablishedAccountTx],
+    ) -> (Vec<PublicKey>, u8) {
+        match &self.source {
+            GenesisAddress::PublicKey(pk) => (vec![pk.raw.clone()], 1),
+            GenesisAddress::EstablishedAddress(owner) => established_accounts
+                .iter()
+                .find_map(|account| {
+                    if &account.derive_established_address() == owner {
+                        Some((
+                            account
+                                .public_keys
+                                .iter()
+                                .map(|pk| pk.raw.clone())
+                                .collect::<Vec<_>>(),
+                            account.threshold,
+                        ))
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Cannot sign a pre-genesis tx because the established \
+                         address {} could not be found",
+                        owner
+                    )
+                }),
+        }
+    }
+
+    fn get_owner(&self) -> GenesisAddress {
+        self.source.clone()
     }
 }
 
@@ -1268,59 +1382,4 @@ impl From<&ValidatorAccountTx<SignedPk>> for UnsignedValidatorAccountTx {
             eth_cold_key: eth_cold_key.pk.clone(),
         }
     }
-}
-
-/// Attempt look-up a subset of secret keys from the wallet matching
-/// the queried established account's public keys.
-fn look_up_sks_from(
-    source: &GenesisAddress,
-    wallet: &mut Wallet<CliWalletUtils>,
-    established_accounts: Option<&[EstablishedAccountTx]>,
-) -> Vec<common::SecretKey> {
-    // Try to look-up the source from wallet first
-    match source {
-        GenesisAddress::EstablishedAddress(_) => None,
-        GenesisAddress::PublicKey(pk) => {
-            wallet.find_key_by_pk(pk, None).map(|sk| vec![sk]).ok()
-        }
-    }
-    .unwrap_or_else(|| {
-        // If it's not in the wallet, it must be an established account
-        // so we need to look-up its public key first
-        if established_accounts.is_none() {
-            return vec![];
-        }
-        established_accounts
-            .unwrap()
-            .iter()
-            .find_map(|account| match source {
-                GenesisAddress::EstablishedAddress(address) => {
-                    // delegation from established account
-                    if &account.derive_established_address() == address {
-                        Some(
-                            account
-                                .public_keys
-                                .iter()
-                                .map(|pk| &pk.raw)
-                                .collect::<Vec<_>>(),
-                        )
-                    } else {
-                        None
-                    }
-                }
-                GenesisAddress::PublicKey(pk) => {
-                    // delegation from an implicit account
-                    Some(vec![&pk.raw])
-                }
-            })
-            .unwrap_or_else(|| {
-                panic!(
-                    "Signing failed. Cannot find \"{source}\" in the wallet \
-                     or in the established accounts."
-                );
-            })
-            .iter()
-            .filter_map(|pk| wallet.find_key_by_pk(pk, None).ok())
-            .collect()
-    })
 }

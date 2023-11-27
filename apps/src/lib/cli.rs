@@ -6943,6 +6943,7 @@ pub mod args {
         pub path: PathBuf,
         pub output: Option<PathBuf>,
         pub validator_alias: Option<String>,
+        pub use_device: bool,
     }
 
     impl Args for SignGenesisTx {
@@ -6950,10 +6951,12 @@ pub mod args {
             let path = PATH.parse(matches);
             let output = OUTPUT.parse(matches);
             let validator_alias = ALIAS_OPT.parse(matches);
+            let use_device = USE_DEVICE.parse(matches);
             Self {
                 path,
                 output,
                 validator_alias,
+                use_device
             }
         }
 
@@ -6970,7 +6973,11 @@ pub mod args {
                 ALIAS_OPT
                     .def()
                     .help("Optional alias to a validator wallet."),
-            )
+            ).arg(USE_DEVICE.def().help(
+                "Derive an address and public key from the seed stored on the \
+                connected hardware wallet.",
+            ))
+
         }
     }
 }
