@@ -534,8 +534,7 @@ pub trait Namada<'a>: Sized {
         args: &args::Tx,
         signing_data: SigningTxData,
         with: impl Fn(Tx, common::PublicKey, HashSet<signing::Signable>) -> F,
-    ) -> crate::error::Result<()>
-    {
+    ) -> crate::error::Result<()> {
         signing::sign_tx(self.wallet_lock(), args, tx, signing_data, with).await
     }
 

@@ -39,9 +39,7 @@ use crate::client::tx::tx::ProcessTxResponse;
 use crate::config::TendermintMode;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::node::ledger::tendermint_node;
-use crate::wallet::{
-    gen_validator_keys, read_and_confirm_encryption_password,
-};
+use crate::wallet::{gen_validator_keys, read_and_confirm_encryption_password};
 
 /// Wrapper around `signing::aux_signing_data` that stores the optional
 /// disposable address to the wallet
@@ -77,12 +75,15 @@ pub async fn aux_signing_data<'a>(
 pub fn with_hardware_wallet<'a, 'b, U: WalletIo + Clone>(
     wallet: &RwLock<&'b mut Wallet<U>>,
     app: &NamadaApp<TransportNativeHID>,
-) -> impl Fn(Tx, common::PublicKey, HashSet<signing::Signable>) -> Pin<Box<dyn Future<Output = Result<Tx, error::Error>>>>
-{
+) -> impl Fn(
+    Tx,
+    common::PublicKey,
+    HashSet<signing::Signable>,
+) -> Pin<Box<dyn Future<Output = Result<Tx, error::Error>>>> {
     let wallet = wallet.read();
     move |mut tx: Tx,
-     pubkey: common::PublicKey,
-     parts: HashSet<signing::Signable>| {
+          pubkey: common::PublicKey,
+          parts: HashSet<signing::Signable>| {
         Box::pin(async move {
             // Obtain derivation path
             let path = wallet
@@ -189,7 +190,8 @@ pub async fn sign<'a, N: Namada<'a>>(
             },
         )?);
         // A closure to facilitate signing transactions also using the Ledger
-        let with_hw = with_hardware_wallet::<N::WalletUtils>(context.wallet_lock(), &app);
+        let with_hw =
+            with_hardware_wallet::<N::WalletUtils>(context.wallet_lock(), &app);
         // Finally, begin the signing with the Ledger as backup
         context.sign(tx, args, signing_data, with_hw).await?;
     } else {

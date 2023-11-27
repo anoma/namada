@@ -10,10 +10,7 @@ use namada::core::types::address::{Address, EstablishedAddress};
 use namada::core::types::string_encoding::StringEncoded;
 use namada::ledger::pos::common::PublicKey;
 use namada::ledger::pos::types::ValidatorMetaData;
-use namada::proto::{
-verify_standalone_sig, Section, SerializeWithBorsh,
-    Tx,
-};
+use namada::proto::{verify_standalone_sig, Section, SerializeWithBorsh, Tx};
 use namada::types::dec::Dec;
 use namada::types::key::{common, ed25519, RefTo, SigScheme, VerifySigError};
 use namada::types::time::{DateTimeUtc, MIN_UTC};
@@ -339,7 +336,6 @@ pub async fn sign_validator_account_tx(
         }
     };
 
-
     to_sign.sign(established_accounts, wallet, args).await;
     to_sign
 }
@@ -351,8 +347,8 @@ pub async fn sign_delegation_bond_tx(
     args: args::Tx,
 ) -> SignedBondTx<Unvalidated> {
     let default = vec![];
-    let established_accounts = established_accounts.as_ref()
-        .unwrap_or(&default);
+    let established_accounts =
+        established_accounts.as_ref().unwrap_or(&default);
     to_sign.sign(established_accounts, wallet, &mut args).await;
     to_sign
 }

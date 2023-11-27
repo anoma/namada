@@ -11,6 +11,7 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 use itertools::Either;
 use namada::core::types::string_encoding::StringEncoded;
+use namada::types::address::nam;
 use namada::types::chain::ChainId;
 use namada::types::dec::Dec;
 use namada::types::key::*;
@@ -21,7 +22,6 @@ use namada_sdk::wallet::{alias, Wallet};
 use prost::bytes::Bytes;
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use namada::types::address::nam;
 
 use crate::cli::args;
 use crate::cli::context::ENV_VAR_WASM_DIR;

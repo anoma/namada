@@ -6956,7 +6956,7 @@ pub mod args {
                 path,
                 output,
                 validator_alias,
-                use_device
+                use_device,
             }
         }
 
@@ -6973,11 +6973,11 @@ pub mod args {
                 ALIAS_OPT
                     .def()
                     .help("Optional alias to a validator wallet."),
-            ).arg(USE_DEVICE.def().help(
+            )
+            .arg(USE_DEVICE.def().help(
                 "Derive an address and public key from the seed stored on the \
-                connected hardware wallet.",
+                 connected hardware wallet.",
             ))
-
         }
     }
 }

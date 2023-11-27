@@ -68,8 +68,9 @@ where
             return Ok(tx);
         }
         let app = app;
-        let with_hw = crate::client::tx::with_hardware_wallet::<CliWalletUtils>(wallet, &app);
+        let with_hw = crate::client::tx::with_hardware_wallet::<CliWalletUtils>(
+            wallet, &app,
+        );
         with_hw(tx, pubkey, parts).await
     }
 }
-
