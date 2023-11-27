@@ -19,7 +19,7 @@ use namada_sdk::wallet::{pre_genesis, Wallet};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use super::toml_utils::{read_toml, write_toml};
+use super::utils::{read_toml, write_toml};
 use super::{templates, transactions};
 use crate::config::genesis::templates::Validated;
 use crate::config::utils::{set_ip, set_port};

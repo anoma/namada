@@ -2,8 +2,8 @@
 
 pub mod chain;
 pub mod templates;
-pub mod toml_utils;
 pub mod transactions;
+pub mod utils;
 
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Display, Formatter};

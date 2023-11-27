@@ -79,6 +79,7 @@ pub trait Io {
 }
 
 /// Rust native I/O handling.
+#[derive(Default)]
 pub struct StdIo;
 
 #[async_trait::async_trait(?Send)]
