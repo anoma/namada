@@ -17,19 +17,26 @@ use namada_vp_prelude::*;
 use once_cell::unsync::Lazy;
 
 enum KeyType<'a> {
-    Token { owner: &'a Address },
+    TokenBalance { owner: &'a Address },
+    TokenMinted,
+    TokenMinter(&'a Address),
     PoS,
     Vp(&'a Address),
     Masp,
     PgfSteward(&'a Address),
     GovernanceVote(&'a Address),
+    Ibc,
     Unknown,
 }
 
 impl<'a> From<&'a storage::Key> for KeyType<'a> {
     fn from(key: &'a storage::Key) -> KeyType<'a> {
         if let Some([_, owner]) = token::is_any_token_balance_key(key) {
-            Self::Token { owner }
+            Self::TokenBalance { owner }
+        } else if token::is_any_minted_balance_key(key).is_some() {
+            Self::TokenMinted
+        } else if let Some(minter) = token::is_any_minter_key(key) {
+            Self::TokenMinter(minter)
         } else if proof_of_stake::storage::is_pos_key(key) {
             Self::PoS
         } else if gov_storage::keys::is_vote_key(key) {
@@ -45,6 +52,8 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
             Self::Vp(address)
         } else if token::is_masp_key(key) {
             Self::Masp
+        } else if ibc::is_ibc_key(key) {
+            Self::Ibc
         } else {
             Self::Unknown
         }
@@ -77,7 +86,7 @@ fn validate_tx(
     for key in keys_changed.iter() {
         let key_type: KeyType = key.into();
         let is_valid = match key_type {
-            KeyType::Token { owner, .. } => {
+            KeyType::TokenBalance { owner, .. } => {
                 if owner == &addr {
                     let pre: token::Amount =
                         ctx.read_pre(key)?.unwrap_or_default();
@@ -107,6 +116,8 @@ fn validate_tx(
                     true
                 }
             }
+            KeyType::TokenMinted => verifiers.contains(&address::MULTITOKEN),
+            KeyType::TokenMinter(minter) => minter != &addr || *valid_sig,
             KeyType::PoS => validate_pos_changes(ctx, &addr, key, &valid_sig)?,
             KeyType::PgfSteward(address) => address != &addr || *valid_sig,
             KeyType::GovernanceVote(voter) => voter != &addr || *valid_sig,
@@ -125,7 +136,7 @@ fn validate_tx(
                     is_vp_whitelisted(ctx, &vp_hash)?
                 }
             }
-            KeyType::Masp => true,
+            KeyType::Masp | KeyType::Ibc => true,
             KeyType::Unknown => {
                 // Unknown changes require a valid signature
                 *valid_sig
