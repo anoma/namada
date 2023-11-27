@@ -134,9 +134,12 @@ pub async fn sign<'a>(
                             response_pubkey, pubkey,
                         )));
                     }
+                    // Remove unnecessary detail for Ledger signing
+                    let mut compressed_tx = tx.clone();
+                    compressed_tx.wallet_filter();
                     // Get the Ledger to sign using our obtained derivation path
                     let response = app
-                        .sign(&path, &tx.serialize_to_vec())
+                        .sign(&path, &compressed_tx.serialize_to_vec())
                         .await
                         .map_err(|err| error::Error::Other(err.to_string()))?;
                     // Sign the raw header if that is requested

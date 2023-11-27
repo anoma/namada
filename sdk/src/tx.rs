@@ -938,9 +938,7 @@ pub async fn build_unjail_validator<'a>(
             );
             if !tx_args.force {
                 return Err(Error::from(
-                    TxError::ValidatorFrozenFromUnjailing(
-                        validator.clone(),
-                    ),
+                    TxError::ValidatorFrozenFromUnjailing(validator.clone()),
                 ));
             }
         }

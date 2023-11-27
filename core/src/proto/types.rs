@@ -507,7 +507,7 @@ impl Signature {
             // vector instead of a map
             assert!(
                 secret_keys.keys().cloned().eq(0..(secret_keys.len() as u8)),
-                "secret keys must be enumerateed when signer address is absent"
+                "secret keys must be enumerated when signer address is absent"
             );
             Signer::PubKeys(secret_keys.values().map(RefTo::ref_to).collect())
         };
