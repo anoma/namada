@@ -696,11 +696,8 @@ where
             .pred_epochs
             .first_block_heights[last_epoch.0 as usize]
             .0;
-        let num_blocks_in_last_epoch = if first_block_of_last_epoch == 0 {
-            self.wl_storage.storage.block.height.0 - 1
-        } else {
-            self.wl_storage.storage.block.height.0 - first_block_of_last_epoch
-        };
+        let num_blocks_in_last_epoch =
+            self.wl_storage.storage.block.height.0 - first_block_of_last_epoch;
 
         let staking_token = staking_token_address(&self.wl_storage);
 
