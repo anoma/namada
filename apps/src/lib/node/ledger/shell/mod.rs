@@ -569,8 +569,7 @@ where
             // TODO: config event log params
             event_log: EventLog::default(),
         };
-
-        shell.update_eth_oracle();
+        shell.update_eth_oracle(&Default::default());
         shell
     }
 
@@ -982,14 +981,18 @@ where
     }
 
     /// If a handle to an Ethereum oracle was provided to the [`Shell`], attempt
-    /// to send it an updated configuration, using an initial configuration
+    /// to send it an updated configuration, using a configuration
     /// based on Ethereum bridge parameters in blockchain storage.
     ///
     /// This method must be safe to call even before ABCI `InitChain` has been
     /// called (i.e. when storage is empty), as we may want to do this check
     /// every time the shell starts up (including the first time ever at which
     /// time storage will be empty).
-    fn update_eth_oracle(&mut self) {
+    ///
+    /// This method is also called during `FinalizeBlock` to update the oracle
+    /// if relevant storage changes have occurred. This includes deactivating
+    /// and reactivating the bridge.
+    fn update_eth_oracle(&mut self, changed_keys: &BTreeSet<Key>) {
         if let ShellMode::Validator {
             eth_oracle: Some(EthereumOracleChannels { control_sender, .. }),
             ..
@@ -1015,16 +1018,30 @@ where
                 );
                 return;
             }
-            if !self.wl_storage.ethbridge_queries().is_bridge_active() {
-                tracing::info!(
-                    "Not starting oracle as the Ethereum bridge is disabled"
-                );
-                return;
-            }
             let config = EthereumOracleConfig::read(&self.wl_storage).expect(
                 "The oracle config must be present in storage, since the \
                  bridge is enabled",
             );
+            let active =
+                if !self.wl_storage.ethbridge_queries().is_bridge_active() {
+                    if !changed_keys
+                        .contains(&eth_bridge::storage::active_key())
+                    {
+                        tracing::info!(
+                            "Not starting oracle as the Ethereum bridge is \
+                             disabled"
+                        );
+                        return;
+                    } else {
+                        tracing::info!(
+                            "Disabling oracle as the bridge has been disabled"
+                        );
+                        false
+                    }
+                } else {
+                    true
+                };
+
             let start_block = self
                 .wl_storage
                 .storage
@@ -1040,6 +1057,7 @@ where
                 min_confirmations: config.min_confirmations.into(),
                 bridge_contract: config.contracts.bridge.address,
                 start_block,
+                active,
             };
             tracing::info!(
                 ?config,

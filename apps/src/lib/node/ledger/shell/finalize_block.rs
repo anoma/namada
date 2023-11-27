@@ -198,6 +198,7 @@ where
 
         // Tracks the accepted transactions
         self.wl_storage.storage.block.results = BlockResults::default();
+        let mut changed_keys = BTreeSet::new();
         for (tx_index, processed_tx) in req.txs.iter().enumerate() {
             let tx = if let Ok(tx) = Tx::try_from(processed_tx.tx.as_ref()) {
                 tx
@@ -411,7 +412,7 @@ where
             )
             .map_err(Error::TxApply)
             {
-                Ok(result) => {
+                Ok(ref mut result) => {
                     if result.is_accepted() {
                         if let EventType::Accepted = tx_event.event_type {
                             // Wrapper transaction
@@ -430,6 +431,7 @@ where
                                 tx_event["hash"],
                                 result
                             );
+                            changed_keys.append(&mut result.changed_keys);
                             stats.increment_successful_txs();
                             if let Some(wrapper) = embedding_wrapper {
                                 self.commit_inner_tx_hash(wrapper);
@@ -561,7 +563,7 @@ where
             self.update_epoch(&mut response);
             // send the latest oracle configs. These may have changed due to
             // governance.
-            self.update_eth_oracle();
+            self.update_eth_oracle(&changed_keys);
         }
 
         write_last_block_proposer_address(

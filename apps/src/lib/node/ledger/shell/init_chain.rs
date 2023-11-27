@@ -111,7 +111,7 @@ where
         if let Some(config) = genesis.get_eth_bridge_params() {
             tracing::debug!("Initializing Ethereum bridge storage.");
             config.init_storage(&mut self.wl_storage);
-            self.update_eth_oracle();
+            self.update_eth_oracle(&Default::default());
         } else {
             self.wl_storage
                 .write_bytes(
