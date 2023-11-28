@@ -14,4 +14,5 @@ version.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+borsh-ext.workspace = true
 namada_core = {path = "../core", default-features = false}

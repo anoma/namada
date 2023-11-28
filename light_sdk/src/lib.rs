@@ -84,114 +84,833 @@
     ```
  */
 
-use namada_core::proto::Tx;
+use namada_core::proto::{Tx, Signature};
 use namada_core::types::chain::ChainId;
-use namada_core::types::transaction::{TxType, WrapperTx};
+use namada_core::types::key::{common, secp256k1};
+use namada_core::types::time::DateTimeUtc;
+use namada_core::types::hash::Hash;
+use namada_core::types::transaction::GasLimit;
+use namada_core::types::storage::Epoch;
+use namada_core::types::transaction::Fee;
+use namada_core::proto::Signer;
+use std::collections::BTreeMap;
+use namada_core::proto::Section;
+use std::str::FromStr;
+use namada_core::proto::TxError;
+use namada_core::types::address::Address;
+use namada_core::types::token;
+use borsh_ext::BorshSerializeExt;
+use namada_core::types::dec::Dec;
+use namada_core::ledger::governance::storage::proposal::ProposalType;
+use namada_core::types::token::{Amount, DenominatedAmount, MaspDenom};
 
-/*
-    * takes a single publickey and builds an inner reveal_pk transaction
-    * expose decode and encode functions for Borsh in this sdk so that users don't have to pass an abstract parameter to `add_data`
-        * maybe don't expose this and just accept parameter like PKs and encode them under the hood
- */
-pub fn build_reveal_pk() -> () {
-    /*
-    * create a tx with TxType::Raw and set all the data on that one (including a correct chain id and some expiration time)
-     */
-    let chain_id = "";
-    let tx_code_hash = ""; // this needs to be the actual hash
-    let tx_tag = ""; // this needs
+/// Initialize account transaction WASM
+pub const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
+/// Initialize validator transaction WASM path
+pub const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
+/// Unjail validator transaction WASM path
+pub const TX_UNJAIL_VALIDATOR_WASM: &str = "tx_unjail_validator.wasm";
+/// Deactivate validator transaction WASM path
+pub const TX_DEACTIVATE_VALIDATOR_WASM: &str = "tx_deactivate_validator.wasm";
+/// Reactivate validator transaction WASM path
+pub const TX_REACTIVATE_VALIDATOR_WASM: &str = "tx_reactivate_validator.wasm";
+/// Initialize proposal transaction WASM path
+pub const TX_INIT_PROPOSAL_WASM: &str = "tx_init_proposal.wasm";
+/// Vote transaction WASM path
+pub const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
+/// Reveal public key transaction WASM path
+pub const TX_REVEAL_PK_WASM: &str = "tx_reveal_pk.wasm";
+/// Update validity predicate WASM path
+pub const TX_UPDATE_ACCOUNT_WASM: &str = "tx_update_account.wasm";
+/// Transfer transaction WASM path
+pub const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
+/// IBC transaction WASM path
+pub const TX_IBC_WASM: &str = "tx_ibc.wasm";
+/// User validity predicate WASM path
+pub const VP_USER_WASM: &str = "vp_user.wasm";
+/// Validator validity predicate WASM path
+pub const VP_VALIDATOR_WASM: &str = "vp_validator.wasm";
+/// Bond WASM path
+pub const TX_BOND_WASM: &str = "tx_bond.wasm";
+/// Unbond WASM path
+pub const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
+/// Withdraw WASM path
+pub const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
+/// Claim-rewards WASM path
+pub const TX_CLAIM_REWARDS_WASM: &str = "tx_claim_rewards.wasm";
+/// Bridge pool WASM path
+pub const TX_BRIDGE_POOL_WASM: &str = "tx_bridge_pool.wasm";
+/// Change commission WASM path
+pub const TX_CHANGE_COMMISSION_WASM: &str =
+    "tx_change_validator_commission.wasm";
+/// Change consensus key WASM path
+pub const TX_CHANGE_CONSENSUS_KEY_WASM: &str = "tx_change_consensus_key.wasm";
+/// Change validator metadata WASM path
+pub const TX_CHANGE_METADATA_WASM: &str = "tx_change_validator_metadata.wasm";
+/// Resign steward WASM path
+pub const TX_RESIGN_STEWARD: &str = "tx_resign_steward.wasm";
+/// Update steward commission WASM path
+pub const TX_UPDATE_STEWARD_COMMISSION: &str =
+    "tx_update_steward_commission.wasm";
+/// Redelegate transaction WASM path
+pub const TX_REDELEGATE_WASM: &str = "tx_redelegate.wasm";
+/// Target chain ID
+pub const CHAIN_ID: &str = "localnet.3e837878d84b54a40f-0";
+/// Reveal public key transaction code hash
+pub const TX_REVEAL_PK_HASH: &str = "924d926119e24a16d2eb50752acedd9ffc506f5131bbfc866cdc1c0c20d2de77";
 
-    // this should all be hidden in a constructor that just takes the parameters to the RevealPk transaction and does all the rest
+#[derive(Debug)]
+pub enum Error { ParseWasmHashErr, ParseChainIdErr }
 
-    // Tx::new creates a TxType::Raw
-    let mut inner_tx = Tx::new(ChainId(chain_id.to_owned()), None);
-    inner_tx.add_code_from_hash(namada_core::types::hash::Hash::from_str(tx_code_hash).unwrap(), Some(tx_tag.to_owned()));
-    inner_tx.add_serialized_data(); // takes the borsh encoded data
+fn build_tx(
+    data: Vec<u8>,
+    timestamp: DateTimeUtc,
+    expiration: Option<DateTimeUtc>,
+    code_hash: &str,
+    code_tag: &str,
+    chain_id: &str,
+) -> Result<Tx, Error> {
+    // Provide default values for chain ID and code hash
+    let chain_id = ChainId(chain_id.to_owned());
+    let code_hash = Hash::from_str(code_hash).map_err(|_| Error::ParseWasmHashErr)?;
+    // Construct a raw transaction
+    let mut inner_tx = Tx::new(chain_id, expiration);
+    inner_tx.header.timestamp = timestamp;
+    inner_tx.add_code_from_hash(code_hash, Some(code_tag.to_owned()));
+    inner_tx.add_serialized_data(data); // takes the borsh encoded data
+    Ok(inner_tx)
+}
 
-    // call - inner_tx.add_wrapper()
-    // Does this call really just mutate the inner_tx.header.tx_type away from TxType::Raw and replace it with TxType::Wrapper?
-    let outer_tx = WrapperTx::new(fee, fee_payer, epoch, gas_limit, None);
-    inner_tx.header.tx_type = TxType::Wrapper(Box::new(outer_tx));
+fn sign_bytes(tx: &Tx) -> Hash {
+    let mut tx = tx.clone();
+    tx.protocol_filter();
+    Signature {
+        targets: vec![tx.raw_header_hash()],
+        signer: Signer::PubKeys(vec![]),
+        signatures: BTreeMap::new(),
+    }.get_raw_hash()
+}
 
-    // the entire tx now exists and can be signed; expose signing functionality by having to call sign_bytes() on the tx object and then passing this to some signing oracle
-    /*
-    ```rust
-        // The inner tx signer signs the Decrypted version of the Header
-        let hashes = vec![self.raw_header_hash()];
-        self.protocol_filter();
+fn attach_inner_signatures(
+    tx: &Tx,
+    signer: Signer,
+    signatures: BTreeMap<u8, common::Signature>,
+) -> Tx {
+    let mut tx = tx.clone();
+    tx.add_section(Section::Signature(Signature {
+        targets: vec![tx.raw_header_hash()],
+        signer,
+        signatures,
+    }));
+    tx
+}
 
-        self.add_section(Section::Signature(Signature::new(
-            hashes,
-            account_public_keys_map.index_secret_keys(keypairs),
-            signer,
-        )));
-    ```
-     */
-    // set the tx.header.tx_type to TxType::Raw and then turn it into a section hash with Section::Header(raw_header).get_hash()
-    // then sign over that hash and add it into a section
+pub struct RevealPk(Tx);
 
-    // now try to sign the outer header
-    /*
-    ```rust
-    pub fn sign_wrapper(&mut self, keypair: common::SecretKey) -> &mut Self {
-        self.protocol_filter();
-        self.add_section(Section::Signature(Signature::new(
-            self.sechashes(),
-            [(0, keypair)].into_iter().collect(),
-            None,
-        )));
-        self
+impl RevealPk {
+    /// Build a raw Reveal Public Key transaction from the given parameters
+    pub fn new(
+        public_key: common::PublicKey,
+        timestamp: DateTimeUtc,
+        expiration: Option<DateTimeUtc>,
+        code_hash: &str,
+        chain_id: &str,
+    ) -> Result<Self, Error> {
+        build_tx(public_key.serialize_to_vec(), timestamp, expiration, code_hash, TX_REVEAL_PK_WASM, chain_id)
+            .map(Self)
     }
-    ```
-     */
-    // signs over all the sections
 
-    // now the bytes should be submittable to cometbft `broadcast_tx` - just call tx.to_bytes() and submit
+    /// Takes any kind of inner tx and gives me back my sign bytes
+    pub fn sign_bytes(&self) -> Hash {
+        sign_bytes(&self.0)
+    }
 
-    println!("{:?}", inner_tx);
+    /// Attach the given inner signatures to the transaction
+    pub fn attach_signatures(
+        &self,
+        signer: Signer,
+        signatures: BTreeMap<u8, common::Signature>,
+    ) -> Self {
+        Self(attach_inner_signatures(&self.0, signer, signatures))
+    }
 }
 
-/*
-    * takes a reveal pk transaction and wraps it in a wrapper transaction
- */
-pub fn wrap_reveal_pk() -> () {
+pub struct Bond(Tx);
 
+impl Bond {
+    /// Build a raw Bond transaction from the given parameters
+    pub fn new(
+        validator: Address,
+        amount: token::Amount,
+        source: Option<Address>,
+        timestamp: DateTimeUtc,
+        expiration: Option<DateTimeUtc>,
+        code_hash: &str,
+        chain_id: &str,
+    ) -> Result<Self, Error> {
+        let bond = namada_core::types::transaction::pos::Bond {
+            validator,
+            amount,
+            source,
+        };
+
+        build_tx(bond.serialize_to_vec(), timestamp, expiration, code_hash, TX_BOND_WASM, chain_id)
+            .map(Self)
+    }
+
+    /// Takes any kind of inner tx and gives me back my sign bytes
+    pub fn sign_bytes(&self) -> Hash {
+        sign_bytes(&self.0)
+    }
+
+    /// Attach the given inner signatures to the transaction
+    pub fn attach_signatures(
+        &self,
+        signer: Signer,
+        signatures: BTreeMap<u8, common::Signature>,
+    ) -> Self {
+        Self(attach_inner_signatures(&self.0, signer, signatures))
+    }
 }
 
-/*
-    * takes a wrapped reveal_pk transaction and signs it
- */
-pub fn sign_reveal_pk() -> () {
+pub struct Unbond(Tx);
 
+impl Unbond {
+    /// Build a raw Bond transaction from the given parameters
+    pub fn new(
+        validator: Address,
+        amount: token::Amount,
+        source: Option<Address>,
+        timestamp: DateTimeUtc,
+        expiration: Option<DateTimeUtc>,
+        code_hash: &str,
+        chain_id: &str,
+    ) -> Result<Self, Error> {
+        let bond = namada_core::types::transaction::pos::Unbond {
+            validator,
+            amount,
+            source,
+        };
+
+        build_tx(bond.serialize_to_vec(), timestamp, expiration, code_hash, TX_UNBOND_WASM, chain_id)
+            .map(Self)
+    }
+
+    /// Takes any kind of inner tx and gives me back my sign bytes
+    pub fn sign_bytes(&self) -> Hash {
+        sign_bytes(&self.0)
+    }
+
+    /// Attach the given inner signatures to the transaction
+    pub fn attach_signatures(
+        &self,
+        signer: Signer,
+        signatures: BTreeMap<u8, common::Signature>,
+    ) -> Self {
+        Self(attach_inner_signatures(&self.0, signer, signatures))
+    }
 }
 
-/*
-    * takes any kind of inner tx and gives me back my sign bytes
- */
-pub fn get_inner_sign_bytes() -> () {
+pub struct InitAccount(Tx);
 
+impl InitAccount {
+    /// Build a raw Bond transaction from the given parameters
+    pub fn new(
+        public_keys: Vec<common::PublicKey>,
+        vp_code_hash: Hash,
+        threshold: u8,
+        timestamp: DateTimeUtc,
+        expiration: Option<DateTimeUtc>,
+        code_hash: &str,
+        chain_id: &str,
+    ) -> Result<Self, Error> {
+        let init_account = namada_core::types::transaction::account::InitAccount {
+            public_keys,
+            vp_code_hash,
+            threshold,
+        };
+
+        build_tx(init_account.serialize_to_vec(), timestamp, expiration, code_hash, TX_INIT_ACCOUNT_WASM, chain_id)
+            .map(Self)
+    }
+
+    /// Takes any kind of inner tx and gives me back my sign bytes
+    pub fn sign_bytes(&self) -> Hash {
+        sign_bytes(&self.0)
+    }
+
+    /// Attach the given inner signatures to the transaction
+    pub fn attach_signatures(
+        &self,
+        signer: Signer,
+        signatures: BTreeMap<u8, common::Signature>,
+    ) -> Self {
+        Self(attach_inner_signatures(&self.0, signer, signatures))
+    }
 }
 
-/*
-    * takes any kind of outer tx and gives me back my sign bytes
- */
-pub fn get_outer_sign_bytes() -> () {
+pub struct UpdateAccount(Tx);
 
+impl UpdateAccount {
+    /// Build a raw Bond transaction from the given parameters
+    pub fn new(
+        addr: Address,
+        vp_code_hash: Option<Hash>,
+        public_keys: Vec<common::PublicKey>,
+        threshold: Option<u8>,
+        timestamp: DateTimeUtc,
+        expiration: Option<DateTimeUtc>,
+        code_hash: &str,
+        chain_id: &str,
+    ) -> Result<Self, Error> {
+        let update_account = namada_core::types::transaction::account::UpdateAccount {
+            addr,
+            vp_code_hash,
+            public_keys,
+            threshold,
+        };
+
+        build_tx(update_account.serialize_to_vec(), timestamp, expiration, code_hash, TX_UPDATE_ACCOUNT_WASM, chain_id)
+            .map(Self)
+    }
+
+    /// Takes any kind of inner tx and gives me back my sign bytes
+    pub fn sign_bytes(&self) -> Hash {
+        sign_bytes(&self.0)
+    }
+
+    /// Attach the given inner signatures to the transaction
+    pub fn attach_signatures(
+        &self,
+        signer: Signer,
+        signatures: BTreeMap<u8, common::Signature>,
+    ) -> Self {
+        Self(attach_inner_signatures(&self.0, signer, signatures))
+    }
 }
 
+pub struct InitValidator(Tx);
 
+impl InitValidator {
+    /// Build a raw Bond transaction from the given parameters
+    pub fn new(
+        account_keys: Vec<common::PublicKey>,
+        threshold: u8,
+        consensus_key: common::PublicKey,
+        eth_cold_key: secp256k1::PublicKey,
+        eth_hot_key: secp256k1::PublicKey,
+        protocol_key: common::PublicKey,
+        commission_rate: Dec,
+        max_commission_rate_change: Dec,
+        email: String,
+        description: Option<String>,
+        website: Option<String>,
+        discord_handle: Option<String>,
+        validator_vp_code_hash: Hash,
+        timestamp: DateTimeUtc,
+        expiration: Option<DateTimeUtc>,
+        code_hash: &str,
+        chain_id: &str,
+    ) -> Result<Self, Error> {
+        let update_account = namada_core::types::transaction::pos::InitValidator {
+            account_keys,
+            threshold,
+            consensus_key,
+            eth_cold_key,
+            eth_hot_key,
+            protocol_key,
+            commission_rate,
+            max_commission_rate_change,
+            email,
+            description,
+            website,
+            discord_handle,
+            validator_vp_code_hash,
+        };
 
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
+        build_tx(update_account.serialize_to_vec(), timestamp, expiration, code_hash, TX_INIT_VALIDATOR_WASM, chain_id)
+            .map(Self)
+    }
+
+    /// Takes any kind of inner tx and gives me back my sign bytes
+    pub fn sign_bytes(&self) -> Hash {
+        sign_bytes(&self.0)
+    }
+
+    /// Attach the given inner signatures to the transaction
+    pub fn attach_signatures(
+        &self,
+        signer: Signer,
+        signatures: BTreeMap<u8, common::Signature>,
+    ) -> Self {
+        Self(attach_inner_signatures(&self.0, signer, signatures))
+    }
+}
+
+pub struct InitProposal(Tx);
+
+impl InitProposal {
+    /// Build a raw Bond transaction from the given parameters
+    pub fn new(
+        id: Option<u64>,
+        content: Hash,
+        author: Address,
+        r#type: ProposalType,
+        voting_start_epoch: Epoch,
+        voting_end_epoch: Epoch,
+        grace_epoch: Epoch,
+        timestamp: DateTimeUtc,
+        expiration: Option<DateTimeUtc>,
+        code_hash: &str,
+        chain_id: &str,
+    ) -> Result<Self, Error> {
+        let init_proposal = namada_core::types::transaction::governance::InitProposalData {
+            id,
+            content,
+            author,
+            r#type,
+            voting_start_epoch,
+            voting_end_epoch,
+            grace_epoch,
+        };
+
+        build_tx(init_proposal.serialize_to_vec(), timestamp, expiration, code_hash, TX_INIT_PROPOSAL_WASM, chain_id)
+            .map(Self)
+    }
+
+    /// Takes any kind of inner tx and gives me back my sign bytes
+    pub fn sign_bytes(&self) -> Hash {
+        sign_bytes(&self.0)
+    }
+
+    /// Attach the given inner signatures to the transaction
+    pub fn attach_signatures(
+        &self,
+        signer: Signer,
+        signatures: BTreeMap<u8, common::Signature>,
+    ) -> Self {
+        Self(attach_inner_signatures(&self.0, signer, signatures))
+    }
+}
+
+pub struct Transfer(Tx);
+
+impl Transfer {
+    /// Build a raw Bond transaction from the given parameters
+    pub fn new(
+        source: Address,
+        target: Address,
+        token: Address,
+        amount: DenominatedAmount,
+        key: Option<String>,
+        shielded: Option<Hash>,
+        timestamp: DateTimeUtc,
+        expiration: Option<DateTimeUtc>,
+        code_hash: &str,
+        chain_id: &str,
+    ) -> Result<Self, Error> {
+        let init_proposal = namada_core::types::token::Transfer {
+            source,
+            target,
+            token,
+            amount,
+            key,
+            shielded,
+        };
+
+        build_tx(init_proposal.serialize_to_vec(), timestamp, expiration, code_hash, TX_TRANSFER_WASM, chain_id)
+            .map(Self)
+    }
+
+    /// Takes any kind of inner tx and gives me back my sign bytes
+    pub fn sign_bytes(&self) -> Hash {
+        sign_bytes(&self.0)
+    }
+
+    /// Attach the given inner signatures to the transaction
+    pub fn attach_signatures(
+        &self,
+        signer: Signer,
+        signatures: BTreeMap<u8, common::Signature>,
+    ) -> Self {
+        Self(attach_inner_signatures(&self.0, signer, signatures))
+    }
+}
+
+pub struct Withdraw(Tx);
+
+impl Withdraw {
+    /// Build a raw Bond transaction from the given parameters
+    pub fn new(
+        validator: Address,
+        source: Option<Address>,
+        timestamp: DateTimeUtc,
+        expiration: Option<DateTimeUtc>,
+        code_hash: &str,
+        chain_id: &str,
+    ) -> Result<Self, Error> {
+        let init_proposal = namada_core::types::transaction::pos::Withdraw {
+            validator,
+            source,
+        };
+
+        build_tx(init_proposal.serialize_to_vec(), timestamp, expiration, code_hash, TX_WITHDRAW_WASM, chain_id)
+            .map(Self)
+    }
+
+    /// Takes any kind of inner tx and gives me back my sign bytes
+    pub fn sign_bytes(&self) -> Hash {
+        sign_bytes(&self.0)
+    }
+
+    /// Attach the given inner signatures to the transaction
+    pub fn attach_signatures(
+        &self,
+        signer: Signer,
+        signatures: BTreeMap<u8, common::Signature>,
+    ) -> Self {
+        Self(attach_inner_signatures(&self.0, signer, signatures))
+    }
+}
+
+pub struct ClaimRewards(Tx);
+
+impl ClaimRewards {
+    /// Build a raw Bond transaction from the given parameters
+    pub fn new(
+        validator: Address,
+        source: Option<Address>,
+        timestamp: DateTimeUtc,
+        expiration: Option<DateTimeUtc>,
+        code_hash: &str,
+        chain_id: &str,
+    ) -> Result<Self, Error> {
+        let init_proposal = namada_core::types::transaction::pos::Withdraw {
+            validator,
+            source,
+        };
+
+        build_tx(init_proposal.serialize_to_vec(), timestamp, expiration, code_hash, TX_CLAIM_REWARDS_WASM, chain_id)
+            .map(Self)
+    }
+
+    /// Takes any kind of inner tx and gives me back my sign bytes
+    pub fn sign_bytes(&self) -> Hash {
+        sign_bytes(&self.0)
+    }
+
+    /// Attach the given inner signatures to the transaction
+    pub fn attach_signatures(
+        &self,
+        signer: Signer,
+        signatures: BTreeMap<u8, common::Signature>,
+    ) -> Self {
+        Self(attach_inner_signatures(&self.0, signer, signatures))
+    }
+}
+
+pub struct ChangeCommission(Tx);
+
+impl ChangeCommission {
+    /// Build a raw Bond transaction from the given parameters
+    pub fn new(
+        validator: Address,
+        new_rate: Dec,
+        timestamp: DateTimeUtc,
+        expiration: Option<DateTimeUtc>,
+        code_hash: &str,
+        chain_id: &str,
+    ) -> Result<Self, Error> {
+        let init_proposal = namada_core::types::transaction::pos::CommissionChange {
+            validator,
+            new_rate,
+        };
+
+        build_tx(init_proposal.serialize_to_vec(), timestamp, expiration, code_hash, TX_CHANGE_COMMISSION_WASM, chain_id)
+            .map(Self)
+    }
+
+    /// Takes any kind of inner tx and gives me back my sign bytes
+    pub fn sign_bytes(&self) -> Hash {
+        sign_bytes(&self.0)
+    }
+
+    /// Attach the given inner signatures to the transaction
+    pub fn attach_signatures(
+        &self,
+        signer: Signer,
+        signatures: BTreeMap<u8, common::Signature>,
+    ) -> Self {
+        Self(attach_inner_signatures(&self.0, signer, signatures))
+    }
+}
+
+pub struct ChangeMetaData(Tx);
+
+impl ChangeMetaData {
+    /// Build a raw Bond transaction from the given parameters
+    pub fn new(
+        validator: Address,
+        email: Option<String>,
+        description: Option<String>,
+        website: Option<String>,
+        discord_handle: Option<String>,
+        commission_rate: Option<Dec>,
+        timestamp: DateTimeUtc,
+        expiration: Option<DateTimeUtc>,
+        code_hash: &str,
+        chain_id: &str,
+    ) -> Result<Self, Error> {
+        let init_proposal = namada_core::types::transaction::pos::MetaDataChange {
+            validator,
+            email,
+            description,
+            website,
+            discord_handle,
+            commission_rate,
+        };
+
+        build_tx(init_proposal.serialize_to_vec(), timestamp, expiration, code_hash, TX_CHANGE_METADATA_WASM, chain_id)
+            .map(Self)
+    }
+
+    /// Takes any kind of inner tx and gives me back my sign bytes
+    pub fn sign_bytes(&self) -> Hash {
+        sign_bytes(&self.0)
+    }
+
+    /// Attach the given inner signatures to the transaction
+    pub fn attach_signatures(
+        &self,
+        signer: Signer,
+        signatures: BTreeMap<u8, common::Signature>,
+    ) -> Self {
+        Self(attach_inner_signatures(&self.0, signer, signatures))
+    }
+}
+
+pub struct ChangeConsensusKey(Tx);
+
+impl ChangeConsensusKey {
+    /// Build a raw Bond transaction from the given parameters
+    pub fn new(
+        validator: Address,
+        consensus_key: common::PublicKey,
+        timestamp: DateTimeUtc,
+        expiration: Option<DateTimeUtc>,
+        code_hash: &str,
+        chain_id: &str,
+    ) -> Result<Self, Error> {
+        let init_proposal = namada_core::types::transaction::pos::ConsensusKeyChange {
+            validator,
+            consensus_key,
+        };
+
+        build_tx(init_proposal.serialize_to_vec(), timestamp, expiration, code_hash, TX_CHANGE_CONSENSUS_KEY_WASM, chain_id)
+            .map(Self)
+    }
+
+    /// Takes any kind of inner tx and gives me back my sign bytes
+    pub fn sign_bytes(&self) -> Hash {
+        sign_bytes(&self.0)
+    }
+
+    /// Attach the given inner signatures to the transaction
+    pub fn attach_signatures(
+        &self,
+        signer: Signer,
+        signatures: BTreeMap<u8, common::Signature>,
+    ) -> Self {
+        Self(attach_inner_signatures(&self.0, signer, signatures))
+    }
+}
+
+pub struct UnjailValidator(Tx);
+
+impl UnjailValidator {
+    /// Build a raw Bond transaction from the given parameters
+    pub fn new(
+        address: Address,
+        timestamp: DateTimeUtc,
+        expiration: Option<DateTimeUtc>,
+        code_hash: &str,
+        chain_id: &str,
+    ) -> Result<Self, Error> {
+        build_tx(address.serialize_to_vec(), timestamp, expiration, code_hash, TX_UNJAIL_VALIDATOR_WASM, chain_id)
+            .map(Self)
+    }
+
+    /// Takes any kind of inner tx and gives me back my sign bytes
+    pub fn sign_bytes(&self) -> Hash {
+        sign_bytes(&self.0)
+    }
+
+    /// Attach the given inner signatures to the transaction
+    pub fn attach_signatures(
+        &self,
+        signer: Signer,
+        signatures: BTreeMap<u8, common::Signature>,
+    ) -> Self {
+        Self(attach_inner_signatures(&self.0, signer, signatures))
+    }
+}
+
+pub struct DeactivateValidator(Tx);
+
+impl DeactivateValidator {
+    /// Build a raw Bond transaction from the given parameters
+    pub fn new(
+        address: Address,
+        timestamp: DateTimeUtc,
+        expiration: Option<DateTimeUtc>,
+        code_hash: &str,
+        chain_id: &str,
+    ) -> Result<Self, Error> {
+        build_tx(address.serialize_to_vec(), timestamp, expiration, code_hash, TX_DEACTIVATE_VALIDATOR_WASM, chain_id)
+            .map(Self)
+    }
+
+    /// Takes any kind of inner tx and gives me back my sign bytes
+    pub fn sign_bytes(&self) -> Hash {
+        sign_bytes(&self.0)
+    }
+
+    /// Attach the given inner signatures to the transaction
+    pub fn attach_signatures(
+        &self,
+        signer: Signer,
+        signatures: BTreeMap<u8, common::Signature>,
+    ) -> Self {
+        Self(attach_inner_signatures(&self.0, signer, signatures))
+    }
+}
+
+pub struct ReactivateValidator(Tx);
+
+impl ReactivateValidator {
+    /// Build a raw Bond transaction from the given parameters
+    pub fn new(
+        address: Address,
+        timestamp: DateTimeUtc,
+        expiration: Option<DateTimeUtc>,
+        code_hash: &str,
+        chain_id: &str,
+    ) -> Result<Self, Error> {
+        build_tx(address.serialize_to_vec(), timestamp, expiration, code_hash, TX_REACTIVATE_VALIDATOR_WASM, chain_id)
+            .map(Self)
+    }
+
+    /// Takes any kind of inner tx and gives me back my sign bytes
+    pub fn sign_bytes(&self) -> Hash {
+        sign_bytes(&self.0)
+    }
+
+    /// Attach the given inner signatures to the transaction
+    pub fn attach_signatures(
+        &self,
+        signer: Signer,
+        signatures: BTreeMap<u8, common::Signature>,
+    ) -> Self {
+        Self(attach_inner_signatures(&self.0, signer, signatures))
+    }
+}
+
+pub struct Wrapper(Tx);
+
+impl Wrapper {
+    /// Takes a transaction and some signatures and wraps them in a wrapper
+    /// transaction
+    pub fn new(
+        tx: &Tx,
+        fee: Fee,
+        fee_payer: common::PublicKey,
+        epoch: Epoch,
+        gas_limit: GasLimit,
+        unshield_hash: Option<Hash>,
+    ) -> Self {
+        let mut tx = tx.clone();
+        tx.add_wrapper(fee, fee_payer, epoch, gas_limit, unshield_hash);
+        Self(tx)
+    }
+
+    /// Takes any kind of outer tx and gives me back my sign bytes
+    pub fn sign_bytes(&self) -> Hash {
+        let mut tx = self.0.clone();
+        tx.protocol_filter();
+        Signature {
+            targets: tx.sechashes(),
+            signer: Signer::PubKeys(vec![]),
+            signatures: BTreeMap::new(),
+        }.get_raw_hash()
+    }
+
+    /// Attach the given outer signatures to the transaction
+    pub fn attach_signatures(
+        &self,
+        signer: common::PublicKey,
+        signature: common::Signature,
+    ) -> Self {
+        let mut tx = self.0.clone();
+        tx.add_section(Section::Signature(Signature {
+            targets: tx.sechashes(),
+            signer: Signer::PubKeys(vec![signer]),
+            signatures: [(0, signature)].into_iter().collect(),
+        }));
+        Self(tx)
+    }
+
+    /// Validate this wrapper transaction
+    pub fn validate_tx(&self) -> std::result::Result<Option<&Signature>, TxError> {
+        self.0.validate_tx()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use namada_core::types::key::RefTo;
+    use namada_core::types::key::SigScheme;
+    use namada_core::types::token::Amount;
+    use namada_core::types::address::Address;
+    use std::str::FromStr;
 
     #[test]
     fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
+        // Setup the keys and addresses necessary for this test
+        let nam = Address::from_str("tnam1q8vyjrk5n30vfphaa26v7prkh8mjv4rfd5fkxh80")
+            .expect("unable to construct address");
+        let sk = common::SecretKey::from_str("0083318ccceac6c08a0177667840b4b93f0e455e45d4c38c28b73b8f8462fbf548")
+            .expect("unable to construct secret key");
+        let pk = sk.ref_to();
+        let now = DateTimeUtc::now();
+        // Make the raw reveal PK transaction
+        let reveal_pk = RevealPk::new(pk.clone(), now, None, TX_REVEAL_PK_HASH, CHAIN_ID)
+            .unwrap();
+        // Sign the raw reveal PK transaction
+        let inner_hash = reveal_pk.sign_bytes();
+        let sig = common::SigScheme::sign(&sk, inner_hash);
+        let signatures = [(0, sig)].into_iter().collect();
+        // Attach the inner signature to the transaction
+        let reveal_pk = reveal_pk.attach_signatures(Signer::PubKeys(vec![pk.clone()]), signatures);
+        let fee = Fee {
+            amount_per_gas_unit: Amount::from(10),
+            token: nam,
+        };
+        // Wrap the inner transaction
+        let wrapper_tx = Wrapper::new(
+            &reveal_pk.0,
+            fee,
+            pk.clone(),
+            Epoch::from(10),
+            GasLimit::from(20_000),
+            None,
+        );
+        // Sign the wrapper transaction
+        let outer_hash = wrapper_tx.sign_bytes();
+        let sig = common::SigScheme::sign(&sk, outer_hash);
+        // Attach the wrapper signature to the transaction
+        let wrapper_tx = wrapper_tx.attach_signatures(pk.clone(), sig);
+        // Validate the outcome
+        wrapper_tx.0.validate_tx().expect("failed to validate transaction");
     }
 }

@@ -3824,6 +3824,7 @@ dependencies = [
 name = "light_sdk"
 version = "0.27.0"
 dependencies = [
+ "borsh-ext",
  "namada_core",
 ]
 
