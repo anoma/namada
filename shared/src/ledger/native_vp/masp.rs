@@ -58,23 +58,6 @@ fn asset_type_from_epoched_address(
     AssetType::new(token_bytes.as_ref()).expect("unable to create asset type")
 }
 
-/// Checks if the asset type matches the expected asset type, Adds a
-/// debug log if the values do not match.
-fn valid_asset_type(
-    asset_type: &AssetType,
-    asset_type_to_test: &AssetType,
-) -> bool {
-    let res =
-        asset_type.get_identifier() == asset_type_to_test.get_identifier();
-    if !res {
-        tracing::debug!(
-            "The asset type must be derived from the token address and \
-             current epoch"
-        );
-    }
-    res
-}
-
 /// Checks if the reported transparent amount and the unshielded
 /// values agree, if not adds to the debug log
 fn valid_transfer_amount(
@@ -196,20 +179,23 @@ where
                     None => continue,
                 };
 
-                let expected_asset_type: AssetType =
-                    asset_type_from_epoched_address(
-                        epoch,
-                        &transfer.token,
-                        denom,
-                    );
-
                 // Satisfies 2. and 3.
-                if !valid_asset_type(&expected_asset_type, &out.asset_type) {
-                    // we don't know which masp denoms are necessary
-                    // apriori. This is encoded via
-                    // the asset types.
-                    continue;
-                }
+                let conversion_state = self.ctx.storage.get_conversion_state();
+                let asset_epoch =
+                    match conversion_state.assets.get(&out.asset_type) {
+                        Some(((address, _), asset_epoch, _, _))
+                            if address == &transfer.token =>
+                        {
+                            asset_epoch
+                        }
+                        _ => {
+                            // we don't know which masp denoms are necessary
+                            // apriori. This is encoded via
+                            // the asset types.
+                            continue;
+                        }
+                    };
+
                 if !valid_transfer_amount(
                     out.value,
                     denom.denominate(&transfer.amount.amount),
@@ -218,7 +204,7 @@ where
                 }
 
                 let (_transp_asset, transp_amt) = convert_amount(
-                    epoch,
+                    *asset_epoch,
                     &transfer.token,
                     transfer.amount.amount,
                     denom,
@@ -285,6 +271,7 @@ where
             }
             _ => {}
         }
+
         // Verify the proofs and charge the gas for the expensive execution
         self.ctx
             .charge_gas(MASP_VERIFY_SHIELDED_TX_GAS)
