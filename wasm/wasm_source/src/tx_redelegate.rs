@@ -403,15 +403,21 @@ mod tests {
             address::testing::arb_non_internal_address(),
             token::testing::arb_amount_non_zero_ceiled(max_amount),
         )
-            .prop_map(
+            .prop_filter_map(
+                "Src and dest validator must not be the same",
                 |(src_validator, dest_validator, owner, amount)| {
-                    let src_validator = Address::Established(src_validator);
-                    let dest_validator = Address::Established(dest_validator);
-                    transaction::pos::Redelegation {
-                        src_validator,
-                        dest_validator,
-                        owner,
-                        amount,
+                    if src_validator == dest_validator {
+                        None
+                    } else {
+                        let src_validator = Address::Established(src_validator);
+                        let dest_validator =
+                            Address::Established(dest_validator);
+                        Some(transaction::pos::Redelegation {
+                            src_validator,
+                            dest_validator,
+                            owner,
+                            amount,
+                        })
                     }
                 },
             )
