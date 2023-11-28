@@ -283,7 +283,10 @@ fn setup_two_single_node_nets() -> Result<(Test, Test)> {
         .as_mut()
         .unwrap()
         .iter_mut()
-        .find(|val| val.address == validator_addr)
+        .find(|val| {
+            Address::Established(val.tx.data.address.raw.clone())
+                == validator_addr
+        })
         .unwrap();
     let new_port = validator_tx.tx.data.net_address.port()
         + setup::ANOTHER_CHAIN_PORT_OFFSET;

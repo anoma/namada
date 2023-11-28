@@ -9,6 +9,7 @@ use namada::ledger::storage_api::token::{credit_tokens, write_denom};
 use namada::ledger::storage_api::StorageWrite;
 use namada::ledger::{ibc, pos};
 use namada::proof_of_stake::BecomeValidator;
+use namada::types::address::Address;
 use namada::types::hash::Hash as CodeHash;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
@@ -389,11 +390,11 @@ where
     ) {
         if let Some(txs) = genesis.transactions.validator_account.as_ref() {
             for FinalizedValidatorAccountTx {
-                address,
                 tx:
                     SignedTx {
                         data:
                             ValidatorAccountTx {
+                                address,
                                 vp,
                                 commission_rate,
                                 max_commission_rate_change,
@@ -410,6 +411,8 @@ where
                     },
             } in txs
             {
+                let address = &Address::Established(address.raw.clone());
+
                 tracing::debug!(
                     "Applying genesis tx to init a validator account {address}"
                 );

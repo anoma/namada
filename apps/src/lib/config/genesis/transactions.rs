@@ -1,22 +1,33 @@
 //! Genesis transactions
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::Debug;
 use std::net::SocketAddr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use borsh_ext::BorshSerializeExt;
 use itertools::{Either, Itertools};
+use ledger_namada_rs::NamadaApp;
+use ledger_transport_hid::hidapi::HidApi;
+use ledger_transport_hid::TransportNativeHID;
+use namada::core::types::account::AccountPublicKeysMap;
 use namada::core::types::address::{Address, EstablishedAddress};
+use namada::core::types::chain::ChainId;
 use namada::core::types::string_encoding::StringEncoded;
 use namada::ledger::pos::common::PublicKey;
 use namada::ledger::pos::types::ValidatorMetaData;
-use namada::proto::{verify_standalone_sig, Section, SerializeWithBorsh, Tx};
+use namada::proto::{
+    verify_standalone_sig, Code, Commitment, Data, Section, SerializeWithBorsh,
+    SignatureIndex, Tx,
+};
+use namada::types::address::nam;
 use namada::types::dec::Dec;
-use namada::types::key::{common, ed25519, RefTo, SigScheme, VerifySigError};
+use namada::types::key::{common, ed25519, RefTo, SigScheme};
 use namada::types::time::{DateTimeUtc, MIN_UTC};
 use namada::types::token;
 use namada::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
 use namada::types::transaction::{pos, Fee, TxType};
+use namada_sdk::args::Tx as TxArgs;
 use namada_sdk::signing::{sign_tx, SigningTxData};
 use namada_sdk::tx::{TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM};
 use namada_sdk::wallet::alias::Alias;
@@ -26,13 +37,18 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
 use super::templates::{DenominatedBalances, Parameters, ValidityPredicates};
-use crate::cli::args;
 use crate::config::genesis::chain::DeriveEstablishedAddress;
 use crate::config::genesis::templates::{
     TemplateValidation, Unvalidated, Validated,
 };
 use crate::config::genesis::{utils, GenesisAddress};
 use crate::wallet::CliWalletUtils;
+
+/// Dummy chain id used to sign [`Tx`] objects at pre-genesis.
+const NAMADA_GENESIS_TX_CHAIN_ID: &str = "namada-genesis";
+
+/// Timestamp used to sign pre-genesis [`Tx`] objects.
+pub const PRE_GENESIS_TX_TIMESTAMP: DateTimeUtc = MIN_UTC;
 
 /// Helper trait to fetch tx data to sign.
 pub trait TxToSign {
@@ -48,14 +64,51 @@ pub trait TxToSign {
     fn get_owner(&self) -> GenesisAddress;
 }
 
+/// Return a dummy set of tx arguments to sign with the
+/// hardware wallet.
+fn get_tx_args(use_device: bool) -> TxArgs {
+    TxArgs {
+        dry_run: false,
+        dry_run_wrapper: false,
+        dump_tx: false,
+        output_folder: None,
+        force: false,
+        broadcast_only: false,
+        ledger_address: (),
+        initialized_account_alias: None,
+        wallet_alias_force: false,
+        fee_amount: None,
+        wrapper_fee_payer: None,
+        fee_token: nam(),
+        fee_unshield: None,
+        gas_limit: Default::default(),
+        expiration: None,
+        disposable_signing_key: false,
+        chain_id: None,
+        signing_keys: vec![],
+        signatures: vec![],
+        tx_reveal_code_path: Default::default(),
+        verification_key: None,
+        password: None,
+        use_device,
+    }
+}
+
 /// Return a ready to sign genesis [`Tx`].
 fn get_tx_to_sign(tag: impl AsRef<str>, data: impl BorshSerialize) -> Tx {
     let mut tx = Tx::from_type(TxType::Raw);
-    tx.add_code_from_hash(Default::default(), Some(tag.as_ref().to_string()));
-    tx.add_data(data);
-    let pk =
-        common::SecretKey::Ed25519(ed25519::SigScheme::from_bytes([0; 32]))
-            .ref_to();
+    tx.header.chain_id = ChainId(NAMADA_GENESIS_TX_CHAIN_ID.to_string());
+    tx.header.timestamp = PRE_GENESIS_TX_TIMESTAMP;
+    tx.set_code(Code {
+        salt: [0; 8],
+        code: Commitment::Hash(Default::default()),
+        tag: Some(tag.as_ref().to_string()),
+    });
+    tx.set_data(Data {
+        salt: [0; 8],
+        data: data.serialize_to_vec(),
+    });
+    let pk = get_sentinnel_pubkey();
     tx.add_wrapper(
         Fee {
             amount_per_gas_unit: Default::default(),
@@ -69,7 +122,11 @@ fn get_tx_to_sign(tag: impl AsRef<str>, data: impl BorshSerialize) -> Tx {
     tx
 }
 
-pub const PRE_GENESIS_TX_TIMESTAMP: DateTimeUtc = MIN_UTC;
+/// Get a dummy public key.
+#[inline]
+fn get_sentinnel_pubkey() -> common::PublicKey {
+    common::SecretKey::Ed25519(ed25519::SigScheme::from_bytes([0; 32])).ref_to()
+}
 
 pub struct GenesisValidatorData {
     pub address: EstablishedAddress,
@@ -90,6 +147,7 @@ pub async fn sign_txs(
     txs: UnsignedTransactions,
     wallet: &mut Wallet<CliWalletUtils>,
     validator_wallet: Option<&ValidatorWallet>,
+    use_device: bool,
 ) -> Transactions<Unvalidated> {
     let UnsignedTransactions {
         established_account,
@@ -106,6 +164,7 @@ pub async fn sign_txs(
                     tx.into(),
                     wallet,
                     &established_account,
+                    use_device,
                 )
                 .await,
             );
@@ -131,6 +190,7 @@ pub async fn sign_txs(
                             "Established account txs required when signing \
                              validator account txs",
                         ),
+                        use_device,
                     )
                     .await,
                 );
@@ -255,7 +315,7 @@ pub async fn sign_validator_account_tx(
     >,
     wallet: &mut Wallet<CliWalletUtils>,
     established_accounts: &[EstablishedAccountTx],
-    args: args::Tx,
+    use_device: bool,
 ) -> SignedValidatorAccountTx {
     let mut to_sign = match to_sign {
         Either::Right(signed_tx) => signed_tx,
@@ -336,7 +396,7 @@ pub async fn sign_validator_account_tx(
         }
     };
 
-    to_sign.sign(established_accounts, wallet, args).await;
+    to_sign.sign(established_accounts, wallet, use_device).await;
     to_sign
 }
 
@@ -344,12 +404,12 @@ pub async fn sign_delegation_bond_tx(
     mut to_sign: SignedBondTx<Unvalidated>,
     wallet: &mut Wallet<CliWalletUtils>,
     established_accounts: &Option<Vec<EstablishedAccountTx>>,
-    args: args::Tx,
+    use_device: bool,
 ) -> SignedBondTx<Unvalidated> {
     let default = vec![];
     let established_accounts =
         established_accounts.as_ref().unwrap_or(&default);
-    to_sign.sign(established_accounts, wallet, &mut args).await;
+    to_sign.sign(established_accounts, wallet, use_device).await;
     to_sign
 }
 
@@ -541,7 +601,7 @@ impl TxToSign for ValidatorAccountTx<SignedPk> {
         established_accounts
             .iter()
             .find_map(|account| {
-                if &account.derive_established_address() == self.address.raw {
+                if account.derive_established_address() == self.address.raw {
                     Some((
                         account
                             .public_keys
@@ -637,11 +697,10 @@ impl<T> Signed<T> {
         &mut self,
         established_accounts: &[EstablishedAccountTx],
         wallet: &mut Wallet<CliWalletUtils>,
-        args: args::Tx,
+        use_device: bool,
     ) where
         T: BorshSerialize + TxToSign,
     {
-        let wallet_lock = RwLock::new(wallet);
         let (pks, threshold) = self.data.get_pks(established_accounts);
         let owner = self.data.get_owner().address();
         let signing_data = SigningTxData {
@@ -649,30 +708,63 @@ impl<T> Signed<T> {
             account_public_keys_map: Some(pks.iter().cloned().collect()),
             public_keys: pks.clone(),
             threshold,
-            fee_payer: common::SecretKey::Ed25519(
-                ed25519::SigScheme::from_bytes([0; 32]),
-            )
-            .ref_to(),
+            fee_payer: get_sentinnel_pubkey(),
         };
 
         let mut tx = self.data.tx_to_sign();
-        sign_tx(
-            wallet,
-            &args,
-            &mut tx,
-            signing_data,
-            utils::with_hardware_wallet(&wallet_lock),
-        )
-        .await
-        .expect("Failed to sign pre-genesis transaction.");
+        let wallet_lock = RwLock::new(wallet);
+
+        if use_device {
+            let hidapi = HidApi::new().expect("Failed to create Hidapi");
+            let transport = TransportNativeHID::new(&hidapi)
+                .expect("Failed to create hardware wallet connection");
+            let app = NamadaApp::new(transport);
+
+            sign_tx(
+                &wallet_lock,
+                &get_tx_args(use_device),
+                &mut tx,
+                signing_data,
+                utils::with_hardware_wallet,
+                (&wallet_lock, &app),
+            )
+            .await
+            .expect("Failed to sign pre-genesis transaction.");
+        } else {
+            async fn software_wallet_sign(
+                tx: Tx,
+                pubkey: common::PublicKey,
+                _parts: HashSet<namada_sdk::signing::Signable>,
+                _user: (),
+            ) -> Result<Tx, namada_sdk::error::Error> {
+                if pubkey == get_sentinnel_pubkey() {
+                    Ok(tx)
+                } else {
+                    Err(namada_sdk::error::Error::Other(format!(
+                        "unable to sign transaction with {pubkey}",
+                    )))
+                }
+            }
+
+            sign_tx(
+                &wallet_lock,
+                &get_tx_args(use_device),
+                &mut tx,
+                signing_data,
+                software_wallet_sign,
+                (),
+            )
+            .await
+            .expect("Failed to sign pre-genesis transaction.");
+        }
 
         let raw_header_hash = tx.raw_header_hash();
         let sigs = tx
             .sections
-            .iter()
+            .into_iter()
             .find_map(|sec| {
                 if let Section::Signature(signatures) = sec {
-                    if &[raw_header_hash] == signatures.targets.as_slice() {
+                    if [raw_header_hash] == signatures.targets.as_slice() {
                         Some(signatures)
                     } else {
                         None
@@ -691,39 +783,40 @@ impl<T> Signed<T> {
     }
 
     /// Verify the signatures of the inner data.
-    pub fn verify_sig(
-        &self,
-        pks: &[common::PublicKey],
-        threshold: u8,
-    ) -> Result<(), VerifySigError>
+    pub fn verify_sig(&self, threshold: u8) -> Result<(), String>
     where
         T: BorshSerialize + TxToSign,
     {
         let Self { data, signatures } = self;
-        if pks.len() > u8::MAX as usize {
-            eprintln!("You're multisig is too facking big");
-            return Err(VerifySigError::TooGoddamnBig);
-        }
-        let mut valid_sigs = 0;
-        let tx_to_sign = data.tx_to_sign();
-        for pk in pks {
-            if let Some(sig) = signatures.get(&StringEncoded::new(pk.clone())) {
-                valid_sigs += verify_standalone_sig::<_, SerializeWithBorsh>(
-                    &tx_to_sign,
-                    pk,
-                    &sig.raw,
+        let (public_keys, signatures): (Vec<_>, Vec<_>) = signatures
+            .iter()
+            .map(|(pk, sig)| {
+                (
+                    pk.raw.clone(),
+                    SignatureIndex {
+                        index: None,
+                        signature: sig.raw.clone(),
+                        pubkey: pk.raw.clone(),
+                    },
                 )
-                .is_ok() as u8;
-                if valid_sigs >= threshold {
-                    break;
-                }
-            }
-        }
-        if valid_sigs >= threshold {
-            Ok(())
-        } else {
-            Err(VerifySigError::ThresholdNotMet(threshold, valid_sigs))
-        }
+            })
+            .unzip();
+        let signed_tx = {
+            let mut tx = data.tx_to_sign();
+            tx.add_signatures(signatures);
+            tx
+        };
+        signed_tx
+            .verify_signatures(
+                &[signed_tx.raw_header_hash()],
+                AccountPublicKeysMap::from_iter(public_keys.into_iter()),
+                &None,
+                threshold,
+                None,
+                || Ok(()),
+            )
+            .map_err(|err| err.to_string())?;
+        Ok(())
     }
 }
 
@@ -995,22 +1088,18 @@ fn validate_bond(
     // Check signature
     let mut is_valid = {
         let source = &tx.data.source;
-        let maybe_source = match source {
+        let maybe_threshold = match source {
             GenesisAddress::EstablishedAddress(address) => {
                 // Try to find the source's PK in either established_accounts or
                 // validator_accounts
                 let established_addr = Address::Established(address.clone());
-                established_accounts
-                    .get(&established_addr)
-                    .map(|(pks, t)| (pks.as_slice(), *t))
+                established_accounts.get(&established_addr).map(|(_, t)| *t)
             }
-            GenesisAddress::PublicKey(pk) => {
-                Some((std::slice::from_ref(&pk.raw), 1))
-            }
+            GenesisAddress::PublicKey(_) => Some(1),
         };
-        if let Some((source_pks, threshold)) = maybe_source {
-            if tx.verify_sig(source_pks, threshold).is_err() {
-                eprintln!("Invalid bond tx signature.",);
+        if let Some(threshold) = maybe_threshold {
+            if let Err(err) = tx.verify_sig(threshold) {
+                eprintln!("Invalid bond tx signature: {err}");
                 false
             } else {
                 true
@@ -1194,7 +1283,7 @@ pub fn validate_validator_account(
 
     // Check signature
     let mut is_valid = {
-        let maybe_source = {
+        let maybe_threshold = {
             let established_addr = Address::Established(tx.address.raw.clone());
             established_accounts.get(&established_addr).map(|(pks, t)| {
                 let all_ed25519_keys = pks
@@ -1206,12 +1295,12 @@ pub fn validate_validator_account(
                          {established_addr} are Ed25519 keys"
                     );
                 }
-                (pks.as_slice(), *t)
+                *t
             })
         };
-        if let Some((source_pks, threshold)) = maybe_source {
-            if signed_tx.verify_sig(source_pks, threshold).is_err() {
-                eprintln!("Invalid validator account signature.");
+        if let Some(threshold) = maybe_threshold {
+            if let Err(err) = signed_tx.verify_sig(threshold) {
+                eprintln!("Invalid validator account signature: {err}");
                 false
             } else {
                 true

@@ -208,6 +208,7 @@ pub async fn default_sign(
     _tx: Tx,
     pubkey: common::PublicKey,
     _parts: HashSet<Signable>,
+    _user: (),
 ) -> Result<Tx, Error> {
     Err(Error::Other(format!(
         "unable to sign transaction with {}",
@@ -226,17 +227,19 @@ pub async fn default_sign(
 /// hashes needed for monitoring the tx on chain.
 ///
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
-pub async fn sign_tx<
-    'a,
-    U: WalletIo,
-    F: std::future::Future<Output = Result<Tx, Error>>,
->(
+pub async fn sign_tx<'a, D, F, U>(
     wallet: &RwLock<&'a mut Wallet<U>>,
     args: &args::Tx,
     tx: &mut Tx,
     signing_data: SigningTxData,
-    sign: impl Fn(Tx, common::PublicKey, HashSet<Signable>) -> F,
-) -> Result<(), Error> {
+    sign: impl Fn(Tx, common::PublicKey, HashSet<Signable>, D) -> F,
+    user_data: D,
+) -> Result<(), Error>
+where
+    D: Clone,
+    U: WalletIo,
+    F: std::future::Future<Output = Result<Tx, Error>>,
+{
     let mut used_pubkeys = HashSet::new();
 
     // First try to sign the raw header with the supplied signatures
@@ -290,6 +293,7 @@ pub async fn sign_tx<
                 tx.clone(),
                 pubkey.clone(),
                 HashSet::from([Signable::RawHeader]),
+                user_data.clone(),
             )
             .await
             {
@@ -316,6 +320,7 @@ pub async fn sign_tx<
                 tx.clone(),
                 signing_data.fee_payer.clone(),
                 HashSet::from([Signable::FeeHeader, Signable::RawHeader]),
+                user_data,
             )
             .await?;
         }
