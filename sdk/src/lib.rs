@@ -528,14 +528,27 @@ pub trait Namada<'a>: Sized {
     }
 
     /// Sign the given transaction using the given signing data
-    async fn sign<F: std::future::Future<Output = crate::error::Result<Tx>>>(
+    async fn sign<D, F>(
         &self,
         tx: &mut Tx,
         args: &args::Tx,
         signing_data: SigningTxData,
-        with: impl Fn(Tx, common::PublicKey, HashSet<signing::Signable>) -> F,
-    ) -> crate::error::Result<()> {
-        signing::sign_tx(self.wallet_lock(), args, tx, signing_data, with).await
+        with: impl Fn(Tx, common::PublicKey, HashSet<signing::Signable>, D) -> F,
+        user_data: D,
+    ) -> crate::error::Result<()>
+    where
+        D: Clone,
+        F: std::future::Future<Output = crate::error::Result<Tx>>,
+    {
+        signing::sign_tx(
+            self.wallet_lock(),
+            args,
+            tx,
+            signing_data,
+            with,
+            user_data,
+        )
+        .await
     }
 
     /// Process the given transaction using the given flags

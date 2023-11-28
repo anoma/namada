@@ -11,7 +11,6 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 use itertools::Either;
 use namada::core::types::string_encoding::StringEncoded;
-use namada::types::address::nam;
 use namada::types::chain::ChainId;
 use namada::types::dec::Dec;
 use namada::types::key::*;
@@ -993,6 +992,7 @@ pub async fn sign_genesis_tx(
                     unsigned,
                     &mut wallet,
                     maybe_pre_genesis_wallet.as_ref(),
+                    use_device,
                 )
                 .await,
                 true,
@@ -1018,7 +1018,7 @@ pub async fn sign_genesis_tx(
                                 tx,
                                 &mut wallet,
                                 &genesis_txs.established_account,
-                                get_tx_args(use_device),
+                                use_device,
                             )
                             .await,
                         );
@@ -1040,7 +1040,7 @@ pub async fn sign_genesis_tx(
                                         "Established account txs required \
                                          when signing validator account txs",
                                     ),
-                                get_tx_args(use_device),
+                                use_device,
                             )
                             .await,
                         );
@@ -1080,34 +1080,6 @@ pub async fn sign_genesis_tx(
             println!();
             println!("{transactions}");
         }
-    }
-}
-
-fn get_tx_args(use_device: bool) -> args::Tx {
-    args::Tx {
-        dry_run: false,
-        dry_run_wrapper: false,
-        dump_tx: false,
-        output_folder: None,
-        force: false,
-        broadcast_only: false,
-        ledger_address: (),
-        initialized_account_alias: None,
-        wallet_alias_force: false,
-        fee_amount: None,
-        wrapper_fee_payer: None,
-        fee_token: nam(),
-        fee_unshield: None,
-        gas_limit: Default::default(),
-        expiration: None,
-        disposable_signing_key: false,
-        chain_id: None,
-        signing_keys: vec![],
-        signatures: vec![],
-        tx_reveal_code_path: Default::default(),
-        verification_key: None,
-        password: None,
-        use_device,
     }
 }
 

@@ -1,10 +1,8 @@
 use std::collections::HashSet;
-use std::future::Future;
 use std::path::Path;
 
 use eyre::Context;
 use ledger_namada_rs::NamadaApp;
-use ledger_transport_hid::hidapi::HidApi;
 use ledger_transport_hid::TransportNativeHID;
 use namada::proto::Tx;
 use namada::types::key::common;
@@ -49,28 +47,24 @@ pub fn write_toml<T: Serialize>(
     })
 }
 
-pub(super) fn with_hardware_wallet<F, T>(
-    wallet: &RwLock<&mut Wallet<CliWalletUtils>>,
-) -> F
-where
-    F: Fn(Tx, common::PublicKey, HashSet<signing::Signable>) -> T,
-    T: Future<Output = Result<Tx, error::Error>> + Sized,
-{
-    // Setup a reusable context for signing transactions using the Ledger
-    let hidapi =
-        HidApi::new().map_err(|err| panic!("Failed to create Hidapi: {}", err));
-    let app = NamadaApp::new(
-        TransportNativeHID::new(&hidapi)
-            .map_err(|err| panic!("Unable to connect to Ledger: {}", err))?,
-    );
-    |tx: Tx, pubkey: common::PublicKey, parts: HashSet<signing::Signable>| async move {
-        if parts.contains(&signing::Signable::FeeHeader) {
-            return Ok(tx);
-        }
-        let app = app;
-        let with_hw = crate::client::tx::with_hardware_wallet::<CliWalletUtils>(
-            wallet, &app,
-        );
-        with_hw(tx, pubkey, parts).await
+pub(super) async fn with_hardware_wallet<'a>(
+    tx: Tx,
+    pubkey: common::PublicKey,
+    parts: HashSet<signing::Signable>,
+    (wallet, app): (
+        &RwLock<&'a mut Wallet<CliWalletUtils>>,
+        &NamadaApp<TransportNativeHID>,
+    ),
+) -> Result<Tx, error::Error> {
+    if parts.contains(&signing::Signable::FeeHeader) {
+        Ok(tx)
+    } else {
+        crate::client::tx::with_hardware_wallet(
+            tx,
+            pubkey,
+            parts,
+            (wallet, app),
+        )
+        .await
     }
 }
