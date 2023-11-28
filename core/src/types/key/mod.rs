@@ -129,8 +129,6 @@ pub enum VerifySigError {
          required {0} got {1}"
     )]
     ThresholdNotMet(u8, u8),
-    #[error("Too many fucking sigs")]
-    TooGoddamnBig,
 }
 
 #[allow(missing_docs)]
