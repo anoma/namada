@@ -23,6 +23,7 @@ use super::ChangedKeys;
 use crate::protocol::transactions::utils;
 use crate::protocol::transactions::votes::update::NewVotes;
 use crate::protocol::transactions::votes::{self, calculate_new};
+use crate::storage::eth_bridge_queries::EthBridgeQueries;
 use crate::storage::vote_tallies::{self, Keys};
 
 impl utils::GetVoters for &HashSet<EthMsgUpdate> {
@@ -63,7 +64,16 @@ where
          protocol transaction"
     );
 
-    let updates = events.into_iter().map(Into::<EthMsgUpdate>::into).collect();
+    let updates = events
+        .into_iter()
+        .filter_map(|multisigned| {
+            // NB: discard events with outdated nonces
+            wl_storage
+                .ethbridge_queries()
+                .validate_eth_event_nonce(&multisigned.event)
+                .then(|| EthMsgUpdate::from(multisigned))
+        })
+        .collect();
 
     let voting_powers = utils::get_voting_powers(wl_storage, &updates)?;
 
@@ -861,5 +871,90 @@ mod tests {
             }
             (_, Some(_)) => {}
         });
+    }
+
+    /// Test that [`MultiSignedEthEvent`]s with outdated nonces do
+    /// not result in votes in storage.
+    #[test]
+    fn test_apply_derived_tx_outdated_nonce() -> Result<()> {
+        let (mut wl_storage, _) = test_utils::setup_default_storage();
+
+        let new_multisigned = |nonce: u64| {
+            let (validator, _) = test_utils::default_validator();
+            let event = EthereumEvent::TransfersToNamada {
+                nonce: nonce.into(),
+                transfers: vec![TransferToNamada {
+                    amount: Amount::from(100),
+                    asset: DAI_ERC20_ETH_ADDRESS,
+                    receiver: validator.clone(),
+                }],
+            };
+            let signers = BTreeSet::from([(validator, BlockHeight(100))]);
+            (
+                MultiSignedEthEvent {
+                    event: event.clone(),
+                    signers,
+                },
+                event,
+            )
+        };
+        macro_rules! nonce_ok {
+            ($nonce:expr) => {
+                let (multisigned, event) = new_multisigned($nonce);
+                let tx_result =
+                    apply_derived_tx(&mut wl_storage, vec![multisigned])?;
+
+                let eth_msg_keys = vote_tallies::Keys::from(&event);
+                assert!(
+                    tx_result.changed_keys.contains(&eth_msg_keys.seen()),
+                    "The Ethereum event should have been seen",
+                );
+                assert_eq!(
+                    wl_storage
+                        .ethbridge_queries()
+                        .get_next_nam_transfers_nonce(),
+                    ($nonce + 1).into(),
+                    "The transfers to Namada nonce should have been \
+                     incremented",
+                );
+            };
+        }
+        macro_rules! nonce_err {
+            ($nonce:expr) => {
+                let (multisigned, event) = new_multisigned($nonce);
+                let tx_result =
+                    apply_derived_tx(&mut wl_storage, vec![multisigned])?;
+
+                let eth_msg_keys = vote_tallies::Keys::from(&event);
+                assert!(
+                    !tx_result.changed_keys.contains(&eth_msg_keys.seen()),
+                    "The Ethereum event should have been ignored",
+                );
+                assert_eq!(
+                    wl_storage
+                        .ethbridge_queries()
+                        .get_next_nam_transfers_nonce(),
+                    NEXT_NONCE_TO_PROCESS.into(),
+                    "The transfers to Namada nonce should not have changed",
+                );
+            };
+        }
+
+        // update storage with valid events
+        const NEXT_NONCE_TO_PROCESS: u64 = 3;
+        for nonce in 0..NEXT_NONCE_TO_PROCESS {
+            nonce_ok!(nonce);
+        }
+
+        // attempts to replay events with older nonces should
+        // result in the events getting ignored
+        for nonce in 0..NEXT_NONCE_TO_PROCESS {
+            nonce_err!(nonce);
+        }
+
+        // process new valid event
+        nonce_ok!(NEXT_NONCE_TO_PROCESS);
+
+        Ok(())
     }
 }

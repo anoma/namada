@@ -254,18 +254,32 @@ impl EthereumReceiver {
         }
     }
 
-    /// Pull messages from the channel and add to queue
-    /// Since vote extensions require ordering of ethereum
-    /// events, we do that here. We also de-duplicate events
-    pub fn fill_queue(&mut self) {
+    /// Pull Ethereum events from the oracle and queue them to
+    /// be voted on.
+    ///
+    /// Since vote extensions require ordering of Ethereum
+    /// events, we do that here. We also de-duplicate events.
+    /// Events may be filtered out of the queue with a provided
+    /// predicate.
+    pub fn fill_queue<F>(&mut self, mut keep_event: F)
+    where
+        F: FnMut(&EthereumEvent) -> bool,
+    {
         let mut new_events = 0;
+        let mut filtered_events = 0;
         while let Ok(eth_event) = self.channel.try_recv() {
-            if self.queue.insert(eth_event) {
+            if keep_event(&eth_event) && self.queue.insert(eth_event) {
                 new_events += 1;
-            };
+            } else {
+                filtered_events += 1;
+            }
         }
-        if new_events > 0 {
-            tracing::info!(n = new_events, "received Ethereum events");
+        if new_events + filtered_events > 0 {
+            tracing::info!(
+                new_events,
+                filtered_events,
+                "received Ethereum events"
+            );
         }
     }
 
@@ -2378,6 +2392,75 @@ mod shell_tests {
             vote_extension.data.ethereum_events,
             vec![ethereum_event_0, ethereum_event_1]
         );
+    }
+
+    /// Test that Ethereum events with outdated nonces are
+    /// not validated by `CheckTx`.
+    #[test]
+    fn test_outdated_nonce_mempool_validate() {
+        use namada::types::storage::InnerEthEventsQueue;
+
+        const LAST_HEIGHT: BlockHeight = BlockHeight(3);
+
+        let (mut shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
+        shell
+            .wl_storage
+            .storage
+            .eth_events_queue
+            // sent transfers to namada nonce to 5
+            .transfers_to_namada = InnerEthEventsQueue::new_at(5.into());
+
+        let (protocol_key, _, _) = wallet::defaults::validator_keys();
+
+        // only bad events
+        {
+            let ethereum_event = EthereumEvent::TransfersToNamada {
+                nonce: 3u64.into(),
+                transfers: vec![],
+            };
+            let ext = {
+                let ext = ethereum_events::Vext {
+                    validator_addr: wallet::defaults::validator_address(),
+                    block_height: LAST_HEIGHT,
+                    ethereum_events: vec![ethereum_event],
+                }
+                .sign(&protocol_key);
+                assert!(ext.verify(&protocol_key.ref_to()).is_ok());
+                ext
+            };
+            let tx = EthereumTxData::EthEventsVext(ext)
+                .sign(&protocol_key, shell.chain_id.clone())
+                .to_bytes();
+            let rsp = shell.mempool_validate(&tx, Default::default());
+            assert!(rsp.code != 0, "Validation should have failed");
+        }
+
+        // at least one good event
+        {
+            let e1 = EthereumEvent::TransfersToNamada {
+                nonce: 3u64.into(),
+                transfers: vec![],
+            };
+            let e2 = EthereumEvent::TransfersToNamada {
+                nonce: 5u64.into(),
+                transfers: vec![],
+            };
+            let ext = {
+                let ext = ethereum_events::Vext {
+                    validator_addr: wallet::defaults::validator_address(),
+                    block_height: LAST_HEIGHT,
+                    ethereum_events: vec![e1, e2],
+                }
+                .sign(&protocol_key);
+                assert!(ext.verify(&protocol_key.ref_to()).is_ok());
+                ext
+            };
+            let tx = EthereumTxData::EthEventsVext(ext)
+                .sign(&protocol_key, shell.chain_id.clone())
+                .to_bytes();
+            let rsp = shell.mempool_validate(&tx, Default::default());
+            assert!(rsp.code == 0, "Validation should have passed");
+        }
     }
 
     /// Test that we do not include protocol txs in the mempool,
