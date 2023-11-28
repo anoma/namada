@@ -86,7 +86,8 @@ index-set = {git = "https://github.com/heliaxdev/index-set", tag = "v0.8.0", fea
 itertools = "0.10.0"
 k256 = { version = "0.13.0", default-features = false, features = ["ecdsa", "pkcs8", "precomputed-tables", "serde", "std"]}
 lazy_static = "1.4.0"
-ledger-namada-rs = { git = "https://github.com/heliaxdev/ledger-namada", rev = "7e861c440de0fdabaf51e30d97f5c8736be348f3" }
+# branch = "murisi/ledger-v0.27.0"
+ledger-namada-rs = { git = "https://github.com/heliaxdev/ledger-namada", rev = "4fd882b84af7c93a1332c32a4e3d705fd63f09ab" }
 ledger-transport-hid = "0.10.0"
 libc = "0.2.97"
 libloading = "0.7.2"
