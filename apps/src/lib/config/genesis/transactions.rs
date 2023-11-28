@@ -1098,8 +1098,8 @@ fn validate_bond(
             GenesisAddress::PublicKey(_) => Some(1),
         };
         if let Some(threshold) = maybe_threshold {
-            if tx.verify_sig(threshold).is_err() {
-                eprintln!("Invalid bond tx signature.",);
+            if let Err(err) = tx.verify_sig(threshold).is_err() {
+                eprintln!("Invalid bond tx signature: {err}");
                 false
             } else {
                 true
