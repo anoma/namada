@@ -45,7 +45,7 @@ where
     pub ctx: Ctx<'a, DB, H, CA>,
 }
 
-/// Generates the current asset type given the current epoch and an
+/// Generates the current asset type given the provided epoch and an
 /// unique token address
 fn asset_type_from_epoched_address(
     epoch: Epoch,
@@ -82,13 +82,12 @@ fn convert_amount(
     token: &Address,
     val: token::Amount,
     denom: token::MaspDenom,
-) -> (AssetType, I128Sum) {
+) -> I128Sum {
     let asset_type = asset_type_from_epoched_address(epoch, token, denom);
     // Combine the value and unit into one amount
-    let amount =
-        I128Sum::from_nonnegative(asset_type, denom.denominate(&val) as i128)
-            .expect("invalid value or asset type for amount");
-    (asset_type, amount)
+
+    I128Sum::from_nonnegative(asset_type, denom.denominate(&val) as i128)
+        .expect("invalid value or asset type for amount")
 }
 
 impl<'a, DB, H, CA> NativeVp for MaspVp<'a, DB, H, CA>
@@ -117,7 +116,7 @@ where
             // where the shielded value has an incorrect timestamp
             // are automatically rejected
             for denom in token::MaspDenom::iter() {
-                let (_transp_asset, transp_amt) = convert_amount(
+                let transp_amt = convert_amount(
                     epoch,
                     &transfer.token,
                     transfer.amount.into(),
@@ -203,7 +202,7 @@ where
                     return Ok(false);
                 }
 
-                let (_transp_asset, transp_amt) = convert_amount(
+                let transp_amt = convert_amount(
                     *asset_epoch,
                     &transfer.token,
                     transfer.amount.amount,
