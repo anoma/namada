@@ -1,26 +1,22 @@
 [[established_account]]
 vp = "vp_user"
-
-[established_account.public_key]
-pk = "tpknam1qrnw8mxyqlj60mykgevnldcj5mg2fya7fs5a8xqdkd2gwtxhef0zy8a2wha"
-authorization = "signam1qz39jpapmmxyc99ra8ty74kdx8c0kax3n42z7n5y44e3tcara4ezm3l4llgwgqhp0kgg0kz48d02v2xfeqn5at4h069dddvmlhral7qgm59d37"
+threshold = 1
+public_keys = ["tpknam1qqwfpuvn8x7yqtquejhppef4vddv9ghusec2rkaxav38amamxaxpgj9cs79"]
 
 [[established_account]]
 vp = "vp_user"
-
-[established_account.public_key]
-pk = "tpknam1qq52dx5e290wyh7ngdt6wudtyd502lg6ln49yvg3vz97e8j2ruux5e3yewq"
-authorization = "signam1qqqvnh3e3j8rv6au622yw74jj76wpty7pttlnfussnyffhg8sk07q7g5ehw5hyz67amnvr4afmcr6tcfs6ktylcqrtc0h350j4zd0qgpqwn9z7"
+threshold = 1
+public_keys = ["tpknam1qq52dx5e290wyh7ngdt6wudtyd502lg6ln49yvg3vz97e8j2ruux5e3yewq"]
 
 [[established_account]]
 vp = "vp_user"
-
-[established_account.public_key]
-pk = "tpknam1qqwfpuvn8x7yqtquejhppef4vddv9ghusec2rkaxav38amamxaxpgj9cs79"
-authorization = "signam1qqfsz9dvtsan6kqp8zn256gvnuw5hsr27935w63cu0hl30535ewx7tpsf3zypq0hxmjh23z4q4sk7l046n6gjqmvg9ueyxl69lxgzvcfvujj9x"
+threshold = 1
+public_keys = ["tpknam1qrnw8mxyqlj60mykgevnldcj5mg2fya7fs5a8xqdkd2gwtxhef0zy8a2wha"]
 
 [[bond]]
-source = "tnam1q8uthkc42sw609e8ce6tcjwu6mgz6zgtccff8wdt"
-validator = "tnam1qyfcx4un953sf06lhcja377hk2z6faw67ykx549w"
+source = "tnam1qxfj3sf6a0meahdu9t6znp05g8zx4dkjtgyn9gfu"
+validator = "tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx"
 amount = "20000"
-signature = "signam1qz00emwjxmvgjlknc55qffxepur6xlay4zhmnejchw32nuwz2kajmn06hdkmdctu9nrnp3kk0hg6495rsvm5paglyuvyekzcvcxzp2qxvf8hlh"
+
+[bond.signatures]
+tpknam1qrnw8mxyqlj60mykgevnldcj5mg2fya7fs5a8xqdkd2gwtxhef0zy8a2wha = "signam1qqrhz8puehekzc4960f322f2nm9vn9r47wavvqs33f6vv6uerycj8e2x89ljzmuyekn7rfg6enchhn2s0wm2r6czlhep5kj0an5ll4qqqkkgqz"
