@@ -39,8 +39,8 @@ use crate::wallet::{gen_validator_keys, read_and_confirm_encryption_password};
 
 /// Wrapper around `signing::aux_signing_data` that stores the optional
 /// disposable address to the wallet
-pub async fn aux_signing_data<'a>(
-    context: &impl Namada<'a>,
+pub async fn aux_signing_data(
+    context: &impl Namada,
     args: &args::Tx,
     owner: Option<Address>,
     default_signer: Option<Address>,
@@ -69,8 +69,8 @@ pub async fn aux_signing_data<'a>(
 }
 
 // Sign the given transaction using a hardware wallet as a backup
-pub async fn sign<'a>(
-    context: &impl Namada<'a>,
+pub async fn sign(
+    context: &impl Namada,
     tx: &mut Tx,
     args: &args::Tx,
     signing_data: SigningTxData,
@@ -200,8 +200,8 @@ pub async fn sign<'a>(
 }
 
 // Build a transaction to reveal the signer of the given transaction.
-pub async fn submit_reveal_aux<'a>(
-    context: &impl Namada<'a>,
+pub async fn submit_reveal_aux(
+    context: &impl Namada,
     args: args::Tx,
     address: &Address,
 ) -> Result<(), error::Error> {
@@ -239,7 +239,7 @@ pub async fn submit_reveal_aux<'a>(
     Ok(())
 }
 
-pub async fn submit_bridge_pool_tx<'a, N: Namada<'a>>(
+pub async fn submit_bridge_pool_tx<N: Namada>(
     namada: &N,
     args: args::EthereumBridgePool,
 ) -> Result<(), error::Error> {
@@ -263,7 +263,7 @@ pub async fn submit_bridge_pool_tx<'a, N: Namada<'a>>(
     Ok(())
 }
 
-pub async fn submit_custom<'a, N: Namada<'a>>(
+pub async fn submit_custom<N: Namada>(
     namada: &N,
     args: args::TxCustom,
 ) -> Result<(), error::Error>
@@ -289,7 +289,7 @@ where
     Ok(())
 }
 
-pub async fn submit_update_account<'a, N: Namada<'a>>(
+pub async fn submit_update_account<N: Namada>(
     namada: &N,
     args: args::TxUpdateAccount,
 ) -> Result<(), error::Error>
@@ -313,7 +313,7 @@ where
     Ok(())
 }
 
-pub async fn submit_init_account<'a, N: Namada<'a>>(
+pub async fn submit_init_account<N: Namada>(
     namada: &N,
     args: args::TxInitAccount,
 ) -> Result<(), error::Error>
@@ -338,8 +338,8 @@ where
     Ok(())
 }
 
-pub async fn submit_change_consensus_key<'a>(
-    namada: &impl Namada<'a>,
+pub async fn submit_change_consensus_key(
+    namada: &impl Namada,
     config: &mut crate::config::Config,
     args::ConsensusKeyChange {
         tx: tx_args,
@@ -482,8 +482,8 @@ pub async fn submit_change_consensus_key<'a>(
     Ok(())
 }
 
-pub async fn submit_init_validator<'a>(
-    namada: &impl Namada<'a>,
+pub async fn submit_init_validator(
+    namada: &impl Namada,
     config: &mut crate::config::Config,
     args::TxInitValidator {
         tx: tx_args,
@@ -629,7 +629,7 @@ pub async fn submit_init_validator<'a>(
     }
     // Generate the validator keys
     let validator_keys = gen_validator_keys(
-        *namada.wallet_mut().await,
+        &mut *namada.wallet_mut().await,
         Some(eth_hot_pk.clone()),
         protocol_key,
         scheme,
@@ -857,8 +857,8 @@ pub async fn submit_init_validator<'a>(
     Ok(())
 }
 
-pub async fn submit_transfer<'a>(
-    namada: &impl Namada<'a>,
+pub async fn submit_transfer(
+    namada: &impl Namada,
     args: args::TxTransfer,
 ) -> Result<(), error::Error> {
     for _ in 0..2 {
@@ -911,7 +911,7 @@ pub async fn submit_transfer<'a>(
     Ok(())
 }
 
-pub async fn submit_ibc_transfer<'a, N: Namada<'a>>(
+pub async fn submit_ibc_transfer<N: Namada>(
     namada: &N,
     args: args::TxIbcTransfer,
 ) -> Result<(), error::Error>
@@ -935,7 +935,7 @@ where
     Ok(())
 }
 
-pub async fn submit_init_proposal<'a, N: Namada<'a>>(
+pub async fn submit_init_proposal<N: Namada>(
     namada: &N,
     args: args::InitProposal,
 ) -> Result<(), error::Error>
@@ -1064,7 +1064,7 @@ where
     Ok(())
 }
 
-pub async fn submit_vote_proposal<'a, N: Namada<'a>>(
+pub async fn submit_vote_proposal<N: Namada>(
     namada: &N,
     args: args::VoteProposal,
 ) -> Result<(), error::Error>
@@ -1144,7 +1144,7 @@ where
     Ok(())
 }
 
-pub async fn sign_tx<'a, N: Namada<'a>>(
+pub async fn sign_tx<N: Namada>(
     namada: &N,
     args::SignTx {
         tx: tx_args,
@@ -1225,7 +1225,7 @@ where
     Ok(())
 }
 
-pub async fn submit_reveal_pk<'a, N: Namada<'a>>(
+pub async fn submit_reveal_pk<N: Namada>(
     namada: &N,
     args: args::RevealPk,
 ) -> Result<(), error::Error>
@@ -1237,7 +1237,7 @@ where
     Ok(())
 }
 
-pub async fn submit_bond<'a, N: Namada<'a>>(
+pub async fn submit_bond<N: Namada>(
     namada: &N,
     args: args::Bond,
 ) -> Result<(), error::Error>
@@ -1264,7 +1264,7 @@ where
     Ok(())
 }
 
-pub async fn submit_unbond<'a, N: Namada<'a>>(
+pub async fn submit_unbond<N: Namada>(
     namada: &N,
     args: args::Unbond,
 ) -> Result<(), error::Error>
@@ -1290,7 +1290,7 @@ where
     Ok(())
 }
 
-pub async fn submit_withdraw<'a, N: Namada<'a>>(
+pub async fn submit_withdraw<N: Namada>(
     namada: &N,
     args: args::Withdraw,
 ) -> Result<(), error::Error>
@@ -1314,7 +1314,7 @@ where
     Ok(())
 }
 
-pub async fn submit_claim_rewards<'a, N: Namada<'a>>(
+pub async fn submit_claim_rewards<N: Namada>(
     namada: &N,
     args: args::ClaimRewards,
 ) -> Result<(), error::Error>
@@ -1338,7 +1338,7 @@ where
     Ok(())
 }
 
-pub async fn submit_redelegate<'a, N: Namada<'a>>(
+pub async fn submit_redelegate<N: Namada>(
     namada: &N,
     args: args::Redelegate,
 ) -> Result<(), error::Error>
@@ -1361,7 +1361,7 @@ where
     Ok(())
 }
 
-pub async fn submit_validator_commission_change<'a, N: Namada<'a>>(
+pub async fn submit_validator_commission_change<N: Namada>(
     namada: &N,
     args: args::CommissionRateChange,
 ) -> Result<(), error::Error>
@@ -1385,7 +1385,7 @@ where
     Ok(())
 }
 
-pub async fn submit_validator_metadata_change<'a, N: Namada<'a>>(
+pub async fn submit_validator_metadata_change<N: Namada>(
     namada: &N,
     args: args::MetaDataChange,
 ) -> Result<(), error::Error>
@@ -1409,7 +1409,7 @@ where
     Ok(())
 }
 
-// pub async fn submit_change_consensus_key<'a, N: Namada<'a>>(
+// pub async fn submit_change_consensus_key<N: Namada>(
 //     namada: &N,
 //     args: args::ConsensusKeyChange,
 // ) -> Result<(), error::Error>
@@ -1431,7 +1431,7 @@ where
 //     Ok(())
 // }
 
-pub async fn submit_unjail_validator<'a, N: Namada<'a>>(
+pub async fn submit_unjail_validator<N: Namada>(
     namada: &N,
     args: args::TxUnjailValidator,
 ) -> Result<(), error::Error>
@@ -1455,7 +1455,7 @@ where
     Ok(())
 }
 
-pub async fn submit_deactivate_validator<'a, N: Namada<'a>>(
+pub async fn submit_deactivate_validator<N: Namada>(
     namada: &N,
     args: args::TxDeactivateValidator,
 ) -> Result<(), error::Error>
@@ -1479,7 +1479,7 @@ where
     Ok(())
 }
 
-pub async fn submit_reactivate_validator<'a, N: Namada<'a>>(
+pub async fn submit_reactivate_validator<N: Namada>(
     namada: &N,
     args: args::TxReactivateValidator,
 ) -> Result<(), error::Error>
@@ -1503,7 +1503,7 @@ where
     Ok(())
 }
 
-pub async fn submit_update_steward_commission<'a, N: Namada<'a>>(
+pub async fn submit_update_steward_commission<N: Namada>(
     namada: &N,
     args: args::UpdateStewardCommission,
 ) -> Result<(), error::Error>
@@ -1528,7 +1528,7 @@ where
     Ok(())
 }
 
-pub async fn submit_resign_steward<'a, N: Namada<'a>>(
+pub async fn submit_resign_steward<N: Namada>(
     namada: &N,
     args: args::ResignSteward,
 ) -> Result<(), error::Error>
@@ -1553,8 +1553,8 @@ where
 }
 
 /// Save accounts initialized from a tx into the wallet, if any.
-pub async fn save_initialized_accounts<'a>(
-    namada: &impl Namada<'a>,
+pub async fn save_initialized_accounts(
+    namada: &impl Namada,
     args: &args::Tx,
     initialized_accounts: Vec<Address>,
 ) {
@@ -1565,8 +1565,8 @@ pub async fn save_initialized_accounts<'a>(
 /// the tx has been successfully included into the mempool of a validator
 ///
 /// In the case of errors in any of those stages, an error message is returned
-pub async fn broadcast_tx<'a>(
-    namada: &impl Namada<'a>,
+pub async fn broadcast_tx(
+    namada: &impl Namada,
     to_broadcast: &TxBroadcastData,
 ) -> Result<Response, error::Error> {
     tx::broadcast_tx(namada, to_broadcast).await
@@ -1580,15 +1580,15 @@ pub async fn broadcast_tx<'a>(
 /// 3. The decrypted payload of the tx has been included on the blockchain.
 ///
 /// In the case of errors in any of those stages, an error message is returned
-pub async fn submit_tx<'a>(
-    namada: &impl Namada<'a>,
+pub async fn submit_tx(
+    namada: &impl Namada,
     to_broadcast: TxBroadcastData,
 ) -> Result<TxResponse, error::Error> {
     tx::submit_tx(namada, to_broadcast).await
 }
 
-pub async fn gen_ibc_shielded_transfer<'a>(
-    context: &impl Namada<'a>,
+pub async fn gen_ibc_shielded_transfer(
+    context: &impl Namada,
     args: args::GenIbcShieldedTransafer,
 ) -> Result<(), error::Error> {
     if let Some(shielded_transfer) =

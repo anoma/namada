@@ -93,7 +93,7 @@ pub use namada_sdk::tx::{
     TX_WITHDRAW_WASM, VP_USER_WASM, VP_VALIDATOR_WASM,
 };
 use namada_sdk::wallet::Wallet;
-use namada_sdk::NamadaImpl;
+use namada_sdk::{Namada, NamadaImpl};
 use namada_test_utils::tx_data::TxWriteData;
 use rand_core::OsRng;
 use sha2::{Digest, Sha256};
@@ -819,11 +819,11 @@ impl Default for BenchShieldedCtx {
 
 impl BenchShieldedCtx {
     pub fn generate_masp_tx(
-        &mut self,
+        mut self,
         amount: Amount,
         source: TransferSource,
         target: TransferTarget,
-    ) -> Tx {
+    ) -> (Self, Tx) {
         let denominated_amount = DenominatedAmount {
             amount,
             denom: 0.into(),
@@ -840,12 +840,13 @@ impl BenchShieldedCtx {
                 &[],
             ))
             .unwrap();
+        let native_token = self.shell.wl_storage.storage.native_token.clone();
         let namada = NamadaImpl::native_new(
-            &self.shell,
-            &mut self.wallet,
-            &mut self.shielded,
-            &StdIo,
-            self.shell.wl_storage.storage.native_token.clone(),
+            self.shell,
+            self.wallet,
+            self.shielded,
+            StdIo,
+            native_token,
         );
         let shielded = async_runtime
             .block_on(
@@ -877,7 +878,7 @@ impl BenchShieldedCtx {
             )
         });
 
-        self.shell.generate_tx(
+        let tx = namada.client().generate_tx(
             TX_TRANSFER_WASM,
             Transfer {
                 source: source.effective_address(),
@@ -890,6 +891,18 @@ impl BenchShieldedCtx {
             shielded,
             None,
             vec![&defaults::albert_keypair()],
-        )
+        );
+        let NamadaImpl {
+            client,
+            wallet,
+            shielded,
+            ..
+        } = namada;
+        let ctx = Self {
+            shielded: shielded.into_inner(),
+            shell: client,
+            wallet: wallet.into_inner(),
+        };
+        (ctx, tx)
     }
 }

@@ -1220,9 +1220,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// of the specified asset type. Return the total value accumulated plus
     /// notes and the corresponding diversifiers/merkle paths that were used to
     /// achieve the total value.
-    pub async fn collect_unspent_notes<'a>(
+    pub async fn collect_unspent_notes(
         &mut self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
         vk: &ViewingKey,
         target: I128Sum,
         target_epoch: Epoch,
@@ -1407,9 +1407,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// the epoch of the transaction or even before, so exchange all these
     /// amounts to the epoch of the transaction in order to get the value that
     /// would have been displayed in the epoch of the transaction.
-    pub async fn compute_exchanged_pinned_balance<'a>(
+    pub async fn compute_exchanged_pinned_balance(
         &mut self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
         owner: PaymentAddress,
         viewing_key: &ViewingKey,
     ) -> Result<(MaspAmount, Epoch), Error> {
@@ -1497,8 +1497,8 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// UTXOs are sometimes used to make transactions balanced, but it is
     /// understood that transparent account changes are effected only by the
     /// amounts and signatures specified by the containing Transfer object.
-    pub async fn gen_shielded_transfer<'a>(
-        context: &impl Namada<'a>,
+    pub async fn gen_shielded_transfer(
+        context: &impl Namada,
         source: &TransferSource,
         target: &TransferTarget,
         token: &Address,

@@ -495,7 +495,7 @@ fn setup_storage_for_masp_verification(
         .to_owned();
 
     // Shield some tokens for Albert
-    let shield_tx = shielded_ctx.generate_masp_tx(
+    let (mut shielded_ctx, shield_tx) = shielded_ctx.generate_masp_tx(
         amount,
         TransferSource::Address(defaults::albert_address()),
         TransferTarget::PaymentAddress(albert_payment_addr),
@@ -504,7 +504,7 @@ fn setup_storage_for_masp_verification(
     shielded_ctx.shell.wl_storage.commit_tx();
     shielded_ctx.shell.commit();
 
-    let signed_tx = match bench_name {
+    let (mut shielded_ctx, signed_tx) = match bench_name {
         "shielding" => shielded_ctx.generate_masp_tx(
             amount,
             TransferSource::Address(defaults::albert_address()),
