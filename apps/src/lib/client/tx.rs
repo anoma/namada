@@ -425,7 +425,7 @@ pub async fn submit_change_consensus_key(
 
     let data = ConsensusKeyChange {
         validator: validator.clone(),
-        consensus_key: new_ck,
+        consensus_key: new_ck.clone(),
     };
 
     tx.add_code_from_hash(
@@ -433,7 +433,9 @@ pub async fn submit_change_consensus_key(
         Some(args::TX_CHANGE_CONSENSUS_KEY_WASM.to_string()),
     )
     .add_data(data);
-    let signing_data = aux_signing_data(namada, &tx_args, None, None).await?;
+
+    let signing_data =
+        init_validator_signing_data(namada, &tx_args, vec![new_ck]).await?;
 
     tx::prepare_tx(
         namada,
