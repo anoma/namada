@@ -1393,7 +1393,7 @@ mod test_prepare_proposal {
             // sent transfers to namada nonce to 5
             .transfers_to_namada = InnerEthEventsQueue::new_at(5.into());
 
-        let (protocol_key, _, _) = wallet::defaults::validator_keys();
+        let (protocol_key, _) = wallet::defaults::validator_keys();
         let validator_addr = wallet::defaults::validator_address();
 
         // test an extension containing solely events with
@@ -1418,12 +1418,12 @@ mod test_prepare_proposal {
                 .sign(&protocol_key, shell.chain_id.clone())
                 .to_bytes();
             let req = RequestPrepareProposal {
-                txs: vec![tx],
+                txs: vec![tx.into()],
                 ..Default::default()
             };
             let proposed_txs =
                 shell.prepare_proposal(req).txs.into_iter().map(|tx_bytes| {
-                    Tx::try_from(tx_bytes.as_slice()).expect("Test failed")
+                    Tx::try_from(tx_bytes.as_ref()).expect("Test failed")
                 });
             // since no events with valid nonces are contained in the vote
             // extension, we drop it from the proposal
@@ -1466,12 +1466,12 @@ mod test_prepare_proposal {
                 .sign(&protocol_key, shell.chain_id.clone())
                 .to_bytes();
             let req = RequestPrepareProposal {
-                txs: vec![tx],
+                txs: vec![tx.into()],
                 ..Default::default()
             };
             let proposed_txs =
                 shell.prepare_proposal(req).txs.into_iter().map(|tx_bytes| {
-                    Tx::try_from(tx_bytes.as_slice()).expect("Test failed")
+                    Tx::try_from(tx_bytes.as_ref()).expect("Test failed")
                 });
             // find the event with the good nonce
             let mut ext = 'ext: {

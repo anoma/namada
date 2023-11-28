@@ -2136,7 +2136,7 @@ mod test_process_proposal {
             // sent transfers to namada nonce to 5
             .transfers_to_namada = InnerEthEventsQueue::new_at(5.into());
 
-        let (protocol_key, _, _) = wallet::defaults::validator_keys();
+        let (protocol_key, _) = wallet::defaults::validator_keys();
 
         // only bad events
         {

@@ -2410,7 +2410,7 @@ mod shell_tests {
             // sent transfers to namada nonce to 5
             .transfers_to_namada = InnerEthEventsQueue::new_at(5.into());
 
-        let (protocol_key, _, _) = wallet::defaults::validator_keys();
+        let (protocol_key, _) = wallet::defaults::validator_keys();
 
         // only bad events
         {
@@ -2432,7 +2432,10 @@ mod shell_tests {
                 .sign(&protocol_key, shell.chain_id.clone())
                 .to_bytes();
             let rsp = shell.mempool_validate(&tx, Default::default());
-            assert!(rsp.code != 0, "Validation should have failed");
+            assert!(
+                rsp.code != ErrorCodes::Ok.into(),
+                "Validation should have failed"
+            );
         }
 
         // at least one good event
@@ -2459,7 +2462,10 @@ mod shell_tests {
                 .sign(&protocol_key, shell.chain_id.clone())
                 .to_bytes();
             let rsp = shell.mempool_validate(&tx, Default::default());
-            assert!(rsp.code == 0, "Validation should have passed");
+            assert!(
+                rsp.code == ErrorCodes::Ok.into(),
+                "Validation should have passed"
+            );
         }
     }
 
