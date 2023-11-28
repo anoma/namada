@@ -5,17 +5,20 @@ use std::fmt::Debug;
 use std::net::SocketAddr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use borsh_ext::BorshSerializeExt;
 use itertools::{Either, Itertools};
 use ledger_namada_rs::NamadaApp;
 use ledger_transport_hid::hidapi::HidApi;
 use ledger_transport_hid::TransportNativeHID;
 use namada::core::types::account::AccountPublicKeysMap;
 use namada::core::types::address::{Address, EstablishedAddress};
+use namada::core::types::chain::ChainId;
 use namada::core::types::string_encoding::StringEncoded;
 use namada::ledger::pos::common::PublicKey;
 use namada::ledger::pos::types::ValidatorMetaData;
 use namada::proto::{
-    verify_standalone_sig, Section, SerializeWithBorsh, SignatureIndex, Tx,
+    verify_standalone_sig, Code, Commitment, Data, Section, SerializeWithBorsh,
+    SignatureIndex, Tx,
 };
 use namada::types::address::nam;
 use namada::types::dec::Dec;
@@ -40,6 +43,12 @@ use crate::config::genesis::templates::{
 };
 use crate::config::genesis::{utils, GenesisAddress};
 use crate::wallet::CliWalletUtils;
+
+/// Dummy chain id used to sign [`Tx`] objects at pre-genesis.
+const NAMADA_GENESIS_TX_CHAIN_ID: &str = "namada-genesis";
+
+/// Timestamp used to sign pre-genesis [`Tx`] objects.
+pub const PRE_GENESIS_TX_TIMESTAMP: DateTimeUtc = MIN_UTC;
 
 /// Helper trait to fetch tx data to sign.
 pub trait TxToSign {
@@ -88,8 +97,17 @@ fn get_tx_args(use_device: bool) -> TxArgs {
 /// Return a ready to sign genesis [`Tx`].
 fn get_tx_to_sign(tag: impl AsRef<str>, data: impl BorshSerialize) -> Tx {
     let mut tx = Tx::from_type(TxType::Raw);
-    tx.add_code_from_hash(Default::default(), Some(tag.as_ref().to_string()));
-    tx.add_data(data);
+    tx.header.chain_id = ChainId(NAMADA_GENESIS_TX_CHAIN_ID.to_string());
+    tx.header.timestamp = PRE_GENESIS_TX_TIMESTAMP;
+    tx.set_code(Code {
+        salt: [0; 8],
+        code: Commitment::Hash(Default::default()),
+        tag: Some(tag.as_ref().to_string()),
+    });
+    tx.set_data(Data {
+        salt: [0; 8],
+        data: data.serialize_to_vec(),
+    });
     let pk = get_sentinnel_pubkey();
     tx.add_wrapper(
         Fee {
@@ -109,8 +127,6 @@ fn get_tx_to_sign(tag: impl AsRef<str>, data: impl BorshSerialize) -> Tx {
 fn get_sentinnel_pubkey() -> common::PublicKey {
     common::SecretKey::Ed25519(ed25519::SigScheme::from_bytes([0; 32])).ref_to()
 }
-
-pub const PRE_GENESIS_TX_TIMESTAMP: DateTimeUtc = MIN_UTC;
 
 pub struct GenesisValidatorData {
     pub address: EstablishedAddress,
@@ -1283,8 +1299,8 @@ pub fn validate_validator_account(
             })
         };
         if let Some(threshold) = maybe_threshold {
-            if signed_tx.verify_sig(threshold).is_err() {
-                eprintln!("Invalid validator account signature.");
+            if let Err(err) = signed_tx.verify_sig(threshold) {
+                eprintln!("Invalid validator account signature: {err}");
                 false
             } else {
                 true
