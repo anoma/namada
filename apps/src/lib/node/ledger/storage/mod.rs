@@ -492,8 +492,7 @@ mod tests {
         let hash = BlockHash::default();
         let height = BlockHeight(1);
         storage.begin_block(hash, height)?;
-        // Epoch 1
-        storage.block.epoch = storage.block.epoch.next();
+        // Epoch 0
         storage.block.pred_epochs.new_epoch(height);
         let mut batch = PersistentStorage::batch();
         for (height, key, write_type) in blocks_write_type.clone() {
@@ -592,7 +591,6 @@ mod tests {
             .write(&key, types::encode(&value))
             .expect("write failed");
 
-        storage.block.epoch = storage.block.epoch.next();
         storage.block.pred_epochs.new_epoch(new_epoch_start);
         let batch = PersistentStorage::batch();
         storage.commit_block(batch).expect("commit failed");
