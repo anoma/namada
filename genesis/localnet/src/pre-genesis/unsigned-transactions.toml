@@ -14,22 +14,25 @@
 # Albert
 [[established_account]]
 vp = "vp_user"
-public_key = "tpknam1qrnw8mxyqlj60mykgevnldcj5mg2fya7fs5a8xqdkd2gwtxhef0zy8a2wha"
+threshold = 1
+public_keys = ["tpknam1qrnw8mxyqlj60mykgevnldcj5mg2fya7fs5a8xqdkd2gwtxhef0zy8a2wha"]
 
 # Bertha
 [[established_account]]
 vp = "vp_user"
-public_key = "tpknam1qq52dx5e290wyh7ngdt6wudtyd502lg6ln49yvg3vz97e8j2ruux5e3yewq"
+threshold = 1
+public_keys = ["tpknam1qq52dx5e290wyh7ngdt6wudtyd502lg6ln49yvg3vz97e8j2ruux5e3yewq"]
 
 # Christel
 [[established_account]]
 vp = "vp_user"
-public_key = "tpknam1qqwfpuvn8x7yqtquejhppef4vddv9ghusec2rkaxav38amamxaxpgj9cs79"
+threshold = 1
+public_keys = ["tpknam1qqwfpuvn8x7yqtquejhppef4vddv9ghusec2rkaxav38amamxaxpgj9cs79"]
 
 ##########################################################################################
 
 # Albert bonds to `validator-0`
 [[bond]]
-source = "tnam1q8uthkc42sw609e8ce6tcjwu6mgz6zgtccff8wdt"
-validator = "tnam1qyfcx4un953sf06lhcja377hk2z6faw67ykx549w"
+source = "tnam1qxfj3sf6a0meahdu9t6znp05g8zx4dkjtgyn9gfu"
+validator = "tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx"
 amount = "20000"

@@ -11,6 +11,7 @@ christel-key = "unencrypted:00a08de8d33b9798328d2e4476fade49f515dc82754451fc6ef7
 daewon = "unencrypted:00d19e226c0e7d123d79f5908b5948d4c461b66a5f8aa95600c28b55ab6f5dc772"
 ester = "unencrypted:01369093e2035d84f72a7e5a17c89b7a938b5d08cc87b2289805e3afcc66ef9a42"
 faucet-key = "unencrypted:00548aa8393422b88dce5f4be8ee0320638061c3e0649ada1b0dacbec4c0c75bb2"
+validator-0-account-key = "unencrypted:0024204e13c51b26ed9b42c05647bc46b3821bb453e53d194962ede57ce5ec66ac"
 
 [public_keys]
 albert-key = "ED25519_PK_PREFIXtpknam1qrnw8mxyqlj60mykgevnldcj5mg2fya7fs5a8xqdkd2gwtxhef0zy8a2wha"
@@ -19,20 +20,21 @@ christel-key = "ED25519_PK_PREFIXtpknam1qqwfpuvn8x7yqtquejhppef4vddv9ghusec2rkax
 daewon = "ED25519_PK_PREFIXtpknam1qzz4x4fammhdcfa0g8xw4udkq8s4n6kjhzlxh00ul3da05wuu9wkykqqvjm"
 ester = "SECP256K1_PK_PREFIXtpknam1qypvqpzu74nafjahlwyq272dj76qq9rz30dulyc94883tmj893mquqs74gxv4"
 faucet-key = "ED25519_PK_PREFIXtpknam1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgyq0vra4"
+validator-0-account-key = "ED25519_PK_PREFIXtpknam1qpg2tsrplvhu3fd7z7tq5ztc2ne3s7e2ahjl2a2cddufrzdyr752g666ytj"
 
 [derivation_paths]
 
 [addresses]
-albert = "tnam1q8uthkc42sw609e8ce6tcjwu6mgz6zgtccff8wdt"
-bertha = "tnam1qx6qc3cpupxgntk7awtqrnqh02cyr3e8vghpspr7"
-christel = "tnam1qy38nhqlcceqjn5sflrs6mvmp8fq2h79kvsdrwns"
+albert = "tnam1qxfj3sf6a0meahdu9t6znp05g8zx4dkjtgyn9gfu"
+bertha = "tnam1q9rhgyv3ydq0zu3whnftvllqnvhvhm270qxay5tn"
+christel = "tnam1q9sx4ekzqaq3xdxtruxkm764nhl00cvcsc7df5jf"
 albert-key = "tnam1qrr8r00nrf6490ff9zgfz52xrnfhdja7rqvldl46"
 bertha-key = "tnam1qqc2ge6tg7s03nlshjr5d79dqyjr33aa8g2mxyzm"
 christel-key = "tnam1qz0nvec686e9pks8ynhm5ddq8ke7j2eey50uagtr"
 daewon = "tnam1qpca48f45pdtpcz06rue7k4kfdcjrvrux5cr3pwn"
 ester = "tnam1qpm3dpsv76ttu382vfggtr7m8n00na3sfyzm2g2q"
 faucet-key = "tnam1qzgcl2znamndmku7ujw6e79dmvd4v7rfd5c89dfz"
-validator-0 = "tnam1qyfcx4un953sf06lhcja377hk2z6faw67ykx549w"
+validator-0 = "tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx"
 
 [pkhs]
 30A4674B47A0F8CFF0BC8746F8AD012438C7BD3A = "bertha-key"
@@ -41,5 +43,6 @@ C671BDF31A7552BD2928909151461CD376CBBE18 = "albert-key"
 918FA853EEE6DDDB9EE49DACF8ADDB1B5678696D = "faucet-key"
 9F36671A3EB250DA0724EFBA35A03DB3E92B3925 = "christel-key"
 7716860CF696BE44EA6250858FDB3CDEF9F63049 = "ester"
+9D371C6D220F8A4C6D70F0D3F828698881AB2447 = "validator-0-account-key"
 
 [address_vp_types]
