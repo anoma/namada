@@ -3529,3 +3529,86 @@ fn test_invalid_validator_txs() -> Result<()> {
 
     Ok(())
 }
+
+/// Consensus key change
+///
+/// 1.
+#[test]
+fn change_consensus_key() -> Result<()> {
+    let test = setup::network(
+        |mut genesis, base_dir| {
+            genesis.parameters.parameters.min_num_of_blocks = 6;
+            genesis.parameters.parameters.max_expected_time_per_block = 1;
+            genesis.parameters.parameters.epochs_per_year = 31_536_000;
+            genesis.parameters.pos_params.pipeline_len = 2;
+            genesis.parameters.pos_params.unbonding_len = 4;
+            setup::set_validators(2, genesis, base_dir, default_port_offset)
+        },
+        None,
+    )?;
+
+    for i in 0..2 {
+        set_ethereum_bridge_mode(
+            &test,
+            &test.net.chain_id,
+            &Who::Validator(i),
+            ethereum_bridge::ledger::Mode::Off,
+            None,
+        );
+    }
+
+    // 1. Run 4 genesis validator ledger nodes
+    let _bg_validator_0 =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
+            .background();
+
+    let _bg_validator_1 =
+        start_namada_ledger_node_wait_wasm(&test, Some(1), Some(40))?
+            .background();
+
+    // let _bg_validator_2 =
+    //     start_namada_ledger_node_wait_wasm(&test, Some(2), Some(40))?
+    //         .background();
+
+    // let _bg_validator_3 =
+    //     start_namada_ledger_node_wait_wasm(&test, Some(3), Some(40))?
+    //         .background();
+
+    let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
+
+    // Put money in the validator account from its balance account so that it
+    // can pay gas fees
+    let tx_args = vec![
+        "transfer",
+        "--source",
+        "validator-0-balance-key",
+        "--target",
+        "validator-0-validator-key",
+        "--amount",
+        "100.0",
+        "--token",
+        "NAM",
+        "--node",
+        &validator_0_rpc,
+    ];
+    let mut client =
+        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result")?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    // Change consensus key
+    let tx_args = vec![
+        "change-consensus-key",
+        "--validator",
+        "validator-0",
+        "--node",
+        &validator_0_rpc,
+    ];
+    let mut client =
+        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    Ok(())
+}
