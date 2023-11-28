@@ -22,7 +22,7 @@ use namada::types::token;
 use namada::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
 use namada::types::transaction::{pos, Fee, TxType};
 use namada_sdk::args::Tx as TxArgs;
-use namada_sdk::signing::{sign_tx, SigningTxData};
+use namada_sdk::signing::{default_sign, sign_tx, SigningTxData};
 use namada_sdk::tx::{TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM};
 use namada_sdk::wallet::alias::Alias;
 use namada_sdk::wallet::pre_genesis::ValidatorWallet;
@@ -691,23 +691,37 @@ impl<T> Signed<T> {
             .ref_to(),
         };
 
-        let hidapi = HidApi::new().expect("Failed to create Hidapi");
-        let transport = TransportNativeHID::new(&hidapi)
-            .expect("Failed to create hardware wallet connection");
-        let app = NamadaApp::new(transport);
+        let mut tx = self.data.tx_to_sign();
         let wallet_lock = RwLock::new(wallet);
 
-        let mut tx = self.data.tx_to_sign();
-        sign_tx(
-            &wallet_lock,
-            &get_tx_args(use_device),
-            &mut tx,
-            signing_data,
-            utils::with_hardware_wallet,
-            (&wallet_lock, &app),
-        )
-        .await
-        .expect("Failed to sign pre-genesis transaction.");
+        if use_device {
+            let hidapi = HidApi::new().expect("Failed to create Hidapi");
+            let transport = TransportNativeHID::new(&hidapi)
+                .expect("Failed to create hardware wallet connection");
+            let app = NamadaApp::new(transport);
+
+            sign_tx(
+                &wallet_lock,
+                &get_tx_args(use_device),
+                &mut tx,
+                signing_data,
+                utils::with_hardware_wallet,
+                (&wallet_lock, &app),
+            )
+            .await
+            .expect("Failed to sign pre-genesis transaction.");
+        } else {
+            sign_tx(
+                &wallet_lock,
+                &get_tx_args(use_device),
+                &mut tx,
+                signing_data,
+                default_sign,
+                (),
+            )
+            .await
+            .expect("Failed to sign pre-genesis transaction.");
+        }
 
         let raw_header_hash = tx.raw_header_hash();
         let sigs = tx
