@@ -7,6 +7,7 @@ use std::{cmp, mem};
 use assert_matches::assert_matches;
 use derivative::Derivative;
 use itertools::Itertools;
+use namada_core::ledger::governance::parameters::GovernanceParameters;
 use namada_core::ledger::storage::testing::TestWlStorage;
 use namada_core::ledger::storage_api::collections::lazy_map::{
     NestedSubKey, SubKey,
@@ -66,6 +67,8 @@ struct AbstractPosState {
     epoch: Epoch,
     /// Parameters
     params: PosParams,
+    /// Governance parameters used to construct `params`
+    gov_params: GovernanceParameters,
     /// Genesis validators
     #[derivative(Debug = "ignore")]
     genesis_validators: Vec<GenesisValidator>,
@@ -1929,6 +1932,7 @@ impl StateMachineTest for ConcretePosState {
                 .collect::<Vec<_>>()
         );
         let mut s = TestWlStorage::default();
+        initial_state.gov_params.init_storage(&mut s).unwrap();
         crate::test_utils::init_genesis_helper(
             &mut s,
             &initial_state.params,
@@ -3575,12 +3579,12 @@ impl ReferenceStateMachine for AbstractPosState {
         arb_params_and_genesis_validators(Some(8), 8..10)
             .prop_map(|(params, genesis_validators)| {
                 let epoch = Epoch::default();
+                let gov_params = GovernanceParameters::default();
+                let params = params.with_gov_params(&gov_params);
                 let mut state = Self {
                     epoch,
-                    params: PosParams {
-                        owned: params,
-                        ..Default::default()
-                    },
+                    params,
+                    gov_params,
                     genesis_validators: genesis_validators
                         .into_iter()
                         // Sorted by stake to fill in the consensus set first
