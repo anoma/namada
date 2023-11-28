@@ -2653,8 +2653,8 @@ pub async fn query_governance_parameters<
 fn unwrap_client_response<C: namada::ledger::queries::Client, T>(
     response: Result<T, C::Error>,
 ) -> T {
-    response.unwrap_or_else(|_err| {
-        eprintln!("Error in the query");
+    response.unwrap_or_else(|err| {
+        eprintln!("Error in the query: {:?}", err);
         cli::safe_exit(1)
     })
 }
