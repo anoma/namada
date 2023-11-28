@@ -55,6 +55,7 @@ mod tests {
 
     use itertools::Itertools;
     use namada::core::ledger::masp_conversions::update_allowed_conversions;
+    use namada::ledger::eth_bridge::storage::bridge_pool;
     use namada::ledger::gas::STORAGE_ACCESS_GAS_PER_BYTE;
     use namada::ledger::ibc::storage::ibc_key;
     use namada::ledger::parameters::{EpochDuration, Parameters};
@@ -62,6 +63,7 @@ mod tests {
     use namada::ledger::storage::{types, StoreType, WlStorage};
     use namada::ledger::storage_api::{self, StorageWrite};
     use namada::types::chain::ChainId;
+    use namada::types::ethereum_events::Uint;
     use namada::types::hash::Hash;
     use namada::types::storage::{BlockHash, BlockHeight, Key};
     use namada::types::time::DurationSecs;
@@ -487,6 +489,9 @@ mod tests {
             let value_bytes = types::encode(&storage.block.height);
             storage.write(&key, value_bytes)?;
         }
+        let key = bridge_pool::get_nonce_key();
+        let bytes = types::encode(&Uint::default());
+        storage.write(&key, bytes)?;
 
         // Update and commit
         let hash = BlockHash::default();
@@ -581,6 +586,11 @@ mod tests {
             Some(5),
         );
         let new_epoch_start = BlockHeight(1);
+        let bp_nonce_key = bridge_pool::get_nonce_key();
+        let nonce = Uint::default();
+        let bytes = types::encode(&nonce);
+        storage.write(&bp_nonce_key, bytes).unwrap();
+
         storage
             .begin_block(BlockHash::default(), new_epoch_start)
             .expect("begin_block failed");
@@ -606,6 +616,10 @@ mod tests {
             .write(&key, types::encode(&value))
             .expect("write failed");
 
+        let nonce = nonce + 1;
+        let bytes = types::encode(&nonce);
+        storage.write(&bp_nonce_key, bytes).unwrap();
+
         storage.block.epoch = storage.block.epoch.next();
         storage.block.pred_epochs.new_epoch(new_epoch_start);
         let batch = PersistentStorage::batch();
@@ -618,6 +632,11 @@ mod tests {
         storage
             .begin_block(BlockHash::default(), new_epoch_start)
             .expect("begin_block failed");
+
+        let nonce = nonce + 1;
+        let bytes = types::encode(&nonce);
+        storage.write(&bp_nonce_key, bytes).unwrap();
+
         storage.block.epoch = storage.block.epoch.next();
         storage.block.pred_epochs.new_epoch(new_epoch_start);
         let batch = PersistentStorage::batch();
@@ -631,7 +650,30 @@ mod tests {
             "The tree at Height 5 shouldn't be able to be restored"
         );
         let result = storage.get_merkle_tree(6.into(), Some(StoreType::Ibc));
-        assert!(result.is_ok(), "The tree should be restored");
+        assert!(result.is_ok(), "The ibc tree should be restored");
+        let result =
+            storage.get_merkle_tree(6.into(), Some(StoreType::BridgePool));
+        assert!(result.is_ok(), "The bridge pool tree should be restored");
+
+        storage
+            .begin_block(BlockHash::default(), BlockHeight(12))
+            .expect("begin_block failed");
+
+        let nonce = nonce + 1;
+        let bytes = types::encode(&nonce);
+        storage.write(&bp_nonce_key, bytes).unwrap();
+        storage.block.epoch = storage.block.epoch.next();
+        storage.block.pred_epochs.new_epoch(BlockHeight(12));
+        let batch = PersistentStorage::batch();
+        storage.commit_block(batch).expect("commit failed");
+
+        // ibc tree should be able to be restored
+        let result = storage.get_merkle_tree(6.into(), Some(StoreType::Ibc));
+        assert!(result.is_ok(), "The ibc tree should be restored");
+        // bridge pool tree should be pruned because of the nonce
+        let result =
+            storage.get_merkle_tree(6.into(), Some(StoreType::BridgePool));
+        assert!(result.is_err(), "The bridge pool tree should be pruned");
     }
 
     /// Test the prefix iterator with RocksDB.
