@@ -489,7 +489,6 @@ pub fn make_dev_genesis(
                 },
             };
             vals.push(chain::FinalizedValidatorAccountTx {
-                address: Address::Established(address.clone()),
                 tx: transactions::Signed::new(
                     transactions::ValidatorAccountTx {
                         address: StringEncoded::new(address.clone()),

@@ -146,7 +146,7 @@ impl Finalized {
             let address = self
                 .transactions
                 .find_validator(&tendermint_pk)
-                .map(|tx| tx.address.clone())
+                .map(|tx| Address::Established(tx.tx.data.address.raw.clone()))
                 .expect("Validator alias not found in genesis transactions.");
             wallet.extend_from_pre_genesis_validator(
                 address,
@@ -650,10 +650,7 @@ impl FinalizedTransactions {
         });
         let validator_account = validator_account.map(|txs| {
             txs.into_iter()
-                .map(|tx| FinalizedValidatorAccountTx {
-                    address: Address::Established(tx.data.address.raw.clone()),
-                    tx,
-                })
+                .map(|tx| FinalizedValidatorAccountTx { tx })
                 .collect()
         });
         FinalizedTransactions {
@@ -745,7 +742,6 @@ pub struct FinalizedEstablishedAccountTx {
     Eq,
 )]
 pub struct FinalizedValidatorAccountTx {
-    pub address: Address,
     #[serde(flatten)]
     pub tx: transactions::SignedValidatorAccountTx,
 }
