@@ -82,16 +82,17 @@ fn transfer(c: &mut Criterion) {
                         .to_owned();
 
                     // Shield some tokens for Albert
-                    let shield_tx = shielded_ctx.generate_masp_tx(
-                        amount,
-                        TransferSource::Address(defaults::albert_address()),
-                        TransferTarget::PaymentAddress(albert_payment_addr),
-                    );
+                    let (mut shielded_ctx, shield_tx) = shielded_ctx
+                        .generate_masp_tx(
+                            amount,
+                            TransferSource::Address(defaults::albert_address()),
+                            TransferTarget::PaymentAddress(albert_payment_addr),
+                        );
                     shielded_ctx.shell.execute_tx(&shield_tx);
                     shielded_ctx.shell.wl_storage.commit_tx();
                     shielded_ctx.shell.commit();
 
-                    let signed_tx = match bench_name {
+                    let (shielded_ctx, signed_tx) = match bench_name {
                         "transparent" => shielded_ctx.generate_masp_tx(
                             amount,
                             TransferSource::Address(defaults::albert_address()),

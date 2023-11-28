@@ -170,8 +170,8 @@ pub fn dump_tx<IO: Io>(io: &IO, args: &args::Tx, tx: Tx) {
 /// Prepare a transaction for signing and submission by adding a wrapper header
 /// to it.
 #[allow(clippy::too_many_arguments)]
-pub async fn prepare_tx<'a>(
-    context: &impl Namada<'a>,
+pub async fn prepare_tx(
+    context: &impl Namada,
     args: &args::Tx,
     tx: &mut Tx,
     fee_payer: common::PublicKey,
@@ -189,8 +189,8 @@ pub async fn prepare_tx<'a>(
 
 /// Submit transaction and wait for result. Returns a list of addresses
 /// initialized in the transaction if any. In dry run, this is always empty.
-pub async fn process_tx<'a>(
-    context: &impl Namada<'a>,
+pub async fn process_tx(
+    context: &impl Namada,
     args: &args::Tx,
     tx: Tx,
 ) -> Result<ProcessTxResponse> {
@@ -263,8 +263,8 @@ pub async fn has_revealed_pk<C: crate::queries::Client + Sync>(
 }
 
 /// Submit transaction to reveal the given public key
-pub async fn build_reveal_pk<'a>(
-    context: &impl Namada<'a>,
+pub async fn build_reveal_pk(
+    context: &impl Namada,
     args: &args::Tx,
     public_key: &common::PublicKey,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
@@ -289,8 +289,8 @@ pub async fn build_reveal_pk<'a>(
 /// the tx has been successfully included into the mempool of a node
 ///
 /// In the case of errors in any of those stages, an error message is returned
-pub async fn broadcast_tx<'a>(
-    context: &impl Namada<'a>,
+pub async fn broadcast_tx(
+    context: &impl Namada,
     to_broadcast: &TxBroadcastData,
 ) -> Result<Response> {
     let (tx, wrapper_tx_hash, decrypted_tx_hash) = match to_broadcast {
@@ -352,8 +352,8 @@ pub async fn broadcast_tx<'a>(
 /// 3. The decrypted payload of the tx has been included on the blockchain.
 ///
 /// In the case of errors in any of those stages, an error message is returned
-pub async fn submit_tx<'a>(
-    context: &impl Namada<'a>,
+pub async fn submit_tx(
+    context: &impl Namada,
     to_broadcast: TxBroadcastData,
 ) -> Result<TxResponse> {
     let (_, wrapper_hash, decrypted_hash) = match &to_broadcast {
@@ -443,7 +443,7 @@ pub fn decode_component<K, F>(
 }
 
 /// Save accounts initialized from a tx into the wallet, if any.
-pub async fn save_initialized_accounts<'a, N: Namada<'a>>(
+pub async fn save_initialized_accounts<N: Namada>(
     context: &N,
     args: &args::Tx,
     initialized_accounts: Vec<Address>,
@@ -503,8 +503,8 @@ pub async fn save_initialized_accounts<'a, N: Namada<'a>>(
 }
 
 /// Submit validator comission rate change
-pub async fn build_validator_commission_change<'a>(
-    context: &impl Namada<'a>,
+pub async fn build_validator_commission_change(
+    context: &impl Namada,
     args::CommissionRateChange {
         tx: tx_args,
         validator,
@@ -615,8 +615,8 @@ pub async fn build_validator_commission_change<'a>(
 }
 
 /// Submit validator metadata change
-pub async fn build_validator_metadata_change<'a>(
-    context: &impl Namada<'a>,
+pub async fn build_validator_metadata_change(
+    context: &impl Namada,
     args::MetaDataChange {
         tx: tx_args,
         validator,
@@ -744,8 +744,8 @@ pub async fn build_validator_metadata_change<'a>(
 }
 
 /// Craft transaction to update a steward commission
-pub async fn build_update_steward_commission<'a>(
-    context: &impl Namada<'a>,
+pub async fn build_update_steward_commission(
+    context: &impl Namada,
     args::UpdateStewardCommission {
         tx: tx_args,
         steward,
@@ -803,8 +803,8 @@ pub async fn build_update_steward_commission<'a>(
 }
 
 /// Craft transaction to resign as a steward
-pub async fn build_resign_steward<'a>(
-    context: &impl Namada<'a>,
+pub async fn build_resign_steward(
+    context: &impl Namada,
     args::ResignSteward {
         tx: tx_args,
         steward,
@@ -843,8 +843,8 @@ pub async fn build_resign_steward<'a>(
 }
 
 /// Submit transaction to unjail a jailed validator
-pub async fn build_unjail_validator<'a>(
-    context: &impl Namada<'a>,
+pub async fn build_unjail_validator(
+    context: &impl Namada,
     args::TxUnjailValidator {
         tx: tx_args,
         validator,
@@ -950,8 +950,8 @@ pub async fn build_unjail_validator<'a>(
 }
 
 /// Submit transaction to deactivate a validator
-pub async fn build_deactivate_validator<'a>(
-    context: &impl Namada<'a>,
+pub async fn build_deactivate_validator(
+    context: &impl Namada,
     args::TxDeactivateValidator {
         tx: tx_args,
         validator,
@@ -1021,8 +1021,8 @@ pub async fn build_deactivate_validator<'a>(
 }
 
 /// Submit transaction to deactivate a validator
-pub async fn build_reactivate_validator<'a>(
-    context: &impl Namada<'a>,
+pub async fn build_reactivate_validator(
+    context: &impl Namada,
     args::TxReactivateValidator {
         tx: tx_args,
         validator,
@@ -1091,8 +1091,8 @@ pub async fn build_reactivate_validator<'a>(
 }
 
 /// Redelegate bonded tokens from one validator to another
-pub async fn build_redelegation<'a>(
-    context: &impl Namada<'a>,
+pub async fn build_redelegation(
+    context: &impl Namada,
     args::Redelegate {
         tx: tx_args,
         src_validator,
@@ -1271,8 +1271,8 @@ pub async fn build_redelegation<'a>(
 }
 
 /// Submit transaction to withdraw an unbond
-pub async fn build_withdraw<'a>(
-    context: &impl Namada<'a>,
+pub async fn build_withdraw(
+    context: &impl Namada,
     args::Withdraw {
         tx: tx_args,
         validator,
@@ -1354,8 +1354,8 @@ pub async fn build_withdraw<'a>(
 }
 
 /// Submit transaction to withdraw an unbond
-pub async fn build_claim_rewards<'a>(
-    context: &impl Namada<'a>,
+pub async fn build_claim_rewards(
+    context: &impl Namada,
     args::ClaimRewards {
         tx: tx_args,
         validator,
@@ -1402,8 +1402,8 @@ pub async fn build_claim_rewards<'a>(
 }
 
 /// Submit a transaction to unbond
-pub async fn build_unbond<'a>(
-    context: &impl Namada<'a>,
+pub async fn build_unbond(
+    context: &impl Namada,
     args::Unbond {
         tx: tx_args,
         validator,
@@ -1509,8 +1509,8 @@ pub async fn build_unbond<'a>(
 }
 
 /// Query the unbonds post-tx
-pub async fn query_unbonds<'a>(
-    context: &impl Namada<'a>,
+pub async fn query_unbonds(
+    context: &impl Namada,
     args: args::Unbond,
     latest_withdrawal_pre: Option<(Epoch, token::Amount)>,
 ) -> Result<()> {
@@ -1580,8 +1580,8 @@ pub async fn query_unbonds<'a>(
 }
 
 /// Submit a transaction to bond
-pub async fn build_bond<'a>(
-    context: &impl Namada<'a>,
+pub async fn build_bond(
+    context: &impl Namada,
     args::Bond {
         tx: tx_args,
         validator,
@@ -1694,8 +1694,8 @@ pub async fn build_bond<'a>(
 }
 
 /// Build a default proposal governance
-pub async fn build_default_proposal<'a>(
-    context: &impl Namada<'a>,
+pub async fn build_default_proposal(
+    context: &impl Namada,
     args::InitProposal {
         tx,
         proposal_data: _,
@@ -1747,8 +1747,8 @@ pub async fn build_default_proposal<'a>(
 }
 
 /// Build a proposal vote
-pub async fn build_vote_proposal<'a>(
-    context: &impl Namada<'a>,
+pub async fn build_vote_proposal(
+    context: &impl Namada,
     args::VoteProposal {
         tx,
         proposal_id,
@@ -1834,8 +1834,8 @@ pub async fn build_vote_proposal<'a>(
 }
 
 /// Build a pgf funding proposal governance
-pub async fn build_pgf_funding_proposal<'a>(
-    context: &impl Namada<'a>,
+pub async fn build_pgf_funding_proposal(
+    context: &impl Namada,
     args::InitProposal {
         tx,
         proposal_data: _,
@@ -1879,8 +1879,8 @@ pub async fn build_pgf_funding_proposal<'a>(
 }
 
 /// Build a pgf funding proposal governance
-pub async fn build_pgf_stewards_proposal<'a>(
-    context: &impl Namada<'a>,
+pub async fn build_pgf_stewards_proposal(
+    context: &impl Namada,
     args::InitProposal {
         tx,
         proposal_data: _,
@@ -1925,8 +1925,8 @@ pub async fn build_pgf_stewards_proposal<'a>(
 }
 
 /// Submit an IBC transfer
-pub async fn build_ibc_transfer<'a>(
-    context: &impl Namada<'a>,
+pub async fn build_ibc_transfer(
+    context: &impl Namada,
     args: &args::TxIbcTransfer,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
     let default_signer = Some(args.source.clone());
@@ -2054,8 +2054,8 @@ pub async fn build_ibc_transfer<'a>(
 
 /// Abstraction for helping build transactions
 #[allow(clippy::too_many_arguments)]
-pub async fn build<'a, F, D>(
-    context: &impl Namada<'a>,
+pub async fn build<F, D>(
+    context: &impl Namada,
     tx_args: &crate::args::Tx,
     path: PathBuf,
     data: D,
@@ -2080,8 +2080,8 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn build_pow_flag<'a, F, D>(
-    context: &impl Namada<'a>,
+async fn build_pow_flag<F, D>(
+    context: &impl Namada,
     tx_args: &crate::args::Tx,
     path: PathBuf,
     mut data: D,
@@ -2123,9 +2123,9 @@ where
 
 /// Try to decode the given asset type and add its decoding to the supplied set.
 /// Returns true only if a new decoding has been added to the given set.
-async fn add_asset_type<'a>(
+async fn add_asset_type(
     asset_types: &mut HashSet<(Address, MaspDenom, Epoch)>,
-    context: &impl Namada<'a>,
+    context: &impl Namada,
     asset_type: AssetType,
 ) -> bool {
     if let Some(asset_type) = context
@@ -2143,8 +2143,8 @@ async fn add_asset_type<'a>(
 /// Collect the asset types used in the given Builder and decode them. This
 /// function provides the data necessary for offline wallets to present asset
 /// type information.
-async fn used_asset_types<'a, P, R, K, N>(
-    context: &impl Namada<'a>,
+async fn used_asset_types<P, R, K, N>(
+    context: &impl Namada,
     builder: &Builder<P, R, K, N>,
 ) -> std::result::Result<HashSet<(Address, MaspDenom, Epoch)>, RpcError> {
     let mut asset_types = HashSet::new();
@@ -2177,7 +2177,7 @@ async fn used_asset_types<'a, P, R, K, N>(
 }
 
 /// Submit an ordinary transfer
-pub async fn build_transfer<'a, N: Namada<'a>>(
+pub async fn build_transfer<N: Namada>(
     context: &N,
     args: &mut args::TxTransfer,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
@@ -2348,8 +2348,8 @@ pub async fn build_transfer<'a, N: Namada<'a>>(
 }
 
 /// Submit a transaction to initialize an account
-pub async fn build_init_account<'a>(
-    context: &impl Namada<'a>,
+pub async fn build_init_account(
+    context: &impl Namada,
     args::TxInitAccount {
         tx: tx_args,
         vp_code_path,
@@ -2403,8 +2403,8 @@ pub async fn build_init_account<'a>(
 }
 
 /// Submit a transaction to update a VP
-pub async fn build_update_account<'a>(
-    context: &impl Namada<'a>,
+pub async fn build_update_account(
+    context: &impl Namada,
     args::TxUpdateAccount {
         tx: tx_args,
         vp_code_path,
@@ -2485,8 +2485,8 @@ pub async fn build_update_account<'a>(
 }
 
 /// Submit a custom transaction
-pub async fn build_custom<'a>(
-    context: &impl Namada<'a>,
+pub async fn build_custom(
+    context: &impl Namada,
     args::TxCustom {
         tx: tx_args,
         code_path,
@@ -2536,7 +2536,7 @@ pub async fn build_custom<'a>(
 }
 
 /// Generate IBC shielded transfer
-pub async fn gen_ibc_shielded_transfer<'a, N: Namada<'a>>(
+pub async fn gen_ibc_shielded_transfer<N: Namada>(
     context: &N,
     args: args::GenIbcShieldedTransafer,
 ) -> Result<Option<IbcShieldedTransfer>> {
@@ -2609,8 +2609,8 @@ pub async fn gen_ibc_shielded_transfer<'a, N: Namada<'a>>(
     }
 }
 
-async fn get_ibc_src_port_channel<'a>(
-    context: &impl Namada<'a>,
+async fn get_ibc_src_port_channel(
+    context: &impl Namada,
     dest_port_id: &PortId,
     dest_channel_id: &ChannelId,
 ) -> Result<(PortId, ChannelId)> {
@@ -2651,9 +2651,9 @@ async fn get_ibc_src_port_channel<'a>(
         })
 }
 
-async fn expect_dry_broadcast<'a>(
+async fn expect_dry_broadcast(
     to_broadcast: TxBroadcastData,
-    context: &impl Namada<'a>,
+    context: &impl Namada,
 ) -> Result<ProcessTxResponse> {
     match to_broadcast {
         TxBroadcastData::DryRun(tx) => {
@@ -2675,10 +2675,10 @@ fn lift_rpc_error<T>(res: std::result::Result<T, RpcError>) -> Result<T> {
 /// Returns the given validator if the given address is a validator,
 /// otherwise returns an error, force forces the address through even
 /// if it isn't a validator
-async fn known_validator_or_err<'a>(
+async fn known_validator_or_err(
     validator: Address,
     force: bool,
-    context: &impl Namada<'a>,
+    context: &impl Namada,
 ) -> Result<Address> {
     // Check that the validator address exists on chain
     let is_validator = rpc::is_validator(context.client(), &validator).await?;
@@ -2701,10 +2701,10 @@ async fn known_validator_or_err<'a>(
 /// general pattern for checking if an address exists on the chain, or
 /// throwing an error if it's not forced. Takes a generic error
 /// message and the error type.
-async fn address_exists_or_err<'a, F>(
+async fn address_exists_or_err<F>(
     addr: Address,
     force: bool,
-    context: &impl Namada<'a>,
+    context: &impl Namada,
     message: String,
     err: F,
 ) -> Result<Address>
@@ -2727,10 +2727,10 @@ where
 /// Returns the given source address if the given address exists on chain
 /// otherwise returns an error, force forces the address through even
 /// if it isn't on chain
-async fn source_exists_or_err<'a>(
+async fn source_exists_or_err(
     token: Address,
     force: bool,
-    context: &impl Namada<'a>,
+    context: &impl Namada,
 ) -> Result<Address> {
     let message =
         format!("The source address {} doesn't exist on chain.", token);
@@ -2743,10 +2743,10 @@ async fn source_exists_or_err<'a>(
 /// Returns the given target address if the given address exists on chain
 /// otherwise returns an error, force forces the address through even
 /// if it isn't on chain
-async fn target_exists_or_err<'a>(
+async fn target_exists_or_err(
     token: Address,
     force: bool,
-    context: &impl Namada<'a>,
+    context: &impl Namada,
 ) -> Result<Address> {
     let message =
         format!("The target address {} doesn't exist on chain.", token);
@@ -2759,7 +2759,7 @@ async fn target_exists_or_err<'a>(
 /// Checks the balance at the given address is enough to transfer the
 /// given amount, along with the balance even existing. Force
 /// overrides this. Returns the updated balance for fee check if necessary
-async fn check_balance_too_low_err<'a, N: Namada<'a>>(
+async fn check_balance_too_low_err<N: Namada>(
     token: &Address,
     source: &Address,
     amount: token::Amount,
@@ -2822,8 +2822,8 @@ async fn check_balance_too_low_err<'a, N: Namada<'a>>(
     }
 }
 
-async fn query_wasm_code_hash_buf<'a>(
-    context: &impl Namada<'a>,
+async fn query_wasm_code_hash_buf(
+    context: &impl Namada,
     path: &Path,
 ) -> Result<Hash> {
     query_wasm_code_hash(context, path.to_string_lossy()).await

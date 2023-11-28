@@ -165,22 +165,18 @@ impl Context {
     }
 
     /// Make an implementation of Namada from this object and parameters.
-    pub fn to_sdk<'a, C, IO>(
-        &'a mut self,
-        client: &'a C,
-        io: &'a IO,
-    ) -> impl Namada
+    pub fn to_sdk<C, IO>(self, client: C, io: IO) -> impl Namada
     where
         C: namada::ledger::queries::Client + Sync,
         IO: Io,
     {
-        let chain_ctx = self.borrow_mut_chain_or_exit();
+        let chain_ctx = self.take_chain_or_exit();
         NamadaImpl::native_new(
             client,
-            &mut chain_ctx.wallet,
-            &mut chain_ctx.shielded,
+            chain_ctx.wallet,
+            chain_ctx.shielded,
             io,
-            chain_ctx.native_token.clone(),
+            chain_ctx.native_token,
         )
     }
 }

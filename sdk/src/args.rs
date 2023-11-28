@@ -175,9 +175,9 @@ impl<C: NamadaTypes> TxCustom<C> {
 
 impl TxCustom {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_custom(context, self).await
@@ -281,9 +281,9 @@ impl<C: NamadaTypes> TxTransfer<C> {
 
 impl TxTransfer {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &mut self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_transfer(context, self).await
@@ -395,9 +395,9 @@ impl<C: NamadaTypes> TxIbcTransfer<C> {
 
 impl TxIbcTransfer {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_ibc_transfer(context, self).await
@@ -484,9 +484,9 @@ impl<C: NamadaTypes> InitProposal<C> {
 
 impl InitProposal {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         let current_epoch = rpc::query_epoch(context.client()).await?;
@@ -641,9 +641,9 @@ impl<C: NamadaTypes> VoteProposal<C> {
 
 impl VoteProposal {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         let current_epoch = rpc::query_epoch(context.client()).await?;
@@ -714,9 +714,9 @@ impl<C: NamadaTypes> TxInitAccount<C> {
 
 impl TxInitAccount {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_init_account(context, self).await
@@ -869,9 +869,9 @@ impl<C: NamadaTypes> TxUpdateAccount<C> {
 
 impl TxUpdateAccount {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_update_account(context, self).await
@@ -947,9 +947,9 @@ impl<C: NamadaTypes> Bond<C> {
 
 impl Bond {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_bond(context, self).await
@@ -974,9 +974,9 @@ pub struct Unbond<C: NamadaTypes = SdkTypes> {
 
 impl Unbond {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(
         crate::proto::Tx,
         SigningTxData,
@@ -1047,9 +1047,9 @@ pub struct Redelegate<C: NamadaTypes = SdkTypes> {
 
 impl Redelegate {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData)> {
         tx::build_redelegation(context, self).await
     }
@@ -1128,9 +1128,9 @@ impl<C: NamadaTypes> RevealPk<C> {
 
 impl RevealPk {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_reveal_pk(context, &self.tx, &self.public_key).await
@@ -1212,9 +1212,9 @@ impl<C: NamadaTypes> Withdraw<C> {
 
 impl Withdraw {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_withdraw(context, self).await
@@ -1249,9 +1249,9 @@ impl<C: NamadaTypes> TxBuilder<C> for ClaimRewards<C> {
 
 impl ClaimRewards {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_claim_rewards(context, self).await
@@ -1382,9 +1382,9 @@ impl<C: NamadaTypes> CommissionRateChange<C> {
 
 impl CommissionRateChange {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_validator_commission_change(context, self).await
@@ -1441,9 +1441,9 @@ pub struct ConsensusKeyChange<C: NamadaTypes = SdkTypes> {
 
 // impl ConsensusKeyChange {
 //     /// Build a transaction from this builder
-//     pub async fn build<'a>(
+//     pub async fn build(
 //         &self,
-//         context: &impl Namada<'a>,
+//         context: &impl Namada,
 //     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData,
 // Option<Epoch>)>     {
 //         tx::build_change_consensus_key(context, self).await
@@ -1500,9 +1500,9 @@ impl<C: NamadaTypes> MetaDataChange<C> {
 
 impl MetaDataChange {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_validator_metadata_change(context, self).await
@@ -1556,9 +1556,9 @@ impl<C: NamadaTypes> UpdateStewardCommission<C> {
 
 impl UpdateStewardCommission {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_update_steward_commission(context, self).await
@@ -1605,9 +1605,9 @@ impl<C: NamadaTypes> ResignSteward<C> {
 
 impl ResignSteward {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_resign_steward(context, self).await
@@ -1654,9 +1654,9 @@ impl<C: NamadaTypes> TxUnjailValidator<C> {
 
 impl TxUnjailValidator {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_unjail_validator(context, self).await
@@ -1703,9 +1703,9 @@ impl<C: NamadaTypes> TxDeactivateValidator<C> {
 
 impl TxDeactivateValidator {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_deactivate_validator(context, self).await
@@ -1752,9 +1752,9 @@ impl<C: NamadaTypes> TxReactivateValidator<C> {
 
 impl TxReactivateValidator {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_reactivate_validator(context, self).await
@@ -2325,9 +2325,9 @@ impl<C: NamadaTypes> EthereumBridgePool<C> {
 
 impl EthereumBridgePool {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         bridge_pool::build_bridge_pool_tx(context, self).await
