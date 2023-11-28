@@ -3253,7 +3253,7 @@ dependencies = [
 [[package]]
 name = "ledger-namada-rs"
 version = "0.0.1"
-source = "git+https://github.com/heliaxdev/ledger-namada?rev=7e861c440de0fdabaf51e30d97f5c8736be348f3#7e861c440de0fdabaf51e30d97f5c8736be348f3"
+source = "git+https://github.com/Zondax/ledger-namada?tag=v0.0.11#4fd882b84af7c93a1332c32a4e3d705fd63f09ab"
 dependencies = [
  "bincode",
  "byteorder",
