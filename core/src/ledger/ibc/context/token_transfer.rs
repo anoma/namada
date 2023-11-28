@@ -4,15 +4,14 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use super::common::IbcCommonContext;
-use crate::ibc::applications::transfer::coin::PrefixedCoin;
-use crate::ibc::applications::transfer::context::{
+use crate::ibc::apps::transfer::context::{
     TokenTransferExecutionContext, TokenTransferValidationContext,
 };
-use crate::ibc::applications::transfer::denom::PrefixedDenom;
-use crate::ibc::applications::transfer::error::TokenTransferError;
-use crate::ibc::core::ics04_channel::error::ChannelError;
-use crate::ibc::core::ics24_host::identifier::{ChannelId, PortId};
-use crate::ibc::core::ContextError;
+use crate::ibc::apps::transfer::types::error::TokenTransferError;
+use crate::ibc::apps::transfer::types::{PrefixedCoin, PrefixedDenom};
+use crate::ibc::core::channel::types::error::ChannelError;
+use crate::ibc::core::handler::types::error::ContextError;
+use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use crate::ledger::ibc::storage;
 use crate::ledger::storage_api::token::read_denom;
 use crate::types::address::{Address, InternalAddress};

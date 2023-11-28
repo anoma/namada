@@ -17,12 +17,12 @@ default = ["rand"]
 mainnet = []
 wasm-runtime = ["rayon"]
 rand = ["dep:rand", "rand_core"]
-ibc-mocks = ["ibc/mocks" ]
 ethers-derive = [
   "ethbridge-structs/ethers-derive"
 ]
 # for integration tests and test utilies
 testing = [
+  "ibc-testkit",
   "rand",
   "proptest",
 ]
@@ -42,9 +42,9 @@ ed25519-consensus.workspace = true
 ethabi.workspace = true
 ethbridge-structs.workspace = true
 eyre.workspace = true
-ibc = { version = "0.47.0", default-features = false, features = ["serde"]}
-ibc-derive = { version = "0.3.0"}
-ibc-proto = {version = "0.37.1", default-features = false}
+ibc.workspace = true
+ibc-derive.workspace = true
+ibc-testkit = {workspace = true, optional = true}
 ics23.workspace = true
 impl-num-traits = "0.1.2"
 index-set.workspace = true

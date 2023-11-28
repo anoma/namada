@@ -41,8 +41,8 @@ use crate::core::ledger::governance::storage::vote::{
     StorageProposalVote, VoteType,
 };
 use crate::error::{EncodingError, Error, TxError};
-use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
-use crate::ibc_proto::google::protobuf::Any;
+use crate::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
+use crate::ibc::primitives::proto::Any;
 use crate::io::*;
 use crate::masp::make_asset_type;
 use crate::proto::{MaspBuilder, Section, Tx};

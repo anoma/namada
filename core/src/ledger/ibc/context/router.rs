@@ -4,8 +4,10 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use super::super::ModuleWrapper;
-use crate::ibc::core::ics24_host::identifier::PortId;
-use crate::ibc::core::router::{Module, ModuleId, Router};
+use crate::ibc::core::host::types::identifiers::PortId;
+use crate::ibc::core::router::module::Module;
+use crate::ibc::core::router::router::Router;
+use crate::ibc::core::router::types::module::ModuleId;
 
 /// IBC router
 #[derive(Debug, Default)]

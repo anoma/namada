@@ -12,9 +12,10 @@ use namada_core::types::hash::Hash;
 use namada_core::types::storage::BlockHeight;
 
 use crate::events::{Event, EventType};
-use crate::ibc::core::ics04_channel::packet::Sequence;
-use crate::ibc::core::ics24_host::identifier::{ChannelId, ClientId, PortId};
-use crate::ibc::Height as IbcHeight;
+use crate::ibc::core::client::types::Height as IbcHeight;
+use crate::ibc::core::host::types::identifiers::{
+    ChannelId, ClientId, PortId, Sequence,
+};
 
 /// A [`QueryMatcher`] verifies if a Namada event matches a
 /// given Tendermint query.
@@ -65,8 +66,9 @@ impl QueryMatcher {
         client_id: ClientId,
         consensus_height: BlockHeight,
     ) -> Self {
-        use crate::ibc::core::ics02_client::events::{
+        use crate::ibc::core::client::types::events::{
             CLIENT_ID_ATTRIBUTE_KEY, CONSENSUS_HEIGHTS_ATTRIBUTE_KEY,
+            UPDATE_CLIENT_EVENT,
         };
 
         let mut attributes = HashMap::new();
@@ -79,7 +81,7 @@ impl QueryMatcher {
                 .to_string(),
         );
         Self {
-            event_type: EventType::Ibc("update_client".to_string()),
+            event_type: EventType::Ibc(UPDATE_CLIENT_EVENT.to_string()),
             attributes,
         }
     }

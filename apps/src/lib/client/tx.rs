@@ -13,7 +13,7 @@ use namada::core::ledger::governance::cli::offline::{
 use namada::core::ledger::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal, ProposalVote,
 };
-use namada::ibc::applications::transfer::Memo;
+use namada::ibc::apps::transfer::types::Memo;
 use namada::proto::{CompressedSignature, Section, Signer, Tx};
 use namada::types::address::{Address, ImplicitAddress};
 use namada::types::dec::Dec;

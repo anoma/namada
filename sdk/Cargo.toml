@@ -41,10 +41,6 @@ async-client = [
   "async-trait",
 ]
 
-ibc-mocks = [
-  "namada_core/ibc-mocks",
-]
-
 # for integration tests and test utilies
 testing = [
   "namada_core/testing",

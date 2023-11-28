@@ -1,6 +1,6 @@
 extern crate alloc;
 
-pub use namada_core::{ibc, ibc_proto, proto, tendermint, tendermint_proto};
+pub use namada_core::{ibc, proto, tendermint, tendermint_proto};
 #[cfg(feature = "tendermint-rpc")]
 pub use tendermint_rpc;
 pub use {
@@ -31,6 +31,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use args::{InputAmount, SdkTypes};
+use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::types::address::Address;
 use namada_core::types::dec::Dec;
 use namada_core::types::ethereum_events::EthAddress;
@@ -41,7 +42,6 @@ use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_core::types::transaction::GasLimit;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-use crate::ibc::core::ics24_host::identifier::{ChannelId, PortId};
 use crate::io::Io;
 use crate::masp::{ShieldedContext, ShieldedUtils};
 use crate::proto::Tx;

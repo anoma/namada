@@ -3,23 +3,26 @@
 use super::client::{AnyClientState, AnyConsensusState};
 use super::common::IbcCommonContext;
 use super::IbcContext;
-use crate::ibc::core::events::IbcEvent;
-use crate::ibc::core::ics02_client::ClientExecutionContext;
-use crate::ibc::core::ics03_connection::connection::ConnectionEnd;
-use crate::ibc::core::ics04_channel::channel::ChannelEnd;
-use crate::ibc::core::ics04_channel::commitment::{
+use crate::ibc::core::channel::types::channel::ChannelEnd;
+use crate::ibc::core::channel::types::commitment::{
     AcknowledgementCommitment, PacketCommitment,
 };
-use crate::ibc::core::ics04_channel::packet::{Receipt, Sequence};
-use crate::ibc::core::ics24_host::identifier::{ClientId, ConnectionId};
-use crate::ibc::core::ics24_host::path::{
+use crate::ibc::core::channel::types::packet::Receipt;
+use crate::ibc::core::client::context::ClientExecutionContext;
+use crate::ibc::core::client::types::Height;
+use crate::ibc::core::connection::types::ConnectionEnd;
+use crate::ibc::core::handler::types::error::ContextError;
+use crate::ibc::core::handler::types::events::IbcEvent;
+use crate::ibc::core::host::types::identifiers::{
+    ClientId, ConnectionId, Sequence,
+};
+use crate::ibc::core::host::types::path::{
     AckPath, ChannelEndPath, ClientConnectionPath, ClientConsensusStatePath,
     ClientStatePath, CommitmentPath, ConnectionPath, ReceiptPath, SeqAckPath,
     SeqRecvPath, SeqSendPath,
 };
-use crate::ibc::core::timestamp::Timestamp;
-use crate::ibc::core::{ContextError, ExecutionContext};
-use crate::ibc::Height;
+use crate::ibc::core::host::ExecutionContext;
+use crate::ibc::primitives::Timestamp;
 use crate::ledger::ibc::storage;
 
 impl<C> ClientExecutionContext for IbcContext<C>
@@ -47,8 +50,8 @@ where
     ) -> Result<(), ContextError> {
         let client_id = consensus_state_path.client_id;
         let height = Height::new(
-            consensus_state_path.epoch,
-            consensus_state_path.height,
+            consensus_state_path.revision_number,
+            consensus_state_path.revision_height,
         )?;
         self.inner.borrow_mut().store_consensus_state(
             &client_id,
@@ -63,8 +66,8 @@ where
     ) -> Result<(), ContextError> {
         let client_id = consensus_state_path.client_id;
         let height = Height::new(
-            consensus_state_path.epoch,
-            consensus_state_path.height,
+            consensus_state_path.revision_number,
+            consensus_state_path.revision_height,
         )?;
         self.inner
             .borrow_mut()
