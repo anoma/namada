@@ -499,9 +499,9 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         rpc::query_and_print_rewards(&namada, args).await;
                     }
                     Sub::QueryDelegations(QueryDelegations(mut args)) => {
