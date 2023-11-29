@@ -63,21 +63,53 @@ use crate::tx::{
     TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
     VP_USER_WASM,
 };
-use crate::wallet::{Wallet, WalletIo, WalletStorage};
+use crate::wallet::{Wallet, WalletIo};
+
+#[cfg(feature = "async-client")]
+pub trait ClientTrait: queries::Client + Sync + Send {}
+
+#[cfg(not(feature = "async-client"))]
+pub trait ClientTrait: queries::Client {}
+
+#[cfg(feature = "async-client")]
+pub trait WalletTrait: WalletIo + Sync + Send {}
+
+#[cfg(not(feature = "async-client"))]
+pub trait WalletTrait: WalletIo {}
+
+#[cfg(feature = "async-client")]
+pub trait ShieldedUtilsTrait: ShieldedUtils + Sync + Send {}
+
+#[cfg(not(feature = "async-client"))]
+pub trait ShieldedUtilsTrait: ShieldedUtils {}
+
+#[cfg(feature = "async-client")]
+pub trait IoTrait: Io + Sync + Send {}
+
+#[cfg(not(feature = "async-client"))]
+pub trait IoTrait: Io {}
+
+
+#[cfg(feature = "async-client")]
+pub trait SSTrait: Sync + Send {}
+
+#[cfg(not(feature = "async-client"))]
+pub trait SSTrait: {}
+
 
 #[cfg_attr(feature = "async-send", async_trait::async_trait)]
 #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
 /// An interface for high-level interaction with the Namada SDK
-pub trait Namada: Sized + Sync {
+pub trait Namada: Sized + SSTrait {
     /// A client with async request dispatcher method
-    type Client: queries::Client + Sync + Send;
+    type Client: ClientTrait;
     /// Captures the interactive parts of the wallet's functioning
-    type WalletUtils: WalletIo + WalletStorage + Sync + Send;
+    type WalletUtils: WalletTrait;
     /// Abstracts platform specific details away from the logic of shielded pool
     /// operations.
-    type ShieldedUtils: ShieldedUtils + Sync + Send;
+    type ShieldedUtils: ShieldedUtilsTrait;
     /// Captures the input/output streams used by this object
-    type Io: Io + Sync + Send;
+    type Io: IoTrait;
 
     /// Obtain the client for communicating with the ledger
     fn client(&self) -> &Self::Client;
@@ -495,15 +527,13 @@ pub trait Namada: Sized + Sync {
 
     /// Sign the given transaction using the given signing data
     async fn sign<
-        F: std::future::Future<Output = crate::error::Result<Tx>> + Send + Sync,
+        F: std::future::Future<Output = crate::error::Result<Tx>> + SSTrait,
     >(
         &self,
         tx: &mut Tx,
         args: &args::Tx,
         signing_data: SigningTxData,
-        with: impl Fn(Tx, common::PublicKey, HashSet<signing::Signable>) -> F
-        + Send
-        + Sync,
+        with: impl Fn(Tx, common::PublicKey, HashSet<signing::Signable>) -> F,
     ) -> crate::error::Result<()> {
         signing::sign_tx(self, args, tx, signing_data, with).await
     }
@@ -537,30 +567,6 @@ pub trait Namada: Sized + Sync {
         format_denominated_amount(self.client(), self.io(), token, amount).await
     }
 }
-
-#[cfg(feature = "async-client")]
-pub trait ClientTrait: queries::Client + Sync + Send {}
-
-#[cfg(not(feature = "async-client"))]
-pub trait ClientTrait: queries::Client {}
-
-#[cfg(feature = "async-client")]
-pub trait WalletTrait: WalletIo + Sync + Send {}
-
-#[cfg(not(feature = "async-client"))]
-pub trait WalletTrait: WalletIo {}
-
-#[cfg(feature = "async-client")]
-pub trait ShieldedUtilsTrait: ShieldedUtils + Sync + Send {}
-
-#[cfg(not(feature = "async-client"))]
-pub trait ShieldedUtilsTrait: ShieldedUtils {}
-
-#[cfg(feature = "async-client")]
-pub trait IoTrait: Io + Sync + Send {}
-
-#[cfg(not(feature = "async-client"))]
-pub trait IoTrait: Io {}
 
 /// Provides convenience methods for common Namada interactions
 pub struct NamadaImpl<C, U, V, I>
@@ -650,6 +656,14 @@ where
         ))
     }
 }
+
+impl<C, U, V, I> SSTrait for NamadaImpl<C, U, V, I>
+where
+    C: ClientTrait,
+    U: WalletTrait + FsWalletStorage,
+    V: ShieldedUtilsTrait,
+    I: IoTrait,
+{}
 
 #[cfg_attr(feature = "async-send", async_trait::async_trait)]
 #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]

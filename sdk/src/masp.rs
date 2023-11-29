@@ -74,7 +74,7 @@ use crate::rpc::{query_conversion, query_storage_value};
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
 use crate::tx::decode_component;
-use crate::{display_line, edisplay_line, rpc, Namada};
+use crate::{display_line, edisplay_line, rpc, Namada, SSTrait};
 
 /// Env var to point to a dir with MASP parameters. When not specified,
 /// the default OS specific path is used.
@@ -393,8 +393,7 @@ pub trait ShieldedUtils:
     + BorshSerialize
     + Default
     + Clone
-    + std::marker::Send
-    + std::marker::Sync
+    + SSTrait
 {
     /// Get a MASP transaction prover
     fn local_tx_prover(&self) -> LocalTxProver;
@@ -2172,6 +2171,8 @@ pub mod fs {
         }
     }
 
+    impl SSTrait for FsShieldedUtils {}
+
     #[cfg_attr(feature = "async-send", async_trait::async_trait)]
     #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
     impl ShieldedUtils for FsShieldedUtils {
@@ -2190,7 +2191,7 @@ pub mod fs {
 
         /// Try to load the last saved shielded context from the given context
         /// directory. If this fails, then leave the current context unchanged.
-        async fn load<U: ShieldedUtils + std::marker::Send>(
+        async fn load<U: ShieldedUtils>(
             &self,
             ctx: &mut ShieldedContext<U>,
         ) -> std::io::Result<()> {
@@ -2208,7 +2209,7 @@ pub mod fs {
 
         /// Save this shielded context into its associated context directory
         async fn save<
-            U: ShieldedUtils + std::marker::Send + std::marker::Sync,
+            U: ShieldedUtils,
         >(
             &self,
             ctx: &ShieldedContext<U>,

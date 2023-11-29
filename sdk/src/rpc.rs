@@ -1128,8 +1128,8 @@ pub async fn denominate_amount<C: Client + Sync>(
 
 /// Look up the denomination of a token in order to format it
 /// correctly as a string.
-pub async fn format_denominated_amount(
-    client: &(impl Client + Sync),
+pub async fn format_denominated_amount<C: Client + Sync>(
+    client: &C,
     io: &impl Io,
     token: &Address,
     amount: token::Amount,

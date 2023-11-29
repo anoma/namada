@@ -43,7 +43,7 @@ use crate::core::ledger::governance::storage::vote::{
 use crate::error::{EncodingError, Error, TxError};
 use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use crate::ibc_proto::google::protobuf::Any;
-use crate::io::*;
+use crate::{io::*, SSTrait};
 use crate::masp::make_asset_type;
 use crate::proto::{MaspBuilder, Section, Tx};
 use crate::rpc::validate_amount;
@@ -227,13 +227,13 @@ pub async fn default_sign(
 ///
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
 pub async fn sign_tx<
-    F: std::future::Future<Output = Result<Tx, Error>> + Send + Sync,
+    F: std::future::Future<Output = Result<Tx, Error>> + SSTrait,
 >(
     context: &impl Namada,
     args: &args::Tx,
     tx: &mut Tx,
     signing_data: SigningTxData,
-    sign: impl Fn(Tx, common::PublicKey, HashSet<Signable>) -> F + Sync + Send,
+    sign: impl Fn(Tx, common::PublicKey, HashSet<Signable>) -> F,
 ) -> Result<(), Error> {
     let mut used_pubkeys = HashSet::new();
 
