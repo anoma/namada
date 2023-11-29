@@ -344,7 +344,8 @@ where
                     total_reward += (addr_bal
                         * (new_normed_inflation, *normed_inflation))
                         .0
-                        - addr_bal;
+                        .checked_sub(addr_bal)
+                        .unwrap_or_default();
                     // Save the new normed inflation
                     *normed_inflation = new_normed_inflation;
                 }
