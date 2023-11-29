@@ -4,6 +4,7 @@ pub use namada_core::{ibc, ibc_proto, proto, tendermint, tendermint_proto};
 #[cfg(feature = "tendermint-rpc")]
 pub use tendermint_rpc;
 use tx::{TX_INIT_ACCOUNT_WASM, VP_VALIDATOR_WASM};
+use wallet::fs::FsWalletStorage;
 pub use {
     bip39, borsh, masp_primitives, masp_proofs, namada_core as core,
     namada_proof_of_stake as proof_of_stake, zeroize,
@@ -71,10 +72,10 @@ pub trait Namada: Sized + Sync {
     /// A client with async request dispatcher method
     type Client: queries::Client + Sync + Send;
     /// Captures the interactive parts of the wallet's functioning
-    type WalletUtils: WalletIo + WalletStorage  + Sync + Send;
+    type WalletUtils: WalletIo + WalletStorage + Sync + Send;
     /// Abstracts platform specific details away from the logic of shielded pool
     /// operations.
-    type ShieldedUtils: ShieldedUtils  + Sync + Send;
+    type ShieldedUtils: ShieldedUtils + Sync + Send;
     /// Captures the input/output streams used by this object
     type Io: Io + Sync + Send;
 
@@ -493,12 +494,16 @@ pub trait Namada: Sized + Sync {
     }
 
     /// Sign the given transaction using the given signing data
-    async fn sign<F: std::future::Future<Output = crate::error::Result<Tx>> + Send + Sync>(
+    async fn sign<
+        F: std::future::Future<Output = crate::error::Result<Tx>> + Send + Sync,
+    >(
         &self,
         tx: &mut Tx,
         args: &args::Tx,
         signing_data: SigningTxData,
-        with: impl Fn(Tx, common::PublicKey, HashSet<signing::Signable>) -> F + Send + Sync,
+        with: impl Fn(Tx, common::PublicKey, HashSet<signing::Signable>) -> F
+        + Send
+        + Sync,
     ) -> crate::error::Result<()> {
         signing::sign_tx(self, args, tx, signing_data, with).await
     }
@@ -533,13 +538,37 @@ pub trait Namada: Sized + Sync {
     }
 }
 
+#[cfg(feature = "async-client")]
+pub trait ClientTrait: queries::Client + Sync + Send {}
+
+#[cfg(not(feature = "async-client"))]
+pub trait ClientTrait: queries::Client {}
+
+#[cfg(feature = "async-client")]
+pub trait WalletTrait: WalletIo + Sync + Send {}
+
+#[cfg(not(feature = "async-client"))]
+pub trait WalletTrait: WalletIo {}
+
+#[cfg(feature = "async-client")]
+pub trait ShieldedUtilsTrait: ShieldedUtils + Sync + Send {}
+
+#[cfg(not(feature = "async-client"))]
+pub trait ShieldedUtilsTrait: ShieldedUtils {}
+
+#[cfg(feature = "async-client")]
+pub trait IoTrait: Io + Sync + Send {}
+
+#[cfg(not(feature = "async-client"))]
+pub trait IoTrait: Io {}
+
 /// Provides convenience methods for common Namada interactions
 pub struct NamadaImpl<C, U, V, I>
 where
-    C: queries::Client + Sync + Send,
-    U: WalletIo + Sync + Send,
-    V: ShieldedUtils + Sync + Send,
-    I: Io + Sync + Send,
+    C: ClientTrait,
+    U: WalletTrait,
+    V: ShieldedUtilsTrait,
+    I: IoTrait,
 {
     /// Used to send and receive messages from the ledger
     pub client: C,
@@ -557,10 +586,10 @@ where
 
 impl<C, U, V, I> NamadaImpl<C, U, V, I>
 where
-    C: queries::Client + Sync + Send,
-    U: WalletIo + Sync + Send ,
-    V: ShieldedUtils + Sync + Send,
-    I: Io + Sync + Send,
+    C: ClientTrait,
+    U: WalletTrait,
+    V: ShieldedUtilsTrait,
+    I: IoTrait,
 {
     /// Construct a new Namada context with the given native token address
     pub fn native_new(
@@ -626,10 +655,10 @@ where
 #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
 impl<C, U, V, I> Namada for NamadaImpl<C, U, V, I>
 where
-    C: queries::Client + Sync + Send,
-    U: WalletIo + WalletStorage + Sync + Send,
-    V: ShieldedUtils + Sync + Send,
-    I: Io + Sync + Send,
+    C: ClientTrait,
+    U: WalletTrait + FsWalletStorage,
+    V: ShieldedUtilsTrait,
+    I: IoTrait,
 {
     type Client = C;
     type Io = I;
@@ -677,10 +706,10 @@ where
 /// Allow the prototypical Tx builder to be modified
 impl<C, U, V, I> args::TxBuilder<SdkTypes> for NamadaImpl<C, U, V, I>
 where
-    C: queries::Client + Sync + std::marker::Send,
-    U: WalletIo + Sync + Send,
-    V: ShieldedUtils + Sync + Send,
-    I: Io + Sync + Send,
+    C: ClientTrait,
+    U: WalletTrait,
+    V: ShieldedUtilsTrait,
+    I: IoTrait,
 {
     fn tx<F>(self, func: F) -> Self
     where

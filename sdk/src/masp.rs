@@ -388,7 +388,13 @@ impl<P1, R1, N1>
 #[cfg_attr(feature = "async-send", async_trait::async_trait)]
 #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
 pub trait ShieldedUtils:
-    Sized + BorshDeserialize + BorshSerialize + Default + Clone + std::marker::Send + std::marker::Sync
+    Sized
+    + BorshDeserialize
+    + BorshSerialize
+    + Default
+    + Clone
+    + std::marker::Send
+    + std::marker::Sync
 {
     /// Get a MASP transaction prover
     fn local_tx_prover(&self) -> LocalTxProver;
@@ -2115,8 +2121,6 @@ pub mod fs {
     use std::fs::{File, OpenOptions};
     use std::io::{Read, Write};
 
-    use async_trait::async_trait;
-
     use super::*;
 
     /// Shielded context file name
@@ -2203,7 +2207,9 @@ pub mod fs {
         }
 
         /// Save this shielded context into its associated context directory
-        async fn save<U: ShieldedUtils + std::marker::Send + std::marker::Sync>(
+        async fn save<
+            U: ShieldedUtils + std::marker::Send + std::marker::Sync,
+        >(
             &self,
             ctx: &ShieldedContext<U>,
         ) -> std::io::Result<()> {
