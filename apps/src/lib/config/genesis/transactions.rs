@@ -773,7 +773,14 @@ impl<T> Signed<T> {
                     None
                 }
             })
-            .unwrap();
+            .unwrap_or_else(|| {
+                panic!(
+                    "No signature could be produced for a transaction of type \
+                     {}. The most likely cause is a missing secret key, \
+                     public key hash or alias in your pre-genesis wallet.",
+                    std::any::type_name::<T>()
+                );
+            });
         for (ix, sig) in sigs.signatures.into_iter() {
             self.signatures.insert(
                 StringEncoded::new(pks[ix as usize].clone()),
