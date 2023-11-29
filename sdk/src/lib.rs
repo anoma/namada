@@ -64,18 +64,19 @@ use crate::tx::{
 };
 use crate::wallet::{Wallet, WalletIo, WalletStorage};
 
-#[async_trait::async_trait(?Send)]
+#[cfg_attr(feature = "async-send", async_trait::async_trait)]
+#[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
 /// An interface for high-level interaction with the Namada SDK
-pub trait Namada: Sized {
+pub trait Namada: Sized + Sync {
     /// A client with async request dispatcher method
-    type Client: queries::Client + Sync;
+    type Client: queries::Client + Sync + Send;
     /// Captures the interactive parts of the wallet's functioning
-    type WalletUtils: WalletIo + WalletStorage;
+    type WalletUtils: WalletIo + WalletStorage  + Sync + Send;
     /// Abstracts platform specific details away from the logic of shielded pool
     /// operations.
-    type ShieldedUtils: ShieldedUtils;
+    type ShieldedUtils: ShieldedUtils  + Sync + Send;
     /// Captures the input/output streams used by this object
-    type Io: Io;
+    type Io: Io + Sync + Send;
 
     /// Obtain the client for communicating with the ledger
     fn client(&self) -> &Self::Client;
@@ -492,12 +493,12 @@ pub trait Namada: Sized {
     }
 
     /// Sign the given transaction using the given signing data
-    async fn sign<F: std::future::Future<Output = crate::error::Result<Tx>>>(
+    async fn sign<F: std::future::Future<Output = crate::error::Result<Tx>> + Send + Sync>(
         &self,
         tx: &mut Tx,
         args: &args::Tx,
         signing_data: SigningTxData,
-        with: impl Fn(Tx, common::PublicKey, HashSet<signing::Signable>) -> F,
+        with: impl Fn(Tx, common::PublicKey, HashSet<signing::Signable>) -> F + Send + Sync,
     ) -> crate::error::Result<()> {
         signing::sign_tx(self, args, tx, signing_data, with).await
     }
@@ -535,10 +536,10 @@ pub trait Namada: Sized {
 /// Provides convenience methods for common Namada interactions
 pub struct NamadaImpl<C, U, V, I>
 where
-    C: queries::Client + Sync,
-    U: WalletIo,
-    V: ShieldedUtils,
-    I: Io,
+    C: queries::Client + Sync + Send,
+    U: WalletIo + Sync + Send,
+    V: ShieldedUtils + Sync + Send,
+    I: Io + Sync + Send,
 {
     /// Used to send and receive messages from the ledger
     pub client: C,
@@ -556,10 +557,10 @@ where
 
 impl<C, U, V, I> NamadaImpl<C, U, V, I>
 where
-    C: queries::Client + Sync,
-    U: WalletIo,
-    V: ShieldedUtils,
-    I: Io,
+    C: queries::Client + Sync + Send,
+    U: WalletIo + Sync + Send ,
+    V: ShieldedUtils + Sync + Send,
+    I: Io + Sync + Send,
 {
     /// Construct a new Namada context with the given native token address
     pub fn native_new(
@@ -621,13 +622,14 @@ where
     }
 }
 
-#[async_trait::async_trait(?Send)]
+#[cfg_attr(feature = "async-send", async_trait::async_trait)]
+#[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
 impl<C, U, V, I> Namada for NamadaImpl<C, U, V, I>
 where
-    C: queries::Client + Sync,
-    U: WalletIo + WalletStorage,
-    V: ShieldedUtils,
-    I: Io,
+    C: queries::Client + Sync + Send,
+    U: WalletIo + WalletStorage + Sync + Send,
+    V: ShieldedUtils + Sync + Send,
+    I: Io + Sync + Send,
 {
     type Client = C;
     type Io = I;
@@ -675,10 +677,10 @@ where
 /// Allow the prototypical Tx builder to be modified
 impl<C, U, V, I> args::TxBuilder<SdkTypes> for NamadaImpl<C, U, V, I>
 where
-    C: queries::Client + Sync,
-    U: WalletIo,
-    V: ShieldedUtils,
-    I: Io,
+    C: queries::Client + Sync + std::marker::Send,
+    U: WalletIo + Sync + Send,
+    V: ShieldedUtils + Sync + Send,
+    I: Io + Sync + Send,
 {
     fn tx<F>(self, func: F) -> Self
     where
