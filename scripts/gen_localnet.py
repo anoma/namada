@@ -5,6 +5,9 @@ import subprocess
 import shutil
 import toml
 
+def system(cmd):
+    if os.system(cmd) != 0:
+        exit(1)
 
 def move_genesis_wallet(genesis_wallet_toml : str, wallet_toml : str):
     genesis_wallet = toml.load(genesis_wallet_toml)
@@ -58,7 +61,11 @@ args = parser.parse_args()
 
 # Access the arguments
 if args.localnet_dir:
-    localnet_dir = namada_dir + '/' + args.localnet_dir
+    if args.localnet_dir[-1] == '/':
+        args.localnet_dir = args.localnet_dir[:-1]
+    print(os.path.basename(args.localnet_dir))
+    localnet_dir = namada_dir + '/' + os.path.basename(args.localnet_dir)
+    shutil.copytree(args.localnet_dir, localnet_dir)
 
     if os.path.isdir(localnet_dir) and os.listdir(localnet_dir):
         print('Using localnet directory: ' + localnet_dir)
@@ -137,7 +144,7 @@ if not os.path.isdir(WASM_PATH) or not os.listdir(WASM_PATH):
     print(f"Cannot find wasm directory that is not empty at {WASM_PATH}")
     sys.exit(1)
 
-os.system(f"{namadac_bin} --base-dir={BASE_DIR} utils init-network --chain-prefix {CHAIN_PREFIX} --genesis-time {GENESIS_TIME} --templates-path {TEMPLATES_PATH} --wasm-checksums-path {WASM_CHECKSUMS_PATH}")
+system(f"{namadac_bin} --base-dir={BASE_DIR} utils init-network --chain-prefix {CHAIN_PREFIX} --genesis-time {GENESIS_TIME} --templates-path {TEMPLATES_PATH} --wasm-checksums-path {WASM_CHECKSUMS_PATH}")
 
 base_dir_files = os.listdir(BASE_DIR)
 CHAIN_ID=""
@@ -158,7 +165,7 @@ if not os.path.isdir(PRE_GENESIS_PATH) or not os.listdir(PRE_GENESIS_PATH):
     print(f"Cannot find pre-genesis directory that is not empty at {PRE_GENESIS_PATH}")
     sys.exit(1)
 
-os.system(f"NAMADA_NETWORK_CONFIGS_DIR='{temp_dir}' {namadac_bin} --base-dir={BASE_DIR} utils join-network --chain-id {CHAIN_ID} --genesis-validator {GENESIS_VALIDATOR} --pre-genesis-path {PRE_GENESIS_PATH} --dont-prefetch-wasm")
+system(f"NAMADA_NETWORK_CONFIGS_DIR='{temp_dir}' {namadac_bin} --base-dir={BASE_DIR} utils join-network --chain-id {CHAIN_ID} --genesis-validator {GENESIS_VALIDATOR} --pre-genesis-path {PRE_GENESIS_PATH} --dont-prefetch-wasm")
 
 shutil.rmtree(BASE_DIR + '/' + CHAIN_ID + '/wasm/')
 shutil.move(temp_dir + CHAIN_ID + '/wasm/', BASE_DIR + '/' + CHAIN_ID + '/wasm/')
