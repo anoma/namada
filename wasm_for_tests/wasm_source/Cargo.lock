@@ -507,9 +507,9 @@ dependencies = [
 
 [[package]]
 name = "borsh"
-version = "1.0.0-alpha.4"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41898277107b0d3f027593697912977397eba6ac39a55bdd2eb02c1d5d5013b5"
+checksum = "bf617fabf5cdbdc92f774bfe5062d870f228b80056d41180797abf48bed4056e"
 dependencies = [
  "borsh-derive",
  "cfg_aliases",
@@ -517,12 +517,12 @@ dependencies = [
 
 [[package]]
 name = "borsh-derive"
-version = "1.0.0-alpha.4"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "413cb435569fe499e89235f758304e0e7198016baa351d8f5827ea0f40526ce0"
+checksum = "f404657a7ea7b5249e36808dff544bc88a28f26e0ac40009f674b7a009d14be3"
 dependencies = [
  "once_cell",
- "proc-macro-crate",
+ "proc-macro-crate 2.0.0",
  "proc-macro2",
  "quote",
  "syn 2.0.38",
@@ -531,8 +531,8 @@ dependencies = [
 
 [[package]]
 name = "borsh-ext"
-version = "1.0.0-alpha.4"
-source = "git+https://github.com/heliaxdev/borsh-ext?tag=v1.0.0-alpha.4#6bebf357002f96574ac37a28f547b6c88e91b799"
+version = "1.2.0"
+source = "git+https://github.com/heliaxdev/borsh-ext?tag=v1.2.0#a62fee3e847e512cad9ac0f1fd5a900e5db9ba37"
 dependencies = [
  "borsh",
 ]
@@ -2298,7 +2298,7 @@ dependencies = [
  "futures-util",
  "http",
  "hyper",
- "rustls 0.21.8",
+ "rustls",
  "tokio",
  "tokio-rustls",
 ]
@@ -2485,7 +2485,7 @@ checksum = "ce23b50ad8242c51a442f3ff322d56b02f08852c77e4c0b4d3fd684abc89c683"
 [[package]]
 name = "index-set"
 version = "0.8.0"
-source = "git+https://github.com/heliaxdev/index-set?tag=v0.8.0#0c218cc300c1bb7a1acf34f21b6e9d489df5fda8"
+source = "git+https://github.com/heliaxdev/index-set?tag=v0.8.1#b0d928f83cf0d465ccda299d131e8df2859b5184"
 dependencies = [
  "borsh",
  "serde",
@@ -2753,8 +2753,8 @@ dependencies = [
 
 [[package]]
 name = "masp_note_encryption"
-version = "0.2.0"
-source = "git+https://github.com/anoma/masp?rev=77e009626f3f52fe83c81ec6ee38fc2547d38da3#77e009626f3f52fe83c81ec6ee38fc2547d38da3"
+version = "1.0.0"
+source = "git+https://github.com/anoma/masp?tag=v1.0.0#c3c6047a9c9da54058afc71219b913ac9f79e48b"
 dependencies = [
  "borsh",
  "chacha20",
@@ -2766,8 +2766,8 @@ dependencies = [
 
 [[package]]
 name = "masp_primitives"
-version = "0.9.0"
-source = "git+https://github.com/anoma/masp?rev=77e009626f3f52fe83c81ec6ee38fc2547d38da3#77e009626f3f52fe83c81ec6ee38fc2547d38da3"
+version = "1.0.0"
+source = "git+https://github.com/anoma/masp?tag=v1.0.0#c3c6047a9c9da54058afc71219b913ac9f79e48b"
 dependencies = [
  "aes",
  "bip0039",
@@ -2797,8 +2797,8 @@ dependencies = [
 
 [[package]]
 name = "masp_proofs"
-version = "0.9.0"
-source = "git+https://github.com/anoma/masp?rev=77e009626f3f52fe83c81ec6ee38fc2547d38da3#77e009626f3f52fe83c81ec6ee38fc2547d38da3"
+version = "1.0.0"
+source = "git+https://github.com/anoma/masp?tag=v1.0.0#c3c6047a9c9da54058afc71219b913ac9f79e48b"
 dependencies = [
  "bellman",
  "blake2b_simd",
@@ -2899,14 +2899,14 @@ dependencies = [
 
 [[package]]
 name = "minreq"
-version = "2.8.1"
+version = "2.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3de406eeb24aba36ed3829532fa01649129677186b44a49debec0ec574ca7da7"
+checksum = "cb3371dfc7b772c540da1380123674a8e20583aca99907087d990ca58cf44203"
 dependencies = [
  "log",
  "once_cell",
- "rustls 0.20.8",
- "webpki",
+ "rustls",
+ "rustls-webpki",
  "webpki-roots",
 ]
 
@@ -3416,7 +3416,7 @@ version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96667db765a921f7b295ffee8b60472b686a51d4f21c2ee4ffdb94c7013b65a6"
 dependencies = [
- "proc-macro-crate",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 2.0.38",
@@ -3428,7 +3428,7 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56ea360eafe1022f7cc56cd7b869ed57330fb2453d0c7831d99b74c65d2f5597"
 dependencies = [
- "proc-macro-crate",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 2.0.38",
@@ -3551,7 +3551,7 @@ version = "3.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "86b26a931f824dd4eca30b3e43bb4f31cd5f0d3a403c5f5ff27106b805bfde7b"
 dependencies = [
- "proc-macro-crate",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 1.0.109",
@@ -3828,7 +3828,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f4c021e1093a56626774e81216a4ce732a735e5bad4868a03f3ed65ca0c3919"
 dependencies = [
  "once_cell",
- "toml_edit",
+ "toml_edit 0.19.11",
+]
+
+[[package]]
+name = "proc-macro-crate"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7e8366a6159044a37876a2b9817124296703c586a5c92e2c53751fa06d8d43e8"
+dependencies = [
+ "toml_edit 0.20.7",
 ]
 
 [[package]]
@@ -4268,7 +4277,7 @@ dependencies = [
  "once_cell",
  "percent-encoding",
  "pin-project-lite",
- "rustls 0.21.8",
+ "rustls",
  "rustls-native-certs",
  "rustls-pemfile",
  "serde",
@@ -4432,18 +4441,6 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.20.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fff78fc74d175294f4e83b28343315ffcfb114b156f0185e9741cb5570f50e2f"
-dependencies = [
- "log",
- "ring 0.16.20",
- "sct",
- "webpki",
-]
-
-[[package]]
-name = "rustls"
 version = "0.21.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "446e14c5cda4f3f30fe71863c34ec70f5ac79d6087097ad0bb433e1be5edf04c"
@@ -4545,7 +4542,7 @@ version = "2.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19df9bd9ace6cc2fe19387c96ce677e823e07d017ceed253e7bb3d1d1bd9c73b"
 dependencies = [
- "proc-macro-crate",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 1.0.109",
@@ -4895,7 +4892,7 @@ dependencies = [
 [[package]]
 name = "sparse-merkle-tree"
 version = "0.3.1-pre"
-source = "git+https://github.com/heliaxdev/sparse-merkle-tree?rev=aed81070ce2c83a41e1c6bada757347f33ef8eb6#aed81070ce2c83a41e1c6bada757347f33ef8eb6"
+source = "git+https://github.com/heliaxdev/sparse-merkle-tree?rev=515687fe7884cb365067ac86c66ac3613de176bb#515687fe7884cb365067ac86c66ac3613de176bb"
 dependencies = [
  "borsh",
  "cfg-if 1.0.0",
@@ -5379,7 +5376,7 @@ version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c28327cf380ac148141087fbfb9de9d7bd4e84ab5d2c28fbc911d753de8a7081"
 dependencies = [
- "rustls 0.21.8",
+ "rustls",
  "tokio",
 ]
 
@@ -5415,14 +5412,14 @@ dependencies = [
  "serde",
  "serde_spanned",
  "toml_datetime",
- "toml_edit",
+ "toml_edit 0.19.11",
 ]
 
 [[package]]
 name = "toml_datetime"
-version = "0.6.3"
+version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7cda73e2f1397b1262d6dfdcef8aafae14d1de7748d66822d3bfeeb6d03e5e4b"
+checksum = "3550f4e9685620ac18a50ed434eb3aec30db8ba93b0287467bca5826ea25baf1"
 dependencies = [
  "serde",
 ]
@@ -5437,7 +5434,18 @@ dependencies = [
  "serde",
  "serde_spanned",
  "toml_datetime",
- "winnow",
+ "winnow 0.4.6",
+]
+
+[[package]]
+name = "toml_edit"
+version = "0.20.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "70f427fce4d84c72b5b732388bf4a9f4531b53f74e2887e3ecb2481f68f66d81"
+dependencies = [
+ "indexmap 2.0.0",
+ "toml_datetime",
+ "winnow 0.5.19",
 ]
 
 [[package]]
@@ -6096,23 +6104,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "webpki"
-version = "0.22.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f095d78192e208183081cc07bc5515ef55216397af48b873e5edcd72637fa1bd"
-dependencies = [
- "ring 0.16.20",
- "untrusted 0.7.1",
-]
-
-[[package]]
 name = "webpki-roots"
-version = "0.22.6"
+version = "0.25.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6c71e40d7d2c34a5106301fb632274ca37242cd0c9d3e64dbece371a40a2d87"
-dependencies = [
- "webpki",
-]
+checksum = "1778a42e8b3b90bff8d0f5032bf22250792889a5cdc752aa0020c84abe3aaf10"
 
 [[package]]
 name = "wee_alloc"
@@ -6372,6 +6367,15 @@ name = "winnow"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "61de7bac303dc551fe038e2b3cef0f571087a47571ea6e79a87692ac99b99699"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
+name = "winnow"
+version = "0.5.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "829846f3e3db426d4cee4510841b71a8e58aa2a76b1132579487ae430ccd9c7b"
 dependencies = [
  "memchr",
 ]

@@ -284,16 +284,29 @@ struct Table {
 
 fn definition_to_table(name: &Declaration, def: schema::Definition) -> Table {
     let (desc, rows) = match def {
-        schema::Definition::Array { length, elements } => {
+        schema::Definition::Primitive(t) => {
+            let rows = None;
+            let desc = format!("Primitive type {}", md_fmt_type(t.to_string()));
+            (desc, rows)
+        }
+        schema::Definition::Sequence {
+            length_width,
+            length_range,
+            elements,
+        } if length_width == 0 => {
             let rows = None;
             let desc = format!(
                 "Fixed-size array with {} elements of {}",
-                length,
+                length_range.end(),
                 md_fmt_type(elements)
             );
             (desc, rows)
         }
-        schema::Definition::Sequence { elements } => {
+        schema::Definition::Sequence {
+            length_width: _,
+            length_range: _,
+            elements,
+        } => {
             let rows = None;
             let desc =
                 format!("Dynamic-size array of {}", md_fmt_type(elements));
@@ -313,10 +326,13 @@ fn definition_to_table(name: &Declaration, def: schema::Definition) -> Table {
             );
             (desc, rows)
         }
-        schema::Definition::Enum { variants } => {
+        schema::Definition::Enum {
+            tag_width: _,
+            variants,
+        } => {
             let mut rows = madato::types::Table::default();
             // build rows for: Variant, Name, Type
-            for (variant, (name, type_name)) in variants.iter().enumerate() {
+            for (_, (variant, name, type_name)) in variants.iter().enumerate() {
                 rows.push(TableRow::from_iter([
                     ("Prefix byte".into(), variant.to_string()),
                     ("Name".into(), name.clone()),
