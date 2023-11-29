@@ -2120,6 +2120,8 @@ pub mod fs {
     use std::fs::{File, OpenOptions};
     use std::io::{Read, Write};
 
+    use crate::ShieldedUtilsTrait;
+
     use super::*;
 
     /// Shielded context file name
@@ -2132,6 +2134,8 @@ pub mod fs {
         #[borsh(skip)]
         context_dir: PathBuf,
     }
+
+    impl ShieldedUtilsTrait for FsShieldedUtils {}
 
     impl FsShieldedUtils {
         /// Initialize a shielded transaction context that identifies notes

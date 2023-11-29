@@ -8,6 +8,7 @@ use std::{env, fs};
 
 use namada::bip39::{Language, Mnemonic};
 use namada::types::key::*;
+use namada_sdk::WalletTrait;
 pub use namada_sdk::wallet::alias::Alias;
 use namada_sdk::wallet::fs::FsWalletStorage;
 use namada_sdk::wallet::store::Store;
@@ -24,6 +25,8 @@ use crate::cli;
 pub struct CliWalletUtils {
     store_dir: PathBuf,
 }
+
+impl WalletTrait for CliWalletUtils {}
 
 impl CliWalletUtils {
     /// Initialize a wallet at the given directory

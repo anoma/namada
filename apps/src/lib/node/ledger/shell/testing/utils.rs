@@ -5,6 +5,7 @@ use std::task::{Context, Poll};
 
 use lazy_static::lazy_static;
 use namada::types::io::{prompt_aux, read_aux, Io};
+use namada_sdk::IoTrait;
 use tempfile::tempdir;
 use tokio::io::{AsyncRead, ReadBuf};
 
@@ -71,6 +72,8 @@ lazy_static! {
 }
 
 pub struct TestingIo;
+
+impl IoTrait for TestingIo {}
 
 #[async_trait::async_trait(?Send)]
 impl Io for TestingIo {

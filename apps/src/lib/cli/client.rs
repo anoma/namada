@@ -1,6 +1,6 @@
 use color_eyre::eyre::Result;
 use namada::types::io::Io;
-use namada_sdk::{Namada, NamadaImpl};
+use namada_sdk::{Namada, NamadaImpl, ClientTrait, IoTrait};
 
 use crate::cli;
 use crate::cli::api::{CliApi, CliClient};
@@ -9,13 +9,14 @@ use crate::cli::cmds::*;
 use crate::client::{rpc, tx, utils};
 
 impl CliApi {
-    pub async fn handle_client_command<C, IO: Io>(
+    pub async fn handle_client_command<C, IO>(
         client: Option<C>,
         cmd: cli::NamadaClient,
         io: IO,
     ) -> Result<()>
     where
-        C: CliClient,
+        C: CliClient + ClientTrait,
+        IO: Io + IoTrait
     {
         match cmd {
             cli::NamadaClient::WithContext(cmd_box) => {

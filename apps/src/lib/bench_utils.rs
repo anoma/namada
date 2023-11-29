@@ -1,12 +1,14 @@
 //! Library code for benchmarks provides a wrapper of the ledger's shell
 //! `BenchShell` and helper functions to generate transactions.
 
+use std::fmt::Display;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Once;
+use thiserror::Error;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
@@ -93,7 +95,7 @@ pub use namada_sdk::tx::{
     TX_WITHDRAW_WASM, VP_USER_WASM, VP_VALIDATOR_WASM,
 };
 use namada_sdk::wallet::Wallet;
-use namada_sdk::{Namada, NamadaImpl};
+use namada_sdk::{Namada, NamadaImpl, SSTrait};
 use namada_test_utils::tx_data::TxWriteData;
 use rand_core::OsRng;
 use sha2::{Digest, Sha256};
@@ -610,6 +612,8 @@ pub struct BenchShieldedUtils {
     context_dir: WrapperTempDir,
 }
 
+impl SSTrait for BenchShieldedUtils {}
+
 #[cfg_attr(feature = "async-send", async_trait::async_trait)]
 #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
 impl ShieldedUtils for BenchShieldedUtils {
@@ -682,10 +686,32 @@ impl ShieldedUtils for BenchShieldedUtils {
     }
 }
 
+impl SSTrait for BenchShell {}
+
+#[derive(Error, Debug)]
+pub enum BenchShellError {
+    #[error("mock error")]
+    Unknown,
+}
+
+impl SSTrait for BenchShellError { }
+
+impl From<std::io::Error> for BenchShellError {
+    fn from(_value: std::io::Error) -> Self {
+        BenchShellError::Unknown
+    }
+}
+
+impl From<namada::ledger::storage_api::Error> for BenchShellError {
+    fn from(_value: namada::ledger::storage_api::Error) -> Self {
+        BenchShellError::Unknown
+    }
+}
+
 #[cfg_attr(feature = "async-send", async_trait::async_trait)]
 #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
 impl Client for BenchShell {
-    type Error = std::io::Error;
+    type Error = BenchShellError;
 
     async fn request(
         &self,
@@ -717,7 +743,7 @@ impl Client for BenchShell {
         } else {
             RPC.handle(ctx, &request)
         }
-        .map_err(|_| std::io::Error::from(std::io::ErrorKind::NotFound))
+        .map_err(|_| BenchShellError::Unknown)
     }
 
     async fn perform<R>(

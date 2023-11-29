@@ -233,7 +233,7 @@ pub async fn sign_tx<
     args: &args::Tx,
     tx: &mut Tx,
     signing_data: SigningTxData,
-    sign: impl Fn(Tx, common::PublicKey, HashSet<Signable>) -> F,
+    sign: impl Fn(Tx, common::PublicKey, HashSet<Signable>) -> F + SSTrait,
 ) -> Result<(), Error> {
     let mut used_pubkeys = HashSet::new();
 

@@ -153,13 +153,31 @@ mod testing {
         }
     }
 
+
+    #[derive(Debug)]
+    pub struct TestClientError(std::io::Error);
+
+    impl SSTrait for TestClientError { }
+
+    impl Display for TestClientError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}", self)
+        }
+    }
+
+    impl From<std::io::Error> for TestClientError {
+        fn from(value: std::io::Error) -> Self {
+            Self(value)
+        }
+    }
+
     #[cfg_attr(feature = "async-send", async_trait::async_trait)]
     #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
     impl<RPC> Client for TestClient<RPC>
     where
         RPC: Router + Sync,
     {
-        type Error = std::io::Error;
+        type Error = TestClientError;
 
         async fn request(
             &self,
@@ -192,7 +210,7 @@ mod testing {
             // TODO: this is a hack to propagate errors to the caller, we should
             // really permit error types other than [`std::io::Error`]
             self.rpc.handle(ctx, &request).map_err(|err| {
-                std::io::Error::new(std::io::ErrorKind::Other, err.to_string())
+                std::io::Error::new(std::io::ErrorKind::Other, err.to_string()).into()
             })
         }
 
@@ -214,6 +232,9 @@ use tendermint_rpc::endpoint::{
 use tendermint_rpc::query::Query;
 use tendermint_rpc::{Error as RpcError, Order};
 
+impl SSTrait for RpcError {}
+
+use crate::SSTrait;
 use crate::tendermint::abci::response::Info;
 use crate::tendermint::block::Height;
 
@@ -226,7 +247,7 @@ use crate::tendermint::block::Height;
 pub trait Client {
     /// `std::io::Error` can happen in decoding with
     /// `BorshDeserialize::try_from_slice`
-    type Error: From<std::io::Error> + Display + Debug;
+    type Error: From<std::io::Error> + Display + Debug + SSTrait;
 
     /// Send a simple query request at the given path. For more options, use the
     /// `request` method.

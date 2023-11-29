@@ -15,6 +15,7 @@ use namada_core::ledger::ibc::storage::{
     ibc_denom_key, ibc_denom_key_prefix, is_ibc_denom_key,
 };
 use namada_core::ledger::storage::LastBlock;
+use namada_core::tendermint;
 use namada_core::types::account::Account;
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::hash::Hash;
@@ -31,6 +32,7 @@ use namada_proof_of_stake::types::{
     BondsAndUnbondsDetails, CommissionPair, ValidatorMetaData, ValidatorState,
 };
 use serde::Serialize;
+use tokio::sync::Mutex;
 
 use crate::args::InputAmount;
 use crate::control_flow::time;
@@ -46,7 +48,7 @@ use crate::tendermint::merkle::proof::ProofOps;
 use crate::tendermint_rpc::error::Error as TError;
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
-use crate::{display_line, edisplay_line, error, Namada};
+use crate::{display_line, edisplay_line, error, Namada, ClientTrait, IoTrait};
 
 /// Query the status of a given transaction.
 ///
@@ -1043,12 +1045,16 @@ pub async fn validate_amount<N: Namada>(
 }
 
 /// Wait for a first block and node to be synced.
-pub async fn wait_until_node_is_synched(
-    client: &(impl Client + Sync),
-    io: &impl Io,
-) -> Result<(), Error> {
+pub async fn wait_until_node_is_synched<C, IO>(
+    client: &C,
+    io: &IO,
+) -> Result<(), Error> 
+where
+    C: crate::queries::Client + Sync,
+    IO: IoTrait  
+{
     let height_one = Height::try_from(1_u64).unwrap();
-    let try_count = Cell::new(1_u64);
+    let try_count = Mutex::new(Cell::new(1_u64));
     const MAX_TRIES: usize = 5;
 
     time::Sleep {
@@ -1059,6 +1065,7 @@ pub async fn wait_until_node_is_synched(
     }
     .retry(MAX_TRIES, || async {
         let node_status = client.status().await;
+    
         match node_status {
             Ok(status) => {
                 let latest_block_height = status.sync_info.latest_block_height;
@@ -1067,6 +1074,8 @@ pub async fn wait_until_node_is_synched(
                 if is_at_least_height_one && !is_catching_up {
                     return ControlFlow::Break(Ok(()));
                 }
+                let try_count_lock = try_count.lock().await;
+
                 display_line!(
                     io,
                     " Waiting for {} ({}/{} tries)...",
@@ -1075,10 +1084,11 @@ pub async fn wait_until_node_is_synched(
                     } else {
                         "node to sync"
                     },
-                    try_count.get(),
+                    try_count_lock.get(),
                     MAX_TRIES,
                 );
-                try_count.set(try_count.get() + 1);
+                try_count_lock.set(try_count_lock.get() + 1);
+                drop(try_count_lock);
                 ControlFlow::Continue(())
             }
             Err(e) => ControlFlow::Break(Err(Error::Query(

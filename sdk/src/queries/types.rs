@@ -5,6 +5,7 @@ use namada_core::ledger::storage_api;
 use namada_core::types::storage::BlockHeight;
 use thiserror::Error;
 
+use crate::SSTrait;
 use crate::events::log::EventLog;
 use crate::tendermint::merkle::proof::ProofOps;
 pub use crate::tendermint::v0_37::abci::request::Query as RequestQuery;
@@ -64,6 +65,8 @@ pub trait Router {
         H: 'static + StorageHasher + Sync;
 }
 
+impl SSTrait for Error {}
+
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
@@ -78,6 +81,19 @@ pub enum Error {
 }
 
 /// Generic response from a query
+#[cfg(feature = "async-send")]
+#[derive(Clone, Debug, Default)]
+pub struct ResponseQuery<T: Sync + Send> {
+    /// Response data to be borsh encoded
+    pub data: T,
+    /// Non-deterministic log of the request execution
+    pub info: String,
+    /// Optional proof - used for storage value reads which request `prove`
+    pub proof: Option<ProofOps>,
+}
+
+/// Generic response from a query
+#[cfg(not(feature = "async-send"))]
 #[derive(Clone, Debug, Default)]
 pub struct ResponseQuery<T> {
     /// Response data to be borsh encoded

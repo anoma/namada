@@ -310,7 +310,7 @@ impl<S: SleepStrategy> Sleep<S> {
     ) -> Result<T, Error>
     where
         G: FnMut() -> F,
-        F: Future<Output = ControlFlow<T>>,
+        F: Future<Output = ControlFlow<T>> + Send,
     {
         self.run_until(
             RunWithRetries {

@@ -1,5 +1,6 @@
 use color_eyre::eyre::Result;
 use namada::types::io::Io;
+use namada_sdk::{ClientTrait, IoTrait};
 use namada_sdk::eth_bridge::{bridge_pool, validator_set};
 
 use crate::cli;
@@ -9,13 +10,14 @@ use crate::cli::cmds::*;
 use crate::cli::utils::get_eth_rpc_client;
 
 impl CliApi {
-    pub async fn handle_relayer_command<C>(
+    pub async fn handle_relayer_command<C, IO>(
         client: Option<C>,
         cmd: cli::NamadaRelayer,
-        io: impl Io,
+        io: IO,
     ) -> Result<()>
     where
-        C: CliClient,
+        C: CliClient + ClientTrait,
+        IO: Io + IoTrait
     {
         match cmd {
             cli::NamadaRelayer::EthBridgePoolWithCtx(boxed) => {

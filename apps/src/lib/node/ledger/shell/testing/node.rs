@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::future::poll_fn;
 use std::mem::ManuallyDrop;
 use std::path::PathBuf;
@@ -34,10 +35,12 @@ use namada::types::hash::Hash;
 use namada::types::key::tm_consensus_key_raw_hash;
 use namada::types::storage::{BlockHash, BlockHeight, Epoch, Header};
 use namada::types::time::DateTimeUtc;
+use namada_sdk::{ClientTrait, SSTrait};
 use namada_sdk::queries::Client;
 use num_traits::cast::FromPrimitive;
 use regex::Regex;
 use tokio::sync::mpsc;
+use thiserror::Error;
 
 use crate::facade::tendermint_proto::v0_37::abci::{
     RequestPrepareProposal, RequestProcessProposal,
@@ -553,10 +556,26 @@ impl MockNode {
     }
 }
 
+impl<'a> ClientTrait for &'a MockNode { }
+
+#[derive(Error, Debug)]
+pub enum MockNodeError {
+    #[error("mock error")]
+    Unknown,
+}
+
+impl SSTrait for MockNodeError { }
+
+impl From<std::io::Error> for MockNodeError {
+    fn from(_value: std::io::Error) -> Self {
+        MockNodeError::Unknown
+    }
+}
+
 #[cfg_attr(feature = "async-send", async_trait::async_trait)]
 #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
 impl<'a> Client for &'a MockNode {
-    type Error = Report;
+    type Error = MockNodeError;
 
     async fn request(
         &self,
@@ -601,7 +620,7 @@ impl<'a> Client for &'a MockNode {
         } else {
             rpc.handle(ctx, &request)
         }
-        .map_err(Report::new)
+        .map_err(|_| MockNodeError::Unknown)
     }
 
     async fn perform<R>(

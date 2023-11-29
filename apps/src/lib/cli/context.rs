@@ -16,7 +16,7 @@ use namada::types::masp::*;
 use namada_sdk::masp::fs::FsShieldedUtils;
 use namada_sdk::masp::ShieldedContext;
 use namada_sdk::wallet::Wallet;
-use namada_sdk::{Namada, NamadaImpl};
+use namada_sdk::{Namada, NamadaImpl, IoTrait, ClientTrait};
 
 use super::args;
 use crate::cli::utils;
@@ -167,8 +167,8 @@ impl Context {
     /// Make an implementation of Namada from this object and parameters.
     pub fn to_sdk<C, IO>(self, client: C, io: IO) -> impl Namada
     where
-        C: namada::ledger::queries::Client + Sync,
-        IO: Io,
+        C: ClientTrait,
+        IO: Io + IoTrait,
     {
         let chain_ctx = self.take_chain_or_exit();
         NamadaImpl::native_new(

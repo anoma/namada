@@ -3,8 +3,8 @@ extern crate alloc;
 pub use namada_core::{ibc, ibc_proto, proto, tendermint, tendermint_proto};
 #[cfg(feature = "tendermint-rpc")]
 pub use tendermint_rpc;
+use tendermint_rpc::Error;
 use tx::{TX_INIT_ACCOUNT_WASM, VP_VALIDATOR_WASM};
-use wallet::fs::FsWalletStorage;
 pub use {
     bip39, borsh, masp_primitives, masp_proofs, namada_core as core,
     namada_proof_of_stake as proof_of_stake, zeroize,
@@ -533,7 +533,7 @@ pub trait Namada: Sized + SSTrait {
         tx: &mut Tx,
         args: &args::Tx,
         signing_data: SigningTxData,
-        with: impl Fn(Tx, common::PublicKey, HashSet<signing::Signable>) -> F,
+        with: impl Fn(Tx, common::PublicKey, HashSet<signing::Signable>) -> F + SSTrait,
     ) -> crate::error::Result<()> {
         signing::sign_tx(self, args, tx, signing_data, with).await
     }
@@ -660,7 +660,7 @@ where
 impl<C, U, V, I> SSTrait for NamadaImpl<C, U, V, I>
 where
     C: ClientTrait,
-    U: WalletTrait + FsWalletStorage,
+    U: WalletTrait,
     V: ShieldedUtilsTrait,
     I: IoTrait,
 {}
@@ -670,7 +670,7 @@ where
 impl<C, U, V, I> Namada for NamadaImpl<C, U, V, I>
 where
     C: ClientTrait,
-    U: WalletTrait + FsWalletStorage,
+    U: WalletTrait,
     V: ShieldedUtilsTrait,
     I: IoTrait,
 {
