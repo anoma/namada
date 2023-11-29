@@ -17,8 +17,7 @@ use crate::ledger::storage_api::{StorageRead, StorageWrite};
 use crate::types::address::{Address, MASP};
 use crate::types::dec::Dec;
 use crate::types::storage::Epoch;
-use crate::types::token;
-use crate::types::token::MaspDenom;
+use crate::types::token::{self, DenominatedAmount, MaspDenom};
 use crate::types::uint::Uint;
 
 /// A representation of the conversion state
@@ -149,6 +148,17 @@ where
                 0u128
             })
     };
+    let inflation_amount = token::Amount::from_uint(
+        (total_token_in_masp.raw_amount() / precision)
+            * Uint::from(noterized_inflation),
+        0,
+    )
+    .unwrap();
+    let denom_amount = DenominatedAmount {
+        amount: inflation_amount,
+        denom: denomination,
+    };
+    tracing::info!("MASP inflation for {addr} is {denom_amount}");
 
     tracing::debug!(
         "Controller, call: total_in_masp {:?}, total_tokens {:?}, \
@@ -166,25 +176,19 @@ where
         kd_gain_nom,
         epochs_per_year,
     );
-    tracing::debug!("Please give me: {:?}", addr);
+    tracing::debug!("Token address: {:?}", addr);
     tracing::debug!("Ratio {:?}", locked_ratio);
     tracing::debug!("inflation from the pd controller {:?}", inflation);
     tracing::debug!("total in the masp {:?}", total_token_in_masp);
-    tracing::debug!("Please give me inflation: {:?}", noterized_inflation);
+    tracing::debug!("precision {}", precision);
+    tracing::debug!("Noterized inflation: {}", noterized_inflation);
 
     // Is it fine to write the inflation rate, this is accurate,
     // but we should make sure the return value's ratio matches
     // this new inflation rate in 'update_allowed_conversions',
     // otherwise we will have an inaccurate view of inflation
-    wl_storage.write(
-        &token::masp_last_inflation_key(addr),
-        token::Amount::from_uint(
-            (total_token_in_masp.raw_amount() / precision)
-                * Uint::from(noterized_inflation),
-            0,
-        )
-        .unwrap(),
-    )?;
+    wl_storage
+        .write(&token::masp_last_inflation_key(addr), inflation_amount)?;
 
     wl_storage.write(&token::masp_last_locked_ratio_key(addr), locked_ratio)?;
 
