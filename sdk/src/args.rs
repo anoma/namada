@@ -1801,6 +1801,17 @@ pub struct QuerySlashes<C: NamadaTypes = SdkTypes> {
     pub validator: Option<C::Address>,
 }
 
+/// Query PoS rewards
+#[derive(Clone, Debug)]
+pub struct QueryRewards<C: NamadaTypes = SdkTypes> {
+    /// Common query args
+    pub query: Query<C>,
+    /// Address of the source
+    pub source: Option<C::Address>,
+    /// Address of the validator
+    pub validator: C::Address,
+}
+
 /// Query PoS delegations
 #[derive(Clone, Debug)]
 pub struct QueryDelegations<C: NamadaTypes = SdkTypes> {

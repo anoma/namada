@@ -493,6 +493,17 @@ impl CliApi {
                         let namada = ctx.to_sdk(client, io);
                         rpc::query_slashes(&namada, args).await;
                     }
+                    Sub::QueryRewards(QueryRewards(mut args)) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.query.ledger_address,
+                            )
+                        });
+                        client.wait_until_node_is_synced(io).await?;
+                        let args = args.to_sdk(&mut ctx);
+                        let namada = ctx.to_sdk(&client, io);
+                        rpc::query_and_print_rewards(&namada, args).await;
+                    }
                     Sub::QueryDelegations(QueryDelegations(mut args)) => {
                         let client = client.unwrap_or_else(|| {
                             C::from_tendermint_address(
