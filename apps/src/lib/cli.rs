@@ -3091,7 +3091,7 @@ pub mod args {
     pub const TRANSFER_SOURCE: Arg<WalletTransferSource> = arg("source");
     pub const TRANSFER_TARGET: Arg<WalletTransferTarget> = arg("target");
     pub const TX_HASH: Arg<String> = arg("tx-hash");
-    pub const THRESOLD: ArgOpt<u8> = arg_opt("threshold");
+    pub const THRESHOLD: ArgOpt<u8> = arg_opt("threshold");
     pub const UNSAFE_DONT_ENCRYPT: ArgFlag = flag("unsafe-dont-encrypt");
     pub const UNSAFE_SHOW_SECRET: ArgFlag = flag("unsafe-show-secret");
     pub const USE_DEVICE: ArgFlag = flag("use-device");
@@ -4040,7 +4040,7 @@ pub mod args {
                 .unwrap_or_else(|| PathBuf::from(VP_USER_WASM));
             let tx_code_path = PathBuf::from(TX_INIT_ACCOUNT_WASM);
             let public_keys = PUBLIC_KEYS.parse(matches);
-            let threshold = THRESOLD.parse(matches);
+            let threshold = THRESHOLD.parse(matches);
             Self {
                 tx,
                 vp_code_path,
@@ -4061,7 +4061,7 @@ pub mod args {
                     "A list public keys to be associated with the new account \
                      in hexadecimal encoding.",
                 ))
-                .arg(THRESOLD.def().help(
+                .arg(THRESHOLD.def().help(
                     "The minimum number of signature to be provided for \
                      authorization. Must be less then the maximum number of \
                      public keys provided.",
@@ -4253,7 +4253,7 @@ pub mod args {
             let tx_init_account_code_path = PathBuf::from(TX_INIT_ACCOUNT_WASM);
             let tx_become_validator_code_path =
                 PathBuf::from(TX_BECOME_VALIDATOR_WASM);
-            let threshold = THRESOLD.parse(matches);
+            let threshold = THRESHOLD.parse(matches);
             Self {
                 tx,
                 scheme,
@@ -4330,7 +4330,7 @@ pub mod args {
                     "UNSAFE: Do not encrypt the generated keypairs. Do not \
                      use this for keys used in a live network.",
                 ))
-                .arg(THRESOLD.def().help(
+                .arg(THRESHOLD.def().help(
                     "The minimum number of signature to be provided for \
                      authorization. Must be less then the maximum number of \
                      public keys provided.",
@@ -4364,7 +4364,7 @@ pub mod args {
             let addr = ADDRESS.parse(matches);
             let tx_code_path = PathBuf::from(TX_UPDATE_ACCOUNT_WASM);
             let public_keys = PUBLIC_KEYS.parse(matches);
-            let threshold = THRESOLD.parse(matches);
+            let threshold = THRESHOLD.parse(matches);
             Self {
                 tx,
                 vp_code_path,
@@ -4390,7 +4390,7 @@ pub mod args {
                     "A list public keys to be associated with the new account \
                      in hexadecimal encoding.",
                 ))
-                .arg(THRESOLD.def().help(
+                .arg(THRESHOLD.def().help(
                     "The minimum number of signature to be provided for \
                      authorization. Must be less then the maximum number of \
                      public keys provided.",
