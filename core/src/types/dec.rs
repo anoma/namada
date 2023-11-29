@@ -478,6 +478,21 @@ impl Debug for Dec {
     }
 }
 
+/// Helpers for testing.
+#[cfg(any(test, feature = "testing"))]
+pub mod testing {
+    use proptest::prelude::*;
+
+    use super::*;
+
+    /// Generate an arbitrary non-negative `Dec`
+    pub fn arb_non_negative_dec() -> impl Strategy<Value = Dec> {
+        (any::<u64>(), 0_u8..POS_DECIMAL_PRECISION).prop_map(
+            |(mantissa, scale)| Dec::new(mantissa.into(), scale).unwrap(),
+        )
+    }
+}
+
 #[cfg(test)]
 mod test_dec {
     use super::*;
