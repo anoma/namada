@@ -42,7 +42,8 @@ use crate::rpc::{query_storage_value, query_wasm_code_hash, validate_amount};
 use crate::signing::aux_signing_data;
 use crate::tx::prepare_tx;
 use crate::{
-    args, display, display_line, edisplay_line, Namada, SigningTxData,
+    args, display, display_line, edisplay_line, MaybeSync, Namada,
+    SigningTxData,
 };
 
 /// Craft a transaction that adds a transfer to the Ethereum bridge pool.
@@ -419,7 +420,7 @@ pub async fn query_relay_progress(
 /// bridge pool.
 async fn construct_bridge_pool_proof(
     client: &(impl Client + Sync),
-    io: &impl Io,
+    io: &(impl Io + MaybeSync),
     args: GenBridgePoolProofReq<'_, '_>,
 ) -> Result<GenBridgePoolProofRsp, Error> {
     let in_progress = RPC
@@ -515,7 +516,7 @@ struct BridgePoolProofResponse {
 /// to relaying it to ethereum).
 pub async fn construct_proof(
     client: &(impl Client + Sync),
-    io: &impl Io,
+    io: &(impl Io + MaybeSync),
     args: args::BridgePoolProof,
 ) -> Result<(), Error> {
     let GenBridgePoolProofRsp {
@@ -565,7 +566,7 @@ pub async fn construct_proof(
 pub async fn relay_bridge_pool_proof<E>(
     eth_client: Arc<E>,
     client: &(impl Client + Sync),
-    io: &impl Io,
+    io: &(impl Io + MaybeSync),
     args: args::RelayBridgePoolProof,
 ) -> Result<(), Error>
 where

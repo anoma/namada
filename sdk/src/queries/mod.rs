@@ -18,6 +18,7 @@ pub use self::shell::eth_bridge::{
     Erc20FlowControl, GenBridgePoolProofReq, GenBridgePoolProofRsp,
     TransferToErcArgs,
 };
+use crate::{MaybeSend, MaybeSync};
 
 #[macro_use]
 mod router;
@@ -157,7 +158,7 @@ mod testing {
     #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
     impl<RPC> Client for TestClient<RPC>
     where
-        RPC: Router + Sync,
+        RPC: Router + MaybeSync,
     {
         type Error = std::io::Error;
 
@@ -257,7 +258,7 @@ pub trait Client {
     /// from `CheckTx`.
     async fn broadcast_tx_sync(
         &self,
-        tx: impl Into<Vec<u8>>,
+        tx: impl Into<Vec<u8>> + MaybeSend,
     ) -> Result<tendermint_rpc::endpoint::broadcast::tx_sync::Response, RpcError>
     {
         self.perform(

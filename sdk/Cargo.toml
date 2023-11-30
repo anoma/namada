@@ -41,6 +41,8 @@ async-client = [
   "async-trait",
 ]
 
+async-send = []
+
 ibc-mocks = [
   "namada_core/ibc-mocks",
 ]

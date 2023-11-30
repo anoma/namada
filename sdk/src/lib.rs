@@ -28,6 +28,10 @@ pub mod queries;
 pub mod wallet;
 
 use std::collections::HashSet;
+#[cfg(feature = "async-send")]
+pub use std::marker::Send as MaybeSend;
+#[cfg(feature = "async-send")]
+pub use std::marker::Sync as MaybeSync;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -64,18 +68,28 @@ use crate::tx::{
 };
 use crate::wallet::{Wallet, WalletIo, WalletStorage};
 
-#[async_trait::async_trait(?Send)]
+#[cfg(not(feature = "async-send"))]
+pub trait MaybeSync {}
+#[cfg(not(feature = "async-send"))]
+impl<T> MaybeSync for T where T: ?Sized {}
+#[cfg(not(feature = "async-send"))]
+pub trait MaybeSend {}
+#[cfg(not(feature = "async-send"))]
+impl<T> MaybeSend for T where T: ?Sized {}
+
+#[cfg_attr(feature = "async-send", async_trait::async_trait)]
+#[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
 /// An interface for high-level interaction with the Namada SDK
-pub trait Namada: Sized {
+pub trait Namada: Sized + MaybeSync + MaybeSend {
     /// A client with async request dispatcher method
-    type Client: queries::Client + Sync;
+    type Client: queries::Client + MaybeSend + Sync;
     /// Captures the interactive parts of the wallet's functioning
-    type WalletUtils: WalletIo + WalletStorage;
+    type WalletUtils: WalletIo + WalletStorage + MaybeSend + MaybeSync;
     /// Abstracts platform specific details away from the logic of shielded pool
     /// operations.
-    type ShieldedUtils: ShieldedUtils;
+    type ShieldedUtils: ShieldedUtils + MaybeSend + MaybeSync;
     /// Captures the input/output streams used by this object
-    type Io: Io;
+    type Io: Io + MaybeSend + MaybeSync;
 
     /// Obtain the client for communicating with the ledger
     fn client(&self) -> &Self::Client;
@@ -492,12 +506,18 @@ pub trait Namada: Sized {
     }
 
     /// Sign the given transaction using the given signing data
-    async fn sign<F: std::future::Future<Output = crate::error::Result<Tx>>>(
+    async fn sign<
+        F: MaybeSend
+            + MaybeSync
+            + std::future::Future<Output = crate::error::Result<Tx>>,
+    >(
         &self,
         tx: &mut Tx,
         args: &args::Tx,
         signing_data: SigningTxData,
-        with: impl Fn(Tx, common::PublicKey, HashSet<signing::Signable>) -> F,
+        with: impl MaybeSend
+        + MaybeSync
+        + Fn(Tx, common::PublicKey, HashSet<signing::Signable>) -> F,
     ) -> crate::error::Result<()> {
         signing::sign_tx(self, args, tx, signing_data, with).await
     }
@@ -535,7 +555,7 @@ pub trait Namada: Sized {
 /// Provides convenience methods for common Namada interactions
 pub struct NamadaImpl<C, U, V, I>
 where
-    C: queries::Client + Sync,
+    C: queries::Client,
     U: WalletIo,
     V: ShieldedUtils,
     I: Io,
@@ -621,13 +641,14 @@ where
     }
 }
 
-#[async_trait::async_trait(?Send)]
+#[cfg_attr(feature = "async-send", async_trait::async_trait)]
+#[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
 impl<C, U, V, I> Namada for NamadaImpl<C, U, V, I>
 where
-    C: queries::Client + Sync,
-    U: WalletIo + WalletStorage,
-    V: ShieldedUtils,
-    I: Io,
+    C: queries::Client + MaybeSend + Sync,
+    U: WalletIo + WalletStorage + MaybeSync + MaybeSend,
+    V: ShieldedUtils + MaybeSend + MaybeSync,
+    I: Io + MaybeSend + MaybeSync,
 {
     type Client = C;
     type Io = I;
