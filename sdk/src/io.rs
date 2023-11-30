@@ -1,9 +1,11 @@
 //! Traits for implementing IO handlers. This is to enable
 //! generic IO. The defaults are the obvious Rust native
 //! functions.
+use crate::{MaybeSend, MaybeSync};
 
 /// A trait that abstracts out I/O operations
-#[async_trait::async_trait(?Send)]
+#[cfg_attr(feature = "async-send", async_trait::async_trait)]
+#[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
 pub trait Io {
     /// Print the given string
     fn print(&self, output: impl AsRef<str>) {
@@ -57,7 +59,10 @@ pub trait Io {
     }
 
     /// Display the given prompt and return the string input
-    async fn prompt(&self, question: impl AsRef<str>) -> String {
+    async fn prompt(
+        &self,
+        question: impl AsRef<str> + MaybeSync + MaybeSend,
+    ) -> String {
         #[cfg(not(target_family = "wasm"))]
         {
             prompt_aux(
@@ -81,13 +86,15 @@ pub trait Io {
 /// Rust native I/O handling.
 pub struct StdIo;
 
-#[async_trait::async_trait(?Send)]
+#[cfg_attr(feature = "async-send", async_trait::async_trait)]
+#[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
 impl Io for StdIo {}
 
 /// Ignores all I/O operations.
 pub struct NullIo;
 
-#[async_trait::async_trait(?Send)]
+#[cfg_attr(feature = "async-send", async_trait::async_trait)]
+#[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
 impl Io for NullIo {
     fn print(&self, _output: impl AsRef<str>) {}
 
@@ -117,7 +124,10 @@ impl Io for NullIo {
         panic!("Unsupported operation")
     }
 
-    async fn prompt(&self, _question: impl AsRef<str>) -> String {
+    async fn prompt(
+        &self,
+        _question: impl AsRef<str> + MaybeSend + MaybeSync,
+    ) -> String {
         panic!("Unsupported operation")
     }
 }

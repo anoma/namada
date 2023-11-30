@@ -41,6 +41,8 @@ async-client = [
   "async-trait",
 ]
 
+async-send = []
+
 # for integration tests and test utilies
 testing = [
   "namada_core/testing",
