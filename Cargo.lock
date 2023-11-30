@@ -1424,15 +1424,30 @@ checksum = "b365fabc795046672053e29c954733ec3b05e4be654ab130fe8f1f94d7051f35"
 
 [[package]]
 name = "curve25519-dalek"
-version = "3.2.0"
+version = "4.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b9fdf9972b2bd6af2d913799d9ebc165ea4d2e65878e329d9c6b372c4491b61"
+checksum = "e89b8c6a2e4b1f45971ad09761aafb85514a84744b67a95e32c3cc1352d1f65c"
 dependencies = [
- "byteorder",
- "digest 0.9.0",
- "rand_core 0.5.1",
+ "cfg-if 1.0.0",
+ "cpufeatures",
+ "curve25519-dalek-derive",
+ "digest 0.10.6",
+ "fiat-crypto",
+ "platforms",
+ "rustc_version 0.4.0",
  "subtle 2.4.1",
  "zeroize",
+]
+
+[[package]]
+name = "curve25519-dalek-derive"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f46882e17999c6cc590af592290432be3bce0428cb0d5f8b6715e4dc7b383eb3"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.38",
 ]
 
 [[package]]
@@ -1655,17 +1670,8 @@ dependencies = [
  "elliptic-curve",
  "rfc6979",
  "serdect",
- "signature 2.1.0",
+ "signature",
  "spki",
-]
-
-[[package]]
-name = "ed25519"
-version = "1.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91cff35c70bba8a626e3185d8cd48cc11b5437e1a5bcd15b9b5fa3c64b6dfee7"
-dependencies = [
- "signature 1.6.4",
 ]
 
 [[package]]
@@ -1675,7 +1681,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "60f6d271ca33075c88028be6f04d502853d63a5ece419d269c15315d4fc1cf1d"
 dependencies = [
  "pkcs8",
- "signature 2.1.0",
+ "signature",
 ]
 
 [[package]]
@@ -1708,15 +1714,15 @@ dependencies = [
 
 [[package]]
 name = "ed25519-dalek"
-version = "1.0.1"
+version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c762bae6dcaf24c4c84667b8579785430908723d5c889f469d76a41d59cc7a9d"
+checksum = "1f628eaec48bfd21b865dc2950cfa014450c01d2fa2b69a86c2fd5844ec523c0"
 dependencies = [
  "curve25519-dalek",
- "ed25519 1.5.3",
- "rand 0.7.3",
+ "ed25519",
  "serde 1.0.190",
- "sha2 0.9.9",
+ "sha2 0.10.6",
+ "subtle 2.4.1",
  "zeroize",
 ]
 
@@ -2238,6 +2244,12 @@ dependencies = [
  "rand_core 0.6.4",
  "subtle 2.4.1",
 ]
+
+[[package]]
+name = "fiat-crypto"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "27573eac26f4dd11e2b1916c3fe1baa56407c83c71a773a8ba17ec0bca03b6b7"
 
 [[package]]
 name = "filetime"
@@ -3209,7 +3221,7 @@ dependencies = [
  "once_cell",
  "serdect",
  "sha2 0.10.6",
- "signature 2.1.0",
+ "signature",
 ]
 
 [[package]]
@@ -3253,7 +3265,7 @@ dependencies = [
 [[package]]
 name = "ledger-namada-rs"
 version = "0.0.1"
-source = "git+https://github.com/heliaxdev/ledger-namada?rev=7e861c440de0fdabaf51e30d97f5c8736be348f3#7e861c440de0fdabaf51e30d97f5c8736be348f3"
+source = "git+https://github.com/Zondax/ledger-namada?tag=v0.0.12#3e7c30bec1d1e135b94c80b48b194aa7341519a4"
 dependencies = [
  "bincode",
  "byteorder",
@@ -4865,6 +4877,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "26072860ba924cbfa98ea39c8c19b4dd6a4a25423dbdf219c1eca91aa0cf6964"
 
 [[package]]
+name = "platforms"
+version = "3.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "14e6ab3f592e6fb464fc9712d8d6e6912de6473954635fd76a589d832cffcbb0"
+
+[[package]]
 name = "plotters"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6132,12 +6150,6 @@ dependencies = [
 
 [[package]]
 name = "signature"
-version = "1.6.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74233d3b3b2f6d4b006dc19dee745e73e2a6bfb6f93607cd3b02bd5b00797d7c"
-
-[[package]]
-name = "signature"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e1788eed21689f9cf370582dfc467ef36ed9c707f073528ddafa8d83e3b8500"
@@ -6434,7 +6446,7 @@ checksum = "bc2294fa667c8b548ee27a9ba59115472d0a09c2ba255771092a7f1dcf03a789"
 dependencies = [
  "bytes",
  "digest 0.10.6",
- "ed25519 2.2.2",
+ "ed25519",
  "ed25519-consensus 2.1.0",
  "flex-error",
  "futures",
@@ -6449,7 +6461,7 @@ dependencies = [
  "serde_json",
  "serde_repr",
  "sha2 0.10.6",
- "signature 2.1.0",
+ "signature",
  "subtle 2.4.1",
  "subtle-encoding",
  "tendermint-proto",
