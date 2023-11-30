@@ -23,7 +23,7 @@ use namada_apps::client::utils::{
     self, validator_pre_genesis_dir, validator_pre_genesis_txs_file,
 };
 use namada_apps::config::genesis::utils::read_toml;
-use namada_apps::config::genesis::{templates, GenesisAddress};
+use namada_apps::config::genesis::{templates, transactions, GenesisAddress};
 use namada_apps::config::{ethereum_bridge, genesis, Config};
 use namada_apps::{config, wallet};
 use namada_core::types::address::Address;
@@ -145,10 +145,23 @@ where
     // - add txs to genesis templates
     let wallet_path = base_dir.join("pre-genesis");
     for val in 0..num {
+        // init validator dir
+        let validator_alias = format!("validator-{val}");
+        let pre_genesis_path =
+            validator_pre_genesis_dir(base_dir, &validator_alias);
+        let pre_genesis_tx_path =
+            validator_pre_genesis_txs_file(&pre_genesis_path);
+        std::fs::create_dir(&pre_genesis_path).unwrap_or_else(|err| {
+            panic!(
+                "Failed to create the pre-genesis path for {validator_alias}: \
+                 {err}"
+            );
+        });
+        let pre_genesis_tx_path_str = pre_genesis_tx_path.to_string_lossy();
         // generate a balance key
         let mut wallet = wallet::load(&wallet_path)
             .expect("Could not locate pre-genesis wallet used for e2e tests.");
-        let alias = format!("validator-{}-balance-key", val);
+        let alias = format!("validator-{val}-balance-key");
         let (alias, sk) = wallet
             .gen_store_secret_key(
                 SchemeType::Ed25519,
@@ -161,35 +174,81 @@ where
                 panic!("Could not generate new key for validator-{}", val)
             });
         wallet::save(&wallet).unwrap();
-        // assign balance to the key
-        genesis
+        let validator_address = {
+            use namada_apps::config::genesis::chain::DeriveEstablishedAddress;
+            let pre_genesis_tx = transactions::EstablishedAccountTx {
+                vp: "vp_user".to_string(),
+                threshold: 1,
+                public_keys: vec![StringEncoded::new(sk.ref_to())],
+            };
+            let address = pre_genesis_tx.derive_established_address();
+            println!(
+                "Initializing validator {validator_alias} with address \
+                 {address}"
+            );
+            address
+        };
+        // invoke `init-genesis-established-account` to generate a new
+        // established account with the generated balance key
+        let args = vec![
+            "utils",
+            "init-genesis-established-account",
+            "--alias",
+            &alias,
+            "--path",
+            &pre_genesis_tx_path_str,
+        ];
+        let mut init_established_account = run_cmd(
+            Bin::Client,
+            args,
+            Some(5),
+            &working_dir(),
+            base_dir,
+            format!("{}:{}", std::file!(), std::line!()),
+        )
+        .unwrap();
+        init_established_account.assert_success();
+        // assign balance to the implicit addr (i.e. pubkey) + established acc
+        let nam_balances = genesis
             .balances
             .token
             .get_mut(&Alias::from_str("nam").expect("Infallible"))
-            .expect("NAM balances should exist in pre-genesis wallet already")
-            .0
-            .insert(
-                GenesisAddress::PublicKey(StringEncoded::new(sk.ref_to())),
-                token::DenominatedAmount {
-                    amount: token::Amount::from_uint(
-                        3000000,
-                        NATIVE_MAX_DECIMAL_PLACES,
-                    )
-                    .unwrap(),
-                    denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-                },
-            );
-        // invoke `init-genesis-validator` signed by balance key to generate
-        // validator pre-genesis wallet signed genesis txs
-        let validator_alias = format!("validator-{}", val);
+            .expect("NAM balances should exist in pre-genesis wallet already");
+        nam_balances.0.insert(
+            GenesisAddress::PublicKey(StringEncoded::new(sk.ref_to())),
+            token::DenominatedAmount {
+                amount: token::Amount::from_uint(
+                    2000000,
+                    NATIVE_MAX_DECIMAL_PLACES,
+                )
+                .unwrap(),
+                denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+            },
+        );
+        nam_balances.0.insert(
+            GenesisAddress::EstablishedAddress(validator_address.clone()),
+            token::DenominatedAmount {
+                amount: token::Amount::from_uint(
+                    1000000,
+                    NATIVE_MAX_DECIMAL_PLACES,
+                )
+                .unwrap(),
+                denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+            },
+        );
+        // invoke `init-genesis-validator` to promote the generated established
+        // account to a validator account
         let net_addr = format!("127.0.0.1:{}", 27656 + port_offset(val));
+        let validator_address_str = validator_address.to_string();
         let args = vec![
             "utils",
             "init-genesis-validator",
-            "--source",
-            &alias,
             "--alias",
             &validator_alias,
+            "--address",
+            &validator_address_str,
+            "--path",
+            &pre_genesis_tx_path_str,
             "--net-address",
             &net_addr,
             "--commission-rate",
@@ -198,14 +257,10 @@ where
             "0.01",
             "--email",
             "null@null.net",
-            "--transfer-from-source-amount",
-            "2000000",
             "--self-bond-amount",
             "100000",
             "--unsafe-dont-encrypt",
         ];
-        let validator_alias = format!("validator-{}", val);
-        // initialize the validator
         let mut init_genesis_validator = run_cmd(
             Bin::Client,
             args,
@@ -216,11 +271,30 @@ where
         )
         .unwrap();
         init_genesis_validator.assert_success();
+        // invoke `sign-genesis-txs` to sign the validator txs with
+        // the generated balance key
+        let args = vec![
+            "utils",
+            "sign-genesis-txs",
+            "--alias",
+            &validator_alias,
+            "--path",
+            &pre_genesis_tx_path_str,
+            "--output",
+            &pre_genesis_tx_path_str,
+        ];
+        let mut sign_pre_genesis_txs = run_cmd(
+            Bin::Client,
+            args,
+            Some(5),
+            &working_dir(),
+            base_dir,
+            format!("{}:{}", std::file!(), std::line!()),
+        )
+        .unwrap();
+        sign_pre_genesis_txs.assert_success();
+        // initialize the validator
         // add generated txs to genesis
-        let pre_genesis_path =
-            validator_pre_genesis_dir(base_dir, &validator_alias);
-        let pre_genesis_tx_path =
-            validator_pre_genesis_txs_file(&pre_genesis_path);
         let pre_genesis_txs =
             read_toml(&pre_genesis_tx_path, "transactions.toml").unwrap();
         genesis.transactions.merge(pre_genesis_txs);
