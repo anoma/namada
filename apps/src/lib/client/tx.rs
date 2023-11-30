@@ -134,9 +134,12 @@ pub async fn sign(
                             response_pubkey, pubkey,
                         )));
                     }
+                    // Remove unnecessary detail for Ledger signing
+                    let mut compressed_tx = tx.clone();
+                    compressed_tx.wallet_filter();
                     // Get the Ledger to sign using our obtained derivation path
                     let response = app
-                        .sign(&path, &tx.serialize_to_vec())
+                        .sign(&path, &compressed_tx.serialize_to_vec())
                         .await
                         .map_err(|err| error::Error::Other(err.to_string()))?;
                     // Sign the raw header if that is requested
@@ -383,8 +386,8 @@ pub async fn submit_change_consensus_key(
     let mut wallet = namada.wallet_mut().await;
     let consensus_key = consensus_key
         .map(|key| match key {
-            common::SecretKey::Ed25519(_) => key,
-            common::SecretKey::Secp256k1(_) => {
+            common::PublicKey::Ed25519(_) => key,
+            common::PublicKey::Secp256k1(_) => {
                 edisplay_line!(
                     namada.io(),
                     "Consensus key can only be ed25519"
@@ -406,6 +409,7 @@ pub async fn submit_change_consensus_key(
                 )
                 .expect("Key generation should not fail.")
                 .1
+                .ref_to()
         });
     // To avoid wallet deadlocks in following operations
     drop(wallet);
@@ -413,7 +417,7 @@ pub async fn submit_change_consensus_key(
     // Check that the new consensus key is unique
     let consensus_keys = rpc::query_consensus_keys(namada.client()).await;
 
-    let new_ck = consensus_key.ref_to();
+    let new_ck = consensus_key;
     if consensus_keys.contains(&new_ck) {
         edisplay_line!(namada.io(), "Consensus key can only be ed25519");
         safe_exit(1)
@@ -601,8 +605,8 @@ pub async fn submit_become_validator(
     let mut wallet = namada.wallet_mut().await;
     let consensus_key = consensus_key
         .map(|key| match key {
-            common::SecretKey::Ed25519(_) => key,
-            common::SecretKey::Secp256k1(_) => {
+            common::PublicKey::Ed25519(_) => key,
+            common::PublicKey::Secp256k1(_) => {
                 edisplay_line!(
                     namada.io(),
                     "Consensus key can only be ed25519"
@@ -625,12 +629,13 @@ pub async fn submit_become_validator(
                 )
                 .expect("Key generation should not fail.")
                 .1
+                .ref_to()
         });
 
     let eth_cold_pk = eth_cold_key
         .map(|key| match key {
-            common::SecretKey::Secp256k1(_) => key.ref_to(),
-            common::SecretKey::Ed25519(_) => {
+            common::PublicKey::Secp256k1(_) => key,
+            common::PublicKey::Ed25519(_) => {
                 edisplay_line!(
                     namada.io(),
                     "Eth cold key can only be secp256k1"
@@ -658,8 +663,8 @@ pub async fn submit_become_validator(
 
     let eth_hot_pk = eth_hot_key
         .map(|key| match key {
-            common::SecretKey::Secp256k1(_) => key.ref_to(),
-            common::SecretKey::Ed25519(_) => {
+            common::PublicKey::Secp256k1(_) => key,
+            common::PublicKey::Ed25519(_) => {
                 edisplay_line!(
                     namada.io(),
                     "Eth hot key can only be secp256k1"
@@ -727,7 +732,7 @@ pub async fn submit_become_validator(
     let mut tx = Tx::new(chain_id, tx_args.expiration);
     let data = BecomeValidator {
         address: address.clone(),
-        consensus_key: consensus_key.ref_to(),
+        consensus_key: consensus_key.clone(),
         eth_cold_key: key::secp256k1::PublicKey::try_from_pk(&eth_cold_pk)
             .unwrap(),
         eth_hot_key: key::secp256k1::PublicKey::try_from_pk(&eth_hot_pk)
@@ -753,7 +758,7 @@ pub async fn submit_become_validator(
         });
     let mut all_pks: Vec<_> =
         account.public_keys_map.pk_to_idx.into_keys().collect();
-    all_pks.push(consensus_key.to_public());
+    all_pks.push(consensus_key.clone());
     all_pks.push(eth_cold_pk);
     all_pks.push(eth_hot_pk);
     all_pks.push(data.protocol_key.clone());
@@ -789,21 +794,21 @@ pub async fn submit_become_validator(
 
         if !tx_args.dry_run {
             // add validator address and keys to the wallet
-            namada
-                .wallet_mut()
-                .await
-                .add_validator_data(address.clone(), validator_keys);
-            namada
-                .wallet_mut()
-                .await
+            let mut wallet = namada.wallet_mut().await;
+            wallet.add_validator_data(address.clone(), validator_keys);
+            wallet
                 .save()
                 .unwrap_or_else(|err| edisplay_line!(namada.io(), "{}", err));
 
             let tendermint_home = config.ledger.cometbft_dir();
             tendermint_node::write_validator_key(
                 &tendermint_home,
-                &consensus_key,
+                &wallet
+                    .find_key_by_pk(&consensus_key, None)
+                    .expect("unable to find consensus key pair in the wallet"),
             );
+            // To avoid wallet deadlocks in following operations
+            drop(wallet);
             tendermint_node::write_validator_state(tendermint_home);
 
             // Write Namada config stuff or figure out how to do the above
@@ -1039,8 +1044,14 @@ where
         )
         .await?;
 
+        let mut wallet = namada.wallet_mut().await;
         let signed_offline_proposal = proposal.sign(
-            args.tx.signing_keys,
+            args.tx
+                .signing_keys
+                .iter()
+                .map(|pk| wallet.find_key_by_pk(pk, None))
+                .collect::<Result<_, _>>()
+                .expect("secret keys corresponding to public keys not found"),
             &signing_data.account_public_keys_map.unwrap(),
         );
         let output_file_path = signed_offline_proposal
@@ -1186,8 +1197,14 @@ where
             delegations,
         );
 
+        let mut wallet = namada.wallet_mut().await;
         let offline_signed_vote = offline_vote.sign(
-            args.tx.signing_keys,
+            args.tx
+                .signing_keys
+                .iter()
+                .map(|pk| wallet.find_key_by_pk(pk, None))
+                .collect::<Result<_, _>>()
+                .expect("secret keys corresponding to public keys not found"),
             &signing_data.account_public_keys_map.unwrap(),
         );
         let output_file_path = offline_signed_vote

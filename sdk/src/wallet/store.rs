@@ -631,15 +631,17 @@ impl Store {
         let account_pk = other.account_key.ref_to();
         let consensus_pk = other.consensus_key.ref_to();
         let tendermint_node_pk = other.tendermint_node_key.ref_to();
-        let addresses = [
-            (account_key_alias.clone(), (&account_pk).into()),
-            (consensus_key_alias.clone(), (&consensus_pk).into()),
+        let public_keys = [
+            (account_key_alias.clone(), account_pk.clone()),
+            (consensus_key_alias.clone(), consensus_pk.clone()),
             (
                 tendermint_node_key_alias.clone(),
-                (&tendermint_node_pk).into(),
+                tendermint_node_pk.clone(),
             ),
         ];
-        self.addresses.extend(addresses.into_iter());
+        self.public_keys.extend(public_keys.clone().into_iter());
+        self.addresses
+            .extend(public_keys.into_iter().map(|(k, v)| (k, (&v).into())));
 
         let pkhs = [
             ((&account_pk).into(), account_key_alias),

@@ -345,7 +345,7 @@ pub fn sign_delegation_bond_tx(
     };
     let source_key = match found_key {
         Ok(key) => key,
-        Err(FindKeyError::KeyNotFound) => {
+        Err(FindKeyError::KeyNotFound(_)) => {
             // If it's not in the wallet, it must be an established account
             // so we need to look-up its public key first
             let pk = established_accounts
