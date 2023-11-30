@@ -26,6 +26,7 @@ use namada_apps::config::genesis::utils::read_toml;
 use namada_apps::config::genesis::{templates, transactions, GenesisAddress};
 use namada_apps::config::{ethereum_bridge, genesis, Config};
 use namada_apps::{config, wallet};
+use namada_core::types::address::Address;
 use namada_core::types::key::{RefTo, SchemeType};
 use namada_core::types::string_encoding::StringEncoded;
 use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
@@ -172,7 +173,6 @@ where
             .unwrap_or_else(|_| {
                 panic!("Could not generate new key for validator-{}", val)
             });
-        wallet::save(&wallet).unwrap();
         let validator_address = {
             use namada_apps::config::genesis::chain::DeriveEstablishedAddress;
             let pre_genesis_tx = transactions::EstablishedAccountTx {
@@ -187,6 +187,12 @@ where
             );
             address
         };
+        wallet.insert_address(
+            validator_alias.clone(),
+            Address::Established(validator_address.clone()),
+            true,
+        );
+        wallet::save(&wallet).unwrap();
         // invoke `init-genesis-established-account` to generate a new
         // established account with the generated balance key
         let args = vec![
