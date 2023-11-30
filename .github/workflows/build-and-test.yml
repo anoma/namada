@@ -483,7 +483,7 @@ jobs:
         nightly_version: [nightly-2023-06-01]
         mold_version: [2.3.2]
         comet_bft: [0.37.2]
-        hermes: [1.6.0-namada-beta1]
+        hermes: [1.7.1-namada-beta5]
         make:
           - index: 0
           - index: 1
@@ -559,11 +559,19 @@ jobs:
           curl -o cometbft.tar.gz -LO https://github.com/cometbft/cometbft/releases/download/v${{ matrix.comet_bft }}/cometbft_${{ matrix.comet_bft }}_linux_amd64.tar.gz
           tar -xvzf cometbft.tar.gz
           mv cometbft /usr/local/bin
-      - name: Download Hermes
+      - name: Clone Hermes repo
+        uses: actions/checkout@v4
+        with:
+          repository: https://github.com/heliaxdev/hermes
+          ref: ${{ matrix.hermes }}
+          path: hermes
+      - name: Build Hermes
         run: |
-          curl -o hermes.tar.gz -LO https://github.com/heliaxdev/hermes/releases/download/v${{ matrix.hermes }}/hermes-v${{ matrix.hermes }}-x86_64-unknown-linux-gnu.tar.gz
-          tar -xvzf hermes.tar.gz
-          mv hermes /usr/local/bin
+          cd hermes
+          sed -i ':l;N;s|git = "https://github.com/anoma/namada"\ntag = .*|# git = "https://github.com/anoma/namada"\npath = "../../../sdk"|;b l;' crates/relayer/Cargo.toml
+          # Use nightly to workaround the build failure with Rust =1.70.0 in ibc-proto
+          cargo +${{ matrix.nightly_version }} build --bin hermes
+          cp target/debug/hermes /usr/local/bin
       - name: Change permissions
         run: |
           chmod +x target/release/namada
