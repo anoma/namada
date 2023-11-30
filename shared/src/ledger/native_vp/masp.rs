@@ -1,7 +1,7 @@
 //! MASP native VP
 
 use std::cmp::Ordering;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
@@ -11,10 +11,12 @@ use namada_core::ledger::storage;
 use namada_core::ledger::storage_api::OptionExt;
 use namada_core::ledger::vp_env::VpEnv;
 use namada_core::proto::Tx;
-use namada_core::types::address::Address;
 use namada_core::types::address::InternalAddress::Masp;
-use namada_core::types::storage::{Epoch, Key};
-use namada_core::types::token;
+use namada_core::types::address::{Address, MASP};
+use namada_core::types::storage::{Epoch, Key, KeySeg};
+use namada_core::types::token::{
+    self, is_masp_nullifier_key, MASP_NULLIFIERS_KEY_PREFIX,
+};
 use namada_sdk::masp::verify_shielded_tx;
 use ripemd::Digest as RipemdDigest;
 use sha2::Digest as Sha2Digest;
@@ -119,7 +121,7 @@ where
     fn validate_tx(
         &self,
         tx_data: &Tx,
-        _keys_changed: &BTreeSet<Key>,
+        keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
         let epoch = self.ctx.get_block_epoch()?;
@@ -151,12 +153,52 @@ where
             // 2. the transparent transaction value pool's amount must equal
             // the containing wrapper transaction's fee
             // amount Satisfies 1.
+            // 3. The nullifiers provided by the transaction have not been
+            // revealed previously (even in the same tx) and no unneeded
+            // nullifier is being revealed by the tx
             if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
                 if !transp_bundle.vin.is_empty() {
                     tracing::debug!(
                         "Transparent input to a transaction from the masp \
                          must be 0 but is {}",
                         transp_bundle.vin.len()
+                    );
+                    return Ok(false);
+                }
+            }
+
+            let mut revealed_nullifiers = HashSet::new();
+            for description in shielded_tx
+                .sapling_bundle()
+                .map_or(&vec![], |description| &description.shielded_spends)
+            {
+                let nullifier_key = Key::from(MASP.to_db_key())
+                    .push(&MASP_NULLIFIERS_KEY_PREFIX.to_owned())
+                    .expect("Cannot obtain a storage key")
+                    .push(&namada_core::types::hash::Hash(
+                        description.nullifier.0,
+                    ))
+                    .expect("Cannot obtain a storage key");
+                if self.ctx.has_key_pre(&nullifier_key)?
+                    || revealed_nullifiers.contains(&nullifier_key)
+                {
+                    tracing::debug!(
+                        "MASP double spending attempt, the nullifier {:#?} \
+                         has already been revealed previously",
+                        description.nullifier.0
+                    );
+                    return Ok(false);
+                }
+                revealed_nullifiers.insert(nullifier_key);
+            }
+
+            for nullifier_key in
+                keys_changed.iter().filter(|key| is_masp_nullifier_key(key))
+            {
+                if !revealed_nullifiers.contains(nullifier_key) {
+                    tracing::debug!(
+                        "An unexpected MASP nullifier key {nullifier_key} has \
+                         been revealed by the transaction"
                     );
                     return Ok(false);
                 }

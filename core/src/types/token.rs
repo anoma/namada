@@ -1130,6 +1130,15 @@ pub fn is_masp_key(key: &Key) -> bool {
                     || key.starts_with(MASP_NULLIFIERS_KEY_PREFIX)))
 }
 
+/// Check if the given storage key is a masp nullifier key
+pub fn is_masp_nullifier_key(key: &Key) -> bool {
+    matches!(&key.segments[..],
+    [DbKeySeg::AddressSeg(addr),
+             DbKeySeg::StringSeg(prefix),
+             ..
+        ] if *addr == MASP && prefix == MASP_NULLIFIERS_KEY_PREFIX)
+}
+
 /// Obtain the storage key for the last locked ratio of a token
 pub fn masp_last_locked_ratio_key(token_address: &Address) -> Key {
     key_of_token(
