@@ -217,7 +217,7 @@ where
             GenesisAddress::PublicKey(StringEncoded::new(sk.ref_to())),
             token::DenominatedAmount {
                 amount: token::Amount::from_uint(
-                    2000000,
+                    1000000,
                     NATIVE_MAX_DECIMAL_PLACES,
                 )
                 .unwrap(),
@@ -228,7 +228,7 @@ where
             GenesisAddress::EstablishedAddress(validator_address.clone()),
             token::DenominatedAmount {
                 amount: token::Amount::from_uint(
-                    1000000,
+                    2000000,
                     NATIVE_MAX_DECIMAL_PLACES,
                 )
                 .unwrap(),
