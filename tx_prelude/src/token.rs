@@ -1,5 +1,6 @@
 use masp_primitives::transaction::Transaction;
 use namada_core::types::address::{Address, MASP};
+use namada_core::types::hash::Hash;
 use namada_core::types::storage::KeySeg;
 use namada_core::types::token;
 pub use namada_core::types::token::*;
@@ -60,6 +61,18 @@ pub fn handle_masp_tx(
     );
     ctx.write(&current_tx_key, record)?;
     ctx.write(&head_tx_key, current_tx_idx + 1)?;
+    for description in shielded
+        .sapling_bundle()
+        .map_or(&vec![], |description| &description.shielded_spends)
+    {
+        // Reveal the nullifier to prevent double spending
+        let nullifier_key = storage::Key::from(masp_addr.to_db_key())
+            .push(&MASP_NULLIFIERS_KEY_PREFIX.to_owned())
+            .expect("Cannot obtain a storage key")
+            .push(&Hash(description.nullifier.0))
+            .expect("Cannot obtain a storage key");
+        ctx.write(&nullifier_key, ())?;
+    }
     // If storage key has been supplied, then pin this transaction to it
     if let Some(key) = &transfer.key {
         let pin_key = storage::Key::from(masp_addr.to_db_key())
