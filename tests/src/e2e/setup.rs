@@ -26,7 +26,6 @@ use namada_apps::config::genesis::utils::read_toml;
 use namada_apps::config::genesis::{templates, transactions, GenesisAddress};
 use namada_apps::config::{ethereum_bridge, genesis, Config};
 use namada_apps::{config, wallet};
-use namada_core::types::address::Address;
 use namada_core::types::key::{RefTo, SchemeType};
 use namada_core::types::string_encoding::StringEncoded;
 use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
@@ -317,26 +316,6 @@ where
     genesis
 }
 
-/// Remove self-bonds from default templates. They will be
-/// regenerated later.
-fn remove_self_bonds(genesis: &mut templates::All<templates::Unvalidated>) {
-    let bonds = genesis.transactions.bond.take().unwrap();
-    genesis.transactions.bond = Some(
-        bonds
-            .into_iter()
-            .filter(|bond| {
-                if let genesis::GenesisAddress::EstablishedAddress(address) =
-                    &bond.data.source
-                {
-                    Address::Established(address.clone()) != bond.data.validator
-                } else {
-                    true
-                }
-            })
-            .collect(),
-    );
-}
-
 /// Setup a network with a single genesis validator node.
 pub fn single_node_net() -> Result<Test> {
     network(
@@ -376,10 +355,9 @@ pub fn network(
                     templates_dir.to_string_lossy()
                 )
             });
-    // clear existing validator txs from genesis
+    // clear existing validator txs and bonds from genesis
     templates.transactions.validator_account = None;
-    // remove self-bonds from genesis
-    remove_self_bonds(&mut templates);
+    templates.transactions.bond = None;
 
     // Update the templates as needed
     templates.parameters.parameters.vp_whitelist =
