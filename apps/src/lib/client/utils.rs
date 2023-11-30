@@ -964,12 +964,12 @@ pub fn validate_genesis_templates(
 /// Sign genesis transactions.
 pub async fn sign_genesis_tx(
     global_args: args::Global,
-    args::SignGenesisTx {
+    args::SignGenesisTxs {
         path,
         output,
         validator_alias,
         use_device,
-    }: args::SignGenesisTx,
+    }: args::SignGenesisTxs,
 ) {
     let (mut wallet, _wallet_file) =
         load_pre_genesis_wallet_or_exit(&global_args.base_dir);
