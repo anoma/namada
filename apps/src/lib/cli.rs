@@ -2186,7 +2186,7 @@ pub mod cmds {
         DefaultBaseDir(DefaultBaseDir),
         EpochSleep(EpochSleep),
         ValidateGenesisTemplates(ValidateGenesisTemplates),
-        SignGenesisTx(SignGenesisTx),
+        SignGenesisTxs(SignGenesisTxs),
     }
 
     impl SubCmd for Utils {
@@ -2215,7 +2215,7 @@ pub mod cmds {
                 let validate_genesis_templates =
                     SubCmd::parse(matches).map(Self::ValidateGenesisTemplates);
                 let genesis_tx =
-                    SubCmd::parse(matches).map(Self::SignGenesisTx);
+                    SubCmd::parse(matches).map(Self::SignGenesisTxs);
                 join_network
                     .or(fetch_wasms)
                     .or(validate_wasm)
@@ -2245,7 +2245,7 @@ pub mod cmds {
                 .subcommand(DefaultBaseDir::def())
                 .subcommand(EpochSleep::def())
                 .subcommand(ValidateGenesisTemplates::def())
-                .subcommand(SignGenesisTx::def())
+                .subcommand(SignGenesisTxs::def())
                 .subcommand_required(true)
                 .arg_required_else_help(true)
         }
@@ -2416,21 +2416,21 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct SignGenesisTx(pub args::SignGenesisTx);
+    pub struct SignGenesisTxs(pub args::SignGenesisTxs);
 
-    impl SubCmd for SignGenesisTx {
-        const CMD: &'static str = "sign-genesis-tx";
+    impl SubCmd for SignGenesisTxs {
+        const CMD: &'static str = "sign-genesis-txs";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .map(|matches| Self(args::SignGenesisTx::parse(matches)))
+                .map(|matches| Self(args::SignGenesisTxs::parse(matches)))
         }
 
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Sign genesis transaction(s).")
-                .add_args::<args::SignGenesisTx>()
+                .add_args::<args::SignGenesisTxs>()
         }
     }
 
@@ -6939,14 +6939,14 @@ pub mod args {
     }
 
     #[derive(Clone, Debug)]
-    pub struct SignGenesisTx {
+    pub struct SignGenesisTxs {
         pub path: PathBuf,
         pub output: Option<PathBuf>,
         pub validator_alias: Option<String>,
         pub use_device: bool,
     }
 
-    impl Args for SignGenesisTx {
+    impl Args for SignGenesisTxs {
         fn parse(matches: &ArgMatches) -> Self {
             let path = PATH.parse(matches);
             let output = OUTPUT.parse(matches);
