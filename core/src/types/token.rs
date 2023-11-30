@@ -401,6 +401,21 @@ impl DenominatedAmount {
             })
             .ok_or(AmountParseError::PrecisionOverflow)
     }
+
+    /// Attempt to apply the precision of the given token to this amount.
+    pub fn apply_precision(
+        self,
+        token: &Address,
+        storage: &impl StorageRead,
+    ) -> storage_api::Result<Self> {
+        let denom = read_denom(storage, token)?.ok_or_else(|| {
+            storage_api::Error::SimpleMessage(
+                "No denomination found in storage for the given token",
+            )
+        })?;
+        self.increase_precision(denom)
+            .map_err(storage_api::Error::new)
+    }
 }
 
 impl Display for DenominatedAmount {

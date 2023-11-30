@@ -2497,7 +2497,7 @@ where
         amount: namada_core::types::token::DenominatedAmount,
     ) -> Result<(), storage_api::Error> {
         use namada_core::types::token;
-
+        
         if amount.amount != token::Amount::default() && src != dest {
             let src_key = token::balance_key(token, src);
             let dest_key = token::balance_key(token, dest);

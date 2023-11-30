@@ -379,6 +379,7 @@ mod test_prepare_proposal {
     use namada::core::ledger::storage_api::collections::lazy_map::{
         NestedSubKey, SubKey,
     };
+    use namada::core::ledger::storage_api::token::read_denom;
     use namada::ledger::gas::Gas;
     use namada::ledger::pos::PosQueries;
     use namada::ledger::replay_protection;
@@ -393,7 +394,7 @@ mod test_prepare_proposal {
     use namada::types::key::RefTo;
     use namada::types::storage::BlockHeight;
     use namada::types::token;
-    use namada::types::token::Amount;
+    use namada::types::token::{Amount, DenominatedAmount};
     use namada::types::transaction::protocol::EthereumTxData;
     use namada::types::transaction::{Fee, TxType, WrapperTx};
     use namada::types::vote_extensions::ethereum_events;
@@ -449,7 +450,9 @@ mod test_prepare_proposal {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: Default::default(),
+                    amount_per_gas_unit: DenominatedAmount::native(
+                        Default::default(),
+                    ),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 keypair.ref_to(),
@@ -747,7 +750,9 @@ mod test_prepare_proposal {
             let mut tx =
                 Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                     Fee {
-                        amount_per_gas_unit: 1.into(),
+                        amount_per_gas_unit: DenominatedAmount::native(
+                            1.into(),
+                        ),
                         token: shell.wl_storage.storage.native_token.clone(),
                     },
                     keypair.ref_to(),
@@ -816,7 +821,7 @@ mod test_prepare_proposal {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: 0.into(),
+                    amount_per_gas_unit: DenominatedAmount::native(0.into()),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 keypair.ref_to(),
@@ -863,7 +868,7 @@ mod test_prepare_proposal {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: 1.into(),
+                    amount_per_gas_unit: DenominatedAmount::native(1.into()),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 keypair.ref_to(),
@@ -898,7 +903,9 @@ mod test_prepare_proposal {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: Amount::zero(),
+                    amount_per_gas_unit: DenominatedAmount::native(
+                        Amount::zero(),
+                    ),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 keypair.ref_to(),
@@ -946,7 +953,7 @@ mod test_prepare_proposal {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: 1.into(),
+                    amount_per_gas_unit: DenominatedAmount::native(1.into()),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 keypair.ref_to(),
@@ -968,7 +975,7 @@ mod test_prepare_proposal {
 
         new_wrapper.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount_per_gas_unit: 1.into(),
+                amount_per_gas_unit: DenominatedAmount::native(1.into()),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             keypair_2.ref_to(),
@@ -998,7 +1005,7 @@ mod test_prepare_proposal {
         let mut wrapper_tx =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: 1.into(),
+                    amount_per_gas_unit: DenominatedAmount::native(1.into()),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 keypair.ref_to(),
@@ -1047,7 +1054,7 @@ mod test_prepare_proposal {
 
         let wrapper = WrapperTx::new(
             Fee {
-                amount_per_gas_unit: 100.into(),
+                amount_per_gas_unit: DenominatedAmount::native(100.into()),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             keypair.ref_to(),
@@ -1086,7 +1093,7 @@ mod test_prepare_proposal {
 
         let wrapper = WrapperTx::new(
             Fee {
-                amount_per_gas_unit: 100.into(),
+                amount_per_gas_unit: DenominatedAmount::native(100.into()),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             keypair.ref_to(),
@@ -1133,9 +1140,16 @@ mod test_prepare_proposal {
             });
         }
 
+        let btc_denom = read_denom(&shell.wl_storage, &address::btc())
+            .expect("unable to read denomination from storage")
+            .expect("unable to find denomination of btcs");
+
         let wrapper = WrapperTx::new(
             Fee {
-                amount_per_gas_unit: 100.into(),
+                amount_per_gas_unit: DenominatedAmount {
+                    amount: 100.into(),
+                    denom: btc_denom,
+                },
                 token: address::btc(),
             },
             crate::wallet::defaults::albert_keypair().ref_to(),
@@ -1174,9 +1188,16 @@ mod test_prepare_proposal {
     fn test_fee_non_whitelisted_token() {
         let (shell, _recv, _, _) = test_utils::setup();
 
+        let apfel_denom = read_denom(&shell.wl_storage, &address::apfel())
+            .expect("unable to read denomination from storage")
+            .expect("unable to find denomination of apfels");
+
         let wrapper = WrapperTx::new(
             Fee {
-                amount_per_gas_unit: 100.into(),
+                amount_per_gas_unit: DenominatedAmount {
+                    amount: 100.into(),
+                    denom: apfel_denom,
+                },
                 token: address::apfel(),
             },
             crate::wallet::defaults::albert_keypair().ref_to(),
@@ -1227,7 +1248,7 @@ mod test_prepare_proposal {
 
         let wrapper = WrapperTx::new(
             Fee {
-                amount_per_gas_unit: 10.into(),
+                amount_per_gas_unit: DenominatedAmount::native(10.into()),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             crate::wallet::defaults::albert_keypair().ref_to(),
@@ -1267,7 +1288,7 @@ mod test_prepare_proposal {
 
         let wrapper = WrapperTx::new(
             Fee {
-                amount_per_gas_unit: 0.into(),
+                amount_per_gas_unit: DenominatedAmount::native(0.into()),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             crate::wallet::defaults::albert_keypair().ref_to(),
@@ -1306,7 +1327,9 @@ mod test_prepare_proposal {
 
         let wrapper = WrapperTx::new(
             Fee {
-                amount_per_gas_unit: 1_000_000_000.into(),
+                amount_per_gas_unit: DenominatedAmount::native(
+                    1_000_000_000.into(),
+                ),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             crate::wallet::defaults::albert_keypair().ref_to(),
@@ -1345,7 +1368,9 @@ mod test_prepare_proposal {
 
         let wrapper = WrapperTx::new(
             Fee {
-                amount_per_gas_unit: token::Amount::max(),
+                amount_per_gas_unit: DenominatedAmount::native(
+                    token::Amount::max(),
+                ),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             crate::wallet::defaults::albert_keypair().ref_to(),

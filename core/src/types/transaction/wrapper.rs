@@ -65,7 +65,7 @@ pub mod wrapper_tx {
     )]
     pub struct Fee {
         /// amount of fee per gas unit
-        pub amount_per_gas_unit: Amount,
+        pub amount_per_gas_unit: DenominatedAmount,
         /// address of the token
         /// TODO: This should support multi-tokens
         pub token: Address,
@@ -301,10 +301,7 @@ pub mod wrapper_tx {
                 source: MASP,
                 target: self.fee_payer(),
                 token: self.fee.token.clone(),
-                amount: DenominatedAmount {
-                    amount: self.get_tx_fee()?,
-                    denom: 0.into(),
-                },
+                amount: self.get_tx_fee()?,
                 key: None,
                 shielded: Some(masp_hash),
             };
@@ -317,11 +314,13 @@ pub mod wrapper_tx {
 
         /// Get the [`Amount`] of fees to be paid by the given wrapper. Returns
         /// an error if the amount overflows
-        pub fn get_tx_fee(&self) -> Result<Amount, WrapperTxErr> {
-            self.fee
-                .amount_per_gas_unit
+        pub fn get_tx_fee(&self) -> Result<DenominatedAmount, WrapperTxErr> {
+            let mut amount_per_gas_unit = self.fee.amount_per_gas_unit;
+            amount_per_gas_unit.amount = amount_per_gas_unit
+                .amount
                 .checked_mul(self.gas_limit.into())
-                .ok_or(WrapperTxErr::OverflowingFee)
+                .ok_or(WrapperTxErr::OverflowingFee)?;
+            Ok(amount_per_gas_unit)
         }
     }
 

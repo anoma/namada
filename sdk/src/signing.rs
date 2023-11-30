@@ -485,6 +485,9 @@ pub async fn wrap_tx<'a, N: Namada<'a>>(
             }
         }
     };
+    let validated_minimum_fee = context
+        .denominate_amount(&args.fee_token, minimum_fee)
+        .await;
     let fee_amount = match args.fee_amount {
         Some(amount) => {
             let validated_fee_amount =
@@ -492,26 +495,23 @@ pub async fn wrap_tx<'a, N: Namada<'a>>(
                     .await
                     .expect("Expected to be able to validate fee");
 
-            let amount =
-                Amount::from_uint(validated_fee_amount.amount, 0).unwrap();
-
-            if amount >= minimum_fee {
-                amount
+            if validated_fee_amount >= validated_minimum_fee {
+                validated_fee_amount
             } else if !args.force {
                 // Update the fee amount if it's not enough
                 display_line!(
                     context.io(),
                     "The provided gas price {} is less than the minimum \
                      amount required {}, changing it to match the minimum",
-                    amount.to_string_native(),
-                    minimum_fee.to_string_native()
+                    validated_fee_amount.to_string(),
+                    validated_minimum_fee.to_string()
                 );
-                minimum_fee
+                validated_minimum_fee
             } else {
-                amount
+                validated_fee_amount
             }
         }
-        None => minimum_fee,
+        None => validated_minimum_fee,
     };
 
     let mut updated_balance = match tx_source_balance {
@@ -533,7 +533,7 @@ pub async fn wrap_tx<'a, N: Namada<'a>>(
         }
     };
 
-    let total_fee = fee_amount * u64::from(args.gas_limit);
+    let total_fee = fee_amount.amount * u64::from(args.gas_limit);
 
     let (unshield, unshielding_epoch) = match total_fee
         .checked_sub(updated_balance)
@@ -1737,28 +1737,23 @@ pub async fn to_ledger_vector<'a>(
     }
 
     if let Some(wrapper) = tx.header.wrapper() {
-        let gas_token = wrapper.fee.token.clone();
-        let gas_limit = context
-            .format_amount(&gas_token, Amount::from(wrapper.gas_limit))
-            .await;
-        let fee_amount_per_gas_unit = context
-            .format_amount(&gas_token, wrapper.fee.amount_per_gas_unit)
-            .await;
+        let fee_amount_per_gas_unit =
+            to_ledger_decimal(&wrapper.fee.amount_per_gas_unit.to_string());
         tv.output_expert.extend(vec![
             format!("Timestamp : {}", tx.header.timestamp.0),
             format!("Pubkey : {}", wrapper.pk),
             format!("Epoch : {}", wrapper.epoch),
-            format!("Gas limit : {}", gas_limit),
+            format!("Gas limit : {}", u64::from(wrapper.gas_limit)),
         ]);
         if let Some(token) = tokens.get(&wrapper.fee.token) {
             tv.output_expert.push(format!(
                 "Fees/gas unit : {} {}",
                 token.to_uppercase(),
-                to_ledger_decimal(&fee_amount_per_gas_unit),
+                fee_amount_per_gas_unit,
             ));
         } else {
             tv.output_expert.extend(vec![
-                format!("Fee token : {}", gas_token),
+                format!("Fee token : {}", wrapper.fee.token),
                 format!("Fees/gas unit : {}", fee_amount_per_gas_unit),
             ]);
         }

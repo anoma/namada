@@ -405,13 +405,16 @@ where
 
     match wrapper.get_tx_fee() {
         Ok(fees) => {
-            if balance.checked_sub(fees).is_some() {
+            let fees = fees
+                .apply_precision(&wrapper.fee.token, wl_storage)
+                .map_err(|e| Error::FeeError(e.to_string()))?;
+            if balance.checked_sub(fees.amount).is_some() {
                 token_transfer(
                     wl_storage,
                     &wrapper.fee.token,
                     &wrapper.fee_payer(),
                     block_proposer,
-                    fees,
+                    fees.amount,
                 )
                 .map_err(|e| Error::FeeError(e.to_string()))
             } else {
@@ -530,7 +533,10 @@ where
         .get_tx_fee()
         .map_err(|e| Error::FeeError(e.to_string()))?;
 
-    if balance.checked_sub(fees).is_some() {
+    let fees = fees
+        .apply_precision(&wrapper.fee.token, wl_storage)
+        .map_err(|e| Error::FeeError(e.to_string()))?;
+    if balance.checked_sub(fees.amount).is_some() {
         Ok(())
     } else {
         Err(Error::FeeError(

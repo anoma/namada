@@ -1400,15 +1400,35 @@ where
             }
         };
 
-        if wrapper.fee.amount_per_gas_unit < minimum_gas_price {
-            // The fees do not match the minimum required
-            return Err(Error::TxApply(protocol::Error::FeeError(format!(
-                "Fee amount {:?} do not match the minimum required amount \
-                 {:?} for token {}",
-                wrapper.fee.amount_per_gas_unit,
-                minimum_gas_price,
-                wrapper.fee.token
-            ))));
+        match wrapper
+            .fee
+            .amount_per_gas_unit
+            .apply_precision(&wrapper.fee.token, &self.wl_storage)
+        {
+            Ok(amount_per_gas_unit)
+                if amount_per_gas_unit.amount < minimum_gas_price =>
+            {
+                // The fees do not match the minimum required
+                return Err(Error::TxApply(protocol::Error::FeeError(
+                    format!(
+                        "Fee amount {:?} do not match the minimum required \
+                         amount {:?} for token {}",
+                        wrapper.fee.amount_per_gas_unit,
+                        minimum_gas_price,
+                        wrapper.fee.token
+                    ),
+                )));
+            }
+            Ok(_) => {}
+            Err(err) => {
+                return Err(Error::TxApply(protocol::Error::FeeError(
+                    format!(
+                        "The precision of the fee amount {:?} is higher than \
+                         the denomination for token {}: {}",
+                        wrapper.fee.amount_per_gas_unit, wrapper.fee.token, err,
+                    ),
+                )));
+            }
         }
 
         if let Some(transaction) = masp_transaction {
@@ -1580,6 +1600,7 @@ mod test_utils {
     use crate::facade::tendermint_proto::v0_37::abci::{
         RequestPrepareProposal, RequestProcessProposal,
     };
+    use crate::node::ledger::shell::token::DenominatedAmount;
     use crate::node::ledger::shims::abcipp_shim_types;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
@@ -2086,7 +2107,7 @@ mod test_utils {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: Default::default(),
+                    amount_per_gas_unit: DenominatedAmount::native(0.into()),
                     token: native_token,
                 },
                 keypair.ref_to(),
@@ -2262,6 +2283,7 @@ mod test_utils {
 #[cfg(test)]
 mod shell_tests {
     use namada::core::ledger::replay_protection;
+    use namada::ledger::storage_api::token::read_denom;
     use namada::proto::{
         Code, Data, Section, SignableEthMessage, Signature, Signed, Tx,
     };
@@ -2276,6 +2298,7 @@ mod shell_tests {
 
     use super::*;
     use crate::node::ledger::shell::test_utils;
+    use crate::node::ledger::shell::token::DenominatedAmount;
     use crate::wallet;
 
     const GAS_LIMIT_MULTIPLIER: u64 = 100_000;
@@ -2505,8 +2528,10 @@ mod shell_tests {
         let mut unsigned_wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: token::Amount::from_uint(100, 0)
-                        .expect("This can't fail"),
+                    amount_per_gas_unit: DenominatedAmount::native(
+                        token::Amount::from_uint(100, 0)
+                            .expect("This can't fail"),
+                    ),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 keypair.ref_to(),
@@ -2542,8 +2567,10 @@ mod shell_tests {
         let mut invalid_wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: token::Amount::from_uint(100, 0)
-                        .expect("This can't fail"),
+                    amount_per_gas_unit: DenominatedAmount::native(
+                        token::Amount::from_uint(100, 0)
+                            .expect("This can't fail"),
+                    ),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 keypair.ref_to(),
@@ -2565,7 +2592,8 @@ mod shell_tests {
         // we mount a malleability attack to try and remove the fee
         let mut new_wrapper =
             invalid_wrapper.header().wrapper().expect("Test failed");
-        new_wrapper.fee.amount_per_gas_unit = Default::default();
+        new_wrapper.fee.amount_per_gas_unit =
+            DenominatedAmount::native(0.into());
         invalid_wrapper.update_header(TxType::Wrapper(Box::new(new_wrapper)));
 
         let mut result = shell.mempool_validate(
@@ -2611,8 +2639,10 @@ mod shell_tests {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: token::Amount::from_uint(100, 0)
-                        .expect("This can't fail"),
+                    amount_per_gas_unit: DenominatedAmount::native(
+                        token::Amount::from_uint(100, 0)
+                            .expect("This can't fail"),
+                    ),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 keypair.ref_to(),
@@ -2773,7 +2803,7 @@ mod shell_tests {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: 100.into(),
+                    amount_per_gas_unit: DenominatedAmount::native(100.into()),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 keypair.ref_to(),
@@ -2806,7 +2836,7 @@ mod shell_tests {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: 100.into(),
+                    amount_per_gas_unit: DenominatedAmount::native(100.into()),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 keypair.ref_to(),
@@ -2835,11 +2865,17 @@ mod shell_tests {
     #[test]
     fn test_fee_non_whitelisted_token() {
         let (shell, _recv, _, _) = test_utils::setup();
+        let apfel_denom = read_denom(&shell.wl_storage, &address::apfel())
+            .expect("unable to read denomination from storage")
+            .expect("unable to find denomination of apfels");
 
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: 100.into(),
+                    amount_per_gas_unit: DenominatedAmount {
+                        amount: 100.into(),
+                        denom: apfel_denom,
+                    },
                     token: address::apfel(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
@@ -2874,7 +2910,7 @@ mod shell_tests {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: 0.into(),
+                    amount_per_gas_unit: DenominatedAmount::native(0.into()),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
@@ -2908,7 +2944,9 @@ mod shell_tests {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: 1_000_000_000.into(),
+                    amount_per_gas_unit: DenominatedAmount::native(
+                        1_000_000_000.into(),
+                    ),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
@@ -2942,7 +2980,9 @@ mod shell_tests {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: token::Amount::max(),
+                    amount_per_gas_unit: DenominatedAmount::native(
+                        token::Amount::max(),
+                    ),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
@@ -2987,7 +3027,9 @@ mod shell_tests {
             let mut wrapper =
                 Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                     Fee {
-                        amount_per_gas_unit: 100.into(),
+                        amount_per_gas_unit: DenominatedAmount::native(
+                            100.into(),
+                        ),
                         token: shell.wl_storage.storage.native_token.clone(),
                     },
                     keypair.ref_to(),
