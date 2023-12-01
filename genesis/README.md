@@ -1,6 +1,6 @@
 # Genesis templates
 
-An example setup with a single validator used to run a localnet can be found in [localnet](localnet/README.md) directory.
+An example setup with a single validator used for running a localnet can be found in [localnet](localnet/README.md) directory.
 
 [Starter templates](starter/README.md) can be used to configure new networks.
 
