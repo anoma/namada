@@ -332,6 +332,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             validator,
             consensus_key: None,
             tx_code_path: PathBuf::from(TX_CHANGE_CONSENSUS_KEY_WASM),
+            unsafe_dont_encrypt: false,
             tx: self.tx_builder(),
         }
     }

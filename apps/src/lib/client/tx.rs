@@ -343,6 +343,7 @@ pub async fn submit_change_consensus_key(
         tx: tx_args,
         validator,
         consensus_key,
+        unsafe_dont_encrypt,
         tx_code_path: _,
     }: args::ConsensusKeyChange,
 ) -> Result<(), error::Error> {
@@ -390,7 +391,8 @@ pub async fn submit_change_consensus_key(
         })
         .unwrap_or_else(|| {
             display_line!(namada.io(), "Generating new consensus key...");
-            let password = read_and_confirm_encryption_password(false);
+            let password =
+                read_and_confirm_encryption_password(unsafe_dont_encrypt);
             wallet
                 .gen_store_secret_key(
                     // Note that TM only allows ed25519 for consensus key
