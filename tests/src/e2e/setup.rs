@@ -173,6 +173,7 @@ where
             .unwrap_or_else(|_| {
                 panic!("Could not generate new key for validator-{}", val)
             });
+        println!("alias: {}, pk: {}", alias, sk.ref_to());
         let validator_address = {
             use namada_apps::config::genesis::chain::DeriveEstablishedAddress;
             let pre_genesis_tx = transactions::EstablishedAccountTx {
