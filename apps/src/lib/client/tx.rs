@@ -374,6 +374,7 @@ pub async fn submit_change_consensus_key(
         consensus_key_alias =
             format!("{base_consensus_key_alias}-{key_counter}");
     }
+    drop(wallet);
 
     let mut wallet = namada.wallet_mut().await;
     let consensus_key = consensus_key
