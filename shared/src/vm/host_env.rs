@@ -10,10 +10,10 @@ use masp_primitives::transaction::Transaction;
 use namada_core::ledger::gas::{
     GasMetering, TxGasMeter, MEMORY_ACCESS_GAS_PER_BYTE,
 };
+use namada_core::ledger::masp_utils;
 use namada_core::types::address::{ESTABLISHED_ADDRESS_BYTES_LEN, MASP};
 use namada_core::types::internal::KeyVal;
 use namada_core::types::storage::TX_INDEX_LENGTH;
-use namada_core::types::token::MASP_NULLIFIERS_KEY_PREFIX;
 use namada_core::types::transaction::TxSentinel;
 use namada_core::types::validity_predicate::VpSentinel;
 use thiserror::Error;
@@ -2542,19 +2542,7 @@ where
         );
         self.write(&current_tx_key, record)?;
         self.write(&head_tx_key, current_tx_idx + 1)?;
-        for description in shielded
-            .masp_tx
-            .sapling_bundle()
-            .map_or(&vec![], |description| &description.shielded_spends)
-        {
-            // Reveal the nullifier to prevent double spending
-            let nullifier_key = Key::from(masp_addr.to_db_key())
-                .push(&MASP_NULLIFIERS_KEY_PREFIX.to_owned())
-                .expect("Cannot obtain a storage key")
-                .push(&Hash(description.nullifier.0))
-                .expect("Cannot obtain a storage key");
-            self.write(&nullifier_key, ())?;
-        }
+        masp_utils::reveal_nullifiers(self, &shielded.masp_tx)?;
         // If storage key has been supplied, then pin this transaction to it
         if let Some(key) = &shielded.transfer.key {
             let pin_key = Key::from(masp_addr.to_db_key())

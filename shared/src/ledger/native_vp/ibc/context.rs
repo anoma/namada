@@ -5,8 +5,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::transaction::Transaction;
 use namada_core::ledger::ibc::{IbcCommonContext, IbcStorageContext};
-use namada_core::types::hash::Hash;
-use namada_core::types::token::MASP_NULLIFIERS_KEY_PREFIX;
+use namada_core::ledger::masp_utils;
 
 use crate::ledger::ibc::storage::is_ibc_key;
 use crate::ledger::native_vp::CtxPreStorageRead;
@@ -239,19 +238,7 @@ where
         );
         self.write(&current_tx_key, record.serialize_to_vec())?;
         self.write(&head_tx_key, (current_tx_idx + 1).serialize_to_vec())?;
-        for description in shielded
-            .masp_tx
-            .sapling_bundle()
-            .map_or(&vec![], |description| &description.shielded_spends)
-        {
-            // Reveal the nullifier to prevent double spending
-            let nullifier_key = Key::from(masp_addr.to_db_key())
-                .push(&MASP_NULLIFIERS_KEY_PREFIX.to_owned())
-                .expect("Cannot obtain a storage key")
-                .push(&Hash(description.nullifier.0))
-                .expect("Cannot obtain a storage key");
-            self.write(&nullifier_key, ())?;
-        }
+        masp_utils::reveal_nullifiers(self, &shielded.masp_tx)?;
         // If storage key has been supplied, then pin this transaction to it
         if let Some(key) = &shielded.transfer.key {
             let pin_key = Key::from(masp_addr.to_db_key())
