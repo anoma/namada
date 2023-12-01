@@ -5412,6 +5412,7 @@ pub mod args {
                 tx,
                 validator: chain_ctx.get(&self.validator),
                 consensus_key: self.consensus_key.map(|x| chain_ctx.get(&x)),
+                unsafe_dont_encrypt: self.unsafe_dont_encrypt,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             }
         }
@@ -5422,11 +5423,13 @@ pub mod args {
             let tx = Tx::parse(matches);
             let validator = VALIDATOR.parse(matches);
             let consensus_key = VALIDATOR_CONSENSUS_KEY.parse(matches);
+            let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let tx_code_path = PathBuf::from(TX_CHANGE_CONSENSUS_KEY_WASM);
             Self {
                 tx,
                 validator,
                 consensus_key,
+                unsafe_dont_encrypt,
                 tx_code_path,
             }
         }
@@ -5439,6 +5442,10 @@ pub mod args {
                 .arg(VALIDATOR_CONSENSUS_KEY.def().help(
                     "The desired new consensus key. A new one will be \
                      generated if none given. Note this key must be ed25519.",
+                ))
+                .arg(UNSAFE_DONT_ENCRYPT.def().help(
+                    "UNSAFE: Do not encrypt the generated keypairs. Do not \
+                     use this for keys used in a live network.",
                 ))
         }
     }

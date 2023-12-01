@@ -3602,8 +3602,11 @@ fn change_consensus_key() -> Result<()> {
         "change-consensus-key",
         "--validator",
         "validator-0",
+        "--signing-keys",
+        "validator-0-validator-key",
         "--node",
         &validator_0_rpc,
+        "--unsafe-dont-encrypt",
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
