@@ -92,7 +92,7 @@ impl Context {
     pub fn new<IO: Io>(global_args: args::Global) -> Result<Self> {
         let global_config = read_or_try_new_global_config(&global_args);
 
-        let chain = match global_config.default_chain_id.as_ref() {
+        let chain = match global_args.chain_id.as_ref() {
             Some(default_chain_id) => {
                 tracing::info!("Default chain ID: {default_chain_id}");
                 let mut config =

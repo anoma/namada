@@ -587,6 +587,7 @@ impl<U: WalletIo> Wallet<U> {
     pub fn gen_hd_seed(
         passphrase: Option<Zeroizing<String>>,
         rng: &mut U::Rng,
+        unsafe_dont_encrypt: bool
     ) -> Result<(Mnemonic, Seed), GenRestoreKeyError> {
         const MNEMONIC_TYPE: MnemonicType = MnemonicType::Words24;
         let mnemonic = U::generate_mnemonic_code(MNEMONIC_TYPE, rng)?;
@@ -596,8 +597,11 @@ impl<U: WalletIo> Wallet<U> {
         );
         println!("{}", mnemonic.clone().into_phrase());
 
-        let passphrase =
-            passphrase.unwrap_or_else(|| U::read_mnemonic_passphrase(true));
+        let passphrase = if unsafe_dont_encrypt {
+            Zeroizing::new(String::new())
+        } else {
+            passphrase.unwrap_or_else(|| U::read_mnemonic_passphrase(true))
+        };
         let seed = Seed::new(&mnemonic, &passphrase);
         Ok((mnemonic, seed))
     }
