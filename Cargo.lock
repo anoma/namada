@@ -3930,6 +3930,7 @@ dependencies = [
  "itertools 0.10.5",
  "k256",
  "masp_primitives",
+ "masp_proofs",
  "namada_macros",
  "num-integer",
  "num-rational 0.4.1",
