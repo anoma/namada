@@ -189,6 +189,16 @@ where
                     );
                     return Ok(false);
                 }
+
+                // Check that the nullifier is indeed committed (no temp write
+                // and no delete) and carries no associated data (the latter not
+                // strictly necessary for validation, but we don't expect any
+                // value for this key anyway)
+                match self.ctx.read_bytes_post(&nullifier_key)? {
+                    Some(value) if value.is_empty() => (),
+                    _ => return Ok(false),
+                }
+
                 revealed_nullifiers.insert(nullifier_key);
             }
 
