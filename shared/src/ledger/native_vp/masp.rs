@@ -5,7 +5,11 @@ use std::collections::{BTreeSet, HashSet};
 
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
+use masp_primitives::merkle_tree::CommitmentTree;
+use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::I128Sum;
+use masp_primitives::transaction::Transaction;
+use masp_proofs::bls12_381;
 use namada_core::ledger::gas::MASP_VERIFY_SHIELDED_TX_GAS;
 use namada_core::ledger::storage;
 use namada_core::ledger::storage_api::OptionExt;
@@ -15,7 +19,9 @@ use namada_core::types::address::InternalAddress::Masp;
 use namada_core::types::address::{Address, MASP};
 use namada_core::types::storage::{Epoch, Key, KeySeg};
 use namada_core::types::token::{
-    self, is_masp_nullifier_key, MASP_NULLIFIERS_KEY_PREFIX,
+    self, is_masp_anchor_key, is_masp_nullifier_key,
+    MASP_NOTE_COMMITMENT_ANCHOR_PREFIX, MASP_NOTE_COMMITMENT_TREE,
+    MASP_NULLIFIERS_KEY_PREFIX,
 };
 use namada_sdk::masp::verify_shielded_tx;
 use ripemd::Digest as RipemdDigest;
@@ -110,6 +116,121 @@ fn convert_amount(
     (asset_type, amount)
 }
 
+impl<'a, DB, H, CA> MaspVp<'a, DB, H, CA>
+where
+    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + storage::StorageHasher,
+    CA: 'static + WasmCacheAccess,
+{
+    // Check that a transaction carrying output descriptions correctly updates
+    // the tree and anchor in storage
+    fn validate_note_commitment_update(
+        &self,
+        keys_changed: &BTreeSet<Key>,
+        transaction: &Transaction,
+    ) -> Result<bool> {
+        // Check that the merkle tree in storage has been correctly updated with
+        // the output descriptions cmu
+        let tree_key = Key::from(MASP.to_db_key())
+            .push(&MASP_NOTE_COMMITMENT_TREE.to_owned())
+            .expect("Cannot obtain a storage key");
+        let mut previous_tree: CommitmentTree<Node> =
+            self.ctx.read_pre(&tree_key)?.ok_or(Error::NativeVpError(
+                native_vp::Error::SimpleMessage("Cannot read storage"),
+            ))?;
+        let post_tree: CommitmentTree<Node> =
+            self.ctx.read_post(&tree_key)?.ok_or(Error::NativeVpError(
+                native_vp::Error::SimpleMessage("Cannot read storage"),
+            ))?;
+
+        // Based on the output descriptions of the transaction, update the
+        // previous tree in storage
+        for description in transaction
+            .sapling_bundle()
+            .map_or(&vec![], |bundle| &bundle.shielded_outputs)
+        {
+            previous_tree
+                .append(Node::from_scalar(description.cmu))
+                .map_err(|()| {
+                    Error::NativeVpError(native_vp::Error::SimpleMessage(
+                        "Failed to update the commitment tree",
+                    ))
+                })?;
+        }
+        // Check that the updated previous tree matches the actual post tree.
+        // This verifies that all and only the necessary notes have been
+        // appended to the tree
+        if previous_tree != post_tree {
+            tracing::debug!("The note commitment tree was incorrectly updated");
+            return Ok(false);
+        }
+
+        // Check that only one anchor was published
+        if keys_changed
+            .iter()
+            .filter(|key| is_masp_anchor_key(key))
+            .count()
+            != 1
+        {
+            tracing::debug!(
+                "More than one MASP anchor keys havebeen revealed by the \
+                 transaction"
+            );
+            return Ok(false);
+        }
+
+        // Check that the new anchor has been written to storage
+        let updated_anchor_key = Key::from(MASP.to_db_key())
+            .push(&MASP_NOTE_COMMITMENT_ANCHOR_PREFIX.to_owned())
+            .expect("Cannot obtain a storage key")
+            .push(&namada_core::types::hash::Hash(
+                bls12_381::Scalar::from(previous_tree.root()).to_bytes(),
+            ))
+            .expect("Cannot obtain a storage key");
+
+        match self.ctx.read_bytes_post(&updated_anchor_key)? {
+            Some(value) if value.is_empty() => (),
+            _ => {
+                tracing::debug!(
+                    "The commitment tree anchor was not updated correctly"
+                );
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
+    }
+
+    // Check that the spend descriptions anchors of a transaction are valid
+    fn validate_spend_descriptions_anchor(
+        &self,
+        transaction: &Transaction,
+    ) -> Result<bool> {
+        for description in transaction
+            .sapling_bundle()
+            .map_or(&vec![], |bundle| &bundle.shielded_spends)
+        {
+            let anchor_key = Key::from(MASP.to_db_key())
+                .push(&MASP_NOTE_COMMITMENT_ANCHOR_PREFIX.to_owned())
+                .expect("Cannot obtain a storage key")
+                .push(&namada_core::types::hash::Hash(
+                    description.anchor.to_bytes(),
+                ))
+                .expect("Cannot obtain a storage key");
+
+            // Check if the provided anchor was published before
+            if !self.ctx.has_key_pre(&anchor_key)? {
+                tracing::debug!(
+                    "Spend description refers to an invalid anchor"
+                );
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
+    }
+}
+
 impl<'a, DB, H, CA> NativeVp for MaspVp<'a, DB, H, CA>
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -153,7 +274,8 @@ where
             // 2. the transparent transaction value pool's amount must equal
             // the containing wrapper transaction's fee
             // amount Satisfies 1.
-            // 3. The nullifiers provided by the transaction have not been
+            // 3. The spend descriptions' anchors are valid
+            // 4. The nullifiers provided by the transaction have not been
             // revealed previously (even in the same tx) and no unneeded
             // nullifier is being revealed by the tx
             if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
@@ -165,6 +287,10 @@ where
                     );
                     return Ok(false);
                 }
+            }
+
+            if !self.validate_spend_descriptions_anchor(&shielded_tx)? {
+                return Ok(false);
             }
 
             let mut revealed_nullifiers = HashSet::new();
@@ -304,6 +430,8 @@ where
             // Handle shielded output
             // The following boundary conditions must be satisfied
             // 1. Zero transparent output
+            // 2. The transaction must correctly update the note commitment tree
+            // and the anchor in storage with the new output descriptions
 
             // Satisfies 1.
             if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
@@ -315,6 +443,13 @@ where
                     );
                     return Ok(false);
                 }
+            }
+
+            // Satisfies 2
+            if !self
+                .validate_note_commitment_update(keys_changed, &shielded_tx)?
+            {
+                return Ok(false);
             }
         }
 
