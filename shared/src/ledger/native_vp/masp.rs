@@ -122,9 +122,63 @@ where
     H: 'static + storage::StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
+    // Check that the transaction correctly revealed the nullifiers
+    fn valid_nullifiers_reveal(
+        &self,
+        keys_changed: &BTreeSet<Key>,
+        transaction: &Transaction,
+    ) -> Result<bool> {
+        let mut revealed_nullifiers = HashSet::new();
+        for description in transaction
+            .sapling_bundle()
+            .map_or(&vec![], |description| &description.shielded_spends)
+        {
+            let nullifier_key = Key::from(MASP.to_db_key())
+                .push(&MASP_NULLIFIERS_KEY_PREFIX.to_owned())
+                .expect("Cannot obtain a storage key")
+                .push(&namada_core::types::hash::Hash(description.nullifier.0))
+                .expect("Cannot obtain a storage key");
+            if self.ctx.has_key_pre(&nullifier_key)?
+                || revealed_nullifiers.contains(&nullifier_key)
+            {
+                tracing::debug!(
+                    "MASP double spending attempt, the nullifier {:#?} has \
+                     already been revealed previously",
+                    description.nullifier.0
+                );
+                return Ok(false);
+            }
+
+            // Check that the nullifier is indeed committed (no temp write
+            // and no delete) and carries no associated data (the latter not
+            // strictly necessary for validation, but we don't expect any
+            // value for this key anyway)
+            match self.ctx.read_bytes_post(&nullifier_key)? {
+                Some(value) if value.is_empty() => (),
+                _ => return Ok(false),
+            }
+
+            revealed_nullifiers.insert(nullifier_key);
+        }
+
+        for nullifier_key in
+            keys_changed.iter().filter(|key| is_masp_nullifier_key(key))
+        {
+            if !revealed_nullifiers.contains(nullifier_key) {
+                tracing::debug!(
+                    "An unexpected MASP nullifier key {nullifier_key} has \
+                     been revealed by the transaction"
+                );
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
+    }
+
     // Check that a transaction carrying output descriptions correctly updates
     // the tree and anchor in storage
-    fn validate_note_commitment_update(
+    fn valid_note_commitment_update(
         &self,
         keys_changed: &BTreeSet<Key>,
         transaction: &Transaction,
@@ -202,7 +256,7 @@ where
     }
 
     // Check that the spend descriptions anchors of a transaction are valid
-    fn validate_spend_descriptions_anchor(
+    fn valid_spend_descriptions_anchor(
         &self,
         transaction: &Transaction,
     ) -> Result<bool> {
@@ -289,55 +343,10 @@ where
                 }
             }
 
-            if !self.validate_spend_descriptions_anchor(&shielded_tx)? {
+            if !(self.valid_spend_descriptions_anchor(&shielded_tx)?
+                && self.valid_nullifiers_reveal(keys_changed, &shielded_tx)?)
+            {
                 return Ok(false);
-            }
-
-            let mut revealed_nullifiers = HashSet::new();
-            for description in shielded_tx
-                .sapling_bundle()
-                .map_or(&vec![], |description| &description.shielded_spends)
-            {
-                let nullifier_key = Key::from(MASP.to_db_key())
-                    .push(&MASP_NULLIFIERS_KEY_PREFIX.to_owned())
-                    .expect("Cannot obtain a storage key")
-                    .push(&namada_core::types::hash::Hash(
-                        description.nullifier.0,
-                    ))
-                    .expect("Cannot obtain a storage key");
-                if self.ctx.has_key_pre(&nullifier_key)?
-                    || revealed_nullifiers.contains(&nullifier_key)
-                {
-                    tracing::debug!(
-                        "MASP double spending attempt, the nullifier {:#?} \
-                         has already been revealed previously",
-                        description.nullifier.0
-                    );
-                    return Ok(false);
-                }
-
-                // Check that the nullifier is indeed committed (no temp write
-                // and no delete) and carries no associated data (the latter not
-                // strictly necessary for validation, but we don't expect any
-                // value for this key anyway)
-                match self.ctx.read_bytes_post(&nullifier_key)? {
-                    Some(value) if value.is_empty() => (),
-                    _ => return Ok(false),
-                }
-
-                revealed_nullifiers.insert(nullifier_key);
-            }
-
-            for nullifier_key in
-                keys_changed.iter().filter(|key| is_masp_nullifier_key(key))
-            {
-                if !revealed_nullifiers.contains(nullifier_key) {
-                    tracing::debug!(
-                        "An unexpected MASP nullifier key {nullifier_key} has \
-                         been revealed by the transaction"
-                    );
-                    return Ok(false);
-                }
             }
         }
 
@@ -446,9 +455,7 @@ where
             }
 
             // Satisfies 2
-            if !self
-                .validate_note_commitment_update(keys_changed, &shielded_tx)?
-            {
+            if !self.valid_note_commitment_update(keys_changed, &shielded_tx)? {
                 return Ok(false);
             }
         }
