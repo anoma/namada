@@ -3,7 +3,6 @@
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::Transaction;
-use masp_proofs::bls12_381;
 
 use super::storage_api::{StorageRead, StorageWrite};
 use crate::ledger::storage_api::{Error, Result};
@@ -15,8 +14,7 @@ use crate::types::token::{
     TX_KEY_PREFIX,
 };
 use crate::types::token::{
-    MASP_NOTE_COMMITMENT_ANCHOR_PREFIX, MASP_NOTE_COMMITMENT_TREE,
-    MASP_NULLIFIERS_KEY_PREFIX,
+    MASP_NOTE_COMMITMENT_TREE, MASP_NULLIFIERS_KEY_PREFIX,
 };
 
 // Writes the nullifiers of the provided masp transaction to storage
@@ -50,31 +48,22 @@ fn update_note_commitment_tree(
             let tree_key = Key::from(MASP.to_db_key())
                 .push(&MASP_NOTE_COMMITMENT_TREE.to_owned())
                 .expect("Cannot obtain a storage key");
-            let mut spend_tree = ctx
+            let mut commitment_tree = ctx
                 .read::<CommitmentTree<Node>>(&tree_key)?
                 .ok_or(Error::SimpleMessage(
-                "Missing note commitment tree in storage",
-            ))?;
+                    "Missing note commitment tree in storage",
+                ))?;
 
             for description in &bundle.shielded_outputs {
                 // Add cmu to the merkle tree
-                spend_tree
+                commitment_tree
                     .append(Node::from_scalar(description.cmu))
                     .map_err(|_| {
                         Error::SimpleMessage("Note commitment tree is full")
                     })?;
             }
 
-            // Write the tree back to storage and update the anchor
-            let updated_anchor = spend_tree.root();
-            ctx.write(&tree_key, spend_tree)?;
-            let anchor_key = Key::from(MASP.to_db_key())
-                .push(&MASP_NOTE_COMMITMENT_ANCHOR_PREFIX.to_owned())
-                .expect("Cannot obtain a storage key")
-                .push(&Hash(bls12_381::Scalar::from(updated_anchor).to_bytes()))
-                .expect("Cannot obtain a storage key");
-
-            ctx.write(&anchor_key, ())?;
+            ctx.write(&tree_key, commitment_tree)?;
         }
     }
 

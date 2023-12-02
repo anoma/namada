@@ -9,7 +9,6 @@ use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::transaction::Transaction;
-use masp_proofs::bls12_381;
 use namada_core::ledger::gas::MASP_VERIFY_SHIELDED_TX_GAS;
 use namada_core::ledger::storage;
 use namada_core::ledger::storage_api::OptionExt;
@@ -219,37 +218,18 @@ where
             return Ok(false);
         }
 
-        // Check that only one anchor was published
+        // Check that no anchor was published (this is to be done by the
+        // protocol)
         if keys_changed
             .iter()
             .filter(|key| is_masp_anchor_key(key))
             .count()
-            != 1
+            != 0
         {
             tracing::debug!(
-                "More than one MASP anchor keys havebeen revealed by the \
-                 transaction"
+                "The transaction revealed one or more MASP anchor keys"
             );
             return Ok(false);
-        }
-
-        // Check that the new anchor has been written to storage
-        let updated_anchor_key = Key::from(MASP.to_db_key())
-            .push(&MASP_NOTE_COMMITMENT_ANCHOR_PREFIX.to_owned())
-            .expect("Cannot obtain a storage key")
-            .push(&namada_core::types::hash::Hash(
-                bls12_381::Scalar::from(previous_tree.root()).to_bytes(),
-            ))
-            .expect("Cannot obtain a storage key");
-
-        match self.ctx.read_bytes_post(&updated_anchor_key)? {
-            Some(value) if value.is_empty() => (),
-            _ => {
-                tracing::debug!(
-                    "The commitment tree anchor was not updated correctly"
-                );
-                return Ok(false);
-            }
         }
 
         Ok(true)

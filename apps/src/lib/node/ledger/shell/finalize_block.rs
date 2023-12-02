@@ -1,9 +1,13 @@
 //! Implementation of the `FinalizeBlock` ABCI++ method for the Shell
 
 use data_encoding::HEXUPPER;
+use masp_primitives::merkle_tree::CommitmentTree;
+use masp_primitives::sapling::Node;
+use masp_proofs::bls12_381;
 use namada::core::ledger::inflation;
 use namada::core::ledger::masp_conversions::update_allowed_conversions;
 use namada::core::ledger::pgf::ADDRESS as pgf_address;
+use namada::core::types::storage::KeySeg;
 use namada::ledger::events::EventType;
 use namada::ledger::gas::{GasMetering, TxGasMeter};
 use namada::ledger::parameters::storage as params_storage;
@@ -17,9 +21,13 @@ use namada::proof_of_stake::{
     find_validator_by_raw_hash, read_last_block_proposer_address,
     read_pos_params, read_total_stake, write_last_block_proposer_address,
 };
+use namada::types::address::MASP;
 use namada::types::dec::Dec;
 use namada::types::key::tm_raw_hash_to_string;
 use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
+use namada::types::token::{
+    MASP_NOTE_COMMITMENT_ANCHOR_PREFIX, MASP_NOTE_COMMITMENT_TREE,
+};
 use namada::types::transaction::protocol::{
     ethereum_tx_data_variants, ProtocolTxType,
 };
@@ -556,6 +564,23 @@ where
 
         tracing::info!("{}", stats);
         tracing::info!("{}", stats.format_tx_executed());
+
+        // Update the MASP commitment tree anchor
+        let tree_key = Key::from(MASP.to_db_key())
+            .push(&MASP_NOTE_COMMITMENT_TREE.to_owned())
+            .expect("Cannot obtain a storage key");
+        let updated_tree: CommitmentTree<Node> = self
+            .wl_storage
+            .read(&tree_key)?
+            .expect("Missing note commitment tree in storage");
+        let anchor_key = Key::from(MASP.to_db_key())
+            .push(&MASP_NOTE_COMMITMENT_ANCHOR_PREFIX.to_owned())
+            .expect("Cannot obtain a storage key")
+            .push(&namada::core::types::hash::Hash(
+                bls12_381::Scalar::from(updated_tree.root()).to_bytes(),
+            ))
+            .expect("Cannot obtain a storage key");
+        self.wl_storage.write(&anchor_key, ())?;
 
         if update_for_tendermint {
             self.update_epoch(&mut response);
