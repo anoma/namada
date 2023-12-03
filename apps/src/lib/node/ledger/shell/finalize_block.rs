@@ -14,9 +14,10 @@ use namada::ledger::parameters::storage as params_storage;
 use namada::ledger::pos::{namada_proof_of_stake, staking_token_address};
 use namada::ledger::protocol;
 use namada::ledger::storage::wl_storage::WriteLogAndStorage;
+use namada::ledger::storage::write_log::StorageModification;
 use namada::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::ledger::storage_api::token::credit_tokens;
-use namada::ledger::storage_api::{pgf, StorageRead, StorageWrite};
+use namada::ledger::storage_api::{pgf, ResultExt, StorageRead, StorageWrite};
 use namada::proof_of_stake::{
     find_validator_by_raw_hash, read_last_block_proposer_address,
     read_pos_params, read_total_stake, write_last_block_proposer_address,
@@ -565,22 +566,24 @@ where
         tracing::info!("{}", stats);
         tracing::info!("{}", stats.format_tx_executed());
 
-        // Update the MASP commitment tree anchor
+        // Update the MASP commitment tree anchor if the tree was updated
         let tree_key = Key::from(MASP.to_db_key())
             .push(&MASP_NOTE_COMMITMENT_TREE.to_owned())
             .expect("Cannot obtain a storage key");
-        let updated_tree: CommitmentTree<Node> = self
-            .wl_storage
-            .read(&tree_key)?
-            .expect("Missing note commitment tree in storage");
-        let anchor_key = Key::from(MASP.to_db_key())
-            .push(&MASP_NOTE_COMMITMENT_ANCHOR_PREFIX.to_owned())
-            .expect("Cannot obtain a storage key")
-            .push(&namada::core::types::hash::Hash(
-                bls12_381::Scalar::from(updated_tree.root()).to_bytes(),
-            ))
-            .expect("Cannot obtain a storage key");
-        self.wl_storage.write(&anchor_key, ())?;
+        if let Some(StorageModification::Write { value }) =
+            self.wl_storage.write_log.read(&tree_key).0
+        {
+            let updated_tree = CommitmentTree::<Node>::try_from_slice(value)
+                .into_storage_result()?;
+            let anchor_key = Key::from(MASP.to_db_key())
+                .push(&MASP_NOTE_COMMITMENT_ANCHOR_PREFIX.to_owned())
+                .expect("Cannot obtain a storage key")
+                .push(&namada::core::types::hash::Hash(
+                    bls12_381::Scalar::from(updated_tree.root()).to_bytes(),
+                ))
+                .expect("Cannot obtain a storage key");
+            self.wl_storage.write(&anchor_key, ())?;
+        }
 
         if update_for_tendermint {
             self.update_epoch(&mut response);
