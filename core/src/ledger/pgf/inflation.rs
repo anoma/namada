@@ -1,5 +1,6 @@
 //! PGF lib code.
 
+use crate::ledger::governance::storage::proposal::PGFTarget;
 use crate::ledger::parameters::storage as params_storage;
 use crate::ledger::storage_api::pgf::{
     get_parameters, get_payments, get_stewards,
@@ -46,26 +47,36 @@ where
     pgf_fundings.sort_by(|a, b| a.id.cmp(&b.id));
 
     for funding in pgf_fundings {
-        if storage_api::token::transfer(
-            storage,
-            &staking_token,
-            &super::ADDRESS,
-            &funding.detail.target,
-            funding.detail.amount,
-        )
-        .is_ok()
-        {
-            tracing::info!(
-                "Paying {} tokens for {} project.",
-                funding.detail.amount.to_string_native(),
-                &funding.detail.target,
-            );
-        } else {
-            tracing::warn!(
-                "Failed to pay {} tokens for {} project.",
-                funding.detail.amount.to_string_native(),
-                &funding.detail.target,
-            );
+        let result = match &funding.detail {
+            PGFTarget::Internal(target) => storage_api::token::transfer(
+                storage,
+                &staking_token,
+                &super::ADDRESS,
+                &target.target,
+                target.amount,
+            ),
+            PGFTarget::Ibc(target) => ibc::transfer_over_ibc(
+                storage,
+                &staking_token,
+                &super::ADDRESS,
+                target,
+            ),
+        };
+        match result {
+            Ok(()) => {
+                tracing::info!(
+                    "Paying {} tokens for {} project.",
+                    funding.detail.amount().to_string_native(),
+                    &funding.detail.target(),
+                );
+            }
+            Err(_) => {
+                tracing::warn!(
+                    "Failed to pay {} tokens for {} project.",
+                    funding.detail.amount().to_string_native(),
+                    &funding.detail.target(),
+                );
+            }
         }
     }
 

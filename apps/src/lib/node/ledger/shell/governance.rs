@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use namada::core::ledger::governance::storage::keys as gov_storage;
 use namada::core::ledger::governance::storage::proposal::{
-    AddRemove, PGFAction, ProposalType, StoragePgfFunding,
+    AddRemove, PGFAction, PGFTarget, ProposalType, StoragePgfFunding,
 };
 use namada::core::ledger::governance::utils::{
     compute_proposal_result, ProposalVotes, TallyResult, TallyType, TallyVote,
@@ -341,14 +341,15 @@ where
     Ok(true)
 }
 
-fn execute_pgf_payment_proposal<S>(
-    storage: &mut S,
+fn execute_pgf_payment_proposal<D, H>(
+    storage: &mut WlStorage<D, H>,
     token: &Address,
     payments: Vec<PGFAction>,
     proposal_id: u64,
 ) -> Result<bool>
 where
-    S: StorageRead + StorageWrite,
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
 {
     for payment in payments {
         match payment {
@@ -356,49 +357,55 @@ where
                 AddRemove::Add(target) => {
                     pgf_storage::fundings_handle().insert(
                         storage,
-                        target.target.clone(),
+                        target.target().clone(),
                         StoragePgfFunding::new(target.clone(), proposal_id),
                     )?;
                     tracing::info!(
                         "Execute ContinousPgf from proposal id {}: set {} to \
                          {}.",
                         proposal_id,
-                        target.amount.to_string_native(),
-                        target.target
+                        target.amount().to_string_native(),
+                        target.target()
                     );
                 }
                 AddRemove::Remove(target) => {
                     pgf_storage::fundings_handle()
-                        .remove(storage, &target.target)?;
+                        .remove(storage, &target.target())?;
                     tracing::info!(
                         "Execute ContinousPgf from proposal id {}: set {} to \
                          {}.",
                         proposal_id,
-                        target.amount.to_string_native(),
-                        target.target
+                        target.amount().to_string_native(),
+                        target.target()
                     );
                 }
             },
             PGFAction::Retro(target) => {
-                match token::transfer(
-                    storage,
-                    token,
-                    &ADDRESS,
-                    &target.target,
-                    target.amount,
-                ) {
+                let result = match &target {
+                    PGFTarget::Internal(target) => token::transfer(
+                        storage,
+                        token,
+                        &ADDRESS,
+                        &target.target,
+                        target.amount,
+                    ),
+                    PGFTarget::Ibc(target) => {
+                        ibc::transfer_over_ibc(storage, token, &ADDRESS, target)
+                    }
+                };
+                match result {
                     Ok(()) => tracing::info!(
                         "Execute RetroPgf from proposal id {}: sent {} to {}.",
                         proposal_id,
-                        target.amount.to_string_native(),
-                        target.target
+                        target.amount().to_string_native(),
+                        target.target()
                     ),
                     Err(e) => tracing::warn!(
                         "Error in RetroPgf transfer from proposal id {}, \
                          amount {} to {}: {}",
                         proposal_id,
-                        target.amount.to_string_native(),
-                        target.target,
+                        target.amount().to_string_native(),
+                        target.target(),
                         e
                     ),
                 }

@@ -27,7 +27,10 @@ use namada_apps::config::ethereum_bridge;
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
 use namada_core::ledger::governance::cli::onchain::{
-    PgfFunding, PgfFundingTarget, StewardsUpdate,
+    PgfFunding, StewardsUpdate,
+};
+use namada_core::ledger::governance::storage::proposal::{
+    PGFInternalTarget, PGFTarget,
 };
 use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_sdk::masp::fs::FsShieldedUtils;
@@ -2317,14 +2320,14 @@ fn pgf_governance_proposal() -> Result<()> {
     let christel = find_address(&test, CHRISTEL)?;
 
     let pgf_funding = PgfFunding {
-        continuous: vec![PgfFundingTarget {
+        continuous: vec![PGFTarget::Internal(PGFInternalTarget {
             amount: token::Amount::from_u64(10),
-            address: bertha.clone(),
-        }],
-        retro: vec![PgfFundingTarget {
+            target: bertha.clone(),
+        })],
+        retro: vec![PGFTarget::Internal(PGFInternalTarget {
             amount: token::Amount::from_u64(5),
-            address: christel,
-        }],
+            target: christel,
+        })],
     };
 
     let valid_proposal_json_path =
