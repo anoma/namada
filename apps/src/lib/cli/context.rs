@@ -93,12 +93,10 @@ impl Context {
         let global_config = read_or_try_new_global_config(&global_args);
 
         let chain = match global_args.chain_id.as_ref() {
-            Some(default_chain_id) => {
-                tracing::info!("Default chain ID: {default_chain_id}");
+            Some(chain_id) => {
                 let mut config =
-                    Config::load(&global_args.base_dir, default_chain_id, None);
-                let chain_dir =
-                    global_args.base_dir.join(default_chain_id.as_str());
+                    Config::load(&global_args.base_dir, chain_id, None);
+                let chain_dir = global_args.base_dir.join(chain_id.as_str());
                 let genesis =
                     genesis::chain::Finalized::read_toml_files(&chain_dir)
                         .expect("Missing genesis files");
@@ -187,8 +185,8 @@ impl Context {
 
 fn safe_exit_on_missing_chain_context() -> ! {
     eprintln!(
-        "No chain is configured. You may need to run `namada client utils \
-         join-network` command."
+        "No chain-id was provided. If no chain is configured, you may need to \
+         run `namada client utils join-network` command."
     );
     utils::safe_exit(1)
 }

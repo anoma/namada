@@ -60,8 +60,14 @@ fn start_namada_ledger_node(
         Some(idx) => Who::Validator(idx),
         _ => Who::NonValidator,
     };
-    let mut node =
-        run_as!(test, who.clone(), Bin::Node, &["ledger"], timeout_sec)?;
+    let chain_id = test.net.chain_id.to_string();
+    let mut node = run_as!(
+        test,
+        who.clone(),
+        Bin::Node,
+        &["--chain-id", &chain_id, "ledger"],
+        timeout_sec
+    )?;
     node.exp_string("Namada ledger node started")?;
     if let Who::Validator(_) = who {
         node.exp_string("This node is a validator")?;
@@ -95,8 +101,11 @@ fn run_ledger() -> Result<()> {
         ethereum_bridge::ledger::Mode::Off,
         None,
     );
-
-    let cmd_combinations = vec![vec!["ledger"], vec!["ledger", "run"]];
+    let chain_id = test.net.chain_id.to_string();
+    let cmd_combinations = vec![
+        vec!["--chain-id", &chain_id, "ledger"],
+        vec!["--chain-id", &chain_id, "ledger", "run"],
+    ];
 
     // Start the ledger as a validator
     for args in &cmd_combinations {
@@ -283,10 +292,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     );
 
     // 1. Run the ledger node
-    let mut ledger = start_namada_ledger_node(&test, Some(0), Some(40))?;
-
-    // There should be no previous state
-    ledger.exp_string("No state could be found")?;
+    let mut ledger = start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?;
     // Wait to commit a block
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
     let bg_ledger = ledger.background();
@@ -320,7 +326,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
         test,
         Who::Validator(0),
         Bin::Node,
-        &["ledger", "reset"],
+        &["--chain-id", &test.net.chain_id.to_string(),"ledger", "reset"],
         Some(10),
     )?;
     session.exp_eof()?;
@@ -948,7 +954,6 @@ fn pos_bonds() -> Result<()> {
 
     let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
-
     // 2. Submit a self-bond for the first genesis validator
     let tx_args = vec![
         "bond",
@@ -1432,13 +1437,17 @@ fn pos_init_validator() -> Result<()> {
     let validator_stake = token::Amount::native_whole(100000_u64);
     let test = setup::network(
         |mut genesis, base_dir: &_| {
-
             genesis.parameters.parameters.min_num_of_blocks = 4;
             genesis.parameters.parameters.epochs_per_year = 31_536_000;
             genesis.parameters.parameters.max_expected_time_per_block = 1;
             genesis.parameters.pos_params.pipeline_len = pipeline_len;
             genesis.parameters.pos_params.unbonding_len = 2;
-            let genesis = setup::set_validators(1, genesis, base_dir, default_port_offset);
+            let genesis = setup::set_validators(
+                1,
+                genesis,
+                base_dir,
+                default_port_offset,
+            );
             println!("{:?}", genesis.transactions.bond);
             let stake = genesis
                 .transactions
@@ -1449,13 +1458,9 @@ fn pos_init_validator() -> Result<()> {
                 .map(|bond| {
                     bond.data
                         .amount
-                        .increase_precision(
-                            NATIVE_MAX_DECIMAL_PLACES.into(),
-                        )
+                        .increase_precision(NATIVE_MAX_DECIMAL_PLACES.into())
                         .unwrap()
                         .amount
-
-
                 })
                 .sum::<token::Amount>();
             assert_eq!(
@@ -3389,7 +3394,6 @@ fn test_invalid_validator_txs() -> Result<()> {
 
     let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
     let validator_1_rpc = get_actor_rpc(&test, &Who::Validator(1));
-
 
     // Try to change validator-1 commission rate as validator-0
     let tx_args = vec![

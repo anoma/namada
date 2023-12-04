@@ -510,7 +510,9 @@ fn key_and_address_gen(
         });
     let mut rng = OsRng;
     let (_mnemonic, seed) = Wallet::<CliWalletUtils>::gen_hd_seed(
-        None, &mut rng, unsafe_dont_encrypt,
+        None,
+        &mut rng,
+        unsafe_dont_encrypt,
     )
     .unwrap_or_else(|err| {
         edisplay_line!(io, "{}", err);
