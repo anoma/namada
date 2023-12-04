@@ -735,7 +735,6 @@ fn make_ledger_amount_addr(
 /// Adds a Ledger output line describing a given transaction amount and asset
 /// type
 async fn make_ledger_amount_asset<'a>(
-    context: &impl Namada<'a>,
     tokens: &HashMap<Address, String>,
     output: &mut Vec<String>,
     amount: u64,
@@ -745,22 +744,17 @@ async fn make_ledger_amount_asset<'a>(
 ) {
     if let Some((token, _, _epoch)) = assets.get(token) {
         // If the AssetType can be decoded, then at least display Addressees
-        let formatted_amt = context.format_amount(token, amount.into()).await;
         if let Some(token) = tokens.get(token) {
             output.push(format!(
                 "{}Amount : {} {}",
                 prefix,
                 token.to_uppercase(),
-                to_ledger_decimal(&formatted_amt),
+                amount,
             ));
         } else {
             output.extend(vec![
                 format!("{}Token : {}", prefix, token),
-                format!(
-                    "{}Amount : {}",
-                    prefix,
-                    to_ledger_decimal(&formatted_amt)
-                ),
+                format!("{}Amount : {}", prefix, amount,),
             ]);
         }
     } else {
@@ -830,7 +824,6 @@ fn format_outputs(output: &mut Vec<String>) {
 /// Adds a Ledger output for the sender and destination for transparent and MASP
 /// transactions
 pub async fn make_ledger_masp_endpoints<'a>(
-    context: &impl Namada<'a>,
     tokens: &HashMap<Address, String>,
     output: &mut Vec<String>,
     transfer: &Transfer,
@@ -853,7 +846,6 @@ pub async fn make_ledger_masp_endpoints<'a>(
             let vk = ExtendedViewingKey::from(*sapling_input.key());
             output.push(format!("Sender : {}", vk));
             make_ledger_amount_asset(
-                context,
                 tokens,
                 output,
                 sapling_input.value(),
@@ -880,7 +872,6 @@ pub async fn make_ledger_masp_endpoints<'a>(
             let pa = PaymentAddress::from(sapling_output.address());
             output.push(format!("Destination : {}", pa));
             make_ledger_amount_asset(
-                context,
                 tokens,
                 output,
                 sapling_output.value(),
@@ -917,7 +908,7 @@ pub async fn generate_test_vector<'a>(
         // Contract the large data blobs in the transaction
         tx.wallet_filter();
         // Convert the transaction to Ledger format
-        let decoding = to_ledger_vector(context, &tx).await?;
+        let decoding = to_ledger_vector(*context.wallet().await, &tx).await?;
         let output = serde_json::to_string(&decoding)
             .map_err(|e| Error::from(EncodingError::Serde(e.to_string())))?;
         // Record the transaction at the identified path
@@ -1015,13 +1006,11 @@ impl<'a> Display for LedgerProposalType<'a> {
 /// Converts the given transaction to the form that is displayed on the Ledger
 /// device
 pub async fn to_ledger_vector<'a>(
-    context: &impl Namada<'a>,
+    wallet: &Wallet<impl WalletIo>,
     tx: &Tx,
 ) -> Result<LedgerVector, Error> {
     // To facilitate lookups of human-readable token names
-    let tokens: HashMap<Address, String> = context
-        .wallet()
-        .await
+    let tokens: HashMap<Address, String> = wallet
         .get_addresses()
         .into_iter()
         .map(|(alias, addr)| (addr, alias))
@@ -1397,7 +1386,6 @@ pub async fn to_ledger_vector<'a>(
 
         tv.output.push("Type : Transfer".to_string());
         make_ledger_masp_endpoints(
-            context,
             &tokens,
             &mut tv.output,
             &transfer,
@@ -1406,7 +1394,6 @@ pub async fn to_ledger_vector<'a>(
         )
         .await;
         make_ledger_masp_endpoints(
-            context,
             &tokens,
             &mut tv.output_expert,
             &transfer,
