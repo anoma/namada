@@ -99,8 +99,7 @@ impl Context {
         let chain_id = std::env::var(ENV_VAR_CHAIN_ID)
             .ok()
             .and_then(|chain_id| ChainId::from_str(&chain_id).ok());
-        let chain_id =
-            chain_id.as_ref().or_else(|| global_args.chain_id.as_ref());
+        let chain_id = chain_id.as_ref().or(global_args.chain_id.as_ref());
 
         let chain = match chain_id {
             Some(chain_id) => {
