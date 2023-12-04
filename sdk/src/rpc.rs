@@ -807,6 +807,19 @@ pub async fn query_bond<C: crate::queries::Client + Sync>(
     )
 }
 
+/// Query a validator's bonds for a given epoch
+pub async fn query_last_infraction_epoch<C: crate::queries::Client + Sync>(
+    client: &C,
+    validator: &Address,
+) -> Result<Option<Epoch>, error::Error> {
+    convert_response::<C, _>(
+        RPC.vp()
+            .pos()
+            .validator_last_infraction_epoch(client, validator)
+            .await,
+    )
+}
+
 /// Query the accunt substorage space of an address
 pub async fn get_account_info<C: crate::queries::Client + Sync>(
     client: &C,

@@ -900,23 +900,20 @@ pub async fn build_unjail_validator<'a>(
         }
     }
 
-    let last_slash_epoch_key =
-        namada_proof_of_stake::storage::validator_last_slash_key(validator);
-    let last_slash_epoch = rpc::query_storage_value::<_, Epoch>(
-        context.client(),
-        &last_slash_epoch_key,
-    )
-    .await;
+    let last_slash_epoch =
+        rpc::query_last_infraction_epoch(context.client(), validator).await;
     match last_slash_epoch {
-        Ok(last_slash_epoch) => {
+        Ok(Some(last_slash_epoch)) => {
+            // Jailed due to slashing
             let eligible_epoch =
                 last_slash_epoch + params.slash_processing_epoch_offset();
             if current_epoch < eligible_epoch {
                 edisplay_line!(
                     context.io(),
                     "The given validator address {} is currently frozen and \
-                     not yet eligible to be unjailed.",
-                    &validator
+                     will be eligible to be unjailed starting at epoch {}.",
+                    &validator,
+                    eligible_epoch
                 );
                 if !tx_args.force {
                     return Err(Error::from(
@@ -927,16 +924,14 @@ pub async fn build_unjail_validator<'a>(
                 }
             }
         }
-        Err(Error::Query(
-            QueryError::NoSuchKey(_) | QueryError::General(_),
-        )) => {
-            return Err(Error::from(TxError::Other(format!(
-                "The given validator address {} is currently frozen and not \
-                 yet eligible to be unjailed.",
-                &validator
-            ))));
+        Ok(None) => {
+            // Jailed due to liveness only. No checks needed.
         }
-        Err(err) => return Err(err),
+        Err(err) => {
+            if !tx_args.force {
+                return Err(err);
+            }
+        }
     }
 
     build(
