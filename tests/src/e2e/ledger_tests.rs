@@ -1264,7 +1264,6 @@ fn pos_rewards() -> Result<()> {
 /// 6. Wait for epoch 7
 /// 7. Check the output of the bonds query
 #[test]
-#[ignore] // TODO: fix this test
 fn test_bond_queries() -> Result<()> {
     let pipeline_len = 2;
     let unbonding_len = 4;
