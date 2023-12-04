@@ -650,11 +650,15 @@ impl CliApi {
                     utils::default_base_dir(global_args, args)
                 }
                 Utils::EpochSleep(EpochSleep(args)) => {
+                    let mut ctx = cli::Context::new::<IO>(global_args)
+                        .expect("expected to construct a context");
                     let mut ledger_address = args.ledger_address.clone();
                     let client =
                         C::from_tendermint_address(&mut ledger_address);
                     client.wait_until_node_is_synced(io).await?;
-                    rpc::epoch_sleep_ctxless(&client, io).await;
+                    let args = args.to_sdk(&mut ctx);
+                    let namada = ctx.to_sdk(&client, io);
+                    rpc::epoch_sleep(&namada, args).await;
                 }
                 Utils::ValidateGenesisTemplates(ValidateGenesisTemplates(
                     args,

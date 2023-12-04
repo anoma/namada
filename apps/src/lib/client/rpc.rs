@@ -54,7 +54,7 @@ use namada_sdk::rpc::{
     self, enriched_bonds_and_unbonds, query_epoch, TxResponse,
 };
 use namada_sdk::wallet::AddressVpType;
-use namada_sdk::{display, display_line, edisplay_line, error, prompt, Namada, queries};
+use namada_sdk::{display, display_line, edisplay_line, error, prompt, Namada};
 use tokio::time::Instant;
 
 use crate::cli::{self, args};
@@ -75,12 +75,6 @@ pub async fn query_tx_status<'a>(
         .unwrap()
 }
 
-/// Query and print the epoch of the last committed block
-pub async fn query_and_print_epoch_ctxless<'a, T: 'a + Io>(client: &(impl 'a + queries::Client + Sync), io: &T) -> Epoch {
-    let epoch = rpc::query_epoch(client).await.unwrap();
-    display_line!(io, "Last committed epoch: {}", epoch);
-    epoch
-}
 /// Query and print the epoch of the last committed block
 pub async fn query_and_print_epoch<'a>(context: &impl Namada<'a>) -> Epoch {
     let epoch = rpc::query_epoch(context.client()).await.unwrap();
@@ -2539,18 +2533,6 @@ pub async fn query_result<'a>(
                     cli::safe_exit(1)
                 }
             }
-        }
-    }
-}
-
-pub async fn epoch_sleep_ctxless<'a, T: 'a + Io>(client: &(impl 'a + queries::Client + Sync), io: &T) {
-    let start_epoch = query_and_print_epoch_ctxless(client, io).await;
-    loop {
-        tokio::time::sleep(core::time::Duration::from_secs(1)).await;
-        let current_epoch = query_epoch(client).await.unwrap();
-        if current_epoch > start_epoch {
-            display_line!(io, "Reached epoch {}", current_epoch);
-            break;
         }
     }
 }
