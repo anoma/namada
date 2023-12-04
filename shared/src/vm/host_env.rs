@@ -6,12 +6,11 @@ use std::num::TryFromIntError;
 
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
-use masp_primitives::transaction::Transaction;
 use namada_core::ledger::gas::{
     GasMetering, TxGasMeter, MEMORY_ACCESS_GAS_PER_BYTE,
 };
 use namada_core::ledger::masp_utils;
-use namada_core::types::address::{ESTABLISHED_ADDRESS_BYTES_LEN, MASP};
+use namada_core::types::address::ESTABLISHED_ADDRESS_BYTES_LEN;
 use namada_core::types::internal::KeyVal;
 use namada_core::types::storage::TX_INDEX_LENGTH;
 use namada_core::types::transaction::TxSentinel;
@@ -33,10 +32,9 @@ use crate::types::address::{self, Address};
 use crate::types::hash::Hash;
 use crate::types::ibc::{IbcEvent, IbcShieldedTransfer};
 use crate::types::internal::HostEnvResult;
-use crate::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
+use crate::types::storage::{BlockHeight, Epoch, Key, TxIndex};
 use crate::types::token::{
     is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
-    Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX,
 };
 use crate::vm::memory::VmMemory;
 use crate::vm::prefix_iter::{PrefixIteratorId, PrefixIterators};
@@ -2521,36 +2519,7 @@ where
         &mut self,
         shielded: &IbcShieldedTransfer,
     ) -> Result<(), storage_api::Error> {
-        let masp_addr = MASP;
-        let head_tx_key = Key::from(masp_addr.to_db_key())
-            .push(&HEAD_TX_KEY.to_owned())
-            .expect("Cannot obtain a storage key");
-        let current_tx_idx =
-            self.read::<u64>(&head_tx_key).unwrap_or(None).unwrap_or(0);
-        let current_tx_key = Key::from(masp_addr.to_db_key())
-            .push(&(TX_KEY_PREFIX.to_owned() + &current_tx_idx.to_string()))
-            .expect("Cannot obtain a storage key");
-        // Save the Transfer object and its location within the blockchain
-        // so that clients do not have to separately look these
-        // up
-        let record: (Epoch, BlockHeight, TxIndex, Transfer, Transaction) = (
-            self.get_block_epoch()?,
-            self.get_block_height()?,
-            self.get_tx_index()?,
-            shielded.transfer.clone(),
-            shielded.masp_tx.clone(),
-        );
-        self.write(&current_tx_key, record)?;
-        self.write(&head_tx_key, current_tx_idx + 1)?;
-        masp_utils::reveal_nullifiers(self, &shielded.masp_tx)?;
-        // If storage key has been supplied, then pin this transaction to it
-        if let Some(key) = &shielded.transfer.key {
-            let pin_key = Key::from(masp_addr.to_db_key())
-                .push(&(PIN_KEY_PREFIX.to_owned() + key))
-                .expect("Cannot obtain a storage key");
-            self.write(&pin_key, current_tx_idx)?;
-        }
-        Ok(())
+        masp_utils::handle_masp_tx(self, &shielded.transfer, &shielded.masp_tx)
     }
 
     fn mint_token(
