@@ -19,6 +19,7 @@ use expectrl::{ControlCode, Eof, WaitStatus};
 use eyre::eyre;
 use itertools::{Either, Itertools};
 use namada::types::chain::ChainId;
+use namada_apps::cli::context::ENV_VAR_CHAIN_ID;
 use namada_apps::client::utils::{
     self, validator_pre_genesis_dir, validator_pre_genesis_txs_file,
 };
@@ -547,6 +548,9 @@ pub fn network(
     }
 
     copy_wasm_to_chain_dir(&working_dir, test_dir.path(), &net.chain_id);
+
+    // Set the chain id
+    std::env::set_var(ENV_VAR_CHAIN_ID, net.chain_id.to_string());
 
     Ok(Test {
         working_dir,

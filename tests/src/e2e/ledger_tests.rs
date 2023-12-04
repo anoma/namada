@@ -60,14 +60,8 @@ fn start_namada_ledger_node(
         Some(idx) => Who::Validator(idx),
         _ => Who::NonValidator,
     };
-    let chain_id = test.net.chain_id.to_string();
-    let mut node = run_as!(
-        test,
-        who.clone(),
-        Bin::Node,
-        &["--chain-id", &chain_id, "ledger"],
-        timeout_sec
-    )?;
+    let mut node =
+        run_as!(test, who.clone(), Bin::Node, &["ledger"], timeout_sec)?;
     node.exp_string("Namada ledger node started")?;
     if let Who::Validator(_) = who {
         node.exp_string("This node is a validator")?;
@@ -101,11 +95,8 @@ fn run_ledger() -> Result<()> {
         ethereum_bridge::ledger::Mode::Off,
         None,
     );
-    let chain_id = test.net.chain_id.to_string();
-    let cmd_combinations = vec![
-        vec!["--chain-id", &chain_id, "ledger"],
-        vec!["--chain-id", &chain_id, "ledger", "run"],
-    ];
+
+    let cmd_combinations = vec![vec!["ledger"], vec!["ledger", "run"]];
 
     // Start the ledger as a validator
     for args in &cmd_combinations {
@@ -292,7 +283,10 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     );
 
     // 1. Run the ledger node
-    let mut ledger = start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?;
+    let mut ledger = start_namada_ledger_node(&test, Some(0), Some(40))?;
+
+    // There should be no previous state
+    ledger.exp_string("No state could be found")?;
     // Wait to commit a block
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
     let bg_ledger = ledger.background();
@@ -326,7 +320,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
         test,
         Who::Validator(0),
         Bin::Node,
-        &["--chain-id", &test.net.chain_id.to_string(),"ledger", "reset"],
+        &["ledger", "reset"],
         Some(10),
     )?;
     session.exp_eof()?;
