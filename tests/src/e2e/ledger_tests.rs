@@ -38,7 +38,8 @@ use setup::Test;
 
 use super::helpers::{
     epochs_per_year_from_min_duration, get_established_addr_from_pregenesis,
-    get_height, wait_for_block_height, wait_for_wasm_pre_compile,
+    get_height, get_pregenesis_wallet, wait_for_block_height,
+    wait_for_wasm_pre_compile,
 };
 use super::setup::{get_all_wasms_hashes, set_ethereum_bridge_mode, NamadaCmd};
 use crate::e2e::helpers::{
@@ -921,10 +922,13 @@ fn pos_bonds() -> Result<()> {
                 default_port_offset,
             );
             genesis.transactions.bond = Some({
+                let wallet = get_pregenesis_wallet(base_dir);
+                let validator_1_address = wallet
+                    .find_address("validator-1")
+                    .expect("Failed to find validator-1 address");
                 let mut bonds = genesis.transactions.bond.unwrap();
-                // NB: the last bond should be from `validator-1`.
-                // we will filter it out from the list of bonds
-                bonds.pop();
+                bonds
+                    .retain(|bond| bond.data.validator != *validator_1_address);
                 bonds
             });
             genesis
@@ -1282,26 +1286,6 @@ fn test_bond_queries() -> Result<()> {
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
     let validator_alias = "validator-0";
-
-    // put money in the validator account from its balance account so that it
-    // can pay gas fees
-    let tx_args = vec![
-        "transfer",
-        "--source",
-        "validator-0-balance-key",
-        "--target",
-        "validator-0-validator-key",
-        "--amount",
-        "100.0",
-        "--token",
-        "NAM",
-        "--node",
-        &validator_one_rpc,
-    ];
-    let mut client =
-        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction is valid.")?;
-    client.assert_success();
 
     // 2. Submit a delegation to the genesis validator
     let tx_args = vec![
@@ -2956,8 +2940,6 @@ fn implicit_account_reveal_pk() -> Result<()> {
             &["key", "gen", "--alias", &key_alias, "--unsafe-dont-encrypt"],
             Some(20),
         )?;
-        cmd.exp_string("Enter BIP39 passphrase (empty for none): ")?;
-        cmd.send_line("")?;
         cmd.assert_success();
 
         // Apply the key_alias once the key is generated to obtain tx args
@@ -3095,10 +3077,13 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
                 default_port_offset,
             );
             genesis.transactions.bond = Some({
+                let wallet = get_pregenesis_wallet(base_dir);
+                let validator_1_address = wallet
+                    .find_address("validator-1")
+                    .expect("Failed to find validator-1 address");
                 let mut bonds = genesis.transactions.bond.unwrap();
-                // NB: the last bond should be from `validator-1`.
-                // we will filter it out from the list of bonds
-                bonds.pop();
+                bonds
+                    .retain(|bond| bond.data.validator != *validator_1_address);
                 bonds
             });
             genesis
@@ -3126,7 +3111,7 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
 
     let validator_1_rpc = get_actor_rpc(&test, &Who::Validator(1));
 
-    // Check the state of validator-0
+    // Check the state of validator-1
     let tx_args = vec![
         "validator-state",
         "--validator",
@@ -3358,10 +3343,13 @@ fn test_invalid_validator_txs() -> Result<()> {
                 default_port_offset,
             );
             genesis.transactions.bond = Some({
+                let wallet = get_pregenesis_wallet(base_dir);
+                let validator_1_address = wallet
+                    .find_address("validator-1")
+                    .expect("Failed to find validator-1 address");
                 let mut bonds = genesis.transactions.bond.unwrap();
-                // NB: the last bond should be from `validator-1`.
-                // we will filter it out from the list of bonds
-                bonds.pop();
+                bonds
+                    .retain(|bond| bond.data.validator != *validator_1_address);
                 bonds
             });
             genesis
