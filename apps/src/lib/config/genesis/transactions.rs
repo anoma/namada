@@ -23,7 +23,7 @@ use namada::proto::{
 use namada::types::address::nam;
 use namada::types::dec::Dec;
 use namada::types::key::{common, ed25519, RefTo, SigScheme};
-use namada::types::time::{DateTimeUtc, MIN_UTC};
+use namada::types::time::DateTimeUtc;
 use namada::types::token;
 use namada::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
 use namada::types::transaction::{pos, Fee, TxType};
@@ -46,9 +46,6 @@ use crate::wallet::CliWalletUtils;
 
 /// Dummy chain id used to sign [`Tx`] objects at pre-genesis.
 const NAMADA_GENESIS_TX_CHAIN_ID: &str = "namada-genesis";
-
-/// Timestamp used to sign pre-genesis [`Tx`] objects.
-pub const PRE_GENESIS_TX_TIMESTAMP: DateTimeUtc = MIN_UTC;
 
 /// Helper trait to fetch tx data to sign.
 pub trait TxToSign {
@@ -94,11 +91,21 @@ fn get_tx_args(use_device: bool) -> TxArgs {
     }
 }
 
+/// Timestamp used to sign pre-genesis [`Tx`] objects.
+#[inline]
+fn pre_genesis_tx_timestamp() -> DateTimeUtc {
+    DateTimeUtc::from_unix_timestamp(
+        // Mon Jan 01 2001 01:01:01 UTC+0000
+        978310861,
+    )
+    .unwrap()
+}
+
 /// Return a ready to sign genesis [`Tx`].
 fn get_tx_to_sign(tag: impl AsRef<str>, data: impl BorshSerialize) -> Tx {
     let mut tx = Tx::from_type(TxType::Raw);
     tx.header.chain_id = ChainId(NAMADA_GENESIS_TX_CHAIN_ID.to_string());
-    tx.header.timestamp = PRE_GENESIS_TX_TIMESTAMP;
+    tx.header.timestamp = pre_genesis_tx_timestamp();
     tx.set_code(Code {
         salt: [0; 8],
         code: Commitment::Hash(Default::default()),
