@@ -176,6 +176,13 @@ mod dev {
         VALIDATOR_WALLET.consensus_key.clone()
     }
 
+    /// The name of a file that is unique to the project's root directory.
+    const PROJECT_ROOT_UNIQUE_FILE: &str = "rust-toolchain.toml";
+
+    /// The pre-genesis directory of `validator-0`.
+    const VALIDATOR_0_PREGENESIS_DIR: &str =
+        "genesis/localnet/src/pre-genesis/validator-0";
+
     lazy_static! {
         static ref PREGENESIS_WALLET: Wallet<CliWalletUtils> = {
             let mut root_dir = std::env::current_dir()
@@ -183,7 +190,7 @@ mod dev {
                 .canonicalize()
                 .expect("Current directory should exist");
             // Find the project root dir
-            while !root_dir.join("rust-toolchain.toml").exists() {
+            while !root_dir.join(PROJECT_ROOT_UNIQUE_FILE).exists() {
                 root_dir.pop();
             }
             let path = root_dir.join("genesis/localnet/src/pre-genesis");
@@ -196,11 +203,11 @@ mod dev {
                 .canonicalize()
                 .expect("Current directory should exist");
             // Find the project root dir
-            while !root_dir.join("rust-toolchain.toml").exists() {
+            while !root_dir.join(PROJECT_ROOT_UNIQUE_FILE).exists() {
                 root_dir.pop();
             }
             let path =
-                root_dir.join("genesis/localnet/src/pre-genesis/validator-0");
+                root_dir.join(VALIDATOR_0_PREGENESIS_DIR);
             crate::wallet::pre_genesis::load(&path).unwrap()
         };
     }
