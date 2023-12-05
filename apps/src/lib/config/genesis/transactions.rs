@@ -878,7 +878,9 @@ where
             TX_BOND_WASM,
             pos::Bond {
                 validator: self.validator.clone(),
-                amount: self.amount.clone().into(),
+                amount: denominate_amount::<T>(self.amount.clone())
+                    .unwrap()
+                    .amount,
                 source: Some(self.source.address()),
             },
         )
@@ -924,27 +926,34 @@ where
 impl BondTx<Unvalidated> {
     /// Add the correct denomination to the contained amount
     pub fn denominate(self) -> eyre::Result<BondTx<Validated>> {
-        let BondTx {
-            source,
-            validator,
-            amount,
-        } = self;
-        let amount = amount
-            .increase_precision(NATIVE_MAX_DECIMAL_PLACES.into())
-            .map_err(|e| {
-                eprintln!(
-                    "A bond amount in the transactions.toml file was \
-                     incorrectly formatted:\n{}",
-                    e
-                );
-                e
-            })?;
+        let amount = denominate_amount::<Unvalidated>(self.amount)?;
         Ok(BondTx {
-            source,
-            validator,
+            source: self.source,
+            validator: self.validator,
             amount,
         })
     }
+}
+
+/// Return the correctly denominated amount of bonded tokens
+fn denominate_amount<T>(
+    amount: T::Amount,
+) -> eyre::Result<token::DenominatedAmount>
+where
+    T: TemplateValidation,
+{
+    let amount = amount
+        .into()
+        .increase_precision(NATIVE_MAX_DECIMAL_PLACES.into())
+        .map_err(|e| {
+            eprintln!(
+                "A bond amount in the transactions.toml file was incorrectly \
+                 formatted:\n{}",
+                e
+            );
+            e
+        })?;
+    Ok(amount)
 }
 
 impl<T: TemplateValidation> From<BondTx<T>> for SignedBondTx<T> {
