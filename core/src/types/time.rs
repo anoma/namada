@@ -152,6 +152,16 @@ impl DateTimeUtc {
         Self(Utc::now())
     }
 
+    /// Returns a [`DateTimeUtc`] corresponding to the Unix epoch.
+    #[inline]
+    pub fn unix_epoch() -> Self {
+        Self(chrono::DateTime::from_utc(
+            chrono::NaiveDateTime::from_timestamp_opt(0, 0)
+                .expect("This operation should be infallible"),
+            chrono::Utc,
+        ))
+    }
+
     /// Returns an rfc3339 string or an error.
     pub fn to_rfc3339(&self) -> String {
         chrono::DateTime::to_rfc3339(&self.0)
