@@ -49,7 +49,7 @@ validator = "tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx"
 amount = "100000"
 
 [bond.signatures]
-tpknam1qpg2tsrplvhu3fd7z7tq5ztc2ne3s7e2ahjl2a2cddufrzdyr752g666ytj = "signam1qpe7tlwcl4xdnm67sra9cfc3754mnyvgpxxcdzrz7nuev3lhhv6ngsrhw0cwmumnkjc2f67prx82v650x9gvl609zg7ekspph8unzhs9dkz0st"
+tpknam1qpg2tsrplvhu3fd7z7tq5ztc2ne3s7e2ahjl2a2cddufrzdyr752g666ytj = "signam1qp7jrgg0q488vm3m4yzt8c44e40kaklc08fvsktwuayw69wzjgsvr9zlqs60wml5ewpnm8yydg0g5kga76zm3xmtcxauxszftrv7l9cpalu82v"
 
 # 2.
 
@@ -74,4 +74,4 @@ validator = "tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx"
 amount = "20000"
 
 [bond.signatures]
-tpknam1qrnw8mxyqlj60mykgevnldcj5mg2fya7fs5a8xqdkd2gwtxhef0zy8a2wha = "signam1qq48ks6ta5hmsl9z3nwvqdl0g30g7qdkxwzel9j7eyvye9a99aw2sy03ukykgz49pksmw2s640nrl2xw0h5mq7srz2pw4fxljyp77lg9tqdr29"
+tpknam1qrnw8mxyqlj60mykgevnldcj5mg2fya7fs5a8xqdkd2gwtxhef0zy8a2wha = "signam1qpnkmht38f4ewksnu2e4kaue9vqynvujs7hghk358rjn5wt6ywm9zdet6m3txrh08qzc5up47vgskt7cz48dpqlpuan7waz7prlxe0sxn9zsn7"
