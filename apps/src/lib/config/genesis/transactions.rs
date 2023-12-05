@@ -108,7 +108,7 @@ fn get_tx_to_sign(tag: impl AsRef<str>, data: impl BorshSerialize) -> Tx {
         salt: [0; 8],
         data: data.serialize_to_vec(),
     });
-    let pk = get_sentinnel_pubkey();
+    let pk = get_sentinel_pubkey();
     tx.add_wrapper(
         Fee {
             amount_per_gas_unit: Default::default(),
@@ -124,7 +124,7 @@ fn get_tx_to_sign(tag: impl AsRef<str>, data: impl BorshSerialize) -> Tx {
 
 /// Get a dummy public key.
 #[inline]
-fn get_sentinnel_pubkey() -> common::PublicKey {
+fn get_sentinel_pubkey() -> common::PublicKey {
     common::SecretKey::Ed25519(ed25519::SigScheme::from_bytes([0; 32])).ref_to()
 }
 
@@ -708,7 +708,7 @@ impl<T> Signed<T> {
             account_public_keys_map: Some(pks.iter().cloned().collect()),
             public_keys: pks.clone(),
             threshold,
-            fee_payer: get_sentinnel_pubkey(),
+            fee_payer: get_sentinel_pubkey(),
         };
 
         let mut tx = self.data.tx_to_sign();
@@ -737,7 +737,7 @@ impl<T> Signed<T> {
                 _parts: HashSet<namada_sdk::signing::Signable>,
                 _user: (),
             ) -> Result<Tx, namada_sdk::error::Error> {
-                if pubkey == get_sentinnel_pubkey() {
+                if pubkey == get_sentinel_pubkey() {
                     Ok(tx)
                 } else {
                     Err(namada_sdk::error::Error::Other(format!(
