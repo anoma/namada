@@ -6779,8 +6779,9 @@ pub mod args {
 
     impl Args for InitGenesisEstablishedAccount {
         fn parse(matches: &ArgMatches) -> Self {
+            use crate::config::genesis::utils::VP_USER;
             let wallet_aliases = ALIAS_MANY.parse(matches);
-            let vp = VP.parse(matches).unwrap_or_else(|| "vp_user".to_string());
+            let vp = VP.parse(matches).unwrap_or_else(|| VP_USER.to_string());
             let threshold = THRESOLD.parse(matches).unwrap_or(1);
             let output_path = PATH.parse(matches);
             Self {

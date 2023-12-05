@@ -14,6 +14,9 @@ use tokio::sync::RwLock;
 
 use crate::wallet::CliWalletUtils;
 
+/// Validity predicaty assigned to established accounts.
+pub const VP_USER: &str = "vp_user";
+
 pub fn read_toml<T: DeserializeOwned>(
     path: &Path,
     which_file: &str,

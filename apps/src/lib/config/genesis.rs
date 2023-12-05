@@ -443,7 +443,7 @@ pub fn make_dev_genesis(
                 genesis.transactions.established_account.as_mut().unwrap();
 
             let tx = transactions::EstablishedAccountTx {
-                vp: "vp_user".to_string(),
+                vp: utils::VP_USER.to_string(),
                 public_keys: vec![StringEncoded::new(
                     consensus_keypair.ref_to(),
                 )],
@@ -458,7 +458,7 @@ pub fn make_dev_genesis(
 
             let validator_account_tx = transactions::ValidatorAccountTx {
                 address: StringEncoded::new(address.clone()),
-                vp: "vp_user".to_string(),
+                vp: utils::VP_USER.to_string(),
                 commission_rate: Dec::new(5, 2).expect("This can't fail"),
                 max_commission_rate_change: Dec::new(1, 2)
                     .expect("This can't fail"),
