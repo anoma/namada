@@ -167,7 +167,7 @@ pub fn init_validator(
         validator_wallet,
     )]);
 
-    let transfer = if transfer_from_source_amount.amount.is_zero() {
+    let transfer = if transfer_from_source_amount.amount().is_zero() {
         None
     } else {
         let unsigned_transfer_tx = TransferTx {
@@ -181,7 +181,7 @@ pub fn init_validator(
         Some(vec![transfer_tx])
     };
 
-    let bond = if self_bond_amount.amount.is_zero() {
+    let bond = if self_bond_amount.amount().is_zero() {
         None
     } else {
         let unsigned_bond_tx = BondTx {
@@ -513,7 +513,7 @@ impl Transactions<Validated> {
                     BTreeMap::new();
                 for tx in txs {
                     let entry = stakes.entry(&tx.validator).or_default();
-                    *entry += tx.amount.amount;
+                    *entry += tx.amount.amount();
                 }
 
                 stakes.into_iter().any(|(_validator, stake)| {
@@ -1129,8 +1129,19 @@ fn validate_bond(
                                     balances.pks.0.remove(source);
                                 }
                             }
+                        } else if let Some(new_balance) =
+                            balance.checked_sub(*amount)
+                        {
+                            *balance = new_balance;
                         } else {
-                            balance.amount -= amount.amount;
+                            eprintln!(
+                                "Invalid bond tx. Amount {} should have the \
+                                 denomination {:?}. Got {:?}.",
+                                amount,
+                                balance.denom(),
+                                amount.denom(),
+                            );
+                            is_valid = false;
                         }
                     }
                 }
@@ -1370,7 +1381,7 @@ pub fn validate_transfer(
     match balances.get_mut(token) {
         Some(balances) => match balances.pks.0.get_mut(source) {
             Some(balance) => {
-                if balance.amount < amount.amount {
+                if *balance < *amount {
                     eprintln!(
                         "Invalid transfer tx. Source {source} doesn't have \
                          enough balance of token \"{token}\" to transfer {}. \
@@ -1380,21 +1391,47 @@ pub fn validate_transfer(
                     is_valid = false;
                 } else {
                     // Deduct the amount from source
-                    if amount.amount == balance.amount {
+                    if amount == balance {
                         balances.pks.0.remove(source);
+                    } else if let Some(new_balance) =
+                        balance.checked_sub(*amount)
+                    {
+                        *balance = new_balance;
                     } else {
-                        balance.amount -= amount.amount;
+                        eprintln!(
+                            "Invalid bond tx. Amount {} should have the \
+                             denomination {:?}. Got {:?}.",
+                            amount,
+                            balance.denom(),
+                            amount.denom(),
+                        );
+                        is_valid = false;
                     }
 
                     // Add the amount to target
                     let target_balance = balances
                         .aliases
                         .entry(target.clone())
-                        .or_insert_with(|| DenominatedAmount {
-                            amount: token::Amount::zero(),
-                            denom: amount.denom,
+                        .or_insert_with(|| {
+                            DenominatedAmount::new(
+                                token::Amount::zero(),
+                                amount.denom(),
+                            )
                         });
-                    target_balance.amount += amount.amount;
+                    if let Some(new_balance) =
+                        target_balance.checked_add(*amount)
+                    {
+                        *target_balance = new_balance;
+                    } else {
+                        eprintln!(
+                            "Invalid bond tx. Amount {} should have the \
+                             denomination {:?}. Got {:?}.",
+                            amount,
+                            target_balance.denom(),
+                            amount.denom(),
+                        );
+                        is_valid = false;
+                    }
                 }
             }
             None => {

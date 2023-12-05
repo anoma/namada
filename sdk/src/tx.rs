@@ -1951,7 +1951,7 @@ pub async fn build_ibc_transfer<'a>(
         validate_amount(context, args.amount, &args.token, args.tx.force)
             .await
             .expect("expected to validate amount");
-    if validated_amount.canonical().denom.0 != 0 {
+    if validated_amount.canonical().denom().0 != 0 {
         return Err(Error::Other(format!(
             "The amount for the IBC transfer should be an integer: {}",
             validated_amount
@@ -1964,7 +1964,7 @@ pub async fn build_ibc_transfer<'a>(
     let post_balance = check_balance_too_low_err(
         &args.token,
         &source,
-        validated_amount.amount,
+        validated_amount.amount(),
         balance_key,
         args.tx.force,
         context,
@@ -2212,7 +2212,7 @@ pub async fn build_transfer<'a, N: Namada<'a>>(
     let post_balance = check_balance_too_low_err(
         &args.token,
         &source,
-        validated_amount.amount,
+        validated_amount.amount(),
         balance_key,
         args.tx.force,
         context,
@@ -2234,7 +2234,7 @@ pub async fn build_transfer<'a, N: Namada<'a>>(
         // TODO Refactor me, we shouldn't rely on any specific token here.
         (token::Amount::zero(), args.native_token.clone())
     } else {
-        (validated_amount.amount, args.token.clone())
+        (validated_amount.amount(), args.token.clone())
     };
     // Determine whether to pin this transaction to a storage key
     let key = match &args.target {
@@ -2258,7 +2258,7 @@ pub async fn build_transfer<'a, N: Namada<'a>>(
         Err(Build(builder::Error::InsufficientFunds(_))) => {
             Err(TxError::NegativeBalanceAfterTransfer(
                 Box::new(source.clone()),
-                validated_amount.amount.to_string_native(),
+                validated_amount.amount().to_string_native(),
                 Box::new(token.clone()),
             ))
         }

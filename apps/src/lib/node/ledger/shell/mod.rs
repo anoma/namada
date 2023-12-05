@@ -1403,10 +1403,10 @@ where
         match wrapper
             .fee
             .amount_per_gas_unit
-            .apply_precision(&wrapper.fee.token, &self.wl_storage)
+            .to_amount(&wrapper.fee.token, &self.wl_storage)
         {
             Ok(amount_per_gas_unit)
-                if amount_per_gas_unit.amount < minimum_gas_price =>
+                if amount_per_gas_unit < minimum_gas_price =>
             {
                 // The fees do not match the minimum required
                 return Err(Error::TxApply(protocol::Error::FeeError(
@@ -2872,10 +2872,10 @@ mod shell_tests {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: DenominatedAmount {
-                        amount: 100.into(),
-                        denom: apfel_denom,
-                    },
+                    amount_per_gas_unit: DenominatedAmount::new(
+                        100.into(),
+                        apfel_denom,
+                    ),
                     token: address::apfel(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),

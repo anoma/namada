@@ -315,12 +315,10 @@ pub mod wrapper_tx {
         /// Get the [`Amount`] of fees to be paid by the given wrapper. Returns
         /// an error if the amount overflows
         pub fn get_tx_fee(&self) -> Result<DenominatedAmount, WrapperTxErr> {
-            let mut amount_per_gas_unit = self.fee.amount_per_gas_unit;
-            amount_per_gas_unit.amount = amount_per_gas_unit
-                .amount
-                .checked_mul(self.gas_limit.into())
-                .ok_or(WrapperTxErr::OverflowingFee)?;
-            Ok(amount_per_gas_unit)
+            self.fee
+                .amount_per_gas_unit
+                .checked_mul(Amount::from(self.gas_limit).into())
+                .ok_or(WrapperTxErr::OverflowingFee)
         }
     }
 

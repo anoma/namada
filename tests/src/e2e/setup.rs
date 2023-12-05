@@ -170,14 +170,14 @@ where
             .0
             .insert(
                 StringEncoded::new(sk.ref_to()),
-                token::DenominatedAmount {
-                    amount: token::Amount::from_uint(
+                token::DenominatedAmount::new(
+                    token::Amount::from_uint(
                         3000000,
                         NATIVE_MAX_DECIMAL_PLACES,
                     )
                     .unwrap(),
-                    denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-                },
+                    NATIVE_MAX_DECIMAL_PLACES.into(),
+                ),
             );
         // invoke `init-genesis-validator` signed by balance key to generate
         // validator pre-genesis wallet signed genesis txs

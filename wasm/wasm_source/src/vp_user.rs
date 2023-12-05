@@ -244,10 +244,10 @@ mod tests {
         )
         .unwrap();
 
-        let amount = token::DenominatedAmount {
+        let amount = token::DenominatedAmount::new(
             amount,
-            denom: token::NATIVE_MAX_DECIMAL_PLACES.into(),
-        };
+            token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        );
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Apply transfer in a transaction
@@ -299,10 +299,10 @@ mod tests {
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, amount);
 
-        let amount = token::DenominatedAmount {
+        let amount = token::DenominatedAmount::new(
             amount,
-            denom: token::NATIVE_MAX_DECIMAL_PLACES.into(),
-        };
+            token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        );
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Apply transfer in a transaction
@@ -357,10 +357,10 @@ mod tests {
         )
         .unwrap();
 
-        let amount = token::DenominatedAmount {
+        let amount = token::DenominatedAmount::new(
             amount,
-            denom: token::NATIVE_MAX_DECIMAL_PLACES.into(),
-        };
+            token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        );
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -592,10 +592,10 @@ mod tests {
         // be able to transfer from it
         tx_env.credit_tokens(&source, &token, amount);
 
-        let amount = token::DenominatedAmount {
+        let amount = token::DenominatedAmount::new(
             amount,
-            denom: token::NATIVE_MAX_DECIMAL_PLACES.into(),
-        };
+            token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        );
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {

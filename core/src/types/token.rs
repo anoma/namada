@@ -169,7 +169,7 @@ impl Amount {
             .map(|result| Self { raw: result })
     }
 
-    /// Checked division. Returns `None` on overflow.
+    /// Checked multiplication. Returns `None` on overflow.
     pub fn checked_mul(&self, amount: Amount) -> Option<Self> {
         self.raw
             .checked_mul(amount.raw)
@@ -181,9 +181,7 @@ impl Amount {
         string: impl AsRef<str>,
         denom: impl Into<u8>,
     ) -> Result<Amount, AmountParseError> {
-        DenominatedAmount::from_str(string.as_ref())?
-            .increase_precision(denom.into().into())
-            .map(Into::into)
+        DenominatedAmount::from_str(string.as_ref())?.scale(denom)
     }
 
     /// Attempt to convert an unsigned integer to an `Amount` with the
@@ -320,12 +318,17 @@ impl From<Denomination> for u8 {
 )]
 pub struct DenominatedAmount {
     /// The mantissa
-    pub amount: Amount,
+    amount: Amount,
     /// The number of decimal places in base ten.
-    pub denom: Denomination,
+    denom: Denomination,
 }
 
 impl DenominatedAmount {
+    /// Make a new denominated amount
+    pub fn new(amount: Amount, denom: Denomination) -> Self {
+        Self { amount, denom }
+    }
+
     /// Return a denominated native token amount.
     pub const fn native(amount: Amount) -> Self {
         Self {
@@ -402,12 +405,14 @@ impl DenominatedAmount {
             .ok_or(AmountParseError::PrecisionOverflow)
     }
 
-    /// Attempt to apply the precision of the given token to this amount.
-    pub fn apply_precision(
+    /// Convert this denominated amount into a plain amount by increasing its
+    /// precision to the given token's denomination and then taking the
+    /// significand.
+    pub fn to_amount(
         self,
         token: &Address,
         storage: &impl StorageRead,
-    ) -> storage_api::Result<Self> {
+    ) -> storage_api::Result<Amount> {
         let denom = read_denom(storage, token)?.ok_or_else(|| {
             storage_api::Error::SimpleMessage(
                 "No denomination found in storage for the given token",
@@ -415,6 +420,64 @@ impl DenominatedAmount {
         })?;
         self.increase_precision(denom)
             .map_err(storage_api::Error::new)
+            .map(|x| x.amount)
+    }
+
+    /// Multiply this number by 10^denom and return the computed integer if
+    /// possible. Otherwise error out.
+    pub fn scale(
+        self,
+        denom: impl Into<u8>,
+    ) -> Result<Amount, AmountParseError> {
+        self.increase_precision(Denomination(denom.into()))
+            .map(|x| x.amount)
+    }
+
+    /// Checked multiplication. Returns `None` on overflow.
+    pub fn checked_mul(&self, rhs: DenominatedAmount) -> Option<Self> {
+        let amount = self.amount.checked_mul(rhs.amount)?;
+        let denom = self.denom.0.checked_add(rhs.denom.0)?.into();
+        Some(Self { amount, denom })
+    }
+
+    /// Checked subtraction. Returns `None` on overflow.
+    pub fn checked_sub(&self, mut rhs: DenominatedAmount) -> Option<Self> {
+        let mut lhs = *self;
+        if lhs.denom < rhs.denom {
+            lhs = lhs.increase_precision(rhs.denom).ok()?;
+        } else {
+            rhs = rhs.increase_precision(lhs.denom).ok()?;
+        }
+        let amount = lhs.amount.checked_sub(rhs.amount)?;
+        Some(Self {
+            amount,
+            denom: lhs.denom,
+        })
+    }
+
+    /// Checked addition. Returns `None` on overflow.
+    pub fn checked_add(&self, mut rhs: DenominatedAmount) -> Option<Self> {
+        let mut lhs = *self;
+        if lhs.denom < rhs.denom {
+            lhs = lhs.increase_precision(rhs.denom).ok()?;
+        } else {
+            rhs = rhs.increase_precision(lhs.denom).ok()?;
+        }
+        let amount = lhs.amount.checked_add(rhs.amount)?;
+        Some(Self {
+            amount,
+            denom: lhs.denom,
+        })
+    }
+
+    /// Returns the significand of this number
+    pub fn amount(&self) -> Amount {
+        self.amount
+    }
+
+    /// Returns the denomination of this number
+    pub fn denom(&self) -> Denomination {
+        self.denom
     }
 }
 
@@ -569,15 +632,9 @@ impl<'de> serde::Deserialize<'de> for DenominatedAmount {
     }
 }
 
-impl<'a> From<&'a DenominatedAmount> for &'a Amount {
-    fn from(denom: &'a DenominatedAmount) -> Self {
-        &denom.amount
-    }
-}
-
-impl From<DenominatedAmount> for Amount {
-    fn from(denom: DenominatedAmount) -> Self {
-        denom.amount
+impl From<Amount> for DenominatedAmount {
+    fn from(amount: Amount) -> Self {
+        DenominatedAmount::new(amount, 0.into())
     }
 }
 

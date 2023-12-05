@@ -3451,7 +3451,7 @@ mod test_finalize_block {
         let fee_amount =
             wrapper.header().wrapper().unwrap().get_tx_fee().unwrap();
         let fee_amount = fee_amount
-            .apply_precision(
+            .to_amount(
                 &wrapper.header().wrapper().unwrap().fee.token,
                 &shell.wl_storage,
             )
@@ -3493,7 +3493,7 @@ mod test_finalize_block {
         .unwrap();
         assert_eq!(
             new_proposer_balance,
-            proposer_balance.checked_add(fee_amount.amount).unwrap()
+            proposer_balance.checked_add(fee_amount).unwrap()
         );
 
         let new_signer_balance = storage_api::token::read_balance(
@@ -3504,7 +3504,7 @@ mod test_finalize_block {
         .unwrap();
         assert_eq!(
             new_signer_balance,
-            signer_balance.checked_sub(fee_amount.amount).unwrap()
+            signer_balance.checked_sub(fee_amount).unwrap()
         )
     }
 

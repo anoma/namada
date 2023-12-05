@@ -15,7 +15,8 @@ pub fn transfer(
     token: &Address,
     amount: DenominatedAmount,
 ) -> TxResult {
-    if amount.amount != Amount::default() && src != dest {
+    let amount = amount.to_amount(token, ctx)?;
+    if amount != Amount::default() && src != dest {
         let src_key = token::balance_key(token, src);
         let dest_key = token::balance_key(token, dest);
         let src_bal: Option<Amount> = ctx.read(&src_key)?;
@@ -23,9 +24,9 @@ pub fn transfer(
             log_string(format!("src {} has no balance", src_key));
             unreachable!()
         });
-        src_bal.spend(&amount.amount);
+        src_bal.spend(&amount);
         let mut dest_bal: Amount = ctx.read(&dest_key)?.unwrap_or_default();
-        dest_bal.receive(&amount.amount);
+        dest_bal.receive(&amount);
         ctx.write(&src_key, src_bal)?;
         ctx.write(&dest_key, dest_bal)?;
     }

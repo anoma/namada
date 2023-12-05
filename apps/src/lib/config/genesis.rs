@@ -411,10 +411,10 @@ pub fn make_dev_genesis(
                 StringEncoded {
                     raw: account_keypair.ref_to(),
                 },
-                token::DenominatedAmount {
-                    amount: token::Amount::native_whole(200_000),
-                    denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-                },
+                token::DenominatedAmount::new(
+                    token::Amount::native_whole(200_000),
+                    NATIVE_MAX_DECIMAL_PLACES.into(),
+                ),
             );
         }
         // transfer funds from implicit key to validator
@@ -425,10 +425,10 @@ pub fn make_dev_genesis(
                     raw: account_keypair.ref_to(),
                 },
                 target: alias.clone(),
-                amount: token::DenominatedAmount {
-                    amount: token::Amount::native_whole(200_000),
-                    denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-                },
+                amount: token::DenominatedAmount::new(
+                    token::Amount::native_whole(200_000),
+                    NATIVE_MAX_DECIMAL_PLACES.into(),
+                ),
             })
         }
         // self bond
@@ -436,10 +436,10 @@ pub fn make_dev_genesis(
             bonds.push(transactions::BondTx {
                 source: transactions::AliasOrPk::Alias(alias.clone()),
                 validator: alias,
-                amount: token::DenominatedAmount {
-                    amount: token::Amount::native_whole(100_000),
-                    denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-                },
+                amount: token::DenominatedAmount::new(
+                    token::Amount::native_whole(100_000),
+                    NATIVE_MAX_DECIMAL_PLACES.into(),
+                ),
             })
         }
     }

@@ -1047,25 +1047,25 @@ mod test {
         let result = TEST_RPC.b1(&client).await.unwrap();
         assert_eq!(result, "b1");
 
-        let balance = token::DenominatedAmount {
-            amount: token::Amount::native_whole(123_000_000),
-            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-        };
+        let balance = token::DenominatedAmount::new(
+            token::Amount::native_whole(123_000_000),
+            NATIVE_MAX_DECIMAL_PLACES.into(),
+        );
         let result = TEST_RPC.b2i(&client, &balance).await.unwrap();
         assert_eq!(result, format!("b2i/{balance}"));
 
-        let a1 = token::DenominatedAmount {
-            amount: token::Amount::native_whole(345),
-            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-        };
-        let a2 = token::DenominatedAmount {
-            amount: token::Amount::native_whole(123_000),
-            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-        };
-        let a3 = token::DenominatedAmount {
-            amount: token::Amount::native_whole(1_000_999),
-            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-        };
+        let a1 = token::DenominatedAmount::new(
+            token::Amount::native_whole(345),
+            NATIVE_MAX_DECIMAL_PLACES.into(),
+        );
+        let a2 = token::DenominatedAmount::new(
+            token::Amount::native_whole(123_000),
+            NATIVE_MAX_DECIMAL_PLACES.into(),
+        );
+        let a3 = token::DenominatedAmount::new(
+            token::Amount::native_whole(1_000_999),
+            NATIVE_MAX_DECIMAL_PLACES.into(),
+        );
         let result = TEST_RPC.b3(&client, &a1, &a2, &a3).await.unwrap();
         assert_eq!(result, format!("b3/{a1}/{a2}/{a3}"));
 

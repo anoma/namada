@@ -1146,10 +1146,10 @@ mod test_prepare_proposal {
 
         let wrapper = WrapperTx::new(
             Fee {
-                amount_per_gas_unit: DenominatedAmount {
-                    amount: 100.into(),
-                    denom: btc_denom,
-                },
+                amount_per_gas_unit: DenominatedAmount::new(
+                    100.into(),
+                    btc_denom,
+                ),
                 token: address::btc(),
             },
             crate::wallet::defaults::albert_keypair().ref_to(),
@@ -1194,10 +1194,10 @@ mod test_prepare_proposal {
 
         let wrapper = WrapperTx::new(
             Fee {
-                amount_per_gas_unit: DenominatedAmount {
-                    amount: 100.into(),
-                    denom: apfel_denom,
-                },
+                amount_per_gas_unit: DenominatedAmount::new(
+                    100.into(),
+                    apfel_denom,
+                ),
                 token: address::apfel(),
             },
             crate::wallet::defaults::albert_keypair().ref_to(),

@@ -313,7 +313,7 @@ impl Finalized {
                 .map(|(token, amt)| {
                     (
                         self.tokens.token.get(token).cloned().unwrap().address,
-                        amt.amount,
+                        amt.amount(),
                     )
                 })
                 .collect(),

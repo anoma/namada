@@ -491,7 +491,7 @@ pub struct EthBridgeParams {
 impl TokenBalances {
     pub fn get(&self, pk: common::PublicKey) -> Option<token::Amount> {
         let pk = StringEncoded { raw: pk };
-        self.0.get(&pk).map(|amt| amt.amount)
+        self.0.get(&pk).map(|amt| amt.amount())
     }
 }
 #[derive(
@@ -906,7 +906,7 @@ pub fn validate_balances(
         let sum = next.0.values().try_fold(
             token::Amount::default(),
             |acc, amount| {
-                let res = acc.checked_add(amount.amount);
+                let res = acc.checked_add(amount.amount());
                 if res.as_ref().is_none() {
                     is_valid = false;
                     eprintln!(
@@ -997,7 +997,7 @@ mod tests {
                 .0
                 .get(&StringEncoded { raw: pk })
                 .unwrap()
-                .amount
+                .amount()
         );
     }
 }

@@ -533,7 +533,7 @@ pub async fn wrap_tx<'a, N: Namada<'a>>(
         }
     };
 
-    let total_fee = fee_amount.amount * u64::from(args.gas_limit);
+    let total_fee = fee_amount.amount() * u64::from(args.gas_limit);
 
     let (unshield, unshielding_epoch) = match total_fee
         .checked_sub(updated_balance)
@@ -544,15 +544,15 @@ pub async fn wrap_tx<'a, N: Namada<'a>>(
                 let target = namada_core::types::masp::TransferTarget::Address(
                     fee_payer_address.clone(),
                 );
-                let fee_amount = DenominatedAmount {
+                let fee_amount = DenominatedAmount::new(
                     // NOTE: must unshield the total fee amount, not the
                     // diff, because the ledger evaluates the transaction in
                     // reverse (wrapper first, inner second) and cannot know
                     // ahead of time if the inner will modify the balance of
                     // the gas payer
-                    amount: total_fee,
-                    denom: 0.into(),
-                };
+                    total_fee,
+                    0.into(),
+                );
 
                 match ShieldedContext::<N::ShieldedUtils>::gen_shielded_transfer(
                         context,

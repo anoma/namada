@@ -202,14 +202,15 @@ where
         token: &Address,
         amount: DenominatedAmount,
     ) -> Result<()> {
+        let amount = amount.to_amount(token, self)?;
         let src_key = token::balance_key(token, src);
         let dest_key = token::balance_key(token, dest);
         let src_bal: Option<Amount> = self.ctx.read(&src_key)?;
         let mut src_bal = src_bal.expect("The source has no balance");
-        src_bal.spend(&amount.amount);
+        src_bal.spend(&amount);
         let mut dest_bal: Amount =
             self.ctx.read(&dest_key)?.unwrap_or_default();
-        dest_bal.receive(&amount.amount);
+        dest_bal.receive(&amount);
 
         self.write(&src_key, src_bal.serialize_to_vec())?;
         self.write(&dest_key, dest_bal.serialize_to_vec())
@@ -253,15 +254,16 @@ where
         token: &Address,
         amount: DenominatedAmount,
     ) -> Result<()> {
+        let amount = amount.to_amount(token, self)?;
         let target_key = token::balance_key(token, target);
         let mut target_bal: Amount =
             self.ctx.read(&target_key)?.unwrap_or_default();
-        target_bal.receive(&amount.amount);
+        target_bal.receive(&amount);
 
         let minted_key = token::minted_balance_key(token);
         let mut minted_bal: Amount =
             self.ctx.read(&minted_key)?.unwrap_or_default();
-        minted_bal.receive(&amount.amount);
+        minted_bal.receive(&amount);
 
         self.write(&target_key, target_bal.serialize_to_vec())?;
         self.write(&minted_key, minted_bal.serialize_to_vec())?;
@@ -279,15 +281,16 @@ where
         token: &Address,
         amount: DenominatedAmount,
     ) -> Result<()> {
+        let amount = amount.to_amount(token, self)?;
         let target_key = token::balance_key(token, target);
         let mut target_bal: Amount =
             self.ctx.read(&target_key)?.unwrap_or_default();
-        target_bal.spend(&amount.amount);
+        target_bal.spend(&amount);
 
         let minted_key = token::minted_balance_key(token);
         let mut minted_bal: Amount =
             self.ctx.read(&minted_key)?.unwrap_or_default();
-        minted_bal.spend(&amount.amount);
+        minted_bal.spend(&amount);
 
         self.write(&target_key, target_bal.serialize_to_vec())?;
         self.write(&minted_key, minted_bal.serialize_to_vec())

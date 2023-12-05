@@ -66,7 +66,7 @@ impl IbcStorageContext for Ctx {
             &Address::Internal(InternalAddress::Ibc),
             target,
             token,
-            amount.amount,
+            amount.to_amount(token, self)?,
         )
     }
 
@@ -76,7 +76,7 @@ impl IbcStorageContext for Ctx {
         token: &Address,
         amount: DenominatedAmount,
     ) -> Result<(), Error> {
-        burn(self, target, token, amount.amount)
+        burn(self, target, token, amount.to_amount(token, self)?)
     }
 
     fn log_string(&self, message: String) {

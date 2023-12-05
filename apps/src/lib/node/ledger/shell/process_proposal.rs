@@ -1856,10 +1856,10 @@ mod test_process_proposal {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: DenominatedAmount {
-                        amount: 100.into(),
-                        denom: apfel_denom,
-                    },
+                    amount_per_gas_unit: DenominatedAmount::new(
+                        100.into(),
+                        apfel_denom,
+                    ),
                     token: address::apfel(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
