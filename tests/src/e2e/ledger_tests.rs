@@ -217,7 +217,7 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
     for ledger_rpc in &[validator_0_rpc, validator_1_rpc, non_validator_rpc] {
         let mut client =
             run!(test, Bin::Client, query_balance_args(ledger_rpc), Some(40))?;
-        client.exp_string("nam: 980010.1")?;
+        client.exp_string("nam: 2000010.1")?;
         client.assert_success();
     }
 
@@ -2587,28 +2587,6 @@ fn double_signing_gets_slashed() -> Result<()> {
     validator_3.exp_string("This node is a validator")?;
     let _bg_validator_3 = validator_3.background();
 
-    let validator_zero_rpc = get_actor_rpc(&test, &Who::Validator(0));
-    // put money in the validator account from its balance account so that it
-    // can pay gas fees
-    let tx_args = vec![
-        "transfer",
-        "--source",
-        "validator-0-balance-key",
-        "--target",
-        "validator-0-validator-key",
-        "--amount",
-        "100.0",
-        "--token",
-        "NAM",
-        "--node",
-        &validator_zero_rpc,
-    ];
-    let mut client =
-        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction is valid.")?;
-
-    client.assert_success();
-
     // 2. Copy the first genesis validator base-dir
     let validator_0_base_dir = test.get_base_dir(&Who::Validator(0));
     let validator_0_base_dir_copy = test
@@ -2716,7 +2694,7 @@ fn double_signing_gets_slashed() -> Result<()> {
         "--node",
         &validator_one_rpc,
     ];
-    let _client = run!(test, Bin::Client, tx_args, Some(40))?;
+    let _client = run!(test, Bin::Client, tx_args, Some(100))?;
     // We don't wait for tx result - sometimes the node may crash before while
     // it's being applied, because the slashed validator will stop voting and
     // rewards calculation then fails with `InsufficientVotes`.

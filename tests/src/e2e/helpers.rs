@@ -192,7 +192,7 @@ pub fn get_validator_pk(test: &Test, who: &Who) -> Option<common::PublicKey> {
     };
     let mut wallet = get_node_wallet(test, who);
     let sk = wallet
-        .find_secret_key(format!("validator-{index}-validator-key"), None)
+        .find_secret_key(format!("validator-{index}-balance-key"), None)
         .ok()?;
     Some(sk.ref_to())
 }

@@ -1432,7 +1432,7 @@ fn check_balances(
         "balance", "--owner", ALBERT, "--token", NAM, "--node", &rpc_a,
     ];
     let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
-    let expected = "nam: 880000".to_string();
+    let expected = "nam: 1900000".to_string();
     client.exp_string(&expected)?;
     client.assert_success();
 
@@ -1499,7 +1499,7 @@ fn check_balances_after_back(
         "balance", "--owner", ALBERT, "--token", NAM, "--node", &rpc_a,
     ];
     let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
-    let expected = "nam: 930000".to_string();
+    let expected = "nam: 1950000".to_string();
     client.exp_string(&expected)?;
     client.assert_success();
 
