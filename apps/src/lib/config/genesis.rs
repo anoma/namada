@@ -7,6 +7,7 @@ pub mod utils;
 
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Display, Formatter};
+use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
@@ -82,8 +83,6 @@ impl<'de> Deserialize<'de> for GenesisAddress {
     where
         D: serde::Deserializer<'de>,
     {
-        use std::str::FromStr;
-
         struct FieldVisitor;
 
         impl<'de> serde::de::Visitor<'de> for FieldVisitor {
@@ -99,25 +98,8 @@ impl<'de> Deserialize<'de> for GenesisAddress {
             where
                 E: serde::de::Error,
             {
-                // Try to deserialize a PK first
-                let maybe_pk =
-                    StringEncoded::<common::PublicKey>::from_str(value);
-                match maybe_pk {
-                    Ok(pk) => Ok(GenesisAddress::PublicKey(pk)),
-                    Err(_) => {
-                        // If that doesn't work, attempt to retrieve
-                        // an established address
-                        let address = Address::from_str(value)
-                            .map_err(serde::de::Error::custom)?;
-                        if let Address::Established(established) = address {
-                            Ok(GenesisAddress::EstablishedAddress(established))
-                        } else {
-                            Err(serde::de::Error::custom(
-                                "expected an established address or public key",
-                            ))
-                        }
-                    }
-                }
+                GenesisAddress::from_str(value)
+                    .map_err(serde::de::Error::custom)
             }
         }
 
@@ -132,6 +114,30 @@ impl Display for GenesisAddress {
                 write!(f, "{}", Address::Established(address.clone()).encode())
             }
             GenesisAddress::PublicKey(pk) => write!(f, "{}", pk),
+        }
+    }
+}
+
+impl FromStr for GenesisAddress {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        // Try to deserialize a PK first
+        let maybe_pk = StringEncoded::<common::PublicKey>::from_str(value);
+        match maybe_pk {
+            Ok(pk) => Ok(GenesisAddress::PublicKey(pk)),
+            Err(_) => {
+                // If that doesn't work, attempt to retrieve
+                // an established address
+                let address =
+                    Address::from_str(value).map_err(|err| err.to_string())?;
+                if let Address::Established(established) = address {
+                    Ok(GenesisAddress::EstablishedAddress(established))
+                } else {
+                    Err("expected an established address or public key"
+                        .to_string())
+                }
+            }
         }
     }
 }
@@ -308,7 +314,6 @@ pub fn make_dev_genesis(
     target_chain_dir: std::path::PathBuf,
 ) -> Finalized {
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-    use std::str::FromStr;
     use std::time::Duration;
 
     use namada::ledger::eth_bridge::{Contracts, UpgradeableContract};

@@ -730,6 +730,30 @@ pub fn init_genesis_established_account(
     println!("{}: {toml_path_str}", "Wrote genesis tx to".bold());
 }
 
+/// Bond to a validator at pre-genesis.
+pub fn genesis_bond(args: args::GenesisBond) {
+    let args::GenesisBond {
+        source,
+        validator,
+        bond_amount,
+        output: toml_path,
+    } = args;
+    let txs = genesis::transactions::init_bond(source, validator, bond_amount);
+
+    let toml_path_str = toml_path.to_string_lossy();
+
+    let genesis_part = toml::to_string(&txs).unwrap();
+    fs::write(&toml_path, genesis_part).unwrap_or_else(|err| {
+        eprintln!(
+            "Couldn't write pre-genesis transactions file to {toml_path_str}. \
+             Failed with: {err}",
+        );
+        safe_exit(1)
+    });
+
+    println!("{}: {toml_path_str}", "Wrote genesis tx to".bold());
+}
+
 /// Initialize genesis validator's address, consensus key and validator account
 /// key into a special "pre-genesis" wallet.
 pub fn init_genesis_validator(

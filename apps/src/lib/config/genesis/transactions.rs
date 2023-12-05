@@ -234,6 +234,23 @@ pub fn init_established_account(
     (address, txs)
 }
 
+/// Create a [`BondTx`] for a genesis validator.
+pub fn init_bond(
+    source: GenesisAddress,
+    validator: EstablishedAddress,
+    bond_amount: token::DenominatedAmount,
+) -> UnsignedTransactions {
+    let unsigned_tx = BondTx {
+        source,
+        validator: Address::Established(validator),
+        amount: bond_amount,
+    };
+    UnsignedTransactions {
+        bond: Some(vec![unsigned_tx]),
+        ..Default::default()
+    }
+}
+
 /// Create [`UnsignedTransactions`] for a genesis validator.
 pub fn init_validator(
     GenesisValidatorData {

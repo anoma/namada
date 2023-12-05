@@ -634,6 +634,9 @@ impl CliApi {
                 Utils::InitNetwork(InitNetwork(args)) => {
                     utils::init_network(global_args, args)
                 }
+                Utils::GenesisBond(GenesisBond(args)) => {
+                    utils::genesis_bond(args)
+                }
                 Utils::DeriveGenesisAddresses(DeriveGenesisAddresses(args)) => {
                     utils::derive_genesis_addresses(global_args, args)
                 }

@@ -2180,6 +2180,7 @@ pub mod cmds {
         ValidateWasm(ValidateWasm),
         InitNetwork(InitNetwork),
         DeriveGenesisAddresses(DeriveGenesisAddresses),
+        GenesisBond(GenesisBond),
         InitGenesisEstablishedAccount(InitGenesisEstablishedAccount),
         InitGenesisValidator(InitGenesisValidator),
         PkToTmAddress(PkToTmAddress),
@@ -2203,6 +2204,8 @@ pub mod cmds {
                     SubCmd::parse(matches).map(Self::InitNetwork);
                 let derive_addresses =
                     SubCmd::parse(matches).map(Self::DeriveGenesisAddresses);
+                let genesis_bond =
+                    SubCmd::parse(matches).map(Self::GenesisBond);
                 let init_established = SubCmd::parse(matches)
                     .map(Self::InitGenesisEstablishedAccount);
                 let init_genesis =
@@ -2221,6 +2224,7 @@ pub mod cmds {
                     .or(validate_wasm)
                     .or(init_network)
                     .or(derive_addresses)
+                    .or(genesis_bond)
                     .or(init_established)
                     .or(init_genesis)
                     .or(pk_to_tm_address)
@@ -2239,6 +2243,7 @@ pub mod cmds {
                 .subcommand(ValidateWasm::def())
                 .subcommand(InitNetwork::def())
                 .subcommand(DeriveGenesisAddresses::def())
+                .subcommand(GenesisBond::def())
                 .subcommand(InitGenesisEstablishedAccount::def())
                 .subcommand(InitGenesisValidator::def())
                 .subcommand(PkToTmAddress::def())
@@ -2369,6 +2374,25 @@ pub mod cmds {
                     "Initialize an established account available at genesis.",
                 )
                 .add_args::<args::InitGenesisEstablishedAccount>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct GenesisBond(pub args::GenesisBond);
+
+    impl SubCmd for GenesisBond {
+        const CMD: &'static str = "genesis-bond";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::GenesisBond::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Bond to a validator at pre-genesis.")
+                .add_args::<args::GenesisBond>()
         }
     }
 
@@ -2925,6 +2949,7 @@ pub mod args {
     use super::utils::*;
     use super::{ArgGroup, ArgMatches};
     use crate::client::utils::PRE_GENESIS_DIR;
+    use crate::config::genesis::GenesisAddress;
     use crate::config::{self, Action, ActionAtHeight};
     use crate::facade::tendermint::Timeout;
     use crate::facade::tendermint_config::net::Address as TendermintAddress;
@@ -3027,16 +3052,20 @@ pub mod args {
             denom: NATIVE_MAX_DECIMAL_PLACES.into(),
         }),
     );
+    pub const GENESIS_BOND_SOURCE: ArgOpt<GenesisAddress> = arg_opt("source");
     pub const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     pub const GENESIS_TIME: Arg<DateTimeUtc> = arg("genesis-time");
     pub const GENESIS_VALIDATOR: ArgOpt<String> =
         arg("genesis-validator").opt();
+    pub const GENESIS_VALIDATOR_ADDRESS: Arg<EstablishedAddress> =
+        arg("validator");
     pub const HALT_ACTION: ArgFlag = flag("halt");
     pub const HASH_LIST: Arg<String> = arg("hash-list");
     pub const HD_WALLET_DERIVATION_PATH: ArgDefault<String> =
         arg_default("hd-path", DefaultFn(|| "default".to_string()));
     pub const HISTORIC: ArgFlag = flag("historic");
     pub const IBC_TRANSFER_MEMO_PATH: ArgOpt<PathBuf> = arg_opt("memo-path");
+    pub const INPUT_OPT: ArgOpt<PathBuf> = arg_opt("input");
     pub const LEDGER_ADDRESS_ABOUT: &str =
         "Address of a ledger node as \"{scheme}://{host}:{port}\". If the \
          scheme is not supplied, it is assumed to be TCP.";
@@ -6810,6 +6839,45 @@ pub mod args {
                 "The path of the .toml file to write the established account \
                  transaction to. Overwrites the file if it exists.",
             ))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct GenesisBond {
+        pub source: GenesisAddress,
+        pub validator: EstablishedAddress,
+        pub bond_amount: token::DenominatedAmount,
+        pub output: PathBuf,
+    }
+
+    impl Args for GenesisBond {
+        fn parse(matches: &ArgMatches) -> Self {
+            let validator = GENESIS_VALIDATOR_ADDRESS.parse(matches);
+            let source =
+                GENESIS_BOND_SOURCE.parse(matches).unwrap_or_else(|| {
+                    GenesisAddress::EstablishedAddress(validator.clone())
+                });
+            let bond_amount = AMOUNT.parse(matches);
+            let output = PATH.parse(matches);
+            Self {
+                source,
+                validator,
+                bond_amount,
+                output,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(GENESIS_VALIDATOR_ADDRESS.def().help("Validator address."))
+                .arg(AMOUNT.def().help("Amount of tokens to stake in a bond."))
+                .arg(GENESIS_BOND_SOURCE.def().help(
+                    "Source address for delegations. For self-bonds, the \
+                     validator is also the source.",
+                ))
+                .arg(
+                    PATH.def()
+                        .help("Output toml file to write transactions to."),
+                )
         }
     }
 
