@@ -5778,6 +5778,12 @@ where
         .collect::<HashSet<_>>();
 
     for validator in &validators_to_jail {
+        let state_jail_epoch = validator_state_handle(validator)
+            .get(storage, jail_epoch, params)?
+            .expect("Validator should have a state for the jail epoch");
+        if state_jail_epoch == ValidatorState::Jailed {
+            continue;
+        }
         tracing::info!(
             "Jailing validator {} starting in epoch {} for missing too many \
              votes to ensure liveness",
