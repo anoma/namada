@@ -1,15 +1,14 @@
 # This file contains hand-written unsigned transactions for localnet with:
 #
-# - MASP account
-# - Faucet account that allows anyone to withdraw limited amount of tokens
-# - 2 established accounts for "Albert" and "Bertha"
+# - 3 established accounts for "Albert", "Bertha" and "Christel"
+# - a bond from "Albert"'s established account to validator-0
 #
-# Note that 2 more localnet user accounts "Christel" and "Daewon" are left as
-# implicit accounts, so their tokens are kept in the accounts derived from their
+# Note that 1 localnet user account "Daewon" is left as
+# implicit account, so their tokens are kept in the accounts derived from their
 # keys used in `balances.toml`.
 #
 # This file is used to produce `signed-transactions.toml` with
-# the `sign-genesis-tx` command.
+# the `sign-genesis-txs` command.
 
 # Albert
 [[established_account]]
