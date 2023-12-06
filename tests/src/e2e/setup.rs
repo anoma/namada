@@ -200,7 +200,7 @@ where
         let args = vec![
             "utils",
             "init-genesis-established-account",
-            "--alias",
+            "--aliases",
             &alias,
             "--path",
             &pre_genesis_tx_path_str,
