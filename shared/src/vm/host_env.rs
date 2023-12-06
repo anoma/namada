@@ -6,6 +6,7 @@ use std::num::TryFromIntError;
 
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
+use masp_primitives::transaction::Transaction;
 use namada_core::ledger::gas::{
     GasMetering, TxGasMeter, MEMORY_ACCESS_GAS_PER_BYTE,
 };
@@ -2164,6 +2165,41 @@ where
     }
 }
 
+/// Appends the new note commitments to the tree in storage
+pub fn tx_update_masp_note_commitment_tree<MEM, DB, H, CA>(
+    env: &TxVmEnv<MEM, DB, H, CA>,
+    transaction_ptr: u64,
+    transaction_len: u64,
+) -> TxResult<i64>
+where
+    MEM: VmMemory,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    CA: WasmCacheAccess,
+{
+    let _sentinel = unsafe { env.ctx.sentinel.get() };
+    let _gas_meter = unsafe { env.ctx.gas_meter.get() };
+    let (serialized_transaction, gas) = env
+        .memory
+        .read_bytes(transaction_ptr, transaction_len as _)
+        .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
+
+    tx_charge_gas(env, gas)?;
+    let transaction = Transaction::try_from_slice(&serialized_transaction)
+        .map_err(TxRuntimeError::EncodingError)?;
+
+    let mut ctx = env.ctx.clone();
+    match masp_utils::update_note_commitment_tree(&mut ctx, &transaction) {
+        Ok(()) => Ok(HostEnvResult::Success.to_i64()),
+        Err(_) => {
+            // NOTE: sentinel for gas errors is already set by the
+            // update_note_commitment_tree function which in turn calls other
+            // host functions
+            Ok(HostEnvResult::Fail.to_i64())
+        }
+    }
+}
+
 /// Evaluate a validity predicate with the given input data.
 pub fn vp_eval<MEM, DB, H, EVAL, CA>(
     env: &VpVmEnv<'static, MEM, DB, H, EVAL, CA>,
@@ -2519,7 +2555,12 @@ where
         &mut self,
         shielded: &IbcShieldedTransfer,
     ) -> Result<(), storage_api::Error> {
-        masp_utils::handle_masp_tx(self, &shielded.transfer, &shielded.masp_tx)
+        masp_utils::handle_masp_tx(
+            self,
+            &shielded.transfer,
+            &shielded.masp_tx,
+        )?;
+        masp_utils::update_note_commitment_tree(self, &shielded.masp_tx)
     }
 
     fn mint_token(

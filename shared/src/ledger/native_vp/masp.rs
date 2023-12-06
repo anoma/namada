@@ -19,7 +19,7 @@ use namada_core::types::address::{Address, MASP};
 use namada_core::types::storage::{Epoch, Key, KeySeg};
 use namada_core::types::token::{
     self, is_masp_anchor_key, is_masp_nullifier_key,
-    MASP_NOTE_COMMITMENT_ANCHOR_PREFIX, MASP_NOTE_COMMITMENT_TREE,
+    MASP_NOTE_COMMITMENT_ANCHOR_PREFIX, MASP_NOTE_COMMITMENT_TREE_KEY,
     MASP_NULLIFIERS_KEY_PREFIX,
 };
 use namada_sdk::masp::verify_shielded_tx;
@@ -185,7 +185,7 @@ where
         // Check that the merkle tree in storage has been correctly updated with
         // the output descriptions cmu
         let tree_key = Key::from(MASP.to_db_key())
-            .push(&MASP_NOTE_COMMITMENT_TREE.to_owned())
+            .push(&MASP_NOTE_COMMITMENT_TREE_KEY.to_owned())
             .expect("Cannot obtain a storage key");
         let mut previous_tree: CommitmentTree<Node> =
             self.ctx.read_pre(&tree_key)?.ok_or(Error::NativeVpError(
@@ -330,6 +330,12 @@ where
             }
         }
 
+        // The transaction must correctly update the note commitment tree
+        // and the anchor in storage with the new output descriptions
+        if !self.valid_note_commitment_update(keys_changed, &shielded_tx)? {
+            return Ok(false);
+        }
+
         if transfer.target != Address::Internal(Masp) {
             // Handle transparent output
             // The following boundary conditions must be satisfied
@@ -419,8 +425,6 @@ where
             // Handle shielded output
             // The following boundary conditions must be satisfied
             // 1. Zero transparent output
-            // 2. The transaction must correctly update the note commitment tree
-            // and the anchor in storage with the new output descriptions
 
             // Satisfies 1.
             if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
@@ -432,11 +436,6 @@ where
                     );
                     return Ok(false);
                 }
-            }
-
-            // Satisfies 2
-            if !self.valid_note_commitment_update(keys_changed, &shielded_tx)? {
-                return Ok(false);
             }
         }
 

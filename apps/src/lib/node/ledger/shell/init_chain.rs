@@ -18,7 +18,7 @@ use namada::types::key::*;
 use namada::types::storage::KeySeg;
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::types::token::{
-    MASP_NOTE_COMMITMENT_ANCHOR_PREFIX, MASP_NOTE_COMMITMENT_TREE,
+    MASP_NOTE_COMMITMENT_ANCHOR_PREFIX, MASP_NOTE_COMMITMENT_TREE_KEY,
 };
 use namada::vm::validate_untrusted_wasm;
 use namada_sdk::eth_bridge::EthBridgeStatus;
@@ -184,7 +184,7 @@ where
             CommitmentTree::empty();
         let anchor = empty_commitment_tree.root();
         let note_commitment_tree_key = Key::from(MASP.to_db_key())
-            .push(&MASP_NOTE_COMMITMENT_TREE.to_owned())
+            .push(&MASP_NOTE_COMMITMENT_TREE_KEY.to_owned())
             .expect("Cannot obtain a storage key");
         self.wl_storage
             .write(&note_commitment_tree_key, empty_commitment_tree)

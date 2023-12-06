@@ -10,11 +10,8 @@ use crate::types::address::MASP;
 use crate::types::hash::Hash;
 use crate::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
 use crate::types::token::{
-    Transfer, HEAD_TX_KEY, MASP_NULLIFIERS_KEY_PREFIX, PIN_KEY_PREFIX,
-    TX_KEY_PREFIX,
-};
-use crate::types::token::{
-    MASP_NOTE_COMMITMENT_TREE, MASP_NULLIFIERS_KEY_PREFIX,
+    Transfer, HEAD_TX_KEY, MASP_NOTE_COMMITMENT_TREE_KEY,
+    MASP_NULLIFIERS_KEY_PREFIX, PIN_KEY_PREFIX, TX_KEY_PREFIX,
 };
 
 // Writes the nullifiers of the provided masp transaction to storage
@@ -37,20 +34,21 @@ fn reveal_nullifiers(
     Ok(())
 }
 
-// Appends the note commitments of the provided transaction to the merkle tree
-// and updates the anchor
-fn update_note_commitment_tree(
+/// Appends the note commitments of the provided transaction to the merkle tree
+/// and updates the anchor
+/// NOTE: this function is public as a temporary workaround because of an issue
+/// when running this function in WASM
+pub fn update_note_commitment_tree(
     ctx: &mut (impl StorageRead + StorageWrite),
     transaction: &Transaction,
 ) -> Result<()> {
     if let Some(bundle) = transaction.sapling_bundle() {
         if !bundle.shielded_outputs.is_empty() {
             let tree_key = Key::from(MASP.to_db_key())
-                .push(&MASP_NOTE_COMMITMENT_TREE.to_owned())
+                .push(&MASP_NOTE_COMMITMENT_TREE_KEY.to_owned())
                 .expect("Cannot obtain a storage key");
-            let mut commitment_tree = ctx
-                .read::<CommitmentTree<Node>>(&tree_key)?
-                .ok_or(Error::SimpleMessage(
+            let mut commitment_tree: CommitmentTree<Node> =
+                ctx.read(&tree_key)?.ok_or(Error::SimpleMessage(
                     "Missing note commitment tree in storage",
                 ))?;
 
@@ -97,7 +95,10 @@ pub fn handle_masp_tx(
     );
     ctx.write(&current_tx_key, record)?;
     ctx.write(&head_tx_key, current_tx_idx + 1)?;
-    update_note_commitment_tree(ctx, shielded)?;
+    // TODO: temporarily disabled because of the node aggregation issue in WASM.
+    // Using the host env tx_update_masp_note_commitment_tree or directly the
+    // update_note_commitment_tree function as a  workaround instead
+    // update_note_commitment_tree(ctx, shielded)?;
     reveal_nullifiers(ctx, shielded)?;
 
     // If storage key has been supplied, then pin this transaction to it

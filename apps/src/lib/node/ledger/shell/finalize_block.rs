@@ -27,7 +27,7 @@ use namada::types::dec::Dec;
 use namada::types::key::tm_raw_hash_to_string;
 use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
 use namada::types::token::{
-    MASP_NOTE_COMMITMENT_ANCHOR_PREFIX, MASP_NOTE_COMMITMENT_TREE,
+    MASP_NOTE_COMMITMENT_ANCHOR_PREFIX, MASP_NOTE_COMMITMENT_TREE_KEY,
 };
 use namada::types::transaction::protocol::{
     ethereum_tx_data_variants, ProtocolTxType,
@@ -568,7 +568,7 @@ where
 
         // Update the MASP commitment tree anchor if the tree was updated
         let tree_key = Key::from(MASP.to_db_key())
-            .push(&MASP_NOTE_COMMITMENT_TREE.to_owned())
+            .push(&MASP_NOTE_COMMITMENT_TREE_KEY.to_owned())
             .expect("Cannot obtain a storage key");
         if let Some(StorageModification::Write { value }) =
             self.wl_storage.write_log.read(&tree_key).0

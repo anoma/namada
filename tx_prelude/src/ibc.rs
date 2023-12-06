@@ -53,7 +53,12 @@ impl IbcStorageContext for Ctx {
         &mut self,
         shielded: &IbcShieldedTransfer,
     ) -> Result<(), Error> {
-        masp_utils::handle_masp_tx(self, &shielded.transfer, &shielded.masp_tx)
+        masp_utils::handle_masp_tx(
+            self,
+            &shielded.transfer,
+            &shielded.masp_tx,
+        )?;
+        masp_utils::update_note_commitment_tree(self, &shielded.masp_tx)
     }
 
     fn mint_token(
