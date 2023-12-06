@@ -19,7 +19,6 @@ use namada::types::masp::{MaspValue, PaymentAddress};
 use namada_sdk::masp::find_valid_diversifier;
 use namada_sdk::wallet::{
     DecryptionError, DerivationPath, DerivationPathError, FindKeyError, Wallet,
-    WalletIo, WalletStorage,
 };
 use namada_sdk::{display, display_line, edisplay_line};
 use rand_core::OsRng;
@@ -42,12 +41,7 @@ impl CliApi {
         match cmd {
             cmds::NamadaWallet::Key(sub) => match sub {
                 cmds::WalletKey::Derive(cmds::KeyDerive(args)) => {
-                    key_and_address_derive(
-                        &mut ctx.borrow_mut_chain_or_exit().wallet,
-                        io,
-                        args,
-                    )
-                    .await
+                    key_and_address_derive(ctx, io, args).await
                 }
                 cmds::WalletKey::Gen(cmds::KeyGen(args)) => {
                     key_and_address_gen(ctx, io, args)
@@ -67,12 +61,7 @@ impl CliApi {
                     key_and_address_gen(ctx, io, args)
                 }
                 cmds::WalletAddress::Derive(cmds::AddressDerive(args)) => {
-                    key_and_address_derive(
-                        &mut ctx.borrow_mut_chain_or_exit().wallet,
-                        io,
-                        args,
-                    )
-                    .await
+                    key_and_address_derive(ctx, io, args).await
                 }
                 cmds::WalletAddress::Find(cmds::AddressOrAliasFind(args)) => {
                     address_or_alias_find(ctx, io, args)
@@ -88,11 +77,7 @@ impl CliApi {
                 }
                 cmds::WalletMasp::GenPayAddr(cmds::MaspGenPayAddr(args)) => {
                     let args = args.to_sdk(&mut ctx);
-                    payment_address_gen(
-                        &mut ctx.borrow_mut_chain_or_exit().wallet,
-                        io,
-                        args,
-                    )
+                    payment_address_gen(ctx, io, args)
                 }
                 cmds::WalletMasp::AddAddrKey(cmds::MaspAddAddrKey(args)) => {
                     address_key_add(ctx, io, args)
@@ -272,7 +257,7 @@ fn spending_key_gen(
 
 /// Generate a shielded payment address from the given key.
 fn payment_address_gen(
-    wallet: &mut Wallet<impl WalletStorage + WalletIo>,
+    ctx: Context,
     io: &impl Io,
     args::MaspPayAddrGen {
         alias,
@@ -282,6 +267,7 @@ fn payment_address_gen(
         ..
     }: args::MaspPayAddrGen,
 ) {
+    let mut wallet = load_wallet(ctx);
     let alias = alias.to_lowercase();
     let viewing_key = ExtendedFullViewingKey::from(viewing_key).fvk.vk;
     let (div, _g_d) = find_valid_diversifier(&mut OsRng);
@@ -384,7 +370,7 @@ pub fn decode_derivation_path(
 /// Derives a keypair and an implicit address from the mnemonic code in the
 /// wallet.
 async fn key_and_address_derive(
-    wallet: &mut Wallet<impl WalletStorage + WalletIo>,
+    ctx: Context,
     io: &impl Io,
     args::KeyAndAddressDerive {
         scheme,
@@ -395,6 +381,7 @@ async fn key_and_address_derive(
         use_device,
     }: args::KeyAndAddressDerive,
 ) {
+    let mut wallet = load_wallet(ctx);
     let derivation_path = decode_derivation_path(scheme, derivation_path)
         .unwrap_or_else(|err| {
             edisplay_line!(io, "{}", err);
