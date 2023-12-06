@@ -197,10 +197,13 @@ impl Context {
 
 fn safe_exit_on_missing_chain_context() -> ! {
     eprintln!(
-        "No chain-id was provided. If no chain is configured, you may need to \
-         run `namada client utils join-network` command. If the chain is \
-         configured, set the chain id with `--chain-id <chainid>` or
-         via the env var `{ENV_VAR_CHAIN_ID}`."
+        "Failed to construct Namada chain context. If no chain is configured, \
+         you may need to run `namada client utils join-network`. If the chain \
+         is configured, you may need to set the chain id with `--chain-id \
+         <chainid>`, via the env var `{ENV_VAR_CHAIN_ID}`, or configure the \
+         default chain id in the `global-config.toml` file. If you do intend \
+         to run pre-genesis operations, pass the `--pre-genesis` flag as the \
+         first argument to the command."
     );
     utils::safe_exit(1)
 }
