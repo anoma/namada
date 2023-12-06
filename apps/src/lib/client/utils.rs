@@ -985,6 +985,58 @@ pub fn validate_genesis_templates(
     }
 }
 
+async fn append_signature_to_signed_toml(
+    input_txs: &Path,
+    wallet: &mut Wallet<CliWalletUtils>,
+    use_device: bool,
+) -> genesis::transactions::Transactions<genesis::templates::Unvalidated> {
+    // Parse signed txs toml to append new signatures to
+    let mut genesis_txs = genesis::templates::read_transactions(input_txs)
+        .unwrap_or_else(|_| {
+            eprintln!(
+                "Unable to parse the TOML from path: {}",
+                input_txs.to_string_lossy()
+            );
+            safe_exit(1)
+        });
+    // Sign bond txs and append signatures to toml file
+    if let Some(txs) = genesis_txs.bond {
+        let mut bonds = vec![];
+        for tx in txs {
+            bonds.push(
+                sign_delegation_bond_tx(
+                    tx,
+                    wallet,
+                    &genesis_txs.established_account,
+                    use_device,
+                )
+                .await,
+            );
+        }
+        genesis_txs.bond = Some(bonds);
+    }
+    // Sign validator txs and append signatures to toml file
+    if let Some(txs) = genesis_txs.validator_account {
+        let mut validator_accounts = vec![];
+        for tx in txs {
+            validator_accounts.push(
+                sign_validator_account_tx(
+                    Either::Right(tx),
+                    wallet,
+                    genesis_txs.established_account.as_ref().expect(
+                        "Established account txs required when signing \
+                         validator account txs",
+                    ),
+                    use_device,
+                )
+                .await,
+            );
+        }
+        genesis_txs.validator_account = Some(validator_accounts);
+    }
+    genesis_txs
+}
+
 /// Sign genesis transactions.
 pub async fn sign_genesis_tx(
     global_args: args::Global,
@@ -1009,82 +1061,36 @@ pub async fn sign_genesis_tx(
         );
         safe_exit(1)
     });
-    let (signed, append) =
-        match genesis::transactions::parse_unsigned(&contents) {
-            Ok(unsigned) => (
-                genesis::transactions::sign_txs(
-                    unsigned,
-                    &mut wallet,
-                    maybe_pre_genesis_wallet.as_ref(),
-                    use_device,
-                )
-                .await,
-                true,
-            ),
-            Err(err) => {
-                let mut genesis_txs =
-                    genesis::templates::read_transactions(&path)
-                        .unwrap_or_else(|e| {
-                            eprintln!(
-                                "Unable to parse the TOML from {}. Could not \
-                                 parse as unsigned with {err}. Could not \
-                                 parse as signed with {e}.",
-                                path.to_string_lossy()
-                            );
-                            safe_exit(1)
-                        });
-                // Sign bond txs
-                if let Some(txs) = genesis_txs.bond {
-                    let mut bonds = vec![];
-                    for tx in txs {
-                        bonds.push(
-                            sign_delegation_bond_tx(
-                                tx,
-                                &mut wallet,
-                                &genesis_txs.established_account,
-                                use_device,
-                            )
-                            .await,
-                        );
-                    }
-                    genesis_txs.bond = Some(bonds);
-                }
-                // Sign validator txs
-                if let Some(txs) = genesis_txs.validator_account {
-                    let mut validator_accounts = vec![];
-                    for tx in txs {
-                        validator_accounts.push(
-                            sign_validator_account_tx(
-                                Either::Right(tx),
-                                &mut wallet,
-                                genesis_txs
-                                    .established_account
-                                    .as_ref()
-                                    .expect(
-                                        "Established account txs required \
-                                         when signing validator account txs",
-                                    ),
-                                use_device,
-                            )
-                            .await,
-                        );
-                    }
-                    genesis_txs.validator_account = Some(validator_accounts);
-                }
-                (genesis_txs, false)
-            }
-        };
+    // Sign a subset of the input txs (the ones whose keys we own)
+    let signed = if let Ok(unsigned) =
+        genesis::transactions::parse_unsigned(&contents)
+    {
+        let signed = genesis::transactions::sign_txs(
+            unsigned,
+            &mut wallet,
+            maybe_pre_genesis_wallet.as_ref(),
+            use_device,
+        )
+        .await;
+        if let Some(output_path) = output.as_ref() {
+            // If the output path contains existing signed txs, we append
+            // the newly signed txs to the file
+            let mut prev_txs =
+                genesis::templates::read_transactions(output_path)
+                    .unwrap_or_default();
+            prev_txs.merge(signed);
+            prev_txs
+        } else {
+            signed
+        }
+    } else {
+        // In case we fail to parse unsigned txs, we will attempt to
+        // parse signed txs and append new signatures to the existing
+        // toml file
+        append_signature_to_signed_toml(&path, &mut wallet, use_device).await
+    };
     match output {
         Some(output_path) => {
-            let signed = if append {
-                let mut prev_txs =
-                    genesis::templates::read_transactions(&output_path)
-                        .unwrap_or_default();
-                prev_txs.merge(signed);
-                prev_txs
-            } else {
-                signed
-            };
             let transactions = toml::to_vec(&signed).unwrap();
             fs::write(&output_path, transactions).unwrap_or_else(|err| {
                 eprintln!(
@@ -1100,8 +1106,6 @@ pub async fn sign_genesis_tx(
         }
         None => {
             let transactions = toml::to_string(&signed).unwrap();
-            println!("Your public signed transactions TOML:");
-            println!();
             println!("{transactions}");
         }
     }
