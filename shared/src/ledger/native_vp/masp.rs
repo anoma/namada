@@ -19,8 +19,8 @@ use namada_core::types::address::{Address, MASP};
 use namada_core::types::storage::{Epoch, Key, KeySeg};
 use namada_core::types::token::{
     self, is_masp_anchor_key, is_masp_nullifier_key,
-    MASP_NOTE_COMMITMENT_ANCHOR_PREFIX, MASP_NOTE_COMMITMENT_TREE_KEY,
-    MASP_NULLIFIERS_KEY_PREFIX,
+    MASP_CONVERT_ANCHOR_PREFIX, MASP_NOTE_COMMITMENT_ANCHOR_PREFIX,
+    MASP_NOTE_COMMITMENT_TREE_KEY, MASP_NULLIFIERS_KEY_PREFIX,
 };
 use namada_sdk::masp::verify_shielded_tx;
 use ripemd::Digest as RipemdDigest;
@@ -263,6 +263,35 @@ where
 
         Ok(true)
     }
+
+    // Check that the convert descriptions anchors of a transaction are valid
+    fn valid_convert_descriptions_anchor(
+        &self,
+        transaction: &Transaction,
+    ) -> Result<bool> {
+        for description in transaction
+            .sapling_bundle()
+            .map_or(&vec![], |bundle| &bundle.shielded_converts)
+        {
+            let anchor_key = Key::from(MASP.to_db_key())
+                .push(&MASP_CONVERT_ANCHOR_PREFIX.to_owned())
+                .expect("Cannot obtain a storage key")
+                .push(&namada_core::types::hash::Hash(
+                    description.anchor.to_bytes(),
+                ))
+                .expect("Cannot obtain a storage key");
+
+            // Check if the provided anchor was published before
+            if !self.ctx.has_key_pre(&anchor_key)? {
+                tracing::debug!(
+                    "Convert description refers to an invalid anchor"
+                );
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
+    }
 }
 
 impl<'a, DB, H, CA> NativeVp for MaspVp<'a, DB, H, CA>
@@ -309,7 +338,8 @@ where
             // the containing wrapper transaction's fee
             // amount Satisfies 1.
             // 3. The spend descriptions' anchors are valid
-            // 4. The nullifiers provided by the transaction have not been
+            // 4. The convert descriptions's anchors are valid
+            // 5. The nullifiers provided by the transaction have not been
             // revealed previously (even in the same tx) and no unneeded
             // nullifier is being revealed by the tx
             if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
@@ -324,6 +354,7 @@ where
             }
 
             if !(self.valid_spend_descriptions_anchor(&shielded_tx)?
+                && self.valid_convert_descriptions_anchor(&shielded_tx)?
                 && self.valid_nullifiers_reveal(keys_changed, &shielded_tx)?)
             {
                 return Ok(false);
