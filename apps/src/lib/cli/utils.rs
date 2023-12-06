@@ -252,7 +252,10 @@ where
     pub fn parse(&self, matches: &ArgMatches) -> Vec<FromContext<T>> {
         matches
             .get_many(self.name)
-            .unwrap_or_default()
+            .unwrap_or_else(|| {
+                eprintln!("Missing at least one argument to `--{}`", self.name);
+                safe_exit(1)
+            })
             .map(|raw: &String| FromContext::new(raw.to_string()))
             .collect()
     }
@@ -304,7 +307,10 @@ where
     pub fn parse(&self, matches: &ArgMatches) -> Vec<T> {
         matches
             .get_many(self.name)
-            .unwrap_or_default()
+            .unwrap_or_else(|| {
+                eprintln!("Missing at least one argument to `--{}`", self.name);
+                safe_exit(1)
+            })
             .map(|raw: &String| {
                 raw.parse().unwrap_or_else(|e| {
                     eprintln!(
