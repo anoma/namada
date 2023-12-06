@@ -2958,7 +2958,7 @@ pub mod args {
     pub const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
     pub const ALIAS: Arg<String> = arg("alias");
     pub const ALIAS_FORCE: ArgFlag = flag("alias-force");
-    pub const ALIAS_MANY: ArgMulti<String> = arg_multi("alias");
+    pub const ALIAS_MANY: ArgMulti<String> = arg_multi("aliases");
     pub const ALLOW_DUPLICATE_IP: ArgFlag = flag("allow-duplicate-ip");
     pub const AMOUNT: Arg<token::DenominatedAmount> = arg("amount");
     pub const ARCHIVE_DIR: ArgOpt<PathBuf> = arg_opt("archive-dir");
@@ -6822,11 +6822,10 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(
-                ALIAS_MANY
-                    .def()
-                    .help("The aliases of the keys to use from the wallet."),
-            )
+            app.arg(ALIAS_MANY.def().help(
+                "Comma separated list of aliases of the keys to use from the \
+                 wallet.",
+            ))
             .arg(THRESOLD.def().help(
                 "The minimum number of signatures to be provided for \
                  authorization. Must be less than or equal to the maximum \

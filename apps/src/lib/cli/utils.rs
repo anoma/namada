@@ -297,7 +297,8 @@ where
     pub fn def(&self) -> ClapArg {
         ClapArg::new(self.name)
             .long(self.name)
-            .action(ArgAction::Append)
+            .num_args(1..)
+            .value_delimiter(',')
     }
 
     pub fn parse(&self, matches: &ArgMatches) -> Vec<T> {
