@@ -4,6 +4,8 @@ use std::rc::Rc;
 use std::str::FromStr;
 
 use criterion::{criterion_group, criterion_main, Criterion};
+use masp_primitives::sapling::Node;
+use masp_proofs::bls12_381;
 use namada::core::ledger::governance::storage::proposal::ProposalType;
 use namada::core::ledger::governance::storage::vote::{
     StorageProposalVote, VoteType,
@@ -40,14 +42,18 @@ use namada::ledger::native_vp::{Ctx, NativeVp};
 use namada::ledger::pgf::PgfVp;
 use namada::ledger::pos::PosVP;
 use namada::namada_sdk::masp::verify_shielded_tx;
+use namada::namada_sdk::masp_primitives::merkle_tree::CommitmentTree;
 use namada::namada_sdk::masp_primitives::transaction::Transaction;
 use namada::proof_of_stake;
 use namada::proof_of_stake::KeySeg;
 use namada::proto::{Code, Section, Tx};
-use namada::types::address::InternalAddress;
+use namada::types::address::{InternalAddress, MASP};
 use namada::types::eth_bridge_pool::{GasFee, PendingTransfer};
 use namada::types::masp::{TransferSource, TransferTarget};
 use namada::types::storage::{Epoch, TxIndex};
+use namada::types::token::{
+    MASP_NOTE_COMMITMENT_ANCHOR_PREFIX, MASP_NOTE_COMMITMENT_TREE_KEY,
+};
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
@@ -502,6 +508,30 @@ fn setup_storage_for_masp_verification(
     );
     shielded_ctx.shell.execute_tx(&shield_tx);
     shielded_ctx.shell.wl_storage.commit_tx();
+
+    // Update the anchor in storage
+    let tree_key = namada::core::types::storage::Key::from(MASP.to_db_key())
+        .push(&MASP_NOTE_COMMITMENT_TREE_KEY.to_owned())
+        .expect("Cannot obtain a storage key");
+    let updated_tree: CommitmentTree<Node> = shielded_ctx
+        .shell
+        .wl_storage
+        .read(&tree_key)
+        .unwrap()
+        .unwrap();
+    let anchor_key = namada::core::types::storage::Key::from(MASP.to_db_key())
+        .push(&MASP_NOTE_COMMITMENT_ANCHOR_PREFIX.to_owned())
+        .expect("Cannot obtain a storage key")
+        .push(&namada::core::types::hash::Hash(
+            bls12_381::Scalar::from(updated_tree.root()).to_bytes(),
+        ))
+        .expect("Cannot obtain a storage key");
+    shielded_ctx
+        .shell
+        .wl_storage
+        .write(&anchor_key, ())
+        .unwrap();
+
     shielded_ctx.shell.commit();
 
     let signed_tx = match bench_name {

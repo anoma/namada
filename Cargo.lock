@@ -3896,6 +3896,8 @@ dependencies = [
  "borsh",
  "borsh-ext",
  "criterion",
+ "masp_primitives",
+ "masp_proofs",
  "namada",
  "namada_apps",
  "rand 0.8.5",
