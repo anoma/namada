@@ -4,8 +4,8 @@
 pub use dev::{
     addresses, albert_address, albert_keypair, bertha_address, bertha_keypair,
     christel_address, christel_keypair, daewon_address, daewon_keypair,
-    ester_address, ester_keypair, keys, tokens, validator_address,
-    validator_keypair, validator_keys,
+    ester_address, ester_keypair, keys, tokens, validator_account_keypair,
+    validator_address, validator_keypair, validator_keys,
 };
 
 #[cfg(any(test, feature = "testing", feature = "benches"))]
@@ -174,6 +174,11 @@ mod dev {
     /// Get the validator consensus keypair from the wallet.
     pub fn validator_keypair() -> common::SecretKey {
         VALIDATOR_WALLET.consensus_key.clone()
+    }
+
+    /// Get the validator account keypair from the wallet.
+    pub fn validator_account_keypair() -> common::SecretKey {
+        get_unencrypted_keypair("validator-0-account-key")
     }
 
     /// The name of a file that is unique to the project's root directory.
