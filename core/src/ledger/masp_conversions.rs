@@ -16,7 +16,7 @@ use crate::ledger::storage_api::token::read_denom;
 use crate::ledger::storage_api::{StorageRead, StorageWrite};
 use crate::types::address::{Address, MASP};
 use crate::types::dec::Dec;
-use crate::types::storage::Epoch;
+use crate::types::storage::{Epoch, Key, KeySeg};
 use crate::types::token;
 use crate::types::token::MaspDenom;
 use crate::types::uint::Uint;
@@ -211,6 +211,7 @@ where
     use rayon::prelude::ParallelSlice;
 
     use crate::types::address;
+    use crate::types::token::MASP_CONVERT_ANCHOR_PREFIX;
 
     // The derived conversions will be placed in MASP address space
     let masp_addr = MASP;
@@ -454,6 +455,18 @@ where
     // obtained
     wl_storage.storage.conversion_state.tree =
         FrozenCommitmentTree::merge(&tree_parts);
+    // Publish the new anchor in storage
+    let anchor_key = Key::from(MASP.to_db_key())
+        .push(&MASP_CONVERT_ANCHOR_PREFIX.to_owned())
+        .expect("Cannot obtain a storage key")
+        .push(&crate::types::hash::Hash(
+            masp_primitives::bls12_381::Scalar::from(
+                wl_storage.storage.conversion_state.tree.root(),
+            )
+            .to_bytes(),
+        ))
+        .expect("Cannot obtain a storage key");
+    wl_storage.write(&anchor_key, ())?;
 
     // Add purely decoding entries to the assets map. These will be
     // overwritten before the creation of the next commitment tree
