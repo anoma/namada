@@ -2958,7 +2958,7 @@ pub mod args {
     pub const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
     pub const ALIAS: Arg<String> = arg("alias");
     pub const ALIAS_FORCE: ArgFlag = flag("alias-force");
-    pub const ALIAS_MANY: ArgMulti<String> = arg_multi("aliases");
+    pub const ALIAS_MANY: ArgMulti<String, GlobPlus> = arg_multi("aliases");
     pub const ALLOW_DUPLICATE_IP: ArgFlag = flag("allow-duplicate-ip");
     pub const AMOUNT: Arg<token::DenominatedAmount> = arg("amount");
     pub const ARCHIVE_DIR: ArgOpt<PathBuf> = arg_opt("archive-dir");
@@ -3106,7 +3106,8 @@ pub mod args {
     pub const PROTOCOL_KEY: ArgOpt<WalletPublicKey> = arg_opt("protocol-key");
     pub const PRE_GENESIS_PATH: ArgOpt<PathBuf> = arg_opt("pre-genesis-path");
     pub const PUBLIC_KEY: Arg<WalletPublicKey> = arg("public-key");
-    pub const PUBLIC_KEYS: ArgMulti<WalletPublicKey> = arg_multi("public-keys");
+    pub const PUBLIC_KEYS: ArgMulti<WalletPublicKey, GlobStar> =
+        arg_multi("public-keys");
     pub const PROPOSAL_ID: Arg<u64> = arg("proposal-id");
     pub const PROPOSAL_ID_OPT: ArgOpt<u64> = arg_opt("proposal-id");
     pub const PROPOSAL_VOTE_PGF_OPT: ArgOpt<String> = arg_opt("pgf");
@@ -3129,8 +3130,9 @@ pub mod args {
     pub const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
     pub const SIGNING_KEY_OPT: ArgOpt<WalletKeypair> = SIGNING_KEY.opt();
     pub const SIGNING_KEY: Arg<WalletKeypair> = arg("signing-key");
-    pub const SIGNING_KEYS: ArgMulti<WalletKeypair> = arg_multi("signing-keys");
-    pub const SIGNATURES: ArgMulti<PathBuf> = arg_multi("signatures");
+    pub const SIGNING_KEYS: ArgMulti<WalletKeypair, GlobStar> =
+        arg_multi("signing-keys");
+    pub const SIGNATURES: ArgMulti<PathBuf, GlobStar> = arg_multi("signatures");
     pub const SOURCE: Arg<WalletAddress> = arg("source");
     pub const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
     pub const STEWARD: Arg<WalletAddress> = arg("steward");
@@ -3154,7 +3156,7 @@ pub mod args {
     pub const VALIDATOR_OPT: ArgOpt<WalletAddress> = VALIDATOR.opt();
     pub const VALIDATOR_ACCOUNT_KEY: ArgOpt<WalletPublicKey> =
         arg_opt("account-key");
-    pub const VALIDATOR_ACCOUNT_KEYS: ArgMulti<WalletPublicKey> =
+    pub const VALIDATOR_ACCOUNT_KEYS: ArgMulti<WalletPublicKey, GlobStar> =
         arg_multi("account-keys");
     pub const VALIDATOR_CONSENSUS_KEY: ArgOpt<WalletKeypair> =
         arg_opt("consensus-key");
