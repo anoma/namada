@@ -96,13 +96,16 @@ impl Context {
     pub fn new<IO: Io>(global_args: args::Global) -> Result<Self> {
         let global_config = read_or_try_new_global_config(&global_args);
 
-        let chain_id = std::env::var(ENV_VAR_CHAIN_ID)
+        let env_var_chain_id = std::env::var(ENV_VAR_CHAIN_ID)
             .ok()
             .and_then(|chain_id| ChainId::from_str(&chain_id).ok());
-        let chain_id = chain_id.as_ref().or(global_args.chain_id.as_ref());
+        let chain_id = env_var_chain_id
+            .as_ref()
+            .or(global_args.chain_id.as_ref())
+            .or(global_config.default_chain_id.as_ref());
 
         let chain = match chain_id {
-            Some(chain_id) => {
+            Some(chain_id) if !global_args.is_pre_genesis => {
                 let mut config =
                     Config::load(&global_args.base_dir, chain_id, None);
                 let chain_dir = global_args.base_dir.join(chain_id.as_str());
@@ -138,7 +141,7 @@ impl Context {
                     native_token,
                 })
             }
-            None => None,
+            _ => None,
         };
 
         Ok(Self {

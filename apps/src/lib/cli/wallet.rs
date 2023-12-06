@@ -77,9 +77,7 @@ impl CliApi {
                 cmds::WalletAddress::Find(cmds::AddressOrAliasFind(args)) => {
                     address_or_alias_find(ctx, io, args)
                 }
-                cmds::WalletAddress::List(cmds::AddressList(args)) => {
-                    address_list(ctx, io, args)
-                }
+                cmds::WalletAddress::List => address_list(ctx, io),
                 cmds::WalletAddress::Add(cmds::AddressAdd(args)) => {
                     address_add(ctx, io, args)
                 }
@@ -99,9 +97,9 @@ impl CliApi {
                 cmds::WalletMasp::AddAddrKey(cmds::MaspAddAddrKey(args)) => {
                     address_key_add(ctx, io, args)
                 }
-                cmds::WalletMasp::ListPayAddrs(cmds::MaspListPayAddrs(
-                    args,
-                )) => payment_addresses_list(ctx, io, args),
+                cmds::WalletMasp::ListPayAddrs => {
+                    payment_addresses_list(ctx, io)
+                }
                 cmds::WalletMasp::ListKeys(cmds::MaspListKeys(args)) => {
                     spending_keys_list(ctx, io, args)
                 }
@@ -121,10 +119,9 @@ fn address_key_find(
     args::AddrKeyFind {
         alias,
         unsafe_show_secret,
-        is_pre_genesis,
     }: args::AddrKeyFind,
 ) {
-    let mut wallet = load_wallet(ctx, is_pre_genesis);
+    let mut wallet = load_wallet(ctx);
     let alias = alias.to_lowercase();
     if let Ok(viewing_key) = wallet.find_viewing_key(&alias) {
         // Check if alias is a viewing key
@@ -160,11 +157,10 @@ fn spending_keys_list(
     io: &impl Io,
     args::MaspKeysList {
         decrypt,
-        is_pre_genesis,
         unsafe_show_secret,
     }: args::MaspKeysList,
 ) {
-    let wallet = load_wallet(ctx, is_pre_genesis);
+    let wallet = load_wallet(ctx);
     let known_view_keys = wallet.get_viewing_keys();
     let known_spend_keys = wallet.get_spending_keys();
     if known_view_keys.is_empty() {
@@ -232,12 +228,8 @@ fn spending_keys_list(
 }
 
 /// List payment addresses.
-fn payment_addresses_list(
-    ctx: Context,
-    io: &impl Io,
-    args::MaspListPayAddrs { is_pre_genesis }: args::MaspListPayAddrs,
-) {
-    let wallet = load_wallet(ctx, is_pre_genesis);
+fn payment_addresses_list(ctx: Context, io: &impl Io) {
+    let wallet = load_wallet(ctx);
     let known_addresses = wallet.get_payment_addrs();
     if known_addresses.is_empty() {
         display_line!(
@@ -262,11 +254,10 @@ fn spending_key_gen(
     args::MaspSpendKeyGen {
         alias,
         alias_force,
-        is_pre_genesis,
         unsafe_dont_encrypt,
     }: args::MaspSpendKeyGen,
 ) {
-    let mut wallet = load_wallet(ctx, is_pre_genesis);
+    let mut wallet = load_wallet(ctx);
     let alias = alias.to_lowercase();
     let password = read_and_confirm_encryption_password(unsafe_dont_encrypt);
     let (alias, _key) =
@@ -323,12 +314,11 @@ fn address_key_add(
         alias,
         alias_force,
         value,
-        is_pre_genesis,
         unsafe_dont_encrypt,
     }: args::MaspAddrKeyAdd,
 ) {
     let alias = alias.to_lowercase();
-    let mut wallet = load_wallet(ctx, is_pre_genesis);
+    let mut wallet = load_wallet(ctx);
     let (alias, typ) = match value {
         MaspValue::FullViewingKey(viewing_key) => {
             let alias = wallet
@@ -495,12 +485,11 @@ fn key_and_address_gen(
         scheme,
         alias,
         alias_force,
-        is_pre_genesis,
         unsafe_dont_encrypt,
         derivation_path,
     }: args::KeyAndAddressGen,
 ) {
-    let mut wallet = load_wallet(ctx, is_pre_genesis);
+    let mut wallet = load_wallet(ctx);
     let encryption_password =
         read_and_confirm_encryption_password(unsafe_dont_encrypt);
     let derivation_path = decode_derivation_path(scheme, derivation_path)
@@ -551,11 +540,10 @@ fn key_find(
         public_key,
         alias,
         value,
-        is_pre_genesis,
         unsafe_show_secret,
     }: args::KeyFind,
 ) {
-    let mut wallet = load_wallet(ctx, is_pre_genesis);
+    let mut wallet = load_wallet(ctx);
     let found_keypair = match public_key {
         Some(pk) => wallet.find_key_by_pk(&pk, None),
         None => {
@@ -596,11 +584,10 @@ fn key_list(
     io: &impl Io,
     args::KeyList {
         decrypt,
-        is_pre_genesis,
         unsafe_show_secret,
     }: args::KeyList,
 ) {
-    let wallet = load_wallet(ctx, is_pre_genesis);
+    let wallet = load_wallet(ctx);
     let known_public_keys = wallet.get_public_keys();
     if known_public_keys.is_empty() {
         display_line!(
@@ -663,12 +650,9 @@ fn key_list(
 fn key_export(
     ctx: Context,
     io: &impl Io,
-    args::KeyExport {
-        alias,
-        is_pre_genesis,
-    }: args::KeyExport,
+    args::KeyExport { alias }: args::KeyExport,
 ) {
-    let mut wallet = load_wallet(ctx, is_pre_genesis);
+    let mut wallet = load_wallet(ctx);
     wallet
         .find_secret_key(alias.to_lowercase(), None)
         .map(|keypair| {
@@ -686,12 +670,8 @@ fn key_export(
 }
 
 /// List all known addresses.
-fn address_list(
-    ctx: Context,
-    io: &impl Io,
-    args::AddressList { is_pre_genesis }: args::AddressList,
-) {
-    let wallet = load_wallet(ctx, is_pre_genesis);
+fn address_list(ctx: Context, io: &impl Io) {
+    let wallet = load_wallet(ctx);
     let known_addresses = wallet.get_addresses();
     if known_addresses.is_empty() {
         display_line!(
@@ -717,13 +697,9 @@ fn address_list(
 fn address_or_alias_find(
     ctx: Context,
     io: &impl Io,
-    args::AddressOrAliasFind {
-        alias,
-        address,
-        is_pre_genesis,
-    }: args::AddressOrAliasFind,
+    args::AddressOrAliasFind { alias, address }: args::AddressOrAliasFind,
 ) {
-    let wallet = load_wallet(ctx, is_pre_genesis);
+    let wallet = load_wallet(ctx);
     if address.is_some() && alias.is_some() {
         panic!(
             "This should not be happening: clap should emit its own error \
@@ -762,10 +738,9 @@ fn address_add(
         alias,
         alias_force,
         address,
-        is_pre_genesis,
     }: args::AddressAdd,
 ) {
-    let mut wallet = load_wallet(ctx, is_pre_genesis);
+    let mut wallet = load_wallet(ctx);
     if wallet
         .insert_address(alias.to_lowercase(), address, alias_force)
         .is_none()
@@ -784,9 +759,9 @@ fn address_add(
 }
 
 /// Load wallet for chain when `ctx.chain.is_some()` or pre-genesis wallet when
-/// `is_pre_genesis || ctx.chain.is_none()`.
-fn load_wallet(ctx: Context, is_pre_genesis: bool) -> Wallet<CliWalletUtils> {
-    if is_pre_genesis || ctx.chain.is_none() {
+/// `ctx.global_args.is_pre_genesis || ctx.chain.is_none()`.
+fn load_wallet(ctx: Context) -> Wallet<CliWalletUtils> {
+    if ctx.global_args.is_pre_genesis || ctx.chain.is_none() {
         let wallet_path = ctx.global_args.base_dir.join(PRE_GENESIS_DIR);
         wallet::load_or_new(&wallet_path)
     } else {
