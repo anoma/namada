@@ -24,10 +24,10 @@ use namada_proof_of_stake::{
     read_consensus_validator_set_addresses_with_stake, read_pos_params,
     read_total_stake, read_validator_description,
     read_validator_discord_handle, read_validator_email,
-    read_validator_max_commission_rate_change, read_validator_stake,
-    read_validator_website, unbond_handle, validator_commission_rate_handle,
-    validator_incoming_redelegations_handle, validator_slashes_handle,
-    validator_state_handle,
+    read_validator_last_slash_epoch, read_validator_max_commission_rate_change,
+    read_validator_stake, read_validator_website, unbond_handle,
+    validator_commission_rate_handle, validator_incoming_redelegations_handle,
+    validator_slashes_handle, validator_state_handle,
 };
 
 use crate::queries::types::RequestCtx;
@@ -57,6 +57,9 @@ router! {POS,
 
         ( "incoming_redelegation" / [src_validator: Address] / [delegator: Address] )
             -> Option<Epoch> = validator_incoming_redelegation,
+
+        ( "last_infraction_epoch" / [validator: Address] )
+            -> Option<Epoch> = validator_last_infraction_epoch,
     },
 
     ( "validator_set" ) = {
@@ -289,6 +292,18 @@ where
         &params,
     )?;
     Ok(state)
+}
+
+/// Get the validator state
+fn validator_last_infraction_epoch<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+    validator: Address,
+) -> storage_api::Result<Option<Epoch>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    read_validator_last_slash_epoch(ctx.wl_storage, &validator)
 }
 
 /// Get the total stake of a validator at the given epoch or current when
