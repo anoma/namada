@@ -25,9 +25,7 @@ pub use wl_storage::{
 };
 
 use super::gas::MEMORY_ACCESS_GAS_PER_BYTE;
-use crate::ledger::eth_bridge::storage::bridge_pool::{
-    self, is_pending_transfer_key,
-};
+use crate::ledger::eth_bridge::storage::bridge_pool::is_pending_transfer_key;
 use crate::ledger::gas::{
     STORAGE_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE,
 };
@@ -359,6 +357,13 @@ pub trait DB: std::fmt::Debug {
         store_type: &StoreType,
         pruned_epoch: Epoch,
     ) -> Result<()>;
+
+    /// Read the signed nonce of Bridge Pool
+    fn read_bridge_pool_signed_nonce(
+        &self,
+        height: BlockHeight,
+        last_height: BlockHeight,
+    ) -> Result<Uint>;
 
     /// Write a replay protection entry
     fn write_replay_protection_entry(
@@ -1209,11 +1214,10 @@ where
 
     /// Get oldest epoch which has the valid signed nonce of the bridge pool
     pub fn get_oldest_epoch_with_valid_nonce(&self) -> Result<Epoch> {
-        let nonce_key = bridge_pool::get_nonce_key();
-        let (bytes, _) = self.read(&nonce_key)?;
-        let bytes = bytes.expect("Bridge pool nonce should exits");
-        let current_nonce =
-            Uint::try_from_slice(&bytes).map_err(Error::BorshCodingError)?;
+        let last_height = self.get_last_block_height();
+        let current_nonce = self
+            .db
+            .read_bridge_pool_signed_nonce(last_height, last_height)?;
         let (mut epoch, _) = self.get_last_epoch();
         // We don't need to check the older epochs because their Merkle tree
         // snapshots have been already removed
@@ -1228,10 +1232,8 @@ where
                     Some(h) => h,
                     None => continue,
                 };
-            let (bytes, _) = self.read_with_height(&nonce_key, height)?;
-            let bytes = bytes.expect("Bridge pool nonce should exits");
-            let nonce = Uint::try_from_slice(&bytes)
-                .map_err(Error::BorshCodingError)?;
+            let nonce =
+                self.db.read_bridge_pool_signed_nonce(height, last_height)?;
             if nonce < current_nonce {
                 break;
             }

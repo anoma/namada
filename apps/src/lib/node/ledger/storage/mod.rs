@@ -55,6 +55,7 @@ mod tests {
 
     use itertools::Itertools;
     use namada::core::ledger::masp_conversions::update_allowed_conversions;
+    use namada::eth_bridge::storage::proof::BridgePoolRootProof;
     use namada::ledger::eth_bridge::storage::bridge_pool;
     use namada::ledger::gas::STORAGE_ACCESS_GAS_PER_BYTE;
     use namada::ledger::ibc::storage::ibc_key;
@@ -65,6 +66,7 @@ mod tests {
     use namada::types::chain::ChainId;
     use namada::types::ethereum_events::Uint;
     use namada::types::hash::Hash;
+    use namada::types::keccak::KeccakHash;
     use namada::types::storage::{BlockHash, BlockHeight, Key};
     use namada::types::time::DurationSecs;
     use namada::types::{address, storage, token};
@@ -489,8 +491,10 @@ mod tests {
             let value_bytes = types::encode(&storage.block.height);
             storage.write(&key, value_bytes)?;
         }
-        let key = bridge_pool::get_nonce_key();
-        let bytes = types::encode(&Uint::default());
+        let key = bridge_pool::get_signed_root_key();
+        let root_proof =
+            BridgePoolRootProof::new((KeccakHash::default(), Uint::default()));
+        let bytes = types::encode(&root_proof);
         storage.write(&key, bytes)?;
 
         // Update and commit
@@ -586,10 +590,12 @@ mod tests {
             None,
             Some(5),
         );
-        let bp_nonce_key = bridge_pool::get_nonce_key();
+        let signed_root_key = bridge_pool::get_signed_root_key();
         let nonce = Uint::default();
-        let bytes = types::encode(&nonce);
-        storage.write(&bp_nonce_key, bytes).unwrap();
+        let root_proof =
+            BridgePoolRootProof::new((KeccakHash::default(), nonce));
+        let bytes = types::encode(&root_proof);
+        storage.write(&signed_root_key, bytes).unwrap();
 
         storage
             .begin_block(BlockHash::default(), BlockHeight(1))
@@ -617,8 +623,10 @@ mod tests {
             .expect("write failed");
 
         let nonce = nonce + 1;
-        let bytes = types::encode(&nonce);
-        storage.write(&bp_nonce_key, bytes).unwrap();
+        let root_proof =
+            BridgePoolRootProof::new((KeccakHash::default(), nonce));
+        let bytes = types::encode(&root_proof);
+        storage.write(&signed_root_key, bytes).unwrap();
 
         storage.block.epoch = storage.block.epoch.next();
         storage.block.pred_epochs.new_epoch(BlockHeight(6));
@@ -633,8 +641,10 @@ mod tests {
             .expect("begin_block failed");
 
         let nonce = nonce + 1;
-        let bytes = types::encode(&nonce);
-        storage.write(&bp_nonce_key, bytes).unwrap();
+        let root_proof =
+            BridgePoolRootProof::new((KeccakHash::default(), nonce));
+        let bytes = types::encode(&root_proof);
+        storage.write(&signed_root_key, bytes).unwrap();
 
         storage.block.epoch = storage.block.epoch.next();
         storage.block.pred_epochs.new_epoch(BlockHeight(11));
@@ -659,8 +669,10 @@ mod tests {
             .expect("begin_block failed");
 
         let nonce = nonce + 1;
-        let bytes = types::encode(&nonce);
-        storage.write(&bp_nonce_key, bytes).unwrap();
+        let root_proof =
+            BridgePoolRootProof::new((KeccakHash::default(), nonce));
+        let bytes = types::encode(&root_proof);
+        storage.write(&signed_root_key, bytes).unwrap();
         storage.block.epoch = storage.block.epoch.next();
         storage.block.pred_epochs.new_epoch(BlockHeight(12));
         let batch = PersistentStorage::batch();
