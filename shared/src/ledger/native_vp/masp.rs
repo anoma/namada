@@ -331,7 +331,7 @@ where
         }
 
         // The transaction must correctly update the note commitment tree
-        // and the anchor in storage with the new output descriptions
+        // in storage with the new output descriptions
         if !self.valid_note_commitment_update(keys_changed, &shielded_tx)? {
             return Ok(false);
         }
