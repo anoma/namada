@@ -248,7 +248,7 @@ fn validate_pos_changes(
                     }
                     (None, Some(_post)) => {
                         // Becoming a validator must be authorized
-                        **valid_sig
+                        address == owner && **valid_sig
                     }
                     (Some(_pre), None) => {
                         // Clearing of old epoched data
@@ -271,6 +271,10 @@ fn validate_pos_changes(
     let is_valid_reward_claim = || {
         if let Some(bond_id) = storage::is_last_pos_reward_claim_epoch_key(key)
         {
+            // Claims for this address must be signed
+            return &bond_id.source != owner || **valid_sig;
+        }
+        if let Some(bond_id) = storage::is_rewards_counter_key(key) {
             // Claims for this address must be signed
             return &bond_id.source != owner || **valid_sig;
         }
