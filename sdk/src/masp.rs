@@ -146,6 +146,7 @@ fn load_pvks() -> (
     let [spend_path, convert_path, output_path] =
         [SPEND_NAME, CONVERT_NAME, OUTPUT_NAME].map(|p| params_dir.join(p));
 
+    #[cfg(feature = "download-params")]
     if !spend_path.exists() || !convert_path.exists() || !output_path.exists() {
         let paths = masp_proofs::download_masp_parameters(None).expect(
             "MASP parameters were not present, expected the download to \
