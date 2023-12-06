@@ -227,14 +227,14 @@ pub fn init_established_account(
     vp: String,
     public_keys: Vec<StringEncoded<common::PublicKey>>,
     threshold: u8,
-) -> (Address, Transactions<Unvalidated>) {
+) -> (Address, UnsignedTransactions) {
     let unsigned_tx = EstablishedAccountTx {
         vp,
         threshold,
         public_keys,
     };
     let address = unsigned_tx.derive_address();
-    let txs = Transactions {
+    let txs = UnsignedTransactions {
         established_account: Some(vec![unsigned_tx]),
         ..Default::default()
     };
