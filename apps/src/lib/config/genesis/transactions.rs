@@ -1250,6 +1250,19 @@ pub fn validate_established_account(
         );
         is_valid = false;
     }
+    {
+        // check for duped pubkeys
+        let mut used_keys = HashSet::new();
+        for key in tx.public_keys.iter() {
+            if !used_keys.insert(key) {
+                eprintln!(
+                    "The same public key has been used twice in an \
+                     established account tx: {key}"
+                );
+                is_valid = false;
+            }
+        }
+    }
     established_accounts.insert(
         established_address.clone(),
         (
