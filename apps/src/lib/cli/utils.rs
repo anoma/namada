@@ -28,11 +28,11 @@ const RELAYER_KEY_ENV_VAR: &str = "NAMADA_RELAYER_KEY";
 pub type App = clap::Command;
 pub type ClapArg = clap::Arg;
 
-/// Mode of operation og [`ArgMulti`] where zero or
+/// Mode of operation of [`ArgMulti`] where zero or
 /// more arguments may be present (i.e. `<pattern>*`).
 pub enum GlobStar {}
 
-/// Mode of operation og [`ArgMulti`] where at least
+/// Mode of operation of [`ArgMulti`] where at least
 /// one argument must be present (i.e. `<pattern>+`).
 pub enum GlobPlus {}
 

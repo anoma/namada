@@ -169,7 +169,7 @@ pub async fn sign<'a, N: Namada<'a>>(
         let app = NamadaApp::new(TransportNativeHID::new(&hidapi).map_err(
             |err| {
                 error::Error::Other(format!(
-                    "Unble to connect to Ledger: {}",
+                    "Unable to connect to Ledger: {}",
                     err
                 ))
             },
