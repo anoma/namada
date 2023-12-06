@@ -6199,15 +6199,14 @@ pub mod args {
                         safe_exit(1)
                     })
             };
-            let viewing_key =
-                if ctx.global_args.is_pre_genesis || ctx.chain.is_none() {
-                    let wallet_path =
-                        ctx.global_args.base_dir.join(PRE_GENESIS_DIR);
-                    let mut wallet = crate::wallet::load_or_new(&wallet_path);
-                    find_viewing_key(&mut wallet)
-                } else {
-                    find_viewing_key(&mut ctx.borrow_mut_chain_or_exit().wallet)
-                };
+            let viewing_key = if ctx.global_args.is_pre_genesis {
+                let wallet_path =
+                    ctx.global_args.base_dir.join(PRE_GENESIS_DIR);
+                let mut wallet = crate::wallet::load_or_new(&wallet_path);
+                find_viewing_key(&mut wallet)
+            } else {
+                find_viewing_key(&mut ctx.borrow_mut_chain_or_exit().wallet)
+            };
             MaspPayAddrGen::<SdkTypes> {
                 alias: self.alias,
                 alias_force: self.alias_force,

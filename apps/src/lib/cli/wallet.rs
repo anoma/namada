@@ -746,9 +746,9 @@ fn address_add(
 }
 
 /// Load wallet for chain when `ctx.chain.is_some()` or pre-genesis wallet when
-/// `ctx.global_args.is_pre_genesis || ctx.chain.is_none()`.
+/// `ctx.global_args.is_pre_genesis`.
 fn load_wallet(ctx: Context) -> Wallet<CliWalletUtils> {
-    if ctx.global_args.is_pre_genesis || ctx.chain.is_none() {
+    if ctx.global_args.is_pre_genesis {
         let wallet_path = ctx.global_args.base_dir.join(PRE_GENESIS_DIR);
         wallet::load_or_new(&wallet_path)
     } else {
