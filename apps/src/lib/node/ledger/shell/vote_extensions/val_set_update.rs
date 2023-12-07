@@ -258,11 +258,12 @@ mod test_vote_extensions {
         NestedSubKey, SubKey,
     };
     use namada::ledger::pos::PosQueries;
-    use namada::proof_of_stake::types::WeightedValidator;
-    use namada::proof_of_stake::{
+    use namada::proof_of_stake::storage::{
         consensus_validator_set_handle,
-        read_consensus_validator_set_addresses_with_stake, Epoch,
+        read_consensus_validator_set_addresses_with_stake,
     };
+    use namada::proof_of_stake::types::WeightedValidator;
+    use namada::proof_of_stake::Epoch;
     use namada::tendermint::abci::types::VoteInfo;
     use namada::types::key::RefTo;
     use namada::types::vote_extensions::validator_set_update;

@@ -7,11 +7,11 @@ use namada_core::ledger::storage_api::governance;
 pub use namada_proof_of_stake;
 pub use namada_proof_of_stake::parameters::PosParams;
 // use namada_proof_of_stake::validation::validate;
-use namada_proof_of_stake::read_pos_params;
+use namada_proof_of_stake::storage::read_pos_params;
+use namada_proof_of_stake::storage_key::is_params_key;
 pub use namada_proof_of_stake::types;
 use thiserror::Error;
 
-use super::is_params_key;
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 // use crate::ledger::pos::{
 //     is_validator_address_raw_hash_key,

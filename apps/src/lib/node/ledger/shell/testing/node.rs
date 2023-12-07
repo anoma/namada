@@ -20,11 +20,11 @@ use namada::ledger::storage::{
     LastBlock, Sha256Hasher, EPOCH_SWITCH_BLOCKS_DELAY,
 };
 use namada::proof_of_stake::pos_queries::PosQueries;
-use namada::proof_of_stake::types::WeightedValidator;
-use namada::proof_of_stake::{
+use namada::proof_of_stake::storage::{
     read_consensus_validator_set_addresses_with_stake,
     validator_consensus_key_handle,
 };
+use namada::proof_of_stake::types::WeightedValidator;
 use namada::tendermint::abci::response::Info;
 use namada::tendermint::abci::types::VoteInfo;
 use namada::tendermint_rpc::SimpleRequest;

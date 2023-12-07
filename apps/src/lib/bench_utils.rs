@@ -217,7 +217,8 @@ impl Default for BenchShell {
             source: Some(defaults::albert_address()),
         };
         let params =
-            proof_of_stake::read_pos_params(&shell.wl_storage).unwrap();
+            proof_of_stake::storage::read_pos_params(&shell.wl_storage)
+                .unwrap();
         let mut bench_shell = BenchShell {
             inner: shell,
             tempdir,
@@ -398,13 +399,14 @@ impl BenchShell {
 
     pub fn advance_epoch(&mut self) {
         let params =
-            proof_of_stake::read_pos_params(&self.inner.wl_storage).unwrap();
+            proof_of_stake::storage::read_pos_params(&self.inner.wl_storage)
+                .unwrap();
 
         self.wl_storage.storage.block.epoch =
             self.wl_storage.storage.block.epoch.next();
         let current_epoch = self.wl_storage.storage.block.epoch;
 
-        proof_of_stake::copy_validator_sets_and_positions(
+        proof_of_stake::validator_set_update::copy_validator_sets_and_positions(
             &mut self.wl_storage,
             &params,
             current_epoch,

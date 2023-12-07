@@ -5,7 +5,7 @@ use namada::core::ledger::gas::TxGasMeter;
 use namada::ledger::pos::PosQueries;
 use namada::ledger::protocol::get_fee_unshielding_transaction;
 use namada::ledger::storage::{DBIter, StorageHasher, TempWlStorage, DB};
-use namada::proof_of_stake::find_validator_by_raw_hash;
+use namada::proof_of_stake::storage::find_validator_by_raw_hash;
 use namada::proto::Tx;
 use namada::types::address::Address;
 use namada::types::internal::TxInQueue;
@@ -382,11 +382,12 @@ mod test_prepare_proposal {
     use namada::ledger::gas::Gas;
     use namada::ledger::pos::PosQueries;
     use namada::ledger::replay_protection;
-    use namada::proof_of_stake::types::WeightedValidator;
-    use namada::proof_of_stake::{
+    use namada::proof_of_stake::storage::{
         consensus_validator_set_handle,
-        read_consensus_validator_set_addresses_with_stake, Epoch,
+        read_consensus_validator_set_addresses_with_stake,
     };
+    use namada::proof_of_stake::types::WeightedValidator;
+    use namada::proof_of_stake::Epoch;
     use namada::proto::{Code, Data, Header, Section, Signature, Signed};
     use namada::types::address::{self, Address};
     use namada::types::ethereum_events::EthereumEvent;

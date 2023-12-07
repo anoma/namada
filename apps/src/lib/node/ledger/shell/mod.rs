@@ -51,7 +51,9 @@ use namada::ledger::storage::{
 use namada::ledger::storage_api::tx::validate_tx_bytes;
 use namada::ledger::storage_api::{self, StorageRead};
 use namada::ledger::{parameters, pos, protocol};
-use namada::proof_of_stake::{self, process_slashes, read_pos_params, slash};
+use namada::proof_of_stake::slashing::{process_slashes, slash};
+use namada::proof_of_stake::storage::read_pos_params;
+use namada::proof_of_stake::{self};
 use namada::proto::{self, Section, Tx};
 use namada::types::address::Address;
 use namada::types::chain::ChainId;
@@ -749,7 +751,7 @@ where
                 let validator_raw_hash =
                     tm_raw_hash_to_string(evidence.validator.address);
                 let validator =
-                    match proof_of_stake::find_validator_by_raw_hash(
+                    match proof_of_stake::storage::find_validator_by_raw_hash(
                         &self.wl_storage,
                         &validator_raw_hash,
                     )
@@ -1536,13 +1538,13 @@ where
 
         let (current_epoch, _gas) = self.wl_storage.storage.get_current_epoch();
         let pos_params =
-            namada_proof_of_stake::read_pos_params(&self.wl_storage)
+            namada_proof_of_stake::storage::read_pos_params(&self.wl_storage)
                 .expect("Could not find the PoS parameters");
 
         let validator_set_update_fn = if is_genesis {
             namada_proof_of_stake::genesis_validator_set_tendermint
         } else {
-            namada_proof_of_stake::validator_set_update_tendermint
+            namada_proof_of_stake::validator_set_update::validator_set_update_tendermint
         };
 
         validator_set_update_fn(
@@ -1589,7 +1591,7 @@ mod test_utils {
     use namada::ledger::storage::{LastBlock, Sha256Hasher};
     use namada::ledger::storage_api::StorageWrite;
     use namada::proof_of_stake::parameters::PosParams;
-    use namada::proof_of_stake::validator_consensus_key_handle;
+    use namada::proof_of_stake::storage::validator_consensus_key_handle;
     use namada::proto::{Code, Data};
     use namada::tendermint::abci::types::VoteInfo;
     use namada::types::address;

@@ -25,8 +25,9 @@ use namada::ibc::core::host::types::identifiers::{
 };
 use namada::ledger::eth_bridge::read_native_erc20_address;
 use namada::ledger::storage_api::{StorageRead, StorageWrite};
+use namada::proof_of_stake::storage::read_pos_params;
 use namada::proof_of_stake::types::SlashType;
-use namada::proof_of_stake::{self, read_pos_params, KeySeg};
+use namada::proof_of_stake::{self, KeySeg};
 use namada::proto::{Code, Section};
 use namada::types::address::{self, Address};
 use namada::types::eth_bridge_pool::{GasFee, PendingTransfer};
@@ -285,9 +286,10 @@ fn withdraw(c: &mut Criterion) {
                     shell.wl_storage.commit_tx();
 
                     // Advance Epoch for pipeline and unbonding length
-                    let params =
-                        proof_of_stake::read_pos_params(&shell.wl_storage)
-                            .unwrap();
+                    let params = proof_of_stake::storage::read_pos_params(
+                        &shell.wl_storage,
+                    )
+                    .unwrap();
                     let advance_epochs =
                         params.pipeline_len + params.unbonding_len;
 
@@ -330,7 +332,7 @@ fn redelegate(c: &mut Criterion) {
                 let shell = BenchShell::default();
                 // Find the other genesis validator
                 let current_epoch = shell.wl_storage.get_block_epoch().unwrap();
-                let validators = namada::proof_of_stake::read_consensus_validator_set_addresses(&shell.inner.wl_storage, current_epoch).unwrap();
+                let validators = namada::proof_of_stake::storage::read_consensus_validator_set_addresses(&shell.inner.wl_storage, current_epoch).unwrap();
                 let validator_2 = validators.into_iter().find(|addr| addr != &defaults::validator_address()).expect("There must be another validator to redelegate to");
                 // Prepare the redelegation tx
                 (shell, redelegation(validator_2))
@@ -835,7 +837,7 @@ fn unjail_validator(c: &mut Criterion) {
                 let pos_params = read_pos_params(&shell.wl_storage).unwrap();
                 let current_epoch = shell.wl_storage.storage.block.epoch;
                 let evidence_epoch = current_epoch.prev();
-                proof_of_stake::slash(
+                proof_of_stake::slashing::slash(
                     &mut shell.wl_storage,
                     &pos_params,
                     current_epoch,
@@ -1055,9 +1057,10 @@ fn claim_rewards(c: &mut Criterion) {
                     let mut shell = BenchShell::default();
 
                     // Advance Epoch for pipeline and unbonding length
-                    let params =
-                        proof_of_stake::read_pos_params(&shell.wl_storage)
-                            .unwrap();
+                    let params = proof_of_stake::storage::read_pos_params(
+                        &shell.wl_storage,
+                    )
+                    .unwrap();
                     let advance_epochs =
                         params.pipeline_len + params.unbonding_len;
 

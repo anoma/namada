@@ -41,7 +41,25 @@ use test_log::test;
 use crate::epoched::DEFAULT_NUM_PAST_EPOCHS;
 use crate::parameters::testing::arb_pos_params;
 use crate::parameters::{OwnedPosParams, PosParams};
-use crate::rewards::PosRewardsCalculator;
+use crate::queries::bonds_and_unbonds;
+use crate::rewards::{
+    log_block_rewards, update_rewards_products_and_mint_inflation,
+    PosRewardsCalculator,
+};
+use crate::slashing::{
+    compute_bond_at_epoch, compute_slash_bond_at_epoch,
+    compute_slashable_amount, process_slashes, slash, slash_redelegation,
+    slash_validator, slash_validator_redelegation,
+};
+use crate::storage::{
+    find_validator_by_raw_hash, get_consensus_key_set,
+    get_num_consensus_validators,
+    read_below_capacity_validator_set_addresses_with_stake,
+    read_below_threshold_validator_set_addresses,
+    read_consensus_validator_set_addresses_with_stake, read_total_stake,
+    read_validator_deltas_value, rewards_accumulator_handle,
+    total_deltas_handle,
+};
 use crate::test_utils::test_init_genesis;
 use crate::types::{
     into_tm_voting_power, BondDetails, BondId, BondsAndUnbondsDetails,
@@ -49,32 +67,24 @@ use crate::types::{
     RedelegatedTokens, ReverseOrdTokenAmount, Slash, SlashType, UnbondDetails,
     ValidatorSetUpdate, ValidatorState, VoteInfo, WeightedValidator,
 };
+use crate::validator_set_update::validator_set_update_tendermint;
 use crate::{
     apply_list_slashes, become_validator, below_capacity_validator_set_handle,
-    bond_handle, bond_tokens, bonds_and_unbonds, change_consensus_key,
+    bond_handle, bond_tokens, change_consensus_key,
     compute_amount_after_slashing_unbond,
     compute_amount_after_slashing_withdraw,
-    compute_and_store_total_consensus_stake, compute_bond_at_epoch,
-    compute_modified_redelegation, compute_new_redelegated_unbonds,
-    compute_slash_bond_at_epoch, compute_slashable_amount,
-    consensus_validator_set_handle, copy_validator_sets_and_positions,
-    delegator_redelegated_bonds_handle, delegator_redelegated_unbonds_handle,
-    find_bonds_to_remove, find_validator_by_raw_hash,
-    fold_and_slash_redelegated_bonds, get_consensus_key_set,
-    get_num_consensus_validators, insert_validator_into_validator_set,
-    is_validator, process_slashes,
-    read_below_capacity_validator_set_addresses_with_stake,
-    read_below_threshold_validator_set_addresses,
-    read_consensus_validator_set_addresses_with_stake, read_total_stake,
-    read_validator_deltas_value, read_validator_stake, slash,
-    slash_redelegation, slash_validator, slash_validator_redelegation,
-    staking_token_address, total_bonded_handle, total_deltas_handle,
-    total_unbonded_handle, unbond_handle, unbond_tokens, unjail_validator,
-    update_validator_deltas, update_validator_set,
+    compute_and_store_total_consensus_stake, compute_modified_redelegation,
+    compute_new_redelegated_unbonds, consensus_validator_set_handle,
+    copy_validator_sets_and_positions, delegator_redelegated_bonds_handle,
+    delegator_redelegated_unbonds_handle, find_bonds_to_remove,
+    fold_and_slash_redelegated_bonds, insert_validator_into_validator_set,
+    is_validator, read_validator_stake, staking_token_address,
+    total_bonded_handle, total_unbonded_handle, unbond_handle, unbond_tokens,
+    unjail_validator, update_validator_deltas, update_validator_set,
     validator_consensus_key_handle, validator_incoming_redelegations_handle,
     validator_outgoing_redelegations_handle, validator_set_positions_handle,
-    validator_set_update_tendermint, validator_slashes_handle,
-    validator_state_handle, validator_total_redelegated_bonded_handle,
+    validator_slashes_handle, validator_state_handle,
+    validator_total_redelegated_bonded_handle,
     validator_total_redelegated_unbonded_handle, withdraw_tokens,
     write_pos_params, write_validator_address_raw_hash, BecomeValidator,
     EagerRedelegatedUnbonds, FoldRedelegatedBondsResult, ModifiedRedelegation,
@@ -1222,7 +1232,7 @@ fn test_slashes_with_unbonding_aux(
     s.commit_block().unwrap();
 
     current_epoch = advance_epoch(&mut s, &params);
-    super::process_slashes(&mut s, current_epoch).unwrap();
+    process_slashes(&mut s, current_epoch).unwrap();
 
     // Discover first slash
     let slash_0_evidence_epoch = current_epoch;
@@ -1247,7 +1257,7 @@ fn test_slashes_with_unbonding_aux(
         slash_0_evidence_epoch + params.slash_processing_epoch_offset();
     while current_epoch < unfreeze_epoch {
         current_epoch = advance_epoch(&mut s, &params);
-        super::process_slashes(&mut s, current_epoch).unwrap();
+        process_slashes(&mut s, current_epoch).unwrap();
     }
 
     // Advance more epochs randomly from the generated delay
@@ -1285,7 +1295,7 @@ fn test_slashes_with_unbonding_aux(
     let withdraw_epoch = unbond_epoch + params.withdrawable_epoch_offset();
     while current_epoch < withdraw_epoch {
         current_epoch = advance_epoch(&mut s, &params);
-        super::process_slashes(&mut s, current_epoch).unwrap();
+        process_slashes(&mut s, current_epoch).unwrap();
     }
     let token = staking_token_address(&s);
     let val_balance_pre = read_balance(&s, &token, val_addr).unwrap();
@@ -1294,8 +1304,7 @@ fn test_slashes_with_unbonding_aux(
         source: val_addr.clone(),
         validator: val_addr.clone(),
     };
-    let binding =
-        super::bonds_and_unbonds(&s, None, Some(val_addr.clone())).unwrap();
+    let binding = bonds_and_unbonds(&s, None, Some(val_addr.clone())).unwrap();
     let details = binding.get(&bond_id).unwrap();
     let exp_withdraw_from_details = details.unbonds[0].amount
         - details.unbonds[0].slashed_amount.unwrap_or_default();
@@ -2398,7 +2407,7 @@ fn test_unjail_validator_aux(
     s.commit_block().unwrap();
 
     current_epoch = advance_epoch(&mut s, &params);
-    super::process_slashes(&mut s, current_epoch).unwrap();
+    process_slashes(&mut s, current_epoch).unwrap();
 
     // Discover first slash
     let slash_0_evidence_epoch = current_epoch;
@@ -2449,7 +2458,7 @@ fn test_unjail_validator_aux(
         slash_0_evidence_epoch + params.slash_processing_epoch_offset();
     while current_epoch < unfreeze_epoch + 4u64 {
         current_epoch = advance_epoch(&mut s, &params);
-        super::process_slashes(&mut s, current_epoch).unwrap();
+        process_slashes(&mut s, current_epoch).unwrap();
     }
 
     // Unjail the validator
@@ -2483,7 +2492,7 @@ fn test_unjail_validator_aux(
 
     // Advance another epoch
     current_epoch = advance_epoch(&mut s, &params);
-    super::process_slashes(&mut s, current_epoch).unwrap();
+    process_slashes(&mut s, current_epoch).unwrap();
 
     let second_att = unjail_validator(&mut s, val_addr, current_epoch);
     assert!(second_att.is_err());
@@ -4471,7 +4480,7 @@ fn test_simple_redelegation_aux(
 
     for _ in 0..5 {
         current_epoch = advance_epoch(&mut storage, &params);
-        super::process_slashes(&mut storage, current_epoch).unwrap();
+        process_slashes(&mut storage, current_epoch).unwrap();
     }
 
     let init_epoch = current_epoch;
@@ -4515,11 +4524,11 @@ fn test_simple_redelegation_aux(
 
     // Advance three epochs
     current_epoch = advance_epoch(&mut storage, &params);
-    super::process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(&mut storage, current_epoch).unwrap();
     current_epoch = advance_epoch(&mut storage, &params);
-    super::process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(&mut storage, current_epoch).unwrap();
     current_epoch = advance_epoch(&mut storage, &params);
-    super::process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(&mut storage, current_epoch).unwrap();
 
     // Redelegate in epoch 3
     println!(
@@ -4667,11 +4676,11 @@ fn test_simple_redelegation_aux(
 
     // Advance three epochs
     current_epoch = advance_epoch(&mut storage, &params);
-    super::process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(&mut storage, current_epoch).unwrap();
     current_epoch = advance_epoch(&mut storage, &params);
-    super::process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(&mut storage, current_epoch).unwrap();
     current_epoch = advance_epoch(&mut storage, &params);
-    super::process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(&mut storage, current_epoch).unwrap();
 
     // Unbond in epoch 5 from dest_validator
     println!(
@@ -4796,7 +4805,7 @@ fn test_simple_redelegation_aux(
     // Advance to withdrawal epoch
     loop {
         current_epoch = advance_epoch(&mut storage, &params);
-        super::process_slashes(&mut storage, current_epoch).unwrap();
+        process_slashes(&mut storage, current_epoch).unwrap();
         if current_epoch == unbond_end {
             break;
         }
@@ -4867,7 +4876,7 @@ fn test_redelegation_with_slashing_aux(
 
     for _ in 0..5 {
         current_epoch = advance_epoch(&mut storage, &params);
-        super::process_slashes(&mut storage, current_epoch).unwrap();
+        process_slashes(&mut storage, current_epoch).unwrap();
     }
 
     let init_epoch = current_epoch;
@@ -4911,11 +4920,11 @@ fn test_redelegation_with_slashing_aux(
 
     // Advance three epochs
     current_epoch = advance_epoch(&mut storage, &params);
-    super::process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(&mut storage, current_epoch).unwrap();
     current_epoch = advance_epoch(&mut storage, &params);
-    super::process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(&mut storage, current_epoch).unwrap();
     current_epoch = advance_epoch(&mut storage, &params);
-    super::process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(&mut storage, current_epoch).unwrap();
 
     // Redelegate in epoch 8
     println!(
@@ -5063,11 +5072,11 @@ fn test_redelegation_with_slashing_aux(
 
     // Advance three epochs
     current_epoch = advance_epoch(&mut storage, &params);
-    super::process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(&mut storage, current_epoch).unwrap();
     current_epoch = advance_epoch(&mut storage, &params);
-    super::process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(&mut storage, current_epoch).unwrap();
     current_epoch = advance_epoch(&mut storage, &params);
-    super::process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(&mut storage, current_epoch).unwrap();
 
     // Unbond in epoch 11 from dest_validator
     println!(
@@ -5154,7 +5163,7 @@ fn test_redelegation_with_slashing_aux(
 
     // Advance one epoch
     current_epoch = advance_epoch(&mut storage, &params);
-    super::process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(&mut storage, current_epoch).unwrap();
 
     // Discover evidence
     slash(
@@ -5209,7 +5218,7 @@ fn test_redelegation_with_slashing_aux(
     // Advance to withdrawal epoch
     loop {
         current_epoch = advance_epoch(&mut storage, &params);
-        super::process_slashes(&mut storage, current_epoch).unwrap();
+        process_slashes(&mut storage, current_epoch).unwrap();
         if current_epoch == unbond_end {
             break;
         }
@@ -5288,7 +5297,7 @@ fn test_chain_redelegations_aux(mut validators: Vec<GenesisValidator>) {
 
     // Advance one epoch
     current_epoch = advance_epoch(&mut storage, &params);
-    super::process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(&mut storage, current_epoch).unwrap();
 
     // Redelegate in epoch 1 to dest_validator
     let redel_amount_1: token::Amount = 58.into();
@@ -5401,9 +5410,9 @@ fn test_chain_redelegations_aux(mut validators: Vec<GenesisValidator>) {
 
     // Attempt to redelegate in epoch 3 to dest_validator
     current_epoch = advance_epoch(&mut storage, &params);
-    super::process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(&mut storage, current_epoch).unwrap();
     current_epoch = advance_epoch(&mut storage, &params);
-    super::process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(&mut storage, current_epoch).unwrap();
 
     let redel_amount_2: token::Amount = 23.into();
     let redel_att = super::redelegate_tokens(
@@ -5422,7 +5431,7 @@ fn test_chain_redelegations_aux(mut validators: Vec<GenesisValidator>) {
         redel_end.prev() + params.slash_processing_epoch_offset();
     loop {
         current_epoch = advance_epoch(&mut storage, &params);
-        super::process_slashes(&mut storage, current_epoch).unwrap();
+        process_slashes(&mut storage, current_epoch).unwrap();
         if current_epoch == epoch_can_redel.prev() {
             break;
         }
@@ -5441,7 +5450,7 @@ fn test_chain_redelegations_aux(mut validators: Vec<GenesisValidator>) {
 
     // Advance one more epoch
     current_epoch = advance_epoch(&mut storage, &params);
-    super::process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(&mut storage, current_epoch).unwrap();
 
     // Redelegate from dest_validator to dest_validator_2 now
     super::redelegate_tokens(
@@ -5808,7 +5817,7 @@ fn test_overslashing_aux(mut validators: Vec<GenesisValidator>) {
     // Advance to processing epoch 1
     loop {
         current_epoch = advance_epoch(&mut storage, &params);
-        super::process_slashes(&mut storage, current_epoch).unwrap();
+        process_slashes(&mut storage, current_epoch).unwrap();
         if current_epoch == processing_epoch_1 {
             break;
         }
@@ -5845,7 +5854,7 @@ fn test_overslashing_aux(mut validators: Vec<GenesisValidator>) {
     // Advance to processing epoch 2
     loop {
         current_epoch = advance_epoch(&mut storage, &params);
-        super::process_slashes(&mut storage, current_epoch).unwrap();
+        process_slashes(&mut storage, current_epoch).unwrap();
         if current_epoch == processing_epoch_2 {
             break;
         }
@@ -5963,7 +5972,7 @@ fn test_unslashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
 
     // Advance an epoch
     current_epoch = advance_epoch(&mut storage, &params);
-    super::process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(&mut storage, current_epoch).unwrap();
 
     // Bond to validator 1
     super::bond_tokens(
@@ -6011,7 +6020,7 @@ fn test_unslashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
 
     // Advance an epoch
     current_epoch = advance_epoch(&mut storage, &params);
-    super::process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(&mut storage, current_epoch).unwrap();
 
     // Bond to validator 1
     super::bond_tokens(
@@ -6108,7 +6117,7 @@ fn test_log_block_rewards_aux(
     tracing::info!(?proposer_address,);
 
     // Rewards accumulator should be empty at first
-    let rewards_handle = crate::rewards_accumulator_handle();
+    let rewards_handle = rewards_accumulator_handle();
     assert!(rewards_handle.is_empty(&s).unwrap());
 
     let mut last_rewards = BTreeMap::default();
@@ -6159,7 +6168,7 @@ fn test_log_block_rewards_aux(
         };
 
         let (votes, signing_stake, non_voters) = prep_votes(current_epoch);
-        crate::log_block_rewards(
+        log_block_rewards(
             &mut s,
             current_epoch,
             &proposer_address,
@@ -6278,8 +6287,7 @@ fn test_log_block_rewards_aux(
         }
         s.commit_block().unwrap();
 
-        last_rewards =
-            crate::rewards_accumulator_handle().collect_map(&s).unwrap();
+        last_rewards = rewards_accumulator_handle().collect_map(&s).unwrap();
 
         let rewards_sum: Dec = last_rewards.values().copied().sum();
         let expected_sum = Dec::one() * (i as u64 + 1);
@@ -6336,7 +6344,7 @@ fn test_update_rewards_products_aux(validators: Vec<GenesisValidator>) {
 
     // Assign some reward accumulator values to consensus validator
     for validator in &consensus_set {
-        crate::rewards_accumulator_handle()
+        rewards_accumulator_handle()
             .insert(
                 &mut s,
                 validator.clone(),
@@ -6348,7 +6356,7 @@ fn test_update_rewards_products_aux(validators: Vec<GenesisValidator>) {
     // Distribute inflation into rewards
     let last_epoch = current_epoch.prev();
     let inflation = token::Amount::native_whole(10_000_000);
-    crate::update_rewards_products_and_mint_inflation(
+    update_rewards_products_and_mint_inflation(
         &mut s,
         &params,
         last_epoch,
@@ -6380,7 +6388,7 @@ fn test_update_rewards_products_aux(validators: Vec<GenesisValidator>) {
     );
 
     // Rewards accumulator must be cleared out
-    let rewards_handle = crate::rewards_accumulator_handle();
+    let rewards_handle = rewards_accumulator_handle();
     assert!(rewards_handle.is_empty(&s).unwrap());
 }
 
@@ -6467,7 +6475,7 @@ fn test_slashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
 
     // Advance an epoch to 1
     current_epoch = advance_epoch(&mut storage, &params);
-    super::process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(&mut storage, current_epoch).unwrap();
 
     // Bond to validator 1
     super::bond_tokens(
@@ -6515,7 +6523,7 @@ fn test_slashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
 
     // Advance an epoch to ep 2
     current_epoch = advance_epoch(&mut storage, &params);
-    super::process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(&mut storage, current_epoch).unwrap();
 
     // Bond to validator 1
     super::bond_tokens(
@@ -6553,11 +6561,11 @@ fn test_slashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
     // Advance two epochs to ep 4
     for _ in 0..2 {
         current_epoch = advance_epoch(&mut storage, &params);
-        super::process_slashes(&mut storage, current_epoch).unwrap();
+        process_slashes(&mut storage, current_epoch).unwrap();
     }
 
     // Find some slashes committed in various epochs
-    super::slash(
+    slash(
         &mut storage,
         &params,
         current_epoch,
@@ -6568,7 +6576,7 @@ fn test_slashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
         current_epoch,
     )
     .unwrap();
-    super::slash(
+    slash(
         &mut storage,
         &params,
         current_epoch,
@@ -6579,7 +6587,7 @@ fn test_slashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
         current_epoch,
     )
     .unwrap();
-    super::slash(
+    slash(
         &mut storage,
         &params,
         current_epoch,
@@ -6590,7 +6598,7 @@ fn test_slashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
         current_epoch,
     )
     .unwrap();
-    super::slash(
+    slash(
         &mut storage,
         &params,
         current_epoch,
@@ -6605,7 +6613,7 @@ fn test_slashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
     // Advance such that these slashes are all processed
     for _ in 0..params.slash_processing_epoch_offset() {
         current_epoch = advance_epoch(&mut storage, &params);
-        super::process_slashes(&mut storage, current_epoch).unwrap();
+        process_slashes(&mut storage, current_epoch).unwrap();
     }
 
     let pipeline_epoch = current_epoch + params.pipeline_len;
@@ -6811,7 +6819,7 @@ fn test_is_delegator_aux(mut validators: Vec<GenesisValidator>) {
 
     // Advance to epoch 1
     current_epoch = advance_epoch(&mut storage, &params);
-    super::process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(&mut storage, current_epoch).unwrap();
 
     // Delegate in epoch 1 to validator1
     let del1_epoch = current_epoch;
@@ -6827,7 +6835,7 @@ fn test_is_delegator_aux(mut validators: Vec<GenesisValidator>) {
 
     // Advance to epoch 2
     current_epoch = advance_epoch(&mut storage, &params);
-    super::process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(&mut storage, current_epoch).unwrap();
 
     // Delegate in epoch 2 to validator2
     let del2_epoch = current_epoch;

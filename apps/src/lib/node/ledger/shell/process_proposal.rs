@@ -8,7 +8,7 @@ use namada::ledger::pos::PosQueries;
 use namada::ledger::protocol::get_fee_unshielding_transaction;
 use namada::ledger::storage::TempWlStorage;
 use namada::ledger::storage_api::tx::validate_tx_bytes;
-use namada::proof_of_stake::find_validator_by_raw_hash;
+use namada::proof_of_stake::storage::find_validator_by_raw_hash;
 use namada::types::internal::TxInQueue;
 use namada::types::transaction::protocol::{
     ethereum_tx_data_variants, ProtocolTxType,

@@ -110,7 +110,8 @@ fn governance(c: &mut Criterion) {
                 let content_section =
                     Section::ExtraData(Code::new(vec![], None));
                 let params =
-                    proof_of_stake::read_pos_params(&shell.wl_storage).unwrap();
+                    proof_of_stake::storage::read_pos_params(&shell.wl_storage)
+                        .unwrap();
                 let voting_start_epoch =
                     Epoch(2 + params.pipeline_len + params.unbonding_len);
                 // Must start after current epoch
@@ -161,7 +162,8 @@ fn governance(c: &mut Criterion) {
                 ));
 
                 let params =
-                    proof_of_stake::read_pos_params(&shell.wl_storage).unwrap();
+                    proof_of_stake::storage::read_pos_params(&shell.wl_storage)
+                        .unwrap();
                 let voting_start_epoch =
                     Epoch(2 + params.pipeline_len + params.unbonding_len);
                 // Must start after current epoch
