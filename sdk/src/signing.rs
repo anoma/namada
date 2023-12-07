@@ -695,14 +695,14 @@ fn other_err<T>(string: String) -> Result<T, Error> {
 }
 
 /// Represents the transaction data that is displayed on a Ledger device
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize, Debug, Clone)]
 pub struct LedgerVector {
-    blob: String,
-    index: u64,
-    name: String,
-    output: Vec<String>,
-    output_expert: Vec<String>,
-    valid: bool,
+    pub blob: String,
+    pub index: u64,
+    pub name: String,
+    pub output: Vec<String>,
+    pub output_expert: Vec<String>,
+    pub valid: bool,
 }
 
 /// Adds a Ledger output line describing a given transaction amount and address
@@ -1291,9 +1291,25 @@ pub async fn to_ledger_vector<'a>(
             Error::from(EncodingError::Conversion(err.to_string()))
         })?;
 
-        tv.name = "Update_VP_0".to_string();
+        tv.name = "Update_Account_0".to_string();
+        tv.output.extend(vec![
+            format!("Type : Update Account"),
+            format!("Address : {}", update_account.addr),
+        ]);
+        tv.output.extend(
+            update_account
+                .public_keys
+                .iter()
+                .map(|k| format!("Public key : {}", k)),
+        );
+        if update_account.threshold.is_some() {
+            tv.output.extend(vec![format!(
+                "Threshold : {}",
+                update_account.threshold.unwrap()
+            )])
+        }
 
-        match &update_account.vp_code_hash {
+        let vp_code_data = match &update_account.vp_code_hash {
             Some(hash) => {
                 let extra = tx
                     .get_section(hash)
@@ -1308,45 +1324,31 @@ pub async fn to_ledger_vector<'a>(
                 } else {
                     HEXLOWER.encode(&extra.code.hash().0)
                 };
-                tv.output.extend(vec![
-                    format!("Type : Update VP"),
-                    format!("Address : {}", update_account.addr),
-                ]);
-                tv.output.extend(
-                    update_account
-                        .public_keys
-                        .iter()
-                        .map(|k| format!("Public key : {}", k)),
-                );
-                if update_account.threshold.is_some() {
-                    tv.output.extend(vec![format!(
-                        "Threshold : {}",
-                        update_account.threshold.unwrap()
-                    )])
-                }
-                tv.output.extend(vec![format!("VP type : {}", vp_code)]);
-
-                tv.output_expert
-                    .extend(vec![format!("Address : {}", update_account.addr)]);
-                tv.output_expert.extend(
-                    update_account
-                        .public_keys
-                        .iter()
-                        .map(|k| format!("Public key : {}", k)),
-                );
-                if update_account.threshold.is_some() {
-                    tv.output_expert.extend(vec![format!(
-                        "Threshold : {}",
-                        update_account.threshold.unwrap()
-                    )])
-                }
-                tv.output_expert.extend(vec![format!(
-                    "VP type : {}",
-                    HEXLOWER.encode(&extra.code.hash().0)
-                )]);
+                Some((vp_code, extra.code.hash()))
             }
-            None => (),
+            None => None,
         };
+        if let Some((vp_code, _)) = &vp_code_data {
+            tv.output.extend(vec![format!("VP type : {}", vp_code)]);
+        }
+        tv.output_expert
+            .extend(vec![format!("Address : {}", update_account.addr)]);
+        tv.output_expert.extend(
+            update_account
+                .public_keys
+                .iter()
+                .map(|k| format!("Public key : {}", k)),
+        );
+        if let Some(threshold) = update_account.threshold {
+            tv.output_expert
+                .extend(vec![format!("Threshold : {}", threshold,)])
+        }
+        if let Some((_, extra_code_hash)) = vp_code_data {
+            tv.output_expert.extend(vec![format!(
+                "VP type : {}",
+                HEXLOWER.encode(&extra_code_hash.0)
+            )]);
+        }
     } else if code_sec.tag == Some(TX_TRANSFER_WASM.to_string()) {
         let transfer = Transfer::try_from_slice(
             &tx.data()
