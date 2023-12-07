@@ -162,9 +162,9 @@ impl BlockResults {
     }
 }
 
-/// Height of a block, i.e. the level.
+/// Height of a block, i.e. the level. The `default` is the
+/// [`BlockHeight::sentinel`] value, which doesn't correspond to any block.
 #[derive(
-    Default,
     Clone,
     Copy,
     BorshSerialize,
@@ -180,6 +180,12 @@ impl BlockResults {
     Deserialize,
 )]
 pub struct BlockHeight(pub u64);
+
+impl Default for BlockHeight {
+    fn default() -> Self {
+        Self::sentinel()
+    }
+}
 
 impl Display for BlockHeight {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -288,6 +294,17 @@ impl TryFrom<i64> for BlockHeight {
     }
 }
 impl BlockHeight {
+    /// The first block height 1.
+    pub const fn first() -> Self {
+        Self(1)
+    }
+
+    /// A sentinel value block height 0 may be used before any block is
+    /// committed or in queries to read from the latest committed block.
+    pub const fn sentinel() -> Self {
+        Self(0)
+    }
+
     /// Get the height of the next block
     pub fn next_height(&self) -> BlockHeight {
         BlockHeight(self.0 + 1)
@@ -1175,6 +1192,7 @@ impl Mul for Epoch {
 #[derive(
     Clone,
     Debug,
+    Default,
     PartialEq,
     Eq,
     PartialOrd,
@@ -1187,16 +1205,6 @@ pub struct Epochs {
     /// The block heights of the first block of each known epoch.
     /// Invariant: the values must be sorted in ascending order.
     pub first_block_heights: Vec<BlockHeight>,
-}
-
-impl Default for Epochs {
-    /// Initialize predecessor epochs, assuming starting on the epoch 0 and
-    /// block height 0.
-    fn default() -> Self {
-        Self {
-            first_block_heights: vec![BlockHeight::default()],
-        }
-    }
 }
 
 impl Epochs {
@@ -1641,11 +1649,13 @@ mod tests {
 
     #[test]
     fn test_predecessor_epochs_and_heights() {
-        let mut epochs = Epochs::default();
+        let mut epochs = Epochs {
+            first_block_heights: vec![BlockHeight::first()],
+        };
         println!("epochs {:#?}", epochs);
         assert_eq!(
             epochs.get_start_height_of_epoch(Epoch(0)),
-            Some(BlockHeight(0))
+            Some(BlockHeight(1))
         );
         assert_eq!(epochs.get_epoch(BlockHeight(0)), Some(Epoch(0)));
 
@@ -1657,14 +1667,15 @@ mod tests {
             Some(BlockHeight(10))
         );
         assert_eq!(epochs.get_epoch(BlockHeight(0)), Some(Epoch(0)));
+        assert_eq!(epochs.get_epoch_start_height(BlockHeight(0)), None);
         assert_eq!(
-            epochs.get_epoch_start_height(BlockHeight(0)),
-            Some(BlockHeight(0))
+            epochs.get_epoch_start_height(BlockHeight(1)),
+            Some(BlockHeight(1))
         );
         assert_eq!(epochs.get_epoch(BlockHeight(9)), Some(Epoch(0)));
         assert_eq!(
             epochs.get_epoch_start_height(BlockHeight(9)),
-            Some(BlockHeight(0))
+            Some(BlockHeight(1))
         );
         assert_eq!(epochs.get_epoch(BlockHeight(10)), Some(Epoch(1)));
         assert_eq!(

@@ -492,8 +492,7 @@ mod tests {
         let hash = BlockHash::default();
         let height = BlockHeight(1);
         storage.begin_block(hash, height)?;
-        // Epoch 1
-        storage.block.epoch = storage.block.epoch.next();
+        // Epoch 0
         storage.block.pred_epochs.new_epoch(height);
         let mut batch = PersistentStorage::batch();
         for (height, key, write_type) in blocks_write_type.clone() {
@@ -581,8 +580,9 @@ mod tests {
             None,
             Some(5),
         );
+        let new_epoch_start = BlockHeight(1);
         storage
-            .begin_block(BlockHash::default(), BlockHeight(1))
+            .begin_block(BlockHash::default(), new_epoch_start)
             .expect("begin_block failed");
 
         let key = ibc_key("key").unwrap();
@@ -591,13 +591,13 @@ mod tests {
             .write(&key, types::encode(&value))
             .expect("write failed");
 
-        storage.block.epoch = storage.block.epoch.next();
-        storage.block.pred_epochs.new_epoch(BlockHeight(1));
+        storage.block.pred_epochs.new_epoch(new_epoch_start);
         let batch = PersistentStorage::batch();
         storage.commit_block(batch).expect("commit failed");
 
+        let new_epoch_start = BlockHeight(6);
         storage
-            .begin_block(BlockHash::default(), BlockHeight(6))
+            .begin_block(BlockHash::default(), new_epoch_start)
             .expect("begin_block failed");
 
         let key = ibc_key("key2").unwrap();
@@ -607,18 +607,19 @@ mod tests {
             .expect("write failed");
 
         storage.block.epoch = storage.block.epoch.next();
-        storage.block.pred_epochs.new_epoch(BlockHeight(6));
+        storage.block.pred_epochs.new_epoch(new_epoch_start);
         let batch = PersistentStorage::batch();
         storage.commit_block(batch).expect("commit failed");
 
         let result = storage.get_merkle_tree(1.into(), Some(StoreType::Ibc));
         assert!(result.is_ok(), "The tree at Height 1 should be restored");
 
+        let new_epoch_start = BlockHeight(11);
         storage
-            .begin_block(BlockHash::default(), BlockHeight(11))
+            .begin_block(BlockHash::default(), new_epoch_start)
             .expect("begin_block failed");
         storage.block.epoch = storage.block.epoch.next();
-        storage.block.pred_epochs.new_epoch(BlockHeight(11));
+        storage.block.pred_epochs.new_epoch(new_epoch_start);
         let batch = PersistentStorage::batch();
         storage.commit_block(batch).expect("commit failed");
 

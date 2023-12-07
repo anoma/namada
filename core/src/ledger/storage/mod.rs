@@ -136,8 +136,8 @@ pub struct BlockStorage<H: StorageHasher> {
     pub hash: BlockHash,
     /// From the start of `FinalizeBlock` until the end of `Commit`, this is
     /// height of the block that is going to be committed. Otherwise, it is the
-    /// height of the most recently committed block, or `BlockHeight(0)` if no
-    /// block has been committed yet.
+    /// height of the most recently committed block, or `BlockHeight::sentinel`
+    /// (0) if no block has been committed yet.
     pub height: BlockHeight,
     /// From the start of `FinalizeBlock` until the end of `Commit`, this is
     /// height of the block that is going to be committed. Otherwise it is the
@@ -1012,6 +1012,9 @@ where
         } = parameters.epoch_duration;
         self.next_epoch_min_start_height = initial_height + min_num_of_blocks;
         self.next_epoch_min_start_time = genesis_time + min_duration;
+        self.block.pred_epochs = Epochs {
+            first_block_heights: vec![initial_height],
+        };
         self.update_epoch_in_merkle_tree()
     }
 
@@ -1394,6 +1397,12 @@ mod tests {
                 minimum_gas_price: BTreeMap::default(),
             };
             parameters.init_storage(&mut wl_storage).unwrap();
+            // Initialize pred_epochs to the current height
+            wl_storage
+                .storage
+                .block
+                .pred_epochs
+                .new_epoch(wl_storage.storage.block.height);
 
             let epoch_before = wl_storage.storage.last_epoch;
             assert_eq!(epoch_before, wl_storage.storage.block.epoch);
