@@ -28,10 +28,8 @@ pub enum VoteExtensionError {
     ValsetUpdProofAvailable,
     #[error("The length of the transfers and their validity map differ")]
     TransfersLenMismatch,
-    #[error("The bridge pool nonce in the vote extension is invalid")]
-    InvalidBpNonce,
-    #[error("The transfer to Namada nonce in the vote extension is invalid")]
-    InvalidNamNonce,
+    #[error("The nonce in the Ethereum event is invalid")]
+    InvalidEthEventNonce,
     #[error("The vote extension was issued for an unexpected block height")]
     UnexpectedBlockHeight,
     #[error("The vote extension was issued for an unexpected epoch")]
@@ -229,8 +227,20 @@ where
                 }
             };
             match (&tx).try_into().ok()? {
-                EthereumTxData::EthEventsVext(_)
-                | EthereumTxData::BridgePoolVext(_) => Some(tx_bytes.clone()),
+                EthereumTxData::BridgePoolVext(_) => Some(tx_bytes.clone()),
+                EthereumTxData::EthEventsVext(ext) => {
+                    // NB: only propose events with at least
+                    // one valid nonce
+                    ext.data
+                        .ethereum_events
+                        .iter()
+                        .any(|event| {
+                            self.wl_storage
+                                .ethbridge_queries()
+                                .validate_eth_event_nonce(event)
+                        })
+                        .then(|| tx_bytes.clone())
+                }
                 EthereumTxData::ValSetUpdateVext(ext) => {
                     // only include non-stale validator set updates
                     // in block proposals. it might be sitting long

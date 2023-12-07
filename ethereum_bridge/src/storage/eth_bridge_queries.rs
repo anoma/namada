@@ -10,7 +10,7 @@ use namada_core::types::address::Address;
 use namada_core::types::eth_abi::Encode;
 use namada_core::types::eth_bridge_pool::PendingTransfer;
 use namada_core::types::ethereum_events::{
-    EthAddress, GetEventNonce, TransferToEthereum, Uint,
+    EthAddress, EthereumEvent, GetEventNonce, TransferToEthereum, Uint,
 };
 use namada_core::types::keccak::KeccakHash;
 use namada_core::types::storage::{BlockHeight, Epoch, Key as StorageKey};
@@ -539,6 +539,53 @@ where
             .read(&pending_key)
             .expect("Reading from storage should not fail")
             .zip(Some(pending_key))
+    }
+
+    /// Valdidate an [`EthereumEvent`]'s nonce against the current
+    /// state of the ledger.
+    ///
+    /// # Event kinds
+    ///
+    /// In this section, we shall describe the checks perform for
+    /// each kind of relevant Ethereum event.
+    ///
+    /// ## Transfers to Ethereum
+    ///
+    /// We need to check if the nonce in the event corresponds to
+    /// the most recent bridge pool nonce. Unless the nonces match,
+    /// no state updates derived from the event should be applied.
+    /// In case the nonces are different, we reject the event, and
+    /// thus the inclusion of its container Ethereum events vote
+    /// extension.
+    ///
+    /// ## Transfers to Namada
+    ///
+    /// For a transfers to Namada event to be considered valid,
+    /// the nonce of this kind of event must not be lower than
+    /// the one stored in Namada.
+    pub fn validate_eth_event_nonce(&self, event: &EthereumEvent) -> bool {
+        match event {
+            EthereumEvent::TransfersToEthereum {
+                nonce: ext_nonce, ..
+            } => {
+                let current_bp_nonce = self.get_bridge_pool_nonce();
+                if &current_bp_nonce != ext_nonce {
+                    return false;
+                }
+            }
+            EthereumEvent::TransfersToNamada {
+                nonce: ext_nonce, ..
+            } => {
+                let next_nam_transfers_nonce =
+                    self.get_next_nam_transfers_nonce();
+                if &next_nam_transfers_nonce > ext_nonce {
+                    return false;
+                }
+            }
+            // consider other ethereum event kinds valid
+            _ => {}
+        }
+        true
     }
 }
 
