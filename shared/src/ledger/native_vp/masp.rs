@@ -21,7 +21,7 @@ use namada_core::types::token::{
     self, is_masp_allowed_key, is_masp_key, is_masp_nullifier_key,
     is_masp_tx_pin_key, is_masp_tx_prefix_key, Transfer, HEAD_TX_KEY,
     MASP_CONVERT_ANCHOR_KEY, MASP_NOTE_COMMITMENT_ANCHOR_PREFIX,
-    MASP_NOTE_COMMITMENT_TREE_KEY, MASP_NULLIFIERS_KEY_PREFIX, PIN_KEY_PREFIX,
+    MASP_NOTE_COMMITMENT_TREE_KEY, MASP_NULLIFIERS_KEY, PIN_KEY_PREFIX,
     TX_KEY_PREFIX,
 };
 use namada_sdk::masp::verify_shielded_tx;
@@ -135,7 +135,7 @@ where
             .map_or(&vec![], |description| &description.shielded_spends)
         {
             let nullifier_key = Key::from(MASP.to_db_key())
-                .push(&MASP_NULLIFIERS_KEY_PREFIX.to_owned())
+                .push(&MASP_NULLIFIERS_KEY.to_owned())
                 .expect("Cannot obtain a storage key")
                 .push(&namada_core::types::hash::Hash(description.nullifier.0))
                 .expect("Cannot obtain a storage key");
