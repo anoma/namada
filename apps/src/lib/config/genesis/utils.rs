@@ -55,7 +55,7 @@ pub(super) async fn with_hardware_wallet<'a>(
     pubkey: common::PublicKey,
     parts: HashSet<signing::Signable>,
     (wallet, app): (
-        &RwLock<&'a mut Wallet<CliWalletUtils>>,
+        &RwLock<Wallet<CliWalletUtils>>,
         &NamadaApp<TransportNativeHID>,
     ),
 ) -> Result<Tx, error::Error> {

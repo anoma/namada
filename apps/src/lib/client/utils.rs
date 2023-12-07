@@ -21,6 +21,7 @@ use namada_sdk::wallet::{alias, Wallet};
 use prost::bytes::Bytes;
 use serde_json::json;
 use sha2::{Digest, Sha256};
+use tokio::sync::RwLock;
 
 use crate::cli::args;
 use crate::cli::context::ENV_VAR_WASM_DIR;
@@ -987,7 +988,7 @@ pub fn validate_genesis_templates(
 
 async fn append_signature_to_signed_toml(
     input_txs: &Path,
-    wallet: &mut Wallet<CliWalletUtils>,
+    wallet: &RwLock<Wallet<CliWalletUtils>>,
     use_device: bool,
 ) -> genesis::transactions::Transactions<genesis::templates::Unvalidated> {
     // Parse signed txs toml to append new signatures to
@@ -1047,8 +1048,9 @@ pub async fn sign_genesis_tx(
         use_device,
     }: args::SignGenesisTxs,
 ) {
-    let (mut wallet, _wallet_file) =
+    let (wallet, _wallet_file) =
         load_pre_genesis_wallet_or_exit(&global_args.base_dir);
+    let wallet_lock = RwLock::new(wallet);
     let maybe_pre_genesis_wallet = validator_alias.and_then(|alias| {
         let pre_genesis_dir =
             validator_pre_genesis_dir(&global_args.base_dir, &alias);
@@ -1067,7 +1069,7 @@ pub async fn sign_genesis_tx(
     {
         let signed = genesis::transactions::sign_txs(
             unsigned,
-            &mut wallet,
+            &wallet_lock,
             maybe_pre_genesis_wallet.as_ref(),
             use_device,
         )
@@ -1087,7 +1089,7 @@ pub async fn sign_genesis_tx(
         // In case we fail to parse unsigned txs, we will attempt to
         // parse signed txs and append new signatures to the existing
         // toml file
-        append_signature_to_signed_toml(&path, &mut wallet, use_device).await
+        append_signature_to_signed_toml(&path, &wallet_lock, use_device).await
     };
     match output {
         Some(output_path) => {

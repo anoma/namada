@@ -74,7 +74,7 @@ pub async fn with_hardware_wallet<'a, U: WalletIo + Clone>(
     mut tx: Tx,
     pubkey: common::PublicKey,
     parts: HashSet<signing::Signable>,
-    (wallet, app): (&RwLock<&'a mut Wallet<U>>, &NamadaApp<TransportNativeHID>),
+    (wallet, app): (&RwLock<Wallet<U>>, &NamadaApp<TransportNativeHID>),
 ) -> Result<Tx, error::Error> {
     // Obtain derivation path
     let path = wallet
@@ -154,8 +154,8 @@ pub async fn with_hardware_wallet<'a, U: WalletIo + Clone>(
 }
 
 // Sign the given transaction using a hardware wallet as a backup
-pub async fn sign(
-    context: &impl Namada,
+pub async fn sign<N: Namada>(
+    context: &N,
     tx: &mut Tx,
     args: &args::Tx,
     signing_data: SigningTxData,

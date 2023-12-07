@@ -209,7 +209,7 @@ pub async fn default_sign(
 ///
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
 pub async fn sign_tx<'a, D, F, U>(
-    wallet: &RwLock<&'a mut Wallet<U>>,
+    wallet: &RwLock<Wallet<U>>,
     args: &args::Tx,
     tx: &mut Tx,
     signing_data: SigningTxData,
@@ -290,7 +290,7 @@ where
         // Lock the wallet just long enough to extract a key from it without
         // interfering with the sign closure call
         let mut wallet = wallet.write().await;
-        find_key_by_pk(*wallet, args, &signing_data.fee_payer)
+        find_key_by_pk(&mut *wallet, args, &signing_data.fee_payer)
     };
     match key {
         Ok(fee_payer_keypair) => {

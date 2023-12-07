@@ -85,7 +85,6 @@ fn get_tx_args(use_device: bool) -> TxArgs {
         signing_keys: vec![],
         signatures: vec![],
         tx_reveal_code_path: Default::default(),
-        verification_key: None,
         password: None,
         use_device,
     }
@@ -152,7 +151,7 @@ pub struct GenesisValidatorData {
 /// `init-genesis-validator` command).
 pub async fn sign_txs(
     txs: UnsignedTransactions,
-    wallet: &mut Wallet<CliWalletUtils>,
+    wallet: &RwLock<Wallet<CliWalletUtils>>,
     validator_wallet: Option<&ValidatorWallet>,
     use_device: bool,
 ) -> Transactions<Unvalidated> {
@@ -337,7 +336,7 @@ pub async fn sign_validator_account_tx(
         (UnsignedValidatorAccountTx, &ValidatorWallet),
         SignedValidatorAccountTx,
     >,
-    wallet: &mut Wallet<CliWalletUtils>,
+    wallet: &RwLock<Wallet<CliWalletUtils>>,
     established_accounts: &[EstablishedAccountTx],
     use_device: bool,
 ) -> SignedValidatorAccountTx {
@@ -426,7 +425,7 @@ pub async fn sign_validator_account_tx(
 
 pub async fn sign_delegation_bond_tx(
     mut to_sign: SignedBondTx<Unvalidated>,
-    wallet: &mut Wallet<CliWalletUtils>,
+    wallet: &RwLock<Wallet<CliWalletUtils>>,
     established_accounts: &Option<Vec<EstablishedAccountTx>>,
     use_device: bool,
 ) -> SignedBondTx<Unvalidated> {
@@ -720,7 +719,7 @@ impl<T> Signed<T> {
     pub async fn sign(
         &mut self,
         established_accounts: &[EstablishedAccountTx],
-        wallet: &mut Wallet<CliWalletUtils>,
+        wallet_lock: &RwLock<Wallet<CliWalletUtils>>,
         use_device: bool,
     ) where
         T: BorshSerialize + TxToSign,
@@ -736,7 +735,6 @@ impl<T> Signed<T> {
         };
 
         let mut tx = self.data.tx_to_sign();
-        let wallet_lock = RwLock::new(wallet);
 
         if use_device {
             let hidapi = HidApi::new().expect("Failed to create Hidapi");
@@ -745,12 +743,12 @@ impl<T> Signed<T> {
             let app = NamadaApp::new(transport);
 
             sign_tx(
-                &wallet_lock,
+                wallet_lock,
                 &get_tx_args(use_device),
                 &mut tx,
                 signing_data,
                 utils::with_hardware_wallet,
-                (&wallet_lock, &app),
+                (wallet_lock, &app),
             )
             .await
             .expect("Failed to sign pre-genesis transaction.");
@@ -771,7 +769,7 @@ impl<T> Signed<T> {
             }
 
             sign_tx(
-                &wallet_lock,
+                wallet_lock,
                 &get_tx_args(use_device),
                 &mut tx,
                 signing_data,

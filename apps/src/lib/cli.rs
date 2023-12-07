@@ -3149,7 +3149,7 @@ pub mod args {
         arg("self-bond-amount");
     pub const SENDER: Arg<String> = arg("sender");
     pub const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
-    pub const SIGNING_KEYS: ArgMulti<WalletKeypair, GlobStar> =
+    pub const SIGNING_KEYS: ArgMulti<WalletPublicKey, GlobStar> =
         arg_multi("signing-keys");
     pub const SIGNATURES: ArgMulti<PathBuf, GlobStar> = arg_multi("signatures");
     pub const SOURCE: Arg<WalletAddress> = arg("source");
@@ -6741,7 +6741,7 @@ pub mod args {
             use crate::config::genesis::utils::VP_USER;
             let wallet_aliases = ALIAS_MANY.parse(matches);
             let vp = VP.parse(matches).unwrap_or_else(|| VP_USER.to_string());
-            let threshold = THRESOLD.parse(matches).unwrap_or(1);
+            let threshold = THRESHOLD.parse(matches).unwrap_or(1);
             let output_path = PATH.parse(matches);
             Self {
                 wallet_aliases,
@@ -6756,7 +6756,7 @@ pub mod args {
                 "Comma separated list of aliases of the keys to use from the \
                  wallet.",
             ))
-            .arg(THRESOLD.def().help(
+            .arg(THRESHOLD.def().help(
                 "The minimum number of signatures to be provided for \
                  authorization. Must be less than or equal to the maximum \
                  number of key aliases provided.",

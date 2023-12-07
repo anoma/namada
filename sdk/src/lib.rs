@@ -103,7 +103,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     async fn wallet_mut(&self) -> RwLockWriteGuard<Wallet<Self::WalletUtils>>;
 
     /// Obtain the wallet lock
-    fn wallet_lock(&self) -> &RwLock<&'a mut Wallet<Self::WalletUtils>>;
+    fn wallet_lock(&self) -> &RwLock<Wallet<Self::WalletUtils>>;
 
     /// Obtain read guard on the shielded context
     async fn shielded(
@@ -731,7 +731,7 @@ where
         self.shielded.write().await
     }
 
-    fn wallet_lock(&self) -> &RwLock<&'a mut Wallet<Self::WalletUtils>> {
+    fn wallet_lock(&self) -> &RwLock<Wallet<Self::WalletUtils>> {
         &self.wallet
     }
 }

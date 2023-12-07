@@ -629,7 +629,7 @@ impl Store {
         let consensus_pk = other.consensus_key.ref_to();
         let tendermint_node_pk = other.tendermint_node_key.ref_to();
         let public_keys = [
-            (consensus_key_alias.clone(), (&consensus_pk).into()),
+            (consensus_key_alias.clone(), consensus_pk.clone()),
             (
                 tendermint_node_key_alias.clone(),
                 tendermint_node_pk.clone(),
