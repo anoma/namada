@@ -16,13 +16,13 @@ use masp_primitives::transaction::components::transparent::fees::{
     InputView as TransparentInputView, OutputView as TransparentOutputView,
 };
 use masp_primitives::transaction::components::I128Sum;
-use namada_core::ibc::applications::transfer::msgs::transfer::MsgTransfer;
-use namada_core::ibc::applications::transfer::packet::PacketData;
-use namada_core::ibc::applications::transfer::PrefixedCoin;
-use namada_core::ibc::core::ics04_channel::timeout::TimeoutHeight;
-use namada_core::ibc::core::timestamp::Timestamp as IbcTimestamp;
-use namada_core::ibc::core::Msg;
-use namada_core::ibc::Height as IbcHeight;
+use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
+use namada_core::ibc::apps::transfer::types::packet::PacketData;
+use namada_core::ibc::apps::transfer::types::PrefixedCoin;
+use namada_core::ibc::core::channel::types::timeout::TimeoutHeight;
+use namada_core::ibc::core::client::types::Height as IbcHeight;
+use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
+use namada_core::ibc::primitives::{Msg, Timestamp as IbcTimestamp};
 use namada_core::ledger::governance::cli::onchain::{
     DefaultProposal, OnChainProposal, PgfFundingProposal, PgfStewardProposal,
     ProposalVote,
@@ -53,7 +53,6 @@ use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
 use crate::args::{self, InputAmount};
 use crate::control_flow::time;
 use crate::error::{EncodingError, Error, QueryError, Result, TxError};
-use crate::ibc::core::ics24_host::identifier::{ChannelId, PortId};
 use crate::io::Io;
 use crate::masp::TransferErr::Build;
 use crate::masp::{make_asset_type, ShieldedContext, ShieldedTransfer};
@@ -2615,8 +2614,8 @@ async fn get_ibc_src_port_channel<'a>(
     dest_port_id: &PortId,
     dest_channel_id: &ChannelId,
 ) -> Result<(PortId, ChannelId)> {
-    use crate::ibc::core::ics04_channel::channel::ChannelEnd;
-    use crate::ibc_proto::protobuf::Protobuf;
+    use crate::ibc::core::channel::types::channel::ChannelEnd;
+    use crate::ibc::primitives::proto::Protobuf;
 
     let channel_key = channel_key(dest_port_id, dest_channel_id);
     let bytes = rpc::query_storage_value_bytes(

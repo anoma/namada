@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
 use crate::eth_bridge::bridge_pool;
-use crate::ibc::core::ics24_host::identifier::{ChannelId, PortId};
+use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use crate::signing::SigningTxData;
 use crate::{rpc, tx, Namada};
 

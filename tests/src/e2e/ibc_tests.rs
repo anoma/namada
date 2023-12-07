@@ -17,39 +17,41 @@ use std::path::PathBuf;
 
 use color_eyre::eyre::Result;
 use eyre::eyre;
-use namada::ibc::applications::transfer::VERSION as ICS20_VERSION;
-use namada::ibc::clients::ics07_tendermint::client_state::{
-    AllowUpdate, ClientState as TmClientState,
+use namada::ibc::apps::transfer::types::VERSION as ICS20_VERSION;
+use namada::ibc::clients::tendermint::client_state::ClientState as TmClientState;
+use namada::ibc::clients::tendermint::consensus_state::ConsensusState as TmConsensusState;
+use namada::ibc::clients::tendermint::types::{
+    AllowUpdate, ClientState as TmClientStateType, Header as IbcTmHeader,
+    TrustThreshold,
 };
-use namada::ibc::clients::ics07_tendermint::consensus_state::ConsensusState as TmConsensusState;
-use namada::ibc::clients::ics07_tendermint::header::Header as IbcTmHeader;
-use namada::ibc::clients::ics07_tendermint::trust_threshold::TrustThreshold;
-use namada::ibc::core::ics02_client::msgs::create_client::MsgCreateClient;
-use namada::ibc::core::ics02_client::msgs::update_client::MsgUpdateClient;
-use namada::ibc::core::ics03_connection::connection::Counterparty as ConnCounterparty;
-use namada::ibc::core::ics03_connection::msgs::conn_open_ack::MsgConnectionOpenAck;
-use namada::ibc::core::ics03_connection::msgs::conn_open_confirm::MsgConnectionOpenConfirm;
-use namada::ibc::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
-use namada::ibc::core::ics03_connection::msgs::conn_open_try::MsgConnectionOpenTry;
-use namada::ibc::core::ics03_connection::version::Version as ConnVersion;
-use namada::ibc::core::ics04_channel::channel::Order as ChanOrder;
-use namada::ibc::core::ics04_channel::msgs::{
+use namada::ibc::core::channel::types::channel::Order as ChanOrder;
+use namada::ibc::core::channel::types::msgs::{
     MsgAcknowledgement, MsgChannelOpenAck, MsgChannelOpenConfirm,
     MsgChannelOpenInit, MsgChannelOpenTry, MsgRecvPacket, MsgTimeout,
 };
-use namada::ibc::core::ics04_channel::packet::Packet;
-use namada::ibc::core::ics04_channel::timeout::TimeoutHeight;
-use namada::ibc::core::ics04_channel::Version as ChanVersion;
-use namada::ibc::core::ics23_commitment::commitment::{
+use namada::ibc::core::channel::types::packet::Packet;
+use namada::ibc::core::channel::types::timeout::TimeoutHeight;
+use namada::ibc::core::channel::types::Version as ChanVersion;
+use namada::ibc::core::client::context::client_state::ClientStateCommon;
+use namada::ibc::core::client::types::msgs::{
+    MsgCreateClient, MsgUpdateClient,
+};
+use namada::ibc::core::client::types::Height;
+use namada::ibc::core::commitment_types::commitment::{
     CommitmentPrefix, CommitmentProofBytes,
 };
-use namada::ibc::core::ics23_commitment::merkle::MerkleProof;
-use namada::ibc::core::ics24_host::identifier::{
+use namada::ibc::core::commitment_types::merkle::MerkleProof;
+use namada::ibc::core::connection::types::msgs::{
+    MsgConnectionOpenAck, MsgConnectionOpenConfirm, MsgConnectionOpenInit,
+    MsgConnectionOpenTry,
+};
+use namada::ibc::core::connection::types::version::Version as ConnVersion;
+use namada::ibc::core::connection::types::Counterparty as ConnCounterparty;
+use namada::ibc::core::host::types::identifiers::{
     ChainId, ChannelId, ClientId, ConnectionId, PortId,
 };
-use namada::ibc::core::Msg;
-use namada::ibc::{Height, Signer};
-use namada::ibc_proto::google::protobuf::Any;
+use namada::ibc::primitives::proto::Any;
+use namada::ibc::primitives::{Msg, Signer, Timestamp};
 use namada::ledger::events::EventType;
 use namada::ledger::ibc::storage::*;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
@@ -299,7 +301,7 @@ fn setup_two_single_node_nets() -> Result<(Test, Test)> {
 fn create_client(test_a: &Test, test_b: &Test) -> Result<(ClientId, ClientId)> {
     let height = query_height(test_b)?;
     let client_state = make_client_state(test_b, height);
-    let height = client_state.latest_height;
+    let height = client_state.latest_height();
     let message = MsgCreateClient {
         client_state: client_state.into(),
         consensus_state: make_consensus_state(test_b, height)?.into(),
@@ -309,7 +311,7 @@ fn create_client(test_a: &Test, test_b: &Test) -> Result<(ClientId, ClientId)> {
 
     let height = query_height(test_a)?;
     let client_state = make_client_state(test_a, height);
-    let height = client_state.latest_height;
+    let height = client_state.latest_height();
     let message = MsgCreateClient {
         client_state: client_state.into(),
         consensus_state: make_consensus_state(test_a, height)?.into(),
@@ -350,7 +352,7 @@ fn make_client_state(test: &Test, height: Height) -> TmClientState {
     let max_clock_drift = Duration::new(60, 0);
     let chain_id = ChainId::from_str(test.net.chain_id.as_str()).unwrap();
 
-    TmClientState::new(
+    TmClientStateType::new(
         chain_id,
         TrustThreshold::default(),
         Duration::from_secs(trusting_period),
@@ -365,6 +367,7 @@ fn make_client_state(test: &Test, height: Height) -> TmClientState {
         },
     )
     .unwrap()
+    .into()
 }
 
 fn make_consensus_state(
@@ -396,7 +399,7 @@ fn update_client_with_height(
     };
     let client_state = TmClientState::try_from(cs)
         .expect("the state should be a TmClientState");
-    let trusted_height = client_state.latest_height;
+    let trusted_height = client_state.latest_height();
 
     update_client(
         src_test,
@@ -496,15 +499,22 @@ fn connection_handshake(
         Some(conn_id_a.clone()),
         commitment_prefix(),
     );
-    let msg = make_msg_conn_open_try(
-        client_id_b.clone(),
-        client_state,
+    #[allow(deprecated)]
+    let msg = MsgConnectionOpenTry {
+        client_id_on_b: client_id_b.clone(),
+        client_state_of_b_on_a: client_state.clone().into(),
         counterparty,
-        conn_proof,
-        client_state_proof,
-        consensus_proof,
-        height_a,
-    );
+        versions_on_a: vec![ConnVersion::default()],
+        proofs_height_on_a: height_a,
+        proof_conn_end_on_a: conn_proof,
+        proof_client_state_of_b_on_a: client_state_proof,
+        proof_consensus_state_of_b_on_a: consensus_proof,
+        consensus_height_of_b_on_a: client_state.latest_height(),
+        delay_period: Duration::from_secs(0),
+        signer: "test".to_string().into(),
+        proof_consensus_state_of_b: None,
+        previous_connection_id: ConnectionId::default().to_string(),
+    };
     // Update the client state of Chain A on Chain B
     update_client_with_height(test_a, test_b, client_id_b, height_a)?;
     // OpenTryConnection on Chain B
@@ -518,7 +528,7 @@ fn connection_handshake(
     let conn_proof = get_connection_proof(test_b, &conn_id_b, height_b)?;
     let (client_state, client_state_proof, consensus_proof) =
         get_client_states(test_b, client_id_b, height_b)?;
-    let consensus_height_of_a_on_b = client_state.latest_height;
+    let consensus_height_of_a_on_b = client_state.latest_height();
     let msg = MsgConnectionOpenAck {
         conn_id_on_a: conn_id_a.clone(),
         conn_id_on_b: conn_id_b.clone(),
@@ -695,7 +705,7 @@ fn get_client_states(
         .expect("the state should be a TmClientState");
     let client_state_proof = convert_proof(tm_proof)?;
 
-    let height = client_state.latest_height;
+    let height = client_state.latest_height();
     let ibc_height = Height::new(0, height.revision_height()).unwrap();
     let key = consensus_state_key(client_id, ibc_height);
     let (_, tm_proof) = query_value_with_proof(test, &key, Some(query_height))?;
@@ -1375,19 +1385,15 @@ fn query_value_with_proof(
 }
 
 fn convert_proof(tm_proof: TmProof) -> Result<CommitmentProofBytes> {
-    use namada::ibc_proto::ibc::core::commitment::v1::MerkleProof as RawMerkleProof;
-    use namada::ibc_proto::ics23::CommitmentProof;
-
     let mut proofs = Vec::new();
-
     for op in &tm_proof.ops {
-        let mut parsed = CommitmentProof { proof: None };
+        let mut parsed = ics23::CommitmentProof { proof: None };
         prost::Message::merge(&mut parsed, op.data.as_slice())
             .expect("merging CommitmentProof failed");
         proofs.push(parsed);
     }
 
-    let merkle_proof = MerkleProof::from(RawMerkleProof { proofs });
+    let merkle_proof = MerkleProof { proofs };
     CommitmentProofBytes::try_from(merkle_proof).map_err(|e| {
         eyre!("Proof conversion to CommitmentProofBytes failed: {}", e)
     })
@@ -1527,40 +1533,6 @@ fn signer() -> Signer {
     "signer".to_string().into()
 }
 
-/// Helper function to make the MsgConnectionOpenTry because it has a private
-/// field
-fn make_msg_conn_open_try(
-    client_id: ClientId,
-    client_state: TmClientState,
-    counterparty: ConnCounterparty,
-    conn_proof: CommitmentProofBytes,
-    client_state_proof: CommitmentProofBytes,
-    consensus_proof: CommitmentProofBytes,
-    proofs_height: Height,
-) -> MsgConnectionOpenTry {
-    use namada::ibc_proto::ibc::core::connection::v1::MsgConnectionOpenTry as RawMsgConnectionOpenTry;
-
-    let consensus_height = client_state.latest_height;
-    #[allow(deprecated)]
-    RawMsgConnectionOpenTry {
-        client_id: client_id.as_str().to_string(),
-        client_state: Some(client_state.into()),
-        counterparty: Some(counterparty.into()),
-        delay_period: 0,
-        counterparty_versions: vec![ConnVersion::default().into()],
-        proof_init: conn_proof.into(),
-        proof_height: Some(proofs_height.into()),
-        proof_client: client_state_proof.into(),
-        proof_consensus: consensus_proof.into(),
-        consensus_height: Some(consensus_height.into()),
-        signer: "signer".to_string(),
-        previous_connection_id: ConnectionId::default().to_string(),
-        host_consensus_state_proof: vec![],
-    }
-    .try_into()
-    .expect("invalid message")
-}
-
 fn get_client_id_from_events(events: &Vec<AbciEvent>) -> Option<ClientId> {
     get_attribute_from_events(events, "client_id").map(|v| v.parse().unwrap())
 }
@@ -1600,7 +1572,16 @@ fn get_packet_from_events(events: &Vec<AbciEvent>) -> Option<Packet> {
         if !attributes.contains_key("packet_src_port") {
             continue;
         }
-        let mut packet = Packet::default();
+        let mut packet = Packet {
+            seq_on_a: 0.into(),
+            port_id_on_a: PortId::transfer(),
+            chan_id_on_a: ChannelId::default(),
+            port_id_on_b: PortId::transfer(),
+            chan_id_on_b: ChannelId::default(),
+            data: vec![],
+            timeout_height_on_b: TimeoutHeight::default(),
+            timeout_timestamp_on_b: Timestamp::default(),
+        };
         for (key, val) in attributes {
             match key.as_str() {
                 "packet_src_port" => packet.port_id_on_a = val.parse().unwrap(),

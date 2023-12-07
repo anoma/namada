@@ -18,19 +18,23 @@ pub use context::ValidationParams;
 use prost::Message;
 use thiserror::Error;
 
-use crate::ibc::applications::transfer::error::TokenTransferError;
-use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
-use crate::ibc::applications::transfer::{
-    is_receiver_chain_source, send_transfer_execute, send_transfer_validate,
-    PrefixedDenom, TracePrefix,
+use crate::ibc::apps::transfer::handler::{
+    send_transfer_execute, send_transfer_validate,
 };
-use crate::ibc::core::ics04_channel::msgs::PacketMsg;
-use crate::ibc::core::ics24_host::identifier::{
-    ChannelId, IdentifierError, PortId,
+use crate::ibc::apps::transfer::types::error::TokenTransferError;
+use crate::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
+use crate::ibc::apps::transfer::types::{
+    is_receiver_chain_source, PrefixedDenom, TracePrefix,
 };
-use crate::ibc::core::router::ModuleId;
-use crate::ibc::core::{execute, validate, MsgEnvelope, RouterError};
-use crate::ibc_proto::google::protobuf::Any;
+use crate::ibc::core::channel::types::msgs::PacketMsg;
+use crate::ibc::core::entrypoint::{execute, validate};
+use crate::ibc::core::handler::types::error::ContextError;
+use crate::ibc::core::handler::types::msgs::MsgEnvelope;
+use crate::ibc::core::host::types::error::IdentifierError;
+use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
+use crate::ibc::core::router::types::error::RouterError;
+use crate::ibc::core::router::types::module::ModuleId;
+use crate::ibc::primitives::proto::Any;
 use crate::types::address::{Address, MASP};
 use crate::types::ibc::{
     get_shielded_transfer, is_ibc_denom, EVENT_TYPE_DENOM_TRACE,
@@ -45,16 +49,10 @@ pub enum Error {
     DecodingData(prost::DecodeError),
     #[error("Decoding message error: {0}")]
     DecodingMessage(RouterError),
-    #[error("IBC storage error: {0}")]
-    IbcStorage(storage::Error),
-    #[error("IBC execution error: {0}")]
-    Execution(RouterError),
+    #[error("IBC context error: {0}")]
+    Context(Box<ContextError>),
     #[error("IBC token transfer error: {0}")]
     TokenTransfer(TokenTransferError),
-    #[error("IBC validation error: {0}")]
-    Validation(RouterError),
-    #[error("IBC module doesn't exist")]
-    NoModule,
     #[error("Denom error: {0}")]
     Denom(String),
     #[error("Invalid chain ID: {0}")]
@@ -114,10 +112,10 @@ where
                 .map_err(Error::TokenTransfer)
             }
             Err(_) => {
-                let envelope =
-                    MsgEnvelope::try_from(any_msg).map_err(Error::Execution)?;
+                let envelope = MsgEnvelope::try_from(any_msg)
+                    .map_err(Error::DecodingMessage)?;
                 execute(&mut self.ctx, &mut self.router, envelope.clone())
-                    .map_err(Error::Execution)?;
+                    .map_err(|e| Error::Context(Box::new(e)))?;
                 // For receiving the token to a shielded address
                 self.handle_masp_tx(&envelope)?;
                 // the current ibc-rs execution doesn't store the denom for the
@@ -230,9 +228,9 @@ where
             }
             Err(_) => {
                 let envelope = MsgEnvelope::try_from(any_msg)
-                    .map_err(Error::Validation)?;
+                    .map_err(Error::DecodingMessage)?;
                 validate(&self.ctx, &self.router, envelope)
-                    .map_err(Error::Validation)
+                    .map_err(|e| Error::Context(Box::new(e)))
             }
         }
     }

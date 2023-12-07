@@ -14,8 +14,8 @@ use std::fmt::Debug;
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::ibc::core::ics23_commitment::specs::ProofSpecs;
-use crate::ibc::core::ics24_host::identifier::ChainId as IbcChainId;
+use crate::ibc::core::commitment_types::specs::ProofSpecs;
+use crate::ibc::core::host::types::identifiers::ChainId as IbcChainId;
 
 /// IBC context to handle IBC-related data
 #[derive(Debug)]
@@ -58,7 +58,7 @@ pub struct ValidationParams {
 impl Default for ValidationParams {
     fn default() -> Self {
         Self {
-            chain_id: IbcChainId::new("non-init-chain", 0)
+            chain_id: IbcChainId::new("non-init-chain")
                 .expect("Convert the default chain ID shouldn't fail"),
             proof_specs: ProofSpecs::default(),
             unbonding_period: Duration::default(),

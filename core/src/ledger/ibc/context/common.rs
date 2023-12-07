@@ -7,31 +7,30 @@ use sha2::Digest;
 
 use super::client::{AnyClientState, AnyConsensusState};
 use super::storage::IbcStorageContext;
-use crate::ibc::clients::ics07_tendermint::consensus_state::ConsensusState as TmConsensusState;
-use crate::ibc::core::ics02_client::consensus_state::ConsensusState;
-use crate::ibc::core::ics02_client::error::ClientError;
-use crate::ibc::core::ics02_client::height::Height;
-use crate::ibc::core::ics03_connection::connection::ConnectionEnd;
-use crate::ibc::core::ics03_connection::error::ConnectionError;
-use crate::ibc::core::ics04_channel::channel::ChannelEnd;
-use crate::ibc::core::ics04_channel::commitment::{
+use crate::ibc::clients::tendermint::consensus_state::ConsensusState as TmConsensusState;
+use crate::ibc::clients::tendermint::types::ConsensusState as TmConsensusStateType;
+use crate::ibc::core::channel::types::channel::ChannelEnd;
+use crate::ibc::core::channel::types::commitment::{
     AcknowledgementCommitment, PacketCommitment,
 };
-use crate::ibc::core::ics04_channel::error::{ChannelError, PacketError};
-use crate::ibc::core::ics04_channel::packet::{Receipt, Sequence};
-use crate::ibc::core::ics04_channel::timeout::TimeoutHeight;
-use crate::ibc::core::ics24_host::identifier::{
-    ChannelId, ClientId, ConnectionId, PortId,
+use crate::ibc::core::channel::types::error::{ChannelError, PacketError};
+use crate::ibc::core::channel::types::packet::Receipt;
+use crate::ibc::core::channel::types::timeout::TimeoutHeight;
+use crate::ibc::core::client::context::consensus_state::ConsensusState;
+use crate::ibc::core::client::types::error::ClientError;
+use crate::ibc::core::client::types::Height;
+use crate::ibc::core::connection::types::error::ConnectionError;
+use crate::ibc::core::connection::types::ConnectionEnd;
+use crate::ibc::core::handler::types::error::ContextError;
+use crate::ibc::core::host::types::identifiers::{
+    ChannelId, ClientId, ConnectionId, PortId, Sequence,
 };
-use crate::ibc::core::timestamp::Timestamp;
-use crate::ibc::core::ContextError;
-use crate::ibc_proto::google::protobuf::Any;
-use crate::ibc_proto::protobuf::Protobuf;
+use crate::ibc::primitives::proto::{Any, Protobuf};
+use crate::ibc::primitives::Timestamp;
 use crate::ledger::ibc::storage;
 use crate::ledger::parameters::storage::get_max_expected_time_per_block_key;
 use crate::ledger::storage_api;
 use crate::tendermint::Time as TmTime;
-use crate::tendermint_proto::Protobuf as TmProtobuf;
 use crate::types::storage::{BlockHeight, Key};
 use crate::types::time::DurationSecs;
 
@@ -292,8 +291,12 @@ pub trait IbcCommonContext: IbcStorageContext {
             .next_validators_hash
             .try_into()
             .expect("The hash should be converted");
-        let consensus_state =
-            TmConsensusState::new(commitment_root, time, next_validators_hash);
+        let consensus_state: TmConsensusState = TmConsensusStateType::new(
+            commitment_root,
+            time,
+            next_validators_hash,
+        )
+        .into();
         Ok(consensus_state.into())
     }
 

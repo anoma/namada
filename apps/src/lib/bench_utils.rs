@@ -19,39 +19,39 @@ use namada::core::types::address::{self, Address};
 use namada::core::types::key::common::SecretKey;
 use namada::core::types::storage::Key;
 use namada::core::types::token::{Amount, Transfer};
-use namada::ibc::applications::transfer::msgs::transfer::MsgTransfer;
-use namada::ibc::applications::transfer::packet::PacketData;
-use namada::ibc::applications::transfer::PrefixedCoin;
-use namada::ibc::clients::ics07_tendermint::client_state::{
-    AllowUpdate, ClientState,
+use namada::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
+use namada::ibc::apps::transfer::types::packet::PacketData;
+use namada::ibc::apps::transfer::types::PrefixedCoin;
+use namada::ibc::clients::tendermint::client_state::ClientState;
+use namada::ibc::clients::tendermint::consensus_state::ConsensusState;
+use namada::ibc::clients::tendermint::types::{
+    AllowUpdate, ClientState as ClientStateType,
+    ConsensusState as ConsensusStateType, TrustThreshold,
 };
-use namada::ibc::clients::ics07_tendermint::consensus_state::ConsensusState;
-use namada::ibc::clients::ics07_tendermint::trust_threshold::TrustThreshold;
-use namada::ibc::core::ics02_client::client_type::ClientType;
-use namada::ibc::core::ics03_connection::connection::{
-    ConnectionEnd, Counterparty, State as ConnectionState,
-};
-use namada::ibc::core::ics03_connection::version::Version;
-use namada::ibc::core::ics04_channel::channel::{
+use namada::ibc::core::channel::types::channel::{
     ChannelEnd, Counterparty as ChannelCounterparty, Order, State,
 };
-use namada::ibc::core::ics04_channel::timeout::TimeoutHeight;
-use namada::ibc::core::ics04_channel::Version as ChannelVersion;
-use namada::ibc::core::ics23_commitment::commitment::{
+use namada::ibc::core::channel::types::timeout::TimeoutHeight;
+use namada::ibc::core::channel::types::Version as ChannelVersion;
+use namada::ibc::core::client::types::Height as IbcHeight;
+use namada::ibc::core::commitment_types::commitment::{
     CommitmentPrefix, CommitmentRoot,
 };
-use namada::ibc::core::ics23_commitment::specs::ProofSpecs;
-use namada::ibc::core::ics24_host::identifier::{
-    ChainId as IbcChainId, ChannelId as NamadaChannelId, ChannelId, ClientId,
-    ConnectionId, ConnectionId as NamadaConnectionId, PortId as NamadaPortId,
-    PortId,
+use namada::ibc::core::commitment_types::specs::ProofSpecs;
+use namada::ibc::core::connection::types::version::Version;
+use namada::ibc::core::connection::types::{
+    ConnectionEnd, Counterparty, State as ConnectionState,
 };
-use namada::ibc::core::ics24_host::path::Path as IbcPath;
-use namada::ibc::core::timestamp::Timestamp as IbcTimestamp;
-use namada::ibc::core::Msg;
-use namada::ibc::Height as IbcHeight;
-use namada::ibc_proto::google::protobuf::Any;
-use namada::ibc_proto::protobuf::Protobuf;
+use namada::ibc::core::host::types::identifiers::{
+    ChainId as IbcChainId, ChannelId as NamadaChannelId, ChannelId, ClientId,
+    ClientType, ConnectionId, ConnectionId as NamadaConnectionId,
+    PortId as NamadaPortId, PortId,
+};
+use namada::ibc::core::host::types::path::{
+    ClientConsensusStatePath, ClientStatePath, Path as IbcPath,
+};
+use namada::ibc::primitives::proto::{Any, Protobuf};
+use namada::ibc::primitives::{Msg, Timestamp as IbcTimestamp};
 use namada::ledger::dry_run_tx;
 use namada::ledger::gas::TxGasMeter;
 use namada::ledger::ibc::storage::{channel_key, connection_key};
@@ -424,15 +424,11 @@ impl BenchShell {
             ClientId::new(ClientType::new("01-tendermint").unwrap(), 1)
                 .unwrap();
         let client_state_key = addr_key.join(&Key::from(
-            IbcPath::ClientState(
-                namada::ibc::core::ics24_host::path::ClientStatePath(
-                    client_id.clone(),
-                ),
-            )
-            .to_string()
-            .to_db_key(),
+            IbcPath::ClientState(ClientStatePath(client_id.clone()))
+                .to_string()
+                .to_db_key(),
         ));
-        let client_state = ClientState::new(
+        let client_state = ClientStateType::new(
             IbcChainId::from_str(&ChainId::default().to_string()).unwrap(),
             TrustThreshold::ONE_THIRD,
             std::time::Duration::new(100, 0),
@@ -446,8 +442,9 @@ impl BenchShell {
                 after_misbehaviour: true,
             },
         )
-        .unwrap();
-        let bytes = <ClientState as Protobuf<Any>>::encode_vec(&client_state);
+        .unwrap()
+        .into();
+        let bytes = <ClientState as Protobuf<Any>>::encode_vec(client_state);
         self.wl_storage
             .storage
             .write(&client_state_key, bytes)
@@ -457,25 +454,24 @@ impl BenchShell {
         let now: namada::tendermint::Time =
             DateTimeUtc::now().try_into().unwrap();
         let consensus_key = addr_key.join(&Key::from(
-            IbcPath::ClientConsensusState(
-                namada::ibc::core::ics24_host::path::ClientConsensusStatePath {
-                    client_id: client_id.clone(),
-                    epoch: 0,
-                    height: 1,
-                },
-            )
+            IbcPath::ClientConsensusState(ClientConsensusStatePath {
+                client_id: client_id.clone(),
+                revision_number: 0,
+                revision_height: 1,
+            })
             .to_string()
             .to_db_key(),
         ));
 
-        let consensus_state = ConsensusState {
+        let consensus_state = ConsensusStateType {
             timestamp: now,
             root: CommitmentRoot::from_bytes(&[]),
             next_validators_hash: Hash::Sha256([0u8; 32]),
-        };
+        }
+        .into();
 
         let bytes =
-            <ConsensusState as Protobuf<Any>>::encode_vec(&consensus_state);
+            <ConsensusState as Protobuf<Any>>::encode_vec(consensus_state);
         self.wl_storage
             .storage
             .write(&consensus_key, bytes)

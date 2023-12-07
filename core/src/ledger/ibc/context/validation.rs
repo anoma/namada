@@ -1,35 +1,37 @@
 //! ValidationContext implementation for IBC
 
+#[cfg(feature = "testing")]
+use ibc_testkit::testapp::ibc::clients::mock::client_state::MockClientState;
+
 use super::client::{AnyClientState, AnyConsensusState};
 use super::common::IbcCommonContext;
 use super::IbcContext;
-use crate::ibc::clients::ics07_tendermint::{
+use crate::ibc::clients::tendermint::context::{
     CommonContext as TmCommonContext, ValidationContext as TmValidationContext,
 };
-use crate::ibc::core::ics02_client::error::ClientError;
-use crate::ibc::core::ics02_client::ClientValidationContext;
-use crate::ibc::core::ics03_connection::connection::ConnectionEnd;
-use crate::ibc::core::ics04_channel::channel::ChannelEnd;
-use crate::ibc::core::ics04_channel::commitment::{
+use crate::ibc::core::channel::types::channel::ChannelEnd;
+use crate::ibc::core::channel::types::commitment::{
     AcknowledgementCommitment, PacketCommitment,
 };
-use crate::ibc::core::ics04_channel::packet::{Receipt, Sequence};
-use crate::ibc::core::ics23_commitment::commitment::CommitmentPrefix;
-use crate::ibc::core::ics23_commitment::specs::ProofSpecs;
-use crate::ibc::core::ics24_host::identifier::{
-    ChainId, ClientId, ConnectionId,
+use crate::ibc::core::channel::types::packet::Receipt;
+use crate::ibc::core::client::context::ClientValidationContext;
+use crate::ibc::core::client::types::error::ClientError;
+use crate::ibc::core::client::types::Height;
+use crate::ibc::core::commitment_types::commitment::CommitmentPrefix;
+use crate::ibc::core::commitment_types::specs::ProofSpecs;
+use crate::ibc::core::connection::types::ConnectionEnd;
+use crate::ibc::core::handler::types::error::ContextError;
+use crate::ibc::core::host::types::identifiers::{
+    ChainId, ClientId, ConnectionId, Sequence,
 };
-use crate::ibc::core::ics24_host::path::{
+use crate::ibc::core::host::types::path::{
     AckPath, ChannelEndPath, ClientConsensusStatePath, CommitmentPath,
     ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath,
 };
-use crate::ibc::core::timestamp::Timestamp;
-use crate::ibc::core::{ContextError, ValidationContext};
-use crate::ibc::hosts::tendermint::ValidateSelfClientContext;
-#[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
-use crate::ibc::mock::client_state::MockClientState;
-use crate::ibc::{Height, Signer};
-use crate::ibc_proto::google::protobuf::Any;
+use crate::ibc::core::host::ValidationContext;
+use crate::ibc::cosmos_host::ValidateSelfClientContext;
+use crate::ibc::primitives::proto::Any;
+use crate::ibc::primitives::{Signer, Timestamp};
 use crate::ledger::ibc::storage;
 
 const COMMITMENT_PREFIX: &[u8] = b"ibc";
@@ -85,9 +87,9 @@ where
     }
 }
 
-#[cfg(feature = "ibc-mocks")]
-use crate::ibc::mock::client_state::MockClientContext;
-#[cfg(feature = "ibc-mocks")]
+#[cfg(feature = "testing")]
+use ibc_testkit::testapp::ibc::clients::mock::client_state::MockClientContext;
+#[cfg(feature = "testing")]
 impl<C> MockClientContext for IbcContext<C>
 where
     C: IbcCommonContext,
@@ -164,8 +166,8 @@ where
         client_cons_state_path: &ClientConsensusStatePath,
     ) -> Result<Self::AnyConsensusState, ContextError> {
         let height = Height::new(
-            client_cons_state_path.epoch,
-            client_cons_state_path.height,
+            client_cons_state_path.revision_number,
+            client_cons_state_path.revision_height,
         )?;
         self.inner
             .borrow()
@@ -205,7 +207,7 @@ where
         &self,
         counterparty_client_state: Any,
     ) -> Result<(), ContextError> {
-        #[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
+        #[cfg(feature = "testing")]
         {
             if MockClientState::try_from(counterparty_client_state.clone())
                 .is_ok()
