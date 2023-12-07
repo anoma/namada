@@ -51,7 +51,7 @@ use namada_apps::bench_utils::{
     TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM, TX_RESIGN_STEWARD,
     TX_REVEAL_PK_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
     TX_UPDATE_ACCOUNT_WASM, TX_UPDATE_STEWARD_COMMISSION,
-    TX_VOTE_PROPOSAL_WASM, TX_WITHDRAW_WASM, VP_VALIDATOR_WASM,
+    TX_VOTE_PROPOSAL_WASM, TX_WITHDRAW_WASM, VP_USER_WASM,
 };
 use namada_apps::wallet::defaults;
 use sha2::Digest;
@@ -369,11 +369,11 @@ fn reveal_pk(c: &mut Criterion) {
 fn update_account(c: &mut Criterion) {
     let shell = BenchShell::default();
     let vp_code_hash: Hash = shell
-        .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
+        .read_storage_key(&Key::wasm_hash(VP_USER_WASM))
         .unwrap();
     let extra_section = Section::ExtraData(Code::from_hash(
         vp_code_hash,
-        Some(VP_VALIDATOR_WASM.to_string()),
+        Some(VP_USER_WASM.to_string()),
     ));
     let data = UpdateAccount {
         addr: defaults::albert_address(),
@@ -412,11 +412,11 @@ fn init_account(c: &mut Criterion) {
 
     let shell = BenchShell::default();
     let vp_code_hash: Hash = shell
-        .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
+        .read_storage_key(&Key::wasm_hash(VP_USER_WASM))
         .unwrap();
     let extra_section = Section::ExtraData(Code::from_hash(
         vp_code_hash,
-        Some(VP_VALIDATOR_WASM.to_string()),
+        Some(VP_USER_WASM.to_string()),
     ));
     let extra_hash = Hash(
         extra_section
@@ -613,11 +613,11 @@ fn init_validator(c: &mut Criterion) {
 
     let shell = BenchShell::default();
     let validator_vp_code_hash: Hash = shell
-        .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
+        .read_storage_key(&Key::wasm_hash(VP_USER_WASM))
         .unwrap();
     let extra_section = Section::ExtraData(Code::from_hash(
         validator_vp_code_hash,
-        Some(VP_VALIDATOR_WASM.to_string()),
+        Some(VP_USER_WASM.to_string()),
     ));
     let extra_hash = Hash(
         extra_section

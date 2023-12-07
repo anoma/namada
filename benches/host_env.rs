@@ -9,7 +9,7 @@ use namada::proto::Signature;
 use namada::vm::wasm::TxCache;
 use namada_apps::bench_utils::{
     BenchShell, TX_INIT_PROPOSAL_WASM, TX_REVEAL_PK_WASM, TX_TRANSFER_WASM,
-    TX_UPDATE_ACCOUNT_WASM, VP_VALIDATOR_WASM, WASM_DIR,
+    TX_UPDATE_ACCOUNT_WASM, VP_USER_WASM, WASM_DIR,
 };
 use namada_apps::wallet::defaults;
 use namada_apps::wasm_loader;
@@ -68,7 +68,7 @@ fn compile_wasm(c: &mut Criterion) {
         TX_INIT_PROPOSAL_WASM,
         TX_REVEAL_PK_WASM,
         TX_UPDATE_ACCOUNT_WASM,
-        VP_VALIDATOR_WASM,
+        VP_USER_WASM,
     ] {
         let wasm_code = wasm_loader::read_wasm_or_exit(WASM_DIR, tx);
         txs.insert(tx, wasm_code);

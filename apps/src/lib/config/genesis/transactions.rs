@@ -153,7 +153,7 @@ pub fn init_validator(
             validator_wallet.eth_cold_key.ref_to(),
         ),
         // No custom validator VPs yet
-        vp: "vp_validator".to_string(),
+        vp: "vp_user".to_string(),
         commission_rate,
         max_commission_rate_change,
         email,

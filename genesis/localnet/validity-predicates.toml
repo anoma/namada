@@ -8,7 +8,3 @@ filename = "vp_implicit.wasm"
 [wasm.vp_user]
 filename = "vp_user.wasm"
 
-# Default validator VP
-[wasm.vp_validator]
-filename = "vp_validator.wasm"
-

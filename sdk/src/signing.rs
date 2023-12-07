@@ -54,7 +54,6 @@ use crate::tx::{
     TX_INIT_PROPOSAL, TX_INIT_VALIDATOR_WASM, TX_REACTIVATE_VALIDATOR_WASM,
     TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
     TX_UPDATE_ACCOUNT_WASM, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM, VP_USER_WASM,
-    VP_VALIDATOR_WASM,
 };
 pub use crate::wallet::store::AddressVpType;
 use crate::wallet::{Wallet, WalletIo};
@@ -1067,8 +1066,6 @@ pub async fn to_ledger_vector<'a>(
             })?;
         let vp_code = if extra.tag == Some(VP_USER_WASM.to_string()) {
             "User".to_string()
-        } else if extra.tag == Some(VP_VALIDATOR_WASM.to_string()) {
-            "Validator".to_string()
         } else {
             HEXLOWER.encode(&extra.code.hash().0)
         };
@@ -1113,8 +1110,6 @@ pub async fn to_ledger_vector<'a>(
             })?;
         let vp_code = if extra.tag == Some(VP_USER_WASM.to_string()) {
             "User".to_string()
-        } else if extra.tag == Some(VP_VALIDATOR_WASM.to_string()) {
-            "Validator".to_string()
         } else {
             HEXLOWER.encode(&extra.code.hash().0)
         };
@@ -1314,8 +1309,6 @@ pub async fn to_ledger_vector<'a>(
                     })?;
                 let vp_code = if extra.tag == Some(VP_USER_WASM.to_string()) {
                     "User".to_string()
-                } else if extra.tag == Some(VP_VALIDATOR_WASM.to_string()) {
-                    "Validator".to_string()
                 } else {
                     HEXLOWER.encode(&extra.code.hash().0)
                 };

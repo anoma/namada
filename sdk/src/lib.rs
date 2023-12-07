@@ -3,7 +3,6 @@ extern crate alloc;
 pub use namada_core::{ibc, ibc_proto, proto, tendermint, tendermint_proto};
 #[cfg(feature = "tendermint-rpc")]
 pub use tendermint_rpc;
-use tx::{TX_INIT_ACCOUNT_WASM, VP_VALIDATOR_WASM};
 pub use {
     bip39, borsh, masp_primitives, masp_proofs, namada_core as core,
     namada_proof_of_stake as proof_of_stake, zeroize,
@@ -55,10 +54,10 @@ use crate::tx::{
     ProcessTxResponse, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
     TX_CHANGE_COMMISSION_WASM, TX_CHANGE_CONSENSUS_KEY_WASM,
     TX_CHANGE_METADATA_WASM, TX_CLAIM_REWARDS_WASM,
-    TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM, TX_INIT_PROPOSAL,
-    TX_INIT_VALIDATOR_WASM, TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM,
-    TX_RESIGN_STEWARD, TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM,
-    TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
+    TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
+    TX_INIT_PROPOSAL, TX_INIT_VALIDATOR_WASM, TX_REACTIVATE_VALIDATOR_WASM,
+    TX_REDELEGATE_WASM, TX_RESIGN_STEWARD, TX_REVEAL_PK, TX_TRANSFER_WASM,
+    TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
     TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
     VP_USER_WASM,
 };
@@ -366,7 +365,7 @@ pub trait Namada<'a>: Sized {
             eth_cold_key: None,
             eth_hot_key: None,
             protocol_key: None,
-            validator_vp_code_path: PathBuf::from(VP_VALIDATOR_WASM),
+            validator_vp_code_path: PathBuf::from(VP_USER_WASM),
             unsafe_dont_encrypt: false,
             tx_code_path: PathBuf::from(TX_INIT_VALIDATOR_WASM),
             tx: self.tx_builder(),

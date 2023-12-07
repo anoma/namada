@@ -56,7 +56,7 @@ An unsigned `validator_account` tx example:
 ```toml
 [[validator_account]]
 alias = "validator-0"
-vp = "vp_validator"
+vp = "vp_user"
 commission_rate = "0.05"
 max_commission_rate_change = "0.01"
 net_address = "127.0.0.1:27656"
