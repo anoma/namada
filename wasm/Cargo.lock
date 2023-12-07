@@ -3600,6 +3600,7 @@ dependencies = [
  "once_cell",
  "proptest",
  "ripemd",
+ "test-log",
  "tracing",
  "tracing-subscriber",
  "wee_alloc",

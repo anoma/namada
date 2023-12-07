@@ -106,7 +106,7 @@ orion = "0.16.0"
 paste = "1.0.9"
 pretty_assertions = "1.4.0"
 primitive-types = "0.12.1"
-proptest = "1.2.0"
+proptest = "1.4.0"
 proptest-state-machine = "0.1.0"
 prost = "0.12.0"
 prost-types = "0.12.0"
@@ -134,7 +134,7 @@ tendermint-config = "0.34.0"
 tendermint-light-client = "0.34.0"
 tendermint-proto = "0.34.0"
 tendermint-rpc = {version = "0.34.0", default-features = false}
-test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
+test-log = {version = "0.2.14", default-features = false, features = ["trace"]}
 tiny-bip39 = {git = "https://github.com/anoma/tiny-bip39.git", rev = "bf0f6d8713589b83af7a917366ec31f5275c0e57"}
 tiny-hderive = "0.3.0"
 thiserror = "1.0.38"

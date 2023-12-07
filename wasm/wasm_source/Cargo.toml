@@ -56,6 +56,7 @@ namada_tests = {path = "../../tests"}
 namada_test_utils = {path = "../../test_utils"}
 namada_tx_prelude = {path = "../../tx_prelude"}
 namada_vp_prelude = {path = "../../vp_prelude"}
-proptest = "1.2.0"
+proptest = "1.4.0"
+test-log = {version = "0.2.14", default-features = false, features = ["trace"]}
 tracing = "0.1.30"
 tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
