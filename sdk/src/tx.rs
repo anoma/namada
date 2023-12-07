@@ -927,11 +927,17 @@ pub async fn build_unjail_validator(
         Err(Error::Query(
             QueryError::NoSuchKey(_) | QueryError::General(_),
         )) => {
-            return Err(Error::from(TxError::Other(format!(
+            edisplay_line!(
+                context.io(),
                 "The given validator address {} is currently frozen and not \
                  yet eligible to be unjailed.",
                 &validator
-            ))));
+            );
+            if !tx_args.force {
+                return Err(Error::from(
+                    TxError::ValidatorFrozenFromUnjailing(validator.clone()),
+                ));
+            }
         }
         Err(err) => return Err(err),
     }

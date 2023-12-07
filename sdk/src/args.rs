@@ -733,11 +733,11 @@ pub struct TxBecomeValidator<C: NamadaTypes = SdkTypes> {
     /// Signature scheme
     pub scheme: SchemeType,
     /// Consensus key
-    pub consensus_key: Option<C::Keypair>,
+    pub consensus_key: Option<C::PublicKey>,
     /// Ethereum cold key
-    pub eth_cold_key: Option<C::Keypair>,
+    pub eth_cold_key: Option<C::PublicKey>,
     /// Ethereum hot key
-    pub eth_hot_key: Option<C::Keypair>,
+    pub eth_hot_key: Option<C::PublicKey>,
     /// Protocol key
     pub protocol_key: Option<C::PublicKey>,
     /// Commission rate
@@ -770,11 +770,11 @@ pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
     /// The account multisignature threshold
     pub threshold: Option<u8>,
     /// Consensus key
-    pub consensus_key: Option<C::Keypair>,
+    pub consensus_key: Option<C::PublicKey>,
     /// Ethereum cold key
-    pub eth_cold_key: Option<C::Keypair>,
+    pub eth_cold_key: Option<C::PublicKey>,
     /// Ethereum hot key
-    pub eth_hot_key: Option<C::Keypair>,
+    pub eth_hot_key: Option<C::PublicKey>,
     /// Protocol key
     pub protocol_key: Option<C::PublicKey>,
     /// Commission rate
@@ -1399,7 +1399,7 @@ pub struct ConsensusKeyChange<C: NamadaTypes = SdkTypes> {
     /// Validator address (should be self)
     pub validator: C::Address,
     /// New consensus key
-    pub consensus_key: Option<C::Keypair>,
+    pub consensus_key: Option<C::PublicKey>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -1865,7 +1865,7 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// The amount being payed (for gas unit) to include the transaction
     pub fee_amount: Option<InputAmount>,
     /// The fee payer signing key
-    pub wrapper_fee_payer: Option<C::Keypair>,
+    pub wrapper_fee_payer: Option<C::PublicKey>,
     /// The token in which the fee is being paid
     pub fee_token: C::Address,
     /// The optional spending key for fee unshielding
@@ -1880,13 +1880,11 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// The chain id for which the transaction is intended
     pub chain_id: Option<ChainId>,
     /// Sign the tx with the key for the given alias from your wallet
-    pub signing_keys: Vec<C::Keypair>,
+    pub signing_keys: Vec<C::PublicKey>,
     /// List of signatures to attach to the transaction
     pub signatures: Vec<C::Data>,
     /// Path to the TX WASM code file to reveal PK
     pub tx_reveal_code_path: PathBuf,
-    /// Sign the tx with the public key for the given alias from your wallet
-    pub verification_key: Option<C::PublicKey>,
     /// Password to decrypt key
     pub password: Option<Zeroizing<String>>,
     /// Use device to sign the transaction
@@ -1966,7 +1964,7 @@ pub trait TxBuilder<C: NamadaTypes>: Sized {
         })
     }
     /// The fee payer signing key
-    fn wrapper_fee_payer(self, wrapper_fee_payer: C::Keypair) -> Self {
+    fn wrapper_fee_payer(self, wrapper_fee_payer: C::PublicKey) -> Self {
         self.tx(|x| Tx {
             wrapper_fee_payer: Some(wrapper_fee_payer),
             ..x
@@ -2010,7 +2008,7 @@ pub trait TxBuilder<C: NamadaTypes>: Sized {
         })
     }
     /// Sign the tx with the key for the given alias from your wallet
-    fn signing_keys(self, signing_keys: Vec<C::Keypair>) -> Self {
+    fn signing_keys(self, signing_keys: Vec<C::PublicKey>) -> Self {
         self.tx(|x| Tx { signing_keys, ..x })
     }
     /// List of signatures to attach to the transaction
@@ -2021,13 +2019,6 @@ pub trait TxBuilder<C: NamadaTypes>: Sized {
     fn tx_reveal_code_path(self, tx_reveal_code_path: PathBuf) -> Self {
         self.tx(|x| Tx {
             tx_reveal_code_path,
-            ..x
-        })
-    }
-    /// Sign the tx with the public key for the given alias from your wallet
-    fn verification_key(self, verification_key: C::PublicKey) -> Self {
-        self.tx(|x| Tx {
-            verification_key: Some(verification_key),
             ..x
         })
     }

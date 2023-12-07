@@ -2985,7 +2985,7 @@ pub mod args {
         arg_opt("gas-spending-key");
     pub const FEE_AMOUNT_OPT: ArgOpt<token::DenominatedAmount> =
         arg_opt("gas-price");
-    pub const FEE_PAYER_OPT: ArgOpt<WalletKeypair> = arg_opt("gas-payer");
+    pub const FEE_PAYER_OPT: ArgOpt<WalletPublicKey> = arg_opt("gas-payer");
     pub const FORCE: ArgFlag = flag("force");
     pub const GAS_LIMIT: ArgDefault<GasLimit> =
         arg_default("gas-limit", DefaultFn(|| GasLimit::from(25_000)));
@@ -3070,9 +3070,8 @@ pub mod args {
         arg("self-bond-amount");
     pub const SENDER: Arg<String> = arg("sender");
     pub const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
-    pub const SIGNING_KEY_OPT: ArgOpt<WalletKeypair> = SIGNING_KEY.opt();
-    pub const SIGNING_KEY: Arg<WalletKeypair> = arg("signing-key");
-    pub const SIGNING_KEYS: ArgMulti<WalletKeypair> = arg_multi("signing-keys");
+    pub const SIGNING_KEYS: ArgMulti<WalletPublicKey> =
+        arg_multi("signing-keys");
     pub const SIGNATURES: ArgMulti<PathBuf> = arg_multi("signatures");
     pub const SOURCE: Arg<WalletAddress> = arg("source");
     pub const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
@@ -3101,17 +3100,15 @@ pub mod args {
         arg_opt("account-key");
     pub const VALIDATOR_ACCOUNT_KEYS: ArgMulti<WalletPublicKey> =
         arg_multi("account-keys");
-    pub const VALIDATOR_CONSENSUS_KEY: ArgOpt<WalletKeypair> =
+    pub const VALIDATOR_CONSENSUS_KEY: ArgOpt<WalletPublicKey> =
         arg_opt("consensus-key");
     pub const VALIDATOR_CODE_PATH: ArgOpt<PathBuf> =
         arg_opt("validator-code-path");
-    pub const VALIDATOR_ETH_COLD_KEY: ArgOpt<WalletKeypair> =
+    pub const VALIDATOR_ETH_COLD_KEY: ArgOpt<WalletPublicKey> =
         arg_opt("eth-cold-key");
-    pub const VALIDATOR_ETH_HOT_KEY: ArgOpt<WalletKeypair> =
+    pub const VALIDATOR_ETH_HOT_KEY: ArgOpt<WalletPublicKey> =
         arg_opt("eth-hot-key");
     pub const VALUE: ArgOpt<String> = arg_opt("value");
-    pub const VERIFICATION_KEY: ArgOpt<WalletPublicKey> =
-        arg_opt("verification-key");
     pub const VIEWING_KEY: Arg<WalletViewingKey> = arg("key");
     pub const WALLET_ALIAS_FORCE: ArgFlag = flag("wallet-alias-force");
     pub const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
@@ -4077,13 +4074,9 @@ pub mod args {
                 tx,
                 scheme: self.scheme,
                 address: chain_ctx.get(&self.address),
-                consensus_key: self
-                    .consensus_key
-                    .map(|x| chain_ctx.get_cached(&x)),
-                eth_cold_key: self
-                    .eth_cold_key
-                    .map(|x| chain_ctx.get_cached(&x)),
-                eth_hot_key: self.eth_hot_key.map(|x| chain_ctx.get_cached(&x)),
+                consensus_key: self.consensus_key.map(|x| chain_ctx.get(&x)),
+                eth_cold_key: self.eth_cold_key.map(|x| chain_ctx.get(&x)),
+                eth_hot_key: self.eth_hot_key.map(|x| chain_ctx.get(&x)),
                 protocol_key: self.protocol_key.map(|x| chain_ctx.get(&x)),
                 commission_rate: self.commission_rate,
                 max_commission_rate_change: self.max_commission_rate_change,
@@ -4202,13 +4195,9 @@ pub mod args {
                     .map(|x| chain_ctx.get(x))
                     .collect(),
                 threshold: self.threshold,
-                consensus_key: self
-                    .consensus_key
-                    .map(|x| chain_ctx.get_cached(&x)),
-                eth_cold_key: self
-                    .eth_cold_key
-                    .map(|x| chain_ctx.get_cached(&x)),
-                eth_hot_key: self.eth_hot_key.map(|x| chain_ctx.get_cached(&x)),
+                consensus_key: self.consensus_key.map(|x| chain_ctx.get(&x)),
+                eth_cold_key: self.eth_cold_key.map(|x| chain_ctx.get(&x)),
+                eth_hot_key: self.eth_hot_key.map(|x| chain_ctx.get(&x)),
                 protocol_key: self.protocol_key.map(|x| chain_ctx.get(&x)),
                 commission_rate: self.commission_rate,
                 max_commission_rate_change: self.max_commission_rate_change,
@@ -5336,9 +5325,7 @@ pub mod args {
             ConsensusKeyChange::<SdkTypes> {
                 tx,
                 validator: chain_ctx.get(&self.validator),
-                consensus_key: self
-                    .consensus_key
-                    .map(|x| chain_ctx.get_cached(&x)),
+                consensus_key: self.consensus_key.map(|x| chain_ctx.get(&x)),
                 tx_code_path: self.tx_code_path.to_path_buf(),
             }
         }
@@ -5865,16 +5852,13 @@ pub mod args {
                 signing_keys: self
                     .signing_keys
                     .iter()
-                    .map(|key| ctx.get_cached(key))
+                    .map(|key| ctx.get(key))
                     .collect(),
                 signatures: self
                     .signatures
                     .iter()
                     .map(|path| std::fs::read(path).unwrap())
                     .collect(),
-                verification_key: self
-                    .verification_key
-                    .map(|public_key| ctx.get(&public_key)),
                 disposable_signing_key: self.disposable_signing_key,
                 tx_reveal_code_path: self.tx_reveal_code_path,
                 password: self.password,
@@ -5882,9 +5866,7 @@ pub mod args {
                 chain_id: self
                     .chain_id
                     .or_else(|| Some(ctx.config.ledger.chain_id.clone())),
-                wrapper_fee_payer: self
-                    .wrapper_fee_payer
-                    .map(|x| ctx.get_cached(&x)),
+                wrapper_fee_payer: self.wrapper_fee_payer.map(|x| ctx.get(&x)),
                 use_device: self.use_device,
             }
         }
@@ -5968,10 +5950,7 @@ pub mod args {
                          public key, public key hash or alias from your \
                          wallet.",
                     )
-                    .conflicts_with_all([
-                        SIGNATURES.name,
-                        VERIFICATION_KEY.name,
-                    ]),
+                    .conflicts_with_all([SIGNATURES.name]),
             )
             .arg(
                 SIGNATURES
@@ -5981,25 +5960,12 @@ pub mod args {
                          to be attached to a transaction. Requires to provide \
                          a gas payer.",
                     )
-                    .conflicts_with_all([
-                        SIGNING_KEYS.name,
-                        VERIFICATION_KEY.name,
-                    ])
+                    .conflicts_with_all([SIGNING_KEYS.name])
                     .requires(FEE_PAYER_OPT.name),
             )
             .arg(OUTPUT_FOLDER_PATH.def().help(
                 "The output folder path where the artifact will be stored.",
             ))
-            .arg(
-                VERIFICATION_KEY
-                    .def()
-                    .help(
-                        "Sign the transaction with the key for the given \
-                         public key, public key hash or alias from your \
-                         wallet.",
-                    )
-                    .conflicts_with_all([SIGNING_KEYS.name, SIGNATURES.name]),
-            )
             .arg(CHAIN_ID_OPT.def().help("The chain ID."))
             .arg(
                 FEE_PAYER_OPT
@@ -6036,7 +6002,6 @@ pub mod args {
             let disposable_signing_key = DISPOSABLE_SIGNING_KEY.parse(matches);
             let signing_keys = SIGNING_KEYS.parse(matches);
             let signatures = SIGNATURES.parse(matches);
-            let verification_key = VERIFICATION_KEY.parse(matches);
             let tx_reveal_code_path = PathBuf::from(TX_REVEAL_PK);
             let chain_id = CHAIN_ID_OPT.parse(matches);
             let password = None;
@@ -6060,7 +6025,6 @@ pub mod args {
                 disposable_signing_key,
                 signing_keys,
                 signatures,
-                verification_key,
                 tx_reveal_code_path,
                 password,
                 chain_id,
