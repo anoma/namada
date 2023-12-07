@@ -82,7 +82,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let init_account_schema =
         schema_container_of::<transaction::account::InitAccount>();
     let init_validator_schema =
-        schema_container_of::<transaction::pos::InitValidator>();
+        schema_container_of::<transaction::pos::BecomeValidator>();
     let token_transfer_schema = schema_container_of::<token::Transfer>();
     let update_account =
         schema_container_of::<transaction::account::UpdateAccount>();

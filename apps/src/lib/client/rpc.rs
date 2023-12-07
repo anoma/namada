@@ -2288,7 +2288,7 @@ pub async fn get_public_key<C: namada::ledger::queries::Client + Sync>(
     rpc::get_public_key_at(client, address, index).await
 }
 
-/// Check if the given address is a known validator.
+/// Check if the given address has any bonds.
 pub async fn is_validator<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     address: &Address,
@@ -2316,6 +2316,14 @@ pub async fn is_delegator_at<C: namada::ledger::queries::Client + Sync>(
     namada_sdk::rpc::is_delegator_at(client, address, epoch)
         .await
         .unwrap()
+}
+
+/// Check if the given address has any bonds.
+pub async fn has_bonds<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
+    address: &Address,
+) -> bool {
+    namada_sdk::rpc::has_bonds(client, address).await.unwrap()
 }
 
 /// Check if the address exists on chain. Established address exists if it has a

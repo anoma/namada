@@ -249,20 +249,22 @@ mod test_bp_vote_extensions {
         let hot_key = gen_secp256k1_keypair();
         let cold_key = gen_secp256k1_keypair();
 
-        become_validator(BecomeValidator {
-            storage: &mut shell.wl_storage,
-            params: &params,
-            address: &bertha_address(),
-            consensus_key: &consensus_key.ref_to(),
-            protocol_key: &protocol_key.ref_to(),
-            eth_hot_key: &hot_key.ref_to(),
-            eth_cold_key: &cold_key.ref_to(),
-            current_epoch: 0.into(),
-            commission_rate: Default::default(),
-            max_commission_rate_change: Default::default(),
-            metadata: Default::default(),
-            offset_opt: None,
-        })
+        become_validator(
+            &mut shell.wl_storage,
+            BecomeValidator {
+                params: &params,
+                address: &bertha_address(),
+                consensus_key: &consensus_key.ref_to(),
+                protocol_key: &protocol_key.ref_to(),
+                eth_hot_key: &hot_key.ref_to(),
+                eth_cold_key: &cold_key.ref_to(),
+                current_epoch: 0.into(),
+                commission_rate: Default::default(),
+                max_commission_rate_change: Default::default(),
+                metadata: Default::default(),
+                offset_opt: None,
+            },
+        )
         .expect("Test failed");
 
         // we advance forward to the next epoch

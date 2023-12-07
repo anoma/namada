@@ -282,6 +282,16 @@ impl Address {
             }
         }
     }
+
+    /// If the address established?
+    pub fn is_established(&self) -> bool {
+        matches!(self, Address::Established(_))
+    }
+
+    /// If the address implicit?
+    pub fn is_implicit(&self) -> bool {
+        matches!(self, Address::Implicit(_))
+    }
 }
 
 impl string_encoding::Format for Address {

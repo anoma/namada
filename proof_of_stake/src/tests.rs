@@ -1027,7 +1027,25 @@ fn test_become_validator_aux(
     );
     assert!(!is_validator(&s, &new_validator).unwrap());
 
-    // Initialize the validator account
+    // Credit the `new_validator` account
+    let staking_token = staking_token_address(&s);
+    let amount = token::Amount::from_uint(100_500_000, 0).unwrap();
+    // Credit twice the amount as we're gonna bond it in delegation first, then
+    // self-bond
+    credit_tokens(&mut s, &staking_token, &new_validator, amount * 2).unwrap();
+
+    // Add a delegation from `new_validator` to `genesis_validator`
+    let genesis_validator = &validators.first().unwrap().address;
+    bond_tokens(
+        &mut s,
+        Some(&new_validator),
+        genesis_validator,
+        amount,
+        current_epoch,
+        None,
+    )
+    .unwrap();
+
     let consensus_key = new_validator_consensus_key.to_public();
     let protocol_sk = common_sk_from_simple_seed(0);
     let protocol_key = protocol_sk.to_public();
@@ -1037,21 +1055,57 @@ fn test_become_validator_aux(
     let eth_cold_key = key::common::PublicKey::Secp256k1(
         key::testing::gen_keypair::<key::secp256k1::SigScheme>().ref_to(),
     );
-    become_validator(BecomeValidator {
-        storage: &mut s,
-        params: &params,
-        address: &new_validator,
-        consensus_key: &consensus_key,
-        protocol_key: &protocol_key,
-        eth_cold_key: &eth_cold_key,
-        eth_hot_key: &eth_hot_key,
+
+    // Try to become a validator - it should fail as there is a delegation
+    let result = become_validator(
+        &mut s,
+        BecomeValidator {
+            params: &params,
+            address: &new_validator,
+            consensus_key: &consensus_key,
+            protocol_key: &protocol_key,
+            eth_cold_key: &eth_cold_key,
+            eth_hot_key: &eth_hot_key,
+            current_epoch,
+            commission_rate: Dec::new(5, 2).expect("Dec creation failed"),
+            max_commission_rate_change: Dec::new(5, 2)
+                .expect("Dec creation failed"),
+            metadata: Default::default(),
+            offset_opt: None,
+        },
+    );
+    assert!(result.is_err());
+    assert!(!is_validator(&s, &new_validator).unwrap());
+
+    // Unbond the delegation
+    unbond_tokens(
+        &mut s,
+        Some(&new_validator),
+        genesis_validator,
+        amount,
         current_epoch,
-        commission_rate: Dec::new(5, 2).expect("Dec creation failed"),
-        max_commission_rate_change: Dec::new(5, 2)
-            .expect("Dec creation failed"),
-        metadata: Default::default(),
-        offset_opt: None,
-    })
+        false,
+    )
+    .unwrap();
+
+    // Try to become a validator account again - it should pass now
+    become_validator(
+        &mut s,
+        BecomeValidator {
+            params: &params,
+            address: &new_validator,
+            consensus_key: &consensus_key,
+            protocol_key: &protocol_key,
+            eth_cold_key: &eth_cold_key,
+            eth_hot_key: &eth_hot_key,
+            current_epoch,
+            commission_rate: Dec::new(5, 2).expect("Dec creation failed"),
+            max_commission_rate_change: Dec::new(5, 2)
+                .expect("Dec creation failed"),
+            metadata: Default::default(),
+            offset_opt: None,
+        },
+    )
     .unwrap();
     assert!(is_validator(&s, &new_validator).unwrap());
 
@@ -1066,9 +1120,6 @@ fn test_become_validator_aux(
     current_epoch = advance_epoch(&mut s, &params);
 
     // Self-bond to the new validator
-    let staking_token = staking_token_address(&s);
-    let amount = token::Amount::from_uint(100_500_000, 0).unwrap();
-    credit_tokens(&mut s, &staking_token, &new_validator, amount).unwrap();
     bond_tokens(&mut s, None, &new_validator, amount, current_epoch, None)
         .unwrap();
 

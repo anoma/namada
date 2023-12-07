@@ -70,8 +70,8 @@ use crate::{display_line, edisplay_line, Namada};
 
 /// Initialize account transaction WASM
 pub const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
-/// Initialize validator transaction WASM path
-pub const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
+/// Become validator transaction WASM path
+pub const TX_BECOME_VALIDATOR_WASM: &str = "tx_become_validator.wasm";
 /// Unjail validator transaction WASM path
 pub const TX_UNJAIL_VALIDATOR_WASM: &str = "tx_unjail_validator.wasm";
 /// Deactivate validator transaction WASM path

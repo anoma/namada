@@ -113,6 +113,9 @@ router! {POS,
 
     ( "consensus_keys" ) -> BTreeSet<common::PublicKey> = consensus_key_set,
 
+    ( "has_bonds" / [source: Address] )
+        -> bool = has_bonds,
+
 }
 
 /// Enriched bonds data with extra information calculated from the data queried
@@ -595,6 +598,18 @@ where
     H: 'static + StorageHasher + Sync,
 {
     namada_proof_of_stake::get_consensus_key_set(ctx.wl_storage)
+}
+
+/// Find if the given source address has any bonds.
+fn has_bonds<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+    source: Address,
+) -> storage_api::Result<bool>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    namada_proof_of_stake::has_bonds(ctx.wl_storage, &source)
 }
 
 /// Client-only methods for the router type are composed from router functions.

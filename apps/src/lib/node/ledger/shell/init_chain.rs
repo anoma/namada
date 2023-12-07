@@ -448,8 +448,8 @@ where
                 // TODO: replace pos::init_genesis validators arg with
                 // init_genesis_validator from here
                 if let Err(err) = pos::namada_proof_of_stake::become_validator(
+                    &mut self.wl_storage,
                     BecomeValidator {
-                        storage: &mut self.wl_storage,
                         params,
                         address,
                         consensus_key: &consensus_key.pk.raw,
