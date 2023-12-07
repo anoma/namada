@@ -50,6 +50,8 @@ use data_encoding::HEXLOWER;
 use itertools::Either;
 use namada::core::ledger::masp_conversions::ConversionState;
 use namada::core::types::ethereum_structs;
+use namada::eth_bridge::storage::proof::BridgePoolRootProof;
+use namada::ledger::eth_bridge::storage::bridge_pool;
 use namada::ledger::storage::merkle_tree::{
     base_tree_key_prefix, subtree_key_prefix,
 };
@@ -58,6 +60,7 @@ use namada::ledger::storage::{
     types, BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error,
     MerkleTreeStoresRead, Result, StoreType, DB,
 };
+use namada::types::ethereum_events::Uint;
 use namada::types::internal::TxQueue;
 use namada::types::storage::{
     BlockHeight, BlockResults, Epoch, EthEventsQueue, Header, Key, KeySeg,
@@ -1444,6 +1447,23 @@ impl DB for RocksDB {
         let store_key = key_prefix.with_segment("store".to_owned());
         batch.0.delete_cf(block_cf, store_key.to_string());
         Ok(())
+    }
+
+    fn read_bridge_pool_signed_nonce(
+        &self,
+        height: BlockHeight,
+        last_height: BlockHeight,
+    ) -> Result<Uint> {
+        let nonce_key = bridge_pool::get_signed_root_key();
+        let bytes = if height == BlockHeight(0) || height >= last_height {
+            self.read_subspace_val(&nonce_key)?
+        } else {
+            self.read_subspace_val_with_height(&nonce_key, height, last_height)?
+        };
+        let bytes = bytes.expect("Signed root should exist");
+        let bp_root_proof = BridgePoolRootProof::try_from_slice(&bytes)
+            .map_err(Error::BorshCodingError)?;
+        Ok(bp_root_proof.data.1)
     }
 
     fn write_replay_protection_entry(
