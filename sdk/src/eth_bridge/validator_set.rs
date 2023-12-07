@@ -270,7 +270,7 @@ impl From<Option<TransactionReceipt>> for RelayResult {
 
 /// Query an ABI encoding of the validator set to be installed
 /// at the given epoch, and its associated proof.
-pub async fn query_validator_set_update_proof<'a>(
+pub async fn query_validator_set_update_proof(
     client: &(impl Client + Sync),
     io: &impl Io,
     args: args::ValidatorSetProof,
@@ -298,7 +298,7 @@ pub async fn query_validator_set_update_proof<'a>(
 }
 
 /// Query an ABI encoding of the Bridge validator set at a given epoch.
-pub async fn query_bridge_validator_set<'a>(
+pub async fn query_bridge_validator_set(
     client: &(impl Client + Sync),
     io: &impl Io,
     args: args::BridgeValidatorSet,
@@ -326,7 +326,7 @@ pub async fn query_bridge_validator_set<'a>(
 }
 
 /// Query an ABI encoding of the Governance validator set at a given epoch.
-pub async fn query_governnace_validator_set<'a>(
+pub async fn query_governnace_validator_set(
     client: &(impl Client + Sync),
     io: &impl Io,
     args: args::GovernanceValidatorSet,

@@ -85,8 +85,8 @@ pub struct SigningTxData {
 /// for it from the wallet. If the keypair is encrypted but a password is not
 /// supplied, then it is interactively prompted. Errors if the key cannot be
 /// found or loaded.
-pub async fn find_pk<'a>(
-    context: &impl Namada<'a>,
+pub async fn find_pk(
+    context: &impl Namada,
     addr: &Address,
 ) -> Result<common::PublicKey, Error> {
     match addr {
@@ -166,8 +166,8 @@ pub fn find_key_by_pk<U: WalletIo>(
 /// signer. Return the given signing key or public key of the given signer if
 /// possible. If no explicit signer given, use the `default`. If no `default`
 /// is given, an `Error` is returned.
-pub async fn tx_signers<'a>(
-    context: &impl Namada<'a>,
+pub async fn tx_signers(
+    context: &impl Namada,
     args: &args::Tx<SdkTypes>,
     default: Option<Address>,
 ) -> Result<Vec<common::PublicKey>, Error> {
@@ -225,8 +225,8 @@ pub async fn default_sign(
 /// hashes needed for monitoring the tx on chain.
 ///
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
-pub async fn sign_tx<'a, F: std::future::Future<Output = Result<Tx, Error>>>(
-    context: &impl Namada<'a>,
+pub async fn sign_tx<F: std::future::Future<Output = Result<Tx, Error>>>(
+    context: &impl Namada,
     args: &args::Tx,
     tx: &mut Tx,
     signing_data: SigningTxData,
@@ -259,7 +259,7 @@ pub async fn sign_tx<'a, F: std::future::Future<Output = Result<Tx, Error>>>(
                 if used_pubkeys.contains(public_key) {
                     None
                 } else {
-                    match find_key_by_pk(*wallet, args, public_key) {
+                    match find_key_by_pk(&mut wallet, args, public_key) {
                         Ok(secret_key) => {
                             used_pubkeys.insert(public_key.clone());
                             Some(secret_key)
@@ -300,7 +300,7 @@ pub async fn sign_tx<'a, F: std::future::Future<Output = Result<Tx, Error>>>(
         // Lock the wallet just long enough to extract a key from it without
         // interfering with the sign closure call
         let mut wallet = context.wallet_mut().await;
-        find_key_by_pk(*wallet, args, &signing_data.fee_payer)
+        find_key_by_pk(&mut wallet, args, &signing_data.fee_payer)
     };
     match key {
         Ok(fee_payer_keypair) => {
@@ -320,8 +320,8 @@ pub async fn sign_tx<'a, F: std::future::Future<Output = Result<Tx, Error>>>(
 
 /// Return the necessary data regarding an account to be able to generate a
 /// multisignature section
-pub async fn aux_signing_data<'a>(
-    context: &impl Namada<'a>,
+pub async fn aux_signing_data(
+    context: &impl Namada,
     args: &args::Tx<SdkTypes>,
     owner: Option<Address>,
     default_signer: Option<Address>,
@@ -389,8 +389,8 @@ pub async fn aux_signing_data<'a>(
     })
 }
 
-pub async fn init_validator_signing_data<'a>(
-    context: &impl Namada<'a>,
+pub async fn init_validator_signing_data(
+    context: &impl Namada,
     args: &args::Tx<SdkTypes>,
     validator_keys: Vec<common::PublicKey>,
 ) -> Result<SigningTxData, Error> {
@@ -449,7 +449,7 @@ pub struct TxSourcePostBalance {
 /// wrapper and its payload which is needed for monitoring its
 /// progress on chain.
 #[allow(clippy::too_many_arguments)]
-pub async fn wrap_tx<'a, N: Namada<'a>>(
+pub async fn wrap_tx<N: Namada>(
     context: &N,
     tx: &mut Tx,
     args: &args::Tx<SdkTypes>,
@@ -733,8 +733,8 @@ fn make_ledger_amount_addr(
 
 /// Adds a Ledger output line describing a given transaction amount and asset
 /// type
-async fn make_ledger_amount_asset<'a>(
-    context: &impl Namada<'a>,
+async fn make_ledger_amount_asset(
+    context: &impl Namada,
     tokens: &HashMap<Address, String>,
     output: &mut Vec<String>,
     amount: u64,
@@ -828,8 +828,8 @@ fn format_outputs(output: &mut Vec<String>) {
 
 /// Adds a Ledger output for the sender and destination for transparent and MASP
 /// transactions
-pub async fn make_ledger_masp_endpoints<'a>(
-    context: &impl Namada<'a>,
+pub async fn make_ledger_masp_endpoints(
+    context: &impl Namada,
     tokens: &HashMap<Address, String>,
     output: &mut Vec<String>,
     transfer: &Transfer,
@@ -903,8 +903,8 @@ pub async fn make_ledger_masp_endpoints<'a>(
 
 /// Internal method used to generate transaction test vectors
 #[cfg(feature = "std")]
-pub async fn generate_test_vector<'a>(
-    context: &impl Namada<'a>,
+pub async fn generate_test_vector(
+    context: &impl Namada,
     tx: &Tx,
 ) -> Result<(), Error> {
     use std::env;
@@ -1013,8 +1013,8 @@ impl<'a> Display for LedgerProposalType<'a> {
 
 /// Converts the given transaction to the form that is displayed on the Ledger
 /// device
-pub async fn to_ledger_vector<'a>(
-    context: &impl Namada<'a>,
+pub async fn to_ledger_vector(
+    context: &impl Namada,
     tx: &Tx,
 ) -> Result<LedgerVector, Error> {
     // To facilitate lookups of human-readable token names

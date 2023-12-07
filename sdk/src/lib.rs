@@ -65,42 +65,38 @@ use crate::wallet::{Wallet, WalletIo, WalletStorage};
 
 #[async_trait::async_trait(?Send)]
 /// An interface for high-level interaction with the Namada SDK
-pub trait Namada<'a>: Sized {
+pub trait Namada: Sized {
     /// A client with async request dispatcher method
-    type Client: 'a + queries::Client + Sync;
+    type Client: queries::Client + Sync;
     /// Captures the interactive parts of the wallet's functioning
-    type WalletUtils: 'a + WalletIo + WalletStorage;
+    type WalletUtils: WalletIo + WalletStorage;
     /// Abstracts platform specific details away from the logic of shielded pool
     /// operations.
-    type ShieldedUtils: 'a + ShieldedUtils;
+    type ShieldedUtils: ShieldedUtils;
     /// Captures the input/output streams used by this object
-    type Io: 'a + Io;
+    type Io: Io;
 
     /// Obtain the client for communicating with the ledger
-    fn client(&self) -> &'a Self::Client;
+    fn client(&self) -> &Self::Client;
 
     /// Obtain the input/output handle for this context
-    fn io(&self) -> &'a Self::Io;
+    fn io(&self) -> &Self::Io;
 
     /// Obtain read guard on the wallet
-    async fn wallet(
-        &self,
-    ) -> RwLockReadGuard<&'a mut Wallet<Self::WalletUtils>>;
+    async fn wallet(&self) -> RwLockReadGuard<Wallet<Self::WalletUtils>>;
 
     /// Obtain write guard on the wallet
-    async fn wallet_mut(
-        &self,
-    ) -> RwLockWriteGuard<&'a mut Wallet<Self::WalletUtils>>;
+    async fn wallet_mut(&self) -> RwLockWriteGuard<Wallet<Self::WalletUtils>>;
 
     /// Obtain read guard on the shielded context
     async fn shielded(
         &self,
-    ) -> RwLockReadGuard<&'a mut ShieldedContext<Self::ShieldedUtils>>;
+    ) -> RwLockReadGuard<ShieldedContext<Self::ShieldedUtils>>;
 
     /// Obtain write guard on the shielded context
     async fn shielded_mut(
         &self,
-    ) -> RwLockWriteGuard<&'a mut ShieldedContext<Self::ShieldedUtils>>;
+    ) -> RwLockWriteGuard<ShieldedContext<Self::ShieldedUtils>>;
 
     /// Return the native token
     fn native_token(&self) -> Address;
@@ -566,7 +562,7 @@ pub trait Namada<'a>: Sized {
 }
 
 /// Provides convenience methods for common Namada interactions
-pub struct NamadaImpl<'a, C, U, V, I>
+pub struct NamadaImpl<C, U, V, I>
 where
     C: queries::Client + Sync,
     U: WalletIo,
@@ -574,20 +570,20 @@ where
     I: Io,
 {
     /// Used to send and receive messages from the ledger
-    pub client: &'a C,
+    pub client: C,
     /// Stores the addresses and keys required for ledger interactions
-    pub wallet: RwLock<&'a mut Wallet<U>>,
+    pub wallet: RwLock<Wallet<U>>,
     /// Stores the current state of the shielded pool
-    pub shielded: RwLock<&'a mut ShieldedContext<V>>,
+    pub shielded: RwLock<ShieldedContext<V>>,
     /// Captures the input/output streams used by this object
-    pub io: &'a I,
+    pub io: I,
     /// The address of the native token
     native_token: Address,
     /// The default builder for a Tx
     prototype: args::Tx,
 }
 
-impl<'a, C, U, V, I> NamadaImpl<'a, C, U, V, I>
+impl<C, U, V, I> NamadaImpl<C, U, V, I>
 where
     C: queries::Client + Sync,
     U: WalletIo,
@@ -596,10 +592,10 @@ where
 {
     /// Construct a new Namada context with the given native token address
     pub fn native_new(
-        client: &'a C,
-        wallet: &'a mut Wallet<U>,
-        shielded: &'a mut ShieldedContext<V>,
-        io: &'a I,
+        client: C,
+        wallet: Wallet<U>,
+        shielded: ShieldedContext<V>,
+        io: I,
         native_token: Address,
     ) -> Self {
         NamadaImpl {
@@ -638,12 +634,12 @@ where
 
     /// Construct a new Namada context looking up the native token address
     pub async fn new(
-        client: &'a C,
-        wallet: &'a mut Wallet<U>,
-        shielded: &'a mut ShieldedContext<V>,
-        io: &'a I,
-    ) -> crate::error::Result<NamadaImpl<'a, C, U, V, I>> {
-        let native_token = query_native_token(client).await?;
+        client: C,
+        wallet: Wallet<U>,
+        shielded: ShieldedContext<V>,
+        io: I,
+    ) -> crate::error::Result<NamadaImpl<C, U, V, I>> {
+        let native_token = query_native_token(&client).await?;
         Ok(NamadaImpl::native_new(
             client,
             wallet,
@@ -655,7 +651,7 @@ where
 }
 
 #[async_trait::async_trait(?Send)]
-impl<'a, C, U, V, I> Namada<'a> for NamadaImpl<'a, C, U, V, I>
+impl<C, U, V, I> Namada for NamadaImpl<C, U, V, I>
 where
     C: queries::Client + Sync,
     U: WalletIo + WalletStorage,
@@ -676,41 +672,37 @@ where
         self.native_token.clone()
     }
 
-    fn io(&self) -> &'a Self::Io {
-        self.io
+    fn io(&self) -> &Self::Io {
+        &self.io
     }
 
-    fn client(&self) -> &'a Self::Client {
-        self.client
+    fn client(&self) -> &Self::Client {
+        &self.client
     }
 
-    async fn wallet(
-        &self,
-    ) -> RwLockReadGuard<&'a mut Wallet<Self::WalletUtils>> {
+    async fn wallet(&self) -> RwLockReadGuard<Wallet<Self::WalletUtils>> {
         self.wallet.read().await
     }
 
-    async fn wallet_mut(
-        &self,
-    ) -> RwLockWriteGuard<&'a mut Wallet<Self::WalletUtils>> {
+    async fn wallet_mut(&self) -> RwLockWriteGuard<Wallet<Self::WalletUtils>> {
         self.wallet.write().await
     }
 
     async fn shielded(
         &self,
-    ) -> RwLockReadGuard<&'a mut ShieldedContext<Self::ShieldedUtils>> {
+    ) -> RwLockReadGuard<ShieldedContext<Self::ShieldedUtils>> {
         self.shielded.read().await
     }
 
     async fn shielded_mut(
         &self,
-    ) -> RwLockWriteGuard<&'a mut ShieldedContext<Self::ShieldedUtils>> {
+    ) -> RwLockWriteGuard<ShieldedContext<Self::ShieldedUtils>> {
         self.shielded.write().await
     }
 }
 
 /// Allow the prototypical Tx builder to be modified
-impl<'a, C, U, V, I> args::TxBuilder<SdkTypes> for NamadaImpl<'a, C, U, V, I>
+impl<C, U, V, I> args::TxBuilder<SdkTypes> for NamadaImpl<C, U, V, I>
 where
     C: queries::Client + Sync,
     U: WalletIo,

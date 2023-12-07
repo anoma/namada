@@ -52,8 +52,8 @@ use crate::{display_line, edisplay_line, error, Namada};
 ///
 /// If a response is not delivered until `deadline`, we exit the cli with an
 /// error.
-pub async fn query_tx_status<'a>(
-    context: &impl Namada<'a>,
+pub async fn query_tx_status(
+    context: &impl Namada,
     status: TxEventQuery<'_>,
     deadline: time::Instant,
 ) -> Result<Event, Error> {
@@ -284,8 +284,8 @@ pub async fn query_conversions<C: crate::queries::Client + Sync>(
 }
 
 /// Query a wasm code hash
-pub async fn query_wasm_code_hash<'a>(
-    context: &impl Namada<'a>,
+pub async fn query_wasm_code_hash(
+    context: &impl Namada,
     code_path: impl AsRef<str>,
 ) -> Result<Hash, error::Error> {
     let hash_key = Key::wasm_hash(code_path.as_ref());
@@ -368,7 +368,7 @@ pub async fn query_storage_value_bytes<C: crate::queries::Client + Sync>(
 /// Query a range of storage values with a matching prefix and decode them with
 /// [`BorshDeserialize`]. Returns an iterator of the storage keys paired with
 /// their associated values.
-pub async fn query_storage_prefix<'a, 'b, N: Namada<'a>, T>(
+pub async fn query_storage_prefix<'a, 'b, N: Namada, T>(
     context: &'b N,
     key: &storage::Key,
 ) -> Result<Option<impl 'b + Iterator<Item = (storage::Key, T)>>, error::Error>
@@ -472,7 +472,7 @@ pub async fn query_tx_events<C: crate::queries::Client + Sync>(
 }
 
 /// Dry run a transaction
-pub async fn dry_run_tx<'a, N: Namada<'a>>(
+pub async fn dry_run_tx<N: Namada>(
     context: &N,
     tx_bytes: Vec<u8>,
 ) -> Result<namada_core::types::transaction::TxResult, Error> {
@@ -850,8 +850,8 @@ pub async fn get_public_key_at<C: crate::queries::Client + Sync>(
 }
 
 /// Query a validator's unbonds for a given epoch
-pub async fn query_and_print_unbonds<'a>(
-    context: &impl Namada<'a>,
+pub async fn query_and_print_unbonds(
+    context: &impl Namada,
     source: &Address,
     validator: &Address,
 ) -> Result<(), error::Error> {
@@ -990,7 +990,7 @@ pub async fn enriched_bonds_and_unbonds<C: crate::queries::Client + Sync>(
 }
 
 /// Get the correct representation of the amount given the token type.
-pub async fn validate_amount<'a, N: Namada<'a>>(
+pub async fn validate_amount<N: Namada>(
     context: &N,
     amount: InputAmount,
     token: &Address,
@@ -1051,7 +1051,7 @@ pub async fn validate_amount<'a, N: Namada<'a>>(
 }
 
 /// Wait for a first block and node to be synced.
-pub async fn wait_until_node_is_synched<'a>(
+pub async fn wait_until_node_is_synched(
     client: &(impl Client + Sync),
     io: &impl Io,
 ) -> Result<(), Error> {
@@ -1148,7 +1148,7 @@ pub async fn format_denominated_amount(
 }
 
 /// Look up the IBC denomination from a IbcToken.
-pub async fn query_ibc_denom<'a, N: Namada<'a>>(
+pub async fn query_ibc_denom<N: Namada>(
     context: &N,
     token: &Address,
     owner: Option<&Address>,

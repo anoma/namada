@@ -65,8 +65,8 @@ use crate::facade::tendermint_rpc::error::Error as TError;
 ///
 /// If a response is not delivered until `deadline`, we exit the cli with an
 /// error.
-pub async fn query_tx_status<'a>(
-    namada: &impl Namada<'a>,
+pub async fn query_tx_status(
+    namada: &impl Namada,
     status: namada_sdk::rpc::TxEventQuery<'_>,
     deadline: Instant,
 ) -> Event {
@@ -76,14 +76,14 @@ pub async fn query_tx_status<'a>(
 }
 
 /// Query and print the epoch of the last committed block
-pub async fn query_and_print_epoch<'a>(context: &impl Namada<'a>) -> Epoch {
+pub async fn query_and_print_epoch(context: &impl Namada) -> Epoch {
     let epoch = rpc::query_epoch(context.client()).await.unwrap();
     display_line!(context.io(), "Last committed epoch: {}", epoch);
     epoch
 }
 
 /// Query the last committed block
-pub async fn query_block<'a>(context: &impl Namada<'a>) {
+pub async fn query_block(context: &impl Namada) {
     let block = namada_sdk::rpc::query_block(context.client())
         .await
         .unwrap();
@@ -114,8 +114,8 @@ pub async fn query_results<C: namada::ledger::queries::Client + Sync>(
 }
 
 /// Query the specified accepted transfers from the ledger
-pub async fn query_transfers<'a>(
-    context: &impl Namada<'a>,
+pub async fn query_transfers(
+    context: &impl Namada,
     args: args::QueryTransfers,
 ) {
     let query_token = args.token;
@@ -250,7 +250,7 @@ pub async fn query_transfers<'a>(
 }
 
 /// Query the raw bytes of given storage key
-pub async fn query_raw_bytes<'a, N: Namada<'a>>(
+pub async fn query_raw_bytes<N: Namada>(
     context: &N,
     args: args::QueryRawBytes,
 ) {
@@ -281,10 +281,7 @@ pub async fn query_raw_bytes<'a, N: Namada<'a>>(
 }
 
 /// Query token balance(s)
-pub async fn query_balance<'a>(
-    context: &impl Namada<'a>,
-    args: args::QueryBalance,
-) {
+pub async fn query_balance(context: &impl Namada, args: args::QueryBalance) {
     // Query the balances of shielded or transparent account types depending on
     // the CLI arguments
     match &args.owner {
@@ -309,8 +306,8 @@ pub async fn query_balance<'a>(
 }
 
 /// Query token balance(s)
-pub async fn query_transparent_balance<'a>(
-    context: &impl Namada<'a>,
+pub async fn query_transparent_balance(
+    context: &impl Namada,
     args: args::QueryBalance,
 ) {
     let prefix = Key::from(
@@ -386,8 +383,8 @@ pub async fn query_transparent_balance<'a>(
 }
 
 /// Query the token pinned balance(s)
-pub async fn query_pinned_balance<'a>(
-    context: &impl Namada<'a>,
+pub async fn query_pinned_balance(
+    context: &impl Namada,
     args: args::QueryBalance,
 ) {
     // Map addresses to token names
@@ -549,8 +546,8 @@ pub async fn query_pinned_balance<'a>(
     }
 }
 
-async fn print_balances<'a>(
-    context: &impl Namada<'a>,
+async fn print_balances(
+    context: &impl Namada,
     balances: impl Iterator<Item = (storage::Key, token::Amount)>,
     token: Option<&Address>,
     target: Option<&Address>,
@@ -629,8 +626,8 @@ async fn print_balances<'a>(
     }
 }
 
-async fn lookup_token_alias<'a>(
-    context: &impl Namada<'a>,
+async fn lookup_token_alias(
+    context: &impl Namada,
     token: &Address,
     owner: &Address,
 ) -> String {
@@ -649,8 +646,8 @@ async fn lookup_token_alias<'a>(
 }
 
 /// Returns pairs of token alias and token address
-async fn query_tokens<'a>(
-    context: &impl Namada<'a>,
+async fn query_tokens(
+    context: &impl Namada,
     base_token: Option<&Address>,
     owner: Option<&Address>,
 ) -> BTreeMap<String, Address> {
@@ -708,8 +705,8 @@ async fn query_tokens<'a>(
     tokens
 }
 
-async fn get_ibc_denom_alias<'a>(
-    context: &impl Namada<'a>,
+async fn get_ibc_denom_alias(
+    context: &impl Namada,
     ibc_denom: impl AsRef<str>,
 ) -> String {
     let wallet = context.wallet().await;
@@ -729,10 +726,7 @@ async fn get_ibc_denom_alias<'a>(
 }
 
 /// Query Proposals
-pub async fn query_proposal<'a>(
-    context: &impl Namada<'a>,
-    args: args::QueryProposal,
-) {
+pub async fn query_proposal(context: &impl Namada, args: args::QueryProposal) {
     let current_epoch = query_and_print_epoch(context).await;
 
     if let Some(id) = args.proposal_id {
@@ -781,8 +775,8 @@ pub async fn query_proposal_by_id<C: namada::ledger::queries::Client + Sync>(
 }
 
 /// Query token shielded balance(s)
-pub async fn query_shielded_balance<'a>(
-    context: &impl Namada<'a>,
+pub async fn query_shielded_balance(
+    context: &impl Namada,
     args: args::QueryBalance,
 ) {
     // Used to control whether balances for all keys or a specific key are
@@ -1050,8 +1044,8 @@ pub async fn query_shielded_balance<'a>(
     }
 }
 
-pub async fn print_decoded_balance<'a>(
-    context: &impl Namada<'a>,
+pub async fn print_decoded_balance(
+    context: &impl Namada,
     decoded_balance: MaspAmount,
     epoch: Epoch,
 ) {
@@ -1072,8 +1066,8 @@ pub async fn print_decoded_balance<'a>(
     }
 }
 
-pub async fn print_decoded_balance_with_epoch<'a>(
-    context: &impl Namada<'a>,
+pub async fn print_decoded_balance_with_epoch(
+    context: &impl Namada,
     decoded_balance: MaspAmount,
 ) {
     let tokens = context
@@ -1110,8 +1104,8 @@ pub async fn get_token_balance<C: namada::ledger::queries::Client + Sync>(
         .unwrap()
 }
 
-pub async fn query_proposal_result<'a>(
-    context: &impl Namada<'a>,
+pub async fn query_proposal_result(
+    context: &impl Namada,
     args: args::QueryProposalResult,
 ) {
     if args.proposal_id.is_some() {
@@ -1250,10 +1244,7 @@ pub async fn query_proposal_result<'a>(
     }
 }
 
-pub async fn query_account<'a>(
-    context: &impl Namada<'a>,
-    args: args::QueryAccount,
-) {
+pub async fn query_account(context: &impl Namada, args: args::QueryAccount) {
     let account = rpc::get_account_info(context.client(), &args.owner)
         .await
         .unwrap();
@@ -1269,7 +1260,7 @@ pub async fn query_account<'a>(
     }
 }
 
-pub async fn query_pgf<'a>(context: &impl Namada<'a>, _args: args::QueryPgf) {
+pub async fn query_pgf(context: &impl Namada, _args: args::QueryPgf) {
     let stewards = query_pgf_stewards(context.client()).await;
     let fundings = query_pgf_fundings(context.client()).await;
 
@@ -1320,8 +1311,8 @@ pub async fn query_pgf<'a>(context: &impl Namada<'a>, _args: args::QueryPgf) {
     }
 }
 
-pub async fn query_protocol_parameters<'a>(
-    context: &impl Namada<'a>,
+pub async fn query_protocol_parameters(
+    context: &impl Namada,
     _args: args::QueryProtocolParameters,
 ) {
     let governance_parameters =
@@ -1578,8 +1569,8 @@ pub async fn query_pgf_parameters<C: namada::ledger::queries::Client + Sync>(
     unwrap_client_response::<C, _>(RPC.vp().pgf().parameters(client).await)
 }
 
-pub async fn query_and_print_unbonds<'a>(
-    context: &impl Namada<'a>,
+pub async fn query_and_print_unbonds(
+    context: &impl Namada,
     source: &Address,
     validator: &Address,
 ) {
@@ -1634,8 +1625,8 @@ pub async fn query_withdrawable_tokens<
 }
 
 /// Query PoS bond(s) and unbond(s)
-pub async fn query_bonds<'a>(
-    context: &impl Namada<'a>,
+pub async fn query_bonds(
+    context: &impl Namada,
     args: args::QueryBonds,
 ) -> std::io::Result<()> {
     let epoch = query_and_print_epoch(context).await;
@@ -1758,7 +1749,7 @@ pub async fn query_bonds<'a>(
 }
 
 /// Query PoS bonded stake
-pub async fn query_bonded_stake<'a, N: Namada<'a>>(
+pub async fn query_bonded_stake<N: Namada>(
     context: &N,
     args: args::QueryBondedStake,
 ) {
@@ -1896,8 +1887,8 @@ pub async fn query_validator_state<
 }
 
 /// Query a validator's state information
-pub async fn query_and_print_validator_state<'a>(
-    context: &impl Namada<'a>,
+pub async fn query_and_print_validator_state(
+    context: &impl Namada,
     args: args::QueryValidatorState,
 ) {
     let validator = args.validator;
@@ -1941,8 +1932,8 @@ pub async fn query_and_print_validator_state<'a>(
 }
 
 /// Query PoS validator's commission rate information
-pub async fn query_and_print_commission_rate<'a>(
-    context: &impl Namada<'a>,
+pub async fn query_and_print_commission_rate(
+    context: &impl Namada,
     args: args::QueryCommissionRate,
 ) {
     let validator = args.validator;
@@ -1974,8 +1965,8 @@ pub async fn query_and_print_commission_rate<'a>(
 }
 
 /// Query PoS validator's metadata
-pub async fn query_and_print_metadata<'a>(
-    context: &impl Namada<'a>,
+pub async fn query_and_print_metadata(
+    context: &impl Namada,
     args: args::QueryMetaData,
 ) {
     let validator = args.validator;
@@ -2051,10 +2042,7 @@ pub async fn query_and_print_metadata<'a>(
 }
 
 /// Query PoS slashes
-pub async fn query_slashes<'a, N: Namada<'a>>(
-    context: &N,
-    args: args::QuerySlashes,
-) {
+pub async fn query_slashes<N: Namada>(context: &N, args: args::QuerySlashes) {
     match args.validator {
         Some(validator) => {
             let validator = validator;
@@ -2206,7 +2194,7 @@ pub async fn query_slashes<'a, N: Namada<'a>>(
     }
 }
 
-pub async fn query_delegations<'a, N: Namada<'a>>(
+pub async fn query_delegations<N: Namada>(
     context: &N,
     args: args::QueryDelegations,
 ) {
@@ -2227,7 +2215,7 @@ pub async fn query_delegations<'a, N: Namada<'a>>(
     }
 }
 
-pub async fn query_find_validator<'a, N: Namada<'a>>(
+pub async fn query_find_validator<N: Namada>(
     context: &N,
     args: args::QueryFindValidator,
 ) {
@@ -2264,7 +2252,7 @@ pub async fn query_find_validator<'a, N: Namada<'a>>(
 }
 
 /// Dry run a transaction
-pub async fn dry_run_tx<'a, N: Namada<'a>>(
+pub async fn dry_run_tx<N: Namada>(
     context: &N,
     tx_bytes: Vec<u8>,
 ) -> Result<(), error::Error>
@@ -2339,8 +2327,8 @@ pub async fn known_address<C: namada::ledger::queries::Client + Sync>(
 }
 
 /// Query for all conversions.
-pub async fn query_conversions<'a>(
-    context: &impl Namada<'a>,
+pub async fn query_conversions(
+    context: &impl Namada,
     args: args::QueryConversions,
 ) {
     // The chosen token type of the conversions
@@ -2416,8 +2404,8 @@ pub async fn query_conversion<C: namada::ledger::queries::Client + Sync>(
 }
 
 /// Query a wasm code hash
-pub async fn query_wasm_code_hash<'a>(
-    context: &impl Namada<'a>,
+pub async fn query_wasm_code_hash(
+    context: &impl Namada,
     code_path: impl AsRef<str>,
 ) -> Result<Hash, error::Error> {
     rpc::query_wasm_code_hash(context, code_path).await
@@ -2451,8 +2439,8 @@ pub async fn query_storage_value_bytes<
 /// Query a range of storage values with a matching prefix and decode them with
 /// [`BorshDeserialize`]. Returns an iterator of the storage keys paired with
 /// their associated values.
-pub async fn query_storage_prefix<'a, 'b, T>(
-    context: &'b impl Namada<'a>,
+pub async fn query_storage_prefix<'b, T>(
+    context: &'b impl Namada,
     key: &storage::Key,
 ) -> Option<impl 'b + Iterator<Item = (storage::Key, T)>>
 where
@@ -2496,10 +2484,7 @@ pub async fn query_tx_response<C: namada::ledger::queries::Client + Sync>(
 
 /// Lookup the results of applying the specified transaction to the
 /// blockchain.
-pub async fn query_result<'a>(
-    context: &impl Namada<'a>,
-    args: args::QueryResult,
-) {
+pub async fn query_result(context: &impl Namada, args: args::QueryResult) {
     // First try looking up application event pertaining to given hash.
     let tx_response = query_tx_response(
         context.client(),
@@ -2537,7 +2522,7 @@ pub async fn query_result<'a>(
     }
 }
 
-pub async fn epoch_sleep<'a>(context: &impl Namada<'a>, _args: args::Query) {
+pub async fn epoch_sleep(context: &impl Namada, _args: args::Query) {
     let start_epoch = query_and_print_epoch(context).await;
     loop {
         tokio::time::sleep(core::time::Duration::from_secs(1)).await;
@@ -2642,8 +2627,8 @@ fn unwrap_client_response<C: namada::ledger::queries::Client, T>(
     })
 }
 
-pub async fn compute_offline_proposal_votes<'a>(
-    context: &impl Namada<'a>,
+pub async fn compute_offline_proposal_votes(
+    context: &impl Namada,
     proposal: &OfflineSignedProposal,
     votes: Vec<OfflineVote>,
 ) -> ProposalVotes {

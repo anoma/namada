@@ -48,7 +48,7 @@ pub fn run(
             rt.block_on(CliApi::handle_client_command(
                 Some(node),
                 cmd,
-                &TestingIo,
+                TestingIo,
             ))
         }
         Bin::Wallet => {
@@ -84,7 +84,7 @@ pub fn run(
             rt.block_on(CliApi::handle_relayer_command(
                 Some(node),
                 cmd,
-                &TestingIo,
+                TestingIo,
             ))
         }
     }
