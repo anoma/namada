@@ -97,7 +97,7 @@ futures.workspace = true
 itertools.workspace = true
 loupe = {version = "0.1.3", optional = true}
 masp_primitives.workspace = true
-masp_proofs = { workspace = true, features = ["download-params"] }
+masp_proofs.workspace = true
 num256.workspace = true
 orion.workspace = true
 owo-colors = "3.5.0"

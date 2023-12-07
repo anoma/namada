@@ -12,119 +12,124 @@ pub use namada_sdk::queries;
 pub mod storage;
 pub mod vp_host_fns;
 
-use namada_core::ledger::storage::{DBIter, StorageHasher, DB};
-use namada_core::ledger::storage_api::ResultExt;
+#[cfg(feature = "wasm-runtime")]
+pub use dry_run_tx::dry_run_tx;
 pub use namada_core::ledger::{
     gas, parameters, replay_protection, storage_api, tx_env, vp_env,
 };
-use namada_sdk::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
 
 #[cfg(feature = "wasm-runtime")]
-use crate::vm::wasm::{TxCache, VpCache};
-use crate::vm::WasmCacheAccess;
+mod dry_run_tx {
+    use namada_core::ledger::storage::{DBIter, StorageHasher, DB};
+    use namada_core::ledger::storage_api::ResultExt;
+    use namada_sdk::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
 
-/// Dry run a transaction
-#[cfg(feature = "wasm-runtime")]
-pub fn dry_run_tx<D, H, CA>(
-    mut ctx: RequestCtx<'_, D, H, VpCache<CA>, TxCache<CA>>,
-    request: &RequestQuery,
-) -> storage_api::Result<EncodedResponseQuery>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
-    CA: 'static + WasmCacheAccess + Sync,
-{
-    use borsh_ext::BorshSerializeExt;
-    use namada_core::ledger::gas::{Gas, GasMetering, TxGasMeter};
-    use namada_core::ledger::storage::TempWlStorage;
-    use namada_core::proto::Tx;
-    use namada_core::types::transaction::DecryptedTx;
+    use super::{protocol, storage_api};
+    use crate::vm::wasm::{TxCache, VpCache};
+    use crate::vm::WasmCacheAccess;
 
-    use crate::ledger::protocol::ShellParams;
-    use crate::types::storage::TxIndex;
-    use crate::types::transaction::TxType;
+    /// Dry run a transaction
+    pub fn dry_run_tx<D, H, CA>(
+        mut ctx: RequestCtx<'_, D, H, VpCache<CA>, TxCache<CA>>,
+        request: &RequestQuery,
+    ) -> storage_api::Result<EncodedResponseQuery>
+    where
+        D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+        H: 'static + StorageHasher + Sync,
+        CA: 'static + WasmCacheAccess + Sync,
+    {
+        use borsh_ext::BorshSerializeExt;
+        use namada_core::ledger::gas::{Gas, GasMetering, TxGasMeter};
+        use namada_core::ledger::storage::TempWlStorage;
+        use namada_core::proto::Tx;
+        use namada_core::types::transaction::DecryptedTx;
 
-    let mut tx = Tx::try_from(&request.data[..]).into_storage_result()?;
-    tx.validate_tx().into_storage_result()?;
+        use crate::ledger::protocol::ShellParams;
+        use crate::types::storage::TxIndex;
+        use crate::types::transaction::TxType;
 
-    let mut temp_wl_storage = TempWlStorage::new(&ctx.wl_storage.storage);
-    let mut cumulated_gas = Gas::default();
+        let mut tx = Tx::try_from(&request.data[..]).into_storage_result()?;
+        tx.validate_tx().into_storage_result()?;
 
-    // Wrapper dry run to allow estimating the gas cost of a transaction
-    let mut tx_gas_meter = match tx.header().tx_type {
-        TxType::Wrapper(wrapper) => {
-            let mut tx_gas_meter =
-                TxGasMeter::new(wrapper.gas_limit.to_owned());
-            protocol::apply_wrapper_tx(
-                tx.clone(),
-                &wrapper,
-                None,
-                &request.data,
-                ShellParams::new(
-                    &mut tx_gas_meter,
-                    &mut temp_wl_storage,
-                    &mut ctx.vp_wasm_cache,
-                    &mut ctx.tx_wasm_cache,
-                ),
-                None,
-            )
-            .into_storage_result()?;
+        let mut temp_wl_storage = TempWlStorage::new(&ctx.wl_storage.storage);
+        let mut cumulated_gas = Gas::default();
 
-            temp_wl_storage.write_log.commit_tx();
-            cumulated_gas = tx_gas_meter.get_tx_consumed_gas();
+        // Wrapper dry run to allow estimating the gas cost of a transaction
+        let mut tx_gas_meter = match tx.header().tx_type {
+            TxType::Wrapper(wrapper) => {
+                let mut tx_gas_meter =
+                    TxGasMeter::new(wrapper.gas_limit.to_owned());
+                protocol::apply_wrapper_tx(
+                    tx.clone(),
+                    &wrapper,
+                    None,
+                    &request.data,
+                    ShellParams::new(
+                        &mut tx_gas_meter,
+                        &mut temp_wl_storage,
+                        &mut ctx.vp_wasm_cache,
+                        &mut ctx.tx_wasm_cache,
+                    ),
+                    None,
+                )
+                .into_storage_result()?;
 
-            tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
-            TxGasMeter::new_from_sub_limit(tx_gas_meter.get_available_gas())
-        }
-        TxType::Protocol(_) | TxType::Decrypted(_) => {
-            // If dry run only the inner tx, use the max block gas as the gas
-            // limit
-            TxGasMeter::new(
-                namada_core::ledger::gas::get_max_block_gas(ctx.wl_storage)
-                    .unwrap()
-                    .into(),
-            )
-        }
-        TxType::Raw => {
-            // Cast tx to a decrypted for execution
-            tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
+                temp_wl_storage.write_log.commit_tx();
+                cumulated_gas = tx_gas_meter.get_tx_consumed_gas();
 
-            // If dry run only the inner tx, use the max block gas as the gas
-            // limit
-            TxGasMeter::new(
-                namada_core::ledger::gas::get_max_block_gas(ctx.wl_storage)
-                    .unwrap()
-                    .into(),
-            )
-        }
-    };
+                tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
+                TxGasMeter::new_from_sub_limit(tx_gas_meter.get_available_gas())
+            }
+            TxType::Protocol(_) | TxType::Decrypted(_) => {
+                // If dry run only the inner tx, use the max block gas as the
+                // gas limit
+                TxGasMeter::new(
+                    namada_core::ledger::gas::get_max_block_gas(ctx.wl_storage)
+                        .unwrap()
+                        .into(),
+                )
+            }
+            TxType::Raw => {
+                // Cast tx to a decrypted for execution
+                tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
 
-    let mut data = protocol::apply_wasm_tx(
-        tx,
-        &TxIndex(0),
-        ShellParams::new(
-            &mut tx_gas_meter,
-            &mut temp_wl_storage,
-            &mut ctx.vp_wasm_cache,
-            &mut ctx.tx_wasm_cache,
-        ),
-    )
-    .into_storage_result()?;
-    cumulated_gas = cumulated_gas
-        .checked_add(tx_gas_meter.get_tx_consumed_gas())
-        .ok_or(namada_core::ledger::storage_api::Error::SimpleMessage(
-            "Overflow in gas",
-        ))?;
-    // Account gas for both inner and wrapper (if available)
-    data.gas_used = cumulated_gas;
-    // NOTE: the keys changed by the wrapper transaction (if any) are not
-    // returned from this function
-    let data = data.serialize_to_vec();
-    Ok(EncodedResponseQuery {
-        data,
-        proof: None,
-        info: Default::default(),
-    })
+                // If dry run only the inner tx, use the max block gas as the
+                // gas limit
+                TxGasMeter::new(
+                    namada_core::ledger::gas::get_max_block_gas(ctx.wl_storage)
+                        .unwrap()
+                        .into(),
+                )
+            }
+        };
+
+        let mut data = protocol::apply_wasm_tx(
+            tx,
+            &TxIndex(0),
+            ShellParams::new(
+                &mut tx_gas_meter,
+                &mut temp_wl_storage,
+                &mut ctx.vp_wasm_cache,
+                &mut ctx.tx_wasm_cache,
+            ),
+        )
+        .into_storage_result()?;
+        cumulated_gas = cumulated_gas
+            .checked_add(tx_gas_meter.get_tx_consumed_gas())
+            .ok_or(namada_core::ledger::storage_api::Error::SimpleMessage(
+                "Overflow in gas",
+            ))?;
+        // Account gas for both inner and wrapper (if available)
+        data.gas_used = cumulated_gas;
+        // NOTE: the keys changed by the wrapper transaction (if any) are not
+        // returned from this function
+        let data = data.serialize_to_vec();
+        Ok(EncodedResponseQuery {
+            data,
+            proof: None,
+            info: Default::default(),
+        })
+    }
 }
 
 #[cfg(test)]
@@ -138,14 +143,15 @@ mod test {
     use namada_core::types::transaction::decrypted::DecryptedTx;
     use namada_core::types::transaction::TxType;
     use namada_core::types::{address, token};
-    use namada_sdk::queries::{Router, RPC};
+    use namada_sdk::queries::{
+        EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
+    };
     use namada_test_utils::TestWasms;
     use tempfile::TempDir;
     use tendermint_rpc::{Error as RpcError, Response};
 
     use crate::ledger::events::log::EventLog;
     use crate::ledger::queries::Client;
-    use crate::ledger::{EncodedResponseQuery, RequestCtx, RequestQuery};
     use crate::proto::{Code, Data, Tx};
     use crate::vm::wasm::{TxCache, VpCache};
     use crate::vm::{wasm, WasmCacheRoAccess};

@@ -42,12 +42,12 @@ vp_user = ["namada_vp_prelude", "once_cell"]
 [dependencies]
 namada_tx_prelude = {path = "../../tx_prelude", optional = true}
 namada_vp_prelude = {path = "../../vp_prelude", optional = true}
-borsh = "1.0.0-alpha.4"
+borsh = "1.2.0"
 once_cell = {version = "1.8.0", optional = true}
 wee_alloc = "0.4.5"
 getrandom = { version = "0.2", features = ["custom"] }
 # branch = "murisi/namada-integration"
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "77e009626f3f52fe83c81ec6ee38fc2547d38da3", optional = true }
+masp_primitives = { git = "https://github.com/anoma/masp", tag = "v1.0.0", optional = true }
 ripemd = "0.1"
 
 [dev-dependencies]
