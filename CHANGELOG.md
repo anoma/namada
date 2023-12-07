@@ -1,5 +1,69 @@
 # CHANGELOG
 
+## v0.28.0
+
+Namada 0.28.0 is a minor release that improves the genesis setup to allow signing with hardware wallet and contains various improvements including validator liveness jailing, accounts simplifications, bug fixes, stability improvements and more.
+
+### BUG FIXES
+
+- Fix the start block height of the first epoch.
+  ([\#1993](https://github.com/anoma/namada/pull/1993))
+- Fix Ethereum event validation/state updates when more than one validator is
+  running the chain ([\#2035](https://github.com/anoma/namada/pull/2035))
+- Fix possible underflow in MASP rewards calculation.
+  ([\#2230](https://github.com/anoma/namada/pull/2230))
+
+### IMPROVEMENTS
+
+Allow  the ethereum oracle to be activated / deactivated via config 
+updates sent from ledger. This allows governance to shut down the 
+ledger without restarts. Otherwise, disconnecting from Ethereum will
+result in the ledger crashing.
+([\#1764](https://github.com/anoma/namada/pull/1764))
+- Prune merkle tree of bridge pool
+  ([\#2110](https://github.com/anoma/namada/issues/2110))
+- Revert the chain ID format by upgrading ibc-rs to 0.48.1
+  ([\#2153](https://github.com/anoma/namada/issues/2153))
+- Changed pre-genesis established addresses to be derived from their data.
+  Improved signing of pre-genesis transactions to use the same format as
+  regular transactions. Genesis token balances now can be directly assigned to
+  established addresses. ([\#2186](https://github.com/anoma/namada/pull/2186))
+- Combined the user and the validator VP into one.
+  ([\#2202](https://github.com/anoma/namada/pull/2202))
+- Charge gas for network usage.
+  ([\#2205](https://github.com/anoma/namada/pull/2205))
+- A new `tx_become_validator` replaces `tx_init_validator`. This tx doesn't
+  initialize a new account and instead it modifies an existing established
+  address to become a validator. This currently requires that there are no
+  delegations on the source account before it can become a validator (if there
+  are some, they have to be unbonded, but they don't have to be withdrawn).
+  A new client command `become-validator` is added that requires an `--address`.
+  The client command `init-validator` is kept for convenience and updated to
+  send `tx_init_account` tx before `tx_become_validator`.
+  ([\#2208](https://github.com/anoma/namada/pull/2208))
+- Increase hardware wallet support in the CLI
+  ([\#2209](https://github.com/anoma/namada/pull/2209))
+- Handle errors on loading WASMs from file-system compilation cache.
+  ([\#2215](https://github.com/anoma/namada/pull/2215))
+- Implement a CLI query for available rewards from a bond,
+  and improve the bond amount for rewards computation
+  ([\#2217](https://github.com/anoma/namada/pull/2217))
+- Fix bug in client to allow for unjailing a validator
+  that was jailed for missing liveness requirements
+  ([\#2246](https://github.com/anoma/namada/pull/2246))
+
+### MISCELLANEOUS
+
+- Upgraded borsh dependency to v1.2.0.
+  ([\#2233](https://github.com/anoma/namada/pull/2233))
+
+### SDK
+
+- Removed uses of lifetimes in the SDKs Namada trait and implementation
+  ([\#2225](https://github.com/anoma/namada/pull/2225))
+- Added Send trait support to the SDK to allow its use in more multithreaded
+  contexts. ([\#2235](https://github.com/anoma/namada/pull/2235))
+
 ## v0.27.0
 
 Namada 0.27.0 is a minor release that incorporates the remaining essential proof-of-stake features, updates the MASP and transaction functionality, and provides some additions to the SDK.
@@ -134,7 +198,7 @@ This release includes only the new genesis flow.
 
 ## v0.24.1
 
-Namada 0.24.1 is patch release addressing ledger startup problems with wasm artifacts and several other minor fixes.
+Namada 0.24.1 is a patch release addressing ledger startup problems with wasm artifacts and several other minor fixes.
 
 ### BUG FIXES
 
@@ -143,7 +207,7 @@ Namada 0.24.1 is patch release addressing ledger startup problems with wasm arti
 
 ### IMPROVEMENTS
 
-- Define the wasm download endpoint via environemnt variable.
+- Define the wasm download endpoint via environment variable.
   ([\#2064](https://github.com/anoma/namada/pull/2064))
 
 ## v0.24.0
