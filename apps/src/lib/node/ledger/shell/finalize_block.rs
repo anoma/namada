@@ -2175,7 +2175,7 @@ mod test_finalize_block {
         assert!(rp3 > rp4);
     }
 
-    /// A unit test for PoS inflationary rewards claiming
+    /// A unit test for PoS inflationary rewards claiming and querying
     #[test]
     fn test_claim_rewards() {
         let (mut shell, _recv, _, _) = setup_with_cfg(SetupCfg {
@@ -2251,6 +2251,15 @@ mod test_finalize_block {
             advance_epoch(&mut shell, &pkh1, &votes, None);
         total_rewards += inflation;
 
+        // Query the available rewards
+        let query_rewards = namada_proof_of_stake::query_reward_tokens(
+            &shell.wl_storage,
+            None,
+            &validator.address,
+            current_epoch,
+        )
+        .unwrap();
+
         // Claim the rewards from the initial epoch
         let reward_1 = namada_proof_of_stake::claim_reward_tokens(
             &mut shell.wl_storage,
@@ -2260,7 +2269,19 @@ mod test_finalize_block {
         )
         .unwrap();
         total_claimed += reward_1;
+        assert_eq!(reward_1, query_rewards);
         assert!(is_reward_equal_enough(total_rewards, total_claimed, 1));
+
+        // Query the available rewards again and check that it is 0 now after
+        // the claim
+        let query_rewards = namada_proof_of_stake::query_reward_tokens(
+            &shell.wl_storage,
+            None,
+            &validator.address,
+            current_epoch,
+        )
+        .unwrap();
+        assert_eq!(query_rewards, token::Amount::zero());
 
         // Try a claim the next block and ensure we get 0 tokens back
         next_block_for_inflation(
@@ -2296,6 +2317,15 @@ mod test_finalize_block {
         .unwrap();
         assert_eq!(unbond_res.sum, unbond_amount);
 
+        // Query the available rewards
+        let query_rewards = namada_proof_of_stake::query_reward_tokens(
+            &shell.wl_storage,
+            None,
+            &validator.address,
+            current_epoch,
+        )
+        .unwrap();
+
         let rew = namada_proof_of_stake::claim_reward_tokens(
             &mut shell.wl_storage,
             None,
@@ -2305,6 +2335,7 @@ mod test_finalize_block {
         .unwrap();
         total_claimed += rew;
         assert!(is_reward_equal_enough(total_rewards, total_claimed, 3));
+        assert_eq!(query_rewards, rew);
 
         // Check the bond amounts for rewards up thru the withdrawable epoch
         let withdraw_epoch = current_epoch + params.withdrawable_epoch_offset();
@@ -2364,6 +2395,15 @@ mod test_finalize_block {
         .unwrap();
         assert_eq!(withdraw_amount, unbond_amount);
 
+        // Query the available rewards
+        let query_rewards = namada_proof_of_stake::query_reward_tokens(
+            &shell.wl_storage,
+            None,
+            &validator.address,
+            current_epoch,
+        )
+        .unwrap();
+
         // Claim tokens
         let reward_2 = namada_proof_of_stake::claim_reward_tokens(
             &mut shell.wl_storage,
@@ -2373,6 +2413,7 @@ mod test_finalize_block {
         )
         .unwrap();
         total_claimed += reward_2;
+        assert_eq!(query_rewards, reward_2);
 
         // The total rewards claimed should be approximately equal to the total
         // minted inflation, minus (unbond_amount / initial_stake) * rewards
@@ -2383,6 +2424,16 @@ mod test_finalize_block {
         let token_uncertainty = uncertainty * lost_rewards;
         let token_diff = total_claimed + lost_rewards - total_rewards;
         assert!(token_diff < token_uncertainty);
+
+        // Query the available rewards to check that they are 0
+        let query_rewards = namada_proof_of_stake::query_reward_tokens(
+            &shell.wl_storage,
+            None,
+            &validator.address,
+            current_epoch,
+        )
+        .unwrap();
+        assert_eq!(query_rewards, token::Amount::zero());
     }
 
     /// A unit test for PoS inflationary rewards claiming

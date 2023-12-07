@@ -1220,9 +1220,31 @@ fn pos_rewards() -> Result<()> {
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
+    // Query the current rewards for the validator self-bond
+    let tx_args = vec![
+        "rewards",
+        "--validator",
+        "validator-0",
+        "--node",
+        &validator_0_rpc,
+    ];
+    let mut client =
+        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+    let (_, res) = client
+        .exp_regex(r"Current rewards available for claim: [0-9\.]+ NAM")
+        .unwrap();
+    let words = res.split(' ').collect::<Vec<_>>();
+    let res = words[words.len() - 2];
+    let mut last_amount = token::Amount::from_str(
+        res.split(' ').last().unwrap(),
+        NATIVE_MAX_DECIMAL_PLACES,
+    )
+    .unwrap();
+    client.assert_success();
+
     // Wait some epochs
-    let epoch = get_epoch(&test, &validator_0_rpc)?;
-    let wait_epoch = epoch + 4_u64;
+    let mut last_epoch = get_epoch(&test, &validator_0_rpc)?;
+    let wait_epoch = last_epoch + 4_u64;
 
     let start = Instant::now();
     let loop_timeout = Duration::new(40, 0);
@@ -1230,12 +1252,46 @@ fn pos_rewards() -> Result<()> {
         if Instant::now().duration_since(start) > loop_timeout {
             panic!("Timed out waiting for epoch: {}", wait_epoch);
         }
+
         let epoch = epoch_sleep(&test, &validator_0_rpc, 40)?;
         if dbg!(epoch) >= wait_epoch {
             break;
         }
+
+        // Query the current rewards for the validator self-bond and see that it
+        // grows
+        let tx_args = vec![
+            "rewards",
+            "--validator",
+            "validator-0",
+            "--node",
+            &validator_0_rpc,
+        ];
+        let mut client =
+            run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+        let (_, res) = client
+            .exp_regex(r"Current rewards available for claim: [0-9\.]+ NAM")
+            .unwrap();
+        let words = res.split(' ').collect::<Vec<_>>();
+        let res = words[words.len() - 2];
+        let amount = token::Amount::from_str(
+            res.split(' ').last().unwrap(),
+            NATIVE_MAX_DECIMAL_PLACES,
+        )
+        .unwrap();
+        client.assert_success();
+
+        if epoch > last_epoch {
+            assert!(amount > last_amount);
+        } else {
+            assert_eq!(amount, last_amount);
+        }
+
+        last_amount = amount;
+        last_epoch = epoch;
     }
 
+    // Query the balance of the validator account
     let query_balance_args = vec![
         "balance",
         "--owner",
@@ -1254,6 +1310,7 @@ fn pos_rewards() -> Result<()> {
     .unwrap();
     client.assert_success();
 
+    // Claim rewards
     let tx_args = vec![
         "claim-rewards",
         "--validator",
@@ -1269,6 +1326,8 @@ fn pos_rewards() -> Result<()> {
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
+    // Query the validator balance again and check that the balance has grown
+    // after claiming
     let query_balance_args = vec![
         "balance",
         "--owner",

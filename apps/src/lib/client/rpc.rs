@@ -1886,6 +1886,17 @@ pub async fn query_validator_state<
     )
 }
 
+/// Query and return the available reward tokens corresponding to the bond
+pub async fn query_rewards<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
+    source: &Option<Address>,
+    validator: &Address,
+) -> token::Amount {
+    unwrap_client_response::<C, token::Amount>(
+        RPC.vp().pos().rewards(client, validator, source).await,
+    )
+}
+
 /// Query a validator's state information
 pub async fn query_and_print_validator_state(
     context: &impl Namada,
@@ -2192,6 +2203,20 @@ pub async fn query_slashes<N: Namada>(context: &N, args: args::QuerySlashes) {
             }
         }
     }
+}
+
+pub async fn query_and_print_rewards<N: Namada>(
+    context: &N,
+    args: args::QueryRewards,
+) {
+    let (source, validator) = (args.source, args.validator);
+
+    let rewards = query_rewards(context.client(), &source, &validator).await;
+    display_line!(
+        context.io(),
+        "Current rewards available for claim: {} NAM",
+        rewards.to_string_native()
+    );
 }
 
 pub async fn query_delegations<N: Namada>(
@@ -2621,8 +2646,8 @@ pub async fn query_governance_parameters<
 fn unwrap_client_response<C: namada::ledger::queries::Client, T>(
     response: Result<T, C::Error>,
 ) -> T {
-    response.unwrap_or_else(|_err| {
-        eprintln!("Error in the query");
+    response.unwrap_or_else(|err| {
+        eprintln!("Error in the query: {:?}", err);
         cli::safe_exit(1)
     })
 }
