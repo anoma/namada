@@ -16,11 +16,13 @@ use namada_core::ledger::vp_env::VpEnv;
 use namada_core::proto::Tx;
 use namada_core::types::address::InternalAddress::Masp;
 use namada_core::types::address::{Address, MASP};
-use namada_core::types::storage::{Epoch, Key, KeySeg};
+use namada_core::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
 use namada_core::types::token::{
-    self, is_masp_anchor_key, is_masp_nullifier_key,
+    self, is_masp_allowed_key, is_masp_key, is_masp_nullifier_key,
+    is_masp_tx_pin_key, is_masp_tx_prefix_key, Transfer, HEAD_TX_KEY,
     MASP_CONVERT_ANCHOR_PREFIX, MASP_NOTE_COMMITMENT_ANCHOR_PREFIX,
-    MASP_NOTE_COMMITMENT_TREE_KEY, MASP_NULLIFIERS_KEY_PREFIX,
+    MASP_NOTE_COMMITMENT_TREE_KEY, MASP_NULLIFIERS_KEY_PREFIX, PIN_KEY_PREFIX,
+    TX_KEY_PREFIX,
 };
 use namada_sdk::masp::verify_shielded_tx;
 use ripemd::Digest as RipemdDigest;
@@ -179,7 +181,6 @@ where
     // the tree and anchor in storage
     fn valid_note_commitment_update(
         &self,
-        keys_changed: &BTreeSet<Key>,
         transaction: &Transaction,
     ) -> Result<bool> {
         // Check that the merkle tree in storage has been correctly updated with
@@ -215,20 +216,6 @@ where
         // appended to the tree
         if previous_tree != post_tree {
             tracing::debug!("The note commitment tree was incorrectly updated");
-            return Ok(false);
-        }
-
-        // Check that no anchor was published (this is to be done by the
-        // protocol)
-        if keys_changed
-            .iter()
-            .filter(|key| is_masp_anchor_key(key))
-            .count()
-            != 0
-        {
-            tracing::debug!(
-                "The transaction revealed one or more MASP anchor keys"
-            );
             return Ok(false);
         }
 
@@ -292,6 +279,84 @@ where
 
         Ok(true)
     }
+
+    /// Check the correctness of the general storage changes that pertain to all
+    /// types of masp transfers
+    fn valid_state(
+        &self,
+        keys_changed: &BTreeSet<Key>,
+        transfer: &Transfer,
+        transaction: &Transaction,
+    ) -> Result<bool> {
+        // Check that the transaction didn't write unallowed masp keys, nor
+        // multiple variations of the same key prefixes
+        let mut found_tx_key = false;
+        let mut found_pin_key = false;
+        for key in keys_changed.iter().filter(|key| is_masp_key(key)) {
+            if !is_masp_allowed_key(key) {
+                return Ok(false);
+            } else if is_masp_tx_prefix_key(key) {
+                if found_tx_key {
+                    return Ok(false);
+                } else {
+                    found_tx_key = true;
+                }
+            } else if is_masp_tx_pin_key(key) {
+                if found_pin_key {
+                    return Ok(false);
+                } else {
+                    found_pin_key = true;
+                }
+            }
+        }
+
+        // Validate head tx
+        let head_tx_key = Key::from(MASP.to_db_key())
+            .push(&HEAD_TX_KEY.to_owned())
+            .expect("Cannot obtain a storage key");
+        let pre_head: u64 = self.ctx.read_pre(&head_tx_key)?.unwrap_or(0);
+        let post_head: u64 = self.ctx.read_post(&head_tx_key)?.unwrap_or(0);
+
+        if post_head != pre_head + 1 {
+            return Ok(false);
+        }
+
+        // Validate tx key
+        let current_tx_key = Key::from(MASP.to_db_key())
+            .push(&(TX_KEY_PREFIX.to_owned() + &pre_head.to_string()))
+            .expect("Cannot obtain a storage key");
+        match self
+            .ctx
+            .read_post::<(Epoch, BlockHeight, TxIndex, Transfer, Transaction)>(
+                &current_tx_key,
+            )? {
+            Some((
+                epoch,
+                height,
+                tx_index,
+                storage_transfer,
+                storage_transaction,
+            )) if (epoch == self.ctx.get_block_epoch()?
+                && height == self.ctx.get_block_height()?
+                && tx_index == self.ctx.get_tx_index()?
+                && &storage_transfer == transfer
+                && &storage_transaction == transaction) => {}
+            _ => return Ok(false),
+        }
+
+        // Validate pin key
+        if let Some(key) = &transfer.key {
+            let pin_key = Key::from(MASP.to_db_key())
+                .push(&(PIN_KEY_PREFIX.to_owned() + key))
+                .expect("Cannot obtain a storage key");
+            match self.ctx.read_post::<u64>(&pin_key)? {
+                Some(tx_idx) if tx_idx == pre_head => (),
+                _ => return Ok(false),
+            }
+        }
+
+        Ok(true)
+    }
 }
 
 impl<'a, DB, H, CA> NativeVp for MaspVp<'a, DB, H, CA>
@@ -313,6 +378,10 @@ where
         let mut transparent_tx_pool = I128Sum::zero();
         // The Sapling value balance adds to the transparent tx pool
         transparent_tx_pool += shielded_tx.sapling_value_balance();
+
+        if !self.valid_state(keys_changed, &transfer, &shielded_tx)? {
+            return Ok(false);
+        }
 
         if transfer.source != Address::Internal(Masp) {
             // Handle transparent input
@@ -363,7 +432,7 @@ where
 
         // The transaction must correctly update the note commitment tree
         // in storage with the new output descriptions
-        if !self.valid_note_commitment_update(keys_changed, &shielded_tx)? {
+        if !self.valid_note_commitment_update(&shielded_tx)? {
             return Ok(false);
         }
 

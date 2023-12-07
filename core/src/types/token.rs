@@ -1128,33 +1128,47 @@ pub fn is_denom_key(token_addr: &Address, key: &Key) -> bool {
 /// Check if the given storage key is a masp key
 pub fn is_masp_key(key: &Key) -> bool {
     matches!(&key.segments[..],
+        [DbKeySeg::AddressSeg(addr), ..] if *addr == MASP
+    )
+}
+
+/// Check if the given storage key is allowed to be touched by a masp transfer
+pub fn is_masp_allowed_key(key: &Key) -> bool {
+    matches!(&key.segments[..],
         [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
             if *addr == MASP
                 && (key == HEAD_TX_KEY
                     || key.starts_with(TX_KEY_PREFIX)
                     || key.starts_with(PIN_KEY_PREFIX)
                     || key.starts_with(MASP_NULLIFIERS_KEY_PREFIX)
-                    || key == MASP_NOTE_COMMITMENT_TREE_KEY
-                    || key.starts_with(MASP_NOTE_COMMITMENT_ANCHOR_PREFIX)
-                    || key.starts_with(MASP_CONVERT_ANCHOR_PREFIX)))
+                    || key == MASP_NOTE_COMMITMENT_TREE_KEY))
+}
+
+/// Check if the given storage key is a masp tx prefix key
+pub fn is_masp_tx_prefix_key(key: &Key) -> bool {
+    matches!(&key.segments[..],
+        [DbKeySeg::AddressSeg(addr),
+             DbKeySeg::StringSeg(prefix),
+             ..
+        ] if *addr == MASP && prefix.starts_with(TX_KEY_PREFIX))
+}
+
+/// Check if the given storage key is a masp tx pin key
+pub fn is_masp_tx_pin_key(key: &Key) -> bool {
+    matches!(&key.segments[..],
+        [DbKeySeg::AddressSeg(addr),
+             DbKeySeg::StringSeg(prefix),
+             ..
+        ] if *addr == MASP && prefix.starts_with(PIN_KEY_PREFIX))
 }
 
 /// Check if the given storage key is a masp nullifier key
 pub fn is_masp_nullifier_key(key: &Key) -> bool {
     matches!(&key.segments[..],
-    [DbKeySeg::AddressSeg(addr),
+        [DbKeySeg::AddressSeg(addr),
              DbKeySeg::StringSeg(prefix),
              ..
         ] if *addr == MASP && prefix == MASP_NULLIFIERS_KEY_PREFIX)
-}
-
-/// Check if the given storage key is a masp anchor key
-pub fn is_masp_anchor_key(key: &Key) -> bool {
-    matches!(&key.segments[..],
-    [DbKeySeg::AddressSeg(addr),
-             DbKeySeg::StringSeg(prefix),
-             ..
-        ] if *addr == MASP && prefix == MASP_NOTE_COMMITMENT_ANCHOR_PREFIX)
 }
 
 /// Obtain the storage key for the last locked ratio of a token
