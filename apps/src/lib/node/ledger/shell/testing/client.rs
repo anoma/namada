@@ -18,6 +18,7 @@ pub fn run(
     let global = {
         let locked = node.shell.lock().unwrap();
         Global {
+            is_pre_genesis: false,
             chain_id: Some(locked.chain_id.clone()),
             base_dir: locked.base_dir.clone(),
             wasm_dir: Some(locked.wasm_dir.clone()),

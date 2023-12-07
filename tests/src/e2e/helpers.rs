@@ -19,10 +19,13 @@ use namada::types::address::Address;
 use namada::types::key::*;
 use namada::types::storage::Epoch;
 use namada::types::token;
-use namada_apps::config::genesis::chain;
+use namada_apps::config::genesis::chain::DeriveEstablishedAddress;
+use namada_apps::config::genesis::templates;
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps::config::{Config, TendermintMode};
 use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
+use namada_sdk::wallet::fs::FsWalletUtils;
+use namada_sdk::wallet::Wallet;
 
 use super::setup::{
     self, sleep, NamadaBgCmd, NamadaCmd, Test, ENV_VAR_DEBUG,
@@ -172,25 +175,64 @@ pub fn get_actor_rpc(test: &Test, who: &Who) -> String {
     format!("{}:{}", socket_addr.ip(), socket_addr.port())
 }
 
+/// Get some nodes's wallet.
+pub fn get_node_wallet(test: &Test, who: &Who) -> Wallet<FsWalletUtils> {
+    let wallet_store_dir =
+        test.get_base_dir(who).join(test.net.chain_id.as_str());
+    let mut wallet = FsWalletUtils::new(wallet_store_dir);
+    wallet.load().expect("Failed to load wallet");
+    wallet
+}
+
 /// Get the public key of the validator
 pub fn get_validator_pk(test: &Test, who: &Who) -> Option<common::PublicKey> {
     let index = match who {
         Who::NonValidator => return None,
         Who::Validator(i) => i,
     };
-    let path = test.test_dir.path().join("genesis");
-    let genesis = chain::Finalized::read_toml_files(
-        &path.join(test.net.chain_id.as_str()),
-    )
-    .unwrap();
-    genesis
-        .transactions
-        .validator_account?
-        .iter()
-        .find(|val_tx| {
-            val_tx.tx.alias.to_string() == format!("validator-{}", index)
-        })
-        .map(|val_tx| val_tx.tx.account_key.pk.raw.clone())
+    let mut wallet = get_node_wallet(test, who);
+    let sk = wallet
+        .find_secret_key(format!("validator-{index}-balance-key"), None)
+        .ok()?;
+    Some(sk.ref_to())
+}
+
+/// Get a pregenesis wallet.
+pub fn get_pregenesis_wallet<P: AsRef<Path>>(
+    base_dir_path: P,
+) -> Wallet<FsWalletUtils> {
+    let mut wallet_store_dir = base_dir_path.as_ref().to_path_buf();
+    wallet_store_dir.push("pre-genesis");
+
+    let mut wallet = FsWalletUtils::new(wallet_store_dir);
+    wallet.load().expect("Failed to load wallet");
+
+    wallet
+}
+
+/// Get a pregenesis public key.
+pub fn get_pregenesis_pk<P: AsRef<Path>>(
+    alias: &str,
+    base_dir_path: P,
+) -> Option<common::PublicKey> {
+    let mut wallet = get_pregenesis_wallet(base_dir_path);
+    let sk = wallet.find_secret_key(alias, None).ok()?;
+    Some(sk.ref_to())
+}
+
+/// Get a pregenesis public key.
+pub fn get_established_addr_from_pregenesis<P: AsRef<Path>>(
+    alias: &str,
+    base_dir_path: P,
+    genesis: &templates::All<templates::Unvalidated>,
+) -> Option<Address> {
+    let pk = get_pregenesis_pk(alias, base_dir_path)?;
+    let established_accounts =
+        genesis.transactions.established_account.as_ref()?;
+    let acct = established_accounts.iter().find(|&acct| {
+        acct.public_keys.len() == 1 && acct.public_keys[0].raw == pk
+    })?;
+    Some(acct.derive_address())
 }
 
 /// Find the address of an account by its alias from the wallet

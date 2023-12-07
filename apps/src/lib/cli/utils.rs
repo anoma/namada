@@ -28,6 +28,14 @@ const RELAYER_KEY_ENV_VAR: &str = "NAMADA_RELAYER_KEY";
 pub type App = clap::Command;
 pub type ClapArg = clap::Arg;
 
+/// Mode of operation of [`ArgMulti`] where zero or
+/// more arguments may be present (i.e. `<pattern>*`).
+pub enum GlobStar {}
+
+/// Mode of operation of [`ArgMulti`] where at least
+/// one argument must be present (i.e. `<pattern>+`).
+pub enum GlobPlus {}
+
 pub trait Cmd: Sized {
     fn add_sub(app: App) -> App;
     fn parse(matches: &ArgMatches) -> Option<Self>;
@@ -93,9 +101,9 @@ pub struct ArgFlag {
 }
 
 #[allow(dead_code)]
-pub struct ArgMulti<T> {
+pub struct ArgMulti<T, K> {
     pub name: &'static str,
-    pub r#type: PhantomData<T>,
+    pub r#type: PhantomData<(T, K)>,
 }
 
 pub const fn arg<T>(name: &'static str) -> Arg<T> {
@@ -138,8 +146,7 @@ pub const fn flag(name: &'static str) -> ArgFlag {
     ArgFlag { name }
 }
 
-#[allow(dead_code)]
-pub const fn arg_multi<T>(name: &'static str) -> ArgMulti<T> {
+pub const fn arg_multi<T, K>(name: &'static str) -> ArgMulti<T, K> {
     ArgMulti {
         name,
         r#type: PhantomData,
@@ -163,7 +170,15 @@ impl<T> Arg<T> {
     }
 
     #[allow(dead_code)]
-    pub const fn multi(self) -> ArgMulti<T> {
+    pub const fn multi_glob_star(self) -> ArgMulti<T, GlobStar> {
+        ArgMulti {
+            name: self.name,
+            r#type: PhantomData,
+        }
+    }
+
+    #[allow(dead_code)]
+    pub const fn multi_glob_plus(self) -> ArgMulti<T, GlobPlus> {
         ArgMulti {
             name: self.name,
             r#type: PhantomData,
@@ -237,23 +252,91 @@ where
     }
 }
 
-impl<T> ArgMulti<FromContext<T>>
-where
-    T: FromStr,
-    <T as FromStr>::Err: Debug,
-{
+impl<T, K> ArgMulti<T, K> {
     pub fn def(&self) -> ClapArg {
         ClapArg::new(self.name)
             .long(self.name)
             .num_args(1..)
             .value_delimiter(',')
     }
+}
 
+impl<T> ArgMulti<FromContext<T>, GlobStar>
+where
+    T: FromStr,
+    <T as FromStr>::Err: Debug,
+{
     pub fn parse(&self, matches: &ArgMatches) -> Vec<FromContext<T>> {
         matches
             .get_many(self.name)
             .unwrap_or_default()
             .map(|raw: &String| FromContext::new(raw.to_string()))
+            .collect()
+    }
+}
+
+impl<T> ArgMulti<FromContext<T>, GlobPlus>
+where
+    T: FromStr,
+    <T as FromStr>::Err: Debug,
+{
+    pub fn parse(&self, matches: &ArgMatches) -> Vec<FromContext<T>> {
+        matches
+            .get_many(self.name)
+            .unwrap_or_else(|| {
+                eprintln!("Missing at least one argument to `--{}`", self.name);
+                safe_exit(1)
+            })
+            .map(|raw: &String| FromContext::new(raw.to_string()))
+            .collect()
+    }
+}
+
+impl<T> ArgMulti<T, GlobStar>
+where
+    T: FromStr,
+    <T as FromStr>::Err: Debug,
+{
+    pub fn parse(&self, matches: &ArgMatches) -> Vec<T> {
+        matches
+            .get_many(self.name)
+            .unwrap_or_default()
+            .map(|raw: &String| {
+                raw.parse().unwrap_or_else(|e| {
+                    eprintln!(
+                        "Failed to parse the {} argument. Raw value: {}, \
+                         error: {:?}",
+                        self.name, raw, e
+                    );
+                    safe_exit(1)
+                })
+            })
+            .collect()
+    }
+}
+
+impl<T> ArgMulti<T, GlobPlus>
+where
+    T: FromStr,
+    <T as FromStr>::Err: Debug,
+{
+    pub fn parse(&self, matches: &ArgMatches) -> Vec<T> {
+        matches
+            .get_many(self.name)
+            .unwrap_or_else(|| {
+                eprintln!("Missing at least one argument to `--{}`", self.name);
+                safe_exit(1)
+            })
+            .map(|raw: &String| {
+                raw.parse().unwrap_or_else(|e| {
+                    eprintln!(
+                        "Failed to parse the {} argument. Raw value: {}, \
+                         error: {:?}",
+                        self.name, raw, e
+                    );
+                    safe_exit(1)
+                })
+            })
             .collect()
     }
 }
@@ -285,36 +368,6 @@ impl ArgFlag {
 
     pub fn parse(&self, matches: &ArgMatches) -> bool {
         matches.get_flag(self.name)
-    }
-}
-
-#[allow(dead_code)]
-impl<T> ArgMulti<T>
-where
-    T: FromStr,
-    <T as FromStr>::Err: Debug,
-{
-    pub fn def(&self) -> ClapArg {
-        ClapArg::new(self.name)
-            .long(self.name)
-            .action(ArgAction::Append)
-    }
-
-    pub fn parse(&self, matches: &ArgMatches) -> Vec<T> {
-        matches
-            .get_many(self.name)
-            .unwrap_or_default()
-            .map(|raw: &String| {
-                raw.parse().unwrap_or_else(|e| {
-                    eprintln!(
-                        "Failed to parse the {} argument. Raw value: {}, \
-                         error: {:?}",
-                        self.name, raw, e
-                    );
-                    safe_exit(1)
-                })
-            })
-            .collect()
     }
 }
 

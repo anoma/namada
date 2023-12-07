@@ -112,18 +112,18 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let cli::context::ChainContext {
-                            mut wallet,
+                            wallet,
                             mut config,
-                            mut shielded,
+                            shielded,
                             native_token,
                         } = ctx.take_chain_or_exit();
                         let namada = NamadaImpl::native_new(
-                            &client,
-                            &mut wallet,
-                            &mut shielded,
+                            client,
+                            wallet,
+                            shielded,
                             io,
                             native_token,
                         );
@@ -645,6 +645,15 @@ impl CliApi {
                 Utils::InitNetwork(InitNetwork(args)) => {
                     utils::init_network(global_args, args)
                 }
+                Utils::GenesisBond(GenesisBond(args)) => {
+                    utils::genesis_bond(args)
+                }
+                Utils::DeriveGenesisAddresses(DeriveGenesisAddresses(args)) => {
+                    utils::derive_genesis_addresses(global_args, args)
+                }
+                Utils::InitGenesisEstablishedAccount(
+                    InitGenesisEstablishedAccount(args),
+                ) => utils::init_genesis_established_account(global_args, args),
                 Utils::InitGenesisValidator(InitGenesisValidator(args)) => {
                     utils::init_genesis_validator(global_args, args)
                 }
@@ -668,8 +677,8 @@ impl CliApi {
                 Utils::ValidateGenesisTemplates(ValidateGenesisTemplates(
                     args,
                 )) => utils::validate_genesis_templates(global_args, args),
-                Utils::SignGenesisTx(SignGenesisTx(args)) => {
-                    utils::sign_genesis_tx(global_args, args)
+                Utils::SignGenesisTxs(SignGenesisTxs(args)) => {
+                    utils::sign_genesis_tx(global_args, args).await
                 }
             },
         }

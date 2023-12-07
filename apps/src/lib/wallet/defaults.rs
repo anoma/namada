@@ -4,14 +4,15 @@
 pub use dev::{
     addresses, albert_address, albert_keypair, bertha_address, bertha_keypair,
     christel_address, christel_keypair, daewon_address, daewon_keypair,
-    ester_address, ester_keypair, keys, tokens, validator_address,
-    validator_keypair, validator_keys,
+    ester_address, ester_keypair, keys, tokens, validator_account_keypair,
+    validator_address, validator_keypair, validator_keys,
 };
 
 #[cfg(any(test, feature = "testing", feature = "benches"))]
 mod dev {
     use std::collections::HashMap;
 
+    use lazy_static::lazy_static;
     use namada::ledger::{governance, pgf, pos};
     use namada::types::address::{
         apfel, btc, dot, eth, kartoffel, nam, schnitzel, Address,
@@ -19,15 +20,19 @@ mod dev {
     use namada::types::key::*;
     use namada_sdk::wallet::alias::Alias;
     use namada_sdk::wallet::pre_genesis::ValidatorWallet;
+    use namada_sdk::wallet::Wallet;
+
+    use crate::wallet::CliWalletUtils;
 
     /// Get protocol, eth_bridge, and dkg keys from the validator pre-genesis
     /// wallet
     pub fn validator_keys() -> (common::SecretKey, common::SecretKey) {
-        let protocol_key = get_validator_pre_genesis_wallet()
+        let protocol_key = VALIDATOR_WALLET
             .store
             .validator_keys
-            .protocol_keypair;
-        let eth_bridge_key = get_validator_pre_genesis_wallet().eth_hot_key;
+            .protocol_keypair
+            .clone();
+        let eth_bridge_key = VALIDATOR_WALLET.eth_hot_key.clone();
         (protocol_key, eth_bridge_key)
     }
 
@@ -86,25 +91,30 @@ mod dev {
 
     /// An established user address for testing & development
     pub fn albert_address() -> Address {
-        Address::decode("tnam1qxgzrwqn9qny9fzd7xnlrdkf7hhj9ecyx5mv3sgw")
-            .expect("The token address decoding shouldn't fail")
+        PREGENESIS_WALLET
+            .find_address("albert")
+            .expect("Albert's address should be in the pre-genesis wallet")
+            .into_owned()
     }
 
     /// An established user address for testing & development
     pub fn bertha_address() -> Address {
-        Address::decode("tnam1qyctxtpnkhwaygye0sftkq28zedf774xc5a2m7st")
-            .expect("The token address decoding shouldn't fail")
+        PREGENESIS_WALLET
+            .find_address("bertha")
+            .expect("Bertha's address should be in the pre-genesis wallet")
+            .into_owned()
     }
 
     /// An established user address for testing & development
     pub fn christel_address() -> Address {
-        Address::decode("tnam1q99ylwumqqs5r7uwgmyu7e94n07vjeqr4g970na0")
-            .expect("The token address decoding shouldn't fail")
+        PREGENESIS_WALLET
+            .find_address("christel")
+            .expect("Christel's address should be in the pre-genesis wallet")
+            .into_owned()
     }
 
     /// An implicit user address for testing & development
     pub fn daewon_address() -> Address {
-        // "tnam1qq83g60hemh00tza9naxmrhg7stz7neqhytnj6l0"
         (&daewon_keypair().ref_to()).into()
     }
 
@@ -115,25 +125,21 @@ mod dev {
 
     /// An established validator address for testing & development
     pub fn validator_address() -> Address {
-        Address::decode("tnam1qxcc0xpgs72z6s5kx9ayvejs3mftf05jkutgz2cc")
-            .expect("The token address decoding shouldn't fail")
+        PREGENESIS_WALLET
+            .find_address("validator-0")
+            .expect(
+                "The zeroth validator's address should be in the pre-genesis \
+                 wallet",
+            )
+            .into_owned()
     }
 
     /// Get an unecrypted keypair from the pre-genesis wallet.
     pub fn get_unencrypted_keypair(name: &str) -> common::SecretKey {
-        let mut root_dir = std::env::current_dir()
-            .expect("Current directory should exist")
-            .canonicalize()
-            .expect("Current directory should exist");
-        // Find the project root dir
-        while !root_dir.join("rust-toolchain.toml").exists() {
-            root_dir.pop();
-        }
-        let path = root_dir.join("genesis/localnet/src/pre-genesis");
-        let wallet = crate::wallet::load(&path).unwrap();
-        let sk = match wallet.get_secret_keys().get(name).unwrap().0 {
+        let sk = match PREGENESIS_WALLET.get_secret_keys().get(name).unwrap().0
+        {
             namada_sdk::wallet::StoredKeypair::Encrypted(_) => {
-                panic!("{}'s keypair should not be encrypted", name)
+                panic!("{name}'s keypair should not be encrypted")
             }
             namada_sdk::wallet::StoredKeypair::Raw(sk) => sk,
         };
@@ -165,35 +171,49 @@ mod dev {
         get_unencrypted_keypair("ester")
     }
 
-    /// Get validator pre-genesis wallet
-    pub fn get_validator_pre_genesis_wallet() -> ValidatorWallet {
-        let mut root_dir = std::env::current_dir()
-            .expect("Current directory should exist")
-            .canonicalize()
-            .expect("Current directory should exist");
-        // Find the project root dir
-        while !root_dir.join("rust-toolchain.toml").exists() {
-            root_dir.pop();
-        }
-        let path =
-            root_dir.join("genesis/localnet/src/pre-genesis/validator-0");
-        crate::wallet::pre_genesis::load(&path).unwrap()
-    }
-
     /// Get the validator consensus keypair from the wallet.
     pub fn validator_keypair() -> common::SecretKey {
-        let mut root_dir = std::env::current_dir()
-            .expect("Current directory should exist")
-            .canonicalize()
-            .expect("Current directory should exist");
-        // Find the project root dir
-        while !root_dir.join("rust-toolchain.toml").exists() {
-            root_dir.pop();
-        }
-        let path =
-            root_dir.join("genesis/localnet/src/pre-genesis/validator-0");
+        VALIDATOR_WALLET.consensus_key.clone()
+    }
 
-        let wallet = crate::wallet::pre_genesis::load(&path).unwrap();
-        wallet.consensus_key
+    /// Get the validator account keypair from the wallet.
+    pub fn validator_account_keypair() -> common::SecretKey {
+        get_unencrypted_keypair("validator-0-account-key")
+    }
+
+    /// The name of a file that is unique to the project's root directory.
+    const PROJECT_ROOT_UNIQUE_FILE: &str = "rust-toolchain.toml";
+
+    /// The pre-genesis directory of `validator-0`.
+    const VALIDATOR_0_PREGENESIS_DIR: &str =
+        "genesis/localnet/src/pre-genesis/validator-0";
+
+    lazy_static! {
+        static ref PREGENESIS_WALLET: Wallet<CliWalletUtils> = {
+            let mut root_dir = std::env::current_dir()
+                .expect("Current directory should exist")
+                .canonicalize()
+                .expect("Current directory should exist");
+            // Find the project root dir
+            while !root_dir.join(PROJECT_ROOT_UNIQUE_FILE).exists() {
+                root_dir.pop();
+            }
+            let path = root_dir.join("genesis/localnet/src/pre-genesis");
+            crate::wallet::load(&path).unwrap()
+        };
+
+        static ref VALIDATOR_WALLET: ValidatorWallet = {
+            let mut root_dir = std::env::current_dir()
+                .expect("Current directory should exist")
+                .canonicalize()
+                .expect("Current directory should exist");
+            // Find the project root dir
+            while !root_dir.join(PROJECT_ROOT_UNIQUE_FILE).exists() {
+                root_dir.pop();
+            }
+            let path =
+                root_dir.join(VALIDATOR_0_PREGENESIS_DIR);
+            crate::wallet::pre_genesis::load(&path).unwrap()
+        };
     }
 }

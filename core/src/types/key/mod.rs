@@ -124,6 +124,11 @@ pub enum VerifySigError {
     MismatchedScheme,
     #[error("Signature verification went out of gas: {0}")]
     OutOfGas(#[from] crate::ledger::gas::Error),
+    #[error(
+        "The number of valid signatures did not meet the required threshold, \
+         required {0} got {1}"
+    )]
+    ThresholdNotMet(u8, u8),
 }
 
 #[allow(missing_docs)]
@@ -371,6 +376,7 @@ pub trait SigScheme: Eq + Ord + Debug + Serialize + Default {
     PartialOrd,
     Ord,
     Hash,
+    Default,
 )]
 pub struct PublicKeyHash(pub(crate) [u8; address::HASH_LEN]);
 

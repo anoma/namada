@@ -1312,9 +1312,11 @@ impl Tx {
                 }
             }
         }
-        Err(Error::InvalidSectionSignature(
-            "signature threshold not met.".to_string(),
-        ))
+        Err(Error::InvalidSectionSignature(format!(
+            "signature threshold not met: ({} < {})",
+            verified_pks.len(),
+            threshold
+        )))
     }
 
     /// Verify that the sections with the given hashes have been signed together

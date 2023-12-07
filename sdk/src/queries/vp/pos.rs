@@ -480,8 +480,8 @@ where
         next_result.map(
             |(
                 lazy_map::NestedSubKey::Data {
-                    key: withdraw_epoch,
-                    nested_sub_key: lazy_map::SubKey::Data(bond_epoch),
+                    key: bond_epoch,
+                    nested_sub_key: lazy_map::SubKey::Data(withdraw_epoch),
                 },
                 amount,
             )| ((bond_epoch, withdraw_epoch), amount),
