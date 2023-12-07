@@ -74,7 +74,7 @@ use crate::rpc::{query_conversion, query_storage_value};
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
 use crate::tx::decode_component;
-use crate::{display_line, edisplay_line, rpc, Namada};
+use crate::{display_line, edisplay_line, rpc, MaybeSend, MaybeSync, Namada};
 
 /// Env var to point to a dir with MASP parameters. When not specified,
 /// the default OS specific path is used.
@@ -394,13 +394,13 @@ pub trait ShieldedUtils:
     fn local_tx_prover(&self) -> LocalTxProver;
 
     /// Load up the currently saved ShieldedContext
-    async fn load<U: ShieldedUtils>(
+    async fn load<U: ShieldedUtils + MaybeSend>(
         &self,
         ctx: &mut ShieldedContext<U>,
     ) -> std::io::Result<()>;
 
     /// Save the given ShieldedContext for future loads
-    async fn save<U: ShieldedUtils>(
+    async fn save<U: ShieldedUtils + MaybeSync>(
         &self,
         ctx: &ShieldedContext<U>,
     ) -> std::io::Result<()>;
@@ -619,7 +619,7 @@ impl<U: ShieldedUtils + Default> Default for ShieldedContext<U> {
     }
 }
 
-impl<U: ShieldedUtils> ShieldedContext<U> {
+impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     /// Try to load the last saved shielded context from the given context
     /// directory. If this fails, then leave the current context unchanged.
     pub async fn load(&mut self) -> std::io::Result<()> {
@@ -2115,8 +2115,6 @@ pub mod fs {
     use std::fs::{File, OpenOptions};
     use std::io::{Read, Write};
 
-    use async_trait::async_trait;
-
     use super::*;
 
     /// Shielded context file name
@@ -2168,7 +2166,8 @@ pub mod fs {
         }
     }
 
-    #[async_trait(?Send)]
+    #[cfg_attr(feature = "async-send", async_trait::async_trait)]
+    #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
     impl ShieldedUtils for FsShieldedUtils {
         fn local_tx_prover(&self) -> LocalTxProver {
             if let Ok(params_dir) = env::var(ENV_VAR_MASP_PARAMS_DIR) {
@@ -2185,7 +2184,7 @@ pub mod fs {
 
         /// Try to load the last saved shielded context from the given context
         /// directory. If this fails, then leave the current context unchanged.
-        async fn load<U: ShieldedUtils>(
+        async fn load<U: ShieldedUtils + MaybeSend>(
             &self,
             ctx: &mut ShieldedContext<U>,
         ) -> std::io::Result<()> {
@@ -2202,7 +2201,7 @@ pub mod fs {
         }
 
         /// Save this shielded context into its associated context directory
-        async fn save<U: ShieldedUtils>(
+        async fn save<U: ShieldedUtils + MaybeSync>(
             &self,
             ctx: &ShieldedContext<U>,
         ) -> std::io::Result<()> {
