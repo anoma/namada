@@ -5,6 +5,8 @@ use std::collections::BTreeMap;
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
+#[cfg(feature = "wasm-runtime")]
+use masp_primitives::bls12_381;
 use masp_primitives::convert::AllowedConversion;
 use masp_primitives::merkle_tree::FrozenCommitmentTree;
 use masp_primitives::sapling::Node;
@@ -16,7 +18,9 @@ use crate::ledger::storage_api::token::read_denom;
 use crate::ledger::storage_api::{StorageRead, StorageWrite};
 use crate::types::address::{Address, MASP};
 use crate::types::dec::Dec;
-use crate::types::storage::{Epoch, Key, KeySeg};
+use crate::types::storage::Epoch;
+#[cfg(feature = "wasm-runtime")]
+use crate::types::storage::{Key, KeySeg};
 use crate::types::token;
 use crate::types::token::MaspDenom;
 use crate::types::uint::Uint;
