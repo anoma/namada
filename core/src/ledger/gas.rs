@@ -35,6 +35,8 @@ const STORAGE_OCCUPATION_GAS_PER_BYTE: u64 =
 // codebase. For these two reasons we just set an arbitrary value (based on
 // actual SSDs latency) per byte here
 const PHYSICAL_STORAGE_LATENCY_PER_BYTE: u64 = 75;
+// This is based on the global avarage bandwidth
+const NETWORK_TRANSMISSION_GAS_PER_BYTE: u64 = 13;
 
 /// The cost of accessing data from memory (both read and write mode), per byte
 pub const MEMORY_ACCESS_GAS_PER_BYTE: u64 = 2;
@@ -273,13 +275,18 @@ impl TxGasMeter {
     /// Add the gas required by a wrapper transaction which is comprised of:
     ///  - cost of validating the wrapper tx
     ///  - space that the transaction requires in the block
+    ///  - cost of downloading (as part of the block) the transaction bytes over
+    ///    the network
     pub fn add_wrapper_gas(&mut self, tx_bytes: &[u8]) -> Result<()> {
         self.consume(WRAPPER_TX_VALIDATION_GAS)?;
 
         let bytes_len = tx_bytes.len() as u64;
         self.consume(
             bytes_len
-                .checked_mul(STORAGE_OCCUPATION_GAS_PER_BYTE)
+                .checked_mul(
+                    STORAGE_OCCUPATION_GAS_PER_BYTE
+                        + NETWORK_TRANSMISSION_GAS_PER_BYTE,
+                )
                 .ok_or(Error::GasOverflow)?,
         )
     }
