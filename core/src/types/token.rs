@@ -907,7 +907,7 @@ pub const MASP_NOTE_COMMITMENT_TREE_KEY: &str = "commitment_tree";
 /// Key segment prefix for the note commitment anchor
 pub const MASP_NOTE_COMMITMENT_ANCHOR_PREFIX: &str = "note_commitment_anchor";
 /// Key segment prefix for the convert anchor
-pub const MASP_CONVERT_ANCHOR_PREFIX: &str = "convert_anchor";
+pub const MASP_CONVERT_ANCHOR_KEY: &str = "convert_anchor";
 /// Last calculated inflation value handed out
 pub const MASP_LAST_INFLATION_KEY: &str = "last_inflation";
 /// The last locked ratio

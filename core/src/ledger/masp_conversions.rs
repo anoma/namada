@@ -215,7 +215,7 @@ where
     use rayon::prelude::ParallelSlice;
 
     use crate::types::address;
-    use crate::types::token::MASP_CONVERT_ANCHOR_PREFIX;
+    use crate::types::token::MASP_CONVERT_ANCHOR_KEY;
 
     // The derived conversions will be placed in MASP address space
     let masp_addr = MASP;
@@ -459,18 +459,19 @@ where
     // obtained
     wl_storage.storage.conversion_state.tree =
         FrozenCommitmentTree::merge(&tree_parts);
-    // Publish the new anchor in storage
+    // Update the anchor in storage
     let anchor_key = Key::from(MASP.to_db_key())
-        .push(&MASP_CONVERT_ANCHOR_PREFIX.to_owned())
-        .expect("Cannot obtain a storage key")
-        .push(&crate::types::hash::Hash(
-            masp_primitives::bls12_381::Scalar::from(
+        .push(&MASP_CONVERT_ANCHOR_KEY.to_owned())
+        .expect("Cannot obtain a storage key");
+    wl_storage.write(
+        &anchor_key,
+        crate::types::hash::Hash(
+            bls12_381::Scalar::from(
                 wl_storage.storage.conversion_state.tree.root(),
             )
             .to_bytes(),
-        ))
-        .expect("Cannot obtain a storage key");
-    wl_storage.write(&anchor_key, ())?;
+        ),
+    )?;
 
     // Add purely decoding entries to the assets map. These will be
     // overwritten before the creation of the next commitment tree

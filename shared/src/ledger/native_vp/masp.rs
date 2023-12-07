@@ -20,7 +20,7 @@ use namada_core::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
 use namada_core::types::token::{
     self, is_masp_allowed_key, is_masp_key, is_masp_nullifier_key,
     is_masp_tx_pin_key, is_masp_tx_prefix_key, Transfer, HEAD_TX_KEY,
-    MASP_CONVERT_ANCHOR_PREFIX, MASP_NOTE_COMMITMENT_ANCHOR_PREFIX,
+    MASP_CONVERT_ANCHOR_KEY, MASP_NOTE_COMMITMENT_ANCHOR_PREFIX,
     MASP_NOTE_COMMITMENT_TREE_KEY, MASP_NULLIFIERS_KEY_PREFIX, PIN_KEY_PREFIX,
     TX_KEY_PREFIX,
 };
@@ -256,24 +256,31 @@ where
         &self,
         transaction: &Transaction,
     ) -> Result<bool> {
-        for description in transaction
-            .sapling_bundle()
-            .map_or(&vec![], |bundle| &bundle.shielded_converts)
-        {
-            let anchor_key = Key::from(MASP.to_db_key())
-                .push(&MASP_CONVERT_ANCHOR_PREFIX.to_owned())
-                .expect("Cannot obtain a storage key")
-                .push(&namada_core::types::hash::Hash(
-                    description.anchor.to_bytes(),
-                ))
-                .expect("Cannot obtain a storage key");
+        if let Some(bundle) = transaction.sapling_bundle() {
+            if !bundle.shielded_converts.is_empty() {
+                let anchor_key = Key::from(MASP.to_db_key())
+                    .push(&MASP_CONVERT_ANCHOR_KEY.to_owned())
+                    .expect("Cannot obtain a storage key");
+                let expected_anchor = self
+                    .ctx
+                    .read_pre::<namada_core::types::hash::Hash>(&anchor_key)?
+                    .ok_or(Error::NativeVpError(
+                        native_vp::Error::SimpleMessage("Cannot read storage"),
+                    ))?;
 
-            // Check if the provided anchor was published before
-            if !self.ctx.has_key_pre(&anchor_key)? {
-                tracing::debug!(
-                    "Convert description refers to an invalid anchor"
-                );
-                return Ok(false);
+                for description in &bundle.shielded_converts {
+                    // Check if the provided anchor matches the current
+                    // conversion tree's one
+                    if namada_core::types::hash::Hash(
+                        description.anchor.to_bytes(),
+                    ) != expected_anchor
+                    {
+                        tracing::debug!(
+                            "Convert description refers to an invalid anchor"
+                        );
+                        return Ok(false);
+                    }
+                }
             }
         }
 
