@@ -23,7 +23,7 @@ borsh.workspace = true
 data-encoding.workspace = true
 derivative.workspace = true
 once_cell.workspace = true
-proptest = {version = "1.2.0", optional = true}
+proptest = {workspace = true, optional = true}
 serde.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
