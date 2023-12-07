@@ -37,7 +37,37 @@ The public key can then be given some tokens in the [balances.toml file](balance
 tpknam1qz5ywdn47sdm8s7rkzjl5dud0k9c9ndd5agn4gu0u0ryrmtmyuxmk0h25th = 1_337_707.50
 ```
 
+## Established accounts
+
+For example, an established account can be created with:
+
+```shell
+namada client utils \
+  init-genesis-established-account \
+  --path "{acc_tx_file}.toml" \
+  --aliases "{key_aliases_from_wallet}"
+```
+
+For a multisig also specify a value for `--threshold` (defaults to 1 for single-signature accounts).
+
+The command will print out a `Derived established account address`. It can be derived from the file again:
+
+```shell
+namada client utils \
+  derive-genesis-addresses \
+  --path "{acc_tx_file}.toml"
+```
+
 ## Validator accounts
+
+To create a validator's account, first initialize an established account:
+
+```shell
+namada client utils \
+  init-genesis-established-account \
+  --path "{validator_txs_file}.toml" \
+  --aliases "{key_aliases_from_wallet}"
+```
 
 For this step, you'll need to have a key with some native [token balance](#token-balances), from which you can sign the validator account creation genesis transaction.
 
@@ -46,8 +76,9 @@ To generate a new validator pre-genesis wallet and produce signed transactions w
 ```shell
 namada client utils \
   init-genesis-validator \
-  --source "my-key" \
   --alias "my-validator" \
+  --address "{address_derived_from_previous_cmd}" \
+  --path "{validator_txs_file}.toml" \
   --net-address "127.0.0.1:26656" \
   --commission-rate 0.05 \
   --max-commission-rate-change 0.01 \
@@ -56,6 +87,39 @@ namada client utils \
 ```
 
 This will print the validator transactions that can be added to the [transactions.toml file](transactions.toml).
+
+## Delegations
+
+A delegation with native tokens to a validator account whose address has to be known beforehand is created with:
+
+```shell
+namada client utils \
+  genesis-bond \
+  --validator "{validator_address}" \
+  --amount {amount} \
+  --path "{bond_tx_file}.toml"
+```
+
+## Signing
+
+Non-validator transactions can be signed using:
+
+```shell
+namada client utils \
+  sign-genesis-txs \
+  --path "{tx_file}.toml" \
+  --output "{signed_tx_file}.toml"
+```
+
+Validator transactions require an extra `--alias` argument to find the validator pre-genesis wallet:
+
+```shell
+namada client utils \
+  sign-genesis-txs \
+  --path "{validator_txs_file}.toml" \
+  --output "{signed_validator_txs_file}.toml"
+  --alias my-validator
+```
 
 ## Initialize the chain
 

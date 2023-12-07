@@ -70,6 +70,7 @@ pub fn initialize_genesis() -> Result<(MockNode, MockServicesController)> {
     // addresses and update WASM checksums
     let wasm_checksums_path = working_dir.join("wasm/checksums.json");
     let global_args = args::Global {
+        is_pre_genesis: true,
         chain_id: Some(chain_id.clone()),
         base_dir: test_dir.path().to_path_buf(),
         wasm_dir: Some(test_dir.path().join(chain_id.as_str()).join("wasm")),

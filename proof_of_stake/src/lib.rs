@@ -802,9 +802,7 @@ where
         return Ok(());
     }
 
-    let params = read_pos_params(storage)?;
-    let offset = offset_opt.unwrap_or(params.pipeline_len);
-    let offset_epoch = current_epoch + offset;
+    // Transfer the bonded tokens from the source to PoS
     if let Some(source) = source {
         if source != validator && is_validator(storage, source)? {
             return Err(
@@ -812,6 +810,15 @@ where
             );
         }
     }
+    let source = source.unwrap_or(validator);
+    tracing::debug!("Source {source} --> Validator {validator}");
+
+    let staking_token = staking_token_address(storage);
+    token::transfer(storage, &staking_token, source, &ADDRESS, amount)?;
+
+    let params = read_pos_params(storage)?;
+    let offset = offset_opt.unwrap_or(params.pipeline_len);
+    let offset_epoch = current_epoch + offset;
 
     // Check that the validator is actually a validator
     let validator_state_handle = validator_state_handle(validator);
@@ -819,9 +826,6 @@ where
     if state.is_none() {
         return Err(BondError::NotAValidator(validator.clone()).into());
     }
-
-    let source = source.unwrap_or(validator);
-    tracing::debug!("Source {} --> Validator {}", source, validator);
 
     let bond_handle = bond_handle(source, validator);
     let total_bonded_handle = total_bonded_handle(validator);
@@ -875,10 +879,6 @@ where
         current_epoch,
         offset_opt,
     )?;
-
-    // Transfer the bonded tokens from the source to PoS
-    let staking_token = staking_token_address(storage);
-    token::transfer(storage, &staking_token, source, &ADDRESS, amount)?;
 
     Ok(())
 }

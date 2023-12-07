@@ -1,114 +1,37 @@
 # This file contains hand-written unsigned transactions for localnet with:
 #
-# - MASP account
-# - Faucet account that allows anyone to withdraw limited amount of tokens
-# - 2 established accounts for "Albert" and "Bertha"
+# - 3 established accounts for "Albert", "Bertha" and "Christel"
+# - a bond from "Albert"'s established account to validator-0
 #
-# Note that 2 more localnet user accounts "Christel" and "Daewon" are left as
-# implicit accounts, so their tokens are kept in the accounts derived from their
+# Note that 1 localnet user account "Daewon" is left as
+# implicit account, so their tokens are kept in the accounts derived from their
 # keys used in `balances.toml`.
 #
 # This file is used to produce `signed-transactions.toml` with
-# the `sign-genesis-tx` command.
+# the `sign-genesis-txs` command.
 
 # Albert
 [[established_account]]
-alias = "albert"
 vp = "vp_user"
-public_key = "tpknam1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63we33t3r"
+threshold = 1
+public_keys = ["tpknam1qrnw8mxyqlj60mykgevnldcj5mg2fya7fs5a8xqdkd2gwtxhef0zy8a2wha"]
 
 # Bertha
 [[established_account]]
-alias = "bertha"
 vp = "vp_user"
-public_key = "tpknam1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3nds48x83t"
+threshold = 1
+public_keys = ["tpknam1qq52dx5e290wyh7ngdt6wudtyd502lg6ln49yvg3vz97e8j2ruux5e3yewq"]
 
 # Christel
 [[established_account]]
-alias = "christel"
 vp = "vp_user"
-public_key = "tpknam1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzwgc7uu"
+threshold = 1
+public_keys = ["tpknam1qqwfpuvn8x7yqtquejhppef4vddv9ghusec2rkaxav38amamxaxpgj9cs79"]
 
-# Transfer all the Albert's tokens into it's established account:
-[[transfer]]
-token = "NAM"
-source = "tpknam1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63we33t3r"
-target = "albert"
-amount = "1000000"
+##########################################################################################
 
-[[transfer]]
-token = "BTC"
-source = "tpknam1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63we33t3r"
-target = "albert"
-amount = "1000000"
-
-[[transfer]]
-token = "ETH"
-source = "tpknam1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63we33t3r"
-target = "albert"
-amount = "1000000"
-
-[[transfer]]
-token = "DOT"
-source = "tpknam1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63we33t3r"
-target = "albert"
-amount = "1000000"
-
-[[transfer]]
-token = "Schnitzel"
-source = "tpknam1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63we33t3r"
-target = "albert"
-amount = "1000000"
-
-[[transfer]]
-token = "Apfel"
-source = "tpknam1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63we33t3r"
-target = "albert"
-amount = "1000000"
-
-[[transfer]]
-token = "Kartoffel"
-source = "tpknam1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63we33t3r"
-target = "albert"
-amount = "1000000"
-
-[[transfer]]
-token = "NAM"
-source = "tpknam1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3nds48x83t"
-target = "bertha"
-amount = "1000000"
-
-[[transfer]]
-token = "BTC"
-source = "tpknam1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3nds48x83t"
-target = "bertha"
-amount = "1000000"
-
-[[transfer]]
-token = "ETH"
-source = "tpknam1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3nds48x83t"
-target = "bertha"
-amount = "1000000"
-
-[[transfer]]
-token = "NAM"
-source = "tpknam1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzwgc7uu"
-target = "christel"
-amount = "1000000"
-
-[[transfer]]
-token = "BTC"
-source = "tpknam1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzwgc7uu"
-target = "christel"
-amount = "1000000"
-
-[[transfer]]
-token = "ETH"
-source = "tpknam1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzwgc7uu"
-target = "christel"
-amount = "1000000"
-
+# Albert bonds to `validator-0`
 [[bond]]
-source = "albert"
-validator = "validator-0"
+source = "tnam1qxfj3sf6a0meahdu9t6znp05g8zx4dkjtgyn9gfu"
+validator = "tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx"
 amount = "20000"

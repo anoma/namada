@@ -1,10 +1,3 @@
-# Transactions pasted from:
-#
-# 1. `src/pre-genesis/validator-0/signed-transactions.toml`
-# 2. `src/pre-genesis/signed-transactions.toml`
-
-# 1.
-
 [[established_account]]
 vp = "vp_user"
 threshold = 1
@@ -50,28 +43,3 @@ amount = "100000"
 
 [bond.signatures]
 tpknam1qpg2tsrplvhu3fd7z7tq5ztc2ne3s7e2ahjl2a2cddufrzdyr752g666ytj = "signam1qp7jrgg0q488vm3m4yzt8c44e40kaklc08fvsktwuayw69wzjgsvr9zlqs60wml5ewpnm8yydg0g5kga76zm3xmtcxauxszftrv7l9cpalu82v"
-
-# 2.
-
-[[established_account]]
-vp = "vp_user"
-threshold = 1
-public_keys = ["tpknam1qqwfpuvn8x7yqtquejhppef4vddv9ghusec2rkaxav38amamxaxpgj9cs79"]
-
-[[established_account]]
-vp = "vp_user"
-threshold = 1
-public_keys = ["tpknam1qq52dx5e290wyh7ngdt6wudtyd502lg6ln49yvg3vz97e8j2ruux5e3yewq"]
-
-[[established_account]]
-vp = "vp_user"
-threshold = 1
-public_keys = ["tpknam1qrnw8mxyqlj60mykgevnldcj5mg2fya7fs5a8xqdkd2gwtxhef0zy8a2wha"]
-
-[[bond]]
-source = "tnam1qxfj3sf6a0meahdu9t6znp05g8zx4dkjtgyn9gfu"
-validator = "tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx"
-amount = "20000"
-
-[bond.signatures]
-tpknam1qrnw8mxyqlj60mykgevnldcj5mg2fya7fs5a8xqdkd2gwtxhef0zy8a2wha = "signam1qpnkmht38f4ewksnu2e4kaue9vqynvujs7hghk358rjn5wt6ywm9zdet6m3txrh08qzc5up47vgskt7cz48dpqlpuan7waz7prlxe0sxn9zsn7"

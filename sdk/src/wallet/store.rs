@@ -612,14 +612,12 @@ impl Store {
         validator_alias: Alias,
         other: pre_genesis::ValidatorWallet,
     ) {
-        let account_key_alias = alias::validator_key(&validator_alias);
         let consensus_key_alias =
             alias::validator_consensus_key(&validator_alias);
         let tendermint_node_key_alias =
             alias::validator_tendermint_node_key(&validator_alias);
 
         let keys = [
-            (account_key_alias.clone(), other.store.account_key),
             (consensus_key_alias.clone(), other.store.consensus_key),
             (
                 tendermint_node_key_alias.clone(),
@@ -628,12 +626,10 @@ impl Store {
         ];
         self.secret_keys.extend(keys.into_iter());
 
-        let account_pk = other.account_key.ref_to();
         let consensus_pk = other.consensus_key.ref_to();
         let tendermint_node_pk = other.tendermint_node_key.ref_to();
         let public_keys = [
-            (account_key_alias.clone(), account_pk.clone()),
-            (consensus_key_alias.clone(), consensus_pk.clone()),
+            (consensus_key_alias.clone(), (&consensus_pk).into()),
             (
                 tendermint_node_key_alias.clone(),
                 tendermint_node_pk.clone(),
@@ -644,7 +640,6 @@ impl Store {
             .extend(public_keys.into_iter().map(|(k, v)| (k, (&v).into())));
 
         let pkhs = [
-            ((&account_pk).into(), account_key_alias),
             ((&consensus_pk).into(), consensus_key_alias),
             ((&tendermint_node_pk).into(), tendermint_node_key_alias),
         ];

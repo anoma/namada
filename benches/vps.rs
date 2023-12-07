@@ -341,7 +341,7 @@ fn vp_validator(c: &mut Criterion) {
         },
         None,
         None,
-        vec![&defaults::validator_keypair()],
+        vec![&defaults::validator_account_keypair()],
     );
 
     let received_transfer = shell.generate_tx(
@@ -371,7 +371,7 @@ fn vp_validator(c: &mut Criterion) {
                 .finalize_reset()
                 .into(),
         )),
-        public_keys: vec![defaults::validator_keypair().to_public()],
+        public_keys: vec![defaults::validator_account_keypair().to_public()],
         threshold: None,
     };
     let vp = shell.generate_tx(
@@ -379,7 +379,7 @@ fn vp_validator(c: &mut Criterion) {
         data,
         None,
         Some(vec![extra_section]),
-        vec![&defaults::validator_keypair()],
+        vec![&defaults::validator_account_keypair()],
     );
 
     let commission_rate = shell.generate_tx(
@@ -390,7 +390,7 @@ fn vp_validator(c: &mut Criterion) {
         },
         None,
         None,
-        vec![&defaults::validator_keypair()],
+        vec![&defaults::validator_account_keypair()],
     );
 
     let vote = shell.generate_tx(
@@ -403,7 +403,7 @@ fn vp_validator(c: &mut Criterion) {
         },
         None,
         None,
-        vec![&defaults::validator_keypair()],
+        vec![&defaults::validator_account_keypair()],
     );
 
     let pos = shell.generate_tx(
@@ -415,7 +415,7 @@ fn vp_validator(c: &mut Criterion) {
         },
         None,
         None,
-        vec![&defaults::validator_keypair()],
+        vec![&defaults::validator_account_keypair()],
     );
 
     for (signed_tx, bench_name) in [

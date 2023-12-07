@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use super::address::Address;
 use super::key::{common, RefTo};
+use crate::hints;
 
 #[derive(
     Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
@@ -62,6 +63,11 @@ impl FromIterator<common::PublicKey> for AccountPublicKeysMap {
         let mut idx_to_pk = HashMap::new();
 
         for (index, public_key) in iter.into_iter().enumerate() {
+            if hints::unlikely(index > u8::MAX as usize) {
+                panic!(
+                    "Only up to 255 signers are allowed in a multisig account"
+                );
+            }
             pk_to_idx.insert(public_key.to_owned(), index as u8);
             idx_to_pk.insert(index as u8, public_key.to_owned());
         }

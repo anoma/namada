@@ -84,6 +84,7 @@ pub trait Io {
 }
 
 /// Rust native I/O handling.
+#[derive(Default)]
 pub struct StdIo;
 
 #[cfg_attr(feature = "async-send", async_trait::async_trait)]

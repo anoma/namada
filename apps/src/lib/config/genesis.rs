@@ -2,22 +2,22 @@
 
 pub mod chain;
 pub mod templates;
-pub mod toml_utils;
 pub mod transactions;
+pub mod utils;
 
-use std::array::TryFromSliceError;
 use std::collections::{BTreeMap, HashMap};
+use std::fmt::{Display, Formatter};
+use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use data_encoding::HEXLOWER;
 use derivative::Derivative;
 use namada::core::ledger::governance::parameters::GovernanceParameters;
 use namada::core::ledger::pgf::parameters::PgfParameters;
-use namada::core::types::string_encoding;
+use namada::core::types::string_encoding::StringEncoded;
 use namada::ledger::eth_bridge::EthereumBridgeParams;
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::{Dec, GenesisValidator, OwnedPosParams};
-use namada::types::address::Address;
+use namada::types::address::{Address, EstablishedAddress};
 use namada::types::chain::ProposalBytes;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, DurationSecs};
@@ -26,7 +26,121 @@ use namada::types::{storage, token};
 use serde::{Deserialize, Serialize};
 
 #[cfg(all(any(test, feature = "benches"), not(feature = "integration")))]
-use crate::config::genesis::chain::Finalized;
+use crate::config::genesis::chain::{Finalized, FinalizedEstablishedAccountTx};
+
+#[derive(
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    PartialEq,
+    Eq,
+    Ord,
+    PartialOrd,
+    Hash,
+)]
+pub enum GenesisAddress {
+    /// Encoded as `public_key = "value"` in toml.
+    PublicKey(StringEncoded<common::PublicKey>),
+    /// Encoded as `established_address = "value"` in toml.
+    EstablishedAddress(EstablishedAddress),
+}
+
+impl GenesisAddress {
+    /// Return an [`Address`] from this [`GenesisAddress`].
+    #[inline]
+    pub fn address(&self) -> Address {
+        match self {
+            Self::EstablishedAddress(addr) => {
+                Address::Established(addr.clone())
+            }
+            Self::PublicKey(pk) => (&pk.raw).into(),
+        }
+    }
+}
+
+impl Serialize for GenesisAddress {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            GenesisAddress::EstablishedAddress(address) => {
+                Serialize::serialize(
+                    &Address::Established(address.clone()),
+                    serializer,
+                )
+            }
+            GenesisAddress::PublicKey(pk) => {
+                Serialize::serialize(pk, serializer)
+            }
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for GenesisAddress {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct FieldVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for FieldVisitor {
+            type Value = GenesisAddress;
+
+            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+                formatter.write_str(
+                    "a bech32m encoded public key or an established address",
+                )
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                GenesisAddress::from_str(value)
+                    .map_err(serde::de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(FieldVisitor)
+    }
+}
+
+impl Display for GenesisAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GenesisAddress::EstablishedAddress(address) => {
+                write!(f, "{}", Address::Established(address.clone()).encode())
+            }
+            GenesisAddress::PublicKey(pk) => write!(f, "{}", pk),
+        }
+    }
+}
+
+impl FromStr for GenesisAddress {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        // Try to deserialize a PK first
+        let maybe_pk = StringEncoded::<common::PublicKey>::from_str(value);
+        match maybe_pk {
+            Ok(pk) => Ok(GenesisAddress::PublicKey(pk)),
+            Err(_) => {
+                // If that doesn't work, attempt to retrieve
+                // an established address
+                let address =
+                    Address::from_str(value).map_err(|err| err.to_string())?;
+                if let Address::Established(established) = address {
+                    Ok(GenesisAddress::EstablishedAddress(established))
+                } else {
+                    Err("expected an established address or public key"
+                        .to_string())
+                }
+            }
+        }
+    }
+}
 
 #[derive(Debug, BorshSerialize, BorshDeserialize)]
 #[borsh(init=init)]
@@ -189,55 +303,6 @@ pub struct Parameters {
     pub minimum_gas_price: BTreeMap<Address, token::Amount>,
 }
 
-#[derive(
-    Clone,
-    Debug,
-    Deserialize,
-    Serialize,
-    BorshSerialize,
-    BorshDeserialize,
-    PartialOrd,
-    Ord,
-    PartialEq,
-    Eq,
-)]
-pub struct HexString(pub String);
-
-impl HexString {
-    pub fn parse(&self) -> Result<Vec<u8>, HexKeyError> {
-        let bytes = HEXLOWER.decode(self.0.as_ref())?;
-        Ok(bytes)
-    }
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum HexKeyError {
-    #[error("Invalid hex string: {0:?}")]
-    InvalidHexString(data_encoding::DecodeError),
-    #[error("Invalid sha256 checksum: {0}")]
-    InvalidSha256(TryFromSliceError),
-    #[error("Invalid public key: {0}")]
-    InvalidPublicKey(string_encoding::DecodeError),
-}
-
-impl From<data_encoding::DecodeError> for HexKeyError {
-    fn from(err: data_encoding::DecodeError) -> Self {
-        Self::InvalidHexString(err)
-    }
-}
-
-impl From<string_encoding::DecodeError> for HexKeyError {
-    fn from(err: string_encoding::DecodeError) -> Self {
-        Self::InvalidPublicKey(err)
-    }
-}
-
-impl From<TryFromSliceError> for HexKeyError {
-    fn from(err: TryFromSliceError) -> Self {
-        Self::InvalidSha256(err)
-    }
-}
-
 /// Modify the default genesis file (namada/genesis/localnet/) to
 /// accommodate testing.
 ///
@@ -249,20 +314,18 @@ pub fn make_dev_genesis(
     target_chain_dir: std::path::PathBuf,
 ) -> Finalized {
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-    use std::str::FromStr;
     use std::time::Duration;
 
-    use namada::core::types::string_encoding::StringEncoded;
     use namada::ledger::eth_bridge::{Contracts, UpgradeableContract};
+    use namada::ledger::pos::types::ValidatorMetaData;
     use namada::proto::{standalone_signature, SerializeWithBorsh};
     use namada::types::address::wnam;
     use namada::types::chain::ChainIdPrefix;
     use namada::types::ethereum_events::EthAddress;
-    use namada::types::token::NATIVE_MAX_DECIMAL_PLACES;
+    use namada::types::key::*;
     use namada_sdk::wallet::alias::Alias;
 
-    use crate::config::genesis::chain::finalize;
-    use crate::config::genesis::transactions::UnsignedValidatorAccountTx;
+    use crate::config::genesis::chain::{finalize, DeriveEstablishedAddress};
     use crate::wallet::defaults;
 
     let mut current_path = std::env::current_dir()
@@ -297,34 +360,6 @@ pub fn make_dev_genesis(
         erc20_whitelist: vec![],
     });
 
-    if let Some(vals) = genesis.transactions.validator_account.as_mut() {
-        let tx = vals.get_mut(0).unwrap();
-        // Use the default validator address
-        tx.address = defaults::validator_address();
-
-        // Use the default validator key - have to add it with a sig
-        tx.address = defaults::validator_address();
-        let sk = defaults::validator_keypair();
-        let pk = StringEncoded::new(sk.to_public());
-        let unsigned_tx = UnsignedValidatorAccountTx::from(&tx.tx);
-        let sig = transactions::sign_tx(&unsigned_tx, &sk);
-        tx.tx.account_key = transactions::SignedPk {
-            pk,
-            authorization: sig,
-        };
-    }
-
-    // Use the default address for matching established accounts
-    let default_addresses: HashMap<Alias, Address> =
-        defaults::addresses().into_iter().collect();
-    if let Some(accs) = genesis.transactions.established_account.as_mut() {
-        for acc in accs {
-            if let Some(addr) = default_addresses.get(&acc.tx.alias) {
-                acc.address = addr.clone();
-            }
-        }
-    }
-
     // Use the default token address for matching tokens
     let default_tokens: HashMap<Alias, Address> = defaults::tokens()
         .into_iter()
@@ -336,14 +371,52 @@ pub fn make_dev_genesis(
         }
     }
 
+    let assert_established_addr = |addr: &Address| {
+        if let Address::Established(addr) = addr {
+            addr.clone()
+        } else {
+            panic!("should have gotten an established address")
+        }
+    };
+
     // remove Albert's bond since it messes up existing unit test math
     if let Some(bonds) = genesis.transactions.bond.as_mut() {
-        bonds.retain(|bond| {
-            bond.source
-                != transactions::AliasOrPk::Alias(
-                    Alias::from_str("albert").unwrap(),
-                )
-        })
+        let default_addresses: HashMap<Alias, Address> =
+            defaults::addresses().into_iter().collect();
+        let fat_alberts_address =
+            GenesisAddress::EstablishedAddress(assert_established_addr(
+                default_addresses
+                    .get(&Alias::from_str("albert").unwrap())
+                    .unwrap(),
+            ));
+        bonds.retain(|bond| bond.source != fat_alberts_address);
+    };
+    // fetch validator's balances
+    let (first_val_balance, first_val_bonded) = {
+        let nam_balances = genesis
+            .balances
+            .token
+            .get_mut(&Alias::from_str("nam").unwrap())
+            .unwrap();
+
+        let tx = genesis
+            .transactions
+            .validator_account
+            .as_ref()
+            .unwrap()
+            .get(0)
+            .unwrap();
+        let genesis_addr =
+            GenesisAddress::EstablishedAddress(tx.tx.data.address.raw.clone());
+
+        let balance = *nam_balances.0.get(&genesis_addr).unwrap();
+        let bonded = {
+            let bond =
+                genesis.transactions.bond.as_mut().unwrap().get(0).unwrap();
+            bond.amount
+        };
+
+        (balance, bonded)
     };
     let secp_eth_cold_keypair = secp256k1::SecretKey::try_from_slice(&[
         90, 83, 107, 155, 193, 251, 120, 27, 76, 1, 188, 8, 116, 121, 90, 99,
@@ -360,86 +433,111 @@ pub fn make_dev_genesis(
         },
     };
     // Add other validators with randomly generated keys if needed
-    for val in 0..(num_validators - 1) {
+    for _val in 0..(num_validators - 1) {
         let consensus_keypair: common::SecretKey =
             testing::gen_keypair::<ed25519::SigScheme>()
                 .try_to_sk()
                 .unwrap();
-        let account_keypair = consensus_keypair.clone();
-        let address = namada::types::address::gen_established_address(
-            "validator account",
-        );
         let eth_cold_keypair =
             common::SecretKey::try_from_sk(&secp_eth_cold_keypair).unwrap();
         let (protocol_keypair, eth_bridge_keypair) = defaults::validator_keys();
-        let alias = Alias::from_str(&format!("validator-{}", val + 1))
-            .expect("infallible");
         // add the validator
-        if let Some(vals) = genesis.transactions.validator_account.as_mut() {
-            vals.push(chain::FinalizedValidatorAccountTx {
-                address,
-                tx: transactions::ValidatorAccountTx {
-                    alias: alias.clone(),
-                    vp: "vp_user".to_string(),
-                    commission_rate: Dec::new(5, 2).expect("This can't fail"),
-                    max_commission_rate_change: Dec::new(1, 2)
-                        .expect("This can't fail"),
+        let validator_address = {
+            let vals = genesis.transactions.validator_account.as_mut().unwrap();
+            let established_accounts =
+                genesis.transactions.established_account.as_mut().unwrap();
+
+            let tx = transactions::EstablishedAccountTx {
+                vp: utils::VP_USER.to_string(),
+                public_keys: vec![StringEncoded::new(
+                    consensus_keypair.ref_to(),
+                )],
+                threshold: 1,
+            };
+            let address = tx.derive_established_address();
+            let established_account_tx = FinalizedEstablishedAccountTx {
+                address: Address::Established(address.clone()),
+                tx,
+            };
+            established_accounts.push(established_account_tx);
+
+            let validator_account_tx = transactions::ValidatorAccountTx {
+                address: StringEncoded::new(address.clone()),
+                vp: utils::VP_USER.to_string(),
+                commission_rate: Dec::new(5, 2).expect("This can't fail"),
+                max_commission_rate_change: Dec::new(1, 2)
+                    .expect("This can't fail"),
+                metadata: ValidatorMetaData {
                     email: "null@null.net".to_string(),
                     description: None,
                     website: None,
                     discord_handle: None,
-                    net_address: SocketAddr::new(
-                        IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-                        8080,
-                    ),
-                    account_key: sign_pk(&account_keypair),
-                    consensus_key: sign_pk(&consensus_keypair),
-                    protocol_key: sign_pk(&protocol_keypair),
-                    tendermint_node_key: sign_pk(&consensus_keypair),
-                    eth_hot_key: sign_pk(&eth_bridge_keypair),
-                    eth_cold_key: sign_pk(&eth_cold_keypair),
                 },
-            })
+                net_address: SocketAddr::new(
+                    IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
+                    8080,
+                ),
+                consensus_key: StringEncoded {
+                    raw: consensus_keypair.to_public(),
+                },
+                protocol_key: StringEncoded {
+                    raw: protocol_keypair.to_public(),
+                },
+                tendermint_node_key: StringEncoded {
+                    raw: consensus_keypair.to_public(),
+                },
+                eth_hot_key: StringEncoded {
+                    raw: eth_bridge_keypair.to_public(),
+                },
+                eth_cold_key: StringEncoded {
+                    raw: eth_cold_keypair.to_public(),
+                },
+            };
+            vals.push(chain::FinalizedValidatorAccountTx {
+                tx: transactions::Signed::new(
+                    transactions::ValidatorAccountTx {
+                        address: StringEncoded::new(address.clone()),
+                        vp: validator_account_tx.vp,
+                        commission_rate: validator_account_tx.commission_rate,
+                        max_commission_rate_change: validator_account_tx
+                            .max_commission_rate_change,
+                        metadata: validator_account_tx.metadata,
+                        net_address: validator_account_tx.net_address,
+                        consensus_key: sign_pk(&consensus_keypair),
+                        protocol_key: sign_pk(&protocol_keypair),
+                        tendermint_node_key: sign_pk(&consensus_keypair),
+                        eth_hot_key: sign_pk(&eth_bridge_keypair),
+                        eth_cold_key: sign_pk(&eth_cold_keypair),
+                    },
+                ),
+            });
+            address
         };
-        // add the balance to validators implicit key
-        if let Some(bals) = genesis
-            .balances
-            .token
-            .get_mut(&Alias::from_str("nam").unwrap())
+        // credit nam tokens to validators such that they can bond
         {
-            bals.0.insert(
-                StringEncoded {
-                    raw: account_keypair.ref_to(),
-                },
-                token::DenominatedAmount {
-                    amount: token::Amount::native_whole(200_000),
-                    denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-                },
-            );
-        }
-        // transfer funds from implicit key to validator
-        if let Some(trans) = genesis.transactions.transfer.as_mut() {
-            trans.push(transactions::TransferTx {
-                token: Alias::from_str("nam").expect("infallible"),
-                source: StringEncoded {
-                    raw: account_keypair.ref_to(),
-                },
-                target: alias.clone(),
-                amount: token::DenominatedAmount {
-                    amount: token::Amount::native_whole(200_000),
-                    denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-                },
-            })
+            let nam_balances = genesis
+                .balances
+                .token
+                .get_mut(&Alias::from_str("nam").unwrap())
+                .unwrap();
+
+            let validator_addr =
+                GenesisAddress::EstablishedAddress(validator_address.clone());
+            let account_pk = GenesisAddress::PublicKey(StringEncoded::new(
+                consensus_keypair.ref_to(),
+            ));
+
+            nam_balances.0.insert(validator_addr, first_val_balance);
+            nam_balances.0.insert(account_pk, first_val_balance);
         }
         // self bond
         if let Some(bonds) = genesis.transactions.bond.as_mut() {
             bonds.push(transactions::BondTx {
-                source: transactions::AliasOrPk::Alias(alias.clone()),
-                validator: alias,
-                amount: token::DenominatedAmount {
-                    amount: token::Amount::native_whole(100_000),
-                    denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-                },
+                source: GenesisAddress::EstablishedAddress(
+                    validator_address.clone(),
+                ),
+                validator: Address::Established(validator_address),
+                amount: first_val_bonded,
             })
         }
     }

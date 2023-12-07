@@ -744,6 +744,7 @@ impl Default for BenchShieldedCtx {
         wallet.save().unwrap();
 
         let ctx = Context::new::<StdIo>(crate::cli::args::Global {
+            is_pre_genesis: false,
             chain_id: Some(shell.inner.chain_id.clone()),
             base_dir,
             wasm_dir: Some(WASM_DIR.into()),

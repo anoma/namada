@@ -33,6 +33,7 @@ use prost::Message;
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
+use tokio::sync::RwLock;
 
 use super::masp::{ShieldedContext, ShieldedTransfer};
 use crate::args::SdkTypes;
@@ -188,6 +189,7 @@ pub async fn default_sign(
     _tx: Tx,
     pubkey: common::PublicKey,
     _parts: HashSet<Signable>,
+    _user: (),
 ) -> Result<Tx, Error> {
     Err(Error::Other(format!(
         "unable to sign transaction with {}",
@@ -206,13 +208,19 @@ pub async fn default_sign(
 /// hashes needed for monitoring the tx on chain.
 ///
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
-pub async fn sign_tx<F: std::future::Future<Output = Result<Tx, Error>>>(
-    context: &impl Namada,
+pub async fn sign_tx<'a, D, F, U>(
+    wallet: &RwLock<&'a mut Wallet<U>>,
     args: &args::Tx,
     tx: &mut Tx,
     signing_data: SigningTxData,
-    sign: impl Fn(Tx, common::PublicKey, HashSet<Signable>) -> F,
-) -> Result<(), Error> {
+    sign: impl Fn(Tx, common::PublicKey, HashSet<Signable>, D) -> F,
+    user_data: D,
+) -> Result<(), Error>
+where
+    D: Clone,
+    U: WalletIo,
+    F: std::future::Future<Output = Result<Tx, Error>>,
+{
     let mut used_pubkeys = HashSet::new();
 
     // First try to sign the raw header with the supplied signatures
@@ -232,7 +240,7 @@ pub async fn sign_tx<F: std::future::Future<Output = Result<Tx, Error>>>(
     // Then try to sign the raw header with private keys in the software wallet
     if let Some(account_public_keys_map) = signing_data.account_public_keys_map
     {
-        let mut wallet = context.wallet_mut().await;
+        let mut wallet = wallet.write().await;
         let signing_tx_keypairs = signing_data
             .public_keys
             .iter()
@@ -266,6 +274,7 @@ pub async fn sign_tx<F: std::future::Future<Output = Result<Tx, Error>>>(
                 tx.clone(),
                 pubkey.clone(),
                 HashSet::from([Signable::RawHeader]),
+                user_data.clone(),
             )
             .await
             {
@@ -280,8 +289,8 @@ pub async fn sign_tx<F: std::future::Future<Output = Result<Tx, Error>>>(
     let key = {
         // Lock the wallet just long enough to extract a key from it without
         // interfering with the sign closure call
-        let mut wallet = context.wallet_mut().await;
-        find_key_by_pk(&mut wallet, args, &signing_data.fee_payer)
+        let mut wallet = wallet.write().await;
+        find_key_by_pk(*wallet, args, &signing_data.fee_payer)
     };
     match key {
         Ok(fee_payer_keypair) => {
@@ -292,6 +301,7 @@ pub async fn sign_tx<F: std::future::Future<Output = Result<Tx, Error>>>(
                 tx.clone(),
                 signing_data.fee_payer.clone(),
                 HashSet::from([Signable::FeeHeader, Signable::RawHeader]),
+                user_data,
             )
             .await?;
         }

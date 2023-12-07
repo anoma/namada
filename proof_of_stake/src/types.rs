@@ -21,6 +21,7 @@ use namada_core::types::storage::{Epoch, KeySeg};
 use namada_core::types::token;
 use namada_core::types::token::Amount;
 pub use rev_order::ReverseOrdTokenAmount;
+use serde::{Deserialize, Serialize};
 
 use crate::parameters::PosParams;
 
@@ -345,6 +346,8 @@ pub struct GenesisValidator {
     BorshSerialize,
     BorshSchema,
     BorshDeserialize,
+    Deserialize,
+    Serialize,
     Eq,
     Ord,
     PartialOrd,

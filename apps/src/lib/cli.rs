@@ -674,7 +674,7 @@ pub mod cmds {
         GenPayAddr(MaspGenPayAddr),
         GenSpendKey(MaspGenSpendKey),
         AddAddrKey(MaspAddAddrKey),
-        ListPayAddrs(MaspListPayAddrs),
+        ListPayAddrs,
         ListKeys(MaspListKeys),
         FindAddrKey(MaspFindAddrKey),
     }
@@ -687,7 +687,8 @@ pub mod cmds {
                 let genpa = SubCmd::parse(matches).map(Self::GenPayAddr);
                 let gensk = SubCmd::parse(matches).map(Self::GenSpendKey);
                 let addak = SubCmd::parse(matches).map(Self::AddAddrKey);
-                let listpa = SubCmd::parse(matches).map(Self::ListPayAddrs);
+                let listpa = <MaspListPayAddrs as SubCmd>::parse(matches)
+                    .map(|_| Self::ListPayAddrs);
                 let listsk = SubCmd::parse(matches).map(Self::ListKeys);
                 let findak = SubCmd::parse(matches).map(Self::FindAddrKey);
                 gensk.or(genpa).or(addak).or(listpa).or(listsk).or(findak)
@@ -754,21 +755,18 @@ pub mod cmds {
 
     /// List all known payment addresses
     #[derive(Clone, Debug)]
-    pub struct MaspListPayAddrs(pub args::MaspListPayAddrs);
+    pub struct MaspListPayAddrs;
 
     impl SubCmd for MaspListPayAddrs {
         const CMD: &'static str = "list-addrs";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| Self(args::MaspListPayAddrs::parse(matches)))
+            matches.subcommand_matches(Self::CMD).map(|_| Self)
         }
 
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Lists all payment addresses in the wallet")
-                .add_args::<args::MaspListPayAddrs>()
         }
     }
 
@@ -839,7 +837,7 @@ pub mod cmds {
         Gen(AddressGen),
         Derive(AddressDerive),
         Find(AddressOrAliasFind),
-        List(AddressList),
+        List,
         Add(AddressAdd),
     }
 
@@ -851,7 +849,8 @@ pub mod cmds {
                 let gen = SubCmd::parse(matches).map(Self::Gen);
                 let restore = SubCmd::parse(matches).map(Self::Derive);
                 let find = SubCmd::parse(matches).map(Self::Find);
-                let list = SubCmd::parse(matches).map(Self::List);
+                let list =
+                    <AddressList as SubCmd>::parse(matches).map(|_| Self::List);
                 let add = SubCmd::parse(matches).map(Self::Add);
                 gen.or(restore).or(find).or(list).or(add)
             })
@@ -947,21 +946,17 @@ pub mod cmds {
 
     /// List known addresses
     #[derive(Clone, Debug)]
-    pub struct AddressList(pub args::AddressList);
+    pub struct AddressList;
 
     impl SubCmd for AddressList {
         const CMD: &'static str = "list";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| Self(args::AddressList::parse(matches)))
+            matches.subcommand_matches(Self::CMD).map(|_| Self)
         }
 
         fn def() -> App {
-            App::new(Self::CMD)
-                .about("List all known addresses.")
-                .add_args::<args::AddressList>()
+            App::new(Self::CMD).about("List all known addresses.")
         }
     }
 
@@ -2205,12 +2200,15 @@ pub mod cmds {
         FetchWasms(FetchWasms),
         ValidateWasm(ValidateWasm),
         InitNetwork(InitNetwork),
+        DeriveGenesisAddresses(DeriveGenesisAddresses),
+        GenesisBond(GenesisBond),
+        InitGenesisEstablishedAccount(InitGenesisEstablishedAccount),
         InitGenesisValidator(InitGenesisValidator),
         PkToTmAddress(PkToTmAddress),
         DefaultBaseDir(DefaultBaseDir),
         EpochSleep(EpochSleep),
         ValidateGenesisTemplates(ValidateGenesisTemplates),
-        SignGenesisTx(SignGenesisTx),
+        SignGenesisTxs(SignGenesisTxs),
     }
 
     impl SubCmd for Utils {
@@ -2225,6 +2223,12 @@ pub mod cmds {
                     SubCmd::parse(matches).map(Self::ValidateWasm);
                 let init_network =
                     SubCmd::parse(matches).map(Self::InitNetwork);
+                let derive_addresses =
+                    SubCmd::parse(matches).map(Self::DeriveGenesisAddresses);
+                let genesis_bond =
+                    SubCmd::parse(matches).map(Self::GenesisBond);
+                let init_established = SubCmd::parse(matches)
+                    .map(Self::InitGenesisEstablishedAccount);
                 let init_genesis =
                     SubCmd::parse(matches).map(Self::InitGenesisValidator);
                 let pk_to_tm_address =
@@ -2235,11 +2239,14 @@ pub mod cmds {
                 let validate_genesis_templates =
                     SubCmd::parse(matches).map(Self::ValidateGenesisTemplates);
                 let genesis_tx =
-                    SubCmd::parse(matches).map(Self::SignGenesisTx);
+                    SubCmd::parse(matches).map(Self::SignGenesisTxs);
                 join_network
                     .or(fetch_wasms)
                     .or(validate_wasm)
                     .or(init_network)
+                    .or(derive_addresses)
+                    .or(genesis_bond)
+                    .or(init_established)
                     .or(init_genesis)
                     .or(pk_to_tm_address)
                     .or(default_base_dir)
@@ -2256,12 +2263,15 @@ pub mod cmds {
                 .subcommand(FetchWasms::def())
                 .subcommand(ValidateWasm::def())
                 .subcommand(InitNetwork::def())
+                .subcommand(DeriveGenesisAddresses::def())
+                .subcommand(GenesisBond::def())
+                .subcommand(InitGenesisEstablishedAccount::def())
                 .subcommand(InitGenesisValidator::def())
                 .subcommand(PkToTmAddress::def())
                 .subcommand(DefaultBaseDir::def())
                 .subcommand(EpochSleep::def())
                 .subcommand(ValidateGenesisTemplates::def())
-                .subcommand(SignGenesisTx::def())
+                .subcommand(SignGenesisTxs::def())
                 .subcommand_required(true)
                 .arg_required_else_help(true)
         }
@@ -2347,6 +2357,67 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct DeriveGenesisAddresses(pub args::DeriveGenesisAddresses);
+
+    impl SubCmd for DeriveGenesisAddresses {
+        const CMD: &'static str = "derive-genesis-addresses";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                Self(args::DeriveGenesisAddresses::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Derive account addresses from a genesis txs toml file.")
+                .add_args::<args::DeriveGenesisAddresses>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct InitGenesisEstablishedAccount(
+        pub args::InitGenesisEstablishedAccount,
+    );
+
+    impl SubCmd for InitGenesisEstablishedAccount {
+        const CMD: &'static str = "init-genesis-established-account";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                Self(args::InitGenesisEstablishedAccount::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Initialize an established account available at genesis.",
+                )
+                .add_args::<args::InitGenesisEstablishedAccount>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct GenesisBond(pub args::GenesisBond);
+
+    impl SubCmd for GenesisBond {
+        const CMD: &'static str = "genesis-bond";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::GenesisBond::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Bond to a validator at pre-genesis.")
+                .add_args::<args::GenesisBond>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct InitGenesisValidator(pub args::InitGenesisValidator);
 
     impl SubCmd for InitGenesisValidator {
@@ -2363,7 +2434,8 @@ pub mod cmds {
                 .about(
                     "Initialize genesis validator's address, consensus key \
                      and validator account key and use it in the ledger's \
-                     node.",
+                     node. Appends validator creation and self-bond txs to a \
+                     .toml file containing an established account tx.",
                 )
                 .add_args::<args::InitGenesisValidator>()
         }
@@ -2389,21 +2461,21 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct SignGenesisTx(pub args::SignGenesisTx);
+    pub struct SignGenesisTxs(pub args::SignGenesisTxs);
 
-    impl SubCmd for SignGenesisTx {
-        const CMD: &'static str = "sign-genesis-tx";
+    impl SubCmd for SignGenesisTxs {
+        const CMD: &'static str = "sign-genesis-txs";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .map(|matches| Self(args::SignGenesisTx::parse(matches)))
+                .map(|matches| Self(args::SignGenesisTxs::parse(matches)))
         }
 
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Sign genesis transaction(s).")
-                .add_args::<args::SignGenesisTx>()
+                .add_args::<args::SignGenesisTxs>()
         }
     }
 
@@ -2869,7 +2941,7 @@ pub mod args {
     use std::str::FromStr;
 
     use namada::ibc::core::host::types::identifiers::{ChannelId, PortId};
-    use namada::types::address::Address;
+    use namada::types::address::{Address, EstablishedAddress};
     use namada::types::chain::{ChainId, ChainIdPrefix};
     use namada::types::dec::Dec;
     use namada::types::ethereum_events::EthAddress;
@@ -2898,6 +2970,7 @@ pub mod args {
     use super::utils::*;
     use super::{ArgGroup, ArgMatches};
     use crate::client::utils::PRE_GENESIS_DIR;
+    use crate::config::genesis::GenesisAddress;
     use crate::config::{self, Action, ActionAtHeight};
     use crate::facade::tendermint::Timeout;
     use crate::facade::tendermint_config::net::Address as TendermintAddress;
@@ -2906,6 +2979,7 @@ pub mod args {
     pub const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
     pub const ALIAS: Arg<String> = arg("alias");
     pub const ALIAS_FORCE: ArgFlag = flag("alias-force");
+    pub const ALIAS_MANY: ArgMulti<String, GlobPlus> = arg_multi("aliases");
     pub const ALLOW_DUPLICATE_IP: ArgFlag = flag("allow-duplicate-ip");
     pub const AMOUNT: Arg<token::DenominatedAmount> = arg("amount");
     pub const ARCHIVE_DIR: ArgOpt<PathBuf> = arg_opt("archive-dir");
@@ -2999,16 +3073,20 @@ pub mod args {
             denom: NATIVE_MAX_DECIMAL_PLACES.into(),
         }),
     );
+    pub const GENESIS_BOND_SOURCE: ArgOpt<GenesisAddress> = arg_opt("source");
     pub const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     pub const GENESIS_TIME: Arg<DateTimeUtc> = arg("genesis-time");
     pub const GENESIS_VALIDATOR: ArgOpt<String> =
         arg("genesis-validator").opt();
+    pub const GENESIS_VALIDATOR_ADDRESS: Arg<EstablishedAddress> =
+        arg("validator");
     pub const HALT_ACTION: ArgFlag = flag("halt");
     pub const HASH_LIST: Arg<String> = arg("hash-list");
     pub const HD_WALLET_DERIVATION_PATH: ArgDefault<String> =
         arg_default("hd-path", DefaultFn(|| "default".to_string()));
     pub const HISTORIC: ArgFlag = flag("historic");
     pub const IBC_TRANSFER_MEMO_PATH: ArgOpt<PathBuf> = arg_opt("memo-path");
+    pub const INPUT_OPT: ArgOpt<PathBuf> = arg_opt("input");
     pub const LEDGER_ADDRESS_ABOUT: &str =
         "Address of a ledger node as \"{scheme}://{host}:{port}\". If the \
          scheme is not supplied, it is assumed to be TCP.";
@@ -3049,18 +3127,19 @@ pub mod args {
     pub const PROTOCOL_KEY: ArgOpt<WalletPublicKey> = arg_opt("protocol-key");
     pub const PRE_GENESIS_PATH: ArgOpt<PathBuf> = arg_opt("pre-genesis-path");
     pub const PUBLIC_KEY: Arg<WalletPublicKey> = arg("public-key");
-    pub const PUBLIC_KEYS: ArgMulti<WalletPublicKey> = arg_multi("public-keys");
+    pub const PUBLIC_KEYS: ArgMulti<WalletPublicKey, GlobStar> =
+        arg_multi("public-keys");
     pub const PROPOSAL_ID: Arg<u64> = arg("proposal-id");
     pub const PROPOSAL_ID_OPT: ArgOpt<u64> = arg_opt("proposal-id");
     pub const PROPOSAL_VOTE_PGF_OPT: ArgOpt<String> = arg_opt("pgf");
     pub const PROPOSAL_VOTE_ETH_OPT: ArgOpt<String> = arg_opt("eth");
     pub const PROPOSAL_VOTE: Arg<String> = arg("vote");
     pub const RAW_ADDRESS: Arg<Address> = arg("address");
+    pub const RAW_ADDRESS_ESTABLISHED: Arg<EstablishedAddress> = arg("address");
     pub const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
     pub const RAW_PUBLIC_KEY: Arg<common::PublicKey> = arg("public-key");
     pub const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> =
         arg_opt("public-key");
-    pub const RAW_SOURCE: Arg<String> = arg("source");
     pub const RECEIVER: Arg<String> = arg("receiver");
     pub const RELAYER: Arg<Address> = arg("relayer");
     pub const SAFE_MODE: ArgFlag = flag("safe-mode");
@@ -3070,9 +3149,9 @@ pub mod args {
         arg("self-bond-amount");
     pub const SENDER: Arg<String> = arg("sender");
     pub const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
-    pub const SIGNING_KEYS: ArgMulti<WalletPublicKey> =
+    pub const SIGNING_KEYS: ArgMulti<WalletKeypair, GlobStar> =
         arg_multi("signing-keys");
-    pub const SIGNATURES: ArgMulti<PathBuf> = arg_multi("signatures");
+    pub const SIGNATURES: ArgMulti<PathBuf, GlobStar> = arg_multi("signatures");
     pub const SOURCE: Arg<WalletAddress> = arg("source");
     pub const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
     pub const STEWARD: Arg<WalletAddress> = arg("steward");
@@ -3085,8 +3164,6 @@ pub mod args {
     pub const TM_ADDRESS: Arg<String> = arg("tm-address");
     pub const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
     pub const TOKEN: Arg<WalletAddress> = arg("token");
-    pub const TRANSFER_FROM_SOURCE_AMOUNT: Arg<token::DenominatedAmount> =
-        arg("transfer-from-source-amount");
     pub const TRANSFER_SOURCE: Arg<WalletTransferSource> = arg("source");
     pub const TRANSFER_TARGET: Arg<WalletTransferTarget> = arg("target");
     pub const TX_HASH: Arg<String> = arg("tx-hash");
@@ -3098,7 +3175,7 @@ pub mod args {
     pub const VALIDATOR_OPT: ArgOpt<WalletAddress> = VALIDATOR.opt();
     pub const VALIDATOR_ACCOUNT_KEY: ArgOpt<WalletPublicKey> =
         arg_opt("account-key");
-    pub const VALIDATOR_ACCOUNT_KEYS: ArgMulti<WalletPublicKey> =
+    pub const VALIDATOR_ACCOUNT_KEYS: ArgMulti<WalletPublicKey, GlobStar> =
         arg_multi("account-keys");
     pub const VALIDATOR_CONSENSUS_KEY: ArgOpt<WalletPublicKey> =
         arg_opt("consensus-key");
@@ -3110,6 +3187,7 @@ pub mod args {
         arg_opt("eth-hot-key");
     pub const VALUE: ArgOpt<String> = arg_opt("value");
     pub const VIEWING_KEY: Arg<WalletViewingKey> = arg("key");
+    pub const VP: ArgOpt<String> = arg_opt("vp");
     pub const WALLET_ALIAS_FORCE: ArgFlag = flag("wallet-alias-force");
     pub const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
     pub const WASM_DIR: ArgOpt<PathBuf> = arg_opt("wasm-dir");
@@ -3120,6 +3198,7 @@ pub mod args {
     /// Global command arguments
     #[derive(Clone, Debug)]
     pub struct Global {
+        pub is_pre_genesis: bool,
         pub chain_id: Option<ChainId>,
         pub base_dir: PathBuf,
         pub wasm_dir: Option<PathBuf>,
@@ -3128,10 +3207,12 @@ pub mod args {
     impl Global {
         /// Parse global arguments
         pub fn parse(matches: &ArgMatches) -> Self {
+            let is_pre_genesis = PRE_GENESIS.parse(matches);
             let chain_id = CHAIN_ID_OPT.parse(matches);
             let base_dir = BASE_DIR.parse(matches);
             let wasm_dir = WASM_DIR.parse(matches);
             Global {
+                is_pre_genesis,
                 chain_id,
                 base_dir,
                 wasm_dir,
@@ -3158,6 +3239,11 @@ pub mod args {
                      `NAMADA_WASM_DIR` environment variable, but the argument \
                      takes precedence, if specified.",
                 ))
+                .arg(
+                    PRE_GENESIS
+                        .def()
+                        .help("Dispatch pre-genesis specific logic."),
+                )
         }
     }
 
@@ -6063,13 +6149,11 @@ pub mod args {
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
             let value = MASP_VALUE.parse(matches);
-            let is_pre_genesis = PRE_GENESIS.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
                 alias,
                 alias_force,
                 value,
-                is_pre_genesis,
                 unsafe_dont_encrypt,
             }
         }
@@ -6088,10 +6172,6 @@ pub mod args {
                     .def()
                     .help("A spending key, viewing key, or payment address."),
             )
-            .arg(PRE_GENESIS.def().help(
-                "Use pre-genesis wallet, instead of for the current chain, if \
-                 any.",
-            ))
             .arg(UNSAFE_DONT_ENCRYPT.def().help(
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
                  used in a live network.",
@@ -6103,12 +6183,10 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
-            let is_pre_genesis = PRE_GENESIS.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
                 alias,
                 alias_force,
-                is_pre_genesis,
                 unsafe_dont_encrypt,
             }
         }
@@ -6121,10 +6199,6 @@ pub mod args {
             )
             .arg(ALIAS_FORCE.def().help(
                 "Override the alias without confirmation if it already exists.",
-            ))
-            .arg(PRE_GENESIS.def().help(
-                "Use pre-genesis wallet, instead of for the current chain, if \
-                 any.",
             ))
             .arg(UNSAFE_DONT_ENCRYPT.def().help(
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
@@ -6150,7 +6224,7 @@ pub mod args {
                         safe_exit(1)
                     })
             };
-            let viewing_key = if self.is_pre_genesis || ctx.chain.is_none() {
+            let viewing_key = if ctx.global_args.is_pre_genesis {
                 let wallet_path =
                     ctx.global_args.base_dir.join(PRE_GENESIS_DIR);
                 let mut wallet = crate::wallet::load_or_new(&wallet_path);
@@ -6163,7 +6237,6 @@ pub mod args {
                 alias_force: self.alias_force,
                 viewing_key,
                 pin: self.pin,
-                is_pre_genesis: self.is_pre_genesis,
             }
         }
     }
@@ -6174,13 +6247,11 @@ pub mod args {
             let alias_force = ALIAS_FORCE.parse(matches);
             let viewing_key = VIEWING_KEY.parse(matches);
             let pin = PIN.parse(matches);
-            let is_pre_genesis = PRE_GENESIS.parse(matches);
             Self {
                 alias,
                 alias_force,
                 viewing_key,
                 pin,
-                is_pre_genesis,
             }
         }
 
@@ -6197,10 +6268,6 @@ pub mod args {
             .arg(PIN.def().help(
                 "Require that the single transaction to this address be \
                  pinned.",
-            ))
-            .arg(PRE_GENESIS.def().help(
-                "Use pre-genesis wallet, instead of for the current chain, if \
-                 any.",
             ))
         }
     }
@@ -6262,14 +6329,12 @@ pub mod args {
             let scheme = SCHEME.parse(matches);
             let alias = ALIAS_OPT.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
-            let is_pre_genesis = PRE_GENESIS.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let derivation_path = HD_WALLET_DERIVATION_PATH.parse(matches);
             Self {
                 scheme,
                 alias,
                 alias_force,
-                is_pre_genesis,
                 unsafe_dont_encrypt,
                 derivation_path,
             }
@@ -6287,10 +6352,6 @@ pub mod args {
             ))
             .arg(ALIAS_FORCE.def().help(
                 "Override the alias without confirmation if it already exists.",
-            ))
-            .arg(PRE_GENESIS.def().help(
-                "Generate a key for pre-genesis, instead of for the current \
-                 chain, if any.",
             ))
             .arg(UNSAFE_DONT_ENCRYPT.def().help(
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
@@ -6313,14 +6374,12 @@ pub mod args {
             let public_key = RAW_PUBLIC_KEY_OPT.parse(matches);
             let alias = ALIAS_OPT.parse(matches);
             let value = VALUE.parse(matches);
-            let is_pre_genesis = PRE_GENESIS.parse(matches);
             let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
 
             Self {
                 public_key,
                 alias,
                 value,
-                is_pre_genesis,
                 unsafe_show_secret,
             }
         }
@@ -6343,10 +6402,6 @@ pub mod args {
                     .def()
                     .help("A public key or alias associated with the keypair."),
             )
-            .arg(PRE_GENESIS.def().help(
-                "Use pre-genesis wallet, instead of for the current chain, if \
-                 any.",
-            ))
             .arg(
                 UNSAFE_SHOW_SECRET
                     .def()
@@ -6359,11 +6414,9 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
             let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
-            let is_pre_genesis = PRE_GENESIS.parse(matches);
             Self {
                 alias,
                 unsafe_show_secret,
-                is_pre_genesis,
             }
         }
 
@@ -6374,31 +6427,21 @@ pub mod args {
                         .def()
                         .help("UNSAFE: Print the spending key values."),
                 )
-                .arg(PRE_GENESIS.def().help(
-                    "Use pre-genesis wallet, instead of for the current \
-                     chain, if any.",
-                ))
         }
     }
 
     impl Args for MaspKeysList {
         fn parse(matches: &ArgMatches) -> Self {
             let decrypt = DECRYPT.parse(matches);
-            let is_pre_genesis = PRE_GENESIS.parse(matches);
             let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
             Self {
                 decrypt,
-                is_pre_genesis,
                 unsafe_show_secret,
             }
         }
 
         fn def(app: App) -> App {
             app.arg(DECRYPT.def().help("Decrypt keys that are encrypted."))
-                .arg(PRE_GENESIS.def().help(
-                    "Use pre-genesis wallet, instead of for the current \
-                     chain, if any.",
-                ))
                 .arg(
                     UNSAFE_SHOW_SECRET
                         .def()
@@ -6407,38 +6450,18 @@ pub mod args {
         }
     }
 
-    impl Args for MaspListPayAddrs {
-        fn parse(matches: &ArgMatches) -> Self {
-            let is_pre_genesis = PRE_GENESIS.parse(matches);
-            Self { is_pre_genesis }
-        }
-
-        fn def(app: App) -> App {
-            app.arg(PRE_GENESIS.def().help(
-                "Use pre-genesis wallet, instead of for the current chain, if \
-                 any.",
-            ))
-        }
-    }
-
     impl Args for KeyList {
         fn parse(matches: &ArgMatches) -> Self {
             let decrypt = DECRYPT.parse(matches);
-            let is_pre_genesis = PRE_GENESIS.parse(matches);
             let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
             Self {
                 decrypt,
-                is_pre_genesis,
                 unsafe_show_secret,
             }
         }
 
         fn def(app: App) -> App {
             app.arg(DECRYPT.def().help("Decrypt keys that are encrypted."))
-                .arg(PRE_GENESIS.def().help(
-                    "Use pre-genesis wallet, instead of for the current \
-                     chain, if any.",
-                ))
                 .arg(
                     UNSAFE_SHOW_SECRET
                         .def()
@@ -6450,21 +6473,13 @@ pub mod args {
     impl Args for KeyExport {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
-            let is_pre_genesis = PRE_GENESIS.parse(matches);
-            Self {
-                alias,
-                is_pre_genesis,
-            }
+            Self { alias }
         }
 
         fn def(app: App) -> App {
             app.arg(
                 ALIAS.def().help("The alias of the key you wish to export."),
             )
-            .arg(PRE_GENESIS.def().help(
-                "Use pre-genesis wallet, instead of for the current chain, if \
-                 any.",
-            ))
         }
     }
 
@@ -6472,12 +6487,7 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS_OPT.parse(matches);
             let address = RAW_ADDRESS_OPT.parse(matches);
-            let is_pre_genesis = PRE_GENESIS.parse(matches);
-            Self {
-                alias,
-                address,
-                is_pre_genesis,
-            }
+            Self { alias, address }
         }
 
         fn def(app: App) -> App {
@@ -6491,10 +6501,6 @@ pub mod args {
                     .def()
                     .help("The bech32m encoded address string."),
             )
-            .arg(PRE_GENESIS.def().help(
-                "Use pre-genesis wallet, instead of for the current chain, if \
-                 any.",
-            ))
             .group(
                 ArgGroup::new("find_flags")
                     .args([ALIAS_OPT.name, RAW_ADDRESS_OPT.name])
@@ -6503,31 +6509,15 @@ pub mod args {
         }
     }
 
-    impl Args for AddressList {
-        fn parse(matches: &ArgMatches) -> Self {
-            let is_pre_genesis = PRE_GENESIS.parse(matches);
-            Self { is_pre_genesis }
-        }
-
-        fn def(app: App) -> App {
-            app.arg(PRE_GENESIS.def().help(
-                "Use pre-genesis wallet, instead of for the current chain, if \
-                 any.",
-            ))
-        }
-    }
-
     impl Args for AddressAdd {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
             let address = RAW_ADDRESS.parse(matches);
-            let is_pre_genesis = PRE_GENESIS.parse(matches);
             Self {
                 alias,
                 alias_force,
                 address,
-                is_pre_genesis,
             }
         }
 
@@ -6545,10 +6535,6 @@ pub mod args {
                     .def()
                     .help("The bech32m encoded address string."),
             )
-            .arg(PRE_GENESIS.def().help(
-                "Use pre-genesis wallet, instead of for the current chain, if \
-                 any.",
-            ))
         }
     }
 
@@ -6727,25 +6713,122 @@ pub mod args {
     }
 
     #[derive(Clone, Debug)]
+    pub struct DeriveGenesisAddresses {
+        pub genesis_txs_path: PathBuf,
+    }
+
+    impl Args for DeriveGenesisAddresses {
+        fn parse(matches: &ArgMatches) -> Self {
+            let genesis_txs_path = PATH.parse(matches);
+            Self { genesis_txs_path }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(PATH.def().help("Path to the genesis txs toml file."))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct InitGenesisEstablishedAccount {
+        pub vp: String,
+        pub wallet_aliases: Vec<String>,
+        pub threshold: u8,
+        pub output_path: PathBuf,
+    }
+
+    impl Args for InitGenesisEstablishedAccount {
+        fn parse(matches: &ArgMatches) -> Self {
+            use crate::config::genesis::utils::VP_USER;
+            let wallet_aliases = ALIAS_MANY.parse(matches);
+            let vp = VP.parse(matches).unwrap_or_else(|| VP_USER.to_string());
+            let threshold = THRESOLD.parse(matches).unwrap_or(1);
+            let output_path = PATH.parse(matches);
+            Self {
+                wallet_aliases,
+                vp,
+                threshold,
+                output_path,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(ALIAS_MANY.def().help(
+                "Comma separated list of aliases of the keys to use from the \
+                 wallet.",
+            ))
+            .arg(THRESOLD.def().help(
+                "The minimum number of signatures to be provided for \
+                 authorization. Must be less than or equal to the maximum \
+                 number of key aliases provided.",
+            ))
+            .arg(VP.def().help(
+                "The validity predicate of the account. Defaults to `vp_user`.",
+            ))
+            .arg(PATH.def().help(
+                "The path of the .toml file to write the established account \
+                 transaction to. Overwrites the file if it exists.",
+            ))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct GenesisBond {
+        pub source: GenesisAddress,
+        pub validator: EstablishedAddress,
+        pub bond_amount: token::DenominatedAmount,
+        pub output: PathBuf,
+    }
+
+    impl Args for GenesisBond {
+        fn parse(matches: &ArgMatches) -> Self {
+            let validator = GENESIS_VALIDATOR_ADDRESS.parse(matches);
+            let source =
+                GENESIS_BOND_SOURCE.parse(matches).unwrap_or_else(|| {
+                    GenesisAddress::EstablishedAddress(validator.clone())
+                });
+            let bond_amount = AMOUNT.parse(matches);
+            let output = PATH.parse(matches);
+            Self {
+                source,
+                validator,
+                bond_amount,
+                output,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(GENESIS_VALIDATOR_ADDRESS.def().help("Validator address."))
+                .arg(AMOUNT.def().help("Amount of tokens to stake in a bond."))
+                .arg(GENESIS_BOND_SOURCE.def().help(
+                    "Source address for delegations. For self-bonds, the \
+                     validator is also the source.",
+                ))
+                .arg(
+                    PATH.def()
+                        .help("Output toml file to write transactions to."),
+                )
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct InitGenesisValidator {
-        pub source: String,
         pub alias: String,
         pub commission_rate: Dec,
         pub max_commission_rate_change: Dec,
         pub net_address: SocketAddr,
         pub unsafe_dont_encrypt: bool,
         pub key_scheme: SchemeType,
-        pub transfer_from_source_amount: token::DenominatedAmount,
         pub self_bond_amount: token::DenominatedAmount,
         pub email: String,
         pub description: Option<String>,
         pub website: Option<String>,
         pub discord_handle: Option<String>,
+        pub address: EstablishedAddress,
+        pub tx_path: PathBuf,
     }
 
     impl Args for InitGenesisValidator {
         fn parse(matches: &ArgMatches) -> Self {
-            let source = RAW_SOURCE.parse(matches);
             let alias = ALIAS.parse(matches);
             let commission_rate = COMMISSION_RATE.parse(matches);
             let max_commission_rate_change =
@@ -6753,94 +6836,83 @@ pub mod args {
             let net_address = NET_ADDRESS.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let key_scheme = SCHEME.parse(matches);
-            // The denomination validation is handled by validating genesis
-            // files later.
-            // At this stage, we treat amounts as opaque and pass them on
-            // verbatim.
-            let transfer_from_source_amount =
-                TRANSFER_FROM_SOURCE_AMOUNT.parse(matches);
             // this must be an amount of native tokens
             let self_bond_amount = SELF_BOND_AMOUNT.parse(matches);
             let email = EMAIL.parse(matches);
             let description = DESCRIPTION_OPT.parse(matches);
             let website = WEBSITE_OPT.parse(matches);
             let discord_handle = DISCORD_OPT.parse(matches);
+            let address = RAW_ADDRESS_ESTABLISHED.parse(matches);
+            let tx_path = PATH.parse(matches);
             Self {
-                source,
                 alias,
                 net_address,
                 unsafe_dont_encrypt,
                 key_scheme,
                 commission_rate,
                 max_commission_rate_change,
-                transfer_from_source_amount,
                 self_bond_amount,
                 email,
                 description,
                 website,
                 discord_handle,
+                tx_path,
+                address,
             }
         }
 
         fn def(app: App) -> App {
-            app.arg(RAW_SOURCE.def().help(
-                "The source key for native token transfer from the \
-                 `balances.toml` genesis template.",
-            ))
-            .arg(ALIAS.def().help("The validator address alias."))
-            .arg(NET_ADDRESS.def().help(
-                "Static {host:port} of your validator node's P2P address. \
-                 Namada uses port `26656` for P2P connections by default, but \
-                 you can configure a different value.",
-            ))
-            .arg(COMMISSION_RATE.def().help(
-                "The commission rate charged by the validator for delegation \
-                 rewards. This is a required parameter.",
-            ))
-            .arg(MAX_COMMISSION_RATE_CHANGE.def().help(
-                "The maximum change per epoch in the commission rate charged \
-                 by the validator for delegation rewards. This is a required \
-                 parameter.",
-            ))
-            .arg(UNSAFE_DONT_ENCRYPT.def().help(
-                "UNSAFE: Do not encrypt the generated keypairs. Do not use \
-                 this for keys used in a live network.",
-            ))
-            .arg(SCHEME.def().help(
-                "The key scheme/type used for the validator keys. Currently \
-                 supports ed25519 and secp256k1.",
-            ))
-            .arg(TRANSFER_FROM_SOURCE_AMOUNT.def().help(
-                "The amount of native token to transfer into the validator \
-                 account from the `--source`. To self-bond some tokens to the \
-                 validator at genesis, specify `--self-bond-amount`.",
-            ))
-            .arg(
-                SELF_BOND_AMOUNT
-                    .def()
-                    .help(
-                        "The amount of native token to self-bond in PoS. \
-                         Because this amount will be bonded from the \
-                         validator's account, it must be lower or equal to \
-                         the amount specified in \
-                         `--transfer-from-source-amount`.",
-                    )
-                    .requires(TRANSFER_FROM_SOURCE_AMOUNT.name),
-            )
-            .arg(EMAIL.def().help(
-                "The email address of the validator. This is a required \
-                 parameter.",
-            ))
-            .arg(DESCRIPTION_OPT.def().help(
-                "The validator's description. This is an optional parameter.",
-            ))
-            .arg(WEBSITE_OPT.def().help(
-                "The validator's website. This is an optional parameter.",
-            ))
-            .arg(DISCORD_OPT.def().help(
-                "The validator's discord handle. This is an optional \
-                 parameter.",
-            ))
+            app.arg(ALIAS.def().help("The validator address alias."))
+                .arg(RAW_ADDRESS_ESTABLISHED.def().help(
+                    "The address of an established account to be promoted to \
+                     a validator.",
+                ))
+                .arg(PATH.def().help(
+                    "The .toml file containing an established account tx from \
+                     which to create a validator.",
+                ))
+                .arg(NET_ADDRESS.def().help(
+                    "Static {host:port} of your validator node's P2P address. \
+                     Namada uses port `26656` for P2P connections by default, \
+                     but you can configure a different value.",
+                ))
+                .arg(COMMISSION_RATE.def().help(
+                    "The commission rate charged by the validator for \
+                     delegation rewards. This is a required parameter.",
+                ))
+                .arg(MAX_COMMISSION_RATE_CHANGE.def().help(
+                    "The maximum change per epoch in the commission rate \
+                     charged by the validator for delegation rewards. This is \
+                     a required parameter.",
+                ))
+                .arg(UNSAFE_DONT_ENCRYPT.def().help(
+                    "UNSAFE: Do not encrypt the generated keypairs. Do not \
+                     use this for keys used in a live network.",
+                ))
+                .arg(SCHEME.def().help(
+                    "The key scheme/type used for the validator keys. \
+                     Currently supports ed25519 and secp256k1.",
+                ))
+                .arg(
+                    SELF_BOND_AMOUNT.def().help(
+                        "The amount of native token to self-bond in PoS.",
+                    ),
+                )
+                .arg(EMAIL.def().help(
+                    "The email address of the validator. This is a required \
+                     parameter.",
+                ))
+                .arg(DESCRIPTION_OPT.def().help(
+                    "The validator's description. This is an optional \
+                     parameter.",
+                ))
+                .arg(WEBSITE_OPT.def().help(
+                    "The validator's website. This is an optional parameter.",
+                ))
+                .arg(DISCORD_OPT.def().help(
+                    "The validator's discord handle. This is an optional \
+                     parameter.",
+                ))
         }
     }
 
@@ -6865,16 +6937,25 @@ pub mod args {
     }
 
     #[derive(Clone, Debug)]
-    pub struct SignGenesisTx {
+    pub struct SignGenesisTxs {
         pub path: PathBuf,
         pub output: Option<PathBuf>,
+        pub validator_alias: Option<String>,
+        pub use_device: bool,
     }
 
-    impl Args for SignGenesisTx {
+    impl Args for SignGenesisTxs {
         fn parse(matches: &ArgMatches) -> Self {
             let path = PATH.parse(matches);
             let output = OUTPUT.parse(matches);
-            Self { path, output }
+            let validator_alias = ALIAS_OPT.parse(matches);
+            let use_device = USE_DEVICE.parse(matches);
+            Self {
+                path,
+                output,
+                validator_alias,
+                use_device,
+            }
         }
 
         fn def(app: App) -> App {
@@ -6885,6 +6966,15 @@ pub mod args {
             .arg(OUTPUT.def().help(
                 "Save the output to a TOML file. When not supplied, the \
                  signed transactions will be printed to stdout instead.",
+            ))
+            .arg(
+                ALIAS_OPT
+                    .def()
+                    .help("Optional alias to a validator wallet."),
+            )
+            .arg(USE_DEVICE.def().help(
+                "Derive an address and public key from the seed stored on the \
+                 connected hardware wallet.",
             ))
         }
     }

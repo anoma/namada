@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use color_eyre::eyre::Result;
+use namada::core::types::chain::ChainId;
 use namada::ledger::ibc::storage::ibc_token;
 use namada::types::address::{Address, InternalAddress};
 use namada::types::ethereum_events::EthAddress;
@@ -27,6 +28,9 @@ use crate::{wallet, wasm_loader};
 
 /// Env. var to set wasm directory
 pub const ENV_VAR_WASM_DIR: &str = "NAMADA_WASM_DIR";
+
+/// Env. var to read the Namada chain id from
+pub const ENV_VAR_CHAIN_ID: &str = "NAMADA_CHAIN_ID";
 
 /// A raw address (bech32m encoding) or an alias of an address that may be found
 /// in the wallet
@@ -92,13 +96,19 @@ impl Context {
     pub fn new<IO: Io>(global_args: args::Global) -> Result<Self> {
         let global_config = read_or_try_new_global_config(&global_args);
 
-        let chain = match global_config.default_chain_id.as_ref() {
-            Some(default_chain_id) => {
-                tracing::info!("Default chain ID: {default_chain_id}");
+        let env_var_chain_id = std::env::var(ENV_VAR_CHAIN_ID)
+            .ok()
+            .and_then(|chain_id| ChainId::from_str(&chain_id).ok());
+        let chain_id = env_var_chain_id
+            .as_ref()
+            .or(global_args.chain_id.as_ref())
+            .or(global_config.default_chain_id.as_ref());
+
+        let chain = match chain_id {
+            Some(chain_id) if !global_args.is_pre_genesis => {
                 let mut config =
-                    Config::load(&global_args.base_dir, default_chain_id, None);
-                let chain_dir =
-                    global_args.base_dir.join(default_chain_id.as_str());
+                    Config::load(&global_args.base_dir, chain_id, None);
+                let chain_dir = global_args.base_dir.join(chain_id.as_str());
                 let genesis =
                     genesis::chain::Finalized::read_toml_files(&chain_dir)
                         .expect("Missing genesis files");
@@ -131,7 +141,7 @@ impl Context {
                     native_token,
                 })
             }
-            None => None,
+            _ => None,
         };
 
         Ok(Self {
@@ -183,8 +193,13 @@ impl Context {
 
 fn safe_exit_on_missing_chain_context() -> ! {
     eprintln!(
-        "No chain is configured. You may need to run `namada client utils \
-         join-network` command."
+        "Failed to construct Namada chain context. If no chain is configured, \
+         you may need to run `namada client utils join-network`. If the chain \
+         is configured, you may need to set the chain id with `--chain-id \
+         <chainid>`, via the env var `{ENV_VAR_CHAIN_ID}`, or configure the \
+         default chain id in the `global-config.toml` file. If you do intend \
+         to run pre-genesis operations, pass the `--pre-genesis` flag as the \
+         first argument to the command."
     );
     utils::safe_exit(1)
 }
