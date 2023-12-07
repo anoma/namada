@@ -1,6 +1,6 @@
 # Localnet genesis templates
 
-This directory contains genesis templates for a local network with a single validator. The `src` directory contains generated pre-genesis wallet pre-loaded with unencrypted keys and a single validator `"validator-0" wallet that are being used in the templates.
+This directory contains genesis templates for a local network with a single validator. The `src` directory contains generated pre-genesis wallet pre-loaded with unencrypted keys and a single validator `validator-0` wallet that are being used in the templates.
 
 If you're modifying any of the files here, you can run this to ensure that the changes are valid:
 
@@ -10,7 +10,7 @@ cargo watch -x "test test_validate_localnet_genesis_templates"
 
 ## balances.toml
 
-The pre-genesis balances wallet is located at [pre-genesis/wallet.toml](pre-genesis/wallet.toml) was used to setup the [balances.toml](balances.toml) and can be re-generated from the repo's root dir with:
+The pre-genesis balances wallet is located at [pre-genesis/wallet.toml](pre-genesis/wallet.toml) and is used to setup the [balances.toml](balances.toml) and can be re-generated from the repo's root dir with:
 
 ```shell
 cargo run --bin namadaw -- --base-dir "genesis/localnet/src" key gen \

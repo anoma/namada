@@ -316,7 +316,7 @@ where
 }
 
 /// Copies the validator sets into all epochs up through the pipeline epoch at
-/// genesis. Also computes the total
+/// genesis.
 pub fn copy_genesis_validator_sets<S>(
     storage: &mut S,
     params: &OwnedPosParams,
@@ -335,7 +335,6 @@ where
             current_epoch,
             epoch,
         )?;
-        // compute_and_store_total_consensus_stake(storage, epoch)?;
     }
     Ok(())
 }
@@ -1019,8 +1018,6 @@ where
 
     let tokens_pre = read_validator_stake(storage, params, validator, epoch)?;
 
-    // tracing::debug!("VALIDATOR STAKE BEFORE UPDATE: {}", tokens_pre);
-
     let tokens_post = tokens_pre
         .change()
         .checked_add(&token_change)
@@ -1548,7 +1545,6 @@ where
     S: StorageRead,
 {
     let handle = validator_set_positions_handle();
-    // handle.get_position(storage, &epoch, validator, params)
     handle.get_data_handler().at(&epoch).get(storage, validator)
 }
 
@@ -4500,7 +4496,11 @@ where
     Ok(())
 }
 
-/// Process slashes NEW
+/// Process enqueued slashes that were discovered earlier. This function is
+/// called upon a new epoch. The final slash rate considering according to the
+/// cubic slashing rate is computed. Then, each slash is recorded in storage
+/// along with its computed rate, and stake is deducted from the affected
+/// validators.
 pub fn process_slashes<S>(
     storage: &mut S,
     current_epoch: Epoch,

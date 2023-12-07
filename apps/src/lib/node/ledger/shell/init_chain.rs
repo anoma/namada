@@ -159,7 +159,7 @@ where
 
         pos::namada_proof_of_stake::compute_and_store_total_consensus_stake(
             &mut self.wl_storage,
-            Default::default(),
+            current_epoch,
         )
         .expect("Could not compute total consensus stake at genesis");
         // This has to be done after `apply_genesis_txs_validator_account`
