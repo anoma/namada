@@ -1198,7 +1198,7 @@ where
 
     let log_path = {
         let mut rng = rand::thread_rng();
-        let log_dir = test.get_base_dir(&Who::NonValidator).join("logs");
+        let log_dir = test.get_base_dir(Who::NonValidator).join("logs");
         std::fs::create_dir_all(&log_dir)?;
         log_dir.join(format!(
             "{}-hermes-{}.log",

@@ -21,6 +21,7 @@ use namada::types::address::Address;
 use namada::types::key::*;
 use namada::types::storage::Epoch;
 use namada::types::token;
+use namada_apps::cli::context::ENV_VAR_CHAIN_ID;
 use namada_apps::config::genesis::chain::DeriveEstablishedAddress;
 use namada_apps::config::genesis::templates;
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
@@ -576,7 +577,7 @@ pub fn make_hermes_config(test_a: &Test, test_b: &Test) -> Result<()> {
 
 fn make_hermes_chain_config(test: &Test) -> Value {
     let chain_id = test.net.chain_id.as_str();
-    let rpc_addr = get_actor_rpc(test, &Who::Validator(0));
+    let rpc_addr = get_actor_rpc(test, Who::Validator(0));
 
     let mut table = toml::map::Map::new();
     table.insert("mode".to_owned(), Value::String("push".to_owned()));
@@ -606,6 +607,7 @@ fn make_hermes_chain_config(test: &Test) -> Value {
     chain.insert("store_prefix".to_owned(), Value::String("ibc".to_owned()));
     let mut table = toml::map::Map::new();
     table.insert("price".to_owned(), Value::Float(0.001));
+    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let nam_addr = find_address(test, setup::constants::NAM).unwrap();
     table.insert("denom".to_owned(), Value::String(nam_addr.to_string()));
     chain.insert("gas_price".to_owned(), Value::Table(table));

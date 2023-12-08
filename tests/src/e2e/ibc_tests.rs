@@ -64,6 +64,7 @@ use namada::types::address::{Address, InternalAddress};
 use namada::types::key::PublicKey;
 use namada::types::storage::{BlockHeight, Key};
 use namada::types::token::Amount;
+use namada_apps::cli::context::ENV_VAR_CHAIN_ID;
 use namada_apps::client::rpc::{
     query_pos_parameters, query_storage_value, query_storage_value_bytes,
 };
@@ -129,8 +130,9 @@ fn run_ledger_ibc() -> Result<()> {
     try_invalid_transfers(&test_a, &test_b, &port_id_a, &channel_id_a)?;
 
     // Transfer 50000 received over IBC on Chain B
-    transfer_received_token(&port_id_b, &channel_id_b, &test_a, &test_b)?;
-    check_balances_after_non_ibc(&port_id_b, &channel_id_b, &test_a, &test_b)?;
+    let token = format!("{port_id_b}/{channel_id_b}/nam");
+    transfer_on_chain(&test_b, BERTHA, ALBERT, token, 50000, BERTHA_KEY)?;
+    check_balances_after_non_ibc(&port_id_b, &channel_id_b, &test_b)?;
 
     // Transfer 50000 back from the origin-specific account on Chain B to Chain
     // A
@@ -190,6 +192,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
     let _bg_hermes = hermes.background();
 
     // Transfer 100000 from the normal account on Chain A to Chain B
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
     let receiver = find_address(&test_b, BERTHA)?;
     transfer(
         &test_a,
@@ -209,15 +212,16 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
     check_balances(&port_id_b, &channel_id_b, &test_a, &test_b)?;
 
     // Transfer 50000 received over IBC on Chain B
-    transfer_received_token(&port_id_b, &channel_id_b, &test_a, &test_b)?;
-    check_balances_after_non_ibc(&port_id_b, &channel_id_b, &test_a, &test_b)?;
+    let token = format!("{port_id_b}/{channel_id_b}/nam");
+    transfer_on_chain(&test_b, BERTHA, ALBERT, token, 50000, BERTHA_KEY)?;
+    check_balances_after_non_ibc(&port_id_b, &channel_id_b, &test_b)?;
 
     // Transfer 50000 back from the origin-specific account on Chain B to Chain
     // A
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
     let receiver = find_address(&test_a, ALBERT)?;
     // Chain A was the source for the sent token
-    let org_token_addr = find_address(&test_a, NAM)?.to_string();
-    let ibc_denom = format!("{port_id_b}/{channel_id_b}/{org_token_addr}");
+    let ibc_denom = format!("{port_id_b}/{channel_id_b}/nam");
     // Send a token from Chain B
     transfer(
         &test_b,
@@ -237,6 +241,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
     check_balances_after_back(&port_id_b, &channel_id_b, &test_a, &test_b)?;
 
     // Transfer a token and it will time out and refund
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
     let receiver = find_address(&test_b, BERTHA)?;
     // Send a token from Chain A
     transfer(
@@ -279,22 +284,14 @@ fn run_two_nets() -> Result<(NamadaCmd, NamadaCmd, Test, Test)> {
     );
 
     // Run Chain A
-    let mut ledger_a = run_as!(
-        test_a,
-        Who::Validator(0),
-        Bin::Node,
-        &["ledger", "run"],
-        Some(40)
-    )?;
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
+    let mut ledger_a =
+        run_as!(test_a, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
     ledger_a.exp_string(LEDGER_STARTED)?;
     // Run Chain B
-    let mut ledger_b = run_as!(
-        test_b,
-        Who::Validator(0),
-        Bin::Node,
-        &["ledger", "run"],
-        Some(40)
-    )?;
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
+    let mut ledger_b =
+        run_as!(test_b, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
     ledger_b.exp_string(LEDGER_STARTED)?;
     ledger_a.exp_string(VALIDATOR_NODE)?;
     ledger_b.exp_string(VALIDATOR_NODE)?;
@@ -891,6 +888,7 @@ fn transfer_token(
     channel_id_a: &ChannelId,
 ) -> Result<()> {
     // Send a token from Chain A
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
     let receiver = find_address(test_b, BERTHA)?;
     let height = transfer(
         test_a,
@@ -956,6 +954,7 @@ fn try_invalid_transfers(
     port_id_a: &PortId,
     channel_id_a: &ChannelId,
 ) -> Result<()> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
     let receiver = find_address(test_b, BERTHA)?;
 
     // invalid amount
@@ -1017,6 +1016,7 @@ fn transfer_on_chain(
     amount: u64,
     signer: impl AsRef<str>,
 ) -> Result<()> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let rpc = get_actor_rpc(test, Who::Validator(0));
     let tx_args = [
         "transfer",
@@ -1050,11 +1050,11 @@ fn transfer_back(
     port_id_b: &PortId,
     channel_id_b: &ChannelId,
 ) -> Result<()> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
     let receiver = find_address(test_a, ALBERT)?;
 
     // Chain A was the source for the sent token
-    let org_nam_addr = find_address(test_a, NAM).unwrap();
-    let ibc_denom = format!("{port_id_b}/{channel_id_b}/{org_nam_addr}");
+    let ibc_denom = format!("{port_id_b}/{channel_id_b}/nam");
     // Send a token from Chain B
     let height = transfer(
         test_b,
@@ -1114,6 +1114,7 @@ fn transfer_timeout(
     port_id_a: &PortId,
     channel_id_a: &ChannelId,
 ) -> Result<()> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
     let receiver = find_address(test_b, BERTHA)?;
 
     // Send a token from Chain A
@@ -1169,6 +1170,8 @@ fn shielded_transfer(
     // Get masp proof for the following IBC transfer from the destination chain
     // It will send 10 BTC from Chain A to PA(B) on Chain B
     let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
+    // Chain B will receive Chain A's BTC
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
     let output_folder = test_b.test_dir.path().to_string_lossy();
     // PA(B) on Chain B will receive BTC on chain A
     let token_addr = find_address(test_a, BTC)?;
@@ -1190,6 +1193,7 @@ fn shielded_transfer(
         "--node",
         &rpc_b,
     ];
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
     let mut client = run!(test_b, Bin::Client, args, Some(120))?;
     let file_path = get_shielded_transfer_path(&mut client)?;
     client.assert_success();
@@ -1321,6 +1325,7 @@ fn submit_ibc_tx(
     signer: &str,
     wait_reveal_pk: bool,
 ) -> Result<u32> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let data_path = test.test_dir.path().join("tx.data");
     let data = make_ibc_data(message);
     std::fs::write(&data_path, data).expect("writing data failed");
@@ -1369,6 +1374,7 @@ fn transfer(
     expected_err: Option<&str>,
     wait_reveal_pk: bool,
 ) -> Result<u32> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let rpc = get_actor_rpc(test, Who::Validator(0));
 
     let channel_id = channel_id.to_string();
@@ -1565,6 +1571,7 @@ fn check_balances(
     test_b: &Test,
 ) -> Result<()> {
     // Check the balances on Chain A
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
     let rpc_a = get_actor_rpc(test_a, Who::Validator(0));
     // Check the escrowed balance
     let escrow = Address::Internal(InternalAddress::Ibc).to_string();
@@ -1583,8 +1590,8 @@ fn check_balances(
     client.assert_success();
 
     // Check the balance on Chain B
-    let org_nam_addr = find_address(test_a, NAM).unwrap();
-    let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/{org_nam_addr}");
+    let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/nam");
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
     let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
     let query_args = vec![
         "balance", "--owner", BERTHA, "--token", &ibc_denom, "--node", &rpc_b,
@@ -1600,13 +1607,11 @@ fn check_balances(
 fn check_balances_after_non_ibc(
     port_id: &PortId,
     channel_id: &ChannelId,
-    test_a: &Test,
     test_b: &Test,
 ) -> Result<()> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
     // Check the balance on Chain B
-    let org_nam_addr = find_address(test_a, NAM).unwrap();
-    let ibc_denom = format!("{port_id}/{channel_id}/{org_nam_addr}");
-
+    let ibc_denom = format!("{port_id}/{channel_id}/nam");
     // Check the source
     let rpc = get_actor_rpc(test_b, Who::Validator(0));
     let query_args = vec![
@@ -1637,6 +1642,7 @@ fn check_balances_after_back(
     test_b: &Test,
 ) -> Result<()> {
     // Check the balances on Chain A
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
     let rpc_a = get_actor_rpc(test_a, Who::Validator(0));
     // Check the escrowed balance
     let escrow = Address::Internal(InternalAddress::Ibc).to_string();
@@ -1655,8 +1661,8 @@ fn check_balances_after_back(
     client.assert_success();
 
     // Check the balance on Chain B
-    let org_nam_addr = find_address(test_a, NAM).unwrap();
-    let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/{org_nam_addr}");
+    let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/nam");
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
     let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
     let query_args = vec![
         "balance", "--owner", BERTHA, "--token", &ibc_denom, "--node", &rpc_b,
@@ -1675,12 +1681,13 @@ fn check_shielded_balances(
     test_a: &Test,
     test_b: &Test,
 ) -> Result<()> {
-    let org_btc_addr = find_address(test_a, BTC).unwrap().to_string();
-    let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/{org_btc_addr}");
     // Check the balance on Chain B
-    let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
     // PA(B) on Chain B has received BTC on chain A
     let token_addr = find_address(test_a, BTC)?.to_string();
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
+    let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
+    let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/btc");
     let query_args = vec![
         "balance",
         "--owner",
