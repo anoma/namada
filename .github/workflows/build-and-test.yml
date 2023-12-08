@@ -648,18 +648,11 @@ jobs:
           curl -o cometbft.tar.gz -LO https://github.com/cometbft/cometbft/releases/download/v${{ matrix.comet_bft }}/cometbft_${{ matrix.comet_bft }}_linux_amd64.tar.gz
           tar -xvzf cometbft.tar.gz
           mv cometbft /usr/local/bin
-      - name: Clone Hermes repo
-        uses: actions/checkout@v4
-        with:
-          repository: https://github.com/heliaxdev/hermes
-          ref: ${{ matrix.hermes }}
-          path: hermes
-      - name: Build Hermes
+      - name: Download Hermes
         run: |
-          cd hermes
-          sed -i 's|git = "https://github.com/anoma/namada"\ntag = .*|# git = "https://github.com/anoma/namada"\npath = "../../../sdk"|' crates/relayer/Cargo.toml
-          cargo build --bin hermes
-          cp target/debug/hermes /usr/local/bin
+          curl -o hermes.tar.gz -LO https://github.com/heliaxdev/hermes/releases/download/v${{ matrix.hermes }}/hermes-v${{ matrix.hermes }}-x86_64-unknown-linux-gnu.tar.gz
+          tar -xvzf hermes.tar.gz
+          mv hermes /usr/local/bin
       - name: Change permissions
         run: |
           chmod +x target/release/namada
