@@ -182,7 +182,6 @@ impl WriteLog {
         &self,
         key: &storage::Key,
     ) -> (Option<&StorageModification>, u64) {
-        // try to read from tx write log first
         match self.block_write_log.get(key) {
             Some(v) => {
                 let gas = match v {
