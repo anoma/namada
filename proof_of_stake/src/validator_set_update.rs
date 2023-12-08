@@ -631,6 +631,107 @@ where
     Ok(())
 }
 
+/// Remove a validator from the consensus validator set
+pub fn remove_consensus_validator<S>(
+    storage: &mut S,
+    params: &PosParams,
+    epoch: Epoch,
+    validator: &Address,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let stake = read_validator_stake(storage, params, validator, epoch)?;
+    let consensus_set = consensus_validator_set_handle().at(&epoch).at(&stake);
+    let val_position = validator_set_positions_handle()
+        .at(&epoch)
+        .get(storage, validator)?
+        .expect("Could not find validator's position in storage.");
+
+    // Removal
+    let removed = consensus_set.remove(storage, &val_position)?;
+    debug_assert_eq!(removed, Some(validator.clone()));
+
+    validator_set_positions_handle()
+        .at(&epoch)
+        .remove(storage, validator)?;
+
+    Ok(())
+}
+
+/// Remove a validator from the below-capacity set
+pub fn remove_below_capacity_validator<S>(
+    storage: &mut S,
+    params: &PosParams,
+    epoch: Epoch,
+    validator: &Address,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let stake = read_validator_stake(storage, params, validator, epoch)?;
+    let below_cap_set = below_capacity_validator_set_handle()
+        .at(&epoch)
+        .at(&stake.into());
+    let val_position = validator_set_positions_handle()
+        .at(&epoch)
+        .get(storage, validator)?
+        .expect("Could not find validator's position in storage.");
+
+    // Removal
+    let removed = below_cap_set.remove(storage, &val_position)?;
+    debug_assert_eq!(removed, Some(validator.clone()));
+
+    validator_set_positions_handle()
+        .at(&epoch)
+        .remove(storage, validator)?;
+
+    Ok(())
+}
+
+/// Promote the next below-capacity validator to the consensus validator set,
+/// determined as the validator in the below-capacity set with the largest stake
+/// and the lowest `Position`. Assumes that there is adequate space within the
+/// consensus set already.
+pub fn promote_next_below_capacity_validator_to_consensus<S>(
+    storage: &mut S,
+    epoch: Epoch,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let below_cap_set = below_capacity_validator_set_handle().at(&epoch);
+    let max_below_capacity_amount =
+        get_max_below_capacity_validator_amount(&below_cap_set, storage)?;
+
+    if let Some(max_below_capacity_amount) = max_below_capacity_amount {
+        let max_bc_vals = below_cap_set.at(&max_below_capacity_amount.into());
+        let position_to_promote = find_first_position(&max_bc_vals, storage)?
+            .expect("Should be at least one below-capacity validator");
+
+        let promoted_validator = max_bc_vals
+            .remove(storage, &position_to_promote)?
+            .expect("Should have returned a removed validator.");
+
+        insert_validator_into_set(
+            &consensus_validator_set_handle()
+                .at(&epoch)
+                .at(&max_below_capacity_amount),
+            storage,
+            &epoch,
+            &promoted_validator,
+        )?;
+        validator_state_handle(&promoted_validator).set(
+            storage,
+            ValidatorState::Consensus,
+            epoch,
+            0,
+        )?;
+    }
+
+    Ok(())
+}
+
 /// Communicate imminent validator set updates to Tendermint. This function is
 /// called two blocks before the start of a new epoch because Tendermint
 /// validator updates become active two blocks after the updates are submitted.
