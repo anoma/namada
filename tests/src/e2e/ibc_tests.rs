@@ -96,14 +96,14 @@ fn run_ledger_ibc() -> Result<()> {
     set_ethereum_bridge_mode(
         &test_a,
         &test_a.net.chain_id,
-        &Who::Validator(0),
+        Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
         None,
     );
     set_ethereum_bridge_mode(
         &test_b,
         &test_b.net.chain_id,
-        &Who::Validator(0),
+        Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
         None,
     );
@@ -265,7 +265,7 @@ fn setup_two_single_node_nets() -> Result<(Test, Test)> {
     .map_err(|_| eyre!("Could not read genesis files from test b"))?;
     // chain b's validator needs to listen on a different port than chain a's
     // validator
-    let validator_pk = get_validator_pk(&test_b, &Who::Validator(0)).unwrap();
+    let validator_pk = get_validator_pk(&test_b, Who::Validator(0)).unwrap();
     let validator_addr = genesis_b
         .transactions
         .established_account
@@ -349,7 +349,7 @@ fn create_client(test_a: &Test, test_b: &Test) -> Result<(ClientId, ClientId)> {
 }
 
 fn make_client_state(test: &Test, height: Height) -> TmClientState {
-    let rpc = get_actor_rpc(test, &Who::Validator(0));
+    let rpc = get_actor_rpc(test, Who::Validator(0));
     let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
     let client = HttpClient::new(ledger_address).unwrap();
 
@@ -473,12 +473,12 @@ fn update_client(
 }
 
 fn make_light_client_io(test: &Test) -> TmLightClientIo {
-    let addr = format!("http://{}", get_actor_rpc(test, &Who::Validator(0)));
+    let addr = format!("http://{}", get_actor_rpc(test, Who::Validator(0)));
     let rpc_addr = Url::from_str(&addr).unwrap();
     let rpc_client = HttpClient::new(rpc_addr).unwrap();
     let rpc_timeout = Duration::new(10, 0);
 
-    let pk = get_validator_pk(test, &Who::Validator(0)).unwrap();
+    let pk = get_validator_pk(test, Who::Validator(0)).unwrap();
     let peer_id = id_from_pk(&PublicKey::try_from_pk(&pk).unwrap());
 
     TmLightClientIo::new(peer_id, rpc_client, Some(rpc_timeout))
@@ -867,7 +867,7 @@ fn transfer_received_token(
     channel_id: &ChannelId,
     test: &Test,
 ) -> Result<()> {
-    let rpc = get_actor_rpc(test, &Who::Validator(0));
+    let rpc = get_actor_rpc(test, Who::Validator(0));
     let ibc_denom = format!("{port_id}/{channel_id}/nam");
     let amount = Amount::native_whole(50000).to_string_native();
     let tx_args = [
@@ -1022,7 +1022,7 @@ fn shielded_transfer(
 ) -> Result<()> {
     // Get masp proof for the following IBC transfer from the destination chain
     // It will send 10 BTC from Chain A to PA(B) on Chain B
-    let rpc_b = get_actor_rpc(test_b, &Who::Validator(0));
+    let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
     let output_folder = test_b.test_dir.path().to_string_lossy();
     let amount = Amount::native_whole(10).to_string_native();
     let args = [
@@ -1178,7 +1178,7 @@ fn submit_ibc_tx(
     std::fs::write(&data_path, data).expect("writing data failed");
 
     let data_path = data_path.to_string_lossy();
-    let rpc = get_actor_rpc(test, &Who::Validator(0));
+    let rpc = get_actor_rpc(test, Who::Validator(0));
     let mut client = run!(
         test,
         Bin::Client,
@@ -1221,7 +1221,7 @@ fn transfer(
     expected_err: Option<&str>,
     wait_reveal_pk: bool,
 ) -> Result<u32> {
-    let rpc = get_actor_rpc(test, &Who::Validator(0));
+    let rpc = get_actor_rpc(test, Who::Validator(0));
 
     let channel_id = channel_id.to_string();
     let port_id = port_id.to_string();
@@ -1311,7 +1311,7 @@ fn make_ibc_data(message: impl Msg) -> Vec<u8> {
 }
 
 fn query_height(test: &Test) -> Result<Height> {
-    let rpc = get_actor_rpc(test, &Who::Validator(0));
+    let rpc = get_actor_rpc(test, Who::Validator(0));
     let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
     let client = HttpClient::new(ledger_address).unwrap();
 
@@ -1324,7 +1324,7 @@ fn query_height(test: &Test) -> Result<Height> {
 }
 
 fn query_header(test: &Test, height: Height) -> Result<TmHeader> {
-    let rpc = get_actor_rpc(test, &Who::Validator(0));
+    let rpc = get_actor_rpc(test, Who::Validator(0));
     let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
     let client = HttpClient::new(ledger_address).unwrap();
     let height = height.revision_height() as u32;
@@ -1345,7 +1345,7 @@ fn check_ibc_update_query(
     client_id: &ClientId,
     consensus_height: BlockHeight,
 ) -> Result<()> {
-    let rpc = get_actor_rpc(test, &Who::Validator(0));
+    let rpc = get_actor_rpc(test, Who::Validator(0));
     let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
     let client = HttpClient::new(ledger_address).unwrap();
     match test.async_runtime().block_on(RPC.shell().ibc_client_update(
@@ -1364,7 +1364,7 @@ fn check_ibc_packet_query(
     event_type: &EventType,
     packet: &Packet,
 ) -> Result<()> {
-    let rpc = get_actor_rpc(test, &Who::Validator(0));
+    let rpc = get_actor_rpc(test, Who::Validator(0));
     let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
     let client = HttpClient::new(ledger_address).unwrap();
     match test.async_runtime().block_on(RPC.shell().ibc_packet(
@@ -1387,7 +1387,7 @@ fn query_value_with_proof(
     key: &Key,
     height: Option<Height>,
 ) -> Result<(Option<Vec<u8>>, TmProof)> {
-    let rpc = get_actor_rpc(test, &Who::Validator(0));
+    let rpc = get_actor_rpc(test, Who::Validator(0));
     let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
     let client = HttpClient::new(ledger_address).unwrap();
     let result = test.async_runtime().block_on(query_storage_value_bytes(
@@ -1425,7 +1425,7 @@ fn check_balances(
     test_b: &Test,
 ) -> Result<()> {
     // Check the balances on Chain A
-    let rpc_a = get_actor_rpc(test_a, &Who::Validator(0));
+    let rpc_a = get_actor_rpc(test_a, Who::Validator(0));
     // Check the escrowed balance
     let escrow = Address::Internal(InternalAddress::Ibc).to_string();
     let query_args = vec![
@@ -1444,7 +1444,7 @@ fn check_balances(
 
     // Check the balance on Chain B
     let trace_path = format!("{}/{}", &dest_port_id, &dest_channel_id);
-    let rpc_b = get_actor_rpc(test_b, &Who::Validator(0));
+    let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
     let query_args = vec![
         "balance", "--owner", BERTHA, "--token", NAM, "--node", &rpc_b,
     ];
@@ -1465,7 +1465,7 @@ fn check_balances_after_non_ibc(
     let trace_path = format!("{}/{}", port_id, channel_id);
 
     // Check the source
-    let rpc = get_actor_rpc(test, &Who::Validator(0));
+    let rpc = get_actor_rpc(test, Who::Validator(0));
     let query_args =
         vec!["balance", "--owner", BERTHA, "--token", NAM, "--node", &rpc];
     let expected = format!("{}/nam: 50000", trace_path);
@@ -1492,7 +1492,7 @@ fn check_balances_after_back(
     test_b: &Test,
 ) -> Result<()> {
     // Check the balances on Chain A
-    let rpc_a = get_actor_rpc(test_a, &Who::Validator(0));
+    let rpc_a = get_actor_rpc(test_a, Who::Validator(0));
     // Check the escrowed balance
     let escrow = Address::Internal(InternalAddress::Ibc).to_string();
     let query_args = vec![
@@ -1511,7 +1511,7 @@ fn check_balances_after_back(
 
     // Check the balance on Chain B
     let trace_path = format!("{}/{}", dest_port_id, dest_channel_id);
-    let rpc_b = get_actor_rpc(test_b, &Who::Validator(0));
+    let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
     let query_args = vec![
         "balance", "--owner", BERTHA, "--token", NAM, "--node", &rpc_b,
     ];
@@ -1529,7 +1529,7 @@ fn check_shielded_balances(
     test_b: &Test,
 ) -> Result<()> {
     // Check the balance on Chain B
-    let rpc_b = get_actor_rpc(test_b, &Who::Validator(0));
+    let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
     let query_args = vec![
         "balance",
         "--owner",
@@ -1640,7 +1640,7 @@ fn get_attributes_from_event(event: &AbciEvent) -> HashMap<String, String> {
 }
 
 fn get_events(test: &Test, height: u32) -> Result<Vec<AbciEvent>> {
-    let rpc = get_actor_rpc(test, &Who::Validator(0));
+    let rpc = get_actor_rpc(test, Who::Validator(0));
     let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
     let client = HttpClient::new(ledger_address).unwrap();
 

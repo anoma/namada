@@ -130,7 +130,7 @@ pub fn find_address(test: &Test, alias: impl AsRef<str>) -> Result<Address> {
 #[allow(dead_code)]
 pub fn find_balance(
     test: &Test,
-    node: &Who,
+    node: Who,
     token: &Address,
     owner: &Address,
 ) -> Result<token::Amount> {
@@ -162,7 +162,7 @@ pub fn find_balance(
 }
 
 /// Find the address of the node's RPC endpoint.
-pub fn get_actor_rpc(test: &Test, who: &Who) -> String {
+pub fn get_actor_rpc(test: &Test, who: Who) -> String {
     let base_dir = test.get_base_dir(who);
     let tendermint_mode = match who {
         Who::NonValidator => TendermintMode::Full,
@@ -176,7 +176,7 @@ pub fn get_actor_rpc(test: &Test, who: &Who) -> String {
 }
 
 /// Get some nodes's wallet.
-pub fn get_node_wallet(test: &Test, who: &Who) -> Wallet<FsWalletUtils> {
+pub fn get_node_wallet(test: &Test, who: Who) -> Wallet<FsWalletUtils> {
     let wallet_store_dir =
         test.get_base_dir(who).join(test.net.chain_id.as_str());
     let mut wallet = FsWalletUtils::new(wallet_store_dir);
@@ -185,7 +185,7 @@ pub fn get_node_wallet(test: &Test, who: &Who) -> Wallet<FsWalletUtils> {
 }
 
 /// Get the public key of the validator
-pub fn get_validator_pk(test: &Test, who: &Who) -> Option<common::PublicKey> {
+pub fn get_validator_pk(test: &Test, who: Who) -> Option<common::PublicKey> {
     let index = match who {
         Who::NonValidator => return None,
         Who::Validator(i) => i,

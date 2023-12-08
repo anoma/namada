@@ -62,8 +62,7 @@ fn start_namada_ledger_node(
         Some(idx) => Who::Validator(idx),
         _ => Who::NonValidator,
     };
-    let mut node =
-        run_as!(test, who.clone(), Bin::Node, &["ledger"], timeout_sec)?;
+    let mut node = run_as!(test, who, Bin::Node, &["ledger"], timeout_sec)?;
     node.exp_string("Namada ledger node started")?;
     if let Who::Validator(_) = who {
         node.exp_string("This node is a validator")?;
@@ -93,7 +92,7 @@ fn run_ledger() -> Result<()> {
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
-        &Who::Validator(0),
+        Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
         None,
     );
@@ -134,20 +133,20 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
         None,
     )?;
 
-    allow_duplicate_ips(&test, &test.net.chain_id, &Who::Validator(0));
-    allow_duplicate_ips(&test, &test.net.chain_id, &Who::Validator(1));
+    allow_duplicate_ips(&test, &test.net.chain_id, Who::Validator(0));
+    allow_duplicate_ips(&test, &test.net.chain_id, Who::Validator(1));
 
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
-        &Who::Validator(0),
+        Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
         None,
     );
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
-        &Who::Validator(1),
+        Who::Validator(1),
         ethereum_bridge::ledger::Mode::Off,
         None,
     );
@@ -163,7 +162,7 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
         start_namada_ledger_node_wait_wasm(&test, None, Some(40))?.background();
 
     // 2. Cross over epoch to check for consensus with multiple nodes
-    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
     let _ = epoch_sleep(&test, &validator_one_rpc, 720)?;
 
     // 3. Submit a valid token transfer tx
@@ -200,9 +199,9 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
     let _bg_validator_0 = validator_0.background();
     let _bg_validator_1 = validator_1.background();
 
-    let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
-    let validator_1_rpc = get_actor_rpc(&test, &Who::Validator(1));
-    let non_validator_rpc = get_actor_rpc(&test, &Who::NonValidator);
+    let validator_0_rpc = get_actor_rpc(&test, Who::Validator(0));
+    let validator_1_rpc = get_actor_rpc(&test, Who::Validator(1));
+    let non_validator_rpc = get_actor_rpc(&test, Who::NonValidator);
 
     // Find the block height on the validator
     let after_tx_height = get_height(&test, &validator_0_rpc)?;
@@ -237,7 +236,7 @@ fn test_namada_shuts_down_if_tendermint_dies() -> Result<()> {
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
-        &Who::Validator(0),
+        Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
         None,
     );
@@ -279,7 +278,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
-        &Who::Validator(0),
+        Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
         None,
     );
@@ -293,7 +292,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
     let bg_ledger = ledger.background();
     // Wait for a new epoch
-    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
     epoch_sleep(&test, &validator_one_rpc, 30)?;
 
     // 2. Shut it down
@@ -362,7 +361,7 @@ fn suspend_ledger() -> Result<()> {
     let bg_ledger = ledger.background();
 
     // 2. Query the ledger
-    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
     let mut client = run!(
         test,
         Bin::Client,
@@ -421,7 +420,7 @@ fn ledger_txs_and_queries() -> Result<()> {
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
-        &Who::Validator(0),
+        Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
         None,
     );
@@ -448,7 +447,7 @@ fn ledger_txs_and_queries() -> Result<()> {
     std::fs::write(&tx_data_path, transfer).unwrap();
     let tx_data_path = tx_data_path.to_string_lossy();
 
-    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
 
     let multisig_account =
         format!("{},{},{}", BERTHA_KEY, ALBERT_KEY, CHRISTEL_KEY);
@@ -711,7 +710,7 @@ fn wrapper_disposable_signer() -> Result<()> {
         start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
             .background();
 
-    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
 
     let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
 
@@ -795,7 +794,7 @@ fn invalid_transactions() -> Result<()> {
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
-        &Who::Validator(0),
+        Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
         None,
     );
@@ -807,7 +806,7 @@ fn invalid_transactions() -> Result<()> {
 
     // 2. Submit a an invalid transaction (trying to transfer tokens should fail
     // in the user's VP due to the wrong signer)
-    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
 
     let tx_args = vec![
         "transfer",
@@ -936,12 +935,12 @@ fn pos_bonds() -> Result<()> {
         },
         None,
     )?;
-    allow_duplicate_ips(&test, &test.net.chain_id, &Who::Validator(0));
-    allow_duplicate_ips(&test, &test.net.chain_id, &Who::Validator(1));
+    allow_duplicate_ips(&test, &test.net.chain_id, Who::Validator(0));
+    allow_duplicate_ips(&test, &test.net.chain_id, Who::Validator(1));
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
-        &Who::Validator(0),
+        Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
         None,
     );
@@ -951,7 +950,7 @@ fn pos_bonds() -> Result<()> {
         start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
             .background();
 
-    let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let validator_0_rpc = get_actor_rpc(&test, Who::Validator(0));
 
     // 2. Submit a self-bond for the first genesis validator
     let tx_args = vec![
@@ -1170,7 +1169,7 @@ fn pos_rewards() -> Result<()> {
         set_ethereum_bridge_mode(
             &test,
             &test.net.chain_id,
-            &Who::Validator(i),
+            Who::Validator(i),
             ethereum_bridge::ledger::Mode::Off,
             None,
         );
@@ -1181,7 +1180,7 @@ fn pos_rewards() -> Result<()> {
         start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
             .background();
 
-    let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let validator_0_rpc = get_actor_rpc(&test, Who::Validator(0));
 
     // Query the current rewards for the validator self-bond
     let tx_args = vec![
@@ -1344,7 +1343,7 @@ fn test_bond_queries() -> Result<()> {
         start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
             .background();
 
-    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
     let validator_alias = "validator-0";
 
     // 2. Submit a delegation to the genesis validator
@@ -1524,7 +1523,7 @@ fn pos_init_validator() -> Result<()> {
     non_validator.exp_string("Committed block hash")?;
     let bg_non_validator = non_validator.background();
 
-    let non_validator_rpc = get_actor_rpc(&test, &Who::NonValidator);
+    let non_validator_rpc = get_actor_rpc(&test, Who::NonValidator);
 
     // 2. Initialize a new validator account with the non-validator node
     let new_validator = "new-validator";
@@ -1639,7 +1638,7 @@ fn pos_init_validator() -> Result<()> {
     }
 
     let loc = format!("{}:{}", std::file!(), std::line!());
-    let validator_1_base_dir = test.get_base_dir(&Who::NonValidator);
+    let validator_1_base_dir = test.get_base_dir(Who::NonValidator);
     let mut validator_1 = setup::run_cmd(
         Bin::Node,
         ["ledger"],
@@ -1703,7 +1702,7 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
-        &Who::Validator(0),
+        Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
         None,
     );
@@ -1713,7 +1712,7 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
         start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
             .background();
 
-    let validator_one_rpc = Arc::new(get_actor_rpc(&test, &Who::Validator(0)));
+    let validator_one_rpc = Arc::new(get_actor_rpc(&test, Who::Validator(0)));
 
     // A token transfer tx args
     let tx_args = Arc::new(vec![
@@ -1789,7 +1788,7 @@ fn proposal_submission() -> Result<()> {
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
-        &Who::Validator(0),
+        Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
         None,
     );
@@ -1805,7 +1804,7 @@ fn proposal_submission() -> Result<()> {
         start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
             .background();
 
-    let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let validator_0_rpc = get_actor_rpc(&test, Who::Validator(0));
 
     // 1.1 Delegate some token
     let tx_args = vec![
@@ -1831,7 +1830,7 @@ fn proposal_submission() -> Result<()> {
         TestWasms::TxProposalCode.read_bytes(),
         12,
     );
-    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
 
     let submit_proposal_args = vec![
         "init-proposal",
@@ -2114,7 +2113,7 @@ fn pgf_governance_proposal() -> Result<()> {
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
-        &Who::Validator(0),
+        Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
         None,
     );
@@ -2130,7 +2129,7 @@ fn pgf_governance_proposal() -> Result<()> {
         start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
             .background();
 
-    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
 
     // Delegate some token
     let tx_args = vec![
@@ -2158,7 +2157,7 @@ fn pgf_governance_proposal() -> Result<()> {
 
     let valid_proposal_json_path =
         prepare_proposal_data(&test, albert, pgf_stewards, 12);
-    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
 
     let submit_proposal_args = vec![
         "init-proposal",
@@ -2350,7 +2349,7 @@ fn pgf_governance_proposal() -> Result<()> {
 
     let valid_proposal_json_path =
         prepare_proposal_data(&test, albert, pgf_funding, 36);
-    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
 
     let submit_proposal_args = vec![
         "init-proposal",
@@ -2428,7 +2427,7 @@ fn proposal_offline() -> Result<()> {
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
-        &Who::Validator(0),
+        Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
         None,
     );
@@ -2438,7 +2437,7 @@ fn proposal_offline() -> Result<()> {
         start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
             .background();
 
-    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
 
     // 1.1 Delegate some token
     let tx_args = vec![
@@ -2489,7 +2488,7 @@ fn proposal_offline() -> Result<()> {
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
 
-    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
 
     let offline_proposal_args = vec![
         "init-proposal",
@@ -2608,20 +2607,20 @@ fn double_signing_gets_slashed() -> Result<()> {
         None,
     )?;
 
-    allow_duplicate_ips(&test, &test.net.chain_id, &Who::Validator(0));
-    allow_duplicate_ips(&test, &test.net.chain_id, &Who::Validator(1));
+    allow_duplicate_ips(&test, &test.net.chain_id, Who::Validator(0));
+    allow_duplicate_ips(&test, &test.net.chain_id, Who::Validator(1));
 
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
-        &Who::Validator(0),
+        Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
         None,
     );
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
-        &Who::Validator(1),
+        Who::Validator(1),
         ethereum_bridge::ledger::Mode::Off,
         None,
     );
@@ -2648,7 +2647,7 @@ fn double_signing_gets_slashed() -> Result<()> {
     let _bg_validator_3 = validator_3.background();
 
     // 2. Copy the first genesis validator base-dir
-    let validator_0_base_dir = test.get_base_dir(&Who::Validator(0));
+    let validator_0_base_dir = test.get_base_dir(Who::Validator(0));
     let validator_0_base_dir_copy = test
         .test_dir
         .path()
@@ -2740,7 +2739,7 @@ fn double_signing_gets_slashed() -> Result<()> {
     let _bg_validator_0_copy = validator_0_copy.background();
 
     // 5. Submit a valid token transfer tx to validator 0
-    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
     let tx_args = [
         "transfer",
         "--source",
@@ -2900,7 +2899,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
             .background();
 
     // 2. Some transactions that need signature authorization:
-    let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let validator_0_rpc = get_actor_rpc(&test, Who::Validator(0));
     let txs_args: Vec<Box<dyn Fn(&str) -> Vec<String>>> = vec![
         // A token transfer tx
         Box::new(|source| {
@@ -3039,7 +3038,7 @@ fn test_epoch_sleep() -> Result<()> {
 
     let _bg_ledger = ledger.background();
 
-    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
 
     // 2. Query the current epoch
     let start_epoch = get_epoch(&test, &validator_one_rpc).unwrap();
@@ -3129,12 +3128,12 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
         },
         None,
     )?;
-    allow_duplicate_ips(&test, &test.net.chain_id, &Who::Validator(0));
-    allow_duplicate_ips(&test, &test.net.chain_id, &Who::Validator(1));
+    allow_duplicate_ips(&test, &test.net.chain_id, Who::Validator(0));
+    allow_duplicate_ips(&test, &test.net.chain_id, Who::Validator(1));
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
-        &Who::Validator(0),
+        Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
         None,
     );
@@ -3148,7 +3147,7 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
         start_namada_ledger_node_wait_wasm(&test, Some(1), Some(40))?
             .background();
 
-    let validator_1_rpc = get_actor_rpc(&test, &Who::Validator(1));
+    let validator_1_rpc = get_actor_rpc(&test, Who::Validator(1));
 
     // Check the state of validator-1
     let tx_args = vec![
@@ -3261,7 +3260,7 @@ fn change_validator_metadata() -> Result<()> {
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
-        &Who::Validator(0),
+        Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
         None,
     );
@@ -3271,7 +3270,7 @@ fn change_validator_metadata() -> Result<()> {
         start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
             .background();
 
-    let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let validator_0_rpc = get_actor_rpc(&test, Who::Validator(0));
 
     // 2. Query the validator metadata loaded from genesis
     let metadata_query_args = vec![
@@ -3399,7 +3398,7 @@ fn test_invalid_validator_txs() -> Result<()> {
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
-        &Who::Validator(0),
+        Who::Validator(0),
         ethereum_bridge::ledger::Mode::Off,
         None,
     );
@@ -3413,8 +3412,8 @@ fn test_invalid_validator_txs() -> Result<()> {
         start_namada_ledger_node_wait_wasm(&test, Some(1), Some(40))?
             .background();
 
-    let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
-    let validator_1_rpc = get_actor_rpc(&test, &Who::Validator(1));
+    let validator_0_rpc = get_actor_rpc(&test, Who::Validator(0));
+    let validator_1_rpc = get_actor_rpc(&test, Who::Validator(1));
 
     // Try to change validator-1 commission rate as validator-0
     let tx_args = vec![
@@ -3560,7 +3559,7 @@ fn change_consensus_key() -> Result<()> {
         set_ethereum_bridge_mode(
             &test,
             &test.net.chain_id,
-            &Who::Validator(i),
+            Who::Validator(i),
             ethereum_bridge::ledger::Mode::Off,
             None,
         );
@@ -3577,7 +3576,7 @@ fn change_consensus_key() -> Result<()> {
         start_namada_ledger_node_wait_wasm(&test, Some(1), Some(40))?
             .background();
 
-    let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let validator_0_rpc = get_actor_rpc(&test, Who::Validator(0));
 
     // =========================================================================
     // 2. Change consensus key of validator-0
@@ -3615,7 +3614,7 @@ fn change_consensus_key() -> Result<()> {
         "{}",
         "Setting up the new validator consensus key in CometBFT...".blue()
     );
-    let chain_dir = test.get_chain_dir(&Who::Validator(0));
+    let chain_dir = test.get_chain_dir(Who::Validator(0));
     let mut wallet = namada_apps::wallet::load(&chain_dir).unwrap();
 
     // =========================================================================
@@ -3625,7 +3624,7 @@ fn change_consensus_key() -> Result<()> {
     let new_key_alias = "validator-0-consensus-key-1";
     let new_sk = wallet.find_secret_key(new_key_alias, None).unwrap();
     // Write the key to CometBFT dir
-    let cometbft_dir = test.get_cometbft_home(&Who::Validator(0));
+    let cometbft_dir = test.get_cometbft_home(Who::Validator(0));
     namada_apps::node::ledger::tendermint_node::write_validator_key(
         cometbft_dir,
         &new_sk,
