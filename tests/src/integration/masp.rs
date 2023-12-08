@@ -1163,9 +1163,6 @@ fn wrapper_fee_unshielding() -> Result<()> {
     let validator_one_rpc = "127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
-    // Lengthen epoch to ensure that a transaction can be constructed and
-    // submitted within the same block. Necessary to ensure that conversion is
-    // not invalidated.
     let (mut node, _services) = setup::setup()?;
     _ = node.next_epoch();
 
@@ -1246,5 +1243,92 @@ fn wrapper_fee_unshielding() -> Result<()> {
     .is_err();
 
     assert!(tx_run);
+    Ok(())
+}
+
+// Test that a masp unshield transaction can be succesfully executed even across
+// an epoch boundary.
+#[test]
+fn cross_epoch_tx() -> Result<()> {
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "127.0.0.1:26567";
+    // Download the shielded pool parameters before starting node
+    let _ = FsShieldedUtils::new(PathBuf::new());
+    let (mut node, _services) = setup::setup()?;
+    _ = node.next_epoch();
+
+    // 1. Shield some tokens
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            ALBERT,
+            "--target",
+            AA_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "1000",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+
+    // 2. Generate the tx in the current epoch
+    let tempdir = tempfile::tempdir().unwrap();
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            A_SPENDING_KEY,
+            "--target",
+            BERTHA,
+            "--token",
+            NAM,
+            "--amount",
+            "100",
+            "--gas-payer",
+            ALBERT_KEY,
+            "--output-folder-path",
+            tempdir.path().to_str().unwrap(),
+            "--dump-tx",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+
+    // Look for the only file in the temp dir
+    let tx_path = tempdir
+        .path()
+        .read_dir()
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+
+    // 3. Submit the unshielding in the following epoch
+    _ = node.next_epoch();
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "tx",
+            "--owner",
+            ALBERT_KEY,
+            "--tx-path",
+            tx_path.to_str().unwrap(),
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+
     Ok(())
 }

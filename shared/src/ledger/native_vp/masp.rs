@@ -45,7 +45,7 @@ where
     pub ctx: Ctx<'a, DB, H, CA>,
 }
 
-/// Generates the current asset type given the current epoch and an
+/// Generates the current asset type given the provided epoch and an
 /// unique token address
 fn asset_type_from_epoched_address(
     epoch: Epoch,
@@ -56,23 +56,6 @@ fn asset_type_from_epoched_address(
     let token_bytes = (token, denom, epoch.0).serialize_to_vec();
     // Generate the unique asset identifier from the unique token address
     AssetType::new(token_bytes.as_ref()).expect("unable to create asset type")
-}
-
-/// Checks if the asset type matches the expected asset type, Adds a
-/// debug log if the values do not match.
-fn valid_asset_type(
-    asset_type: &AssetType,
-    asset_type_to_test: &AssetType,
-) -> bool {
-    let res =
-        asset_type.get_identifier() == asset_type_to_test.get_identifier();
-    if !res {
-        tracing::debug!(
-            "The asset type must be derived from the token address and \
-             current epoch"
-        );
-    }
-    res
 }
 
 /// Checks if the reported transparent amount and the unshielded
@@ -99,13 +82,12 @@ fn convert_amount(
     token: &Address,
     val: token::Amount,
     denom: token::MaspDenom,
-) -> (AssetType, I128Sum) {
+) -> I128Sum {
     let asset_type = asset_type_from_epoched_address(epoch, token, denom);
     // Combine the value and unit into one amount
-    let amount =
-        I128Sum::from_nonnegative(asset_type, denom.denominate(&val) as i128)
-            .expect("invalid value or asset type for amount");
-    (asset_type, amount)
+
+    I128Sum::from_nonnegative(asset_type, denom.denominate(&val) as i128)
+        .expect("invalid value or asset type for amount")
 }
 
 impl<'a, DB, H, CA> NativeVp for MaspVp<'a, DB, H, CA>
@@ -134,7 +116,7 @@ where
             // where the shielded value has an incorrect timestamp
             // are automatically rejected
             for denom in token::MaspDenom::iter() {
-                let (_transp_asset, transp_amt) = convert_amount(
+                let transp_amt = convert_amount(
                     epoch,
                     &transfer.token,
                     transfer.amount.into(),
@@ -196,20 +178,23 @@ where
                     None => continue,
                 };
 
-                let expected_asset_type: AssetType =
-                    asset_type_from_epoched_address(
-                        epoch,
-                        &transfer.token,
-                        denom,
-                    );
-
                 // Satisfies 2. and 3.
-                if !valid_asset_type(&expected_asset_type, &out.asset_type) {
-                    // we don't know which masp denoms are necessary
-                    // apriori. This is encoded via
-                    // the asset types.
-                    continue;
-                }
+                let conversion_state = self.ctx.storage.get_conversion_state();
+                let asset_epoch =
+                    match conversion_state.assets.get(&out.asset_type) {
+                        Some(((address, _), asset_epoch, _, _))
+                            if address == &transfer.token =>
+                        {
+                            asset_epoch
+                        }
+                        _ => {
+                            // we don't know which masp denoms are necessary
+                            // apriori. This is encoded via
+                            // the asset types.
+                            continue;
+                        }
+                    };
+
                 if !valid_transfer_amount(
                     out.value,
                     denom.denominate(&transfer.amount.amount),
@@ -217,8 +202,8 @@ where
                     return Ok(false);
                 }
 
-                let (_transp_asset, transp_amt) = convert_amount(
-                    epoch,
+                let transp_amt = convert_amount(
+                    *asset_epoch,
                     &transfer.token,
                     transfer.amount.amount,
                     denom,
@@ -285,6 +270,7 @@ where
             }
             _ => {}
         }
+
         // Verify the proofs and charge the gas for the expensive execution
         self.ctx
             .charge_gas(MASP_VERIFY_SHIELDED_TX_GAS)
