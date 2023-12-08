@@ -324,8 +324,8 @@ pub struct DenominatedAmount {
 }
 
 impl DenominatedAmount {
-    /// Make a new denominated amount
-    pub fn new(amount: Amount, denom: Denomination) -> Self {
+    /// Make a new denominated amount representing amount*10^(-denom)
+    pub const fn new(amount: Amount, denom: Denomination) -> Self {
         Self { amount, denom }
     }
 
@@ -418,9 +418,8 @@ impl DenominatedAmount {
                 "No denomination found in storage for the given token",
             )
         })?;
-        self.increase_precision(denom)
+        self.scale(denom)
             .map_err(storage_api::Error::new)
-            .map(|x| x.amount)
     }
 
     /// Multiply this number by 10^denom and return the computed integer if
@@ -471,12 +470,12 @@ impl DenominatedAmount {
     }
 
     /// Returns the significand of this number
-    pub fn amount(&self) -> Amount {
+    pub const fn amount(&self) -> Amount {
         self.amount
     }
 
     /// Returns the denomination of this number
-    pub fn denom(&self) -> Denomination {
+    pub const fn denom(&self) -> Denomination {
         self.denom
     }
 }
@@ -1479,6 +1478,23 @@ mod tests {
         assert_eq!(one.mul_ceil(dec), one);
         assert_eq!(two.mul_ceil(dec), one);
         assert_eq!(three.mul_ceil(dec), two);
+    }
+
+    #[test]
+    fn test_denominateed_arithmetic() {
+        let a = DenominatedAmount::new(10.into(), 3.into());
+        let b = DenominatedAmount::new(10.into(), 2.into());
+        let c = DenominatedAmount::new(110.into(), 3.into());
+        let d = DenominatedAmount::new(90.into(), 3.into());
+        let e = DenominatedAmount::new(100.into(), 5.into());
+        let f = DenominatedAmount::new(100.into(), 3.into());
+        let g = DenominatedAmount::new(0.into(), 3.into());
+        assert_eq!(a.checked_add(b).unwrap(), c);
+        assert_eq!(b.checked_sub(a).unwrap(), d);
+        assert_eq!(a.checked_mul(b).unwrap(), e);
+        assert!(a.checked_sub(b).is_none());
+        assert_eq!(c.checked_sub(a).unwrap(), f);
+        assert_eq!(c.checked_sub(c).unwrap(), g);
     }
 
     #[test]
