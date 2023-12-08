@@ -603,6 +603,9 @@ where
         }))
 }
 
+/// Inserts a validator into the provided `handle` within some validator set at
+/// the next position. Also updates the validator set position for the
+/// validator.
 pub fn insert_validator_into_set<S>(
     handle: &ValidatorPositionAddresses,
     storage: &mut S,

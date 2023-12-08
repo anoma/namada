@@ -9,7 +9,7 @@ use namada_core::types::dec::Dec;
 use namada_core::types::key::testing::{
     arb_common_keypair, common_sk_from_simple_seed,
 };
-use namada_core::types::key::{self, common, RefTo, SecretKey};
+use namada_core::types::key::{self, common, RefTo};
 use namada_core::types::storage::Epoch;
 use namada_core::types::token;
 use proptest::prelude::*;
@@ -619,7 +619,7 @@ fn test_validator_sets() {
     // val1 will go below 1 NAM, which is the validator_stake_threshold, so it
     // will enter the below-threshold validator set.
     let unbond = token::Amount::from_uint(500_000, 0).unwrap();
-    let stake1 = stake1 - unbond;
+    // let stake1 = stake1 - unbond;
 
     // Because `update_validator_set` and `update_validator_deltas` are
     // effective from pipeline offset, we use pipeline epoch for the rest of the

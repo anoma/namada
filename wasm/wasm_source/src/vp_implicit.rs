@@ -32,7 +32,7 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
             Self::Pk(address)
         } else if let Some([_, owner]) = token::is_any_token_balance_key(key) {
             Self::Token { owner }
-        } else if proof_of_stake::storage::is_pos_key(key) {
+        } else if proof_of_stake::storage_key::is_pos_key(key) {
             Self::PoS
         } else if gov_storage::keys::is_vote_key(key) {
             let voter_address = gov_storage::keys::get_voter_address(key);
@@ -132,10 +132,10 @@ fn validate_tx(
             }
             KeyType::PoS => {
                 // Allow the account to be used in PoS
-                let bond_id = proof_of_stake::storage::is_bond_key(key)
+                let bond_id = proof_of_stake::storage_key::is_bond_key(key)
                     .map(|(bond_id, _)| bond_id)
                     .or_else(|| {
-                        proof_of_stake::storage::is_unbond_key(key)
+                        proof_of_stake::storage_key::is_unbond_key(key)
                             .map(|(bond_id, _, _)| bond_id)
                     });
                 let valid = match bond_id {

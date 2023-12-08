@@ -467,6 +467,10 @@ where
     Ok(())
 }
 
+/// Computes how many tokens will be slashed from a redelegated bond,
+/// considering that the bond may have been completely or partially unbonded and
+/// that the source validator may have misbehaved within the redelegation
+/// slashing window.
 #[allow(clippy::too_many_arguments)]
 pub fn slash_redelegation<S>(
     storage: &S,
@@ -1004,6 +1008,8 @@ pub fn get_slashed_amount(
     Ok(final_amount)
 }
 
+/// Compute the total amount of tokens from a set of unbonds, both redelegated
+/// and not, after applying slashes. Used in `unbond_tokens`.
 // `def computeAmountAfterSlashingUnbond`
 pub fn compute_amount_after_slashing_unbond<S>(
     storage: &S,
@@ -1057,8 +1063,8 @@ where
     Ok(result_slashing)
 }
 
-/// Compute from a set of unbonds (both redelegated and not) how much is left
-/// after applying all relevant slashes.
+/// Compute the total amount of tokens from a set of unbonds, both redelegated
+/// and not, after applying slashes. Used in `withdraw_tokens`.
 // `def computeAmountAfterSlashingWithdraw`
 pub fn compute_amount_after_slashing_withdraw<S>(
     storage: &S,

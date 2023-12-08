@@ -14,6 +14,11 @@
 use namada_vp_prelude::storage::KeySeg;
 use namada_vp_prelude::*;
 use once_cell::unsync::Lazy;
+use proof_of_stake::storage::{read_pos_params, validator_state_handle};
+use proof_of_stake::storage_key::{
+    is_bond_key, is_pos_key, is_unbond_key, is_validator_commission_rate_key,
+    is_validator_metadata_key, is_validator_state_key,
+};
 use proof_of_stake::types::ValidatorState;
 
 enum KeyType<'a> {
@@ -30,7 +35,7 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
     fn from(key: &'a storage::Key) -> KeyType<'a> {
         if let Some([_, owner]) = token::is_any_token_balance_key(key) {
             Self::Token { owner }
-        } else if proof_of_stake::storage::is_pos_key(key) {
+        } else if is_pos_key(key) {
             Self::PoS
         } else if gov_storage::keys::is_vote_key(key) {
             let voter_address = gov_storage::keys::get_voter_address(key);
@@ -109,12 +114,10 @@ fn validate_tx(
             }
             KeyType::PoS => {
                 // Bond or unbond
-                let bond_id = proof_of_stake::storage::is_bond_key(key)
-                    .map(|(bond_id, _)| bond_id)
-                    .or_else(|| {
-                        proof_of_stake::storage::is_unbond_key(key)
-                            .map(|(bond_id, _, _)| bond_id)
-                    });
+                let bond_id =
+                    is_bond_key(key).map(|(bond_id, _)| bond_id).or_else(
+                        || is_unbond_key(key).map(|(bond_id, _, _)| bond_id),
+                    );
                 let valid_bond_or_unbond_change = match bond_id {
                     Some(bond_id) => {
                         // Bonds and unbonds changes for this address
@@ -127,10 +130,7 @@ fn validate_tx(
                     }
                 };
                 // Commission rate changes must be signed by the validator
-                let comm =
-                    proof_of_stake::storage::is_validator_commission_rate_key(
-                        key,
-                    );
+                let comm = is_validator_commission_rate_key(key);
                 let valid_commission_rate_change = match comm {
                     Some((validator, _epoch)) => {
                         *validator == addr && *valid_sig
@@ -139,8 +139,7 @@ fn validate_tx(
                 };
                 // Metadata changes must be signed by the validator whose
                 // metadata is manipulated
-                let metadata =
-                    proof_of_stake::storage::is_validator_metadata_key(key);
+                let metadata = is_validator_metadata_key(key);
                 let valid_metadata_change = match metadata {
                     Some(address) => *address == addr && *valid_sig,
                     None => true,
@@ -148,27 +147,23 @@ fn validate_tx(
 
                 // Changes due to unjailing, deactivating, and reactivating are
                 // marked by changes in validator state
-                let state_change =
-                    proof_of_stake::storage::is_validator_state_key(key);
-                let valid_state_change = match state_change {
-                    Some((address, epoch)) => {
-                        let params_pre =
-                            proof_of_stake::read_pos_params(&ctx.pre())?;
-                        let state_pre =
-                            proof_of_stake::validator_state_handle(address)
+                let state_change = is_validator_state_key(key);
+                let valid_state_change =
+                    match state_change {
+                        Some((address, epoch)) => {
+                            let params_pre = read_pos_params(&ctx.pre())?;
+                            let state_pre = validator_state_handle(address)
                                 .get(&ctx.pre(), epoch, &params_pre)?;
 
-                        let params_post =
-                            proof_of_stake::read_pos_params(&ctx.post())?;
-                        let state_post =
-                            proof_of_stake::validator_state_handle(address)
+                            let params_post = read_pos_params(&ctx.post())?;
+                            let state_post = validator_state_handle(address)
                                 .get(&ctx.post(), epoch, &params_post)?;
 
-                        match (state_pre, state_post) {
-                            (Some(pre), Some(post)) => {
-                                if
-                                // Deactivation case
-                                (matches!(
+                            match (state_pre, state_post) {
+                                (Some(pre), Some(post)) => {
+                                    if
+                                    // Deactivation case
+                                    (matches!(
                                     pre,
                                     ValidatorState::Consensus
                                         | ValidatorState::BelowCapacity
@@ -184,22 +179,21 @@ fn validate_tx(
                                         ValidatorState::Consensus
                                             | ValidatorState::BelowCapacity
                                             | ValidatorState::BelowThreshold
-                                    )
-                                {
-                                    *address == addr && *valid_sig
-                                } else {
-                                    true
+                                    ) {
+                                        *address == addr && *valid_sig
+                                    } else {
+                                        true
+                                    }
                                 }
+                                (None, Some(_post)) => {
+                                    // Becoming a validator must be authorized
+                                    *valid_sig
+                                }
+                                _ => true,
                             }
-                            (None, Some(_post)) => {
-                                // Becoming a validator must be authorized
-                                *valid_sig
-                            }
-                            _ => true,
                         }
-                    }
-                    None => true,
-                };
+                        None => true,
+                    };
 
                 valid_bond_or_unbond_change
                     && valid_commission_rate_change
