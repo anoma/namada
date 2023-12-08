@@ -86,7 +86,7 @@ pub fn default_port_offset(ix: u8) -> u16 {
 pub fn update_actor_config<F>(
     test: &Test,
     chain_id: &ChainId,
-    who: &Who,
+    who: Who,
     update: F,
 ) where
     F: FnOnce(&mut Config),
@@ -101,7 +101,7 @@ pub fn update_actor_config<F>(
 }
 
 /// Configure validator p2p settings to allow duplicat ips
-pub fn allow_duplicate_ips(test: &Test, chain_id: &ChainId, who: &Who) {
+pub fn allow_duplicate_ips(test: &Test, chain_id: &ChainId, who: Who) {
     update_actor_config(test, chain_id, who, |config| {
         config.ledger.cometbft.p2p.allow_duplicate_ip = true;
     });
@@ -112,7 +112,7 @@ pub fn allow_duplicate_ips(test: &Test, chain_id: &ChainId, who: &Who) {
 pub fn set_ethereum_bridge_mode(
     test: &Test,
     chain_id: &ChainId,
-    who: &Who,
+    who: Who,
     mode: ethereum_bridge::ledger::Mode,
     rpc_endpoint: Option<&str>,
 ) {
@@ -710,7 +710,7 @@ mod macros {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy, Debug)]
 pub enum Who {
     // A non-validator
     NonValidator,
@@ -757,11 +757,11 @@ impl Test {
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
-        let base_dir = self.get_base_dir(&who);
+        let base_dir = self.get_base_dir(who);
         run_cmd(bin, args, timeout_sec, &self.working_dir, base_dir, loc)
     }
 
-    pub fn get_base_dir(&self, who: &Who) -> PathBuf {
+    pub fn get_base_dir(&self, who: Who) -> PathBuf {
         match who {
             Who::NonValidator => self.test_dir.path().to_owned(),
             Who::Validator(index) => self
@@ -772,11 +772,11 @@ impl Test {
         }
     }
 
-    pub fn get_chain_dir(&self, who: &Who) -> PathBuf {
+    pub fn get_chain_dir(&self, who: Who) -> PathBuf {
         self.get_base_dir(who).join(self.net.chain_id.as_str())
     }
 
-    pub fn get_cometbft_home(&self, who: &Who) -> PathBuf {
+    pub fn get_cometbft_home(&self, who: Who) -> PathBuf {
         self.get_chain_dir(who)
             .join(namada_apps::config::COMETBFT_DIR)
     }

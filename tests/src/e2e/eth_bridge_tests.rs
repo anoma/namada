@@ -70,7 +70,7 @@ fn run_ledger_with_ethereum_events_endpoint() -> Result<()> {
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
-        &Who::Validator(0),
+        Who::Validator(0),
         ethereum_bridge::ledger::Mode::SelfHostedEndpoint,
         Some(DEFAULT_ETHEREUM_EVENTS_LISTEN_ADDR),
     );
@@ -318,7 +318,7 @@ async fn test_bridge_pool_e2e() {
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
-        &Who::Validator(0),
+        Who::Validator(0),
         ethereum_bridge::ledger::Mode::SelfHostedEndpoint,
         Some(DEFAULT_ETHEREUM_EVENTS_LISTEN_ADDR),
     );
@@ -533,7 +533,7 @@ async fn test_wnam_transfer() -> Result<()> {
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
-        &Who::Validator(0),
+        Who::Validator(0),
         ethereum_bridge::ledger::Mode::SelfHostedEndpoint,
         Some(DEFAULT_ETHEREUM_EVENTS_LISTEN_ADDR),
     );
@@ -568,7 +568,7 @@ async fn test_wnam_transfer() -> Result<()> {
     // check NAM balance of receiver and bridge
     let receiver_balance = find_balance(
         &test,
-        &Who::Validator(0),
+        Who::Validator(0),
         &native_token_address,
         &wnam_transfer.receiver,
     )?;
@@ -576,7 +576,7 @@ async fn test_wnam_transfer() -> Result<()> {
 
     let bridge_balance = find_balance(
         &test,
-        &Who::Validator(0),
+        Who::Validator(0),
         &native_token_address,
         &BRIDGE_ADDRESS,
     )?;
@@ -629,7 +629,7 @@ fn test_configure_oracle_from_storage() -> Result<()> {
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
-        &Who::Validator(0),
+        Who::Validator(0),
         ethereum_bridge::ledger::Mode::RemoteEndpoint,
         None,
     );
@@ -676,7 +676,7 @@ async fn test_dai_transfer_implicit() -> Result<()> {
 
     let albert_wdai_balance = find_wrapped_erc20_balance(
         &test,
-        &Who::Validator(0),
+        Who::Validator(0),
         &DAI_ERC20_ETH_ADDRESS,
         &albert_addr,
     )?;
@@ -692,7 +692,7 @@ async fn test_dai_transfer_established() -> Result<()> {
 
     // create an established account that Albert controls
     let established_alias = "albert-established";
-    let rpc_address = get_actor_rpc(&test, &Who::Validator(0));
+    let rpc_address = get_actor_rpc(&test, Who::Validator(0));
     init_established_account(
         &test,
         &rpc_address,
@@ -715,7 +715,7 @@ async fn test_dai_transfer_established() -> Result<()> {
 
     let established_wdai_balance = find_wrapped_erc20_balance(
         &test,
-        &Who::Validator(0),
+        Who::Validator(0),
         &DAI_ERC20_ETH_ADDRESS,
         &established_addr,
     )?;
@@ -745,7 +745,7 @@ async fn test_wdai_transfer_implicit_unauthorized() -> Result<()> {
 
     let albert_wdai_balance = find_wrapped_erc20_balance(
         &test,
-        &Who::Validator(0),
+        Who::Validator(0),
         &DAI_ERC20_ETH_ADDRESS,
         &albert_addr,
     )?;
@@ -757,7 +757,7 @@ async fn test_wdai_transfer_implicit_unauthorized() -> Result<()> {
     // signed with Albert's key
     let mut cmd = attempt_wrapped_erc20_transfer(
         &test,
-        &Who::Validator(0),
+        Who::Validator(0),
         &DAI_ERC20_ETH_ADDRESS,
         &albert_addr.to_string(),
         &bertha_addr.to_string(),
@@ -774,7 +774,7 @@ async fn test_wdai_transfer_implicit_unauthorized() -> Result<()> {
     // check balances are unchanged after an unsuccessful transfer
     let albert_wdai_balance = find_wrapped_erc20_balance(
         &test,
-        &Who::Validator(0),
+        Who::Validator(0),
         &DAI_ERC20_ETH_ADDRESS,
         &albert_addr,
     )?;
@@ -793,7 +793,7 @@ async fn test_wdai_transfer_established_unauthorized() -> Result<()> {
     let initial_transfer_amount = token::Amount::from(10_000_000);
     // create an established account that Albert controls
     let albert_established_alias = "albert-established";
-    let rpc_address = get_actor_rpc(&test, &Who::Validator(0));
+    let rpc_address = get_actor_rpc(&test, Who::Validator(0));
     init_established_account(
         &test,
         &rpc_address,
@@ -815,7 +815,7 @@ async fn test_wdai_transfer_established_unauthorized() -> Result<()> {
 
     let albert_wdai_balance = find_wrapped_erc20_balance(
         &test,
-        &Who::Validator(0),
+        Who::Validator(0),
         &DAI_ERC20_ETH_ADDRESS,
         &albert_established_addr,
     )?;
@@ -827,7 +827,7 @@ async fn test_wdai_transfer_established_unauthorized() -> Result<()> {
     // signed with Albert's key
     let mut cmd = attempt_wrapped_erc20_transfer(
         &test,
-        &Who::Validator(0),
+        Who::Validator(0),
         &DAI_ERC20_ETH_ADDRESS,
         &albert_established_addr.to_string(),
         &bertha_addr.to_string(),
@@ -844,7 +844,7 @@ async fn test_wdai_transfer_established_unauthorized() -> Result<()> {
     // check balances are unchanged after an unsuccessful transfer
     let albert_wdai_balance = find_wrapped_erc20_balance(
         &test,
-        &Who::Validator(0),
+        Who::Validator(0),
         &DAI_ERC20_ETH_ADDRESS,
         &albert_established_addr,
     )?;
@@ -873,7 +873,7 @@ async fn test_wdai_transfer_implicit_to_implicit() -> Result<()> {
 
     let albert_wdai_balance = find_wrapped_erc20_balance(
         &test,
-        &Who::Validator(0),
+        Who::Validator(0),
         &DAI_ERC20_ETH_ADDRESS,
         &albert_addr,
     )?;
@@ -888,7 +888,7 @@ async fn test_wdai_transfer_implicit_to_implicit() -> Result<()> {
     };
     let mut cmd = attempt_wrapped_erc20_transfer(
         &test,
-        &Who::Validator(0),
+        Who::Validator(0),
         &DAI_ERC20_ETH_ADDRESS,
         &albert_addr.to_string(),
         &bertha_addr.to_string(),
@@ -901,7 +901,7 @@ async fn test_wdai_transfer_implicit_to_implicit() -> Result<()> {
 
     let albert_wdai_balance = find_wrapped_erc20_balance(
         &test,
-        &Who::Validator(0),
+        Who::Validator(0),
         &DAI_ERC20_ETH_ADDRESS,
         &albert_addr,
     )?;
@@ -912,7 +912,7 @@ async fn test_wdai_transfer_implicit_to_implicit() -> Result<()> {
 
     let bertha_wdai_balance = find_wrapped_erc20_balance(
         &test,
-        &Who::Validator(0),
+        Who::Validator(0),
         &DAI_ERC20_ETH_ADDRESS,
         &bertha_addr,
     )?;
@@ -939,7 +939,7 @@ async fn test_wdai_transfer_implicit_to_established() -> Result<()> {
 
     let albert_wdai_balance = find_wrapped_erc20_balance(
         &test,
-        &Who::Validator(0),
+        Who::Validator(0),
         &DAI_ERC20_ETH_ADDRESS,
         &albert_addr,
     )?;
@@ -947,7 +947,7 @@ async fn test_wdai_transfer_implicit_to_established() -> Result<()> {
 
     // create an established account that Bertha controls
     let bertha_established_alias = "bertha-established";
-    let rpc_address = get_actor_rpc(&test, &Who::Validator(0));
+    let rpc_address = get_actor_rpc(&test, Who::Validator(0));
     init_established_account(
         &test,
         &rpc_address,
@@ -966,7 +966,7 @@ async fn test_wdai_transfer_implicit_to_established() -> Result<()> {
     };
     let mut cmd = attempt_wrapped_erc20_transfer(
         &test,
-        &Who::Validator(0),
+        Who::Validator(0),
         &DAI_ERC20_ETH_ADDRESS,
         &albert_addr.to_string(),
         &bertha_established_addr.to_string(),
@@ -979,7 +979,7 @@ async fn test_wdai_transfer_implicit_to_established() -> Result<()> {
 
     let albert_wdai_balance = find_wrapped_erc20_balance(
         &test,
-        &Who::Validator(0),
+        Who::Validator(0),
         &DAI_ERC20_ETH_ADDRESS,
         &albert_addr,
     )?;
@@ -990,7 +990,7 @@ async fn test_wdai_transfer_implicit_to_established() -> Result<()> {
 
     let bertha_established_wdai_balance = find_wrapped_erc20_balance(
         &test,
-        &Who::Validator(0),
+        Who::Validator(0),
         &DAI_ERC20_ETH_ADDRESS,
         &bertha_established_addr,
     )?;
@@ -1008,7 +1008,7 @@ async fn test_wdai_transfer_established_to_implicit() -> Result<()> {
 
     // create an established account that Albert controls
     let albert_established_alias = "albert-established";
-    let rpc_address = get_actor_rpc(&test, &Who::Validator(0));
+    let rpc_address = get_actor_rpc(&test, Who::Validator(0));
     init_established_account(
         &test,
         &rpc_address,
@@ -1031,7 +1031,7 @@ async fn test_wdai_transfer_established_to_implicit() -> Result<()> {
 
     let albert_established_wdai_balance = find_wrapped_erc20_balance(
         &test,
-        &Who::Validator(0),
+        Who::Validator(0),
         &DAI_ERC20_ETH_ADDRESS,
         &albert_established_addr,
     )?;
@@ -1047,7 +1047,7 @@ async fn test_wdai_transfer_established_to_implicit() -> Result<()> {
     };
     let mut cmd = attempt_wrapped_erc20_transfer(
         &test,
-        &Who::Validator(0),
+        Who::Validator(0),
         &DAI_ERC20_ETH_ADDRESS,
         &albert_established_addr.to_string(),
         &bertha_addr.to_string(),
@@ -1060,7 +1060,7 @@ async fn test_wdai_transfer_established_to_implicit() -> Result<()> {
 
     let albert_established_wdai_balance = find_wrapped_erc20_balance(
         &test,
-        &Who::Validator(0),
+        Who::Validator(0),
         &DAI_ERC20_ETH_ADDRESS,
         &albert_established_addr,
     )?;
@@ -1071,7 +1071,7 @@ async fn test_wdai_transfer_established_to_implicit() -> Result<()> {
 
     let bertha_wdai_balance = find_wrapped_erc20_balance(
         &test,
-        &Who::Validator(0),
+        Who::Validator(0),
         &DAI_ERC20_ETH_ADDRESS,
         &bertha_addr,
     )?;
@@ -1088,7 +1088,7 @@ async fn test_wdai_transfer_established_to_established() -> Result<()> {
 
     // create an established account that Albert controls
     let albert_established_alias = "albert-established";
-    let rpc_address = get_actor_rpc(&test, &Who::Validator(0));
+    let rpc_address = get_actor_rpc(&test, Who::Validator(0));
     init_established_account(
         &test,
         &rpc_address,
@@ -1111,7 +1111,7 @@ async fn test_wdai_transfer_established_to_established() -> Result<()> {
 
     let albert_established_wdai_balance = find_wrapped_erc20_balance(
         &test,
-        &Who::Validator(0),
+        Who::Validator(0),
         &DAI_ERC20_ETH_ADDRESS,
         &albert_established_addr,
     )?;
@@ -1137,7 +1137,7 @@ async fn test_wdai_transfer_established_to_established() -> Result<()> {
     };
     let mut cmd = attempt_wrapped_erc20_transfer(
         &test,
-        &Who::Validator(0),
+        Who::Validator(0),
         &DAI_ERC20_ETH_ADDRESS,
         &albert_established_addr.to_string(),
         &bertha_established_addr.to_string(),
@@ -1150,7 +1150,7 @@ async fn test_wdai_transfer_established_to_established() -> Result<()> {
 
     let albert_established_wdai_balance = find_wrapped_erc20_balance(
         &test,
-        &Who::Validator(0),
+        Who::Validator(0),
         &DAI_ERC20_ETH_ADDRESS,
         &albert_established_addr,
     )?;
@@ -1161,7 +1161,7 @@ async fn test_wdai_transfer_established_to_established() -> Result<()> {
 
     let bertha_established_wdai_balance = find_wrapped_erc20_balance(
         &test,
-        &Who::Validator(0),
+        Who::Validator(0),
         &DAI_ERC20_ETH_ADDRESS,
         &bertha_established_addr,
     )?;
