@@ -210,7 +210,7 @@ use std::fmt::{Debug, Display};
 
 use tendermint_rpc::endpoint::{
     abci_info, block, block_results, blockchain, commit, consensus_params,
-    consensus_state, health, net_info, status,
+    consensus_state, health, net_info, status, validators
 };
 use tendermint_rpc::query::Query;
 use tendermint_rpc::{Error as RpcError, Order};
@@ -427,6 +427,97 @@ pub trait Client {
     /// block hash, app hash, block height and time.
     async fn status(&self) -> Result<status::Response, RpcError> {
         self.perform(status::Request).await
+    }
+
+    /// Cosmos Shim 
+    
+    /// `/validators`: get validators at current block height unless specified 
+    async fn validators(
+        &self, 
+        height: Option<Height>,
+        prove: Option<bool>,
+    ) -> Result<tendermint_rpc::endpoint::abci_query::AbciQuery, RpcError>
+    {
+        let query_path = "/cosmos.staking.v1beta1.Query/Validators".to_string();
+        let prove_value = prove.unwrap_or(false);
+
+        self.abci_query(
+            Some(query_path),
+            Vec::new(),
+            height,
+            prove_value,
+        )
+        .await
+    }
+
+    /// `/balances`: get balances at current block height unless specified
+    async fn balances(
+        &self,
+        address: Option<String>,
+        height: Option<Height>,
+        prove: Option<bool>,
+    ) -> Result<tendermint_rpc::endpoint::abci_query::AbciQuery, RpcError> {
+        let query_path = "/cosmos.bank.v1beta1.Query/AllBalances".to_string();
+        let prove_value = prove.unwrap_or(false);
+
+        self.abci_query(
+            Some(query_path),
+            address.unwrap_or_default().into_bytes(),
+            height,
+            prove_value,
+        )
+        .await
+    }
+
+    /// `/delegator_rewards`: get delegator rewards at current block height unless specified
+    async fn delegator_rewards(
+        &self,
+        delegator_address: Option<String>,
+        validator_address: Option<String>,
+        height: Option<Height>,
+        prove: Option<bool>,
+    ) -> Result<tendermint_rpc::endpoint::abci_query::AbciQuery, RpcError> {
+        let query_path = "/cosmos.distribution.v1beta1.Query/DelegationRewards".to_string();
+        let prove_value = prove.unwrap_or(false);
+
+        let mut query_data = Vec::new();
+        if let Some(delegator) = delegator_address {
+            query_data.extend_from_slice(delegator.as_bytes());
+        }
+    
+        if let Some(validator) = validator_address {
+            query_data.extend_from_slice(validator.as_bytes());
+        }
+    
+        self.abci_query(
+            Some(query_path),
+            query_data,
+            height,
+            prove_value,
+        ).await
+    }
+
+    /// `/validator_delegations`: get validator delegations at current block height unless specified
+    async fn validator_delegations(
+        &self,
+        validator_address: Option<String>,
+        height: Option<Height>,
+        prove: Option<bool>,
+    ) -> Result<tendermint_rpc::endpoint::abci_query::AbciQuery, RpcError> {
+        let query_path = "/cosmos.staking.v1beta1.Query/ValidatorDelegations".to_string();
+        let prove_value = prove.unwrap_or(false);
+
+        let mut query_data = Vec::new();
+        if let Some(validator) = validator_address {
+            query_data.extend_from_slice(validator.as_bytes());
+        }
+    
+        self.abci_query(
+            Some(query_path),
+            query_data,
+            height,
+            prove_value,
+        ).await
     }
 
     /// Perform a request against the RPC endpoint
