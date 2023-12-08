@@ -13,6 +13,7 @@ use namada::core::ledger::governance::cli::offline::{
 use namada::core::ledger::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal, ProposalVote,
 };
+use namada::core::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::ibc::apps::transfer::types::Memo;
 use namada::proto::{CompressedSignature, Section, Signer, Tx};
 use namada::types::address::{Address, ImplicitAddress};
@@ -355,12 +356,8 @@ pub async fn submit_change_consensus_key(
         ..tx_args.clone()
     };
 
-    // TODO: do I need to get the validator alias from somewhere, if it exists?
-    // // Don't think I should generate a new one... Should get the alias
-    // for the consensus key though...
-
-    let wallet = namada.wallet().await;
-
+    // Determine the alias for the new key
+    let mut wallet = namada.wallet_mut().await;
     let alias = wallet.find_alias(&validator).cloned();
     let base_consensus_key_alias = alias
         .map(|al| validator_consensus_key(&al))
@@ -375,10 +372,9 @@ pub async fn submit_change_consensus_key(
         consensus_key_alias =
             format!("{base_consensus_key_alias}-{key_counter}");
     }
-    drop(wallet);
 
-    let mut wallet = namada.wallet_mut().await;
-    let consensus_key = consensus_key
+    // Check the given key or generate a new one
+    let new_key = consensus_key
         .map(|key| match key {
             common::PublicKey::Ed25519(_) => key,
             common::PublicKey::Secp256k1(_) => {
@@ -412,9 +408,8 @@ pub async fn submit_change_consensus_key(
     // Check that the new consensus key is unique
     let consensus_keys = rpc::query_consensus_keys(namada.client()).await;
 
-    let new_ck = consensus_key;
-    if consensus_keys.contains(&new_ck) {
-        edisplay_line!(namada.io(), "Consensus key can only be ed25519");
+    if consensus_keys.contains(&new_key) {
+        edisplay_line!(namada.io(), "The consensus key is already being used.");
         safe_exit(1)
     }
 
@@ -428,7 +423,7 @@ pub async fn submit_change_consensus_key(
 
     let data = ConsensusKeyChange {
         validator: validator.clone(),
-        consensus_key: new_ck.clone(),
+        consensus_key: new_key.clone(),
     };
 
     tx.add_code_from_hash(
@@ -438,7 +433,7 @@ pub async fn submit_change_consensus_key(
     .add_data(data);
 
     let signing_data =
-        init_validator_signing_data(namada, &tx_args, vec![new_ck]).await?;
+        init_validator_signing_data(namada, &tx_args, vec![new_key]).await?;
 
     tx::prepare_tx(
         namada,
@@ -464,17 +459,14 @@ pub async fn submit_change_consensus_key(
                 .save()
                 .unwrap_or_else(|err| edisplay_line!(namada.io(), "{}", err));
 
-            // let tendermint_home = config.ledger.cometbft_dir();
-            // tendermint_node::write_validator_key(
-            //     &tendermint_home,
-            //     &consensus_key,
-            // );
-            // tendermint_node::write_validator_state(tendermint_home);
-
             display_line!(
                 namada.io(),
-                "  Consensus key \"{}\"",
-                consensus_key_alias
+                "New consensus key stored with alias \
+                 \"{consensus_key_alias}\". It will become active \
+                 {EPOCH_SWITCH_BLOCKS_DELAY} blocks before pipeline offset \
+                 from the current epoch, at which point you'll need to give \
+                 the new key to CometBFT in order to be able to sign with it \
+                 in consensus.",
             );
         } else {
             display_line!(
