@@ -63,8 +63,8 @@ pub struct Store {
     view_keys: BTreeMap<Alias, ExtendedViewingKey>,
     /// Known spending keys
     spend_keys: BTreeMap<Alias, StoredKeypair<ExtendedSpendingKey>>,
-    /// Known payment addresses
-    payment_addrs: BTreeMap<Alias, PaymentAddress>,
+    /// Payment address book
+    payment_addrs: BiBTreeMap<Alias, PaymentAddress>,
     /// Cryptographic keypairs
     secret_keys: BTreeMap<Alias, StoredKeypair<common::SecretKey>>,
     /// Known public keys
@@ -148,7 +148,15 @@ impl Store {
         &self,
         alias: impl AsRef<str>,
     ) -> Option<&PaymentAddress> {
-        self.payment_addrs.get(&alias.into())
+        self.payment_addrs.get_by_left(&alias.into())
+    }
+
+    /// Find an alias by the address if it's in the wallet.
+    pub fn find_alias_by_payment_addr(
+        &self,
+        payment_address: &PaymentAddress,
+    ) -> Option<&Alias> {
+        self.payment_addrs.get_by_right(payment_address)
     }
 
     /// Find the stored key by a public key.
@@ -237,7 +245,7 @@ impl Store {
     }
 
     /// Get all known payment addresses by their alias.
-    pub fn get_payment_addrs(&self) -> &BTreeMap<Alias, PaymentAddress> {
+    pub fn get_payment_addrs(&self) -> &BiBTreeMap<Alias, PaymentAddress> {
         &self.payment_addrs
     }
 
@@ -557,7 +565,7 @@ impl Store {
 
     /// Check if any map of the wallet contains the given alias
     pub fn contains_alias(&self, alias: &Alias) -> bool {
-        self.payment_addrs.contains_key(alias)
+        self.payment_addrs.contains_left(alias)
             || self.view_keys.contains_key(alias)
             || self.spend_keys.contains_key(alias)
             || self.secret_keys.contains_key(alias)
@@ -569,7 +577,7 @@ impl Store {
 
     /// Completely remove the given alias from all maps in the wallet
     fn remove_alias(&mut self, alias: &Alias) {
-        self.payment_addrs.remove(alias);
+        self.payment_addrs.remove_by_left(alias);
         self.view_keys.remove(alias);
         self.spend_keys.remove(alias);
         self.secret_keys.remove(alias);
