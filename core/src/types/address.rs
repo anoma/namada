@@ -62,6 +62,8 @@ pub const POS_SLASH_POOL: Address =
 pub const GOV: Address = Address::Internal(InternalAddress::Governance);
 /// Internal MASP address
 pub const MASP: Address = Address::Internal(InternalAddress::Masp);
+/// Internal Multitoken address
+pub const MULTITOKEN: Address = Address::Internal(InternalAddress::Multitoken);
 
 /// Error from decoding address from string
 pub type DecodeError = string_encoding::DecodeError;

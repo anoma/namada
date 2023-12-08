@@ -11,25 +11,32 @@
 //!
 //! Any other storage key changes are allowed only with a valid signature.
 
-use namada_vp_prelude::storage::KeySeg;
+use core::ops::Deref;
+
 use namada_vp_prelude::*;
 use once_cell::unsync::Lazy;
-use proof_of_stake::types::ValidatorState;
 
 enum KeyType<'a> {
-    Token { owner: &'a Address },
+    TokenBalance { owner: &'a Address },
+    TokenMinted,
+    TokenMinter(&'a Address),
     PoS,
     Vp(&'a Address),
     Masp,
-    PgfStward(&'a Address),
+    PgfSteward(&'a Address),
     GovernanceVote(&'a Address),
+    Ibc,
     Unknown,
 }
 
 impl<'a> From<&'a storage::Key> for KeyType<'a> {
     fn from(key: &'a storage::Key) -> KeyType<'a> {
         if let Some([_, owner]) = token::is_any_token_balance_key(key) {
-            Self::Token { owner }
+            Self::TokenBalance { owner }
+        } else if token::is_any_minted_balance_key(key).is_some() {
+            Self::TokenMinted
+        } else if let Some(minter) = token::is_any_minter_key(key) {
+            Self::TokenMinter(minter)
         } else if proof_of_stake::storage::is_pos_key(key) {
             Self::PoS
         } else if gov_storage::keys::is_vote_key(key) {
@@ -40,11 +47,13 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
                 Self::Unknown
             }
         } else if let Some(address) = pgf_storage::keys::is_stewards_key(key) {
-            Self::PgfStward(address)
+            Self::PgfSteward(address)
         } else if let Some(address) = key.is_validity_predicate() {
             Self::Vp(address)
         } else if token::is_masp_key(key) {
             Self::Masp
+        } else if ibc::is_ibc_key(key) {
+            Self::Ibc
         } else {
             Self::Unknown
         }
@@ -77,7 +86,7 @@ fn validate_tx(
     for key in keys_changed.iter() {
         let key_type: KeyType = key.into();
         let is_valid = match key_type {
-            KeyType::Token { owner, .. } => {
+            KeyType::TokenBalance { owner, .. } => {
                 if owner == &addr {
                     let pre: token::Amount =
                         ctx.read_pre(key)?.unwrap_or_default();
@@ -107,119 +116,11 @@ fn validate_tx(
                     true
                 }
             }
-            KeyType::PoS => {
-                // Bond or unbond
-                let bond_id = proof_of_stake::storage::is_bond_key(key)
-                    .map(|(bond_id, _)| bond_id)
-                    .or_else(|| {
-                        proof_of_stake::storage::is_unbond_key(key)
-                            .map(|(bond_id, _, _)| bond_id)
-                    });
-                let valid_bond_or_unbond_change = match bond_id {
-                    Some(bond_id) => {
-                        // Bonds and unbonds changes for this address
-                        // must be signed
-                        bond_id.source != addr || *valid_sig
-                    }
-                    None => {
-                        // Any other PoS changes are allowed without signature
-                        true
-                    }
-                };
-                // Commission rate changes must be signed by the validator
-                let comm =
-                    proof_of_stake::storage::is_validator_commission_rate_key(
-                        key,
-                    );
-                let valid_commission_rate_change = match comm {
-                    Some((validator, _epoch)) => {
-                        *validator == addr && *valid_sig
-                    }
-                    None => true,
-                };
-                // Metadata changes must be signed by the validator whose
-                // metadata is manipulated
-                let metadata =
-                    proof_of_stake::storage::is_validator_metadata_key(key);
-                let valid_metadata_change = match metadata {
-                    Some(address) => *address == addr && *valid_sig,
-                    None => true,
-                };
-
-                // Changes due to unjailing, deactivating, and reactivating are
-                // marked by changes in validator state
-                let state_change =
-                    proof_of_stake::storage::is_validator_state_key(key);
-                let valid_state_change = match state_change {
-                    Some((address, epoch)) => {
-                        let params_pre =
-                            proof_of_stake::read_pos_params(&ctx.pre())?;
-                        let state_pre =
-                            proof_of_stake::validator_state_handle(address)
-                                .get(&ctx.pre(), epoch, &params_pre)?;
-
-                        let params_post =
-                            proof_of_stake::read_pos_params(&ctx.post())?;
-                        let state_post =
-                            proof_of_stake::validator_state_handle(address)
-                                .get(&ctx.post(), epoch, &params_post)?;
-
-                        match (state_pre, state_post) {
-                            (Some(pre), Some(post)) => {
-                                if
-                                // Deactivation case
-                                (matches!(
-                                    pre,
-                                    ValidatorState::Consensus
-                                        | ValidatorState::BelowCapacity
-                                        | ValidatorState::BelowThreshold
-                                ) && post == ValidatorState::Inactive)
-                                // Reactivation case
-                                || pre == ValidatorState::Inactive
-                                    && post != ValidatorState::Inactive
-                                // Unjail case
-                                || pre == ValidatorState::Jailed
-                                    && matches!(
-                                        post,
-                                        ValidatorState::Consensus
-                                            | ValidatorState::BelowCapacity
-                                            | ValidatorState::BelowThreshold
-                                    )
-                                {
-                                    *address == addr && *valid_sig
-                                } else {
-                                    true
-                                }
-                            }
-                            (None, Some(_post)) => {
-                                // Becoming a validator must be authorized
-                                *valid_sig
-                            }
-                            _ => true,
-                        }
-                    }
-                    None => true,
-                };
-
-                valid_bond_or_unbond_change
-                    && valid_commission_rate_change
-                    && valid_state_change
-                    && valid_metadata_change
-            }
-            KeyType::GovernanceVote(voter) => {
-                if voter == &addr {
-                    *valid_sig
-                } else {
-                    true
-                }
-            }
-            KeyType::PgfStward(address) => {
-                if address == &addr {
-                    *valid_sig
-                } else {
-                    true
-                }
-            }
+            KeyType::TokenMinted => verifiers.contains(&address::MULTITOKEN),
+            KeyType::TokenMinter(minter) => minter != &addr || *valid_sig,
+            KeyType::PoS => validate_pos_changes(ctx, &addr, key, &valid_sig)?,
+            KeyType::PgfSteward(address) => address != &addr || *valid_sig,
+            KeyType::GovernanceVote(voter) => voter != &addr || *valid_sig,
             KeyType::Vp(owner) => {
                 let has_post: bool = ctx.has_key_post(key)?;
                 if owner == &addr {
@@ -235,25 +136,194 @@ fn validate_tx(
                     is_vp_whitelisted(ctx, &vp_hash)?
                 }
             }
-            KeyType::Masp => true,
+            KeyType::Masp | KeyType::Ibc => true,
             KeyType::Unknown => {
-                if key.segments.get(0) == Some(&addr.to_db_key()) {
-                    // Unknown changes to this address space require a valid
-                    // signature
-                    *valid_sig
-                } else {
-                    // Unknown changes anywhere else are permitted
-                    true
-                }
+                // Unknown changes require a valid signature
+                *valid_sig
             }
         };
         if !is_valid {
-            debug_log!("key {} modification failed vp", key);
+            log_string(format!("key {} modification failed vp_user", key));
             return reject();
         }
     }
 
     accept()
+}
+
+fn validate_pos_changes(
+    ctx: &Ctx,
+    owner: &Address,
+    key: &storage::Key,
+    valid_sig: &impl Deref<Target = bool>,
+) -> VpResult {
+    use proof_of_stake::storage;
+
+    // Bond or unbond
+    let is_valid_bond_or_unbond_change = || {
+        let bond_id = storage::is_bond_key(key)
+            .map(|(bond_id, _)| bond_id)
+            .or_else(|| storage::is_bond_epoched_meta_key(key))
+            .or_else(|| {
+                storage::is_unbond_key(key).map(|(bond_id, _, _)| bond_id)
+            });
+        if let Some(bond_id) = bond_id {
+            // Bonds and unbonds changes for this address must be signed
+            return &bond_id.source != owner || **valid_sig;
+        };
+        // Unknown changes are not allowed
+        false
+    };
+
+    // Commission rate changes must be signed by the validator
+    let is_valid_commission_rate_change = || {
+        if let Some(validator) = storage::is_validator_commission_rate_key(key)
+        {
+            return validator == owner && **valid_sig;
+        }
+        false
+    };
+
+    // Metadata changes must be signed by the validator whose
+    // metadata is manipulated
+    let is_valid_metadata_change = || {
+        let metadata = storage::is_validator_metadata_key(key);
+        match metadata {
+            Some(address) => address == owner && **valid_sig,
+            None => false,
+        }
+    };
+
+    // Changes in validator state
+    let is_valid_state_change = || {
+        let state_change = storage::is_validator_state_key(key);
+        let is_valid_state = match state_change {
+            Some((address, epoch)) => {
+                let params_pre = proof_of_stake::read_pos_params(&ctx.pre())?;
+                let state_pre = proof_of_stake::validator_state_handle(address)
+                    .get(&ctx.pre(), epoch, &params_pre)?;
+
+                let params_post = proof_of_stake::read_pos_params(&ctx.post())?;
+                let state_post = proof_of_stake::validator_state_handle(
+                    address,
+                )
+                .get(&ctx.post(), epoch, &params_post)?;
+
+                match (state_pre, state_post) {
+                    (Some(pre), Some(post)) => {
+                        use proof_of_stake::types::ValidatorState::*;
+
+                        if (
+                            // Deactivation case
+                            matches!(
+                                    pre,
+                                    Consensus | BelowCapacity | BelowThreshold
+                                ) && post == Inactive)
+                            // Reactivation case
+                            || pre == Inactive && post != Inactive
+                            // Unjail case
+                            || pre == Jailed
+                                && matches!(
+                                    post,
+                                    Consensus
+                                        | BelowCapacity
+                                        | BelowThreshold
+                                )
+                        {
+                            address == owner && **valid_sig
+                        } else if
+                        // Bonding and unbonding may affect validator sets
+                        matches!(
+                            pre,
+                            Consensus | BelowCapacity | BelowThreshold
+                        ) && matches!(
+                            post,
+                            Consensus | BelowCapacity | BelowThreshold
+                        ) {
+                            true
+                        } else {
+                            // Unknown state changes are not allowed
+                            false
+                        }
+                    }
+                    (None, Some(_post)) => {
+                        // Becoming a validator must be authorized
+                        address == owner && **valid_sig
+                    }
+                    (Some(_pre), None) => {
+                        // Clearing of old epoched data
+                        true
+                    }
+                    _ => false,
+                }
+            }
+            None => false,
+        };
+
+        VpResult::Ok(
+            is_valid_state
+                || storage::is_validator_state_epoched_meta_key(key)
+                || storage::is_consensus_validator_set_key(key)
+                || storage::is_below_capacity_validator_set_key(key),
+        )
+    };
+
+    let is_valid_reward_claim = || {
+        if let Some(bond_id) = storage::is_last_pos_reward_claim_epoch_key(key)
+        {
+            // Claims for this address must be signed
+            return &bond_id.source != owner || **valid_sig;
+        }
+        if let Some(bond_id) = storage::is_rewards_counter_key(key) {
+            // Claims for this address must be signed
+            return &bond_id.source != owner || **valid_sig;
+        }
+        false
+    };
+
+    let is_valid_redelegation = || {
+        if storage::is_validator_redelegations_key(key) {
+            return true;
+        }
+        if let Some(delegator) = storage::is_delegator_redelegations_key(key) {
+            // Redelegations for this address must be signed
+            return delegator != owner || **valid_sig;
+        }
+        if let Some(bond_id) = storage::is_rewards_counter_key(key) {
+            // Redelegations auto-claim rewards
+            return &bond_id.source != owner || **valid_sig;
+        }
+        false
+    };
+
+    let is_valid_become_validator = || {
+        if storage::is_validator_addresses_key(key)
+            || storage::is_consensus_keys_key(key)
+            || storage::is_validator_eth_cold_key_key(key).is_some()
+            || storage::is_validator_eth_hot_key_key(key).is_some()
+            || storage::is_validator_max_commission_rate_change_key(key)
+                .is_some()
+            || storage::is_validator_address_raw_hash_key(key).is_some()
+        {
+            // A signature is required to become validator
+            return **valid_sig;
+        }
+        false
+    };
+
+    Ok(is_valid_bond_or_unbond_change()
+        || storage::is_total_deltas_key(key)
+        || storage::is_validator_deltas_key(key)
+        || storage::is_validator_total_bond_or_unbond_key(key)
+        || storage::is_validator_set_positions_key(key)
+        || storage::is_total_consensus_stake_key(key)
+        || is_valid_state_change()?
+        || is_valid_reward_claim()
+        || is_valid_redelegation()
+        || is_valid_commission_rate_change()
+        || is_valid_metadata_change()
+        || is_valid_become_validator()
+        || **valid_sig)
 }
 
 #[cfg(test)]
