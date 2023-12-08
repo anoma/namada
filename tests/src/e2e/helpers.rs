@@ -381,7 +381,9 @@ pub fn wait_for_block_height(
             break Ok(());
         }
         if Instant::now().duration_since(start) > loop_timeout {
-            panic!("Timed out waiting for height {height}, current {current}");
+            return Err(eyre!(
+                "Timed out waiting for height {height}, current {current}"
+            ));
         }
         sleep(1);
     }
