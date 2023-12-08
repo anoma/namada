@@ -772,6 +772,15 @@ impl Test {
         }
     }
 
+    pub fn get_chain_dir(&self, who: &Who) -> PathBuf {
+        self.get_base_dir(who).join(self.net.chain_id.as_str())
+    }
+
+    pub fn get_cometbft_home(&self, who: &Who) -> PathBuf {
+        self.get_chain_dir(who)
+            .join(namada_apps::config::COMETBFT_DIR)
+    }
+
     /// Get an async runtime.
     pub fn async_runtime(&self) -> &tokio::runtime::Runtime {
         Lazy::force(&self.async_runtime.0)

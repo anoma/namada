@@ -18,6 +18,7 @@ use std::time::{Duration, Instant};
 
 use borsh_ext::BorshSerializeExt;
 use color_eyre::eyre::Result;
+use color_eyre::owo_colors::OwoColorize;
 use data_encoding::HEXLOWER;
 use namada::types::address::Address;
 use namada::types::storage::Epoch;
@@ -3530,17 +3531,25 @@ fn test_invalid_validator_txs() -> Result<()> {
     Ok(())
 }
 
-/// Consensus key change
+/// Test change of consensus key of a validator from consensus set.
 ///
-/// 1.
+/// 1. Run 2 genesis validator nodes.
+/// 2. Change consensus key of validator-0
+/// 3. Check that no new blocks are being created - chain halted because
+///    validator-0 consensus change took effect and it cannot sign with the old
+///    key anymore
+/// 4. Configure validator-0 node with the new key
+/// 5. Resume the chain and check that blocks are being created
 #[test]
 fn change_consensus_key() -> Result<()> {
+    let min_num_of_blocks = 6;
+    let pipeline_len = 2;
     let test = setup::network(
         |mut genesis, base_dir| {
-            genesis.parameters.parameters.min_num_of_blocks = 6;
+            genesis.parameters.parameters.min_num_of_blocks = min_num_of_blocks;
             genesis.parameters.parameters.max_expected_time_per_block = 1;
             genesis.parameters.parameters.epochs_per_year = 31_536_000;
-            genesis.parameters.pos_params.pipeline_len = 2;
+            genesis.parameters.pos_params.pipeline_len = pipeline_len;
             genesis.parameters.pos_params.unbonding_len = 4;
             setup::set_validators(2, genesis, base_dir, default_port_offset)
         },
@@ -3557,8 +3566,10 @@ fn change_consensus_key() -> Result<()> {
         );
     }
 
-    // 1. Run 4 genesis validator ledger nodes
-    let _bg_validator_0 =
+    // =========================================================================
+    // 1. Run 2 genesis validator ledger nodes
+
+    let bg_validator_0 =
         start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
             .background();
 
@@ -3566,44 +3577,17 @@ fn change_consensus_key() -> Result<()> {
         start_namada_ledger_node_wait_wasm(&test, Some(1), Some(40))?
             .background();
 
-    // let _bg_validator_2 =
-    //     start_namada_ledger_node_wait_wasm(&test, Some(2), Some(40))?
-    //         .background();
-
-    // let _bg_validator_3 =
-    //     start_namada_ledger_node_wait_wasm(&test, Some(3), Some(40))?
-    //         .background();
-
     let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
-    // Put money in the validator account from its balance account so that it
-    // can pay gas fees
-    let tx_args = vec![
-        "transfer",
-        "--source",
-        "validator-0-balance-key",
-        "--target",
-        "validator-0-validator-key",
-        "--amount",
-        "100.0",
-        "--token",
-        "NAM",
-        "--node",
-        &validator_0_rpc,
-    ];
-    let mut client =
-        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction applied with result")?;
-    client.exp_string("Transaction is valid.")?;
-    client.assert_success();
+    // =========================================================================
+    // 2. Change consensus key of validator-0
 
-    // Change consensus key
     let tx_args = vec![
         "change-consensus-key",
         "--validator",
         "validator-0",
         "--signing-keys",
-        "validator-0-validator-key",
+        "validator-0-balance-key",
         "--node",
         &validator_0_rpc,
         "--unsafe-dont-encrypt",
@@ -3612,6 +3596,63 @@ fn change_consensus_key() -> Result<()> {
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
+
+    // =========================================================================
+    // 3. Check that no new blocks are being created - chain halted because
+    // validator-0 consensus change took effect and it cannot sign with the old
+    // key anymore
+
+    // Wait for the next epoch
+    let validator_0_rpc = get_actor_rpc(&test, Who::Validator(0));
+    let _epoch = epoch_sleep(&test, &validator_0_rpc, 30)?;
+
+    // The chain should halt before the following (pipeline) epoch
+    let _err_report = epoch_sleep(&test, &validator_0_rpc, 30)
+        .expect_err("Chain should halt");
+
+    // Load validator-0 wallet
+    println!(
+        "{}",
+        "Setting up the new validator consensus key in CometBFT...".blue()
+    );
+    let chain_dir = test.get_chain_dir(&Who::Validator(0));
+    let mut wallet = namada_apps::wallet::load(&chain_dir).unwrap();
+
+    // =========================================================================
+    // 4. Configure validator-0 node with the new key
+
+    // Get the new consensus SK
+    let new_key_alias = "validator-0-consensus-key-1";
+    let new_sk = wallet.find_secret_key(new_key_alias, None).unwrap();
+    // Write the key to CometBFT dir
+    let cometbft_dir = test.get_cometbft_home(&Who::Validator(0));
+    namada_apps::node::ledger::tendermint_node::write_validator_key(
+        cometbft_dir,
+        &new_sk,
+    );
+    println!(
+        "{}",
+        "Done setting up the new validator consensus key in CometBFT.".blue()
+    );
+
+    // =========================================================================
+    // 5. Resume the chain and check that blocks are being created
+
+    // Restart validator-0 node
+    let mut validator_0 = bg_validator_0.foreground();
+    validator_0.interrupt().unwrap();
+    // Wait for the node to stop running
+    validator_0.exp_string("Namada ledger node has shut down.")?;
+    validator_0.exp_eof()?;
+    drop(validator_0);
+
+    let mut validator_0 = start_namada_ledger_node(&test, Some(0), Some(40))?;
+    // Wait to commit a block
+    validator_0.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
+    let _bg_validator_0 = validator_0.background();
+
+    // Continue to make blocks for another epoch
+    let _epoch = epoch_sleep(&test, &validator_0_rpc, 40)?;
 
     Ok(())
 }
