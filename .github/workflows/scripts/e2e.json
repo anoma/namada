@@ -27,6 +27,7 @@
     "e2e::ledger_tests::test_bond_queries": 95,
     "e2e::ledger_tests::suspend_ledger": 30,
     "e2e::ledger_tests::stop_ledger_at_height": 18,
+    "e2e::ledger_tests::change_consensus_key": 91,
     "e2e::wallet_tests::wallet_address_cmds": 1,
     "e2e::wallet_tests::wallet_encrypted_key_cmds": 1,
     "e2e::wallet_tests::wallet_encrypted_key_cmds_env_var": 1,
