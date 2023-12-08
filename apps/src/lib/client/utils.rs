@@ -569,7 +569,8 @@ pub fn init_network(
     // After the archive is created, try to copy the built WASM, if they're
     // present with the checksums. This is used for local network setup, so
     // that we can use a local WASM build.
-    let checksums = wasm_loader::Checksums::read_checksums(&wasm_dir_full);
+    let checksums = wasm_loader::Checksums::read_checksums(&wasm_dir_full)
+        .unwrap_or_else(|_| safe_exit(1));
     for (_, full_name) in checksums.0 {
         // try to copy built file from the Namada WASM root dir
         let file = std::env::current_dir()
