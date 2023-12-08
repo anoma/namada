@@ -29,6 +29,7 @@ use proptest_state_machine::{
 use test_log::test;
 use yansi::Paint;
 
+use super::helpers::advance_epoch;
 use super::utils::DbgPrintDiff;
 use crate::parameters::testing::arb_rate;
 use crate::parameters::PosParams;
@@ -41,7 +42,7 @@ use crate::storage::{
     read_below_threshold_validator_set_addresses,
     read_consensus_validator_set_addresses_with_stake,
 };
-use crate::tests::arb_params_and_genesis_validators;
+use crate::tests::helpers::arb_params_and_genesis_validators;
 use crate::tests::utils::pause_for_enter;
 use crate::types::{
     BondId, GenesisValidator, ReverseOrdTokenAmount, Slash, SlashType,
@@ -1978,11 +1979,12 @@ impl StateMachineTest for ConcretePosState {
         match transition {
             Transition::NextEpoch => {
                 tracing::debug!("\nCONCRETE Next epoch");
-                super::advance_epoch(&mut state.s, &params);
+                advance_epoch(&mut state.s, &params);
 
                 // Need to apply some slashing
                 let current_epoch = state.s.storage.block.epoch;
-                super::process_slashes(&mut state.s, current_epoch).unwrap();
+                crate::slashing::process_slashes(&mut state.s, current_epoch)
+                    .unwrap();
 
                 let params = read_pos_params(&state.s).unwrap();
                 state.check_next_epoch_post_conditions(&params);
@@ -1999,9 +2001,9 @@ impl StateMachineTest for ConcretePosState {
                 tracing::debug!("\nCONCRETE Init validator");
                 let current_epoch = state.current_epoch();
 
-                super::become_validator(
+                crate::become_validator(
                     &mut state.s,
-                    super::BecomeValidator {
+                    crate::BecomeValidator {
                         params: &params,
                         address: &address,
                         consensus_key: &consensus_key,
@@ -2071,7 +2073,7 @@ impl StateMachineTest for ConcretePosState {
                 );
 
                 // Apply the bond
-                super::bond_tokens(
+                crate::bond_tokens(
                     &mut state.s,
                     Some(&id.source),
                     &id.validator,
@@ -2136,7 +2138,7 @@ impl StateMachineTest for ConcretePosState {
                     .unwrap();
 
                 // Apply the unbond
-                super::unbond_tokens(
+                crate::unbond_tokens(
                     &mut state.s,
                     Some(&id.source),
                     &id.validator,
@@ -2212,7 +2214,7 @@ impl StateMachineTest for ConcretePosState {
                 //         .unwrap();
 
                 // Apply the withdrawal
-                let withdrawn = super::withdraw_tokens(
+                let withdrawn = crate::withdraw_tokens(
                     &mut state.s,
                     Some(&source),
                     &validator,
@@ -2668,7 +2670,7 @@ impl StateMachineTest for ConcretePosState {
                 tracing::debug!("\nCONCRETE Misbehavior");
                 let current_epoch = state.current_epoch();
                 // Record the slash evidence
-                super::slash(
+                crate::slashing::slash(
                     &mut state.s,
                     &params,
                     current_epoch,
@@ -2697,7 +2699,7 @@ impl StateMachineTest for ConcretePosState {
                 let current_epoch = state.current_epoch();
 
                 // Unjail the validator
-                super::unjail_validator(&mut state.s, &address, current_epoch)
+                crate::unjail_validator(&mut state.s, &address, current_epoch)
                     .unwrap();
 
                 // Post-conditions
@@ -2807,7 +2809,7 @@ impl ConcretePosState {
     ) {
         let pipeline = submit_epoch + params.pipeline_len;
 
-        let cur_stake = super::read_validator_stake(
+        let cur_stake = crate::read_validator_stake(
             &self.s,
             params,
             &id.validator,
@@ -2819,7 +2821,7 @@ impl ConcretePosState {
         // change
         assert_eq!(cur_stake, validator_stake_before_bond_cur);
 
-        let stake_at_pipeline = super::read_validator_stake(
+        let stake_at_pipeline = crate::read_validator_stake(
             &self.s,
             params,
             &id.validator,
@@ -2853,7 +2855,7 @@ impl ConcretePosState {
     ) {
         let pipeline = submit_epoch + params.pipeline_len;
 
-        let cur_stake = super::read_validator_stake(
+        let cur_stake = crate::read_validator_stake(
             &self.s,
             params,
             &id.validator,
@@ -2865,7 +2867,7 @@ impl ConcretePosState {
         // change
         assert_eq!(cur_stake, validator_stake_before_unbond_cur);
 
-        let stake_at_pipeline = super::read_validator_stake(
+        let stake_at_pipeline = crate::read_validator_stake(
             &self.s,
             params,
             &id.validator,
