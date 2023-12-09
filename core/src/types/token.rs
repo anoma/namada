@@ -271,6 +271,12 @@ impl Amount {
     }
 }
 
+impl Display for Amount {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.raw)
+    }
+}
+
 /// Given a number represented as `M*B^D`, then
 /// `M` is the matissa, `B` is the base and `D`
 /// is the denomination, represented by this stuct.
@@ -418,8 +424,7 @@ impl DenominatedAmount {
                 "No denomination found in storage for the given token",
             )
         })?;
-        self.scale(denom)
-            .map_err(storage_api::Error::new)
+        self.scale(denom).map_err(storage_api::Error::new)
     }
 
     /// Multiply this number by 10^denom and return the computed integer if

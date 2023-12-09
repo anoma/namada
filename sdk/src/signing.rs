@@ -27,6 +27,7 @@ use namada_core::types::transaction::account::{InitAccount, UpdateAccount};
 use namada_core::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
+use namada_core::types::transaction::pgf::UpdateStewardCommission;
 use namada_core::types::transaction::pos::InitValidator;
 use namada_core::types::transaction::{pos, Fee};
 use prost::Message;
@@ -40,6 +41,7 @@ use crate::core::ledger::governance::storage::proposal::ProposalType;
 use crate::core::ledger::governance::storage::vote::{
     StorageProposalVote, VoteType,
 };
+use crate::core::types::eth_bridge_pool::PendingTransfer;
 use crate::error::{EncodingError, Error, TxError};
 use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use crate::ibc_proto::google::protobuf::Any;
@@ -48,13 +50,14 @@ use crate::masp::make_asset_type;
 use crate::proto::{MaspBuilder, Section, Tx};
 use crate::rpc::validate_amount;
 use crate::tx::{
-    TX_BOND_WASM, TX_CHANGE_COMMISSION_WASM, TX_CHANGE_CONSENSUS_KEY_WASM,
-    TX_CHANGE_METADATA_WASM, TX_CLAIM_REWARDS_WASM,
-    TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
-    TX_INIT_PROPOSAL, TX_INIT_VALIDATOR_WASM, TX_REACTIVATE_VALIDATOR_WASM,
+    TX_BOND_WASM, TX_BRIDGE_POOL_WASM, TX_CHANGE_COMMISSION_WASM,
+    TX_CHANGE_CONSENSUS_KEY_WASM, TX_CHANGE_METADATA_WASM,
+    TX_CLAIM_REWARDS_WASM, TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM,
+    TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL, TX_INIT_VALIDATOR_WASM,
+    TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM, TX_RESIGN_STEWARD,
     TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
-    TX_UPDATE_ACCOUNT_WASM, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM, VP_USER_WASM,
-    VP_VALIDATOR_WASM,
+    TX_UPDATE_ACCOUNT_WASM, TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL,
+    TX_WITHDRAW_WASM, VP_USER_WASM, VP_VALIDATOR_WASM,
 };
 pub use crate::wallet::store::AddressVpType;
 use crate::wallet::{Wallet, WalletIo};
@@ -1720,6 +1723,111 @@ pub async fn to_ledger_vector<'a>(
         ]);
 
         tv.output_expert.push(format!("Validator : {}", address));
+    } else if code_sec.tag == Some(TX_REDELEGATE_WASM.to_string()) {
+        let redelegation = pos::Redelegation::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
+
+        tv.name = "Redelegate_0".to_string();
+
+        tv.output.extend(vec![
+            format!("Type : Redelegate"),
+            format!("Source Validator : {}", redelegation.src_validator),
+            format!("Destination Validator : {}", redelegation.dest_validator),
+            format!("Owner : {}", redelegation.owner),
+            format!(
+                "Amount : {}",
+                to_ledger_decimal(&redelegation.amount.to_string_native())
+            ),
+        ]);
+
+        tv.output_expert.extend(vec![
+            format!("Source Validator : {}", redelegation.src_validator),
+            format!("Destination Validator : {}", redelegation.dest_validator),
+            format!("Owner : {}", redelegation.owner),
+            format!(
+                "Amount : {}",
+                to_ledger_decimal(&redelegation.amount.to_string_native())
+            ),
+        ]);
+    } else if code_sec.tag == Some(TX_UPDATE_STEWARD_COMMISSION.to_string()) {
+        let update = UpdateStewardCommission::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
+
+        tv.name = "Update_Steward_Commission_0".to_string();
+        tv.output.extend(vec![
+            format!("Type : Update Steward Commission"),
+            format!("Steward : {}", update.steward),
+        ]);
+        for (address, dec) in &update.commission {
+            tv.output.push(format!("Commission : {} {}", address, dec));
+        }
+
+        tv.output_expert
+            .push(format!("Steward : {}", update.steward));
+        for (address, dec) in &update.commission {
+            tv.output_expert
+                .push(format!("Commission : {} {}", address, dec));
+        }
+    } else if code_sec.tag == Some(TX_RESIGN_STEWARD.to_string()) {
+        let address = Address::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
+
+        tv.name = "Resign_Steward_0".to_string();
+
+        tv.output.extend(vec![
+            format!("Type : Resign Steward"),
+            format!("Steward : {}", address),
+        ]);
+
+        tv.output_expert.push(format!("Steward : {}", address));
+    } else if code_sec.tag == Some(TX_BRIDGE_POOL_WASM.to_string()) {
+        let transfer = PendingTransfer::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
+
+        tv.name = "Bridge_Pool_Transfer_0".to_string();
+
+        tv.output.extend(vec![
+            format!("Type : Bridge Pool Transfer"),
+            format!("Transfer Kind : {}", transfer.transfer.kind),
+            format!("Transfer Sender : {}", transfer.transfer.sender),
+            format!("Transfer Recipient : {}", transfer.transfer.recipient),
+            format!("Transfer Asset : {}", transfer.transfer.asset),
+            format!("Transfer Amount : {}", transfer.transfer.amount),
+            format!("Gas Payer : {}", transfer.gas_fee.payer),
+            format!("Gas Token : {}", transfer.gas_fee.token),
+            format!("Gas Amount : {}", transfer.gas_fee.amount),
+        ]);
+
+        tv.output_expert.extend(vec![
+            format!("Transfer Kind : {}", transfer.transfer.kind),
+            format!("Transfer Sender : {}", transfer.transfer.sender),
+            format!("Transfer Recipient : {}", transfer.transfer.recipient),
+            format!("Transfer Asset : {}", transfer.transfer.asset),
+            format!("Transfer Amount : {}", transfer.transfer.amount),
+            format!("Gas Payer : {}", transfer.gas_fee.payer),
+            format!("Gas Token : {}", transfer.gas_fee.token),
+            format!("Gas Amount : {}", transfer.gas_fee.amount),
+        ]);
     } else {
         tv.name = "Custom_0".to_string();
         tv.output.push("Type : Custom".to_string());
