@@ -417,6 +417,14 @@ impl<U> Wallet<U> {
         self.store.find_payment_addr(alias.as_ref())
     }
 
+    /// Find an alias by the payment address if it's in the wallet.
+    pub fn find_alias_by_payment_addr(
+        &self,
+        payment_address: &PaymentAddress,
+    ) -> Option<&Alias> {
+        self.store.find_alias_by_payment_addr(payment_address)
+    }
+
     /// Get all known keys by their alias, paired with PKH, if known.
     pub fn get_secret_keys(
         &self,
