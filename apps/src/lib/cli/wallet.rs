@@ -552,12 +552,94 @@ fn key_address_list(
     }
 }
 
-/// Find key or address
-fn key_find(ctx: Context, io: &impl Io, args_key_find: args::KeyFind) {
-    if !args_key_find.shielded {
-        transparent_key_address_find(ctx, io, args_key_find)
-    } else {
-        shielded_key_address_find(ctx, io, args_key_find)
+/// Find keys and addresses
+fn key_address_find(
+    ctx: Context,
+    io: &impl Io,
+    args::KeyAddressFind {
+        shielded,
+        alias,
+        address,
+        public_key,
+        public_key_hash,
+        payment_address,
+        keys_only,
+        addresses_only,
+        is_pre_genesis,
+        unsafe_show_secret,
+    }: args::KeyAddressFind,
+) {
+    if let Some(alias) = alias {
+        // Search keys and addresses by alias
+        if !shielded {
+            transparent_key_address_find_by_alias(
+                ctx,
+                io,
+                alias,
+                keys_only,
+                addresses_only,
+                is_pre_genesis,
+                unsafe_show_secret,
+            )
+        } else {
+            shielded_key_address_find_by_alias(
+                ctx,
+                io,
+                alias,
+                keys_only,
+                addresses_only,
+                is_pre_genesis,
+                unsafe_show_secret,
+            )
+        }
+    } else if address.is_some() {
+        // Search alias by address
+        transparent_address_or_alias_find(
+            ctx,
+            io,
+            None,
+            address,
+            is_pre_genesis,
+        )
+    } else if public_key.is_some() || public_key_hash.is_some() {
+        // Search transparent keypair by public key or public key hash
+        transparent_key_find(
+            ctx,
+            io,
+            None,
+            public_key,
+            public_key_hash,
+            is_pre_genesis,
+            unsafe_show_secret,
+        )
+    } else if payment_address.is_some() {
+        // Search alias by MASP payment address
+        payment_address_or_alias_find(
+            ctx,
+            io,
+            None,
+            payment_address,
+            is_pre_genesis,
+        )
+    }
+}
+
+#[derive(Debug)]
+pub enum TransparentValue {
+    /// Transparent secret key
+    TranspSecretKey(common::SecretKey),
+    /// Transparent address
+    TranspAddress(Address),
+}
+
+impl FromStr for TransparentValue {
+    type Err = DecodeError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // Try to decode this value first as a secret key, then as an address
+        common::SecretKey::from_str(s)
+            .map(Self::TranspSecretKey)
+            .or_else(|_| Address::from_str(s).map(Self::TranspAddress))
     }
 }
 
@@ -565,10 +647,8 @@ fn key_find(ctx: Context, io: &impl Io, args_key_find: args::KeyFind) {
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum KeyAddrAddValue {
-    /// Transparent secret key
-    TranspSecretKey(common::SecretKey),
-    /// Transparent address
-    TranspAddress(Address),
+    /// Transparent value
+    TranspValue(TransparentValue),
     /// Masp value
     MASPValue(MaspValue),
 }
@@ -577,11 +657,10 @@ impl FromStr for KeyAddrAddValue {
     type Err = DecodeError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Try to decode this value first as a secret key, then as an address,
-        // then as a MASP value
-        common::SecretKey::from_str(s)
-            .map(Self::TranspSecretKey)
-            .or_else(|_| Address::from_str(s).map(Self::TranspAddress))
+        // Try to decode this value first as a transparent value, then as a MASP
+        // value
+        TransparentValue::from_str(s)
+            .map(Self::TranspValue)
             .or_else(|_| MaspValue::from_str(s).map(Self::MASPValue))
     }
 }
@@ -596,34 +675,20 @@ fn add_key_or_address(
     unsafe_dont_encrypt: bool,
 ) {
     match value {
-        KeyAddrAddValue::TranspSecretKey(sk) => {
-            let mut wallet = load_wallet(ctx, is_pre_genesis);
-            let encryption_password =
-                read_and_confirm_encryption_password(unsafe_dont_encrypt);
-            let alias = wallet
-                .insert_keypair(
-                    alias,
-                    alias_force,
-                    sk,
-                    encryption_password,
-                    None,
-                    None,
-                )
-                .unwrap_or_else(|err| {
-                    edisplay_line!(io, "{}", err);
-                    display_line!(io, "No changes are persisted. Exiting.");
-                    cli::safe_exit(1);
-                });
-            wallet
-                .save()
-                .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
-            display_line!(
+        KeyAddrAddValue::TranspValue(TransparentValue::TranspSecretKey(sk)) => {
+            transparent_secret_key_add(
+                ctx,
                 io,
-                "Successfully added a key and an address with alias: \"{}\"",
-                alias
-            );
+                alias,
+                alias_force,
+                sk,
+                is_pre_genesis,
+                unsafe_dont_encrypt,
+            )
         }
-        KeyAddrAddValue::TranspAddress(address) => transparent_address_add(
+        KeyAddrAddValue::TranspValue(TransparentValue::TranspAddress(
+            address,
+        )) => transparent_address_add(
             ctx,
             io,
             alias,
