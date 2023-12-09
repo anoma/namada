@@ -48,12 +48,9 @@ impl CliApi {
             cmds::NamadaWallet::KeyAddrList(cmds::WalletListKeysAddresses(
                 args,
             )) => key_address_list(ctx, io, args),
-            cmds::NamadaWallet::KeyFind(cmds::WalletFindKeys(args)) => {
-                key_find(ctx, io, args)
-            }
-            cmds::NamadaWallet::AddrFind(cmds::WalletFindAddresses(args)) => {
-                address_or_alias_find(ctx, io, args)
-            }
+            cmds::NamadaWallet::KeyAddrFind(cmds::WalletFindKeysAddresses(
+                args,
+            )) => key_address_find(ctx, io, args),
             cmds::NamadaWallet::KeyExport(cmds::WalletExportKey(args)) => {
                 key_export(ctx, io, args)
             }
@@ -535,12 +532,59 @@ fn key_address_list(
     }
 }
 
-/// Find key or address
-fn key_find(ctx: Context, io: &impl Io, args_key_find: args::KeyFind) {
-    if !args_key_find.shielded {
-        transparent_key_address_find(ctx, io, args_key_find)
-    } else {
-        shielded_key_address_find(ctx, io, args_key_find)
+/// Find keys and addresses
+fn key_address_find(
+    ctx: Context,
+    io: &impl Io,
+    args::KeyAddressFind {
+        shielded,
+        alias,
+        address,
+        public_key,
+        public_key_hash,
+        payment_address,
+        keys_only,
+        addresses_only,
+        unsafe_show_secret,
+    }: args::KeyAddressFind,
+) {
+    if let Some(alias) = alias {
+        // Search keys and addresses by alias
+        if !shielded {
+            transparent_key_address_find_by_alias(
+                ctx,
+                io,
+                alias,
+                keys_only,
+                addresses_only,
+                unsafe_show_secret,
+            )
+        } else {
+            shielded_key_address_find_by_alias(
+                ctx,
+                io,
+                alias,
+                keys_only,
+                addresses_only,
+                unsafe_show_secret,
+            )
+        }
+    } else if address.is_some() {
+        // Search alias by address
+        transparent_address_or_alias_find(ctx, io, None, address)
+    } else if public_key.is_some() || public_key_hash.is_some() {
+        // Search transparent keypair by public key or public key hash
+        transparent_key_find(
+            ctx,
+            io,
+            None,
+            public_key,
+            public_key_hash,
+            unsafe_show_secret,
+        )
+    } else if payment_address.is_some() {
+        // Search alias by MASP payment address
+        payment_address_or_alias_find(ctx, io, None, payment_address)
     }
 }
 
@@ -640,22 +684,19 @@ fn key_address_add(
 }
 
 /// Find a keypair in the wallet store.
-fn transparent_key_address_find(
+fn transparent_key_find(
     ctx: Context,
     io: &impl Io,
-    args::KeyFind {
-        public_key,
-        alias,
-        value,
-        unsafe_show_secret,
-        ..
-    }: args::KeyFind,
+    alias: Option<String>,
+    public_key: Option<common::PublicKey>,
+    public_key_hash: Option<String>,
+    unsafe_show_secret: bool,
 ) {
     let mut wallet = load_wallet(ctx);
     let found_keypair = match public_key {
         Some(pk) => wallet.find_key_by_pk(&pk, None),
         None => {
-            let alias = alias.or(value);
+            let alias = alias.or(public_key_hash);
             match alias {
                 None => {
                     edisplay_line!(
@@ -686,27 +727,140 @@ fn transparent_key_address_find(
     }
 }
 
-/// Find shielded address or key
-/// TODO this works for both keys and addresses
-/// TODO split to enable finding alias by payment key
-fn shielded_key_address_find(
+/// Find address (alias) by its alias (address).
+fn transparent_address_or_alias_find(
     ctx: Context,
     io: &impl Io,
-    args::KeyFind {
-        alias,
-        unsafe_show_secret,
-        ..
-    }: args::KeyFind,
+    alias: Option<String>,
+    address: Option<Address>,
+) {
+    let wallet = load_wallet(ctx);
+    if address.is_some() && alias.is_some() {
+        panic!(
+            "This should not be happening: clap should emit its own error \
+             message."
+        );
+    } else if alias.is_some() {
+        let alias = alias.unwrap().to_lowercase();
+        if let Some(address) = wallet.find_address(&alias) {
+            display_line!(io, "Found address {}", address.to_pretty_string());
+        } else {
+            display_line!(
+                io,
+                "No address with alias {} found. Use the command `list \
+                 --addr` to see all the known transparent addresses.",
+                alias
+            );
+        }
+    } else if address.is_some() {
+        if let Some(alias) = wallet.find_alias(address.as_ref().unwrap()) {
+            display_line!(io, "Found alias {}", alias);
+        } else {
+            display_line!(
+                io,
+                "No address with alias {} found. Use the command `list \
+                 --addr` to see all the known transparent addresses.",
+                address.unwrap()
+            );
+        }
+    }
+}
+
+/// Find payment address (alias) by its alias (payment address).
+fn payment_address_or_alias_find(
+    ctx: Context,
+    io: &impl Io,
+    alias: Option<String>,
+    payment_address: Option<PaymentAddress>,
+) {
+    let wallet = load_wallet(ctx);
+    if payment_address.is_some() && alias.is_some() {
+        panic!(
+            "This should not be happening: clap should emit its own error \
+             message."
+        );
+    } else if alias.is_some() {
+        let alias = alias.unwrap().to_lowercase();
+        if let Some(payment_addr) = wallet.find_payment_addr(&alias) {
+            display_line!(io, "Found payment address {}", payment_addr);
+        } else {
+            display_line!(
+                io,
+                "No payment address with alias {} found. Use the command \
+                 `list --shielded --addr` to see all the known payment \
+                 addresses.",
+                alias
+            );
+        }
+    } else if payment_address.is_some() {
+        if let Some(alias) =
+            wallet.find_alias_by_payment_addr(payment_address.as_ref().unwrap())
+        {
+            display_line!(io, "Found alias {}", alias);
+        } else {
+            display_line!(
+                io,
+                "No address with alias {} found. Use the command `list \
+                 --shielded --addr` to see all the known payment addresses.",
+                payment_address.unwrap()
+            );
+        }
+    }
+}
+
+/// Find transparent addresses and keys by alias
+fn transparent_key_address_find_by_alias(
+    ctx: Context,
+    io: &impl Io,
+    alias: String,
+    keys_only: bool,
+    addresses_only: bool,
+    unsafe_show_secret: bool,
 ) {
     let mut wallet = load_wallet(ctx);
-    // TODO
-    let alias = alias.unwrap_or_else(|| {
-        display_line!(io, "Missing alias.");
-        display_line!(io, "No changes are persisted. Exiting.");
-        cli::safe_exit(1)
-    });
     let alias = alias.to_lowercase();
-    if let Ok(viewing_key) = wallet.find_viewing_key(&alias) {
+    if let Some(keypair) = (!addresses_only)
+        .then_some(())
+        .and_then(|_| wallet.find_secret_key(&alias, None).ok())
+    {
+        let pkh: PublicKeyHash = (&keypair.ref_to()).into();
+        display_line!(io, "Public key hash: {}", pkh);
+        display_line!(io, "Public key: {}", keypair.ref_to());
+        if unsafe_show_secret {
+            display_line!(io, "Secret key: {}", keypair);
+        }
+    } else if let Some(address) = (!keys_only)
+        .then_some(())
+        .and_then(|_| wallet.find_address(&alias))
+    {
+        display_line!(io, "Found address {}", address.to_pretty_string());
+    } else if !addresses_only && !keys_only {
+        // Otherwise alias cannot be referring to any shielded value
+        display_line!(
+            io,
+            "No transparent address or key with alias {} found. Use the \
+             command `list` to see all the known transparent addresses and \
+             keys.",
+            alias
+        );
+    }
+}
+
+/// Find shielded payment address and keys by alias
+fn shielded_key_address_find_by_alias(
+    ctx: Context,
+    io: &impl Io,
+    alias: String,
+    keys_only: bool,
+    addresses_only: bool,
+    unsafe_show_secret: bool,
+) {
+    let mut wallet = load_wallet(ctx);
+    let alias = alias.to_lowercase();
+    if let Some(viewing_key) = (!addresses_only)
+        .then_some(())
+        .and_then(|_| wallet.find_viewing_key(&alias).ok())
+    {
         // Check if alias is a viewing key
         display_line!(io, "Viewing key: {}", viewing_key);
         if unsafe_show_secret {
@@ -719,17 +873,20 @@ fn shielded_key_address_find(
                 Err(err) => edisplay_line!(io, "{}", err),
             }
         }
-    } else if let Some(payment_addr) = wallet.find_payment_addr(&alias) {
+    } else if let Some(payment_addr) = (!keys_only)
+        .then_some(())
+        .and_then(|_| wallet.find_payment_addr(&alias))
+    {
         // Failing that, check if alias is a payment address
         display_line!(io, "Payment address: {}", payment_addr);
-    } else {
+    } else if !addresses_only && !keys_only {
         // Otherwise alias cannot be referring to any shielded value
         display_line!(
             io,
-            "No shielded address or key with alias {} found. Use the commands \
-             `list-addr --shielded` and `list-keys --shielded` to see all the \
-             known shielded addresses and keys.",
-            alias.to_lowercase()
+            "No shielded payment address or key with alias {} found. Use the \
+             command `list --shielded` to see all the known shielded \
+             addresses and keys.",
+            alias
         );
     }
 }
@@ -877,42 +1034,33 @@ fn transparent_addresses_list(ctx: Context, io: &impl Io) {
     }
 }
 
-/// Find address (alias) by its alias (address).
-fn address_or_alias_find(
+/// Add a transparent secret key to the wallet.
+fn transparent_secret_key_add(
     ctx: Context,
     io: &impl Io,
-    args::AddressFind { alias, address }: args::AddressFind,
+    alias: String,
+    alias_force: bool,
+    sk: common::SecretKey,
+    unsafe_dont_encrypt: bool,
 ) {
-    let wallet = load_wallet(ctx);
-    if address.is_some() && alias.is_some() {
-        panic!(
-            "This should not be happening: clap should emit its own error \
-             message."
-        );
-    } else if alias.is_some() {
-        let alias = alias.unwrap().to_lowercase();
-        if let Some(address) = wallet.find_address(&alias) {
-            display_line!(io, "Found address {}", address.to_pretty_string());
-        } else {
-            display_line!(
-                io,
-                "No address with alias {} found. Use the command `address \
-                 list` to see all the known addresses.",
-                alias
-            );
-        }
-    } else if address.is_some() {
-        if let Some(alias) = wallet.find_alias(address.as_ref().unwrap()) {
-            display_line!(io, "Found alias {}", alias);
-        } else {
-            display_line!(
-                io,
-                "No alias with address {} found. Use the command `address \
-                 list` to see all the known addresses.",
-                address.unwrap()
-            );
-        }
-    }
+    let mut wallet = load_wallet(ctx);
+    let encryption_password =
+        read_and_confirm_encryption_password(unsafe_dont_encrypt);
+    let alias = wallet
+        .insert_keypair(alias, alias_force, sk, encryption_password, None, None)
+        .unwrap_or_else(|err| {
+            edisplay_line!(io, "{}", err);
+            display_line!(io, "No changes are persisted. Exiting.");
+            cli::safe_exit(1);
+        });
+    wallet
+        .save()
+        .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
+    display_line!(
+        io,
+        "Successfully added a key and an address with alias: \"{}\"",
+        alias
+    );
 }
 
 /// Add an address to the wallet.

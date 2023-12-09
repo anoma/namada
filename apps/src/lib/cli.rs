@@ -485,10 +485,8 @@ pub mod cmds {
         KeyDerive(WalletDerive),
         /// Key / address list
         KeyAddrList(WalletListKeysAddresses),
-        /// Key search
-        KeyFind(WalletFindKeys),
-        /// Address search
-        AddrFind(WalletFindAddresses),
+        /// Key / address search
+        KeyAddrFind(WalletFindKeysAddresses),
         /// Key export
         KeyExport(WalletExportKey),
         /// Key import
@@ -504,8 +502,7 @@ pub mod cmds {
             app.subcommand(WalletGen::def())
                 .subcommand(WalletDerive::def())
                 .subcommand(WalletListKeysAddresses::def())
-                .subcommand(WalletFindKeys::def())
-                .subcommand(WalletFindAddresses::def())
+                .subcommand(WalletFindKeysAddresses::def())
                 .subcommand(WalletExportKey::def())
                 .subcommand(WalletImportKey::def())
                 .subcommand(WalletAddKeyAddress::def())
@@ -516,16 +513,14 @@ pub mod cmds {
             let gen = SubCmd::parse(matches).map(Self::KeyGen);
             let derive = SubCmd::parse(matches).map(Self::KeyDerive);
             let key_addr_list = SubCmd::parse(matches).map(Self::KeyAddrList);
-            let key_find = SubCmd::parse(matches).map(Self::KeyFind);
-            let addr_find = SubCmd::parse(matches).map(Self::AddrFind);
+            let key_addr_find = SubCmd::parse(matches).map(Self::KeyAddrFind);
             let export = SubCmd::parse(matches).map(Self::KeyExport);
             let import = SubCmd::parse(matches).map(Self::KeyImport);
             let key_addr_add = SubCmd::parse(matches).map(Self::KeyAddrAdd);
             let pay_addr_gen = SubCmd::parse(matches).map(Self::PayAddrGen);
             gen.or(derive)
                 .or(key_addr_list)
-                .or(key_find)
-                .or(addr_find)
+                .or(key_addr_find)
                 .or(export)
                 .or(import)
                 .or(key_addr_add)
@@ -642,52 +637,31 @@ pub mod cmds {
         }
     }
 
-    /// TODO Find a keypair in the wallet store
-    /// TODO Find the given shielded address or key
+    /// Find known keys and addresses
     #[derive(Clone, Debug)]
-    pub struct WalletFindKeys(pub args::KeyFind);
+    pub struct WalletFindKeysAddresses(pub args::KeyAddressFind);
 
-    impl SubCmd for WalletFindKeys {
-        const CMD: &'static str = "find-keys";
+    impl SubCmd for WalletFindKeysAddresses {
+        const CMD: &'static str = "find";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .map(|matches| (Self(args::KeyFind::parse(matches))))
+                .map(|matches| Self(args::KeyAddressFind::parse(matches)))
         }
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Key search")
+                .about("Find known keys and addresses in the wallet.")
                 .long_about(
-                    "In the transparent setting, searches for a keypair from \
-                     a public key or an alias.\nIn the shielded setting, \
-                     searches for the given payment address or key in the \
-                     wallet.",
+                    "In the transparent setting, searches for a keypair / \
+                     address by a given alias, public key, or a public key \
+                     hash. Looks up an alias of the given address.\nIn the \
+                     shielded setting, searches for a spending / viewing key \
+                     and payment address by a given alias. Looks up an alias \
+                     of the given payment address.",
                 )
-                .add_args::<args::KeyAddressList>()
-        }
-    }
-
-    /// Find an address by its alias
-    #[derive(Clone, Debug)]
-    pub struct WalletFindAddresses(pub args::AddressFind);
-
-    impl SubCmd for WalletFindAddresses {
-        const CMD: &'static str = "find-addr";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| Self(args::AddressFind::parse(matches)))
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about(
-                    "Find an address by its alias or an alias by its address.",
-                )
-                .add_args::<args::AddressFind>()
+                .add_args::<args::KeyAddressFind>()
         }
     }
 
@@ -2746,7 +2720,7 @@ pub mod args {
     use namada::types::ethereum_events::EthAddress;
     use namada::types::keccak::KeccakHash;
     use namada::types::key::*;
-    use namada::types::masp::MaspValue;
+    use namada::types::masp::PaymentAddress;
     use namada::types::storage::{self, BlockHeight, Epoch};
     use namada::types::time::DateTimeUtc;
     use namada::types::token;
@@ -2896,10 +2870,9 @@ pub mod args {
             TendermintAddress::from_str(raw).unwrap()
         }));
     pub const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("node");
-    pub const LIST_ADDRESSES_ONLY: ArgFlag = flag("addr");
-    pub const LIST_KEYS_ONLY: ArgFlag = flag("keys");
+    pub const LIST_FIND_ADDRESSES_ONLY: ArgFlag = flag("addr");
+    pub const LIST_FIND_KEYS_ONLY: ArgFlag = flag("keys");
     pub const LOCALHOST: ArgFlag = flag("localhost");
-    pub const MASP_VALUE_OPT: ArgOpt<MaspValue> = arg_opt("shielded-value");
     pub const MAX_COMMISSION_RATE_CHANGE: Arg<Dec> =
         arg("max-commission-rate-change");
     pub const MAX_ETH_GAS: ArgOpt<u64> = arg_opt("max_eth-gas");
@@ -2939,9 +2912,15 @@ pub mod args {
     pub const RAW_ADDRESS_ESTABLISHED: Arg<EstablishedAddress> = arg("address");
     pub const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
     pub const RAW_KEY_GEN: ArgFlag = flag("raw");
+    pub const RAW_PAYMENT_ADDRESS: Arg<PaymentAddress> = arg("payment-address");
+    pub const RAW_PAYMENT_ADDRESS_OPT: ArgOpt<PaymentAddress> =
+        RAW_PAYMENT_ADDRESS.opt();
     pub const RAW_PUBLIC_KEY: Arg<common::PublicKey> = arg("public-key");
     pub const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> =
-        arg_opt("public-key");
+        RAW_PUBLIC_KEY.opt();
+    pub const RAW_PUBLIC_KEY_HASH: Arg<String> = arg("public-key-hash");
+    pub const RAW_PUBLIC_KEY_HASH_OPT: ArgOpt<String> =
+        RAW_PUBLIC_KEY_HASH.opt();
     pub const RECEIVER: Arg<String> = arg("receiver");
     pub const RELAYER: Arg<Address> = arg("relayer");
     pub const SAFE_MODE: ArgFlag = flag("safe-mode");
@@ -2989,7 +2968,6 @@ pub mod args {
     pub const VALIDATOR_ETH_HOT_KEY: ArgOpt<WalletPublicKey> =
         arg_opt("eth-hot-key");
     pub const VALUE: Arg<String> = arg("value");
-    pub const VALUE_OPT: ArgOpt<String> = VALUE.opt();
     pub const VIEWING_KEY: Arg<WalletViewingKey> = arg("key");
     pub const VP: ArgOpt<String> = arg_opt("vp");
     pub const WALLET_ALIAS_FORCE: ArgFlag = flag("wallet-alias-force");
@@ -6134,8 +6112,8 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let shielded = SHIELDED.parse(matches);
             let decrypt = DECRYPT.parse(matches);
-            let keys_only = LIST_KEYS_ONLY.parse(matches);
-            let addresses_only = LIST_ADDRESSES_ONLY.parse(matches);
+            let keys_only = LIST_FIND_KEYS_ONLY.parse(matches);
+            let addresses_only = LIST_FIND_ADDRESSES_ONLY.parse(matches);
             let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
             Self {
                 shielded,
@@ -6152,8 +6130,12 @@ pub mod args {
                  shielded pool.",
             ))
             .arg(DECRYPT.def().help("Decrypt keys that are encrypted."))
-            .arg(LIST_KEYS_ONLY.def().help("List only keys."))
-            .arg(LIST_ADDRESSES_ONLY.def().help("List only addresses."))
+            .arg(LIST_FIND_KEYS_ONLY.def().help("List keys only."))
+            .arg(LIST_FIND_ADDRESSES_ONLY.def().help("List addresses only."))
+            .group(ArgGroup::new("only_group").args([
+                LIST_FIND_KEYS_ONLY.name,
+                LIST_FIND_ADDRESSES_ONLY.name,
+            ]))
             .arg(
                 UNSAFE_SHOW_SECRET
                     .def()
@@ -6162,61 +6144,83 @@ pub mod args {
         }
     }
 
-    impl Args for KeyFind {
+    impl Args for KeyAddressFind {
         fn parse(matches: &ArgMatches) -> Self {
             let shielded = SHIELDED.parse(matches);
             let alias = ALIAS_OPT.parse(matches);
+            let address = RAW_ADDRESS_OPT.parse(matches);
             let public_key = RAW_PUBLIC_KEY_OPT.parse(matches);
-            let value = VALUE_OPT.parse(matches);
+            let public_key_hash = RAW_PUBLIC_KEY_HASH_OPT.parse(matches);
+            let payment_address = RAW_PAYMENT_ADDRESS_OPT.parse(matches);
+            let keys_only = LIST_FIND_KEYS_ONLY.parse(matches);
+            let addresses_only = LIST_FIND_ADDRESSES_ONLY.parse(matches);
             let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
-
             Self {
                 shielded,
                 alias,
+                address,
                 public_key,
-                value,
+                public_key_hash,
+                payment_address,
+                keys_only,
+                addresses_only,
                 unsafe_show_secret,
             }
         }
 
         fn def(app: App) -> App {
             app.arg(
-                SHIELDED
-                    .def()
-                    .help("Find spending key for the shielded pool.")
-                    .conflicts_with_all([
-                        VALUE_OPT.name,
-                        RAW_PUBLIC_KEY_OPT.name,
-                    ]),
+                SHIELDED.def().help(
+                    "Find keys and payment addresses for the shielded pool.",
+                ),
             )
             .arg(
                 ALIAS_OPT
                     .def()
+                    .help("An alias associated with the keys / addresses."),
+            )
+            .arg(
+                RAW_ADDRESS_OPT
+                    .def()
                     .help(
-                        "TODO An alias associated with the keypair. The alias \
-                         that is to be found.",
+                        "The bech32m encoded string of a transparent address.",
                     )
-                    .conflicts_with(VALUE_OPT.name),
+                    .conflicts_with(SHIELDED.name),
             )
             .arg(
-                RAW_PUBLIC_KEY_OPT
-                    .def()
-                    .help("A public key associated with the keypair."),
+                RAW_PUBLIC_KEY_OPT.def().help(
+                    "A public key associated with the transparent keypair.",
+                ),
             )
+            .arg(RAW_PUBLIC_KEY_HASH_OPT.def().help(
+                "A public key hash associated with the transparent keypair.",
+            ))
             .arg(
-                VALUE_OPT
+                RAW_PAYMENT_ADDRESS_OPT
                     .def()
-                    .help("A public key or alias associated with the keypair."),
+                    .help(
+                        "The bech32m encoded string of a shielded payment \
+                         address.",
+                    )
+                    .conflicts_with(SHIELDED.name),
             )
             .group(
-                ArgGroup::new("key_find_args")
+                ArgGroup::new("addr_find_args")
                     .args([
                         ALIAS_OPT.name,
+                        RAW_ADDRESS_OPT.name,
                         RAW_PUBLIC_KEY_OPT.name,
-                        VALUE_OPT.name,
+                        RAW_PUBLIC_KEY_HASH_OPT.name,
+                        RAW_PAYMENT_ADDRESS_OPT.name,
                     ])
                     .required(true),
             )
+            .arg(LIST_FIND_KEYS_ONLY.def().help("Find keys only."))
+            .arg(LIST_FIND_ADDRESSES_ONLY.def().help("List addresses only."))
+            .group(ArgGroup::new("only_group").args([
+                LIST_FIND_KEYS_ONLY.name,
+                LIST_FIND_ADDRESSES_ONLY.name,
+            ]))
             .arg(PRE_GENESIS.def().help(
                 "Use pre-genesis wallet, instead of for the current chain, if \
                  any.",
@@ -6225,32 +6229,6 @@ pub mod args {
                 UNSAFE_SHOW_SECRET
                     .def()
                     .help("UNSAFE: Print the secret / spending key."),
-            )
-        }
-    }
-
-    impl Args for AddressFind {
-        fn parse(matches: &ArgMatches) -> Self {
-            let alias = ALIAS_OPT.parse(matches);
-            let address = RAW_ADDRESS_OPT.parse(matches);
-            Self { alias, address }
-        }
-
-        fn def(app: App) -> App {
-            app.arg(
-                ALIAS_OPT
-                    .def()
-                    .help("An alias associated with the address."),
-            )
-            .arg(
-                RAW_ADDRESS_OPT
-                    .def()
-                    .help("The bech32m encoded address string."),
-            )
-            .group(
-                ArgGroup::new("addr_find_args")
-                    .args([ALIAS_OPT.name, RAW_ADDRESS_OPT.name])
-                    .required(true),
             )
         }
     }
