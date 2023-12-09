@@ -13,17 +13,19 @@ use namada::core::ledger::governance::cli::offline::{
 use namada::core::ledger::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal, ProposalVote,
 };
-use namada::ibc::applications::transfer::Memo;
+use namada::ibc::apps::transfer::types::Memo;
 use namada::proto::{CompressedSignature, Section, Signer, Tx};
 use namada::types::address::{Address, ImplicitAddress};
 use namada::types::dec::Dec;
 use namada::types::io::Io;
 use namada::types::key::{self, *};
-use namada::types::transaction::pos::{ConsensusKeyChange, InitValidator};
+use namada::types::transaction::pos::{BecomeValidator, ConsensusKeyChange};
 use namada_sdk::rpc::{TxBroadcastData, TxResponse};
 use namada_sdk::wallet::alias::validator_consensus_key;
+use namada_sdk::wallet::{Wallet, WalletIo};
 use namada_sdk::{display_line, edisplay_line, error, signing, tx, Namada};
 use rand::rngs::OsRng;
+use tokio::sync::RwLock;
 
 use super::rpc;
 use crate::cli::{args, safe_exit};
@@ -39,8 +41,8 @@ use crate::wallet::{gen_validator_keys, read_and_confirm_encryption_password};
 
 /// Wrapper around `signing::aux_signing_data` that stores the optional
 /// disposable address to the wallet
-pub async fn aux_signing_data<'a>(
-    context: &impl Namada<'a>,
+pub async fn aux_signing_data(
+    context: &impl Namada,
     args: &args::Tx,
     owner: Option<Address>,
     default_signer: Option<Address>,
@@ -68,9 +70,92 @@ pub async fn aux_signing_data<'a>(
     Ok(signing_data)
 }
 
+pub async fn with_hardware_wallet<'a, U: WalletIo + Clone>(
+    mut tx: Tx,
+    pubkey: common::PublicKey,
+    parts: HashSet<signing::Signable>,
+    (wallet, app): (&RwLock<Wallet<U>>, &NamadaApp<TransportNativeHID>),
+) -> Result<Tx, error::Error> {
+    // Obtain derivation path
+    let path = wallet
+        .read()
+        .await
+        .find_path_by_pkh(&(&pubkey).into())
+        .map_err(|_| {
+            error::Error::Other(
+                "Unable to find derivation path for key".to_string(),
+            )
+        })?;
+    let path = BIP44Path {
+        path: path.to_string(),
+    };
+    // Now check that the public key at this path in the Ledger
+    // matches
+    let response_pubkey = app
+        .get_address_and_pubkey(&path, false)
+        .await
+        .map_err(|err| error::Error::Other(err.to_string()))?;
+    let response_pubkey =
+        common::PublicKey::try_from_slice(&response_pubkey.public_key)
+            .map_err(|err| {
+                error::Error::Other(format!(
+                    "unable to decode public key from hardware wallet: {}",
+                    err
+                ))
+            })?;
+    if response_pubkey != pubkey {
+        return Err(error::Error::Other(format!(
+            "Unrecognized public key fetched fom Ledger: {}. Expected {}.",
+            response_pubkey, pubkey,
+        )));
+    }
+    // Get the Ledger to sign using our obtained derivation path
+    let response = app
+        .sign(&path, &tx.serialize_to_vec())
+        .await
+        .map_err(|err| error::Error::Other(err.to_string()))?;
+    // Sign the raw header if that is requested
+    if parts.contains(&signing::Signable::RawHeader) {
+        let pubkey = common::PublicKey::try_from_slice(&response.pubkey)
+            .expect("unable to parse public key from Ledger");
+        let signature =
+            common::Signature::try_from_slice(&response.raw_signature)
+                .expect("unable to parse signature from Ledger");
+        // Signatures from the Ledger come back in compressed
+        // form
+        let compressed = CompressedSignature {
+            targets: response.raw_indices,
+            signer: Signer::PubKeys(vec![pubkey]),
+            signatures: [(0, signature)].into(),
+        };
+        // Expand out the signature before adding it to the
+        // transaction
+        tx.add_section(Section::Signature(compressed.expand(&tx)));
+    }
+    // Sign the fee header if that is requested
+    if parts.contains(&signing::Signable::FeeHeader) {
+        let pubkey = common::PublicKey::try_from_slice(&response.pubkey)
+            .expect("unable to parse public key from Ledger");
+        let signature =
+            common::Signature::try_from_slice(&response.wrapper_signature)
+                .expect("unable to parse signature from Ledger");
+        // Signatures from the Ledger come back in compressed
+        // form
+        let compressed = CompressedSignature {
+            targets: response.wrapper_indices,
+            signer: Signer::PubKeys(vec![pubkey]),
+            signatures: [(0, signature)].into(),
+        };
+        // Expand out the signature before adding it to the
+        // transaction
+        tx.add_section(Section::Signature(compressed.expand(&tx)));
+    }
+    Ok(tx)
+}
+
 // Sign the given transaction using a hardware wallet as a backup
-pub async fn sign<'a>(
-    context: &impl Namada<'a>,
+pub async fn sign<N: Namada>(
+    context: &N,
     tx: &mut Tx,
     args: &args::Tx,
     signing_data: SigningTxData,
@@ -89,119 +174,29 @@ pub async fn sign<'a>(
                 ))
             },
         )?);
-        // A closure to facilitate signing transactions also using the Ledger
-        let with_hw =
-            |mut tx: Tx,
-             pubkey: common::PublicKey,
-             parts: HashSet<signing::Signable>| {
-                let app = &app;
-                async move {
-                    // Obtain derivation path corresponding to the signing
-                    // public key
-                    let path = context
-                        .wallet()
-                        .await
-                        .find_path_by_pkh(&(&pubkey).into())
-                        .map_err(|_| {
-                            error::Error::Other(
-                                "Unable to find derivation path for key"
-                                    .to_string(),
-                            )
-                        })?;
-                    let path = BIP44Path {
-                        path: path.to_string(),
-                    };
-                    // Now check that the public key at this path in the Ledger
-                    // matches
-                    let response_pubkey = app
-                        .get_address_and_pubkey(&path, false)
-                        .await
-                        .map_err(|err| error::Error::Other(err.to_string()))?;
-                    let response_pubkey = common::PublicKey::try_from_slice(
-                        &response_pubkey.public_key,
-                    )
-                    .map_err(|err| {
-                        error::Error::Other(format!(
-                            "unable to decode public key from hardware \
-                             wallet: {}",
-                            err
-                        ))
-                    })?;
-                    if response_pubkey != pubkey {
-                        return Err(error::Error::Other(format!(
-                            "Unrecognized public key fetched fom Ledger: {}. \
-                             Expected {}.",
-                            response_pubkey, pubkey,
-                        )));
-                    }
-                    // Get the Ledger to sign using our obtained derivation path
-                    let response = app
-                        .sign(&path, &tx.serialize_to_vec())
-                        .await
-                        .map_err(|err| error::Error::Other(err.to_string()))?;
-                    // Sign the raw header if that is requested
-                    if parts.contains(&signing::Signable::RawHeader) {
-                        let pubkey =
-                            common::PublicKey::try_from_slice(&response.pubkey)
-                                .expect(
-                                    "unable to parse public key from Ledger",
-                                );
-                        let signature = common::Signature::try_from_slice(
-                            &response.raw_signature,
-                        )
-                        .expect("unable to parse signature from Ledger");
-                        // Signatures from the Ledger come back in compressed
-                        // form
-                        let compressed = CompressedSignature {
-                            targets: response.raw_indices,
-                            signer: Signer::PubKeys(vec![pubkey]),
-                            signatures: [(0, signature)].into(),
-                        };
-                        // Expand out the signature before adding it to the
-                        // transaction
-                        tx.add_section(Section::Signature(
-                            compressed.expand(&tx),
-                        ));
-                    }
-                    // Sign the fee header if that is requested
-                    if parts.contains(&signing::Signable::FeeHeader) {
-                        let pubkey =
-                            common::PublicKey::try_from_slice(&response.pubkey)
-                                .expect(
-                                    "unable to parse public key from Ledger",
-                                );
-                        let signature = common::Signature::try_from_slice(
-                            &response.wrapper_signature,
-                        )
-                        .expect("unable to parse signature from Ledger");
-                        // Signatures from the Ledger come back in compressed
-                        // form
-                        let compressed = CompressedSignature {
-                            targets: response.wrapper_indices,
-                            signer: Signer::PubKeys(vec![pubkey]),
-                            signatures: [(0, signature)].into(),
-                        };
-                        // Expand out the signature before adding it to the
-                        // transaction
-                        tx.add_section(Section::Signature(
-                            compressed.expand(&tx),
-                        ));
-                    }
-                    Ok(tx)
-                }
-            };
+        let with_hw_data = (context.wallet_lock(), &app);
         // Finally, begin the signing with the Ledger as backup
-        context.sign(tx, args, signing_data, with_hw).await?;
+        context
+            .sign(
+                tx,
+                args,
+                signing_data,
+                with_hardware_wallet::<N::WalletUtils>,
+                with_hw_data,
+            )
+            .await?;
     } else {
         // Otherwise sign without a backup procedure
-        context.sign(tx, args, signing_data, default_sign).await?;
+        context
+            .sign(tx, args, signing_data, default_sign, ())
+            .await?;
     }
     Ok(())
 }
 
 // Build a transaction to reveal the signer of the given transaction.
-pub async fn submit_reveal_aux<'a>(
-    context: &impl Namada<'a>,
+pub async fn submit_reveal_aux(
+    context: &impl Namada,
     args: args::Tx,
     address: &Address,
 ) -> Result<(), error::Error> {
@@ -239,7 +234,7 @@ pub async fn submit_reveal_aux<'a>(
     Ok(())
 }
 
-pub async fn submit_bridge_pool_tx<'a, N: Namada<'a>>(
+pub async fn submit_bridge_pool_tx<N: Namada>(
     namada: &N,
     args: args::EthereumBridgePool,
 ) -> Result<(), error::Error> {
@@ -263,7 +258,7 @@ pub async fn submit_bridge_pool_tx<'a, N: Namada<'a>>(
     Ok(())
 }
 
-pub async fn submit_custom<'a, N: Namada<'a>>(
+pub async fn submit_custom<N: Namada>(
     namada: &N,
     args: args::TxCustom,
 ) -> Result<(), error::Error>
@@ -289,7 +284,7 @@ where
     Ok(())
 }
 
-pub async fn submit_update_account<'a, N: Namada<'a>>(
+pub async fn submit_update_account<N: Namada>(
     namada: &N,
     args: args::TxUpdateAccount,
 ) -> Result<(), error::Error>
@@ -313,10 +308,10 @@ where
     Ok(())
 }
 
-pub async fn submit_init_account<'a, N: Namada<'a>>(
+pub async fn submit_init_account<N: Namada>(
     namada: &N,
     args: args::TxInitAccount,
-) -> Result<(), error::Error>
+) -> Result<Option<Address>, error::Error>
 where
     <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
 {
@@ -332,14 +327,17 @@ where
 
         signing::generate_test_vector(namada, &tx).await?;
 
-        namada.submit(tx, &args.tx).await?;
+        let result = namada.submit(tx, &args.tx).await?;
+        if let ProcessTxResponse::Applied(response) = result {
+            return Ok(response.initialized_accounts.first().cloned());
+        }
     }
 
-    Ok(())
+    Ok(None)
 }
 
-pub async fn submit_change_consensus_key<'a>(
-    namada: &impl Namada<'a>,
+pub async fn submit_change_consensus_key(
+    namada: &impl Namada,
     config: &mut crate::config::Config,
     args::ConsensusKeyChange {
         tx: tx_args,
@@ -380,8 +378,8 @@ pub async fn submit_change_consensus_key<'a>(
     let mut wallet = namada.wallet_mut().await;
     let consensus_key = consensus_key
         .map(|key| match key {
-            common::SecretKey::Ed25519(_) => key,
-            common::SecretKey::Secp256k1(_) => {
+            common::PublicKey::Ed25519(_) => key,
+            common::PublicKey::Secp256k1(_) => {
                 edisplay_line!(
                     namada.io(),
                     "Consensus key can only be ed25519"
@@ -403,6 +401,7 @@ pub async fn submit_change_consensus_key<'a>(
                 )
                 .expect("Key generation should not fail.")
                 .1
+                .ref_to()
         });
     // To avoid wallet deadlocks in following operations
     drop(wallet);
@@ -410,7 +409,7 @@ pub async fn submit_change_consensus_key<'a>(
     // Check that the new consensus key is unique
     let consensus_keys = rpc::query_consensus_keys(namada.client()).await;
 
-    let new_ck = consensus_key.ref_to();
+    let new_ck = consensus_key;
     if consensus_keys.contains(&new_ck) {
         edisplay_line!(namada.io(), "Consensus key can only be ed25519");
         safe_exit(1)
@@ -482,14 +481,13 @@ pub async fn submit_change_consensus_key<'a>(
     Ok(())
 }
 
-pub async fn submit_init_validator<'a>(
-    namada: &impl Namada<'a>,
+pub async fn submit_become_validator(
+    namada: &impl Namada,
     config: &mut crate::config::Config,
-    args::TxInitValidator {
+    args::TxBecomeValidator {
         tx: tx_args,
+        address,
         scheme,
-        account_keys,
-        threshold,
         consensus_key,
         eth_cold_key,
         eth_hot_key,
@@ -500,10 +498,9 @@ pub async fn submit_init_validator<'a>(
         website,
         description,
         discord_handle,
-        validator_vp_code_path,
         unsafe_dont_encrypt,
-        tx_code_path: _,
-    }: args::TxInitValidator,
+        tx_code_path,
+    }: args::TxBecomeValidator,
 ) -> Result<(), error::Error> {
     let tx_args = args::Tx {
         chain_id: tx_args
@@ -512,6 +509,79 @@ pub async fn submit_init_validator<'a>(
             .or_else(|| Some(config.ledger.chain_id.clone())),
         ..tx_args.clone()
     };
+
+    // Check that the address is established
+    if !address.is_established() {
+        edisplay_line!(
+            namada.io(),
+            "The given address {address} is not established. Only an \
+             established address can become a validator.",
+        );
+        if !tx_args.force {
+            safe_exit(1)
+        }
+    };
+
+    // Check that the address is not already a validator
+    if rpc::is_validator(namada.client(), &address).await {
+        edisplay_line!(
+            namada.io(),
+            "The given address {address} is already a validator",
+        );
+        if !tx_args.force {
+            safe_exit(1)
+        }
+    };
+
+    // If the address is not yet a validator, it cannot have self-bonds, but it
+    // may have delegations. It has to unbond those before it can become a
+    // validator.
+    if rpc::has_bonds(namada.client(), &address).await {
+        edisplay_line!(
+            namada.io(),
+            "The given address {address} has delegations and therefore cannot \
+             become a validator. To become a validator, you have to unbond \
+             your delegations first.",
+        );
+        if !tx_args.force {
+            safe_exit(1)
+        }
+    }
+
+    // Validate the commission rate data
+    if commission_rate > Dec::one() || commission_rate < Dec::zero() {
+        edisplay_line!(
+            namada.io(),
+            "The validator commission rate must not exceed 1.0 or 100%, and \
+             it must be 0 or positive."
+        );
+        if !tx_args.force {
+            safe_exit(1)
+        }
+    }
+    if max_commission_rate_change > Dec::one()
+        || max_commission_rate_change < Dec::zero()
+    {
+        edisplay_line!(
+            namada.io(),
+            "The validator maximum change in commission rate per epoch must \
+             not exceed 1.0 or 100%, and it must be 0 or positive."
+        );
+        if !tx_args.force {
+            safe_exit(1)
+        }
+    }
+    // Validate the email
+    if email.is_empty() {
+        edisplay_line!(
+            namada.io(),
+            "The validator email must not be an empty string."
+        );
+        if !tx_args.force {
+            safe_exit(1)
+        }
+    }
+
     let alias = tx_args
         .initialized_account_alias
         .as_ref()
@@ -521,25 +591,14 @@ pub async fn submit_init_validator<'a>(
     let validator_key_alias = format!("{}-key", alias);
     let consensus_key_alias = validator_consensus_key(&alias.clone().into());
     let protocol_key_alias = format!("{}-protocol-key", alias);
-
-    let threshold = match threshold {
-        Some(threshold) => threshold,
-        None => {
-            if account_keys.len() == 1 {
-                1u8
-            } else {
-                safe_exit(1)
-            }
-        }
-    };
     let eth_hot_key_alias = format!("{}-eth-hot-key", alias);
     let eth_cold_key_alias = format!("{}-eth-cold-key", alias);
 
     let mut wallet = namada.wallet_mut().await;
     let consensus_key = consensus_key
         .map(|key| match key {
-            common::SecretKey::Ed25519(_) => key,
-            common::SecretKey::Secp256k1(_) => {
+            common::PublicKey::Ed25519(_) => key,
+            common::PublicKey::Secp256k1(_) => {
                 edisplay_line!(
                     namada.io(),
                     "Consensus key can only be ed25519"
@@ -562,12 +621,13 @@ pub async fn submit_init_validator<'a>(
                 )
                 .expect("Key generation should not fail.")
                 .1
+                .ref_to()
         });
 
     let eth_cold_pk = eth_cold_key
         .map(|key| match key {
-            common::SecretKey::Secp256k1(_) => key.ref_to(),
-            common::SecretKey::Ed25519(_) => {
+            common::PublicKey::Secp256k1(_) => key,
+            common::PublicKey::Ed25519(_) => {
                 edisplay_line!(
                     namada.io(),
                     "Eth cold key can only be secp256k1"
@@ -595,8 +655,8 @@ pub async fn submit_init_validator<'a>(
 
     let eth_hot_pk = eth_hot_key
         .map(|key| match key {
-            common::SecretKey::Secp256k1(_) => key.ref_to(),
-            common::SecretKey::Ed25519(_) => {
+            common::PublicKey::Secp256k1(_) => key,
+            common::PublicKey::Ed25519(_) => {
                 edisplay_line!(
                     namada.io(),
                     "Eth hot key can only be secp256k1"
@@ -629,7 +689,7 @@ pub async fn submit_init_validator<'a>(
     }
     // Generate the validator keys
     let validator_keys = gen_validator_keys(
-        *namada.wallet_mut().await,
+        &mut *namada.wallet_mut().await,
         Some(eth_hot_pk.clone()),
         protocol_key,
         scheme,
@@ -655,61 +715,16 @@ pub async fn submit_init_validator<'a>(
         )
         .map_err(|err| error::Error::Other(err.to_string()))?;
 
-    let validator_vp_code_hash =
-        query_wasm_code_hash(namada, validator_vp_code_path.to_str().unwrap())
-            .await
-            .unwrap();
-
-    // Validate the commission rate data
-    if commission_rate > Dec::one() || commission_rate < Dec::zero() {
-        edisplay_line!(
-            namada.io(),
-            "The validator commission rate must not exceed 1.0 or 100%, and \
-             it must be 0 or positive"
-        );
-        if !tx_args.force {
-            safe_exit(1)
-        }
-    }
-    if max_commission_rate_change > Dec::one()
-        || max_commission_rate_change < Dec::zero()
-    {
-        edisplay_line!(
-            namada.io(),
-            "The validator maximum change in commission rate per epoch must \
-             not exceed 1.0 or 100%"
-        );
-        if !tx_args.force {
-            safe_exit(1)
-        }
-    }
-    // Validate the email
-    if email.is_empty() {
-        edisplay_line!(
-            namada.io(),
-            "The validator email must not be an empty string"
-        );
-        if !tx_args.force {
-            safe_exit(1)
-        }
-    }
-
     let tx_code_hash =
-        query_wasm_code_hash(namada, args::TX_INIT_VALIDATOR_WASM)
+        query_wasm_code_hash(namada, tx_code_path.to_string_lossy())
             .await
             .unwrap();
 
     let chain_id = tx_args.chain_id.clone().unwrap();
     let mut tx = Tx::new(chain_id, tx_args.expiration);
-    let extra_section_hash = tx.add_extra_section_from_hash(
-        validator_vp_code_hash,
-        Some(validator_vp_code_path.to_string_lossy().into_owned()),
-    );
-
-    let data = InitValidator {
-        account_keys,
-        threshold,
-        consensus_key: consensus_key.ref_to(),
+    let data = BecomeValidator {
+        address: address.clone(),
+        consensus_key: consensus_key.clone(),
         eth_cold_key: key::secp256k1::PublicKey::try_from_pk(&eth_cold_pk)
             .unwrap(),
         eth_hot_key: key::secp256k1::PublicKey::try_from_pk(&eth_hot_pk)
@@ -721,19 +736,28 @@ pub async fn submit_init_validator<'a>(
         description,
         website,
         discord_handle,
-        validator_vp_code_hash: extra_section_hash,
     };
 
     // Put together all the PKs that we have to sign with to verify ownership
-    let mut all_pks = data.account_keys.clone();
-    all_pks.push(consensus_key.to_public());
+    let account = namada_sdk::rpc::get_account_info(namada.client(), &address)
+        .await?
+        .unwrap_or_else(|| {
+            edisplay_line!(
+                namada.io(),
+                "Unable to query account keys for address {address}."
+            );
+            safe_exit(1)
+        });
+    let mut all_pks: Vec<_> =
+        account.public_keys_map.pk_to_idx.into_keys().collect();
+    all_pks.push(consensus_key.clone());
     all_pks.push(eth_cold_pk);
     all_pks.push(eth_hot_pk);
     all_pks.push(data.protocol_key.clone());
 
     tx.add_code_from_hash(
         tx_code_hash,
-        Some(args::TX_INIT_VALIDATOR_WASM.to_string()),
+        Some(args::TX_BECOME_VALIDATOR_WASM.to_string()),
     )
     .add_data(data);
 
@@ -758,49 +782,25 @@ pub async fn submit_init_validator<'a>(
 
         signing::generate_test_vector(namada, &tx).await?;
 
-        let result = namada.submit(tx, &tx_args).await?.initialized_accounts();
+        namada.submit(tx, &tx_args).await?.initialized_accounts();
 
         if !tx_args.dry_run {
-            let (validator_address_alias, validator_address) = match &result[..]
-            {
-                // There should be 1 account for the validator itself
-                [validator_address] => {
-                    if let Some(alias) =
-                        namada.wallet().await.find_alias(validator_address)
-                    {
-                        (alias.clone(), validator_address.clone())
-                    } else {
-                        edisplay_line!(
-                            namada.io(),
-                            "Expected one account to be created"
-                        );
-                        safe_exit(1)
-                    }
-                }
-                _ => {
-                    edisplay_line!(
-                        namada.io(),
-                        "Expected one account to be created"
-                    );
-                    safe_exit(1)
-                }
-            };
             // add validator address and keys to the wallet
-            namada
-                .wallet_mut()
-                .await
-                .add_validator_data(validator_address, validator_keys);
-            namada
-                .wallet_mut()
-                .await
+            let mut wallet = namada.wallet_mut().await;
+            wallet.add_validator_data(address.clone(), validator_keys);
+            wallet
                 .save()
                 .unwrap_or_else(|err| edisplay_line!(namada.io(), "{}", err));
 
             let tendermint_home = config.ledger.cometbft_dir();
             tendermint_node::write_validator_key(
                 &tendermint_home,
-                &consensus_key,
+                &wallet
+                    .find_key_by_pk(&consensus_key, None)
+                    .expect("unable to find consensus key pair in the wallet"),
             );
+            // To avoid wallet deadlocks in following operations
+            drop(wallet);
             tendermint_node::write_validator_state(tendermint_home);
 
             // Write Namada config stuff or figure out how to do the above
@@ -819,12 +819,7 @@ pub async fn submit_init_validator<'a>(
             display_line!(namada.io(), "");
             display_line!(
                 namada.io(),
-                "The validator's addresses and keys were stored in the wallet:"
-            );
-            display_line!(
-                namada.io(),
-                "  Validator address \"{}\"",
-                validator_address_alias
+                "The keys for validator \"{alias}\" were stored in the wallet:"
             );
             display_line!(
                 namada.io(),
@@ -857,8 +852,84 @@ pub async fn submit_init_validator<'a>(
     Ok(())
 }
 
-pub async fn submit_transfer<'a>(
-    namada: &impl Namada<'a>,
+pub async fn submit_init_validator(
+    namada: &impl Namada,
+    config: &mut crate::config::Config,
+    args::TxInitValidator {
+        tx: tx_args,
+        scheme,
+        account_keys,
+        threshold,
+        consensus_key,
+        eth_cold_key,
+        eth_hot_key,
+        protocol_key,
+        commission_rate,
+        max_commission_rate_change,
+        email,
+        website,
+        description,
+        discord_handle,
+        validator_vp_code_path,
+        unsafe_dont_encrypt,
+        tx_init_account_code_path,
+        tx_become_validator_code_path,
+    }: args::TxInitValidator,
+) -> Result<(), error::Error> {
+    let address = submit_init_account(
+        namada,
+        args::TxInitAccount {
+            tx: tx_args.clone(),
+            vp_code_path: validator_vp_code_path,
+            tx_code_path: tx_init_account_code_path,
+            public_keys: account_keys,
+            threshold,
+        },
+    )
+    .await?;
+
+    if tx_args.dry_run {
+        eprintln!(
+            "Cannot proceed to become validator in dry-run as no account has \
+             been created"
+        );
+        safe_exit(1);
+    }
+    let address = address.unwrap_or_else(|| {
+        eprintln!(
+            "Something went wrong with transaction to initialize an account \
+             as no address has been created. Cannot proceed to become \
+             validator."
+        );
+        safe_exit(1);
+    });
+
+    submit_become_validator(
+        namada,
+        config,
+        args::TxBecomeValidator {
+            tx: tx_args,
+            address,
+            scheme,
+            consensus_key,
+            eth_cold_key,
+            eth_hot_key,
+            protocol_key,
+            commission_rate,
+            max_commission_rate_change,
+            email,
+            description,
+            website,
+            discord_handle,
+            tx_code_path: tx_become_validator_code_path,
+            unsafe_dont_encrypt,
+        },
+    )
+    .await
+}
+
+pub async fn submit_transfer(
+    namada: &impl Namada,
     args: args::TxTransfer,
 ) -> Result<(), error::Error> {
     for _ in 0..2 {
@@ -911,7 +982,7 @@ pub async fn submit_transfer<'a>(
     Ok(())
 }
 
-pub async fn submit_ibc_transfer<'a, N: Namada<'a>>(
+pub async fn submit_ibc_transfer<N: Namada>(
     namada: &N,
     args: args::TxIbcTransfer,
 ) -> Result<(), error::Error>
@@ -935,7 +1006,7 @@ where
     Ok(())
 }
 
-pub async fn submit_init_proposal<'a, N: Namada<'a>>(
+pub async fn submit_init_proposal<N: Namada>(
     namada: &N,
     args: args::InitProposal,
 ) -> Result<(), error::Error>
@@ -965,8 +1036,14 @@ where
         )
         .await?;
 
+        let mut wallet = namada.wallet_mut().await;
         let signed_offline_proposal = proposal.sign(
-            args.tx.signing_keys,
+            args.tx
+                .signing_keys
+                .iter()
+                .map(|pk| wallet.find_key_by_pk(pk, None))
+                .collect::<Result<_, _>>()
+                .expect("secret keys corresponding to public keys not found"),
             &signing_data.account_public_keys_map.unwrap(),
         );
         let output_file_path = signed_offline_proposal
@@ -1064,7 +1141,7 @@ where
     Ok(())
 }
 
-pub async fn submit_vote_proposal<'a, N: Namada<'a>>(
+pub async fn submit_vote_proposal<N: Namada>(
     namada: &N,
     args: args::VoteProposal,
 ) -> Result<(), error::Error>
@@ -1112,8 +1189,14 @@ where
             delegations,
         );
 
+        let mut wallet = namada.wallet_mut().await;
         let offline_signed_vote = offline_vote.sign(
-            args.tx.signing_keys,
+            args.tx
+                .signing_keys
+                .iter()
+                .map(|pk| wallet.find_key_by_pk(pk, None))
+                .collect::<Result<_, _>>()
+                .expect("secret keys corresponding to public keys not found"),
             &signing_data.account_public_keys_map.unwrap(),
         );
         let output_file_path = offline_signed_vote
@@ -1144,7 +1227,7 @@ where
     Ok(())
 }
 
-pub async fn sign_tx<'a, N: Namada<'a>>(
+pub async fn sign_tx<N: Namada>(
     namada: &N,
     args::SignTx {
         tx: tx_args,
@@ -1225,7 +1308,7 @@ where
     Ok(())
 }
 
-pub async fn submit_reveal_pk<'a, N: Namada<'a>>(
+pub async fn submit_reveal_pk<N: Namada>(
     namada: &N,
     args: args::RevealPk,
 ) -> Result<(), error::Error>
@@ -1237,7 +1320,7 @@ where
     Ok(())
 }
 
-pub async fn submit_bond<'a, N: Namada<'a>>(
+pub async fn submit_bond<N: Namada>(
     namada: &N,
     args: args::Bond,
 ) -> Result<(), error::Error>
@@ -1264,7 +1347,7 @@ where
     Ok(())
 }
 
-pub async fn submit_unbond<'a, N: Namada<'a>>(
+pub async fn submit_unbond<N: Namada>(
     namada: &N,
     args: args::Unbond,
 ) -> Result<(), error::Error>
@@ -1290,7 +1373,7 @@ where
     Ok(())
 }
 
-pub async fn submit_withdraw<'a, N: Namada<'a>>(
+pub async fn submit_withdraw<N: Namada>(
     namada: &N,
     args: args::Withdraw,
 ) -> Result<(), error::Error>
@@ -1314,7 +1397,7 @@ where
     Ok(())
 }
 
-pub async fn submit_claim_rewards<'a, N: Namada<'a>>(
+pub async fn submit_claim_rewards<N: Namada>(
     namada: &N,
     args: args::ClaimRewards,
 ) -> Result<(), error::Error>
@@ -1338,7 +1421,7 @@ where
     Ok(())
 }
 
-pub async fn submit_redelegate<'a, N: Namada<'a>>(
+pub async fn submit_redelegate<N: Namada>(
     namada: &N,
     args: args::Redelegate,
 ) -> Result<(), error::Error>
@@ -1361,7 +1444,7 @@ where
     Ok(())
 }
 
-pub async fn submit_validator_commission_change<'a, N: Namada<'a>>(
+pub async fn submit_validator_commission_change<N: Namada>(
     namada: &N,
     args: args::CommissionRateChange,
 ) -> Result<(), error::Error>
@@ -1385,7 +1468,7 @@ where
     Ok(())
 }
 
-pub async fn submit_validator_metadata_change<'a, N: Namada<'a>>(
+pub async fn submit_validator_metadata_change<N: Namada>(
     namada: &N,
     args: args::MetaDataChange,
 ) -> Result<(), error::Error>
@@ -1409,7 +1492,7 @@ where
     Ok(())
 }
 
-// pub async fn submit_change_consensus_key<'a, N: Namada<'a>>(
+// pub async fn submit_change_consensus_key<N: Namada>(
 //     namada: &N,
 //     args: args::ConsensusKeyChange,
 // ) -> Result<(), error::Error>
@@ -1431,7 +1514,7 @@ where
 //     Ok(())
 // }
 
-pub async fn submit_unjail_validator<'a, N: Namada<'a>>(
+pub async fn submit_unjail_validator<N: Namada>(
     namada: &N,
     args: args::TxUnjailValidator,
 ) -> Result<(), error::Error>
@@ -1455,7 +1538,7 @@ where
     Ok(())
 }
 
-pub async fn submit_deactivate_validator<'a, N: Namada<'a>>(
+pub async fn submit_deactivate_validator<N: Namada>(
     namada: &N,
     args: args::TxDeactivateValidator,
 ) -> Result<(), error::Error>
@@ -1479,7 +1562,7 @@ where
     Ok(())
 }
 
-pub async fn submit_reactivate_validator<'a, N: Namada<'a>>(
+pub async fn submit_reactivate_validator<N: Namada>(
     namada: &N,
     args: args::TxReactivateValidator,
 ) -> Result<(), error::Error>
@@ -1503,7 +1586,7 @@ where
     Ok(())
 }
 
-pub async fn submit_update_steward_commission<'a, N: Namada<'a>>(
+pub async fn submit_update_steward_commission<N: Namada>(
     namada: &N,
     args: args::UpdateStewardCommission,
 ) -> Result<(), error::Error>
@@ -1528,7 +1611,7 @@ where
     Ok(())
 }
 
-pub async fn submit_resign_steward<'a, N: Namada<'a>>(
+pub async fn submit_resign_steward<N: Namada>(
     namada: &N,
     args: args::ResignSteward,
 ) -> Result<(), error::Error>
@@ -1553,8 +1636,8 @@ where
 }
 
 /// Save accounts initialized from a tx into the wallet, if any.
-pub async fn save_initialized_accounts<'a>(
-    namada: &impl Namada<'a>,
+pub async fn save_initialized_accounts(
+    namada: &impl Namada,
     args: &args::Tx,
     initialized_accounts: Vec<Address>,
 ) {
@@ -1565,8 +1648,8 @@ pub async fn save_initialized_accounts<'a>(
 /// the tx has been successfully included into the mempool of a validator
 ///
 /// In the case of errors in any of those stages, an error message is returned
-pub async fn broadcast_tx<'a>(
-    namada: &impl Namada<'a>,
+pub async fn broadcast_tx(
+    namada: &impl Namada,
     to_broadcast: &TxBroadcastData,
 ) -> Result<Response, error::Error> {
     tx::broadcast_tx(namada, to_broadcast).await
@@ -1580,15 +1663,15 @@ pub async fn broadcast_tx<'a>(
 /// 3. The decrypted payload of the tx has been included on the blockchain.
 ///
 /// In the case of errors in any of those stages, an error message is returned
-pub async fn submit_tx<'a>(
-    namada: &impl Namada<'a>,
+pub async fn submit_tx(
+    namada: &impl Namada,
     to_broadcast: TxBroadcastData,
 ) -> Result<TxResponse, error::Error> {
     tx::submit_tx(namada, to_broadcast).await
 }
 
-pub async fn gen_ibc_shielded_transfer<'a>(
-    context: &impl Namada<'a>,
+pub async fn gen_ibc_shielded_transfer(
+    context: &impl Namada,
     args: args::GenIbcShieldedTransafer,
 ) -> Result<(), error::Error> {
     if let Some(shielded_transfer) =

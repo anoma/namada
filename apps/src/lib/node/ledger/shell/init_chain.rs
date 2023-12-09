@@ -9,13 +9,12 @@ use namada::ledger::storage_api::token::{credit_tokens, write_denom};
 use namada::ledger::storage_api::StorageWrite;
 use namada::ledger::{ibc, pos};
 use namada::proof_of_stake::BecomeValidator;
+use namada::types::address::Address;
 use namada::types::hash::Hash as CodeHash;
 use namada::types::key::*;
-use namada::types::storage::KeySeg;
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::vm::validate_untrusted_wasm;
 use namada_sdk::eth_bridge::EthBridgeStatus;
-use namada_sdk::proof_of_stake::types::ValidatorMetaData;
 use namada_sdk::proof_of_stake::PosParams;
 
 use super::*;
@@ -25,7 +24,7 @@ use crate::config::genesis::chain::{
 };
 use crate::config::genesis::templates::{TokenBalances, TokenConfig};
 use crate::config::genesis::transactions::{
-    BondTx, EstablishedAccountTx, TransferTx, ValidatorAccountTx,
+    BondTx, EstablishedAccountTx, Signed as SignedTx, ValidatorAccountTx,
 };
 use crate::facade::tendermint::v0_37::abci::{request, response};
 use crate::facade::tendermint_proto::google::protobuf;
@@ -111,7 +110,7 @@ where
         if let Some(config) = genesis.get_eth_bridge_params() {
             tracing::debug!("Initializing Ethereum bridge storage.");
             config.init_storage(&mut self.wl_storage);
-            self.update_eth_oracle();
+            self.update_eth_oracle(&Default::default());
         } else {
             self.wl_storage
                 .write_bytes(
@@ -154,12 +153,11 @@ where
             &pos_params,
             current_epoch,
         );
-        self.apply_genesis_txs_transfer(&genesis);
         self.apply_genesis_txs_bonds(&genesis);
 
         pos::namada_proof_of_stake::compute_and_store_total_consensus_stake(
             &mut self.wl_storage,
-            Default::default(),
+            current_epoch,
         )
         .expect("Could not compute total consensus stake at genesis");
         // This has to be done after `apply_genesis_txs_validator_account`
@@ -307,25 +305,26 @@ where
                 .expect("Token with configured balance not found in genesis.")
                 .address;
             let mut total_token_balance = token::Amount::zero();
-            for (owner_pk, balance) in balances {
-                let owner = Address::from(&owner_pk.raw);
-                storage_api::account::set_public_key_at(
-                    &mut self.wl_storage,
-                    &owner,
-                    &owner_pk.raw,
-                    0,
-                )
-                .unwrap();
+            for (owner, balance) in balances {
+                if let genesis::GenesisAddress::PublicKey(pk) = owner {
+                    storage_api::account::init_account_storage(
+                        &mut self.wl_storage,
+                        &owner.address(),
+                        std::slice::from_ref(&pk.raw),
+                        1,
+                    )
+                    .unwrap();
+                }
                 tracing::info!(
                     "Crediting {} {} tokens to {}",
                     balance,
                     token_alias,
-                    owner_pk.raw
+                    owner,
                 );
                 credit_tokens(
                     &mut self.wl_storage,
                     token_address,
-                    &owner,
+                    &owner.address(),
                     balance.amount(),
                 )
                 .expect("Couldn't credit initial balance");
@@ -352,16 +351,15 @@ where
                 address,
                 tx:
                     EstablishedAccountTx {
-                        alias,
                         vp,
-                        public_key,
-                        storage,
+                        threshold,
+                        public_keys,
                     },
             } in txs
             {
                 tracing::debug!(
                     "Applying genesis tx to init an established account \
-                     {alias}"
+                     {address}"
                 );
                 let vp_code = self.lookup_vp(vp, genesis, vp_cache);
                 let code_hash = CodeHash::sha256(&vp_code);
@@ -369,25 +367,15 @@ where
                     .write_bytes(&Key::validity_predicate(address), code_hash)
                     .unwrap();
 
-                if let Some(pk) = public_key {
-                    storage_api::account::set_public_key_at(
-                        &mut self.wl_storage,
-                        address,
-                        &pk.pk.raw,
-                        0,
-                    )
-                    .unwrap();
-                }
-
-                // Place the keys under the owners sub-storage
-                let sub_key = namada::core::types::storage::Key::from(
-                    address.to_db_key(),
-                );
-                for (key, value) in storage {
-                    self.wl_storage
-                        .write_bytes(&sub_key.join(key), value.parse().unwrap())
-                        .unwrap();
-                }
+                let public_keys: Vec<_> =
+                    public_keys.iter().map(|pk| pk.raw.clone()).collect();
+                storage_api::account::init_account_storage(
+                    &mut self.wl_storage,
+                    address,
+                    &public_keys,
+                    *threshold,
+                )
+                .unwrap();
             }
         }
     }
@@ -402,29 +390,31 @@ where
     ) {
         if let Some(txs) = genesis.transactions.validator_account.as_ref() {
             for FinalizedValidatorAccountTx {
-                address,
                 tx:
-                    ValidatorAccountTx {
-                        alias,
-                        vp,
-                        commission_rate,
-                        max_commission_rate_change,
-                        email,
-                        description,
-                        website,
-                        discord_handle,
-                        net_address: _,
-                        account_key,
-                        consensus_key,
-                        protocol_key,
-                        tendermint_node_key: _,
-                        eth_hot_key,
-                        eth_cold_key,
+                    SignedTx {
+                        data:
+                            ValidatorAccountTx {
+                                address,
+                                vp,
+                                commission_rate,
+                                max_commission_rate_change,
+                                metadata,
+                                net_address: _,
+                                consensus_key,
+                                protocol_key,
+                                tendermint_node_key: _,
+                                eth_hot_key,
+                                eth_cold_key,
+                                ..
+                            },
+                        ..
                     },
             } in txs
             {
+                let address = &Address::Established(address.raw.clone());
+
                 tracing::debug!(
-                    "Applying genesis tx to init a validator account {alias}"
+                    "Applying genesis tx to init a validator account {address}"
                 );
 
                 let vp_code = self.lookup_vp(vp, genesis, vp_cache);
@@ -432,14 +422,6 @@ where
                 self.wl_storage
                     .write_bytes(&Key::validity_predicate(address), code_hash)
                     .expect("Unable to write user VP");
-                // Validator account key
-                storage_api::account::set_public_key_at(
-                    &mut self.wl_storage,
-                    address,
-                    &account_key.pk.raw,
-                    0,
-                )
-                .unwrap();
 
                 self.wl_storage
                     .write(&protocol_pk_key(address), &protocol_key.pk.raw)
@@ -448,8 +430,8 @@ where
                 // TODO: replace pos::init_genesis validators arg with
                 // init_genesis_validator from here
                 if let Err(err) = pos::namada_proof_of_stake::become_validator(
+                    &mut self.wl_storage,
                     BecomeValidator {
-                        storage: &mut self.wl_storage,
                         params,
                         address,
                         consensus_key: &consensus_key.pk.raw,
@@ -459,85 +441,16 @@ where
                         current_epoch,
                         commission_rate: *commission_rate,
                         max_commission_rate_change: *max_commission_rate_change,
-                        metadata: ValidatorMetaData {
-                            email: email.clone(),
-                            description: description.clone(),
-                            website: website.clone(),
-                            discord_handle: discord_handle.clone(),
-                        },
+                        metadata: metadata.clone(),
                         offset_opt: Some(0),
                     },
                 ) {
                     tracing::warn!(
-                        "Genesis init genesis validator tx for {alias} failed \
-                         with {err}. Skipping."
+                        "Genesis init genesis validator tx for {address} \
+                         failed with {err}. Skipping."
                     );
                     continue;
                 }
-            }
-        }
-    }
-
-    /// Apply genesis txs to transfer tokens
-    fn apply_genesis_txs_transfer(
-        &mut self,
-        genesis: &genesis::chain::Finalized,
-    ) {
-        if let Some(txs) = &genesis.transactions.transfer {
-            for TransferTx {
-                token,
-                source,
-                target,
-                amount,
-                ..
-            } in txs
-            {
-                let token = match genesis.get_token_address(token) {
-                    Some(token) => {
-                        tracing::debug!(
-                            "Applying genesis tx to transfer {} of token \
-                             {token} from {source} to {target}",
-                            amount
-                        );
-                        token
-                    }
-                    None => {
-                        tracing::warn!(
-                            "Genesis token transfer tx uses an unknown token \
-                             alias {token}. Skipping."
-                        );
-                        continue;
-                    }
-                };
-                let target = match genesis.get_user_address(target) {
-                    Some(target) => target,
-                    None => {
-                        tracing::warn!(
-                            "Genesis token transfer tx uses an unknown target \
-                             alias {target}. Skipping."
-                        );
-                        continue;
-                    }
-                };
-                let source: Address = (&source.raw).into();
-                tracing::debug!(
-                    "Transfer addresses: token {token} from {source} to \
-                     {target}"
-                );
-
-                if let Err(err) = storage_api::token::transfer(
-                    &mut self.wl_storage,
-                    token,
-                    &source,
-                    &target,
-                    amount.amount(),
-                ) {
-                    tracing::warn!(
-                        "Genesis token transfer tx failed with: {err}. \
-                         Skipping."
-                    );
-                    continue;
-                };
             }
         }
     }
@@ -559,38 +472,9 @@ where
                     amount,
                 );
 
-                let source = match source {
-                    genesis::transactions::AliasOrPk::Alias(alias) => {
-                        match genesis.get_user_address(alias) {
-                            Some(addr) => addr,
-                            None => {
-                                tracing::warn!(
-                                    "Cannot find bond source address with \
-                                     alias \"{alias}\". Skipping."
-                                );
-                                continue;
-                            }
-                        }
-                    }
-                    genesis::transactions::AliasOrPk::PublicKey(pk) => {
-                        Address::from(&pk.raw)
-                    }
-                };
-
-                let validator = match genesis.get_validator_address(validator) {
-                    Some(addr) => addr,
-                    None => {
-                        tracing::warn!(
-                            "Cannot find bond validator address with alias \
-                             \"{validator}\". Skipping."
-                        );
-                        continue;
-                    }
-                };
-
                 if let Err(err) = pos::namada_proof_of_stake::bond_tokens(
                     &mut self.wl_storage,
-                    Some(&source),
+                    Some(&source.address()),
                     validator,
                     amount.amount(),
                     current_epoch,

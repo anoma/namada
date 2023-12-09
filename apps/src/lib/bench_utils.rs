@@ -19,39 +19,39 @@ use namada::core::types::address::{self, Address};
 use namada::core::types::key::common::SecretKey;
 use namada::core::types::storage::Key;
 use namada::core::types::token::{Amount, Transfer};
-use namada::ibc::applications::transfer::msgs::transfer::MsgTransfer;
-use namada::ibc::applications::transfer::packet::PacketData;
-use namada::ibc::applications::transfer::PrefixedCoin;
-use namada::ibc::clients::ics07_tendermint::client_state::{
-    AllowUpdate, ClientState,
+use namada::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
+use namada::ibc::apps::transfer::types::packet::PacketData;
+use namada::ibc::apps::transfer::types::PrefixedCoin;
+use namada::ibc::clients::tendermint::client_state::ClientState;
+use namada::ibc::clients::tendermint::consensus_state::ConsensusState;
+use namada::ibc::clients::tendermint::types::{
+    AllowUpdate, ClientState as ClientStateType,
+    ConsensusState as ConsensusStateType, TrustThreshold,
 };
-use namada::ibc::clients::ics07_tendermint::consensus_state::ConsensusState;
-use namada::ibc::clients::ics07_tendermint::trust_threshold::TrustThreshold;
-use namada::ibc::core::ics02_client::client_type::ClientType;
-use namada::ibc::core::ics03_connection::connection::{
-    ConnectionEnd, Counterparty, State as ConnectionState,
-};
-use namada::ibc::core::ics03_connection::version::Version;
-use namada::ibc::core::ics04_channel::channel::{
+use namada::ibc::core::channel::types::channel::{
     ChannelEnd, Counterparty as ChannelCounterparty, Order, State,
 };
-use namada::ibc::core::ics04_channel::timeout::TimeoutHeight;
-use namada::ibc::core::ics04_channel::Version as ChannelVersion;
-use namada::ibc::core::ics23_commitment::commitment::{
+use namada::ibc::core::channel::types::timeout::TimeoutHeight;
+use namada::ibc::core::channel::types::Version as ChannelVersion;
+use namada::ibc::core::client::types::Height as IbcHeight;
+use namada::ibc::core::commitment_types::commitment::{
     CommitmentPrefix, CommitmentRoot,
 };
-use namada::ibc::core::ics23_commitment::specs::ProofSpecs;
-use namada::ibc::core::ics24_host::identifier::{
-    ChainId as IbcChainId, ChannelId as NamadaChannelId, ChannelId, ClientId,
-    ConnectionId, ConnectionId as NamadaConnectionId, PortId as NamadaPortId,
-    PortId,
+use namada::ibc::core::commitment_types::specs::ProofSpecs;
+use namada::ibc::core::connection::types::version::Version;
+use namada::ibc::core::connection::types::{
+    ConnectionEnd, Counterparty, State as ConnectionState,
 };
-use namada::ibc::core::ics24_host::path::Path as IbcPath;
-use namada::ibc::core::timestamp::Timestamp as IbcTimestamp;
-use namada::ibc::core::Msg;
-use namada::ibc::Height as IbcHeight;
-use namada::ibc_proto::google::protobuf::Any;
-use namada::ibc_proto::protobuf::Protobuf;
+use namada::ibc::core::host::types::identifiers::{
+    ChainId as IbcChainId, ChannelId as NamadaChannelId, ChannelId, ClientId,
+    ClientType, ConnectionId, ConnectionId as NamadaConnectionId,
+    PortId as NamadaPortId, PortId,
+};
+use namada::ibc::core::host::types::path::{
+    ClientConsensusStatePath, ClientStatePath, Path as IbcPath,
+};
+use namada::ibc::primitives::proto::{Any, Protobuf};
+use namada::ibc::primitives::{Msg, Timestamp as IbcTimestamp};
 use namada::ledger::dry_run_tx;
 use namada::ledger::gas::TxGasMeter;
 use namada::ledger::ibc::storage::{channel_key, connection_key};
@@ -80,20 +80,20 @@ use namada_sdk::masp::{
     self, ShieldedContext, ShieldedTransfer, ShieldedUtils,
 };
 pub use namada_sdk::tx::{
-    TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
+    TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
     TX_CHANGE_COMMISSION_WASM as TX_CHANGE_VALIDATOR_COMMISSION_WASM,
     TX_CHANGE_CONSENSUS_KEY_WASM,
     TX_CHANGE_METADATA_WASM as TX_CHANGE_VALIDATOR_METADATA_WASM,
     TX_CLAIM_REWARDS_WASM, TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM,
     TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL as TX_INIT_PROPOSAL_WASM,
-    TX_INIT_VALIDATOR_WASM, TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM,
-    TX_RESIGN_STEWARD, TX_REVEAL_PK as TX_REVEAL_PK_WASM, TX_TRANSFER_WASM,
-    TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
+    TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM, TX_RESIGN_STEWARD,
+    TX_REVEAL_PK as TX_REVEAL_PK_WASM, TX_TRANSFER_WASM, TX_UNBOND_WASM,
+    TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
     TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL as TX_VOTE_PROPOSAL_WASM,
-    TX_WITHDRAW_WASM, VP_USER_WASM, VP_VALIDATOR_WASM,
+    TX_WITHDRAW_WASM, VP_USER_WASM,
 };
 use namada_sdk::wallet::Wallet;
-use namada_sdk::NamadaImpl;
+use namada_sdk::{Namada, NamadaImpl};
 use namada_test_utils::tx_data::TxWriteData;
 use rand_core::OsRng;
 use sha2::{Digest, Sha256};
@@ -424,15 +424,11 @@ impl BenchShell {
             ClientId::new(ClientType::new("01-tendermint").unwrap(), 1)
                 .unwrap();
         let client_state_key = addr_key.join(&Key::from(
-            IbcPath::ClientState(
-                namada::ibc::core::ics24_host::path::ClientStatePath(
-                    client_id.clone(),
-                ),
-            )
-            .to_string()
-            .to_db_key(),
+            IbcPath::ClientState(ClientStatePath(client_id.clone()))
+                .to_string()
+                .to_db_key(),
         ));
-        let client_state = ClientState::new(
+        let client_state = ClientStateType::new(
             IbcChainId::from_str(&ChainId::default().to_string()).unwrap(),
             TrustThreshold::ONE_THIRD,
             std::time::Duration::new(100, 0),
@@ -446,8 +442,9 @@ impl BenchShell {
                 after_misbehaviour: true,
             },
         )
-        .unwrap();
-        let bytes = <ClientState as Protobuf<Any>>::encode_vec(&client_state);
+        .unwrap()
+        .into();
+        let bytes = <ClientState as Protobuf<Any>>::encode_vec(client_state);
         self.wl_storage
             .storage
             .write(&client_state_key, bytes)
@@ -457,25 +454,24 @@ impl BenchShell {
         let now: namada::tendermint::Time =
             DateTimeUtc::now().try_into().unwrap();
         let consensus_key = addr_key.join(&Key::from(
-            IbcPath::ClientConsensusState(
-                namada::ibc::core::ics24_host::path::ClientConsensusStatePath {
-                    client_id: client_id.clone(),
-                    epoch: 0,
-                    height: 1,
-                },
-            )
+            IbcPath::ClientConsensusState(ClientConsensusStatePath {
+                client_id: client_id.clone(),
+                revision_number: 0,
+                revision_height: 1,
+            })
             .to_string()
             .to_db_key(),
         ));
 
-        let consensus_state = ConsensusState {
+        let consensus_state = ConsensusStateType {
             timestamp: now,
             root: CommitmentRoot::from_bytes(&[]),
             next_validators_hash: Hash::Sha256([0u8; 32]),
-        };
+        }
+        .into();
 
         let bytes =
-            <ConsensusState as Protobuf<Any>>::encode_vec(&consensus_state);
+            <ConsensusState as Protobuf<Any>>::encode_vec(consensus_state);
         self.wl_storage
             .storage
             .write(&consensus_key, bytes)
@@ -748,6 +744,7 @@ impl Default for BenchShieldedCtx {
         wallet.save().unwrap();
 
         let ctx = Context::new::<StdIo>(crate::cli::args::Global {
+            is_pre_genesis: false,
             chain_id: Some(shell.inner.chain_id.clone()),
             base_dir,
             wasm_dir: Some(WASM_DIR.into()),
@@ -819,11 +816,11 @@ impl Default for BenchShieldedCtx {
 
 impl BenchShieldedCtx {
     pub fn generate_masp_tx(
-        &mut self,
+        mut self,
         amount: Amount,
         source: TransferSource,
         target: TransferTarget,
-    ) -> Tx {
+    ) -> (Self, Tx) {
         let denominated_amount = DenominatedAmount::native(amount);
         let async_runtime = tokio::runtime::Runtime::new().unwrap();
         let spending_key = self
@@ -837,12 +834,13 @@ impl BenchShieldedCtx {
                 &[],
             ))
             .unwrap();
+        let native_token = self.shell.wl_storage.storage.native_token.clone();
         let namada = NamadaImpl::native_new(
-            &self.shell,
-            &mut self.wallet,
-            &mut self.shielded,
-            &StdIo,
-            self.shell.wl_storage.storage.native_token.clone(),
+            self.shell,
+            self.wallet,
+            self.shielded,
+            StdIo,
+            native_token,
         );
         let shielded = async_runtime
             .block_on(
@@ -874,7 +872,7 @@ impl BenchShieldedCtx {
             )
         });
 
-        self.shell.generate_tx(
+        let tx = namada.client().generate_tx(
             TX_TRANSFER_WASM,
             Transfer {
                 source: source.effective_address(),
@@ -887,6 +885,18 @@ impl BenchShieldedCtx {
             shielded,
             None,
             vec![&defaults::albert_keypair()],
-        )
+        );
+        let NamadaImpl {
+            client,
+            wallet,
+            shielded,
+            ..
+        } = namada;
+        let ctx = Self {
+            shielded: shielded.into_inner(),
+            shell: client,
+            wallet: wallet.into_inner(),
+        };
+        (ctx, tx)
     }
 }

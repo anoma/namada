@@ -1,16 +1,20 @@
-//! A basic user VP.
+//! A basic user VP supports both non-validator and validator accounts.
 //!
 //! This VP currently provides a signature verification against a public key for
 //! sending tokens (receiving tokens is permissive).
 //!
 //! It allows to bond, unbond and withdraw tokens to and from PoS system with a
-//! valid signature.
+//! valid signature(s).
+//!
+//! For validator a tx to change a validator's commission rate or metadata
+//! requires a valid signature(s) only from the validator.
 //!
 //! Any other storage key changes are allowed only with a valid signature.
 
 use namada_vp_prelude::storage::KeySeg;
 use namada_vp_prelude::*;
 use once_cell::unsync::Lazy;
+use proof_of_stake::types::ValidatorState;
 
 enum KeyType<'a> {
     Token { owner: &'a Address },
@@ -104,14 +108,14 @@ fn validate_tx(
                 }
             }
             KeyType::PoS => {
-                // Allow the account to be used in PoS
+                // Bond or unbond
                 let bond_id = proof_of_stake::storage::is_bond_key(key)
                     .map(|(bond_id, _)| bond_id)
                     .or_else(|| {
                         proof_of_stake::storage::is_unbond_key(key)
                             .map(|(bond_id, _, _)| bond_id)
                     });
-                let valid = match bond_id {
+                let valid_bond_or_unbond_change = match bond_id {
                     Some(bond_id) => {
                         // Bonds and unbonds changes for this address
                         // must be signed
@@ -122,12 +126,85 @@ fn validate_tx(
                         true
                     }
                 };
-                debug_log!(
-                    "PoS key {} {}",
-                    key,
-                    if valid { "accepted" } else { "rejected" }
-                );
-                valid
+                // Commission rate changes must be signed by the validator
+                let comm =
+                    proof_of_stake::storage::is_validator_commission_rate_key(
+                        key,
+                    );
+                let valid_commission_rate_change = match comm {
+                    Some((validator, _epoch)) => {
+                        *validator == addr && *valid_sig
+                    }
+                    None => true,
+                };
+                // Metadata changes must be signed by the validator whose
+                // metadata is manipulated
+                let metadata =
+                    proof_of_stake::storage::is_validator_metadata_key(key);
+                let valid_metadata_change = match metadata {
+                    Some(address) => *address == addr && *valid_sig,
+                    None => true,
+                };
+
+                // Changes due to unjailing, deactivating, and reactivating are
+                // marked by changes in validator state
+                let state_change =
+                    proof_of_stake::storage::is_validator_state_key(key);
+                let valid_state_change = match state_change {
+                    Some((address, epoch)) => {
+                        let params_pre =
+                            proof_of_stake::read_pos_params(&ctx.pre())?;
+                        let state_pre =
+                            proof_of_stake::validator_state_handle(address)
+                                .get(&ctx.pre(), epoch, &params_pre)?;
+
+                        let params_post =
+                            proof_of_stake::read_pos_params(&ctx.post())?;
+                        let state_post =
+                            proof_of_stake::validator_state_handle(address)
+                                .get(&ctx.post(), epoch, &params_post)?;
+
+                        match (state_pre, state_post) {
+                            (Some(pre), Some(post)) => {
+                                if
+                                // Deactivation case
+                                (matches!(
+                                    pre,
+                                    ValidatorState::Consensus
+                                        | ValidatorState::BelowCapacity
+                                        | ValidatorState::BelowThreshold
+                                ) && post == ValidatorState::Inactive)
+                                // Reactivation case
+                                || pre == ValidatorState::Inactive
+                                    && post != ValidatorState::Inactive
+                                // Unjail case
+                                || pre == ValidatorState::Jailed
+                                    && matches!(
+                                        post,
+                                        ValidatorState::Consensus
+                                            | ValidatorState::BelowCapacity
+                                            | ValidatorState::BelowThreshold
+                                    )
+                                {
+                                    *address == addr && *valid_sig
+                                } else {
+                                    true
+                                }
+                            }
+                            (None, Some(_post)) => {
+                                // Becoming a validator must be authorized
+                                *valid_sig
+                            }
+                            _ => true,
+                        }
+                    }
+                    None => true,
+                };
+
+                valid_bond_or_unbond_change
+                    && valid_commission_rate_change
+                    && valid_state_change
+                    && valid_metadata_change
             }
             KeyType::GovernanceVote(voter) => {
                 if voter == &addr {
@@ -186,7 +263,7 @@ mod tests {
     use namada::proto::{Code, Data, Signature};
     use namada::types::dec::Dec;
     use namada::types::storage::Epoch;
-    use namada::types::transaction::TxType;
+    use namada::types::transaction::{self, TxType};
     use namada_test_utils::TestWasms;
     // Use this as `#[test]` annotation to enable logging
     use namada_tests::log::test;
@@ -398,10 +475,10 @@ mod tests {
         );
     }
 
-    /// Test that a PoS action that must be authorized is rejected without a
-    /// valid signature.
+    /// Test that a non-validator PoS action that must be authorized is rejected
+    /// without a valid signature.
     #[test]
-    fn test_unsigned_pos_action_rejected() {
+    fn test_unsigned_non_validator_pos_action_rejected() {
         // Init PoS genesis
         let pos_params = PosParams::default();
         let validator = address::testing::established_address_3();
@@ -454,7 +531,7 @@ mod tests {
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, amount);
 
-        // Initialize VP environment from a transaction
+        // Initialize VP environment from non-validator PoS actions
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
             // Bond the tokens, then unbond some of them
             tx::ctx()
@@ -478,10 +555,184 @@ mod tests {
         );
     }
 
-    /// Test that a PoS action that must be authorized is accepted with a valid
-    /// signature.
+    /// Test that a PoS action to become validator that must be authorized is
+    /// rejected without a valid signature.
     #[test]
-    fn test_signed_pos_action_accepted() {
+    fn test_unsigned_become_validator_pos_action_rejected() {
+        // Init PoS genesis
+        let pos_params = PosParams::default();
+        let validator = address::testing::established_address_3();
+        let initial_stake = token::Amount::from_uint(10_098_123, 0).unwrap();
+        let consensus_key = key::testing::keypair_2().ref_to();
+        let protocol_key = key::testing::keypair_1().ref_to();
+        let eth_cold_key = key::testing::keypair_3().ref_to();
+        let eth_hot_key = key::testing::keypair_4().ref_to();
+        let commission_rate = Dec::new(5, 2).unwrap();
+        let max_commission_rate_change = Dec::new(1, 2).unwrap();
+
+        let genesis_validators = [GenesisValidator {
+            address: validator,
+            tokens: initial_stake,
+            consensus_key,
+            protocol_key,
+            commission_rate,
+            max_commission_rate_change,
+            eth_hot_key,
+            eth_cold_key,
+            metadata: Default::default(),
+        }];
+
+        init_pos(&genesis_validators[..], &pos_params, Epoch(0));
+
+        // Initialize a tx environment
+        let mut tx_env = tx_host_env::take();
+
+        let secret_key = key::testing::keypair_1();
+        let public_key = secret_key.ref_to();
+        let vp_owner: Address = address::testing::established_address_2();
+
+        // Spawn the accounts to be able to modify their storage
+        tx_env.init_account_storage(&vp_owner, vec![public_key], 1);
+
+        // Initialize VP environment from PoS action to become a validator
+        vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
+            let consensus_key = key::common::PublicKey::Ed25519(
+                key::testing::gen_keypair::<key::ed25519::SigScheme>().ref_to(),
+            );
+            let protocol_key = key::common::PublicKey::Ed25519(
+                key::testing::gen_keypair::<key::ed25519::SigScheme>().ref_to(),
+            );
+            let eth_cold_key =
+                key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                    .ref_to();
+            let eth_hot_key =
+                key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                    .ref_to();
+            let commission_rate = Dec::new(5, 2).unwrap();
+            let max_commission_rate_change = Dec::new(1, 2).unwrap();
+            let args = transaction::pos::BecomeValidator {
+                address: address.clone(),
+                consensus_key,
+                eth_cold_key,
+                eth_hot_key,
+                protocol_key,
+                commission_rate,
+                max_commission_rate_change,
+                email: "cucumber@tastes.good".to_string(),
+                description: None,
+                website: None,
+                discord_handle: None,
+            };
+            tx::ctx().become_validator(args).unwrap();
+        });
+
+        let vp_env = vp_host_env::take();
+        let mut tx_data = Tx::from_type(TxType::Raw);
+        tx_data.set_data(Data::new(vec![]));
+        let keys_changed: BTreeSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: BTreeSet<Address> = BTreeSet::default();
+        vp_host_env::set(vp_env);
+        assert!(
+            !validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+                .unwrap()
+        );
+    }
+
+    /// Test that a validator PoS action that must be authorized is rejected
+    /// without a valid signature.
+    #[test]
+    fn test_unsigned_validator_pos_action_rejected() {
+        // Init PoS genesis
+        let pos_params = PosParams::default();
+        let validator = address::testing::established_address_3();
+        let initial_stake = token::Amount::from_uint(10_098_123, 0).unwrap();
+        let consensus_key = key::testing::keypair_2().ref_to();
+        let protocol_key = key::testing::keypair_1().ref_to();
+        let eth_cold_key = key::testing::keypair_3().ref_to();
+        let eth_hot_key = key::testing::keypair_4().ref_to();
+        let commission_rate = Dec::new(5, 2).unwrap();
+        let max_commission_rate_change = Dec::new(1, 2).unwrap();
+
+        let genesis_validators = [GenesisValidator {
+            address: validator.clone(),
+            tokens: initial_stake,
+            consensus_key,
+            protocol_key,
+            commission_rate,
+            max_commission_rate_change,
+            eth_hot_key,
+            eth_cold_key,
+            metadata: Default::default(),
+        }];
+
+        init_pos(&genesis_validators[..], &pos_params, Epoch(0));
+
+        // Initialize a tx environment
+        let mut tx_env = tx_host_env::take();
+
+        let secret_key = key::testing::keypair_1();
+        let public_key = secret_key.ref_to();
+        let target = address::testing::established_address_3();
+        let token = address::nam();
+        let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
+        let bond_amount = token::Amount::from_uint(5_098_123, 0).unwrap();
+        let unbond_amount = token::Amount::from_uint(3_098_123, 0).unwrap();
+
+        // Spawn the accounts to be able to modify their storage
+        tx_env.spawn_accounts([&target, &token]);
+        tx_env.init_account_storage(&validator, vec![public_key], 1);
+        // write the denomination of NAM into storage
+        storage_api::token::write_denom(
+            &mut tx_env.wl_storage,
+            &token,
+            token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        )
+        .unwrap();
+
+        // Credit the tokens to the validator before running the transaction to
+        // be able to transfer from it
+        tx_env.credit_tokens(&validator, &token, amount);
+
+        // Validator PoS actions
+        vp_host_env::init_from_tx(validator.clone(), tx_env, |_address| {
+            // Bond the tokens, then unbond some of them
+            tx::ctx()
+                .bond_tokens(Some(&validator), &validator, bond_amount)
+                .unwrap();
+            tx::ctx()
+                .unbond_tokens(Some(&validator), &validator, unbond_amount)
+                .unwrap();
+            tx::ctx().deactivate_validator(&validator).unwrap();
+            tx::ctx()
+                .change_validator_metadata(
+                    &validator,
+                    Some("email".to_owned()),
+                    Some("desc".to_owned()),
+                    Some("website".to_owned()),
+                    Some("discord".to_owned()),
+                    Some(Dec::new(6, 2).unwrap()),
+                )
+                .unwrap();
+        });
+
+        let vp_env = vp_host_env::take();
+        let mut tx_data = Tx::from_type(TxType::Raw);
+        tx_data.set_data(Data::new(vec![]));
+        let keys_changed: BTreeSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: BTreeSet<Address> = BTreeSet::default();
+        vp_host_env::set(vp_env);
+        assert!(
+            !validate_tx(&CTX, tx_data, validator, keys_changed, verifiers)
+                .unwrap()
+        );
+    }
+
+    /// Test that a non-validator PoS action that must be authorized is accepted
+    /// with a valid signature.
+    #[test]
+    fn test_signed_non_validator_pos_action_accepted() {
         // Init PoS genesis
         let pos_params = PosParams::default();
         let validator = address::testing::established_address_3();
@@ -539,7 +790,7 @@ mod tests {
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, amount);
 
-        // Initialize VP environment from a transaction
+        // Initialize VP environment from non-validator PoS actions
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
             // Bond the tokens, then unbond some of them
             tx::ctx()
@@ -569,6 +820,205 @@ mod tests {
         vp_host_env::set(vp_env);
         assert!(
             validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
+                .unwrap()
+        );
+    }
+
+    /// Test that a signed PoS action to become validator that must be
+    /// authorized is accepted with a valid signature.
+    #[test]
+    fn test_signed_become_validator_pos_action_accepted() {
+        // Init PoS genesis
+        let pos_params = PosParams::default();
+        let validator = address::testing::established_address_3();
+        let initial_stake = token::Amount::from_uint(10_098_123, 0).unwrap();
+        let consensus_key = key::testing::keypair_2().ref_to();
+        let protocol_key = key::testing::keypair_1().ref_to();
+        let eth_cold_key = key::testing::keypair_3().ref_to();
+        let eth_hot_key = key::testing::keypair_4().ref_to();
+        let commission_rate = Dec::new(5, 2).unwrap();
+        let max_commission_rate_change = Dec::new(1, 2).unwrap();
+
+        let genesis_validators = [GenesisValidator {
+            address: validator,
+            tokens: initial_stake,
+            consensus_key,
+            protocol_key,
+            commission_rate,
+            max_commission_rate_change,
+            eth_hot_key,
+            eth_cold_key,
+            metadata: Default::default(),
+        }];
+
+        init_pos(&genesis_validators[..], &pos_params, Epoch(0));
+
+        // Initialize a tx environment
+        let mut tx_env = tx_host_env::take();
+
+        let secret_key = key::testing::keypair_1();
+        let public_key = secret_key.ref_to();
+        let vp_owner: Address = address::testing::established_address_2();
+
+        // Spawn the accounts to be able to modify their storage
+        tx_env.init_account_storage(&vp_owner, vec![public_key.clone()], 1);
+
+        // Initialize VP environment from PoS action to become a validator
+        vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
+            let consensus_key = key::common::PublicKey::Ed25519(
+                key::testing::gen_keypair::<key::ed25519::SigScheme>().ref_to(),
+            );
+            let protocol_key = key::common::PublicKey::Ed25519(
+                key::testing::gen_keypair::<key::ed25519::SigScheme>().ref_to(),
+            );
+            let eth_cold_key =
+                key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                    .ref_to();
+            let eth_hot_key =
+                key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                    .ref_to();
+            let commission_rate = Dec::new(5, 2).unwrap();
+            let max_commission_rate_change = Dec::new(1, 2).unwrap();
+            let args = transaction::pos::BecomeValidator {
+                address: address.clone(),
+                consensus_key,
+                eth_cold_key,
+                eth_hot_key,
+                protocol_key,
+                commission_rate,
+                max_commission_rate_change,
+                email: "cucumber@tastes.good".to_string(),
+                description: None,
+                website: None,
+                discord_handle: None,
+            };
+            tx::ctx().become_validator(args).unwrap();
+        });
+
+        let pks_map = AccountPublicKeysMap::from_iter(vec![public_key]);
+
+        let mut vp_env = vp_host_env::take();
+        let mut tx = vp_env.tx.clone();
+        tx.set_data(Data::new(vec![]));
+        tx.set_code(Code::new(vec![], None));
+        tx.add_section(Section::Signature(Signature::new(
+            vec![tx.raw_header_hash()],
+            pks_map.index_secret_keys(vec![secret_key]),
+            None,
+        )));
+        let signed_tx = tx.clone();
+        vp_env.tx = signed_tx.clone();
+        let keys_changed: BTreeSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: BTreeSet<Address> = BTreeSet::default();
+        vp_host_env::set(vp_env);
+        assert!(
+            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
+                .unwrap()
+        );
+    }
+
+    /// Test that a validator PoS action that must be authorized is accepted
+    /// with a valid signature.
+    #[test]
+    fn test_signed_validator_pos_action_accepted() {
+        // Init PoS genesis
+        let pos_params = PosParams::default();
+        let validator = address::testing::established_address_3();
+        let initial_stake = token::Amount::from_uint(10_098_123, 0).unwrap();
+        let consensus_key = key::testing::keypair_2().ref_to();
+        let protocol_key = key::testing::keypair_1().ref_to();
+        let commission_rate = Dec::new(5, 2).unwrap();
+        let max_commission_rate_change = Dec::new(1, 2).unwrap();
+
+        let genesis_validators = [GenesisValidator {
+            address: validator.clone(),
+            tokens: initial_stake,
+            consensus_key,
+            protocol_key,
+            commission_rate,
+            max_commission_rate_change,
+            eth_hot_key: key::common::PublicKey::Secp256k1(
+                key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                    .ref_to(),
+            ),
+            eth_cold_key: key::common::PublicKey::Secp256k1(
+                key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                    .ref_to(),
+            ),
+            metadata: Default::default(),
+        }];
+
+        init_pos(&genesis_validators[..], &pos_params, Epoch(0));
+
+        // Initialize a tx environment
+        let mut tx_env = tx_host_env::take();
+
+        let secret_key = key::testing::keypair_1();
+        let public_key = secret_key.ref_to();
+        let target = address::testing::established_address_3();
+        let token = address::nam();
+        let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
+        let bond_amount = token::Amount::from_uint(5_098_123, 0).unwrap();
+        let unbond_amount = token::Amount::from_uint(3_098_123, 0).unwrap();
+
+        // Spawn the accounts to be able to modify their storage
+        tx_env.spawn_accounts([&target, &token]);
+        tx_env.init_account_storage(&validator, vec![public_key.clone()], 1);
+
+        // write the denomination of NAM into storage
+        storage_api::token::write_denom(
+            &mut tx_env.wl_storage,
+            &token,
+            token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        )
+        .unwrap();
+
+        // Credit the tokens to the VP owner before running the transaction to
+        // be able to transfer from it
+        tx_env.credit_tokens(&validator, &token, amount);
+
+        // Validator PoS actions
+        vp_host_env::init_from_tx(validator.clone(), tx_env, |_address| {
+            // Bond the tokens, then unbond some of them
+            tx::ctx()
+                .bond_tokens(Some(&validator), &validator, bond_amount)
+                .unwrap();
+            tx::ctx()
+                .unbond_tokens(Some(&validator), &validator, unbond_amount)
+                .unwrap();
+            tx::ctx().deactivate_validator(&validator).unwrap();
+            tx::ctx()
+                .change_validator_metadata(
+                    &validator,
+                    Some("email".to_owned()),
+                    Some("desc".to_owned()),
+                    Some("website".to_owned()),
+                    Some("discord".to_owned()),
+                    Some(Dec::new(6, 2).unwrap()),
+                )
+                .unwrap();
+        });
+
+        let pks_map = AccountPublicKeysMap::from_iter(vec![public_key]);
+
+        let mut vp_env = vp_host_env::take();
+        let mut tx = vp_env.tx.clone();
+        tx.set_data(Data::new(vec![]));
+        tx.set_code(Code::new(vec![], None));
+        tx.add_section(Section::Signature(Signature::new(
+            vec![tx.raw_header_hash()],
+            pks_map.index_secret_keys(vec![secret_key]),
+            None,
+        )));
+        let signed_tx = tx.clone();
+        vp_env.tx = signed_tx.clone();
+        let keys_changed: BTreeSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: BTreeSet<Address> = BTreeSet::default();
+        vp_host_env::set(vp_env);
+        assert!(
+            validate_tx(&CTX, signed_tx, validator, keys_changed, verifiers)
                 .unwrap()
         );
     }

@@ -254,8 +254,8 @@ fn gen_spending_key(
 #[derive(Error, Debug)]
 pub enum FindKeyError {
     /// Could not find a given key in the wallet
-    #[error("No matching key found")]
-    KeyNotFound,
+    #[error("No key matching {0} found")]
+    KeyNotFound(String),
     /// Could not decrypt a given key in the wallet
     #[error("{0}")]
     KeyDecryptionError(keys::DecryptionError),
@@ -403,9 +403,9 @@ impl<U> Wallet<U> {
         &mut self,
         alias: impl AsRef<str>,
     ) -> Result<&ExtendedViewingKey, FindKeyError> {
-        self.store
-            .find_viewing_key(alias.as_ref())
-            .ok_or(FindKeyError::KeyNotFound)
+        self.store.find_viewing_key(alias.as_ref()).ok_or_else(|| {
+            FindKeyError::KeyNotFound(alias.as_ref().to_string())
+        })
     }
 
     /// Find the payment address with the given alias in the wallet and return
@@ -587,6 +587,7 @@ impl<U: WalletIo> Wallet<U> {
     pub fn gen_hd_seed(
         passphrase: Option<Zeroizing<String>>,
         rng: &mut U::Rng,
+        unsafe_dont_encrypt: bool,
     ) -> Result<(Mnemonic, Seed), GenRestoreKeyError> {
         const MNEMONIC_TYPE: MnemonicType = MnemonicType::Words24;
         let mnemonic = U::generate_mnemonic_code(MNEMONIC_TYPE, rng)?;
@@ -596,8 +597,11 @@ impl<U: WalletIo> Wallet<U> {
         );
         println!("{}", mnemonic.clone().into_phrase());
 
-        let passphrase =
-            passphrase.unwrap_or_else(|| U::read_mnemonic_passphrase(true));
+        let passphrase = if unsafe_dont_encrypt {
+            Zeroizing::new(String::new())
+        } else {
+            passphrase.unwrap_or_else(|| U::read_mnemonic_passphrase(true))
+        };
         let seed = Seed::new(&mnemonic, &passphrase);
         Ok((mnemonic, seed))
     }
@@ -688,7 +692,9 @@ impl<U: WalletIo> Wallet<U> {
         let stored_key = self
             .store
             .find_secret_key(alias_pkh_or_pk.as_ref())
-            .ok_or(FindKeyError::KeyNotFound)?;
+            .ok_or_else(|| {
+            FindKeyError::KeyNotFound(alias_pkh_or_pk.as_ref().to_string())
+        })?;
         Self::decrypt_stored_key::<_>(
             &mut self.decrypted_key_cache,
             stored_key,
@@ -705,7 +711,9 @@ impl<U: WalletIo> Wallet<U> {
         self.store
             .find_public_key(alias_or_pkh.as_ref())
             .cloned()
-            .ok_or(FindKeyError::KeyNotFound)
+            .ok_or_else(|| {
+                FindKeyError::KeyNotFound(alias_or_pkh.as_ref().to_string())
+            })
     }
 
     /// Find the spending key with the given alias in the wallet and return it.
@@ -726,7 +734,9 @@ impl<U: WalletIo> Wallet<U> {
         let stored_spendkey = self
             .store
             .find_spending_key(alias.as_ref())
-            .ok_or(FindKeyError::KeyNotFound)?;
+            .ok_or_else(|| {
+                FindKeyError::KeyNotFound(alias.as_ref().to_string())
+            })?;
         Self::decrypt_stored_key::<_>(
             &mut self.decrypted_spendkey_cache,
             stored_spendkey,
@@ -756,7 +766,7 @@ impl<U: WalletIo> Wallet<U> {
     ) -> Result<DerivationPath, FindKeyError> {
         self.store
             .find_path_by_pkh(pkh)
-            .ok_or(FindKeyError::KeyNotFound)
+            .ok_or_else(|| FindKeyError::KeyNotFound(pkh.to_string()))
     }
 
     /// Find the public key by a public key hash.
@@ -770,7 +780,7 @@ impl<U: WalletIo> Wallet<U> {
         self.store
             .find_public_key_by_pkh(pkh)
             .cloned()
-            .ok_or(FindKeyError::KeyNotFound)
+            .ok_or_else(|| FindKeyError::KeyNotFound(pkh.to_string()))
     }
 
     /// Find the stored key by a public key hash.
@@ -795,7 +805,7 @@ impl<U: WalletIo> Wallet<U> {
         let stored_key = self
             .store
             .find_key_by_pkh(pkh)
-            .ok_or(FindKeyError::KeyNotFound)?;
+            .ok_or_else(|| FindKeyError::KeyNotFound(pkh.to_string()))?;
         Self::decrypt_stored_key(
             &mut self.decrypted_key_cache,
             stored_key,
@@ -830,7 +840,7 @@ impl<U: WalletIo> Wallet<U> {
                 decrypted_key_cache
                     .get(&alias)
                     .cloned()
-                    .ok_or(FindKeyError::KeyNotFound)
+                    .ok_or_else(|| FindKeyError::KeyNotFound(alias.to_string()))
             }
             StoredKeypair::Raw(raw) => Ok(raw.clone()),
         }

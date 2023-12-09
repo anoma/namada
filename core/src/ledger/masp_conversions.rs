@@ -17,8 +17,7 @@ use crate::ledger::storage_api::{StorageRead, StorageWrite};
 use crate::types::address::{Address, MASP};
 use crate::types::dec::Dec;
 use crate::types::storage::Epoch;
-use crate::types::token;
-use crate::types::token::MaspDenom;
+use crate::types::token::{self, DenominatedAmount, MaspDenom};
 use crate::types::uint::Uint;
 
 /// A representation of the conversion state
@@ -149,6 +148,14 @@ where
                 0u128
             })
     };
+    let inflation_amount = token::Amount::from_uint(
+        (total_token_in_masp.raw_amount() / precision)
+            * Uint::from(noterized_inflation),
+        0,
+    )
+    .unwrap();
+    let denom_amount = DenominatedAmount::new(inflation_amount, denomination);
+    tracing::info!("MASP inflation for {addr} is {denom_amount}");
 
     tracing::debug!(
         "Controller, call: total_in_masp {:?}, total_tokens {:?}, \
@@ -166,25 +173,19 @@ where
         kd_gain_nom,
         epochs_per_year,
     );
-    tracing::debug!("Please give me: {:?}", addr);
+    tracing::debug!("Token address: {:?}", addr);
     tracing::debug!("Ratio {:?}", locked_ratio);
     tracing::debug!("inflation from the pd controller {:?}", inflation);
     tracing::debug!("total in the masp {:?}", total_token_in_masp);
-    tracing::debug!("Please give me inflation: {:?}", noterized_inflation);
+    tracing::debug!("precision {}", precision);
+    tracing::debug!("Noterized inflation: {}", noterized_inflation);
 
     // Is it fine to write the inflation rate, this is accurate,
     // but we should make sure the return value's ratio matches
     // this new inflation rate in 'update_allowed_conversions',
     // otherwise we will have an inaccurate view of inflation
-    wl_storage.write(
-        &token::masp_last_inflation_key(addr),
-        token::Amount::from_uint(
-            (total_token_in_masp.raw_amount() / precision)
-                * Uint::from(noterized_inflation),
-            0,
-        )
-        .unwrap(),
-    )?;
+    wl_storage
+        .write(&token::masp_last_inflation_key(addr), inflation_amount)?;
 
     wl_storage.write(&token::masp_last_locked_ratio_key(addr), locked_ratio)?;
 
@@ -192,7 +193,7 @@ where
 }
 
 // This is only enabled when "wasm-runtime" is on, because we're using rayon
-#[cfg(feature = "wasm-runtime")]
+#[cfg(any(feature = "wasm-runtime", test))]
 /// Update the MASP's allowed conversions
 pub fn update_allowed_conversions<D, H>(
     wl_storage: &mut WlStorage<D, H>,
@@ -340,7 +341,8 @@ where
                     total_reward += (addr_bal
                         * (new_normed_inflation, *normed_inflation))
                         .0
-                        - addr_bal;
+                        .checked_sub(addr_bal)
+                        .unwrap_or_default();
                     // Save the new normed inflation
                     *normed_inflation = new_normed_inflation;
                 }
@@ -490,4 +492,130 @@ pub fn encode_asset_type(
     let new_asset_bytes = (addr, denom, epoch.0).serialize_to_vec();
     AssetType::new(new_asset_bytes.as_ref())
         .expect("unable to derive asset identifier")
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::str::FromStr;
+
+    use proptest::prelude::*;
+    use proptest::test_runner::Config;
+    use test_log::test;
+
+    use super::*;
+    use crate::ledger::parameters::{EpochDuration, Parameters};
+    use crate::ledger::storage::testing::TestWlStorage;
+    use crate::ledger::storage_api::token::write_denom;
+    use crate::types::address;
+    use crate::types::dec::testing::arb_non_negative_dec;
+    use crate::types::time::DurationSecs;
+    use crate::types::token::testing::arb_amount;
+
+    proptest! {
+        #![proptest_config(Config {
+            cases: 10,
+            .. Config::default()
+        })]
+        #[test]
+        fn test_updated_allowed_conversions(
+            initial_balance in arb_amount(),
+            masp_locked_ratio in arb_non_negative_dec(),
+        ) {
+            test_updated_allowed_conversions_aux(initial_balance, masp_locked_ratio)
+        }
+    }
+
+    fn test_updated_allowed_conversions_aux(
+        initial_balance: token::Amount,
+        masp_locked_ratio: Dec,
+    ) {
+        const ROUNDS: usize = 10;
+
+        let mut s = TestWlStorage::default();
+        let params = Parameters {
+            max_tx_bytes: 1024 * 1024,
+            epoch_duration: EpochDuration {
+                min_num_of_blocks: 1,
+                min_duration: DurationSecs(3600),
+            },
+            max_expected_time_per_block: DurationSecs(3600),
+            max_proposal_bytes: Default::default(),
+            max_block_gas: 100,
+            vp_whitelist: vec![],
+            tx_whitelist: vec![],
+            implicit_vp_code_hash: Default::default(),
+            epochs_per_year: 365,
+            max_signatures_per_transaction: 10,
+            pos_gain_p: Default::default(),
+            pos_gain_d: Default::default(),
+            staked_ratio: Default::default(),
+            pos_inflation_amount: Default::default(),
+            fee_unshielding_gas_limit: 0,
+            fee_unshielding_descriptions_limit: 0,
+            minimum_gas_price: Default::default(),
+        };
+
+        // Initialize the state
+        {
+            // Parameters
+            params.init_storage(&mut s).unwrap();
+
+            // Tokens
+            let token_params = token::Parameters {
+                max_reward_rate: Dec::from_str("0.1").unwrap(),
+                kp_gain_nom: Dec::from_str("0.1").unwrap(),
+                kd_gain_nom: Dec::from_str("0.1").unwrap(),
+                locked_ratio_target: Dec::from_str("0.6667").unwrap(),
+            };
+
+            for (token_addr, (alias, denom)) in tokens() {
+                token_params.init_storage(&token_addr, &mut s);
+
+                write_denom(&mut s, &token_addr, denom).unwrap();
+
+                // Write a minted token balance
+                let total_token_balance = initial_balance;
+                s.write(
+                    &token::minted_balance_key(&token_addr),
+                    total_token_balance,
+                )
+                .unwrap();
+
+                // Put the locked ratio into MASP
+                s.write(
+                    &token::balance_key(&token_addr, &address::MASP),
+                    masp_locked_ratio * total_token_balance,
+                )
+                .unwrap();
+
+                // Insert tokens into MASP conversion state
+                s.storage
+                    .conversion_state
+                    .tokens
+                    .insert(alias.to_string(), token_addr.clone());
+            }
+        }
+
+        for i in 0..ROUNDS {
+            println!("Round {i}");
+            update_allowed_conversions(&mut s).unwrap();
+            println!();
+            println!();
+        }
+    }
+
+    pub fn tokens() -> HashMap<Address, (&'static str, token::Denomination)> {
+        vec![
+            (address::nam(), ("nam", 6.into())),
+            (address::btc(), ("btc", 8.into())),
+            (address::eth(), ("eth", 18.into())),
+            (address::dot(), ("dot", 10.into())),
+            (address::schnitzel(), ("schnitzel", 6.into())),
+            (address::apfel(), ("apfel", 6.into())),
+            (address::kartoffel(), ("kartoffel", 6.into())),
+        ]
+        .into_iter()
+        .collect()
+    }
 }

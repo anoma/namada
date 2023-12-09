@@ -14,16 +14,15 @@ use namada::core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada::core::types::address::{self, Address};
 use namada::core::types::token::{Amount, Transfer};
 use namada::eth_bridge::storage::whitelist;
-use namada::ibc::core::ics02_client::client_type::ClientType;
-use namada::ibc::core::ics03_connection::connection::Counterparty;
-use namada::ibc::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
-use namada::ibc::core::ics03_connection::version::Version;
-use namada::ibc::core::ics04_channel::channel::Order;
-use namada::ibc::core::ics04_channel::msgs::MsgChannelOpenInit;
-use namada::ibc::core::ics04_channel::Version as ChannelVersion;
-use namada::ibc::core::ics23_commitment::commitment::CommitmentPrefix;
-use namada::ibc::core::ics24_host::identifier::{
-    ClientId, ConnectionId, PortId,
+use namada::ibc::core::channel::types::channel::Order;
+use namada::ibc::core::channel::types::msgs::MsgChannelOpenInit;
+use namada::ibc::core::channel::types::Version as ChannelVersion;
+use namada::ibc::core::commitment_types::commitment::CommitmentPrefix;
+use namada::ibc::core::connection::types::msgs::MsgConnectionOpenInit;
+use namada::ibc::core::connection::types::version::Version;
+use namada::ibc::core::connection::types::Counterparty;
+use namada::ibc::core::host::types::identifiers::{
+    ClientId, ClientType, ConnectionId, PortId,
 };
 use namada::ledger::eth_bridge::read_native_erc20_address;
 use namada::ledger::gas::{TxGasMeter, VpGasMeter};
@@ -495,7 +494,7 @@ fn setup_storage_for_masp_verification(
         .to_owned();
 
     // Shield some tokens for Albert
-    let shield_tx = shielded_ctx.generate_masp_tx(
+    let (mut shielded_ctx, shield_tx) = shielded_ctx.generate_masp_tx(
         amount,
         TransferSource::Address(defaults::albert_address()),
         TransferTarget::PaymentAddress(albert_payment_addr),
@@ -504,7 +503,7 @@ fn setup_storage_for_masp_verification(
     shielded_ctx.shell.wl_storage.commit_tx();
     shielded_ctx.shell.commit();
 
-    let signed_tx = match bench_name {
+    let (mut shielded_ctx, signed_tx) = match bench_name {
         "shielding" => shielded_ctx.generate_masp_tx(
             amount,
             TransferSource::Address(defaults::albert_address()),

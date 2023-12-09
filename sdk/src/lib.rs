@@ -1,9 +1,8 @@
 extern crate alloc;
 
-pub use namada_core::{ibc, ibc_proto, proto, tendermint, tendermint_proto};
+pub use namada_core::{ibc, proto, tendermint, tendermint_proto};
 #[cfg(feature = "tendermint-rpc")]
 pub use tendermint_rpc;
-use tx::{TX_INIT_ACCOUNT_WASM, VP_VALIDATOR_WASM};
 pub use {
     bip39, borsh, masp_primitives, masp_proofs, namada_core as core,
     namada_proof_of_stake as proof_of_stake, zeroize,
@@ -28,10 +27,15 @@ pub mod queries;
 pub mod wallet;
 
 use std::collections::HashSet;
+#[cfg(feature = "async-send")]
+pub use std::marker::Send as MaybeSend;
+#[cfg(feature = "async-send")]
+pub use std::marker::Sync as MaybeSync;
 use std::path::PathBuf;
 use std::str::FromStr;
 
 use args::{InputAmount, SdkTypes};
+use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::types::address::Address;
 use namada_core::types::dec::Dec;
 use namada_core::types::ethereum_events::EthAddress;
@@ -41,7 +45,6 @@ use namada_core::types::token;
 use namada_core::types::transaction::GasLimit;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-use crate::ibc::core::ics24_host::identifier::{ChannelId, PortId};
 use crate::io::Io;
 use crate::masp::{ShieldedContext, ShieldedUtils};
 use crate::proto::Tx;
@@ -51,56 +54,65 @@ use crate::rpc::{
 use crate::signing::SigningTxData;
 use crate::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
 use crate::tx::{
-    ProcessTxResponse, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
-    TX_CHANGE_COMMISSION_WASM, TX_CHANGE_CONSENSUS_KEY_WASM,
-    TX_CHANGE_METADATA_WASM, TX_CLAIM_REWARDS_WASM,
-    TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM, TX_INIT_PROPOSAL,
-    TX_INIT_VALIDATOR_WASM, TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM,
-    TX_RESIGN_STEWARD, TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM,
-    TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
+    ProcessTxResponse, TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM,
+    TX_BRIDGE_POOL_WASM, TX_CHANGE_COMMISSION_WASM,
+    TX_CHANGE_CONSENSUS_KEY_WASM, TX_CHANGE_METADATA_WASM,
+    TX_CLAIM_REWARDS_WASM, TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM,
+    TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL, TX_REACTIVATE_VALIDATOR_WASM,
+    TX_REDELEGATE_WASM, TX_RESIGN_STEWARD, TX_REVEAL_PK, TX_TRANSFER_WASM,
+    TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
     TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
     VP_USER_WASM,
 };
 use crate::wallet::{Wallet, WalletIo, WalletStorage};
 
-#[async_trait::async_trait(?Send)]
+#[cfg(not(feature = "async-send"))]
+pub trait MaybeSync {}
+#[cfg(not(feature = "async-send"))]
+impl<T> MaybeSync for T where T: ?Sized {}
+#[cfg(not(feature = "async-send"))]
+pub trait MaybeSend {}
+#[cfg(not(feature = "async-send"))]
+impl<T> MaybeSend for T where T: ?Sized {}
+
+#[cfg_attr(feature = "async-send", async_trait::async_trait)]
+#[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
 /// An interface for high-level interaction with the Namada SDK
-pub trait Namada<'a>: Sized {
+pub trait Namada: Sized + MaybeSync + MaybeSend {
     /// A client with async request dispatcher method
-    type Client: 'a + queries::Client + Sync;
+    type Client: queries::Client + MaybeSend + Sync;
     /// Captures the interactive parts of the wallet's functioning
-    type WalletUtils: 'a + WalletIo + WalletStorage;
+    type WalletUtils: WalletIo + WalletStorage + MaybeSend + MaybeSync;
     /// Abstracts platform specific details away from the logic of shielded pool
     /// operations.
-    type ShieldedUtils: 'a + ShieldedUtils;
+    type ShieldedUtils: ShieldedUtils + MaybeSend + MaybeSync;
     /// Captures the input/output streams used by this object
-    type Io: 'a + Io;
+    type Io: Io + MaybeSend + MaybeSync;
 
     /// Obtain the client for communicating with the ledger
-    fn client(&self) -> &'a Self::Client;
+    fn client(&self) -> &Self::Client;
 
     /// Obtain the input/output handle for this context
-    fn io(&self) -> &'a Self::Io;
+    fn io(&self) -> &Self::Io;
 
     /// Obtain read guard on the wallet
-    async fn wallet(
-        &self,
-    ) -> RwLockReadGuard<&'a mut Wallet<Self::WalletUtils>>;
+    async fn wallet(&self) -> RwLockReadGuard<Wallet<Self::WalletUtils>>;
 
     /// Obtain write guard on the wallet
-    async fn wallet_mut(
-        &self,
-    ) -> RwLockWriteGuard<&'a mut Wallet<Self::WalletUtils>>;
+    async fn wallet_mut(&self) -> RwLockWriteGuard<Wallet<Self::WalletUtils>>;
+
+    /// Obtain the wallet lock
+    fn wallet_lock(&self) -> &RwLock<Wallet<Self::WalletUtils>>;
 
     /// Obtain read guard on the shielded context
     async fn shielded(
         &self,
-    ) -> RwLockReadGuard<&'a mut ShieldedContext<Self::ShieldedUtils>>;
+    ) -> RwLockReadGuard<ShieldedContext<Self::ShieldedUtils>>;
 
     /// Obtain write guard on the shielded context
     async fn shielded_mut(
         &self,
-    ) -> RwLockWriteGuard<&'a mut ShieldedContext<Self::ShieldedUtils>>;
+    ) -> RwLockWriteGuard<ShieldedContext<Self::ShieldedUtils>>;
 
     /// Return the native token
     fn native_token(&self) -> Address;
@@ -128,7 +140,6 @@ pub trait Namada<'a>: Sized {
             signing_keys: vec![],
             signatures: vec![],
             tx_reveal_code_path: PathBuf::from(TX_REVEAL_PK),
-            verification_key: None,
             password: None,
             use_device: false,
         }
@@ -348,6 +359,33 @@ pub trait Namada<'a>: Sized {
         }
     }
 
+    /// Make a TxBecomeValidator builder from the given minimum set of arguments
+    fn new_become_validator(
+        &self,
+        address: Address,
+        commission_rate: Dec,
+        max_commission_rate_change: Dec,
+        email: String,
+    ) -> args::TxBecomeValidator {
+        args::TxBecomeValidator {
+            address,
+            commission_rate,
+            max_commission_rate_change,
+            scheme: SchemeType::Ed25519,
+            consensus_key: None,
+            eth_cold_key: None,
+            eth_hot_key: None,
+            protocol_key: None,
+            unsafe_dont_encrypt: false,
+            tx_code_path: PathBuf::from(TX_BECOME_VALIDATOR_WASM),
+            tx: self.tx_builder(),
+            email,
+            description: None,
+            website: None,
+            discord_handle: None,
+        }
+    }
+
     /// Make a TxInitValidator builder from the given minimum set of arguments
     fn new_init_validator(
         &self,
@@ -365,9 +403,12 @@ pub trait Namada<'a>: Sized {
             eth_cold_key: None,
             eth_hot_key: None,
             protocol_key: None,
-            validator_vp_code_path: PathBuf::from(VP_VALIDATOR_WASM),
+            validator_vp_code_path: PathBuf::from(VP_USER_WASM),
             unsafe_dont_encrypt: false,
-            tx_code_path: PathBuf::from(TX_INIT_VALIDATOR_WASM),
+            tx_init_account_code_path: PathBuf::from(TX_INIT_ACCOUNT_WASM),
+            tx_become_validator_code_path: PathBuf::from(
+                TX_BECOME_VALIDATOR_WASM,
+            ),
             tx: self.tx_builder(),
             email,
             description: None,
@@ -497,14 +538,29 @@ pub trait Namada<'a>: Sized {
     }
 
     /// Sign the given transaction using the given signing data
-    async fn sign<F: std::future::Future<Output = crate::error::Result<Tx>>>(
+    async fn sign<D, F>(
         &self,
         tx: &mut Tx,
         args: &args::Tx,
         signing_data: SigningTxData,
-        with: impl Fn(Tx, common::PublicKey, HashSet<signing::Signable>) -> F,
-    ) -> crate::error::Result<()> {
-        signing::sign_tx(self, args, tx, signing_data, with).await
+        with: impl Fn(Tx, common::PublicKey, HashSet<signing::Signable>, D) -> F,
+        user_data: D,
+    ) -> crate::error::Result<()>
+    where
+        D: Clone,
+        F: MaybeSend
+            + MaybeSync
+            + std::future::Future<Output = crate::error::Result<Tx>>,
+    {
+        signing::sign_tx(
+            self.wallet_lock(),
+            args,
+            tx,
+            signing_data,
+            with,
+            user_data,
+        )
+        .await
     }
 
     /// Process the given transaction using the given flags
@@ -538,28 +594,28 @@ pub trait Namada<'a>: Sized {
 }
 
 /// Provides convenience methods for common Namada interactions
-pub struct NamadaImpl<'a, C, U, V, I>
+pub struct NamadaImpl<C, U, V, I>
 where
-    C: queries::Client + Sync,
+    C: queries::Client,
     U: WalletIo,
     V: ShieldedUtils,
     I: Io,
 {
     /// Used to send and receive messages from the ledger
-    pub client: &'a C,
+    pub client: C,
     /// Stores the addresses and keys required for ledger interactions
-    pub wallet: RwLock<&'a mut Wallet<U>>,
+    pub wallet: RwLock<Wallet<U>>,
     /// Stores the current state of the shielded pool
-    pub shielded: RwLock<&'a mut ShieldedContext<V>>,
+    pub shielded: RwLock<ShieldedContext<V>>,
     /// Captures the input/output streams used by this object
-    pub io: &'a I,
+    pub io: I,
     /// The address of the native token
     native_token: Address,
     /// The default builder for a Tx
     prototype: args::Tx,
 }
 
-impl<'a, C, U, V, I> NamadaImpl<'a, C, U, V, I>
+impl<C, U, V, I> NamadaImpl<C, U, V, I>
 where
     C: queries::Client + Sync,
     U: WalletIo,
@@ -568,10 +624,10 @@ where
 {
     /// Construct a new Namada context with the given native token address
     pub fn native_new(
-        client: &'a C,
-        wallet: &'a mut Wallet<U>,
-        shielded: &'a mut ShieldedContext<V>,
-        io: &'a I,
+        client: C,
+        wallet: Wallet<U>,
+        shielded: ShieldedContext<V>,
+        io: I,
         native_token: Address,
     ) -> Self {
         NamadaImpl {
@@ -601,7 +657,6 @@ where
                 signing_keys: vec![],
                 signatures: vec![],
                 tx_reveal_code_path: PathBuf::from(TX_REVEAL_PK),
-                verification_key: None,
                 password: None,
                 use_device: false,
             },
@@ -610,12 +665,12 @@ where
 
     /// Construct a new Namada context looking up the native token address
     pub async fn new(
-        client: &'a C,
-        wallet: &'a mut Wallet<U>,
-        shielded: &'a mut ShieldedContext<V>,
-        io: &'a I,
-    ) -> crate::error::Result<NamadaImpl<'a, C, U, V, I>> {
-        let native_token = query_native_token(client).await?;
+        client: C,
+        wallet: Wallet<U>,
+        shielded: ShieldedContext<V>,
+        io: I,
+    ) -> crate::error::Result<NamadaImpl<C, U, V, I>> {
+        let native_token = query_native_token(&client).await?;
         Ok(NamadaImpl::native_new(
             client,
             wallet,
@@ -626,13 +681,14 @@ where
     }
 }
 
-#[async_trait::async_trait(?Send)]
-impl<'a, C, U, V, I> Namada<'a> for NamadaImpl<'a, C, U, V, I>
+#[cfg_attr(feature = "async-send", async_trait::async_trait)]
+#[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
+impl<C, U, V, I> Namada for NamadaImpl<C, U, V, I>
 where
-    C: queries::Client + Sync,
-    U: WalletIo + WalletStorage,
-    V: ShieldedUtils,
-    I: Io,
+    C: queries::Client + MaybeSend + Sync,
+    U: WalletIo + WalletStorage + MaybeSync + MaybeSend,
+    V: ShieldedUtils + MaybeSend + MaybeSync,
+    I: Io + MaybeSend + MaybeSync,
 {
     type Client = C;
     type Io = I;
@@ -648,41 +704,41 @@ where
         self.native_token.clone()
     }
 
-    fn io(&self) -> &'a Self::Io {
-        self.io
+    fn io(&self) -> &Self::Io {
+        &self.io
     }
 
-    fn client(&self) -> &'a Self::Client {
-        self.client
+    fn client(&self) -> &Self::Client {
+        &self.client
     }
 
-    async fn wallet(
-        &self,
-    ) -> RwLockReadGuard<&'a mut Wallet<Self::WalletUtils>> {
+    async fn wallet(&self) -> RwLockReadGuard<Wallet<Self::WalletUtils>> {
         self.wallet.read().await
     }
 
-    async fn wallet_mut(
-        &self,
-    ) -> RwLockWriteGuard<&'a mut Wallet<Self::WalletUtils>> {
+    async fn wallet_mut(&self) -> RwLockWriteGuard<Wallet<Self::WalletUtils>> {
         self.wallet.write().await
     }
 
     async fn shielded(
         &self,
-    ) -> RwLockReadGuard<&'a mut ShieldedContext<Self::ShieldedUtils>> {
+    ) -> RwLockReadGuard<ShieldedContext<Self::ShieldedUtils>> {
         self.shielded.read().await
     }
 
     async fn shielded_mut(
         &self,
-    ) -> RwLockWriteGuard<&'a mut ShieldedContext<Self::ShieldedUtils>> {
+    ) -> RwLockWriteGuard<ShieldedContext<Self::ShieldedUtils>> {
         self.shielded.write().await
+    }
+
+    fn wallet_lock(&self) -> &RwLock<Wallet<Self::WalletUtils>> {
+        &self.wallet
     }
 }
 
 /// Allow the prototypical Tx builder to be modified
-impl<'a, C, U, V, I> args::TxBuilder<SdkTypes> for NamadaImpl<'a, C, U, V, I>
+impl<C, U, V, I> args::TxBuilder<SdkTypes> for NamadaImpl<C, U, V, I>
 where
     C: queries::Client + Sync,
     U: WalletIo,

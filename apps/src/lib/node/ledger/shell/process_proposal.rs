@@ -2152,4 +2152,76 @@ mod test_process_proposal {
             }
         }
     }
+
+    /// Test that Ethereum events with outdated nonces are
+    /// not validated by `ProcessProposal`.
+    #[test]
+    fn test_outdated_nonce_process_proposal() {
+        use namada::types::storage::InnerEthEventsQueue;
+
+        const LAST_HEIGHT: BlockHeight = BlockHeight(3);
+
+        let (mut shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
+        shell
+            .wl_storage
+            .storage
+            .eth_events_queue
+            // sent transfers to namada nonce to 5
+            .transfers_to_namada = InnerEthEventsQueue::new_at(5.into());
+
+        let (protocol_key, _) = wallet::defaults::validator_keys();
+
+        // only bad events
+        {
+            let ethereum_event = EthereumEvent::TransfersToNamada {
+                // outdated nonce (3 < 5)
+                nonce: 3u64.into(),
+                transfers: vec![],
+            };
+            let ext = {
+                let ext = ethereum_events::Vext {
+                    validator_addr: wallet::defaults::validator_address(),
+                    block_height: LAST_HEIGHT,
+                    ethereum_events: vec![ethereum_event],
+                }
+                .sign(&protocol_key);
+                assert!(ext.verify(&protocol_key.ref_to()).is_ok());
+                ext
+            };
+            let tx = EthereumTxData::EthEventsVext(ext)
+                .sign(&protocol_key, shell.chain_id.clone())
+                .to_bytes();
+            let req = ProcessProposal { txs: vec![tx] };
+            let rsp = shell.process_proposal(req);
+            assert!(rsp.is_err());
+        }
+
+        // at least one good event
+        {
+            let e1 = EthereumEvent::TransfersToNamada {
+                nonce: 3u64.into(),
+                transfers: vec![],
+            };
+            let e2 = EthereumEvent::TransfersToNamada {
+                nonce: 5u64.into(),
+                transfers: vec![],
+            };
+            let ext = {
+                let ext = ethereum_events::Vext {
+                    validator_addr: wallet::defaults::validator_address(),
+                    block_height: LAST_HEIGHT,
+                    ethereum_events: vec![e1, e2],
+                }
+                .sign(&protocol_key);
+                assert!(ext.verify(&protocol_key.ref_to()).is_ok());
+                ext
+            };
+            let tx = EthereumTxData::EthEventsVext(ext)
+                .sign(&protocol_key, shell.chain_id.clone())
+                .to_bytes();
+            let req = ProcessProposal { txs: vec![tx] };
+            let rsp = shell.process_proposal(req);
+            assert!(rsp.is_ok());
+        }
+    }
 }

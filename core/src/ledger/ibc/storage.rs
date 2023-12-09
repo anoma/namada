@@ -5,12 +5,11 @@ use std::str::FromStr;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use crate::ibc::core::ics02_client::height::Height;
-use crate::ibc::core::ics04_channel::packet::Sequence;
-use crate::ibc::core::ics24_host::identifier::{
-    ChannelId, ClientId, ConnectionId, PortId,
+use crate::ibc::core::client::types::Height;
+use crate::ibc::core::host::types::identifiers::{
+    ChannelId, ClientId, ConnectionId, PortId, Sequence,
 };
-use crate::ibc::core::ics24_host::path::{
+use crate::ibc::core::host::types::path::{
     AckPath, ChannelEndPath, ClientConnectionPath, ClientConsensusStatePath,
     ClientStatePath, CommitmentPath, ConnectionPath, Path, PortPath,
     ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath,
@@ -81,8 +80,8 @@ pub fn client_state_key(client_id: &ClientId) -> Key {
 pub fn consensus_state_key(client_id: &ClientId, height: Height) -> Key {
     let path = Path::ClientConsensusState(ClientConsensusStatePath {
         client_id: client_id.clone(),
-        epoch: height.revision_number(),
-        height: height.revision_height(),
+        revision_number: height.revision_number(),
+        revision_height: height.revision_height(),
     });
     ibc_key(path.to_string())
         .expect("Creating a key for the consensus state shouldn't fail")
@@ -92,8 +91,8 @@ pub fn consensus_state_key(client_id: &ClientId, height: Height) -> Key {
 pub fn consensus_state_prefix(client_id: &ClientId) -> Key {
     let path = Path::ClientConsensusState(ClientConsensusStatePath {
         client_id: client_id.clone(),
-        epoch: 0,
-        height: 0,
+        revision_number: 0,
+        revision_height: 0,
     });
     let suffix = "/0-0".to_string();
     let path = path.to_string();

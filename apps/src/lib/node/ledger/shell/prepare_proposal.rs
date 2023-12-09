@@ -392,10 +392,12 @@ mod test_prepare_proposal {
     use namada::types::address::{self, Address};
     use namada::types::ethereum_events::EthereumEvent;
     use namada::types::key::RefTo;
-    use namada::types::storage::BlockHeight;
+    use namada::types::storage::{BlockHeight, InnerEthEventsQueue};
     use namada::types::token;
     use namada::types::token::{Amount, DenominatedAmount};
-    use namada::types::transaction::protocol::EthereumTxData;
+    use namada::types::transaction::protocol::{
+        ethereum_tx_data_variants, EthereumTxData,
+    };
     use namada::types::transaction::{Fee, TxType, WrapperTx};
     use namada::types::vote_extensions::ethereum_events;
 
@@ -1400,5 +1402,116 @@ mod test_prepare_proposal {
         let result = shell.prepare_proposal(req);
         eprintln!("Proposal: {:?}", result.txs);
         assert!(result.txs.is_empty());
+    }
+
+    /// Test that Ethereum events with outdated nonces are
+    /// not proposed during `PrepareProposal`.
+    #[test]
+    fn test_outdated_nonce_proposal() {
+        const LAST_HEIGHT: BlockHeight = BlockHeight(3);
+
+        let (mut shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
+        shell
+            .wl_storage
+            .storage
+            .eth_events_queue
+            // sent transfers to namada nonce to 5
+            .transfers_to_namada = InnerEthEventsQueue::new_at(5.into());
+
+        let (protocol_key, _) = wallet::defaults::validator_keys();
+        let validator_addr = wallet::defaults::validator_address();
+
+        // test an extension containing solely events with
+        // bad nonces
+        {
+            let ethereum_event = EthereumEvent::TransfersToNamada {
+                // outdated nonce (3 < 5)
+                nonce: 3u64.into(),
+                transfers: vec![],
+            };
+            let ext = {
+                let ext = ethereum_events::Vext {
+                    validator_addr: validator_addr.clone(),
+                    block_height: LAST_HEIGHT,
+                    ethereum_events: vec![ethereum_event],
+                }
+                .sign(&protocol_key);
+                assert!(ext.verify(&protocol_key.ref_to()).is_ok());
+                ext
+            };
+            let tx = EthereumTxData::EthEventsVext(ext)
+                .sign(&protocol_key, shell.chain_id.clone())
+                .to_bytes();
+            let req = RequestPrepareProposal {
+                txs: vec![tx.into()],
+                ..Default::default()
+            };
+            let proposed_txs =
+                shell.prepare_proposal(req).txs.into_iter().map(|tx_bytes| {
+                    Tx::try_from(tx_bytes.as_ref()).expect("Test failed")
+                });
+            // since no events with valid nonces are contained in the vote
+            // extension, we drop it from the proposal
+            for tx in proposed_txs {
+                if ethereum_tx_data_variants::EthEventsVext::try_from(&tx)
+                    .is_ok()
+                {
+                    panic!(
+                        "No ethereum events should have been found in the \
+                         proposal"
+                    );
+                }
+            }
+        }
+
+        // test an extension containing at least one event
+        // with a good nonce
+        {
+            let event1 = EthereumEvent::TransfersToNamada {
+                // outdated nonce (3 < 5)
+                nonce: 3u64.into(),
+                transfers: vec![],
+            };
+            let event2 = EthereumEvent::TransfersToNamada {
+                // outdated nonce (10 >= 5)
+                nonce: 10u64.into(),
+                transfers: vec![],
+            };
+            let ext = {
+                let ext = ethereum_events::Vext {
+                    validator_addr,
+                    block_height: LAST_HEIGHT,
+                    ethereum_events: vec![event1, event2.clone()],
+                }
+                .sign(&protocol_key);
+                assert!(ext.verify(&protocol_key.ref_to()).is_ok());
+                ext
+            };
+            let tx = EthereumTxData::EthEventsVext(ext)
+                .sign(&protocol_key, shell.chain_id.clone())
+                .to_bytes();
+            let req = RequestPrepareProposal {
+                txs: vec![tx.into()],
+                ..Default::default()
+            };
+            let proposed_txs =
+                shell.prepare_proposal(req).txs.into_iter().map(|tx_bytes| {
+                    Tx::try_from(tx_bytes.as_ref()).expect("Test failed")
+                });
+            // find the event with the good nonce
+            let mut ext = 'ext: {
+                for tx in proposed_txs {
+                    if let Ok(ext) =
+                        ethereum_tx_data_variants::EthEventsVext::try_from(&tx)
+                    {
+                        break 'ext ext;
+                    }
+                }
+                panic!("No ethereum events found in proposal");
+            };
+            assert_eq!(ext.data.ethereum_events.len(), 2);
+            let found_event = ext.data.ethereum_events.remove(1);
+            assert_eq!(found_event, event2);
+        }
     }
 }

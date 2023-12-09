@@ -72,18 +72,12 @@ pub fn load(store_dir: &Path) -> Result<ValidatorWallet, ReadError> {
     })?;
     let store = ValidatorStore::decode(store).map_err(ReadError::Decode)?;
 
-    let password = if store.account_key.is_encrypted()
-        || store.consensus_key.is_encrypted()
-        || store.account_key.is_encrypted()
-    {
+    let password = if store.consensus_key.is_encrypted() {
         Some(CliWalletUtils::read_password(false))
     } else {
         None
     };
 
-    let account_key = store
-        .account_key
-        .get::<CliWalletUtils>(true, password.clone())?;
     let consensus_key = store
         .consensus_key
         .get::<CliWalletUtils>(true, password.clone())?;
@@ -97,7 +91,6 @@ pub fn load(store_dir: &Path) -> Result<ValidatorWallet, ReadError> {
 
     Ok(ValidatorWallet {
         store,
-        account_key,
         consensus_key,
         eth_cold_key,
         eth_hot_key,
@@ -111,8 +104,6 @@ fn gen(
     scheme: SchemeType,
     password: Option<Zeroizing<String>>,
 ) -> ValidatorWallet {
-    let (account_key, account_sk) =
-        gen_key_to_store(scheme, password.clone(), &mut OsRng);
     let (consensus_key, consensus_sk) = gen_key_to_store(
         // Note that TM only allows ed25519 for consensus key
         SchemeType::Ed25519,
@@ -130,7 +121,6 @@ fn gen(
     let validator_keys = gen_validator_keys(None, None, scheme);
     let eth_hot_key = validator_keys.eth_bridge_keypair.clone();
     let store = ValidatorStore {
-        account_key,
         consensus_key,
         eth_cold_key,
         tendermint_node_key,
@@ -138,7 +128,6 @@ fn gen(
     };
     ValidatorWallet {
         store,
-        account_key: account_sk,
         consensus_key: consensus_sk,
         eth_cold_key: eth_cold_sk,
         eth_hot_key,

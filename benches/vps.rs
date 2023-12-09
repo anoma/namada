@@ -22,7 +22,7 @@ use namada_apps::bench_utils::{
     generate_foreign_key_tx, BenchShell, TX_BOND_WASM,
     TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_REVEAL_PK_WASM, TX_TRANSFER_WASM,
     TX_UNBOND_WASM, TX_UPDATE_ACCOUNT_WASM, TX_VOTE_PROPOSAL_WASM,
-    VP_USER_WASM, VP_VALIDATOR_WASM,
+    VP_USER_WASM,
 };
 use namada_apps::wallet::defaults;
 use sha2::Digest;
@@ -70,11 +70,11 @@ fn vp_user(c: &mut Criterion) {
     );
 
     let vp_validator_hash = shell
-        .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
+        .read_storage_key(&Key::wasm_hash(VP_USER_WASM))
         .unwrap();
     let extra_section = Section::ExtraData(Code::from_hash(
         vp_validator_hash,
-        Some(VP_VALIDATOR_WASM.to_string()),
+        Some(VP_USER_WASM.to_string()),
     ));
     let data = UpdateAccount {
         addr: defaults::albert_address(),
@@ -322,7 +322,7 @@ fn vp_implicit(c: &mut Criterion) {
 fn vp_validator(c: &mut Criterion) {
     let shell = BenchShell::default();
     let vp_code_hash: Hash = shell
-        .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
+        .read_storage_key(&Key::wasm_hash(VP_USER_WASM))
         .unwrap();
     let mut group = c.benchmark_group("vp_validator");
 
@@ -341,7 +341,7 @@ fn vp_validator(c: &mut Criterion) {
         },
         None,
         None,
-        vec![&defaults::validator_keypair()],
+        vec![&defaults::validator_account_keypair()],
     );
 
     let received_transfer = shell.generate_tx(
@@ -361,7 +361,7 @@ fn vp_validator(c: &mut Criterion) {
 
     let extra_section = Section::ExtraData(Code::from_hash(
         vp_code_hash,
-        Some(VP_VALIDATOR_WASM.to_string()),
+        Some(VP_USER_WASM.to_string()),
     ));
     let data = UpdateAccount {
         addr: defaults::validator_address(),
@@ -371,7 +371,7 @@ fn vp_validator(c: &mut Criterion) {
                 .finalize_reset()
                 .into(),
         )),
-        public_keys: vec![defaults::validator_keypair().to_public()],
+        public_keys: vec![defaults::validator_account_keypair().to_public()],
         threshold: None,
     };
     let vp = shell.generate_tx(
@@ -379,7 +379,7 @@ fn vp_validator(c: &mut Criterion) {
         data,
         None,
         Some(vec![extra_section]),
-        vec![&defaults::validator_keypair()],
+        vec![&defaults::validator_account_keypair()],
     );
 
     let commission_rate = shell.generate_tx(
@@ -390,7 +390,7 @@ fn vp_validator(c: &mut Criterion) {
         },
         None,
         None,
-        vec![&defaults::validator_keypair()],
+        vec![&defaults::validator_account_keypair()],
     );
 
     let vote = shell.generate_tx(
@@ -403,7 +403,7 @@ fn vp_validator(c: &mut Criterion) {
         },
         None,
         None,
-        vec![&defaults::validator_keypair()],
+        vec![&defaults::validator_account_keypair()],
     );
 
     let pos = shell.generate_tx(
@@ -415,7 +415,7 @@ fn vp_validator(c: &mut Criterion) {
         },
         None,
         None,
-        vec![&defaults::validator_keypair()],
+        vec![&defaults::validator_account_keypair()],
     );
 
     for (signed_tx, bench_name) in [

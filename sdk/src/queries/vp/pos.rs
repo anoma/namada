@@ -19,15 +19,15 @@ use namada_proof_of_stake::types::{
 use namada_proof_of_stake::{
     self, bond_amount, bond_handle, find_all_enqueued_slashes,
     find_all_slashes, find_delegation_validators, find_delegations,
-    read_all_validator_addresses,
+    query_reward_tokens, read_all_validator_addresses,
     read_below_capacity_validator_set_addresses_with_stake,
     read_consensus_validator_set_addresses_with_stake, read_pos_params,
     read_total_stake, read_validator_description,
     read_validator_discord_handle, read_validator_email,
-    read_validator_max_commission_rate_change, read_validator_stake,
-    read_validator_website, unbond_handle, validator_commission_rate_handle,
-    validator_incoming_redelegations_handle, validator_slashes_handle,
-    validator_state_handle,
+    read_validator_last_slash_epoch, read_validator_max_commission_rate_change,
+    read_validator_stake, read_validator_website, unbond_handle,
+    validator_commission_rate_handle, validator_incoming_redelegations_handle,
+    validator_slashes_handle, validator_state_handle,
 };
 
 use crate::queries::types::RequestCtx;
@@ -57,6 +57,9 @@ router! {POS,
 
         ( "incoming_redelegation" / [src_validator: Address] / [delegator: Address] )
             -> Option<Epoch> = validator_incoming_redelegation,
+
+        ( "last_infraction_epoch" / [validator: Address] )
+            -> Option<Epoch> = validator_last_infraction_epoch,
     },
 
     ( "validator_set" ) = {
@@ -86,6 +89,9 @@ router! {POS,
     ( "bond" / [source: Address] / [validator: Address] / [epoch: opt Epoch] )
         -> token::Amount = bond,
 
+    ( "rewards" / [validator: Address] / [source: opt Address] )
+        -> token::Amount = rewards,
+
     ( "bond_with_slashing" / [source: Address] / [validator: Address] / [epoch: opt Epoch] )
         -> token::Amount = bond_with_slashing,
 
@@ -112,6 +118,9 @@ router! {POS,
         -> Option<Address> = validator_by_tm_addr,
 
     ( "consensus_keys" ) -> BTreeSet<common::PublicKey> = consensus_key_set,
+
+    ( "has_bonds" / [source: Address] )
+        -> bool = has_bonds,
 
 }
 
@@ -283,6 +292,18 @@ where
         &params,
     )?;
     Ok(state)
+}
+
+/// Get the validator state
+fn validator_last_infraction_epoch<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+    validator: Address,
+) -> storage_api::Result<Option<Epoch>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    read_validator_last_slash_epoch(ctx.wl_storage, &validator)
 }
 
 /// Get the total stake of a validator at the given epoch or current when
@@ -459,8 +480,8 @@ where
         next_result.map(
             |(
                 lazy_map::NestedSubKey::Data {
-                    key: withdraw_epoch,
-                    nested_sub_key: lazy_map::SubKey::Data(bond_epoch),
+                    key: bond_epoch,
+                    nested_sub_key: lazy_map::SubKey::Data(withdraw_epoch),
                 },
                 amount,
             )| ((bond_epoch, withdraw_epoch), amount),
@@ -496,6 +517,24 @@ where
         }
     }
     Ok(total)
+}
+
+fn rewards<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+    validator: Address,
+    source: Option<Address>,
+) -> storage_api::Result<token::Amount>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let current_epoch = ctx.wl_storage.storage.last_epoch;
+    query_reward_tokens(
+        ctx.wl_storage,
+        source.as_ref(),
+        &validator,
+        current_epoch,
+    )
 }
 
 fn bonds_and_unbonds<D, H, V, T>(
@@ -595,6 +634,18 @@ where
     H: 'static + StorageHasher + Sync,
 {
     namada_proof_of_stake::get_consensus_key_set(ctx.wl_storage)
+}
+
+/// Find if the given source address has any bonds.
+fn has_bonds<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+    source: Address,
+) -> storage_api::Result<bool>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    namada_proof_of_stake::has_bonds(ctx.wl_storage, &source)
 }
 
 /// Client-only methods for the router type are composed from router functions.

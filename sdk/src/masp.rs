@@ -74,7 +74,7 @@ use crate::rpc::{query_conversion, query_storage_value};
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
 use crate::tx::decode_component;
-use crate::{display_line, edisplay_line, rpc, Namada};
+use crate::{display_line, edisplay_line, rpc, MaybeSend, MaybeSync, Namada};
 
 /// Env var to point to a dir with MASP parameters. When not specified,
 /// the default OS specific path is used.
@@ -146,6 +146,7 @@ fn load_pvks() -> (
     let [spend_path, convert_path, output_path] =
         [SPEND_NAME, CONVERT_NAME, OUTPUT_NAME].map(|p| params_dir.join(p));
 
+    #[cfg(feature = "download-params")]
     if !spend_path.exists() || !convert_path.exists() || !output_path.exists() {
         let paths = masp_proofs::download_masp_parameters(None).expect(
             "MASP parameters were not present, expected the download to \
@@ -394,13 +395,13 @@ pub trait ShieldedUtils:
     fn local_tx_prover(&self) -> LocalTxProver;
 
     /// Load up the currently saved ShieldedContext
-    async fn load<U: ShieldedUtils>(
+    async fn load<U: ShieldedUtils + MaybeSend>(
         &self,
         ctx: &mut ShieldedContext<U>,
     ) -> std::io::Result<()>;
 
     /// Save the given ShieldedContext for future loads
-    async fn save<U: ShieldedUtils>(
+    async fn save<U: ShieldedUtils + MaybeSync>(
         &self,
         ctx: &ShieldedContext<U>,
     ) -> std::io::Result<()>;
@@ -619,7 +620,7 @@ impl<U: ShieldedUtils + Default> Default for ShieldedContext<U> {
     }
 }
 
-impl<U: ShieldedUtils> ShieldedContext<U> {
+impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     /// Try to load the last saved shielded context from the given context
     /// directory. If this fails, then leave the current context unchanged.
     pub async fn load(&mut self) -> std::io::Result<()> {
@@ -1220,9 +1221,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// of the specified asset type. Return the total value accumulated plus
     /// notes and the corresponding diversifiers/merkle paths that were used to
     /// achieve the total value.
-    pub async fn collect_unspent_notes<'a>(
+    pub async fn collect_unspent_notes(
         &mut self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
         vk: &ViewingKey,
         target: I128Sum,
         target_epoch: Epoch,
@@ -1407,9 +1408,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// the epoch of the transaction or even before, so exchange all these
     /// amounts to the epoch of the transaction in order to get the value that
     /// would have been displayed in the epoch of the transaction.
-    pub async fn compute_exchanged_pinned_balance<'a>(
+    pub async fn compute_exchanged_pinned_balance(
         &mut self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
         owner: PaymentAddress,
         viewing_key: &ViewingKey,
     ) -> Result<(MaspAmount, Epoch), Error> {
@@ -1497,8 +1498,8 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// UTXOs are sometimes used to make transactions balanced, but it is
     /// understood that transparent account changes are effected only by the
     /// amounts and signatures specified by the containing Transfer object.
-    pub async fn gen_shielded_transfer<'a>(
-        context: &impl Namada<'a>,
+    pub async fn gen_shielded_transfer(
+        context: &impl Namada,
         source: &TransferSource,
         target: &TransferTarget,
         token: &Address,
@@ -2115,8 +2116,6 @@ pub mod fs {
     use std::fs::{File, OpenOptions};
     use std::io::{Read, Write};
 
-    use async_trait::async_trait;
-
     use super::*;
 
     /// Shielded context file name
@@ -2168,7 +2167,8 @@ pub mod fs {
         }
     }
 
-    #[async_trait(?Send)]
+    #[cfg_attr(feature = "async-send", async_trait::async_trait)]
+    #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
     impl ShieldedUtils for FsShieldedUtils {
         fn local_tx_prover(&self) -> LocalTxProver {
             if let Ok(params_dir) = env::var(ENV_VAR_MASP_PARAMS_DIR) {
@@ -2185,7 +2185,7 @@ pub mod fs {
 
         /// Try to load the last saved shielded context from the given context
         /// directory. If this fails, then leave the current context unchanged.
-        async fn load<U: ShieldedUtils>(
+        async fn load<U: ShieldedUtils + MaybeSend>(
             &self,
             ctx: &mut ShieldedContext<U>,
         ) -> std::io::Result<()> {
@@ -2202,7 +2202,7 @@ pub mod fs {
         }
 
         /// Save this shielded context into its associated context directory
-        async fn save<U: ShieldedUtils>(
+        async fn save<U: ShieldedUtils + MaybeSync>(
             &self,
             ctx: &ShieldedContext<U>,
         ) -> std::io::Result<()> {

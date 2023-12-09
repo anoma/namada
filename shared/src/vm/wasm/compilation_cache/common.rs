@@ -156,16 +156,22 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                         return Ok(Some((module.clone(), store())));
                     }
 
-                    let (module, store) = file_load_module(&self.dir, hash);
-                    tracing::info!(
-                        "{} found {} in file cache.",
-                        N::name(),
-                        hash.to_string()
-                    );
-                    // Put into cache, ignore result if it's full
-                    let _ = in_memory.put_with_weight(*hash, module.clone());
+                    if let Ok((module, store)) =
+                        file_load_module(&self.dir, hash)
+                    {
+                        tracing::info!(
+                            "{} found {} in file cache.",
+                            N::name(),
+                            hash.to_string()
+                        );
+                        // Put into cache, ignore result if it's full
+                        let _ =
+                            in_memory.put_with_weight(*hash, module.clone());
 
-                    return Ok(Some((module, store)));
+                        return Ok(Some((module, store)));
+                    } else {
+                        return Ok(None);
+                    }
                 }
                 Some(Compilation::Compiling) => {
                     drop(progress);
@@ -183,11 +189,15 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                     let (module, store) = if module_file_exists(&self.dir, hash)
                     {
                         tracing::info!(
-                            "Loading {} {} from file.",
+                            "Trying to load {} {} from file.",
                             N::name(),
                             hash.to_string()
                         );
-                        file_load_module(&self.dir, hash)
+                        if let Ok(res) = file_load_module(&self.dir, hash) {
+                            res
+                        } else {
+                            return Ok(None);
+                        }
                     } else {
                         return Ok(None);
                     };
@@ -246,13 +256,18 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                         return Ok(Some((module.clone(), store())));
                     }
 
-                    let (module, store) = file_load_module(&self.dir, hash);
-                    tracing::info!(
-                        "{} found {} in file cache.",
-                        N::name(),
-                        hash.to_string()
-                    );
-                    return Ok(Some((module, store)));
+                    if let Ok((module, store)) =
+                        file_load_module(&self.dir, hash)
+                    {
+                        tracing::info!(
+                            "{} found {} in file cache.",
+                            N::name(),
+                            hash.to_string()
+                        );
+                        return Ok(Some((module, store)));
+                    } else {
+                        return Ok(None);
+                    }
                 }
                 Some(Compilation::Compiling) => {
                     drop(progress);
@@ -270,11 +285,15 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
 
                     return if module_file_exists(&self.dir, hash) {
                         tracing::info!(
-                            "Loading {} {} from file.",
+                            "Trying to load {} {} from file.",
                             N::name(),
                             hash.to_string()
                         );
-                        Ok(Some(file_load_module(&self.dir, hash)))
+                        if let Ok(res) = file_load_module(&self.dir, hash) {
+                            return Ok(Some(res));
+                        } else {
+                            return Ok(None);
+                        }
                     } else {
                         Ok(None)
                     };
@@ -478,13 +497,22 @@ fn file_write_module(dir: impl AsRef<Path>, module: &Module, hash: &Hash) {
     fs_cache.store(CacheHash::new(hash.0), module).unwrap();
 }
 
-fn file_load_module(dir: impl AsRef<Path>, hash: &Hash) -> (Module, Store) {
+fn file_load_module(
+    dir: impl AsRef<Path>,
+    hash: &Hash,
+) -> Result<(Module, Store), wasmer::DeserializeError> {
     use wasmer_cache::Cache;
     let fs_cache = fs_cache(dir, hash);
     let store = store();
     let hash = CacheHash::new(hash.0);
-    let module = unsafe { fs_cache.load(&store, hash) }.unwrap();
-    (module, store)
+    let module = unsafe { fs_cache.load(&store, hash) };
+    if let Err(err) = module.as_ref() {
+        tracing::error!(
+            "Error loading cached wasm {}: {err}.",
+            hash.to_string()
+        );
+    }
+    Ok((module?, store))
 }
 
 fn fs_cache(dir: impl AsRef<Path>, hash: &Hash) -> FileSystemCache {

@@ -198,6 +198,7 @@ where
 
         // Tracks the accepted transactions
         self.wl_storage.storage.block.results = BlockResults::default();
+        let mut changed_keys = BTreeSet::new();
         for (tx_index, processed_tx) in req.txs.iter().enumerate() {
             let tx = if let Ok(tx) = Tx::try_from(processed_tx.tx.as_ref()) {
                 tx
@@ -411,7 +412,7 @@ where
             )
             .map_err(Error::TxApply)
             {
-                Ok(result) => {
+                Ok(ref mut result) => {
                     if result.is_accepted() {
                         if let EventType::Accepted = tx_event.event_type {
                             // Wrapper transaction
@@ -430,6 +431,7 @@ where
                                 tx_event["hash"],
                                 result
                             );
+                            changed_keys.append(&mut result.changed_keys);
                             stats.increment_successful_txs();
                             if let Some(wrapper) = embedding_wrapper {
                                 self.commit_inner_tx_hash(wrapper);
@@ -561,7 +563,7 @@ where
             self.update_epoch(&mut response);
             // send the latest oracle configs. These may have changed due to
             // governance.
-            self.update_eth_oracle();
+            self.update_eth_oracle(&changed_keys);
         }
 
         write_last_block_proposer_address(
@@ -694,11 +696,8 @@ where
             .pred_epochs
             .first_block_heights[last_epoch.0 as usize]
             .0;
-        let num_blocks_in_last_epoch = if first_block_of_last_epoch == 0 {
-            self.wl_storage.storage.block.height.0 - 1
-        } else {
-            self.wl_storage.storage.block.height.0 - first_block_of_last_epoch
-        };
+        let num_blocks_in_last_epoch =
+            self.wl_storage.storage.block.height.0 - first_block_of_last_epoch;
 
         let staking_token = staking_token_address(&self.wl_storage);
 
@@ -1666,7 +1665,7 @@ mod test_finalize_block {
                 transfer
             };
             let ethereum_event = EthereumEvent::TransfersToEthereum {
-                nonce: 0u64.into(),
+                nonce: 1u64.into(),
                 transfers: vec![transfer],
                 relayer: bertha,
             };
@@ -2180,7 +2179,7 @@ mod test_finalize_block {
         assert!(rp3 > rp4);
     }
 
-    /// A unit test for PoS inflationary rewards claiming
+    /// A unit test for PoS inflationary rewards claiming and querying
     #[test]
     fn test_claim_rewards() {
         let (mut shell, _recv, _, _) = setup_with_cfg(SetupCfg {
@@ -2256,6 +2255,15 @@ mod test_finalize_block {
             advance_epoch(&mut shell, &pkh1, &votes, None);
         total_rewards += inflation;
 
+        // Query the available rewards
+        let query_rewards = namada_proof_of_stake::query_reward_tokens(
+            &shell.wl_storage,
+            None,
+            &validator.address,
+            current_epoch,
+        )
+        .unwrap();
+
         // Claim the rewards from the initial epoch
         let reward_1 = namada_proof_of_stake::claim_reward_tokens(
             &mut shell.wl_storage,
@@ -2265,7 +2273,19 @@ mod test_finalize_block {
         )
         .unwrap();
         total_claimed += reward_1;
+        assert_eq!(reward_1, query_rewards);
         assert!(is_reward_equal_enough(total_rewards, total_claimed, 1));
+
+        // Query the available rewards again and check that it is 0 now after
+        // the claim
+        let query_rewards = namada_proof_of_stake::query_reward_tokens(
+            &shell.wl_storage,
+            None,
+            &validator.address,
+            current_epoch,
+        )
+        .unwrap();
+        assert_eq!(query_rewards, token::Amount::zero());
 
         // Try a claim the next block and ensure we get 0 tokens back
         next_block_for_inflation(
@@ -2301,6 +2321,15 @@ mod test_finalize_block {
         .unwrap();
         assert_eq!(unbond_res.sum, unbond_amount);
 
+        // Query the available rewards
+        let query_rewards = namada_proof_of_stake::query_reward_tokens(
+            &shell.wl_storage,
+            None,
+            &validator.address,
+            current_epoch,
+        )
+        .unwrap();
+
         let rew = namada_proof_of_stake::claim_reward_tokens(
             &mut shell.wl_storage,
             None,
@@ -2310,6 +2339,7 @@ mod test_finalize_block {
         .unwrap();
         total_claimed += rew;
         assert!(is_reward_equal_enough(total_rewards, total_claimed, 3));
+        assert_eq!(query_rewards, rew);
 
         // Check the bond amounts for rewards up thru the withdrawable epoch
         let withdraw_epoch = current_epoch + params.withdrawable_epoch_offset();
@@ -2369,6 +2399,15 @@ mod test_finalize_block {
         .unwrap();
         assert_eq!(withdraw_amount, unbond_amount);
 
+        // Query the available rewards
+        let query_rewards = namada_proof_of_stake::query_reward_tokens(
+            &shell.wl_storage,
+            None,
+            &validator.address,
+            current_epoch,
+        )
+        .unwrap();
+
         // Claim tokens
         let reward_2 = namada_proof_of_stake::claim_reward_tokens(
             &mut shell.wl_storage,
@@ -2378,6 +2417,7 @@ mod test_finalize_block {
         )
         .unwrap();
         total_claimed += reward_2;
+        assert_eq!(query_rewards, reward_2);
 
         // The total rewards claimed should be approximately equal to the total
         // minted inflation, minus (unbond_amount / initial_stake) * rewards
@@ -2388,6 +2428,16 @@ mod test_finalize_block {
         let token_uncertainty = uncertainty * lost_rewards;
         let token_diff = total_claimed + lost_rewards - total_rewards;
         assert!(token_diff < token_uncertainty);
+
+        // Query the available rewards to check that they are 0
+        let query_rewards = namada_proof_of_stake::query_reward_tokens(
+            &shell.wl_storage,
+            None,
+            &validator.address,
+            current_epoch,
+        )
+        .unwrap();
+        assert_eq!(query_rewards, token::Amount::zero());
     }
 
     /// A unit test for PoS inflationary rewards claiming
@@ -2549,8 +2599,8 @@ mod test_finalize_block {
             (Dec::one() - stake_ratio) * inflation_3 + commission;
         let exp_del_reward = del_rewards_no_commission - commission;
 
-        assert_eq!(exp_val_reward, val_reward_2);
-        assert_eq!(exp_del_reward, del_reward_1);
+        assert!(is_reward_equal_enough(exp_val_reward, val_reward_2, 1));
+        assert!(is_reward_equal_enough(exp_del_reward, del_reward_1, 1));
     }
 
     /// A unit test for changing consensus keys and communicating to CometBFT

@@ -12,24 +12,23 @@ use namada::core::types::key::{
 };
 use namada::core::types::token::Amount;
 use namada::core::types::transaction::account::{InitAccount, UpdateAccount};
-use namada::core::types::transaction::pos::{InitValidator, MetaDataChange};
-use namada::ibc::core::ics02_client::client_type::ClientType;
-use namada::ibc::core::ics03_connection::connection::Counterparty;
-use namada::ibc::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
-use namada::ibc::core::ics03_connection::version::Version;
-use namada::ibc::core::ics04_channel::channel::Order;
-use namada::ibc::core::ics04_channel::msgs::MsgChannelOpenInit;
-use namada::ibc::core::ics04_channel::Version as ChannelVersion;
-use namada::ibc::core::ics23_commitment::commitment::CommitmentPrefix;
-use namada::ibc::core::ics24_host::identifier::{
-    ClientId, ConnectionId, PortId,
+use namada::core::types::transaction::pos::{BecomeValidator, MetaDataChange};
+use namada::ibc::core::channel::types::channel::Order;
+use namada::ibc::core::channel::types::msgs::MsgChannelOpenInit;
+use namada::ibc::core::channel::types::Version as ChannelVersion;
+use namada::ibc::core::commitment_types::commitment::CommitmentPrefix;
+use namada::ibc::core::connection::types::msgs::MsgConnectionOpenInit;
+use namada::ibc::core::connection::types::version::Version;
+use namada::ibc::core::connection::types::Counterparty;
+use namada::ibc::core::host::types::identifiers::{
+    ClientId, ClientType, ConnectionId, PortId,
 };
 use namada::ledger::eth_bridge::read_native_erc20_address;
-use namada::ledger::storage_api::StorageRead;
+use namada::ledger::storage_api::{StorageRead, StorageWrite};
 use namada::proof_of_stake::types::SlashType;
 use namada::proof_of_stake::{self, read_pos_params, KeySeg};
 use namada::proto::{Code, Section};
-use namada::types::address::Address;
+use namada::types::address::{self, Address};
 use namada::types::eth_bridge_pool::{GasFee, PendingTransfer};
 use namada::types::hash::Hash;
 use namada::types::key::{ed25519, secp256k1, PublicKey, RefTo};
@@ -43,15 +42,15 @@ use namada::types::transaction::pos::{
 };
 use namada_apps::bench_utils::{
     BenchShell, BenchShieldedCtx, ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY,
-    BERTHA_PAYMENT_ADDRESS, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
-    TX_CHANGE_CONSENSUS_KEY_WASM, TX_CHANGE_VALIDATOR_COMMISSION_WASM,
-    TX_CHANGE_VALIDATOR_METADATA_WASM, TX_CLAIM_REWARDS_WASM,
-    TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
-    TX_INIT_PROPOSAL_WASM, TX_INIT_VALIDATOR_WASM,
-    TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM, TX_RESIGN_STEWARD,
-    TX_REVEAL_PK_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
-    TX_UPDATE_ACCOUNT_WASM, TX_UPDATE_STEWARD_COMMISSION,
-    TX_VOTE_PROPOSAL_WASM, TX_WITHDRAW_WASM, VP_VALIDATOR_WASM,
+    BERTHA_PAYMENT_ADDRESS, TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM,
+    TX_BRIDGE_POOL_WASM, TX_CHANGE_CONSENSUS_KEY_WASM,
+    TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_CHANGE_VALIDATOR_METADATA_WASM,
+    TX_CLAIM_REWARDS_WASM, TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM,
+    TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL_WASM, TX_REACTIVATE_VALIDATOR_WASM,
+    TX_REDELEGATE_WASM, TX_RESIGN_STEWARD, TX_REVEAL_PK_WASM, TX_UNBOND_WASM,
+    TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
+    TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL_WASM, TX_WITHDRAW_WASM,
+    VP_USER_WASM,
 };
 use namada_apps::wallet::defaults;
 use sha2::Digest;
@@ -83,16 +82,17 @@ fn transfer(c: &mut Criterion) {
                         .to_owned();
 
                     // Shield some tokens for Albert
-                    let shield_tx = shielded_ctx.generate_masp_tx(
-                        amount,
-                        TransferSource::Address(defaults::albert_address()),
-                        TransferTarget::PaymentAddress(albert_payment_addr),
-                    );
+                    let (mut shielded_ctx, shield_tx) = shielded_ctx
+                        .generate_masp_tx(
+                            amount,
+                            TransferSource::Address(defaults::albert_address()),
+                            TransferTarget::PaymentAddress(albert_payment_addr),
+                        );
                     shielded_ctx.shell.execute_tx(&shield_tx);
                     shielded_ctx.shell.wl_storage.commit_tx();
                     shielded_ctx.shell.commit();
 
-                    let signed_tx = match bench_name {
+                    let (shielded_ctx, signed_tx) = match bench_name {
                         "transparent" => shielded_ctx.generate_masp_tx(
                             amount,
                             TransferSource::Address(defaults::albert_address()),
@@ -369,11 +369,11 @@ fn reveal_pk(c: &mut Criterion) {
 fn update_account(c: &mut Criterion) {
     let shell = BenchShell::default();
     let vp_code_hash: Hash = shell
-        .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
+        .read_storage_key(&Key::wasm_hash(VP_USER_WASM))
         .unwrap();
     let extra_section = Section::ExtraData(Code::from_hash(
         vp_code_hash,
-        Some(VP_VALIDATOR_WASM.to_string()),
+        Some(VP_USER_WASM.to_string()),
     ));
     let data = UpdateAccount {
         addr: defaults::albert_address(),
@@ -412,11 +412,11 @@ fn init_account(c: &mut Criterion) {
 
     let shell = BenchShell::default();
     let vp_code_hash: Hash = shell
-        .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
+        .read_storage_key(&Key::wasm_hash(VP_USER_WASM))
         .unwrap();
     let extra_section = Section::ExtraData(Code::from_hash(
         vp_code_hash,
-        Some(VP_VALIDATOR_WASM.to_string()),
+        Some(VP_USER_WASM.to_string()),
     ));
     let extra_hash = Hash(
         extra_section
@@ -586,8 +586,9 @@ fn vote_proposal(c: &mut Criterion) {
     group.finish();
 }
 
-fn init_validator(c: &mut Criterion) {
+fn become_validator(c: &mut Criterion) {
     let mut csprng = rand::rngs::OsRng {};
+    let address = address::testing::established_address_1();
     let consensus_key_sk = ed25519::SigScheme::generate(&mut csprng)
         .try_to_sk::<common::SecretKey>()
         .unwrap();
@@ -612,22 +613,8 @@ fn init_validator(c: &mut Criterion) {
     let protocol_key = protocol_key_sk.to_public();
 
     let shell = BenchShell::default();
-    let validator_vp_code_hash: Hash = shell
-        .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
-        .unwrap();
-    let extra_section = Section::ExtraData(Code::from_hash(
-        validator_vp_code_hash,
-        Some(VP_VALIDATOR_WASM.to_string()),
-    ));
-    let extra_hash = Hash(
-        extra_section
-            .hash(&mut sha2::Sha256::new())
-            .finalize_reset()
-            .into(),
-    );
-    let data = InitValidator {
-        account_keys: vec![defaults::albert_keypair().to_public()],
-        threshold: 1,
+    let data = BecomeValidator {
+        address: address.clone(),
         consensus_key,
         eth_cold_key,
         eth_hot_key,
@@ -638,13 +625,12 @@ fn init_validator(c: &mut Criterion) {
         description: None,
         website: None,
         discord_handle: None,
-        validator_vp_code_hash: extra_hash,
     };
     let tx = shell.generate_tx(
-        TX_INIT_VALIDATOR_WASM,
+        TX_BECOME_VALIDATOR_WASM,
         data,
         None,
-        Some(vec![extra_section]),
+        None,
         vec![
             &defaults::albert_keypair(),
             &consensus_key_sk,
@@ -654,9 +640,22 @@ fn init_validator(c: &mut Criterion) {
         ],
     );
 
-    c.bench_function("init_validator", |b| {
+    c.bench_function("become_validator", |b| {
         b.iter_batched_ref(
-            BenchShell::default,
+            || {
+                let mut shell = BenchShell::default();
+                // Initialize the account to be able to use it
+                shell
+                    .wl_storage
+                    .write_bytes(
+                        &namada::types::storage::Key::validity_predicate(
+                            &address,
+                        ),
+                        vec![],
+                    )
+                    .unwrap();
+                shell
+            },
             |shell| shell.execute_tx(&tx),
             criterion::BatchSize::SmallInput,
         )
@@ -1089,7 +1088,7 @@ criterion_group!(
     init_account,
     init_proposal,
     vote_proposal,
-    init_validator,
+    become_validator,
     change_validator_commission,
     ibc,
     unjail_validator,

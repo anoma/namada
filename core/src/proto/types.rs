@@ -507,7 +507,7 @@ impl Signature {
             // vector instead of a map
             assert!(
                 secret_keys.keys().cloned().eq(0..(secret_keys.len() as u8)),
-                "secret keys must be enumerateed when signer address is absent"
+                "secret keys must be enumerated when signer address is absent"
             );
             Signer::PubKeys(secret_keys.values().map(RefTo::ref_to).collect())
         };
@@ -1312,9 +1312,11 @@ impl Tx {
                 }
             }
         }
-        Err(Error::InvalidSectionSignature(
-            "signature threshold not met.".to_string(),
-        ))
+        Err(Error::InvalidSectionSignature(format!(
+            "signature threshold not met: ({} < {})",
+            verified_pks.len(),
+            threshold
+        )))
     }
 
     /// Verify that the sections with the given hashes have been signed together
@@ -1573,9 +1575,15 @@ impl Tx {
         let hashes = vec![self.raw_header_hash()];
         self.protocol_filter();
 
+        let secret_keys = if signer.is_some() {
+            account_public_keys_map.index_secret_keys(keypairs)
+        } else {
+            (0..).zip(keypairs.into_iter()).collect()
+        };
+
         self.add_section(Section::Signature(Signature::new(
             hashes,
-            account_public_keys_map.index_secret_keys(keypairs),
+            secret_keys,
             signer,
         )));
         self

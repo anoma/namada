@@ -15,7 +15,7 @@ wasms += tx_deactivate_validator
 wasms += tx_ibc
 wasms += tx_init_account
 wasms += tx_init_proposal
-wasms += tx_init_validator
+wasms += tx_become_validator
 wasms += tx_redelegate
 wasms += tx_reactivate_validator
 wasms += tx_reveal_pk
@@ -29,7 +29,6 @@ wasms += tx_update_steward_commission
 wasms += tx_resign_steward
 wasms += vp_implicit
 wasms += vp_user
-wasms += vp_validator
 
 # Build all wasms in release mode
 all: $(wasms)

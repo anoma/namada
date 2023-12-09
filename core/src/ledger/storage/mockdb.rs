@@ -18,6 +18,7 @@ use super::{
 };
 use crate::ledger::masp_conversions::ConversionState;
 use crate::ledger::storage::types::{self, KVBytes, PrefixIterator};
+use crate::types::ethereum_events::Uint;
 use crate::types::ethereum_structs;
 use crate::types::hash::Hash;
 use crate::types::internal::TxQueue;
@@ -586,6 +587,14 @@ impl DB for MockDB {
             .map_err(Error::KeyError)?;
         self.0.borrow_mut().remove(&store_key.to_string());
         Ok(())
+    }
+
+    fn read_bridge_pool_signed_nonce(
+        &self,
+        _height: BlockHeight,
+        _last_height: BlockHeight,
+    ) -> Result<Uint> {
+        Ok(Uint::default())
     }
 
     fn write_replay_protection_entry(

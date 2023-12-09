@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::dec::POS_DECIMAL_PRECISION;
-use crate::ibc::applications::transfer::Amount as IbcAmount;
+use crate::ibc::apps::transfer::types::Amount as IbcAmount;
 use crate::ledger::storage as ledger_storage;
 use crate::ledger::storage_api::token::read_denom;
 use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
@@ -583,6 +583,12 @@ impl PartialOrd for DenominatedAmount {
                 ord
             }
         }
+    }
+}
+
+impl Ord for DenominatedAmount {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
     }
 }
 

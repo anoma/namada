@@ -42,12 +42,13 @@ use crate::rpc::{query_storage_value, query_wasm_code_hash, validate_amount};
 use crate::signing::aux_signing_data;
 use crate::tx::prepare_tx;
 use crate::{
-    args, display, display_line, edisplay_line, Namada, SigningTxData,
+    args, display, display_line, edisplay_line, MaybeSync, Namada,
+    SigningTxData,
 };
 
 /// Craft a transaction that adds a transfer to the Ethereum bridge pool.
 pub async fn build_bridge_pool_tx(
-    context: &impl Namada<'_>,
+    context: &impl Namada,
     args::EthereumBridgePool {
         tx: tx_args,
         nut,
@@ -113,7 +114,7 @@ pub async fn build_bridge_pool_tx(
 /// Perform client validation checks on a Bridge pool transfer.
 #[allow(clippy::too_many_arguments)]
 async fn validate_bridge_pool_tx(
-    context: &impl Namada<'_>,
+    context: &impl Namada,
     force: bool,
     nut: bool,
     asset: EthAddress,
@@ -312,7 +313,7 @@ struct BridgePoolResponse<'pool> {
 
 /// Query the contents of the Ethereum bridge pool.
 /// Prints out a json payload.
-pub async fn query_bridge_pool<'a>(
+pub async fn query_bridge_pool(
     client: &(impl Client + Sync),
     io: &impl Io,
 ) -> Result<HashMap<String, PendingTransfer>, Error> {
@@ -349,7 +350,7 @@ pub async fn query_bridge_pool<'a>(
 /// Query the contents of the Ethereum bridge pool that
 /// is covered by the latest signed root.
 /// Prints out a json payload.
-pub async fn query_signed_bridge_pool<'a>(
+pub async fn query_signed_bridge_pool(
     client: &(impl Client + Sync),
     io: &impl Io,
 ) -> Result<HashMap<String, PendingTransfer>, Error> {
@@ -388,7 +389,7 @@ pub async fn query_signed_bridge_pool<'a>(
 /// backing each `TransferToEthereum` event.
 ///
 /// Prints a json payload.
-pub async fn query_relay_progress<'a>(
+pub async fn query_relay_progress(
     client: &(impl Client + Sync),
     io: &impl Io,
 ) -> Result<(), Error> {
@@ -413,9 +414,9 @@ pub async fn query_relay_progress<'a>(
 
 /// Internal methdod to construct a proof that a set of transfers are in the
 /// bridge pool.
-async fn construct_bridge_pool_proof<'a>(
+async fn construct_bridge_pool_proof(
     client: &(impl Client + Sync),
-    io: &impl Io,
+    io: &(impl Io + MaybeSync),
     args: GenBridgePoolProofReq<'_, '_>,
 ) -> Result<GenBridgePoolProofRsp, Error> {
     let in_progress = RPC
@@ -509,9 +510,9 @@ struct BridgePoolProofResponse {
 /// Construct a merkle proof of a batch of transfers in
 /// the bridge pool and return it to the user (as opposed
 /// to relaying it to ethereum).
-pub async fn construct_proof<'a>(
+pub async fn construct_proof(
     client: &(impl Client + Sync),
-    io: &impl Io,
+    io: &(impl Io + MaybeSync),
     args: args::BridgePoolProof,
 ) -> Result<(), Error> {
     let GenBridgePoolProofRsp {
@@ -558,10 +559,10 @@ pub async fn construct_proof<'a>(
 }
 
 /// Relay a validator set update, signed off for a given epoch.
-pub async fn relay_bridge_pool_proof<'a, E>(
+pub async fn relay_bridge_pool_proof<E>(
     eth_client: Arc<E>,
     client: &(impl Client + Sync),
-    io: &impl Io,
+    io: &(impl Io + MaybeSync),
     args: args::RelayBridgePoolProof,
 ) -> Result<(), Error>
 where
@@ -790,8 +791,8 @@ mod recommendations {
     /// Recommend the most economical batch of transfers to relay based
     /// on a conversion rate estimates from NAM to ETH and gas usage
     /// heuristics.
-    pub async fn recommend_batch<'a>(
-        context: &impl Namada<'a>,
+    pub async fn recommend_batch(
+        context: &impl Namada,
         args: args::RecommendBatch,
     ) -> Result<(), Error> {
         // get transfers that can already been relayed but are awaiting a quorum

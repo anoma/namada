@@ -28,12 +28,13 @@ use namada_core::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
 use namada_core::types::transaction::pgf::UpdateStewardCommission;
-use namada_core::types::transaction::pos::InitValidator;
+use namada_core::types::transaction::pos::BecomeValidator;
 use namada_core::types::transaction::{pos, Fee};
 use prost::Message;
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
+use tokio::sync::RwLock;
 
 use super::masp::{ShieldedContext, ShieldedTransfer};
 use crate::args::SdkTypes;
@@ -43,21 +44,22 @@ use crate::core::ledger::governance::storage::vote::{
 };
 use crate::core::types::eth_bridge_pool::PendingTransfer;
 use crate::error::{EncodingError, Error, TxError};
-use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
-use crate::ibc_proto::google::protobuf::Any;
+use crate::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
+use crate::ibc::primitives::proto::Any;
 use crate::io::*;
 use crate::masp::make_asset_type;
 use crate::proto::{MaspBuilder, Section, Tx};
 use crate::rpc::validate_amount;
 use crate::tx::{
-    TX_BOND_WASM, TX_BRIDGE_POOL_WASM, TX_CHANGE_COMMISSION_WASM,
-    TX_CHANGE_CONSENSUS_KEY_WASM, TX_CHANGE_METADATA_WASM,
-    TX_CLAIM_REWARDS_WASM, TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM,
-    TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL, TX_INIT_VALIDATOR_WASM,
-    TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM, TX_RESIGN_STEWARD,
-    TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
-    TX_UPDATE_ACCOUNT_WASM, TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL,
-    TX_WITHDRAW_WASM, VP_USER_WASM, VP_VALIDATOR_WASM,
+    TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
+    TX_CHANGE_COMMISSION_WASM, TX_CHANGE_CONSENSUS_KEY_WASM,
+    TX_CHANGE_METADATA_WASM, TX_CLAIM_REWARDS_WASM,
+    TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
+    TX_INIT_PROPOSAL, TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM,
+    TX_RESIGN_STEWARD, TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM,
+    TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
+    TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
+    VP_USER_WASM,
 };
 pub use crate::wallet::store::AddressVpType;
 use crate::wallet::{Wallet, WalletIo};
@@ -89,8 +91,8 @@ pub struct SigningTxData {
 /// for it from the wallet. If the keypair is encrypted but a password is not
 /// supplied, then it is interactively prompted. Errors if the key cannot be
 /// found or loaded.
-pub async fn find_pk<'a>(
-    context: &impl Namada<'a>,
+pub async fn find_pk(
+    context: &impl Namada,
     addr: &Address,
 ) -> Result<common::PublicKey, Error> {
     match addr {
@@ -138,21 +140,6 @@ pub fn find_key_by_pk<U: WalletIo>(
         // We already know the secret key corresponding to the MASP sentinal key
         Ok(masp_tx_key())
     } else {
-        // Try to get the signer from the signing-keys argument
-        for signing_key in &args.signing_keys {
-            if signing_key.ref_to() == *public_key {
-                return Ok(signing_key.clone());
-            }
-        }
-        // Try to get the signer from the wrapper-fee-payer argument
-        match &args.wrapper_fee_payer {
-            Some(wrapper_fee_payer)
-                if &wrapper_fee_payer.ref_to() == public_key =>
-            {
-                return Ok(wrapper_fee_payer.clone());
-            }
-            _ => {}
-        }
         // Otherwise we need to search the wallet for the secret key
         wallet
             .find_key_by_pk(public_key, args.password.clone())
@@ -170,17 +157,13 @@ pub fn find_key_by_pk<U: WalletIo>(
 /// signer. Return the given signing key or public key of the given signer if
 /// possible. If no explicit signer given, use the `default`. If no `default`
 /// is given, an `Error` is returned.
-pub async fn tx_signers<'a>(
-    context: &impl Namada<'a>,
+pub async fn tx_signers(
+    context: &impl Namada,
     args: &args::Tx<SdkTypes>,
     default: Option<Address>,
 ) -> Result<Vec<common::PublicKey>, Error> {
     let signer = if !&args.signing_keys.is_empty() {
-        let public_keys =
-            args.signing_keys.iter().map(|key| key.ref_to()).collect();
-        return Ok(public_keys);
-    } else if let Some(verification_key) = &args.verification_key {
-        return Ok(vec![verification_key.clone()]);
+        return Ok(args.signing_keys.clone());
     } else {
         // Otherwise use the signer determined by the caller
         default
@@ -211,6 +194,7 @@ pub async fn default_sign(
     _tx: Tx,
     pubkey: common::PublicKey,
     _parts: HashSet<Signable>,
+    _user: (),
 ) -> Result<Tx, Error> {
     Err(Error::Other(format!(
         "unable to sign transaction with {}",
@@ -229,13 +213,19 @@ pub async fn default_sign(
 /// hashes needed for monitoring the tx on chain.
 ///
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
-pub async fn sign_tx<'a, F: std::future::Future<Output = Result<Tx, Error>>>(
-    context: &impl Namada<'a>,
+pub async fn sign_tx<'a, D, F, U>(
+    wallet: &RwLock<Wallet<U>>,
     args: &args::Tx,
     tx: &mut Tx,
     signing_data: SigningTxData,
-    sign: impl Fn(Tx, common::PublicKey, HashSet<Signable>) -> F,
-) -> Result<(), Error> {
+    sign: impl Fn(Tx, common::PublicKey, HashSet<Signable>, D) -> F,
+    user_data: D,
+) -> Result<(), Error>
+where
+    D: Clone,
+    U: WalletIo,
+    F: std::future::Future<Output = Result<Tx, Error>>,
+{
     let mut used_pubkeys = HashSet::new();
 
     // First try to sign the raw header with the supplied signatures
@@ -255,7 +245,7 @@ pub async fn sign_tx<'a, F: std::future::Future<Output = Result<Tx, Error>>>(
     // Then try to sign the raw header with private keys in the software wallet
     if let Some(account_public_keys_map) = signing_data.account_public_keys_map
     {
-        let mut wallet = context.wallet_mut().await;
+        let mut wallet = wallet.write().await;
         let signing_tx_keypairs = signing_data
             .public_keys
             .iter()
@@ -263,7 +253,7 @@ pub async fn sign_tx<'a, F: std::future::Future<Output = Result<Tx, Error>>>(
                 if used_pubkeys.contains(public_key) {
                     None
                 } else {
-                    match find_key_by_pk(*wallet, args, public_key) {
+                    match find_key_by_pk(&mut wallet, args, public_key) {
                         Ok(secret_key) => {
                             used_pubkeys.insert(public_key.clone());
                             Some(secret_key)
@@ -289,6 +279,7 @@ pub async fn sign_tx<'a, F: std::future::Future<Output = Result<Tx, Error>>>(
                 tx.clone(),
                 pubkey.clone(),
                 HashSet::from([Signable::RawHeader]),
+                user_data.clone(),
             )
             .await
             {
@@ -303,8 +294,8 @@ pub async fn sign_tx<'a, F: std::future::Future<Output = Result<Tx, Error>>>(
     let key = {
         // Lock the wallet just long enough to extract a key from it without
         // interfering with the sign closure call
-        let mut wallet = context.wallet_mut().await;
-        find_key_by_pk(*wallet, args, &signing_data.fee_payer)
+        let mut wallet = wallet.write().await;
+        find_key_by_pk(&mut *wallet, args, &signing_data.fee_payer)
     };
     match key {
         Ok(fee_payer_keypair) => {
@@ -315,6 +306,7 @@ pub async fn sign_tx<'a, F: std::future::Future<Output = Result<Tx, Error>>>(
                 tx.clone(),
                 signing_data.fee_payer.clone(),
                 HashSet::from([Signable::FeeHeader, Signable::RawHeader]),
+                user_data,
             )
             .await?;
         }
@@ -324,8 +316,8 @@ pub async fn sign_tx<'a, F: std::future::Future<Output = Result<Tx, Error>>>(
 
 /// Return the necessary data regarding an account to be able to generate a
 /// multisignature section
-pub async fn aux_signing_data<'a>(
-    context: &impl Namada<'a>,
+pub async fn aux_signing_data(
+    context: &impl Namada,
     args: &args::Tx<SdkTypes>,
     owner: Option<Address>,
     default_signer: Option<Address>,
@@ -371,7 +363,7 @@ pub async fn aux_signing_data<'a>(
             .to_public()
     } else {
         match &args.wrapper_fee_payer {
-            Some(keypair) => keypair.to_public(),
+            Some(keypair) => keypair.clone(),
             None => public_keys.get(0).ok_or(TxError::InvalidFeePayer)?.clone(),
         }
     };
@@ -393,8 +385,8 @@ pub async fn aux_signing_data<'a>(
     })
 }
 
-pub async fn init_validator_signing_data<'a>(
-    context: &impl Namada<'a>,
+pub async fn init_validator_signing_data(
+    context: &impl Namada,
     args: &args::Tx<SdkTypes>,
     validator_keys: Vec<common::PublicKey>,
 ) -> Result<SigningTxData, Error> {
@@ -416,7 +408,7 @@ pub async fn init_validator_signing_data<'a>(
             .to_public()
     } else {
         match &args.wrapper_fee_payer {
-            Some(keypair) => keypair.to_public(),
+            Some(keypair) => keypair.clone(),
             None => public_keys.get(0).ok_or(TxError::InvalidFeePayer)?.clone(),
         }
     };
@@ -453,7 +445,7 @@ pub struct TxSourcePostBalance {
 /// wrapper and its payload which is needed for monitoring its
 /// progress on chain.
 #[allow(clippy::too_many_arguments)]
-pub async fn wrap_tx<'a, N: Namada<'a>>(
+pub async fn wrap_tx<N: Namada>(
     context: &N,
     tx: &mut Tx,
     args: &args::Tx<SdkTypes>,
@@ -737,7 +729,7 @@ fn make_ledger_amount_addr(
 
 /// Adds a Ledger output line describing a given transaction amount and asset
 /// type
-async fn make_ledger_amount_asset<'a>(
+async fn make_ledger_amount_asset(
     tokens: &HashMap<Address, String>,
     output: &mut Vec<String>,
     amount: u64,
@@ -826,7 +818,7 @@ fn format_outputs(output: &mut Vec<String>) {
 
 /// Adds a Ledger output for the sender and destination for transparent and MASP
 /// transactions
-pub async fn make_ledger_masp_endpoints<'a>(
+pub async fn make_ledger_masp_endpoints(
     tokens: &HashMap<Address, String>,
     output: &mut Vec<String>,
     transfer: &Transfer,
@@ -898,8 +890,8 @@ pub async fn make_ledger_masp_endpoints<'a>(
 
 /// Internal method used to generate transaction test vectors
 #[cfg(feature = "std")]
-pub async fn generate_test_vector<'a>(
-    context: &impl Namada<'a>,
+pub async fn generate_test_vector(
+    context: &impl Namada,
     tx: &Tx,
 ) -> Result<(), Error> {
     use std::env;
@@ -911,7 +903,7 @@ pub async fn generate_test_vector<'a>(
         // Contract the large data blobs in the transaction
         tx.wallet_filter();
         // Convert the transaction to Ledger format
-        let decoding = to_ledger_vector(*context.wallet().await, &tx).await?;
+        let decoding = to_ledger_vector(&*context.wallet().await, &tx).await?;
         let output = serde_json::to_string(&decoding)
             .map_err(|e| Error::from(EncodingError::Serde(e.to_string())))?;
         // Record the transaction at the identified path
@@ -1008,7 +1000,7 @@ impl<'a> Display for LedgerProposalType<'a> {
 
 /// Converts the given transaction to the form that is displayed on the Ledger
 /// device
-pub async fn to_ledger_vector<'a>(
+pub async fn to_ledger_vector(
     wallet: &Wallet<impl WalletIo>,
     tx: &Tx,
 ) -> Result<LedgerVector, Error> {
@@ -1059,8 +1051,6 @@ pub async fn to_ledger_vector<'a>(
             })?;
         let vp_code = if extra.tag == Some(VP_USER_WASM.to_string()) {
             "User".to_string()
-        } else if extra.tag == Some(VP_VALIDATOR_WASM.to_string()) {
-            "Validator".to_string()
         } else {
             HEXLOWER.encode(&extra.code.hash().0)
         };
@@ -1086,8 +1076,8 @@ pub async fn to_ledger_vector<'a>(
             format!("Threshold : {}", init_account.threshold),
             format!("VP type : {}", HEXLOWER.encode(&extra.code.hash().0)),
         ]);
-    } else if code_sec.tag == Some(TX_INIT_VALIDATOR_WASM.to_string()) {
-        let init_validator = InitValidator::try_from_slice(
+    } else if code_sec.tag == Some(TX_BECOME_VALIDATOR_WASM.to_string()) {
+        let init_validator = BecomeValidator::try_from_slice(
             &tx.data()
                 .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
         )
@@ -1097,29 +1087,9 @@ pub async fn to_ledger_vector<'a>(
 
         tv.name = "Init_Validator_0".to_string();
 
-        let extra = tx
-            .get_section(&init_validator.validator_vp_code_hash)
-            .and_then(|x| Section::extra_data_sec(x.as_ref()))
-            .ok_or_else(|| {
-                Error::Other("unable to load vp code".to_string())
-            })?;
-        let vp_code = if extra.tag == Some(VP_USER_WASM.to_string()) {
-            "User".to_string()
-        } else if extra.tag == Some(VP_VALIDATOR_WASM.to_string()) {
-            "Validator".to_string()
-        } else {
-            HEXLOWER.encode(&extra.code.hash().0)
-        };
-
         tv.output.extend(vec!["Type : Init Validator".to_string()]);
-        tv.output.extend(
-            init_validator
-                .account_keys
-                .iter()
-                .map(|k| format!("Account key : {}", k)),
-        );
         tv.output.extend(vec![
-            format!("Threshold : {}", init_validator.threshold),
+            format!("Address : {}", init_validator.address),
             format!("Consensus key : {}", init_validator.consensus_key),
             format!("Ethereum cold key : {}", init_validator.eth_cold_key),
             format!("Ethereum hot key : {}", init_validator.eth_hot_key),
@@ -1141,16 +1111,9 @@ pub async fn to_ledger_vector<'a>(
             tv.output
                 .push(format!("Discord handle : {}", discord_handle));
         }
-        tv.output.push(format!("Validator VP type : {}", vp_code));
 
-        tv.output_expert.extend(
-            init_validator
-                .account_keys
-                .iter()
-                .map(|k| format!("Account key : {}", k)),
-        );
         tv.output_expert.extend(vec![
-            format!("Threshold : {}", init_validator.threshold),
+            format!("Address : {}", init_validator.address),
             format!("Consensus key : {}", init_validator.consensus_key),
             format!("Ethereum cold key : {}", init_validator.eth_cold_key),
             format!("Ethereum hot key : {}", init_validator.eth_hot_key),
@@ -1173,10 +1136,6 @@ pub async fn to_ledger_vector<'a>(
             tv.output_expert
                 .push(format!("Discord handle : {}", discord_handle));
         }
-        tv.output_expert.push(format!(
-            "Validator VP type : {}",
-            HEXLOWER.encode(&extra.code.hash().0)
-        ));
     } else if code_sec.tag == Some(TX_INIT_PROPOSAL.to_string()) {
         let init_proposal_data = InitProposalData::try_from_slice(
             &tx.data()
@@ -1322,8 +1281,6 @@ pub async fn to_ledger_vector<'a>(
                     })?;
                 let vp_code = if extra.tag == Some(VP_USER_WASM.to_string()) {
                     "User".to_string()
-                } else if extra.tag == Some(VP_VALIDATOR_WASM.to_string()) {
-                    "Validator".to_string()
                 } else {
                     HEXLOWER.encode(&extra.code.hash().0)
                 };

@@ -80,8 +80,14 @@ impl BorshSchema for PublicKey {
     ) {
         // Encoded as `[u8; PUBLIC_KEY_LENGTH]`
         let elements = "u8".into();
-        let length = PUBLIC_KEY_LENGTH as u32;
-        let definition = borsh::schema::Definition::Array { elements, length };
+        let length = PUBLIC_KEY_LENGTH as u64;
+        // let definition = borsh::schema::Definition::Array { elements, length
+        // };
+        let definition = borsh::schema::Definition::Sequence {
+            length_width: 0,
+            length_range: 0..=length,
+            elements,
+        };
         definitions.insert(Self::declaration(), definition);
     }
 
@@ -198,8 +204,14 @@ impl BorshSchema for SecretKey {
     ) {
         // Encoded as `[u8; SECRET_KEY_LENGTH]`
         let elements = "u8".into();
-        let length = SECRET_KEY_LENGTH as u32;
-        let definition = borsh::schema::Definition::Array { elements, length };
+        let length = SECRET_KEY_LENGTH as u64;
+        // let definition = borsh::schema::Definition::Array { elements, length
+        // };
+        let definition = borsh::schema::Definition::Sequence {
+            length_width: 0,
+            length_range: 0..=length,
+            elements,
+        };
         definitions.insert(Self::declaration(), definition);
     }
 
@@ -279,8 +291,14 @@ impl BorshSchema for Signature {
     ) {
         // Encoded as `[u8; SIGNATURE_LENGTH]`
         let elements = "u8".into();
-        let length = SIGNATURE_LENGTH as u32;
-        let definition = borsh::schema::Definition::Array { elements, length };
+        let length = SIGNATURE_LENGTH as u64;
+        // let definition = borsh::schema::Definition::Array { elements, length
+        // };
+        let definition = borsh::schema::Definition::Sequence {
+            length_width: 0,
+            length_range: 0..=length,
+            elements,
+        };
         definitions.insert(Self::declaration(), definition);
     }
 

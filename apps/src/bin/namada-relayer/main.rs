@@ -14,5 +14,5 @@ async fn main() -> Result<()> {
 
     let cmd = cli::namada_relayer_cli()?;
     // run the CLI
-    CliApi::handle_relayer_command::<HttpClient>(None, cmd, &CliIo).await
+    CliApi::handle_relayer_command::<HttpClient>(None, cmd, CliIo).await
 }

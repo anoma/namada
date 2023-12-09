@@ -30,7 +30,6 @@ use namada_core::ledger::governance::cli::onchain::{
 };
 use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_sdk::masp::fs::FsShieldedUtils;
-use namada_sdk::wallet::alias::Alias;
 use namada_test_utils::TestWasms;
 use namada_vp_prelude::BTreeSet;
 use serde_json::json;
@@ -38,7 +37,8 @@ use setup::constants::*;
 use setup::Test;
 
 use super::helpers::{
-    epochs_per_year_from_min_duration, get_height, wait_for_block_height,
+    epochs_per_year_from_min_duration, get_established_addr_from_pregenesis,
+    get_height, get_pregenesis_wallet, wait_for_block_height,
     wait_for_wasm_pre_compile,
 };
 use super::setup::{get_all_wasms_hashes, set_ethereum_bridge_mode, NamadaCmd};
@@ -217,7 +217,7 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
     for ledger_rpc in &[validator_0_rpc, validator_1_rpc, non_validator_rpc] {
         let mut client =
             run!(test, Bin::Client, query_balance_args(ledger_rpc), Some(40))?;
-        client.exp_string("nam: 980010.1")?;
+        client.exp_string("nam: 2000010.1")?;
         client.assert_success();
     }
 
@@ -655,7 +655,7 @@ fn ledger_txs_and_queries() -> Result<()> {
     }
     let christel = find_address(&test, CHRISTEL)?;
     // as setup in `genesis/e2e-tests-single-node.toml`
-    let christel_balance = token::Amount::native_whole(1000000);
+    let christel_balance = token::Amount::native_whole(2000000);
     let nam = find_address(&test, NAM)?;
     let storage_key = token::balance_key(&nam, &christel).to_string();
     let query_args_and_expected_response = vec![
@@ -921,19 +921,22 @@ fn pos_bonds() -> Result<()> {
                 base_dir,
                 default_port_offset,
             );
-            let bonds = genesis.transactions.bond.unwrap();
-            genesis.transactions.bond = Some(
+            genesis.transactions.bond = Some({
+                let wallet = get_pregenesis_wallet(base_dir);
+                let validator_1_address = wallet
+                    .find_address("validator-1")
+                    .expect("Failed to find validator-1 address");
+                let mut bonds = genesis.transactions.bond.unwrap();
                 bonds
-                    .into_iter()
-                    .filter(|bond| {
-                        (&bond.data.validator).as_ref() != "validator-1"
-                    })
-                    .collect(),
-            );
+                    .retain(|bond| bond.data.validator != *validator_1_address);
+                bonds
+            });
             genesis
         },
         None,
     )?;
+    allow_duplicate_ips(&test, &test.net.chain_id, &Who::Validator(0));
+    allow_duplicate_ips(&test, &test.net.chain_id, &Who::Validator(1));
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
@@ -949,27 +952,6 @@ fn pos_bonds() -> Result<()> {
 
     let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
-    // put money in the validator account from its balance account so that it
-    // can self-bond
-    let tx_args = vec![
-        "transfer",
-        "--source",
-        "validator-0-balance-key",
-        "--target",
-        "validator-0-validator-key",
-        "--amount",
-        "100.0",
-        "--token",
-        "NAM",
-        "--node",
-        &validator_0_rpc,
-    ];
-    let mut client =
-        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction applied with result:")?;
-    client.exp_string("Transaction is valid.")?;
-    client.assert_success();
-
     // 2. Submit a self-bond for the first genesis validator
     let tx_args = vec![
         "bond",
@@ -978,7 +960,7 @@ fn pos_bonds() -> Result<()> {
         "--amount",
         "10000.0",
         "--signing-keys",
-        "validator-0-validator-key",
+        "validator-0-balance-key",
         "--node",
         &validator_0_rpc,
     ];
@@ -1036,7 +1018,7 @@ fn pos_bonds() -> Result<()> {
         "--amount",
         "5100.0",
         "--signing-keys",
-        "validator-0-validator-key",
+        "validator-0-balance-key",
         "--node",
         &validator_0_rpc,
     ];
@@ -1115,7 +1097,7 @@ fn pos_bonds() -> Result<()> {
         "--validator",
         "validator-0",
         "--signing-keys",
-        "validator-0-validator-key",
+        "validator-0-balance-key",
         "--node",
         &validator_0_rpc,
     ];
@@ -1200,29 +1182,31 @@ fn pos_rewards() -> Result<()> {
 
     let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
-    // Put money in the validator account from its balance account so that it
-    // can pay gas fees
+    // Query the current rewards for the validator self-bond
     let tx_args = vec![
-        "transfer",
-        "--source",
-        "validator-0-balance-key",
-        "--target",
-        "validator-0-validator-key",
-        "--amount",
-        "100.0",
-        "--token",
-        "NAM",
+        "rewards",
+        "--validator",
+        "validator-0",
         "--node",
         &validator_0_rpc,
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction is valid.")?;
+    let (_, res) = client
+        .exp_regex(r"Current rewards available for claim: [0-9\.]+ NAM")
+        .unwrap();
+    let words = res.split(' ').collect::<Vec<_>>();
+    let res = words[words.len() - 2];
+    let mut last_amount = token::Amount::from_str(
+        res.split(' ').last().unwrap(),
+        NATIVE_MAX_DECIMAL_PLACES,
+    )
+    .unwrap();
     client.assert_success();
 
     // Wait some epochs
-    let epoch = get_epoch(&test, &validator_0_rpc)?;
-    let wait_epoch = epoch + 4_u64;
+    let mut last_epoch = get_epoch(&test, &validator_0_rpc)?;
+    let wait_epoch = last_epoch + 4_u64;
 
     let start = Instant::now();
     let loop_timeout = Duration::new(40, 0);
@@ -1230,12 +1214,46 @@ fn pos_rewards() -> Result<()> {
         if Instant::now().duration_since(start) > loop_timeout {
             panic!("Timed out waiting for epoch: {}", wait_epoch);
         }
+
         let epoch = epoch_sleep(&test, &validator_0_rpc, 40)?;
         if dbg!(epoch) >= wait_epoch {
             break;
         }
+
+        // Query the current rewards for the validator self-bond and see that it
+        // grows
+        let tx_args = vec![
+            "rewards",
+            "--validator",
+            "validator-0",
+            "--node",
+            &validator_0_rpc,
+        ];
+        let mut client =
+            run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+        let (_, res) = client
+            .exp_regex(r"Current rewards available for claim: [0-9\.]+ NAM")
+            .unwrap();
+        let words = res.split(' ').collect::<Vec<_>>();
+        let res = words[words.len() - 2];
+        let amount = token::Amount::from_str(
+            res.split(' ').last().unwrap(),
+            NATIVE_MAX_DECIMAL_PLACES,
+        )
+        .unwrap();
+        client.assert_success();
+
+        if epoch > last_epoch {
+            assert!(amount > last_amount);
+        } else {
+            assert_eq!(amount, last_amount);
+        }
+
+        last_amount = amount;
+        last_epoch = epoch;
     }
 
+    // Query the balance of the validator account
     let query_balance_args = vec![
         "balance",
         "--owner",
@@ -1254,12 +1272,13 @@ fn pos_rewards() -> Result<()> {
     .unwrap();
     client.assert_success();
 
+    // Claim rewards
     let tx_args = vec![
         "claim-rewards",
         "--validator",
         "validator-0",
         "--signing-keys",
-        "validator-0-validator-key",
+        "validator-0-balance-key",
         "--node",
         &validator_0_rpc,
     ];
@@ -1269,6 +1288,8 @@ fn pos_rewards() -> Result<()> {
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
+    // Query the validator balance again and check that the balance has grown
+    // after claiming
     let query_balance_args = vec![
         "balance",
         "--owner",
@@ -1324,26 +1345,6 @@ fn test_bond_queries() -> Result<()> {
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
     let validator_alias = "validator-0";
-
-    // put money in the validator account from its balance account so that it
-    // can pay gas fees
-    let tx_args = vec![
-        "transfer",
-        "--source",
-        "validator-0-balance-key",
-        "--target",
-        "validator-0-validator-key",
-        "--amount",
-        "100.0",
-        "--token",
-        "NAM",
-        "--node",
-        &validator_one_rpc,
-    ];
-    let mut client =
-        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction is valid.")?;
-    client.assert_success();
 
     // 2. Submit a delegation to the genesis validator
     let tx_args = vec![
@@ -1438,6 +1439,7 @@ fn test_bond_queries() -> Result<()> {
     // 6. Wait for withdraw_epoch
     loop {
         let epoch = epoch_sleep(&test, &validator_one_rpc, 120)?;
+        // NOTE: test passes from epoch ~13 onwards
         if epoch >= withdraw_epoch {
             break;
         }
@@ -1447,8 +1449,8 @@ fn test_bond_queries() -> Result<()> {
     let tx_args = vec!["bonds", "--ledger-address", &validator_one_rpc];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(
-        "All bonds total active: 120188.000000\r
-All bonds total: 120188.000000\r
+        "All bonds total active: 100188.000000\r
+All bonds total: 100188.000000\r
 All unbonds total active: 412.000000\r
 All unbonds total: 412.000000\r
 All unbonds total withdrawable: 412.000000\r",
@@ -1470,27 +1472,33 @@ All unbonds total withdrawable: 412.000000\r",
 #[test]
 fn pos_init_validator() -> Result<()> {
     let pipeline_len = 1;
-    let validator_stake = token::Amount::native_whole(20000_u64);
+    let validator_stake = token::Amount::native_whole(100000_u64);
     let test = setup::network(
         |mut genesis, base_dir: &_| {
+            genesis.parameters.parameters.min_num_of_blocks = 4;
+            genesis.parameters.parameters.epochs_per_year = 31_536_000;
+            genesis.parameters.parameters.max_expected_time_per_block = 1;
+            genesis.parameters.pos_params.pipeline_len = pipeline_len;
+            genesis.parameters.pos_params.unbonding_len = 2;
+            let genesis = setup::set_validators(
+                1,
+                genesis,
+                base_dir,
+                default_port_offset,
+            );
+            println!("{:?}", genesis.transactions.bond);
             let stake = genesis
                 .transactions
                 .bond
                 .as_ref()
                 .unwrap()
                 .iter()
-                .filter_map(|bond| {
-                    (bond.data.validator.to_string() == *"validator-0").then(
-                        || {
-                            bond.data
-                                .amount
-                                .increase_precision(
-                                    NATIVE_MAX_DECIMAL_PLACES.into(),
-                                )
-                                .unwrap()
-                                .amount()
-                        },
-                    )
+                .map(|bond| {
+                    bond.data
+                        .amount
+                        .increase_precision(NATIVE_MAX_DECIMAL_PLACES.into())
+                        .unwrap()
+                        .amount()
                 })
                 .sum::<token::Amount>();
             assert_eq!(
@@ -1498,12 +1506,7 @@ fn pos_init_validator() -> Result<()> {
                 "Assuming this stake, we give the same amount to the new \
                  validator to have half of voting power",
             );
-            genesis.parameters.parameters.min_num_of_blocks = 4;
-            genesis.parameters.parameters.epochs_per_year = 31_536_000;
-            genesis.parameters.parameters.max_expected_time_per_block = 1;
-            genesis.parameters.pos_params.pipeline_len = pipeline_len;
-            genesis.parameters.pos_params.unbonding_len = 2;
-            setup::set_validators(1, genesis, base_dir, default_port_offset)
+            genesis
         },
         None,
     )?;
@@ -1803,26 +1806,6 @@ fn proposal_submission() -> Result<()> {
 
     let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
-    // put money in the validator account from its balance account so that it
-    // can pay gas fees
-    let tx_args = vec![
-        "transfer",
-        "--source",
-        "validator-0-balance-key",
-        "--target",
-        "validator-0-validator-key",
-        "--amount",
-        "100.0",
-        "--token",
-        "NAM",
-        "--node",
-        &validator_0_rpc,
-    ];
-    let mut client =
-        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction is valid.")?;
-    client.assert_success();
-
     // 1.1 Delegate some token
     let tx_args = vec![
         "bond",
@@ -1893,7 +1876,7 @@ fn proposal_submission() -> Result<()> {
     ];
 
     let mut client = run!(test, Bin::Client, query_balance_args, Some(40))?;
-    client.exp_string("nam: 979500")?;
+    client.exp_string("nam: 1999500")?;
     client.assert_success();
 
     // 5. Query token balance governance
@@ -1960,7 +1943,7 @@ fn proposal_submission() -> Result<()> {
     ];
 
     let mut client = run!(test, Bin::Client, query_balance_args, Some(40))?;
-    client.exp_string("nam: 979500")?;
+    client.exp_string("nam: 1999500")?;
     client.assert_success();
 
     // 9. Send a yay vote from a validator
@@ -2046,7 +2029,7 @@ fn proposal_submission() -> Result<()> {
     let mut client = run!(test, Bin::Client, query_proposal, Some(15))?;
     client.exp_string("Proposal Id: 0")?;
     client.exp_string(
-        "passed with 120000.000000 yay votes and 900.000000 nay votes (0.%)",
+        "passed with 100000.000000 yay votes and 900.000000 nay votes (0.%)",
     )?;
     client.assert_success();
 
@@ -2068,7 +2051,7 @@ fn proposal_submission() -> Result<()> {
     ];
 
     let mut client = run!(test, Bin::Client, query_balance_args, Some(30))?;
-    client.exp_string("nam: 980000")?;
+    client.exp_string("nam: 200000")?;
     client.assert_success();
 
     // 13. Check if governance funds are 0
@@ -2116,7 +2099,12 @@ fn pgf_governance_proposal() -> Result<()> {
             genesis.parameters.parameters.min_num_of_blocks = 4;
             genesis.parameters.parameters.max_expected_time_per_block = 1;
             genesis.parameters.pgf_params.stewards =
-                BTreeSet::from_iter(Alias::from_str("albert"));
+                BTreeSet::from_iter([get_established_addr_from_pregenesis(
+                    "albert-key",
+                    base_dir,
+                    &genesis,
+                )
+                .unwrap()]);
             setup::set_validators(1, genesis, base_dir, |_| 0)
         },
         None,
@@ -2142,26 +2130,6 @@ fn pgf_governance_proposal() -> Result<()> {
             .background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
-
-    // put money in the validator account from its balance account so that it
-    // can pay gas fees
-    let tx_args = vec![
-        "transfer",
-        "--source",
-        "validator-0-balance-key",
-        "--target",
-        "validator-0-validator-key",
-        "--amount",
-        "100.0",
-        "--token",
-        "NAM",
-        "--node",
-        &validator_one_rpc,
-    ];
-    let mut client =
-        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction is valid.")?;
-    client.assert_success();
 
     // Delegate some token
     let tx_args = vec![
@@ -2229,7 +2197,7 @@ fn pgf_governance_proposal() -> Result<()> {
     ];
 
     client = run!(test, Bin::Client, query_balance_args, Some(40))?;
-    client.exp_string("nam: 979500")?;
+    client.exp_string("nam: 1999500")?;
     client.assert_success();
 
     // Query token balance governance
@@ -2334,7 +2302,7 @@ fn pgf_governance_proposal() -> Result<()> {
     ];
 
     client = run!(test, Bin::Client, query_balance_args, Some(30))?;
-    client.exp_string("nam: 980000")?;
+    client.exp_string("nam: 2000000")?;
     client.assert_success();
 
     // Check if governance funds are 0
@@ -2581,7 +2549,7 @@ fn proposal_offline() -> Result<()> {
 
     let mut client = run!(test, Bin::Client, tally_offline, Some(15))?;
     client.exp_string("Parsed 1 votes")?;
-    client.exp_string("rejected with 20900.000000 yay votes")?;
+    client.exp_string("rejected with 900.000000 yay votes")?;
     client.assert_success();
 
     Ok(())
@@ -2677,28 +2645,6 @@ fn double_signing_gets_slashed() -> Result<()> {
     validator_3.exp_string("Namada ledger node started")?;
     validator_3.exp_string("This node is a validator")?;
     let _bg_validator_3 = validator_3.background();
-
-    let validator_zero_rpc = get_actor_rpc(&test, &Who::Validator(0));
-    // put money in the validator account from its balance account so that it
-    // can pay gas fees
-    let tx_args = vec![
-        "transfer",
-        "--source",
-        "validator-0-balance-key",
-        "--target",
-        "validator-0-validator-key",
-        "--amount",
-        "100.0",
-        "--token",
-        "NAM",
-        "--node",
-        &validator_zero_rpc,
-    ];
-    let mut client =
-        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction is valid.")?;
-
-    client.assert_success();
 
     // 2. Copy the first genesis validator base-dir
     let validator_0_base_dir = test.get_base_dir(&Who::Validator(0));
@@ -2807,7 +2753,7 @@ fn double_signing_gets_slashed() -> Result<()> {
         "--node",
         &validator_one_rpc,
     ];
-    let _client = run!(test, Bin::Client, tx_args, Some(40))?;
+    let _client = run!(test, Bin::Client, tx_args, Some(100))?;
     // We don't wait for tx result - sometimes the node may crash before while
     // it's being applied, because the slashed validator will stop voting and
     // rewards calculation then fails with `InsufficientVotes`.
@@ -3032,8 +2978,6 @@ fn implicit_account_reveal_pk() -> Result<()> {
             &["key", "gen", "--alias", &key_alias, "--unsafe-dont-encrypt"],
             Some(20),
         )?;
-        cmd.exp_string("Enter BIP39 passphrase (empty for none): ")?;
-        cmd.send_line("")?;
         cmd.assert_success();
 
         // Apply the key_alias once the key is generated to obtain tx args
@@ -3170,20 +3114,22 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
                 base_dir,
                 default_port_offset,
             );
-            let bonds = genesis.transactions.bond.unwrap();
-            genesis.transactions.bond = Some(
+            genesis.transactions.bond = Some({
+                let wallet = get_pregenesis_wallet(base_dir);
+                let validator_1_address = wallet
+                    .find_address("validator-1")
+                    .expect("Failed to find validator-1 address");
+                let mut bonds = genesis.transactions.bond.unwrap();
                 bonds
-                    .into_iter()
-                    .filter(|bond| {
-                        (&bond.data.validator).as_ref() != "validator-1"
-                    })
-                    .collect(),
-            );
+                    .retain(|bond| bond.data.validator != *validator_1_address);
+                bonds
+            });
             genesis
         },
         None,
     )?;
-
+    allow_duplicate_ips(&test, &test.net.chain_id, &Who::Validator(0));
+    allow_duplicate_ips(&test, &test.net.chain_id, &Who::Validator(1));
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
@@ -3203,28 +3149,7 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
 
     let validator_1_rpc = get_actor_rpc(&test, &Who::Validator(1));
 
-    // put money in the validator-1 account from its balance account so that it
-    // can deactivate and reactivate
-    let tx_args = vec![
-        "transfer",
-        "--source",
-        "validator-1-balance-key",
-        "--target",
-        "validator-1-validator-key",
-        "--amount",
-        "100.0",
-        "--token",
-        "NAM",
-        "--node",
-        &validator_1_rpc,
-    ];
-    let mut client =
-        run_as!(test, Who::Validator(1), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction applied with result:")?;
-    client.exp_string("Transaction is valid.")?;
-    client.assert_success();
-
-    // Check the state of validator-0
+    // Check the state of validator-1
     let tx_args = vec![
         "validator-state",
         "--validator",
@@ -3242,7 +3167,7 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
         "--validator",
         "validator-1",
         "--signing-keys",
-        "validator-1-validator-key",
+        "validator-1-balance-key",
         "--node",
         &validator_1_rpc,
     ];
@@ -3286,7 +3211,7 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
         "--validator",
         "validator-1",
         "--signing-keys",
-        "validator-1-validator-key",
+        "validator-1-balance-key",
         "--node",
         &validator_1_rpc,
     ];
@@ -3346,26 +3271,6 @@ fn change_validator_metadata() -> Result<()> {
             .background();
 
     let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
-
-    // put money in the validator account from its balance account so that it
-    // can pay gas fees
-    let tx_args = vec![
-        "transfer",
-        "--source",
-        "validator-0-balance-key",
-        "--target",
-        "validator-0-validator-key",
-        "--amount",
-        "100.0",
-        "--token",
-        "NAM",
-        "--node",
-        &validator_0_rpc,
-    ];
-    let mut client =
-        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction is valid.")?;
-    client.assert_success();
 
     // 2. Query the validator metadata loaded from genesis
     let metadata_query_args = vec![
@@ -3475,15 +3380,16 @@ fn test_invalid_validator_txs() -> Result<()> {
                 base_dir,
                 default_port_offset,
             );
-            let bonds = genesis.transactions.bond.unwrap();
-            genesis.transactions.bond = Some(
+            genesis.transactions.bond = Some({
+                let wallet = get_pregenesis_wallet(base_dir);
+                let validator_1_address = wallet
+                    .find_address("validator-1")
+                    .expect("Failed to find validator-1 address");
+                let mut bonds = genesis.transactions.bond.unwrap();
                 bonds
-                    .into_iter()
-                    .filter(|bond| {
-                        (&bond.data.validator).as_ref() != "validator-1"
-                    })
-                    .collect(),
-            );
+                    .retain(|bond| bond.data.validator != *validator_1_address);
+                bonds
+            });
             genesis
         },
         None,
@@ -3509,48 +3415,6 @@ fn test_invalid_validator_txs() -> Result<()> {
     let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
     let validator_1_rpc = get_actor_rpc(&test, &Who::Validator(1));
 
-    // put money in the validator-1 account from its balance account so that it
-    // can deactivate and reactivate
-    let tx_args = vec![
-        "transfer",
-        "--source",
-        "validator-1-balance-key",
-        "--target",
-        "validator-1-validator-key",
-        "--amount",
-        "100.0",
-        "--token",
-        "NAM",
-        "--node",
-        &validator_1_rpc,
-    ];
-    let mut client =
-        run_as!(test, Who::Validator(1), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction applied with result:")?;
-    client.exp_string("Transaction is valid.")?;
-    client.assert_success();
-
-    // put money in the validator-0 account from its balance account so that it
-    // can deactivate and reactivate
-    let tx_args = vec![
-        "transfer",
-        "--source",
-        "validator-0-balance-key",
-        "--target",
-        "validator-0-validator-key",
-        "--amount",
-        "100.0",
-        "--token",
-        "NAM",
-        "--node",
-        &validator_0_rpc,
-    ];
-    let mut client =
-        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction applied with result:")?;
-    client.exp_string("Transaction is valid.")?;
-    client.assert_success();
-
     // Try to change validator-1 commission rate as validator-0
     let tx_args = vec![
         "change-commission-rate",
@@ -3559,7 +3423,7 @@ fn test_invalid_validator_txs() -> Result<()> {
         "--commission-rate",
         "0.06",
         "--signing-keys",
-        "validator-0-validator-key",
+        "validator-0-balance-key",
         "--node",
         &validator_0_rpc,
     ];
@@ -3575,7 +3439,7 @@ fn test_invalid_validator_txs() -> Result<()> {
         "--validator",
         "validator-1",
         "--signing-keys",
-        "validator-0-validator-key",
+        "validator-0-balance-key",
         "--node",
         &validator_0_rpc,
     ];
@@ -3593,7 +3457,7 @@ fn test_invalid_validator_txs() -> Result<()> {
         "--website",
         "theworstvalidator@namada.net",
         "--signing-keys",
-        "validator-0-validator-key",
+        "validator-0-balance-key",
         "--node",
         &validator_0_rpc,
     ];
@@ -3609,7 +3473,7 @@ fn test_invalid_validator_txs() -> Result<()> {
         "--validator",
         "validator-1",
         "--signing-keys",
-        "validator-1-validator-key",
+        "validator-1-balance-key",
         "--node",
         &validator_1_rpc,
     ];
@@ -3653,7 +3517,7 @@ fn test_invalid_validator_txs() -> Result<()> {
         "--validator",
         "validator-1",
         "--signing-keys",
-        "validator-0-validator-key",
+        "validator-0-balance-key",
         "--node",
         &validator_0_rpc,
     ];

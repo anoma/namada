@@ -316,7 +316,7 @@ where
 }
 
 /// Copies the validator sets into all epochs up through the pipeline epoch at
-/// genesis. Also computes the total
+/// genesis.
 pub fn copy_genesis_validator_sets<S>(
     storage: &mut S,
     params: &OwnedPosParams,
@@ -335,7 +335,6 @@ where
             current_epoch,
             epoch,
         )?;
-        // compute_and_store_total_consensus_stake(storage, epoch)?;
     }
     Ok(())
 }
@@ -803,9 +802,7 @@ where
         return Ok(());
     }
 
-    let params = read_pos_params(storage)?;
-    let offset = offset_opt.unwrap_or(params.pipeline_len);
-    let offset_epoch = current_epoch + offset;
+    // Transfer the bonded tokens from the source to PoS
     if let Some(source) = source {
         if source != validator && is_validator(storage, source)? {
             return Err(
@@ -813,6 +810,15 @@ where
             );
         }
     }
+    let source = source.unwrap_or(validator);
+    tracing::debug!("Source {source} --> Validator {validator}");
+
+    let staking_token = staking_token_address(storage);
+    token::transfer(storage, &staking_token, source, &ADDRESS, amount)?;
+
+    let params = read_pos_params(storage)?;
+    let offset = offset_opt.unwrap_or(params.pipeline_len);
+    let offset_epoch = current_epoch + offset;
 
     // Check that the validator is actually a validator
     let validator_state_handle = validator_state_handle(validator);
@@ -820,9 +826,6 @@ where
     if state.is_none() {
         return Err(BondError::NotAValidator(validator.clone()).into());
     }
-
-    let source = source.unwrap_or(validator);
-    tracing::debug!("Source {} --> Validator {}", source, validator);
 
     let bond_handle = bond_handle(source, validator);
     let total_bonded_handle = total_bonded_handle(validator);
@@ -876,10 +879,6 @@ where
         current_epoch,
         offset_opt,
     )?;
-
-    // Transfer the bonded tokens from the source to PoS
-    let staking_token = staking_token_address(storage);
-    token::transfer(storage, &staking_token, source, &ADDRESS, amount)?;
 
     Ok(())
 }
@@ -1018,8 +1017,6 @@ where
     let below_capacity_val_handle = below_capacity_validator_set.at(&epoch);
 
     let tokens_pre = read_validator_stake(storage, params, validator, epoch)?;
-
-    // tracing::debug!("VALIDATOR STAKE BEFORE UPDATE: {}", tokens_pre);
 
     let tokens_post = tokens_pre
         .change()
@@ -1548,7 +1545,6 @@ where
     S: StorageRead,
 {
     let handle = validator_set_positions_handle();
-    // handle.get_position(storage, &epoch, validator, params)
     handle.get_data_handler().at(&epoch).get(storage, validator)
 }
 
@@ -2714,9 +2710,7 @@ where
 }
 
 /// Arguments to [`become_validator`].
-pub struct BecomeValidator<'a, S> {
-    /// Storage implementation.
-    pub storage: &'a mut S,
+pub struct BecomeValidator<'a> {
     /// Proof-of-stake parameters.
     pub params: &'a PosParams,
     /// The validator's address.
@@ -2743,13 +2737,13 @@ pub struct BecomeValidator<'a, S> {
 
 /// Initialize data for a new validator.
 pub fn become_validator<S>(
-    args: BecomeValidator<'_, S>,
+    storage: &mut S,
+    args: BecomeValidator<'_>,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
     let BecomeValidator {
-        storage,
         params,
         address,
         consensus_key,
@@ -2763,6 +2757,28 @@ where
         offset_opt,
     } = args;
     let offset = offset_opt.unwrap_or(params.pipeline_len);
+
+    if !address.is_established() {
+        return Err(storage_api::Error::new_const(
+            "The given address {address} is not established. Only an \
+             established address can become a validator.",
+        ));
+    }
+
+    if is_validator(storage, address)? {
+        return Err(storage_api::Error::new_const(
+            "The given address is already a validator",
+        ));
+    }
+
+    // If the address is not yet a validator, it cannot have self-bonds, but it
+    // may have delegations.
+    if has_bonds(storage, address)? {
+        return Err(storage_api::Error::new_const(
+            "The given address has delegations and therefore cannot become a \
+             validator. Unbond first.",
+        ));
+    }
 
     // This will fail if the key is already being used
     try_insert_consensus_key(storage, consensus_key)?;
@@ -3301,6 +3317,9 @@ where
 
     if !amounts.is_empty() {
         let slashes = find_validator_slashes(storage, &bond_id.validator)?;
+        let redelegated_bonded =
+            delegator_redelegated_bonds_handle(&bond_id.source)
+                .at(&bond_id.validator);
 
         // Apply slashes
         for (&ep, amounts) in amounts.iter_mut() {
@@ -3318,7 +3337,32 @@ where
                     .cloned()
                     .collect::<Vec<_>>();
 
-                *amount = apply_list_slashes(&params, &list_slashes, *amount);
+                let slash_epoch_filter =
+                    |e: Epoch| e + params.slash_processing_epoch_offset() <= ep;
+
+                let redelegated_bonds =
+                    redelegated_bonded.at(&start).collect_map(storage)?;
+
+                let result_fold = fold_and_slash_redelegated_bonds(
+                    storage,
+                    &params,
+                    &redelegated_bonds,
+                    start,
+                    &list_slashes,
+                    slash_epoch_filter,
+                );
+
+                let total_not_redelegated =
+                    *amount - result_fold.total_redelegated;
+
+                let after_not_redelegated = apply_list_slashes(
+                    &params,
+                    &list_slashes,
+                    total_not_redelegated,
+                );
+
+                *amount =
+                    after_not_redelegated + result_fold.total_after_slashing;
             }
         }
     }
@@ -3621,6 +3665,20 @@ where
         delegations.insert(validator_address, deltas_sum);
     }
     Ok(delegations)
+}
+
+/// Find if the given source address has any bonds.
+pub fn has_bonds<S>(storage: &S, source: &Address) -> storage_api::Result<bool>
+where
+    S: StorageRead,
+{
+    let max_epoch = Epoch(u64::MAX);
+    let delegations = find_delegations(storage, source, &max_epoch)?;
+    Ok(!delegations
+        .values()
+        .cloned()
+        .sum::<token::Amount>()
+        .is_zero())
 }
 
 /// Find PoS slashes applied to a validator, if any
@@ -4438,7 +4496,11 @@ where
     Ok(())
 }
 
-/// Process slashes NEW
+/// Process enqueued slashes that were discovered earlier. This function is
+/// called upon a new epoch. The final slash rate considering according to the
+/// cubic slashing rate is computed. Then, each slash is recorded in storage
+/// along with its computed rate, and stake is deducted from the affected
+/// validators.
 pub fn process_slashes<S>(
     storage: &mut S,
     current_epoch: Epoch,
@@ -5778,6 +5840,12 @@ where
         .collect::<HashSet<_>>();
 
     for validator in &validators_to_jail {
+        let state_jail_epoch = validator_state_handle(validator)
+            .get(storage, jail_epoch, params)?
+            .expect("Validator should have a state for the jail epoch");
+        if state_jail_epoch == ValidatorState::Jailed {
+            continue;
+        }
         tracing::info!(
             "Jailing validator {} starting in epoch {} for missing too many \
              votes to ensure liveness",
@@ -5825,20 +5893,22 @@ pub mod test_utils {
             metadata,
         } in validators
         {
-            become_validator(BecomeValidator {
+            become_validator(
                 storage,
-                params,
-                address: &address,
-                consensus_key: &consensus_key,
-                protocol_key: &protocol_key,
-                eth_cold_key: &eth_cold_key,
-                eth_hot_key: &eth_hot_key,
-                current_epoch,
-                commission_rate,
-                max_commission_rate_change,
-                metadata,
-                offset_opt: Some(0),
-            })?;
+                BecomeValidator {
+                    params,
+                    address: &address,
+                    consensus_key: &consensus_key,
+                    protocol_key: &protocol_key,
+                    eth_cold_key: &eth_cold_key,
+                    eth_hot_key: &eth_hot_key,
+                    current_epoch,
+                    commission_rate,
+                    max_commission_rate_change,
+                    metadata,
+                    offset_opt: Some(0),
+                },
+            )?;
             // Credit token amount to be bonded to the validator address so it
             // can be bonded
             let staking_token = staking_token_address(storage);
@@ -6061,29 +6131,25 @@ where
     Ok(())
 }
 
-/// Claim rewards
-pub fn claim_reward_tokens<S>(
-    storage: &mut S,
-    source: Option<&Address>,
+/// Compute the current available rewards amount due only to existing bonds.
+/// This does not include pending rewards held in the rewards counter due to
+/// unbonds and redelegations.
+pub fn compute_current_rewards_from_bonds<S>(
+    storage: &S,
+    source: &Address,
     validator: &Address,
     current_epoch: Epoch,
 ) -> storage_api::Result<token::Amount>
 where
-    S: StorageRead + StorageWrite,
+    S: StorageRead,
 {
-    tracing::debug!("Claiming rewards in epoch {current_epoch}");
-
-    let rewards_products = validator_rewards_products_handle(validator);
-    let source = source.cloned().unwrap_or_else(|| validator.clone());
-    tracing::debug!("Source {} --> Validator {}", source, validator);
-
     if current_epoch == Epoch::default() {
         // Nothing to claim in the first epoch
         return Ok(token::Amount::zero());
     }
 
     let last_claim_epoch =
-        get_last_reward_claim_epoch(storage, &source, validator)?;
+        get_last_reward_claim_epoch(storage, source, validator)?;
     if let Some(last_epoch) = last_claim_epoch {
         if last_epoch == current_epoch {
             // Already claimed in this epoch
@@ -6109,6 +6175,8 @@ where
         claim_start,
         claim_end,
     )?;
+
+    let rewards_products = validator_rewards_products_handle(validator);
     for (ep, bond_amount) in bond_amounts {
         debug_assert!(ep >= claim_start);
         debug_assert!(ep <= claim_end);
@@ -6116,6 +6184,32 @@ where
         let reward = rp * bond_amount;
         reward_tokens += reward;
     }
+
+    Ok(reward_tokens)
+}
+
+/// Claim available rewards, triggering an immediate transfer of tokens from the
+/// PoS account to the source address.
+pub fn claim_reward_tokens<S>(
+    storage: &mut S,
+    source: Option<&Address>,
+    validator: &Address,
+    current_epoch: Epoch,
+) -> storage_api::Result<token::Amount>
+where
+    S: StorageRead + StorageWrite,
+{
+    tracing::debug!("Claiming rewards in epoch {current_epoch}");
+
+    let source = source.cloned().unwrap_or_else(|| validator.clone());
+    tracing::debug!("Source {} --> Validator {}", source, validator);
+
+    let mut reward_tokens = compute_current_rewards_from_bonds(
+        storage,
+        &source,
+        validator,
+        current_epoch,
+    )?;
 
     // Add reward tokens tallied during previous withdrawals
     reward_tokens += take_rewards_from_counter(storage, &source, validator)?;
@@ -6128,6 +6222,30 @@ where
     token::transfer(storage, &staking_token, &ADDRESS, &source, reward_tokens)?;
 
     Ok(reward_tokens)
+}
+
+/// Query the amount of available reward tokens for a given bond.
+pub fn query_reward_tokens<S>(
+    storage: &S,
+    source: Option<&Address>,
+    validator: &Address,
+    current_epoch: Epoch,
+) -> storage_api::Result<token::Amount>
+where
+    S: StorageRead,
+{
+    let source = source.cloned().unwrap_or_else(|| validator.clone());
+    let rewards_from_bonds = compute_current_rewards_from_bonds(
+        storage,
+        &source,
+        validator,
+        current_epoch,
+    )?;
+
+    let rewards_from_counter =
+        read_rewards_counter(storage, &source, validator)?;
+
+    Ok(rewards_from_bonds + rewards_from_counter)
 }
 
 /// Get the last epoch in which rewards were claimed from storage, if any
@@ -6154,6 +6272,19 @@ where
 {
     let key = last_pos_reward_claim_epoch_key(delegator, validator);
     storage.write(&key, epoch)
+}
+
+/// Read the current token value in the rewards counter.
+fn read_rewards_counter<S>(
+    storage: &S,
+    source: &Address,
+    validator: &Address,
+) -> storage_api::Result<token::Amount>
+where
+    S: StorageRead,
+{
+    let key = rewards_counter_key(source, validator);
+    Ok(storage.read::<token::Amount>(&key)?.unwrap_or_default())
 }
 
 /// Add tokens to a rewards counter.

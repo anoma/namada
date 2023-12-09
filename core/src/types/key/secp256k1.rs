@@ -93,8 +93,14 @@ impl BorshSchema for PublicKey {
     ) {
         // Encoded as `[u8; COMPRESSED_PUBLIC_KEY_SIZE]`
         let elements = "u8".into();
-        let length = COMPRESSED_PUBLIC_KEY_SIZE as u32;
-        let definition = borsh::schema::Definition::Array { elements, length };
+        let length = COMPRESSED_PUBLIC_KEY_SIZE as u64;
+        // let definition = borsh::schema::Definition::Array { elements, length
+        // };
+        let definition = borsh::schema::Definition::Sequence {
+            length_width: 0,
+            length_range: 0..=length,
+            elements,
+        };
         definitions.insert(Self::declaration(), definition);
     }
 
@@ -241,8 +247,14 @@ impl BorshSchema for SecretKey {
     ) {
         // Encoded as `[u8; SECRET_KEY_SIZE]`
         let elements = "u8".into();
-        let length = SECRET_KEY_SIZE as u32;
-        let definition = borsh::schema::Definition::Array { elements, length };
+        let length = SECRET_KEY_SIZE as u64;
+        // let definition = borsh::schema::Definition::Array { elements, length
+        // };
+        let definition = borsh::schema::Definition::Sequence {
+            length_width: 0,
+            length_range: 0..=length,
+            elements,
+        };
         definitions.insert(Self::declaration(), definition);
     }
 

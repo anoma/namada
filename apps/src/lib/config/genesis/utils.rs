@@ -1,8 +1,21 @@
+use std::collections::HashSet;
 use std::path::Path;
 
 use eyre::Context;
+use ledger_namada_rs::NamadaApp;
+use ledger_transport_hid::TransportNativeHID;
+use namada::proto::Tx;
+use namada::types::key::common;
+use namada_sdk::wallet::Wallet;
+use namada_sdk::{error, signing};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use tokio::sync::RwLock;
+
+use crate::wallet::CliWalletUtils;
+
+/// Validity predicaty assigned to established accounts.
+pub const VP_USER: &str = "vp_user";
 
 pub fn read_toml<T: DeserializeOwned>(
     path: &Path,
@@ -35,4 +48,26 @@ pub fn write_toml<T: Serialize>(
             path.to_string_lossy()
         )
     })
+}
+
+pub(super) async fn with_hardware_wallet<'a>(
+    tx: Tx,
+    pubkey: common::PublicKey,
+    parts: HashSet<signing::Signable>,
+    (wallet, app): (
+        &RwLock<Wallet<CliWalletUtils>>,
+        &NamadaApp<TransportNativeHID>,
+    ),
+) -> Result<Tx, error::Error> {
+    if parts.contains(&signing::Signable::FeeHeader) {
+        Ok(tx)
+    } else {
+        crate::client::tx::with_hardware_wallet(
+            tx,
+            pubkey,
+            parts,
+            (wallet, app),
+        )
+        .await
+    }
 }

@@ -5,12 +5,11 @@ use std::marker::PhantomData;
 use std::path::Path;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada::core::types::key::common;
-use namada::core::types::string_encoding::StringEncoded;
 use namada::core::types::{ethereum_structs, token};
 use namada::eth_bridge::parameters::{
     Contracts, Erc20WhitelistEntry, MinimumConfirmations,
 };
+use namada::types::address::Address;
 use namada::types::chain::ProposalBytes;
 use namada::types::dec::Dec;
 use namada::types::token::{
@@ -18,11 +17,11 @@ use namada::types::token::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::toml_utils::{read_toml, write_toml};
 use super::transactions::{self, Transactions};
-use crate::config::genesis::transactions::{
-    BondTx, SignedBondTx, SignedTransferTx, TransferTx,
-};
+use super::utils::{read_toml, write_toml};
+use crate::config::genesis::chain::DeriveEstablishedAddress;
+use crate::config::genesis::transactions::{BondTx, SignedBondTx};
+use crate::config::genesis::GenesisAddress;
 use crate::wallet::Alias;
 
 pub const BALANCES_FILE_NAME: &str = "balances.toml";
@@ -97,9 +96,9 @@ impl UndenominatedBalances {
                 })?
                 .denom;
             let mut denominated_bals = BTreeMap::new();
-            for (pk, bal) in bals.0.into_iter() {
+            for (addr, bal) in bals.0.into_iter() {
                 let denominated = bal.increase_precision(denom)?;
-                denominated_bals.insert(pk, denominated);
+                denominated_bals.insert(addr, denominated);
             }
             balances
                 .token
@@ -136,7 +135,7 @@ pub struct DenominatedBalances {
     Eq,
 )]
 pub struct RawTokenBalances(
-    pub BTreeMap<StringEncoded<common::PublicKey>, token::DenominatedAmount>,
+    pub BTreeMap<GenesisAddress, token::DenominatedAmount>,
 );
 
 /// Genesis balances for a given token
@@ -151,7 +150,7 @@ pub struct RawTokenBalances(
     Eq,
 )]
 pub struct TokenBalances(
-    pub BTreeMap<StringEncoded<common::PublicKey>, token::DenominatedAmount>,
+    pub BTreeMap<GenesisAddress, token::DenominatedAmount>,
 );
 
 /// Genesis validity predicates
@@ -450,7 +449,7 @@ pub struct GovernanceParams {
 )]
 pub struct PgfParams<T: TemplateValidation> {
     /// The set of stewards
-    pub stewards: BTreeSet<Alias>,
+    pub stewards: BTreeSet<Address>,
     /// The pgf funding inflation rate
     pub pgf_inflation_rate: Dec,
     /// The pgf stewards inflation rate
@@ -489,11 +488,11 @@ pub struct EthBridgeParams {
 }
 
 impl TokenBalances {
-    pub fn get(&self, pk: common::PublicKey) -> Option<token::Amount> {
-        let pk = StringEncoded { raw: pk };
-        self.0.get(&pk).map(|amt| amt.amount())
+    pub fn get(&self, addr: &GenesisAddress) -> Option<token::Amount> {
+        self.0.get(addr).map(|amt| amt.amount())
     }
 }
+
 #[derive(
     Clone,
     Debug,
@@ -503,6 +502,8 @@ impl TokenBalances {
     BorshSerialize,
     PartialEq,
     Eq,
+    PartialOrd,
+    Ord,
 )]
 pub struct Unvalidated {}
 
@@ -515,27 +516,24 @@ pub struct Unvalidated {}
     BorshSerialize,
     PartialEq,
     Eq,
+    PartialOrd,
+    Ord,
 )]
 pub struct Validated {}
 
 pub trait TemplateValidation: Serialize {
     type Amount: for<'a> Deserialize<'a>
         + Serialize
+        + Into<token::DenominatedAmount>
         + Clone
         + std::fmt::Debug
         + BorshSerialize
         + BorshDeserialize
         + PartialEq
-        + Eq;
+        + Eq
+        + PartialOrd
+        + Ord;
     type Balances: for<'a> Deserialize<'a>
-        + Serialize
-        + Clone
-        + std::fmt::Debug
-        + BorshSerialize
-        + BorshDeserialize
-        + PartialEq
-        + Eq;
-    type TransferTx: for<'a> Deserialize<'a>
         + Serialize
         + Clone
         + std::fmt::Debug
@@ -550,7 +548,9 @@ pub trait TemplateValidation: Serialize {
         + BorshSerialize
         + BorshDeserialize
         + PartialEq
-        + Eq;
+        + Eq
+        + PartialOrd
+        + Ord;
     type GasMinimums: for<'a> Deserialize<'a>
         + Serialize
         + Clone
@@ -564,9 +564,8 @@ pub trait TemplateValidation: Serialize {
 impl TemplateValidation for Unvalidated {
     type Amount = token::DenominatedAmount;
     type Balances = UndenominatedBalances;
-    type BondTx = SignedBondTx;
+    type BondTx = SignedBondTx<Unvalidated>;
     type GasMinimums = BTreeMap<Alias, DenominatedAmount>;
-    type TransferTx = SignedTransferTx;
 }
 
 impl TemplateValidation for Validated {
@@ -574,7 +573,6 @@ impl TemplateValidation for Validated {
     type Balances = DenominatedBalances;
     type BondTx = BondTx<Validated>;
     type GasMinimums = BTreeMap<Alias, DenominatedAmount>;
-    type TransferTx = TransferTx<Validated>;
 }
 
 #[derive(
@@ -763,22 +761,16 @@ pub fn load_and_validate(templates_dir: &Path) -> Option<All<Validated>> {
         is_valid = false;
     }
 
-    let txs = if let Some(tokens) = tokens.as_ref() {
-        if let Some(txs) = transactions.and_then(|txs| {
-            transactions::validate(
-                txs,
-                vps.as_ref(),
-                balances.as_ref(),
-                tokens,
-                parameters.as_ref(),
-            )
-        }) {
-            println!("Transactions file is valid.");
-            Some(txs)
-        } else {
-            is_valid = false;
-            None
-        }
+    let txs = if let Some(txs) = transactions.and_then(|txs| {
+        transactions::validate(
+            txs,
+            vps.as_ref(),
+            balances.as_ref(),
+            parameters.as_ref(),
+        )
+    }) {
+        println!("Transactions file is valid.");
+        Some(txs)
     } else {
         is_valid = false;
         None
@@ -834,16 +826,14 @@ pub fn validate_parameters(
     for steward in &parameters.pgf_params.stewards {
         let mut found_steward = false;
         if let Some(accs) = &txs.established_account {
-            if accs.iter().any(|acct| acct.alias == *steward) {
+            if accs.iter().any(|acct| {
+                let addr = acct.derive_address();
+                &addr == steward
+            }) {
                 found_steward = true;
             }
         }
 
-        if let Some(accs) = &txs.validator_account {
-            if accs.iter().any(|acct| acct.alias == *steward) {
-                found_steward = true;
-            }
-        }
         is_valid = found_steward && is_valid;
         if !is_valid {
             eprintln!(
@@ -941,6 +931,7 @@ mod tests {
     use std::path::PathBuf;
 
     use namada::core::types::key;
+    use namada::core::types::string_encoding::StringEncoded;
     use namada::types::key::RefTo;
     use tempfile::tempdir;
 
@@ -978,6 +969,8 @@ mod tests {
         let path = test_dir.path().join(BALANCES_FILE_NAME);
         let sk = key::testing::keypair_1();
         let pk = sk.ref_to();
+        let address =
+            GenesisAddress::PublicKey(StringEncoded { raw: pk.clone() });
         let balance = token::Amount::from(101_000_001);
         let token_alias = Alias::from("Some_token".to_string());
         let contents = format!(
@@ -991,13 +984,6 @@ mod tests {
 
         let balances = read_balances(&path).unwrap();
         let example_balance = balances.token.get(&token_alias).unwrap();
-        assert_eq!(
-            balance,
-            example_balance
-                .0
-                .get(&StringEncoded { raw: pk })
-                .unwrap()
-                .amount()
-        );
+        assert_eq!(balance, example_balance.0.get(&address).unwrap().amount());
     }
 }

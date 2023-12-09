@@ -228,6 +228,12 @@ pub fn init_storage_with_validators(
             .write(&protocol_pk_key(validator), protocol_key)
             .expect("Test failed");
     }
+    // Initialize pred_epochs to the current height
+    wl_storage
+        .storage
+        .block
+        .pred_epochs
+        .new_epoch(wl_storage.storage.block.height);
     wl_storage.commit_block().expect("Test failed");
     wl_storage.storage.block.height += 1;
 
@@ -270,20 +276,22 @@ pub fn append_validators_to_storage(
         let eth_cold_key = &keys.eth_gov.ref_to();
         let eth_hot_key = &keys.eth_bridge.ref_to();
 
-        become_validator(BecomeValidator {
-            storage: wl_storage,
-            params: &params,
-            address: &validator,
-            consensus_key,
-            protocol_key,
-            eth_cold_key,
-            eth_hot_key,
-            current_epoch,
-            commission_rate: Dec::new(5, 2).unwrap(),
-            max_commission_rate_change: Dec::new(1, 2).unwrap(),
-            metadata: Default::default(),
-            offset_opt: Some(1),
-        })
+        become_validator(
+            wl_storage,
+            BecomeValidator {
+                params: &params,
+                address: &validator,
+                consensus_key,
+                protocol_key,
+                eth_cold_key,
+                eth_hot_key,
+                current_epoch,
+                commission_rate: Dec::new(5, 2).unwrap(),
+                max_commission_rate_change: Dec::new(1, 2).unwrap(),
+                metadata: Default::default(),
+                offset_opt: Some(1),
+            },
+        )
         .expect("Test failed");
         credit_tokens(wl_storage, &staking_token, &validator, stake)
             .expect("Test failed");

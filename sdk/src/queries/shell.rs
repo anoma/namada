@@ -24,8 +24,9 @@ use namada_core::types::transaction::TxResult;
 use self::eth_bridge::{EthBridge, ETH_BRIDGE};
 use crate::events::log::dumb_queries;
 use crate::events::{Event, EventType};
-use crate::ibc::core::ics04_channel::packet::Sequence;
-use crate::ibc::core::ics24_host::identifier::{ChannelId, ClientId, PortId};
+use crate::ibc::core::host::types::identifiers::{
+    ChannelId, ClientId, PortId, Sequence,
+};
 use crate::queries::types::{RequestCtx, RequestQuery};
 use crate::queries::{require_latest_height, EncodedResponseQuery};
 use crate::tendermint::merkle::proof::ProofOps;

@@ -12,7 +12,7 @@ impl CliApi {
     pub async fn handle_client_command<C, IO: Io>(
         client: Option<C>,
         cmd: cli::NamadaClient,
-        io: &IO,
+        io: IO,
     ) -> Result<()>
     where
         C: CliClient,
@@ -29,9 +29,9 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         let dry_run =
                             args.tx.dry_run || args.tx.dry_run_wrapper;
                         tx::submit_custom(&namada, args).await?;
@@ -42,7 +42,7 @@ impl CliApi {
                                 .save()
                                 .unwrap_or_else(|err| eprintln!("{}", err));
                         } else {
-                            io.println(
+                            namada.io().println(
                                 "Transaction dry run. No addresses have been \
                                  saved.",
                             )
@@ -54,9 +54,9 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         tx::submit_transfer(&namada, args).await?;
                     }
                     Sub::TxIbcTransfer(TxIbcTransfer(mut args)) => {
@@ -65,9 +65,9 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         tx::submit_ibc_transfer(&namada, args).await?;
                     }
                     Sub::TxUpdateAccount(TxUpdateAccount(mut args)) => {
@@ -76,9 +76,9 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         tx::submit_update_account(&namada, args).await?;
                     }
                     Sub::TxInitAccount(TxInitAccount(mut args)) => {
@@ -87,9 +87,9 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         let dry_run =
                             args.tx.dry_run || args.tx.dry_run_wrapper;
                         tx::submit_init_account(&namada, args).await?;
@@ -100,11 +100,35 @@ impl CliApi {
                                 .save()
                                 .unwrap_or_else(|err| eprintln!("{}", err));
                         } else {
-                            io.println(
+                            namada.io().println(
                                 "Transaction dry run. No addresses have been \
                                  saved.",
                             )
                         }
+                    }
+                    Sub::TxBecomeValidator(TxBecomeValidator(mut args)) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.tx.ledger_address,
+                            )
+                        });
+                        client.wait_until_node_is_synced(&io).await?;
+                        let args = args.to_sdk(&mut ctx);
+                        let cli::context::ChainContext {
+                            wallet,
+                            mut config,
+                            shielded,
+                            native_token,
+                        } = ctx.take_chain_or_exit();
+                        let namada = NamadaImpl::native_new(
+                            client,
+                            wallet,
+                            shielded,
+                            io,
+                            native_token,
+                        );
+                        tx::submit_become_validator(&namada, &mut config, args)
+                            .await?;
                     }
                     Sub::TxInitValidator(TxInitValidator(mut args)) => {
                         let client = client.unwrap_or_else(|| {
@@ -112,18 +136,18 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let cli::context::ChainContext {
-                            mut wallet,
+                            wallet,
                             mut config,
-                            mut shielded,
+                            shielded,
                             native_token,
                         } = ctx.take_chain_or_exit();
                         let namada = NamadaImpl::native_new(
-                            &client,
-                            &mut wallet,
-                            &mut shielded,
+                            client,
+                            wallet,
+                            shielded,
                             io,
                             native_token,
                         );
@@ -136,9 +160,9 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         tx::submit_init_proposal(&namada, args).await?;
                     }
                     Sub::TxVoteProposal(TxVoteProposal(mut args)) => {
@@ -147,9 +171,9 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         tx::submit_vote_proposal(&namada, args).await?;
                     }
                     Sub::TxRevealPk(TxRevealPk(mut args)) => {
@@ -158,9 +182,9 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         tx::submit_reveal_pk(&namada, args).await?;
                     }
                     Sub::Bond(Bond(mut args)) => {
@@ -169,9 +193,9 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         tx::submit_bond(&namada, args).await?;
                     }
                     Sub::Unbond(Unbond(mut args)) => {
@@ -180,9 +204,9 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         tx::submit_unbond(&namada, args).await?;
                     }
                     Sub::Withdraw(Withdraw(mut args)) => {
@@ -191,9 +215,9 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         tx::submit_withdraw(&namada, args).await?;
                     }
                     Sub::ClaimRewards(ClaimRewards(mut args)) => {
@@ -202,9 +226,9 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         tx::submit_claim_rewards(&namada, args).await?;
                     }
                     Sub::Redelegate(Redelegate(mut args)) => {
@@ -213,9 +237,9 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         tx::submit_redelegate(&namada, args).await?;
                     }
                     Sub::TxCommissionRateChange(TxCommissionRateChange(
@@ -226,9 +250,9 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         tx::submit_validator_commission_change(&namada, args)
                             .await?;
                     }
@@ -240,18 +264,18 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let cli::context::ChainContext {
-                            mut wallet,
+                            wallet,
                             mut config,
-                            mut shielded,
+                            shielded,
                             native_token,
                         } = ctx.take_chain_or_exit();
                         let namada = NamadaImpl::native_new(
-                            &client,
-                            &mut wallet,
-                            &mut shielded,
+                            client,
+                            wallet,
+                            shielded,
                             io,
                             native_token,
                         );
@@ -268,9 +292,9 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         tx::submit_validator_metadata_change(&namada, args)
                             .await?;
                     }
@@ -282,9 +306,9 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         tx::submit_bridge_pool_tx(&namada, args).await?;
                     }
                     Sub::TxUnjailValidator(TxUnjailValidator(mut args)) => {
@@ -293,9 +317,9 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         tx::submit_unjail_validator(&namada, args).await?;
                     }
                     Sub::TxDeactivateValidator(TxDeactivateValidator(
@@ -306,9 +330,9 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         tx::submit_deactivate_validator(&namada, args).await?;
                     }
                     Sub::TxReactivateValidator(TxReactivateValidator(
@@ -319,9 +343,9 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         tx::submit_reactivate_validator(&namada, args).await?;
                     }
                     Sub::TxUpdateStewardCommission(
@@ -332,9 +356,9 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         tx::submit_update_steward_commission(&namada, args)
                             .await?;
                     }
@@ -344,9 +368,9 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         tx::submit_resign_steward(&namada, args).await?;
                     }
                     // Ledger queries
@@ -354,8 +378,8 @@ impl CliApi {
                         let client = client.unwrap_or_else(|| {
                             C::from_tendermint_address(&mut args.ledger_address)
                         });
-                        client.wait_until_node_is_synced(io).await?;
-                        let namada = ctx.to_sdk(&client, io);
+                        client.wait_until_node_is_synced(&io).await?;
+                        let namada = ctx.to_sdk(client, io);
                         rpc::query_and_print_epoch(&namada).await;
                     }
                     Sub::QueryValidatorState(QueryValidatorState(mut args)) => {
@@ -364,9 +388,9 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         rpc::query_and_print_validator_state(&namada, args)
                             .await;
                     }
@@ -376,9 +400,9 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         rpc::query_transfers(&namada, args).await;
                     }
                     Sub::QueryConversions(QueryConversions(mut args)) => {
@@ -387,17 +411,17 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         rpc::query_conversions(&namada, args).await;
                     }
                     Sub::QueryBlock(QueryBlock(mut args)) => {
                         let client = client.unwrap_or_else(|| {
                             C::from_tendermint_address(&mut args.ledger_address)
                         });
-                        client.wait_until_node_is_synced(io).await?;
-                        let namada = ctx.to_sdk(&client, io);
+                        client.wait_until_node_is_synced(&io).await?;
+                        let namada = ctx.to_sdk(client, io);
                         rpc::query_block(&namada).await;
                     }
                     Sub::QueryBalance(QueryBalance(mut args)) => {
@@ -406,9 +430,9 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         rpc::query_balance(&namada, args).await;
                     }
                     Sub::QueryBonds(QueryBonds(mut args)) => {
@@ -417,9 +441,9 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         rpc::query_bonds(&namada, args)
                             .await
                             .expect("expected successful query of bonds");
@@ -430,9 +454,9 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         rpc::query_bonded_stake(&namada, args).await;
                     }
                     Sub::QueryCommissionRate(QueryCommissionRate(mut args)) => {
@@ -441,9 +465,9 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         rpc::query_and_print_commission_rate(&namada, args)
                             .await;
                     }
@@ -453,9 +477,9 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         rpc::query_and_print_metadata(&namada, args).await;
                     }
                     Sub::QuerySlashes(QuerySlashes(mut args)) => {
@@ -464,10 +488,21 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         rpc::query_slashes(&namada, args).await;
+                    }
+                    Sub::QueryRewards(QueryRewards(mut args)) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.query.ledger_address,
+                            )
+                        });
+                        client.wait_until_node_is_synced(&io).await?;
+                        let args = args.to_sdk(&mut ctx);
+                        let namada = ctx.to_sdk(client, io);
+                        rpc::query_and_print_rewards(&namada, args).await;
                     }
                     Sub::QueryDelegations(QueryDelegations(mut args)) => {
                         let client = client.unwrap_or_else(|| {
@@ -475,9 +510,9 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         rpc::query_delegations(&namada, args).await;
                     }
                     Sub::QueryFindValidator(QueryFindValidator(mut args)) => {
@@ -486,9 +521,9 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         rpc::query_find_validator(&namada, args).await;
                     }
                     Sub::QueryResult(QueryResult(mut args)) => {
@@ -497,9 +532,9 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         rpc::query_result(&namada, args).await;
                     }
                     Sub::QueryRawBytes(QueryRawBytes(mut args)) => {
@@ -508,9 +543,9 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         rpc::query_raw_bytes(&namada, args).await;
                     }
                     Sub::QueryProposal(QueryProposal(mut args)) => {
@@ -519,9 +554,9 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         rpc::query_proposal(&namada, args).await;
                     }
                     Sub::QueryProposalResult(QueryProposalResult(mut args)) => {
@@ -530,9 +565,9 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         rpc::query_proposal_result(&namada, args).await;
                     }
                     Sub::QueryProtocolParameters(QueryProtocolParameters(
@@ -543,9 +578,9 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         rpc::query_protocol_parameters(&namada, args).await;
                     }
                     Sub::QueryPgf(QueryPgf(mut args)) => {
@@ -554,9 +589,9 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         rpc::query_pgf(&namada, args).await;
                     }
                     Sub::QueryAccount(QueryAccount(mut args)) => {
@@ -565,9 +600,9 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         rpc::query_account(&namada, args).await;
                     }
                     Sub::SignTx(SignTx(mut args)) => {
@@ -576,9 +611,9 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         tx::sign_tx(&namada, args).await?;
                     }
                     Sub::GenIbcShieldedTransafer(GenIbcShieldedTransafer(
@@ -589,9 +624,9 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client.wait_until_node_is_synced(io).await?;
+                        client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(&client, io);
+                        let namada = ctx.to_sdk(client, io);
                         tx::gen_ibc_shielded_transfer(&namada, args).await?;
                     }
                 }
@@ -610,6 +645,15 @@ impl CliApi {
                 Utils::InitNetwork(InitNetwork(args)) => {
                     utils::init_network(global_args, args)
                 }
+                Utils::GenesisBond(GenesisBond(args)) => {
+                    utils::genesis_bond(args)
+                }
+                Utils::DeriveGenesisAddresses(DeriveGenesisAddresses(args)) => {
+                    utils::derive_genesis_addresses(global_args, args)
+                }
+                Utils::InitGenesisEstablishedAccount(
+                    InitGenesisEstablishedAccount(args),
+                ) => utils::init_genesis_established_account(global_args, args),
                 Utils::InitGenesisValidator(InitGenesisValidator(args)) => {
                     utils::init_genesis_validator(global_args, args)
                 }
@@ -625,16 +669,16 @@ impl CliApi {
                     let mut ledger_address = args.ledger_address.clone();
                     let client =
                         C::from_tendermint_address(&mut ledger_address);
-                    client.wait_until_node_is_synced(io).await?;
+                    client.wait_until_node_is_synced(&io).await?;
                     let args = args.to_sdk(&mut ctx);
-                    let namada = ctx.to_sdk(&client, io);
+                    let namada = ctx.to_sdk(client, io);
                     rpc::epoch_sleep(&namada, args).await;
                 }
                 Utils::ValidateGenesisTemplates(ValidateGenesisTemplates(
                     args,
                 )) => utils::validate_genesis_templates(global_args, args),
-                Utils::SignGenesisTx(SignGenesisTx(args)) => {
-                    utils::sign_genesis_tx(global_args, args)
+                Utils::SignGenesisTxs(SignGenesisTxs(args)) => {
+                    utils::sign_genesis_tx(global_args, args).await
                 }
             },
         }

@@ -39,6 +39,7 @@ use crate::ledger::storage::merkle_tree::{
 use crate::tendermint::merkle::proof::ProofOps;
 use crate::types::address::{Address, EstablishedAddressGen, InternalAddress};
 use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
+use crate::types::ethereum_events::Uint;
 use crate::types::ethereum_structs;
 use crate::types::hash::{Error as HashError, Hash};
 use crate::types::internal::{ExpiredTxsQueue, TxQueue};
@@ -136,8 +137,8 @@ pub struct BlockStorage<H: StorageHasher> {
     pub hash: BlockHash,
     /// From the start of `FinalizeBlock` until the end of `Commit`, this is
     /// height of the block that is going to be committed. Otherwise, it is the
-    /// height of the most recently committed block, or `BlockHeight(0)` if no
-    /// block has been committed yet.
+    /// height of the most recently committed block, or `BlockHeight::sentinel`
+    /// (0) if no block has been committed yet.
     pub height: BlockHeight,
     /// From the start of `FinalizeBlock` until the end of `Commit`, this is
     /// height of the block that is going to be committed. Otherwise it is the
@@ -356,6 +357,13 @@ pub trait DB: std::fmt::Debug {
         store_type: &StoreType,
         pruned_epoch: Epoch,
     ) -> Result<()>;
+
+    /// Read the signed nonce of Bridge Pool
+    fn read_bridge_pool_signed_nonce(
+        &self,
+        height: BlockHeight,
+        last_height: BlockHeight,
+    ) -> Result<Uint>;
 
     /// Write a replay protection entry
     fn write_replay_protection_entry(
@@ -1012,6 +1020,9 @@ where
         } = parameters.epoch_duration;
         self.next_epoch_min_start_height = initial_height + min_num_of_blocks;
         self.next_epoch_min_start_time = genesis_time + min_duration;
+        self.block.pred_epochs = Epochs {
+            first_block_heights: vec![initial_height],
+        };
         self.update_epoch_in_merkle_tree()
     }
 
@@ -1144,25 +1155,7 @@ where
         if self.block.epoch.0 == 0 {
             return Ok(());
         }
-        if let Some(limit) = self.storage_read_past_height_limit {
-            if self.get_last_block_height().0 <= limit {
-                return Ok(());
-            }
-
-            let min_height = (self.get_last_block_height().0 - limit).into();
-            if let Some(epoch) = self.block.pred_epochs.get_epoch(min_height) {
-                if epoch.0 == 0 {
-                    return Ok(());
-                }
-                // Remove stores at the previous epoch because the Merkle tree
-                // stores at the starting height of the epoch would be used to
-                // restore stores at a height (> min_height) in the epoch
-                for st in StoreType::iter_provable() {
-                    self.db.prune_merkle_tree_store(batch, st, epoch.prev())?;
-                }
-            }
-        }
-        // remove non-provable stores at the previous epoch
+        // Prune non-provable stores at the previous epoch
         for st in StoreType::iter_non_provable() {
             self.db.prune_merkle_tree_store(
                 batch,
@@ -1170,6 +1163,32 @@ where
                 self.block.epoch.prev(),
             )?;
         }
+        // Prune provable stores
+        let oldest_epoch = self.get_oldest_epoch();
+        if oldest_epoch.0 > 0 {
+            // Remove stores at the previous epoch because the Merkle tree
+            // stores at the starting height of the epoch would be used to
+            // restore stores at a height (> oldest_height) in the epoch
+            for st in StoreType::iter_provable() {
+                self.db.prune_merkle_tree_store(
+                    batch,
+                    st,
+                    oldest_epoch.prev(),
+                )?;
+            }
+
+            // Prune the BridgePool subtree stores with invalid nonce
+            let mut epoch = self.get_oldest_epoch_with_valid_nonce()?;
+            while oldest_epoch < epoch {
+                epoch = epoch.prev();
+                self.db.prune_merkle_tree_store(
+                    batch,
+                    &StoreType::BridgePool,
+                    epoch,
+                )?;
+            }
+        }
+
         Ok(())
     }
 
@@ -1180,6 +1199,49 @@ where
             .as_ref()
             .map(|b| b.height)
             .unwrap_or_default()
+    }
+
+    /// Get the oldest epoch where we can read a value
+    pub fn get_oldest_epoch(&self) -> Epoch {
+        let oldest_height = match self.storage_read_past_height_limit {
+            Some(limit) if limit < self.get_last_block_height().0 => {
+                (self.get_last_block_height().0 - limit).into()
+            }
+            _ => BlockHeight(1),
+        };
+        self.block
+            .pred_epochs
+            .get_epoch(oldest_height)
+            .unwrap_or_default()
+    }
+
+    /// Get oldest epoch which has the valid signed nonce of the bridge pool
+    pub fn get_oldest_epoch_with_valid_nonce(&self) -> Result<Epoch> {
+        let last_height = self.get_last_block_height();
+        let current_nonce = self
+            .db
+            .read_bridge_pool_signed_nonce(last_height, last_height)?;
+        let (mut epoch, _) = self.get_last_epoch();
+        // We don't need to check the older epochs because their Merkle tree
+        // snapshots have been already removed
+        let oldest_epoch = self.get_oldest_epoch();
+        // Look up the last valid epoch which has the previous nonce of the
+        // current one. It has the previous nonce, but it was
+        // incremented during the epoch.
+        while 0 < epoch.0 && oldest_epoch <= epoch {
+            epoch = epoch.prev();
+            let height =
+                match self.block.pred_epochs.get_start_height_of_epoch(epoch) {
+                    Some(h) => h,
+                    None => continue,
+                };
+            let nonce =
+                self.db.read_bridge_pool_signed_nonce(height, last_height)?;
+            if nonce < current_nonce {
+                break;
+            }
+        }
+        Ok(epoch)
     }
 
     /// Check it the given transaction's hash is already present in storage
@@ -1394,6 +1456,12 @@ mod tests {
                 minimum_gas_price: BTreeMap::default(),
             };
             parameters.init_storage(&mut wl_storage).unwrap();
+            // Initialize pred_epochs to the current height
+            wl_storage
+                .storage
+                .block
+                .pred_epochs
+                .new_epoch(wl_storage.storage.block.height);
 
             let epoch_before = wl_storage.storage.last_epoch;
             assert_eq!(epoch_before, wl_storage.storage.block.epoch);

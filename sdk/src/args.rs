@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
 use crate::eth_bridge::bridge_pool;
-use crate::ibc::core::ics24_host::identifier::{ChannelId, PortId};
+use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use crate::signing::SigningTxData;
 use crate::{rpc, tx, Namada};
 
@@ -175,9 +175,9 @@ impl<C: NamadaTypes> TxCustom<C> {
 
 impl TxCustom {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_custom(context, self).await
@@ -281,9 +281,9 @@ impl<C: NamadaTypes> TxTransfer<C> {
 
 impl TxTransfer {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &mut self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_transfer(context, self).await
@@ -395,9 +395,9 @@ impl<C: NamadaTypes> TxIbcTransfer<C> {
 
 impl TxIbcTransfer {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_ibc_transfer(context, self).await
@@ -484,9 +484,9 @@ impl<C: NamadaTypes> InitProposal<C> {
 
 impl InitProposal {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         let current_epoch = rpc::query_epoch(context.client()).await?;
@@ -641,9 +641,9 @@ impl<C: NamadaTypes> VoteProposal<C> {
 
 impl VoteProposal {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         let current_epoch = rpc::query_epoch(context.client()).await?;
@@ -714,13 +714,48 @@ impl<C: NamadaTypes> TxInitAccount<C> {
 
 impl TxInitAccount {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_init_account(context, self).await
     }
+}
+
+/// Transaction to initialize a new account
+#[derive(Clone, Debug)]
+pub struct TxBecomeValidator<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
+    pub tx: Tx<C>,
+    /// Address of an account that will become a validator.
+    pub address: C::Address,
+    /// Signature scheme
+    pub scheme: SchemeType,
+    /// Consensus key
+    pub consensus_key: Option<C::PublicKey>,
+    /// Ethereum cold key
+    pub eth_cold_key: Option<C::PublicKey>,
+    /// Ethereum hot key
+    pub eth_hot_key: Option<C::PublicKey>,
+    /// Protocol key
+    pub protocol_key: Option<C::PublicKey>,
+    /// Commission rate
+    pub commission_rate: Dec,
+    /// Maximum commission rate change
+    pub max_commission_rate_change: Dec,
+    /// The validator email
+    pub email: String,
+    /// The validator description
+    pub description: Option<String>,
+    /// The validator website
+    pub website: Option<String>,
+    /// The validator's discord handle
+    pub discord_handle: Option<String>,
+    /// Path to the TX WASM code file
+    pub tx_code_path: PathBuf,
+    /// Don't encrypt the keypair
+    pub unsafe_dont_encrypt: bool,
 }
 
 /// Transaction to initialize a new account
@@ -735,11 +770,11 @@ pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
     /// The account multisignature threshold
     pub threshold: Option<u8>,
     /// Consensus key
-    pub consensus_key: Option<C::Keypair>,
+    pub consensus_key: Option<C::PublicKey>,
     /// Ethereum cold key
-    pub eth_cold_key: Option<C::Keypair>,
+    pub eth_cold_key: Option<C::PublicKey>,
     /// Ethereum hot key
-    pub eth_hot_key: Option<C::Keypair>,
+    pub eth_hot_key: Option<C::PublicKey>,
     /// Protocol key
     pub protocol_key: Option<C::PublicKey>,
     /// Commission rate
@@ -757,7 +792,9 @@ pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
     /// Path to the VP WASM code file
     pub validator_vp_code_path: PathBuf,
     /// Path to the TX WASM code file
-    pub tx_code_path: PathBuf,
+    pub tx_init_account_code_path: PathBuf,
+    /// Path to the TX WASM code file
+    pub tx_become_validator_code_path: PathBuf,
     /// Don't encrypt the keypair
     pub unsafe_dont_encrypt: bool,
 }
@@ -832,9 +869,9 @@ impl<C: NamadaTypes> TxUpdateAccount<C> {
 
 impl TxUpdateAccount {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_update_account(context, self).await
@@ -910,9 +947,9 @@ impl<C: NamadaTypes> Bond<C> {
 
 impl Bond {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_bond(context, self).await
@@ -937,9 +974,9 @@ pub struct Unbond<C: NamadaTypes = SdkTypes> {
 
 impl Unbond {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(
         crate::proto::Tx,
         SigningTxData,
@@ -1010,9 +1047,9 @@ pub struct Redelegate<C: NamadaTypes = SdkTypes> {
 
 impl Redelegate {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData)> {
         tx::build_redelegation(context, self).await
     }
@@ -1091,9 +1128,9 @@ impl<C: NamadaTypes> RevealPk<C> {
 
 impl RevealPk {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_reveal_pk(context, &self.tx, &self.public_key).await
@@ -1175,9 +1212,9 @@ impl<C: NamadaTypes> Withdraw<C> {
 
 impl Withdraw {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_withdraw(context, self).await
@@ -1212,9 +1249,9 @@ impl<C: NamadaTypes> TxBuilder<C> for ClaimRewards<C> {
 
 impl ClaimRewards {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_claim_rewards(context, self).await
@@ -1345,9 +1382,9 @@ impl<C: NamadaTypes> CommissionRateChange<C> {
 
 impl CommissionRateChange {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_validator_commission_change(context, self).await
@@ -1362,7 +1399,7 @@ pub struct ConsensusKeyChange<C: NamadaTypes = SdkTypes> {
     /// Validator address (should be self)
     pub validator: C::Address,
     /// New consensus key
-    pub consensus_key: Option<C::Keypair>,
+    pub consensus_key: Option<C::PublicKey>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -1404,9 +1441,9 @@ pub struct ConsensusKeyChange<C: NamadaTypes = SdkTypes> {
 
 // impl ConsensusKeyChange {
 //     /// Build a transaction from this builder
-//     pub async fn build<'a>(
+//     pub async fn build(
 //         &self,
-//         context: &impl Namada<'a>,
+//         context: &impl Namada,
 //     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData,
 // Option<Epoch>)>     {
 //         tx::build_change_consensus_key(context, self).await
@@ -1463,9 +1500,9 @@ impl<C: NamadaTypes> MetaDataChange<C> {
 
 impl MetaDataChange {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_validator_metadata_change(context, self).await
@@ -1519,9 +1556,9 @@ impl<C: NamadaTypes> UpdateStewardCommission<C> {
 
 impl UpdateStewardCommission {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_update_steward_commission(context, self).await
@@ -1568,9 +1605,9 @@ impl<C: NamadaTypes> ResignSteward<C> {
 
 impl ResignSteward {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_resign_steward(context, self).await
@@ -1617,9 +1654,9 @@ impl<C: NamadaTypes> TxUnjailValidator<C> {
 
 impl TxUnjailValidator {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_unjail_validator(context, self).await
@@ -1666,9 +1703,9 @@ impl<C: NamadaTypes> TxDeactivateValidator<C> {
 
 impl TxDeactivateValidator {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_deactivate_validator(context, self).await
@@ -1715,9 +1752,9 @@ impl<C: NamadaTypes> TxReactivateValidator<C> {
 
 impl TxReactivateValidator {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         &self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_reactivate_validator(context, self).await
@@ -1762,6 +1799,17 @@ pub struct QuerySlashes<C: NamadaTypes = SdkTypes> {
     pub query: Query<C>,
     /// Address of a validator
     pub validator: Option<C::Address>,
+}
+
+/// Query PoS rewards
+#[derive(Clone, Debug)]
+pub struct QueryRewards<C: NamadaTypes = SdkTypes> {
+    /// Common query args
+    pub query: Query<C>,
+    /// Address of the source
+    pub source: Option<C::Address>,
+    /// Address of the validator
+    pub validator: C::Address,
 }
 
 /// Query PoS delegations
@@ -1817,7 +1865,7 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// The amount being payed (for gas unit) to include the transaction
     pub fee_amount: Option<InputAmount>,
     /// The fee payer signing key
-    pub wrapper_fee_payer: Option<C::Keypair>,
+    pub wrapper_fee_payer: Option<C::PublicKey>,
     /// The token in which the fee is being paid
     pub fee_token: C::Address,
     /// The optional spending key for fee unshielding
@@ -1832,13 +1880,11 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// The chain id for which the transaction is intended
     pub chain_id: Option<ChainId>,
     /// Sign the tx with the key for the given alias from your wallet
-    pub signing_keys: Vec<C::Keypair>,
+    pub signing_keys: Vec<C::PublicKey>,
     /// List of signatures to attach to the transaction
     pub signatures: Vec<C::Data>,
     /// Path to the TX WASM code file to reveal PK
     pub tx_reveal_code_path: PathBuf,
-    /// Sign the tx with the public key for the given alias from your wallet
-    pub verification_key: Option<C::PublicKey>,
     /// Password to decrypt key
     pub password: Option<Zeroizing<String>>,
     /// Use device to sign the transaction
@@ -1918,7 +1964,7 @@ pub trait TxBuilder<C: NamadaTypes>: Sized {
         })
     }
     /// The fee payer signing key
-    fn wrapper_fee_payer(self, wrapper_fee_payer: C::Keypair) -> Self {
+    fn wrapper_fee_payer(self, wrapper_fee_payer: C::PublicKey) -> Self {
         self.tx(|x| Tx {
             wrapper_fee_payer: Some(wrapper_fee_payer),
             ..x
@@ -1962,7 +2008,7 @@ pub trait TxBuilder<C: NamadaTypes>: Sized {
         })
     }
     /// Sign the tx with the key for the given alias from your wallet
-    fn signing_keys(self, signing_keys: Vec<C::Keypair>) -> Self {
+    fn signing_keys(self, signing_keys: Vec<C::PublicKey>) -> Self {
         self.tx(|x| Tx { signing_keys, ..x })
     }
     /// List of signatures to attach to the transaction
@@ -1973,13 +2019,6 @@ pub trait TxBuilder<C: NamadaTypes>: Sized {
     fn tx_reveal_code_path(self, tx_reveal_code_path: PathBuf) -> Self {
         self.tx(|x| Tx {
             tx_reveal_code_path,
-            ..x
-        })
-    }
-    /// Sign the tx with the public key for the given alias from your wallet
-    fn verification_key(self, verification_key: C::PublicKey) -> Self {
-        self.tx(|x| Tx {
-            verification_key: Some(verification_key),
             ..x
         })
     }
@@ -2010,9 +2049,6 @@ pub struct MaspAddrKeyAdd {
     pub alias_force: bool,
     /// Any MASP value
     pub value: MaspValue,
-    /// Add a MASP key / address pre-genesis instead
-    /// of a current chain
-    pub is_pre_genesis: bool,
     /// Don't encrypt the keypair
     pub unsafe_dont_encrypt: bool,
 }
@@ -2024,8 +2060,6 @@ pub struct MaspSpendKeyGen {
     pub alias: String,
     /// Whether to force overwrite the alias
     pub alias_force: bool,
-    /// Generate spending key pre-genesis instead of a current chain
-    pub is_pre_genesis: bool,
     /// Don't encrypt the keypair
     pub unsafe_dont_encrypt: bool,
 }
@@ -2041,8 +2075,6 @@ pub struct MaspPayAddrGen<C: NamadaTypes = SdkTypes> {
     pub viewing_key: C::ViewingKey,
     /// Pin
     pub pin: bool,
-    /// Generate an address pre-genesis instead of a current chain
-    pub is_pre_genesis: bool,
 }
 
 /// Wallet generate key and implicit address arguments
@@ -2054,8 +2086,6 @@ pub struct KeyAndAddressGen {
     pub alias: Option<String>,
     /// Whether to force overwrite the alias, if provided
     pub alias_force: bool,
-    /// Generate a key for pre-genesis, instead of a current chain
-    pub is_pre_genesis: bool,
     /// Don't encrypt the keypair
     pub unsafe_dont_encrypt: bool,
     /// BIP44 derivation path
@@ -2088,8 +2118,6 @@ pub struct KeyFind {
     pub alias: Option<String>,
     /// Public key hash to lookup keypair with
     pub value: Option<String>,
-    /// Find a key pre-genesis instead of a current chain
-    pub is_pre_genesis: bool,
     /// Show secret keys to user
     pub unsafe_show_secret: bool,
 }
@@ -2101,8 +2129,6 @@ pub struct AddrKeyFind {
     pub alias: String,
     /// Show secret keys to user
     pub unsafe_show_secret: bool,
-    /// Find shielded address / key pre-genesis instead of a current chain
-    pub is_pre_genesis: bool,
 }
 
 /// Wallet list shielded keys arguments
@@ -2110,18 +2136,8 @@ pub struct AddrKeyFind {
 pub struct MaspKeysList {
     /// Don't decrypt spending keys
     pub decrypt: bool,
-    /// List shielded keys pre-genesis instead of a current chain
-    pub is_pre_genesis: bool,
     /// Show secret keys to user
     pub unsafe_show_secret: bool,
-}
-
-/// Wallet list shielded payment addresses arguments
-#[derive(Clone, Debug)]
-pub struct MaspListPayAddrs {
-    /// List sheilded payment address pre-genesis instead
-    /// of a current chain
-    pub is_pre_genesis: bool,
 }
 
 /// Wallet list keys arguments
@@ -2129,8 +2145,6 @@ pub struct MaspListPayAddrs {
 pub struct KeyList {
     /// Don't decrypt keypairs
     pub decrypt: bool,
-    /// List keys pre-genesis instead of a current chain
-    pub is_pre_genesis: bool,
     /// Show secret keys to user
     pub unsafe_show_secret: bool,
 }
@@ -2140,8 +2154,6 @@ pub struct KeyList {
 pub struct KeyExport {
     /// Key alias
     pub alias: String,
-    /// Export key pre-genesis instead of a current chain
-    pub is_pre_genesis: bool,
 }
 
 /// Wallet address lookup arguments
@@ -2151,15 +2163,6 @@ pub struct AddressOrAliasFind {
     pub alias: Option<String>,
     /// Address to find
     pub address: Option<Address>,
-    /// Lookup address pre-genesis instead of a current chain
-    pub is_pre_genesis: bool,
-}
-
-/// List wallet address
-#[derive(Clone, Debug)]
-pub struct AddressList {
-    /// List addresses pre-genesis instead of current chain
-    pub is_pre_genesis: bool,
 }
 
 /// Wallet address add arguments
@@ -2171,8 +2174,6 @@ pub struct AddressAdd {
     pub alias_force: bool,
     /// Address to add
     pub address: Address,
-    /// Add an address pre-genesis instead of current chain
-    pub is_pre_genesis: bool,
 }
 
 /// Bridge pool batch recommendation.
@@ -2288,9 +2289,9 @@ impl<C: NamadaTypes> EthereumBridgePool<C> {
 
 impl EthereumBridgePool {
     /// Build a transaction from this builder
-    pub async fn build<'a>(
+    pub async fn build(
         self,
-        context: &impl Namada<'a>,
+        context: &impl Namada,
     ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         bridge_pool::build_bridge_pool_tx(context, self).await
