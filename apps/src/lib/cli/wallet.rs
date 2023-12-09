@@ -588,14 +588,31 @@ fn key_address_find(
     }
 }
 
-/// Value for wallet `add` command
-#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
-pub enum KeyAddrAddValue {
+pub enum TransparentValue {
     /// Transparent secret key
     TranspSecretKey(common::SecretKey),
     /// Transparent address
     TranspAddress(Address),
+}
+
+impl FromStr for TransparentValue {
+    type Err = DecodeError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // Try to decode this value first as a secret key, then as an address
+        common::SecretKey::from_str(s)
+            .map(Self::TranspSecretKey)
+            .or_else(|_| Address::from_str(s).map(Self::TranspAddress))
+    }
+}
+
+/// Value for wallet `add` command
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug)]
+pub enum KeyAddrAddValue {
+    /// Transparent value
+    TranspValue(TransparentValue),
     /// Masp value
     MASPValue(MaspValue),
 }
@@ -604,11 +621,10 @@ impl FromStr for KeyAddrAddValue {
     type Err = DecodeError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Try to decode this value first as a secret key, then as an address,
-        // then as a MASP value
-        common::SecretKey::from_str(s)
-            .map(Self::TranspSecretKey)
-            .or_else(|_| Address::from_str(s).map(Self::TranspAddress))
+        // Try to decode this value first as a transparent value, then as a MASP
+        // value
+        TransparentValue::from_str(s)
+            .map(Self::TranspValue)
             .or_else(|_| MaspValue::from_str(s).map(Self::MASPValue))
     }
 }
@@ -622,36 +638,19 @@ fn add_key_or_address(
     unsafe_dont_encrypt: bool,
 ) {
     match value {
-        KeyAddrAddValue::TranspSecretKey(sk) => {
-            let mut wallet = load_wallet(ctx);
-            let encryption_password =
-                read_and_confirm_encryption_password(unsafe_dont_encrypt);
-            let alias = wallet
-                .insert_keypair(
-                    alias,
-                    alias_force,
-                    sk,
-                    encryption_password,
-                    None,
-                    None,
-                )
-                .unwrap_or_else(|err| {
-                    edisplay_line!(io, "{}", err);
-                    display_line!(io, "No changes are persisted. Exiting.");
-                    cli::safe_exit(1);
-                });
-            wallet
-                .save()
-                .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
-            display_line!(
+        KeyAddrAddValue::TranspValue(TransparentValue::TranspSecretKey(sk)) => {
+            transparent_secret_key_add(
+                ctx,
                 io,
-                "Successfully added a key and an address with alias: \"{}\"",
-                alias
-            );
+                alias,
+                alias_force,
+                sk,
+                unsafe_dont_encrypt,
+            )
         }
-        KeyAddrAddValue::TranspAddress(address) => {
-            transparent_address_add(ctx, io, alias, alias_force, address)
-        }
+        KeyAddrAddValue::TranspValue(TransparentValue::TranspAddress(
+            address,
+        )) => transparent_address_add(ctx, io, alias, alias_force, address),
         KeyAddrAddValue::MASPValue(masp_value) => shielded_key_address_add(
             ctx,
             io,
