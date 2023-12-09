@@ -983,7 +983,9 @@ mod test_finalize_block {
     use namada::types::key::tm_consensus_key_raw_hash;
     use namada::types::storage::Epoch;
     use namada::types::time::{DateTimeUtc, DurationSecs};
-    use namada::types::token::{Amount, NATIVE_MAX_DECIMAL_PLACES};
+    use namada::types::token::{
+        Amount, DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES,
+    };
     use namada::types::transaction::governance::{
         InitProposalData, VoteProposalData,
     };
@@ -1021,7 +1023,7 @@ mod test_finalize_block {
         let mut wrapper_tx =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: 1.into(),
+                    amount_per_gas_unit: DenominatedAmount::native(1.into()),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 keypair.ref_to(),
@@ -1062,7 +1064,7 @@ mod test_finalize_block {
         let mut outer_tx =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: 1.into(),
+                    amount_per_gas_unit: DenominatedAmount::native(1.into()),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 keypair.ref_to(),
@@ -1177,7 +1179,9 @@ mod test_finalize_block {
         let mut outer_tx =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: Default::default(),
+                    amount_per_gas_unit: DenominatedAmount::native(
+                        Default::default(),
+                    ),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 keypair.ref_to(),
@@ -1231,7 +1235,7 @@ mod test_finalize_block {
         // not valid tx bytes
         let wrapper = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount_per_gas_unit: 0.into(),
+                amount_per_gas_unit: DenominatedAmount::native(0.into()),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             keypair.ref_to(),
@@ -3005,7 +3009,7 @@ mod test_finalize_block {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: 1.into(),
+                    amount_per_gas_unit: DenominatedAmount::native(1.into()),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 keypair.ref_to(),
@@ -3022,7 +3026,7 @@ mod test_finalize_block {
         let mut new_wrapper = wrapper.clone();
         new_wrapper.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount_per_gas_unit: 1.into(),
+                amount_per_gas_unit: DenominatedAmount::native(1.into()),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             keypair_2.ref_to(),
@@ -3134,7 +3138,9 @@ mod test_finalize_block {
         let mut unsigned_wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: Amount::zero(),
+                    amount_per_gas_unit: DenominatedAmount::native(
+                        Amount::zero(),
+                    ),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 keypair.ref_to(),
@@ -3310,7 +3316,7 @@ mod test_finalize_block {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: 0.into(),
+                    amount_per_gas_unit: DenominatedAmount::native(0.into()),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 keypair.ref_to(),
@@ -3389,7 +3395,7 @@ mod test_finalize_block {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: 100.into(),
+                    amount_per_gas_unit: DenominatedAmount::native(100.into()),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 keypair.ref_to(),
@@ -3472,7 +3478,7 @@ mod test_finalize_block {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: 1.into(),
+                    amount_per_gas_unit: DenominatedAmount::native(1.into()),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
@@ -3494,6 +3500,12 @@ mod test_finalize_block {
         )));
         let fee_amount =
             wrapper.header().wrapper().unwrap().get_tx_fee().unwrap();
+        let fee_amount = fee_amount
+            .to_amount(
+                &wrapper.header().wrapper().unwrap().fee.token,
+                &shell.wl_storage,
+            )
+            .unwrap();
 
         let signer_balance = storage_api::token::read_balance(
             &shell.wl_storage,

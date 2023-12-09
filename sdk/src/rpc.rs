@@ -1025,7 +1025,7 @@ pub async fn validate_amount<N: Namada>(
                     "No denomination found for token: {token}, but --force \
                      was passed. Defaulting to the provided denomination."
                 );
-                Ok(input_amount.denom)
+                Ok(input_amount.denom())
             } else {
                 display_line!(
                     context.io(),
@@ -1038,7 +1038,7 @@ pub async fn validate_amount<N: Namada>(
             }
         }
     }?;
-    if denom < input_amount.denom && !force {
+    if denom < input_amount.denom() && !force {
         display_line!(
             context.io(),
             "The input amount contained a higher precision than allowed by \
@@ -1144,7 +1144,7 @@ pub async fn denominate_amount<C: Client + Sync>(
         );
         0.into()
     });
-    DenominatedAmount { amount, denom }
+    DenominatedAmount::new(amount, denom)
 }
 
 /// Look up the denomination of a token in order to format it

@@ -435,10 +435,10 @@ fn ledger_txs_and_queries() -> Result<()> {
         source: find_address(&test, BERTHA).unwrap(),
         target: find_address(&test, ALBERT).unwrap(),
         token: find_address(&test, NAM).unwrap(),
-        amount: token::DenominatedAmount {
-            amount: token::Amount::native_whole(10),
-            denom: token::NATIVE_MAX_DECIMAL_PLACES.into(),
-        },
+        amount: token::DenominatedAmount::new(
+            token::Amount::native_whole(10),
+            token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        ),
         key: None,
         shielded: None,
     }
@@ -1498,7 +1498,7 @@ fn pos_init_validator() -> Result<()> {
                         .amount
                         .increase_precision(NATIVE_MAX_DECIMAL_PLACES.into())
                         .unwrap()
-                        .amount
+                        .amount()
                 })
                 .sum::<token::Amount>();
             assert_eq!(

@@ -489,7 +489,7 @@ pub struct EthBridgeParams {
 
 impl TokenBalances {
     pub fn get(&self, addr: &GenesisAddress) -> Option<token::Amount> {
-        self.0.get(addr).map(|amt| amt.amount)
+        self.0.get(addr).map(|amt| amt.amount())
     }
 }
 
@@ -896,7 +896,7 @@ pub fn validate_balances(
         let sum = next.0.values().try_fold(
             token::Amount::default(),
             |acc, amount| {
-                let res = acc.checked_add(amount.amount);
+                let res = acc.checked_add(amount.amount());
                 if res.as_ref().is_none() {
                     is_valid = false;
                     eprintln!(
@@ -984,6 +984,6 @@ mod tests {
 
         let balances = read_balances(&path).unwrap();
         let example_balance = balances.token.get(&token_alias).unwrap();
-        assert_eq!(balance, example_balance.0.get(&address).unwrap().amount);
+        assert_eq!(balance, example_balance.0.get(&address).unwrap().amount());
     }
 }

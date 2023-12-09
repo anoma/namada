@@ -108,6 +108,9 @@ where
     ) -> Result<bool> {
         let epoch = self.ctx.get_block_epoch()?;
         let (transfer, shielded_tx) = self.ctx.get_shielded_action(tx_data)?;
+        let transfer_amount = transfer
+            .amount
+            .to_amount(&transfer.token, &self.ctx.pre())?;
         let mut transparent_tx_pool = I128Sum::zero();
         // The Sapling value balance adds to the transparent tx pool
         transparent_tx_pool += shielded_tx.sapling_value_balance();
@@ -121,7 +124,7 @@ where
                 let transp_amt = convert_amount(
                     epoch,
                     &transfer.token,
-                    transfer.amount.into(),
+                    transfer_amount,
                     denom,
                 );
 
@@ -249,7 +252,7 @@ where
 
                 if !valid_transfer_amount(
                     out.value,
-                    denom.denominate(&transfer.amount.amount),
+                    denom.denominate(&transfer_amount),
                 ) {
                     return Ok(false);
                 }
@@ -257,7 +260,7 @@ where
                 let transp_amt = convert_amount(
                     *asset_epoch,
                     &transfer.token,
-                    transfer.amount.amount,
+                    transfer_amount,
                     denom,
                 );
 

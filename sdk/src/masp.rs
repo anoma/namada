@@ -912,7 +912,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             tx.source.clone(),
             MaspChange {
                 asset: token_addr,
-                change: -tx.amount.amount.change(),
+                change: -tx.amount.amount().change(),
             },
         );
         self.last_txidx += 1;
@@ -1566,7 +1566,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
         // Convert transaction amount into MASP types
         let (asset_types, masp_amount) =
-            convert_amount(epoch, token, amount.amount)?;
+            convert_amount(epoch, token, amount.amount())?;
 
         // If there are shielded inputs
         if let Some(sk) = spending_key {
@@ -1621,7 +1621,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 builder
                     .add_transparent_input(TxOut {
                         asset_type: *asset_type,
-                        value: denom.denominate(&amount),
+                        value: denom.denominate(&amount.amount()),
                         address: script,
                     })
                     .map_err(builder::Error::TransparentBuild)?;
@@ -1639,7 +1639,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                         ovk_opt,
                         pa.into(),
                         *asset_type,
-                        denom.denominate(&amount),
+                        denom.denominate(&amount.amount()),
                         memo.clone(),
                     )
                     .map_err(builder::Error::SaplingBuild)?;
@@ -1660,7 +1660,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             ));
             for (denom, asset_type) in MaspDenom::iter().zip(asset_types.iter())
             {
-                let vout = denom.denominate(&amount);
+                let vout = denom.denominate(&amount.amount());
                 if vout != 0 {
                     builder
                         .add_transparent_output(
@@ -1932,7 +1932,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                                 transfer.source.clone(),
                                 MaspChange {
                                     asset: transfer.token.clone(),
-                                    change: -transfer.amount.amount.change(),
+                                    change: -transfer.amount.amount().change(),
                                 },
                             )]);
 

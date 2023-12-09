@@ -223,25 +223,19 @@ where
             .expect("NAM balances should exist in pre-genesis wallet already");
         nam_balances.0.insert(
             GenesisAddress::PublicKey(StringEncoded::new(sk.ref_to())),
-            token::DenominatedAmount {
-                amount: token::Amount::from_uint(
-                    1000000,
-                    NATIVE_MAX_DECIMAL_PLACES,
-                )
-                .unwrap(),
-                denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-            },
+            token::DenominatedAmount::new(
+                token::Amount::from_uint(1000000, NATIVE_MAX_DECIMAL_PLACES)
+                    .unwrap(),
+                NATIVE_MAX_DECIMAL_PLACES.into(),
+            ),
         );
         nam_balances.0.insert(
             GenesisAddress::EstablishedAddress(validator_address.clone()),
-            token::DenominatedAmount {
-                amount: token::Amount::from_uint(
-                    2000000,
-                    NATIVE_MAX_DECIMAL_PLACES,
-                )
-                .unwrap(),
-                denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-            },
+            token::DenominatedAmount::new(
+                token::Amount::from_uint(2000000, NATIVE_MAX_DECIMAL_PLACES)
+                    .unwrap(),
+                NATIVE_MAX_DECIMAL_PLACES.into(),
+            ),
         );
         // invoke `init-genesis-validator` to promote the generated established
         // account to a validator account

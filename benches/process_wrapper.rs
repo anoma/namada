@@ -6,6 +6,7 @@ use namada::proto::Signature;
 use namada::types::key::RefTo;
 use namada::types::storage::BlockHeight;
 use namada::types::time::DateTimeUtc;
+use namada::types::token::DenominatedAmount;
 use namada::types::transaction::{Fee, WrapperTx};
 use namada_apps::bench_utils::{BenchShell, TX_TRANSFER_WASM};
 use namada_apps::node::ledger::shell::process_proposal::ValidationMeta;
@@ -37,7 +38,7 @@ fn process_tx(c: &mut Criterion) {
         WrapperTx::new(
             Fee {
                 token: address::nam(),
-                amount_per_gas_unit: 1.into(),
+                amount_per_gas_unit: DenominatedAmount::native(1.into()),
             },
             defaults::albert_keypair().ref_to(),
             0.into(),

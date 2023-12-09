@@ -42,7 +42,6 @@ use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::key::*;
 use namada_core::types::masp::{TransferSource, TransferTarget};
 use namada_core::types::token;
-use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_core::types::transaction::GasLimit;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
@@ -53,7 +52,7 @@ use crate::rpc::{
     denominate_amount, format_denominated_amount, query_native_token,
 };
 use crate::signing::SigningTxData;
-use crate::token::DenominatedAmount;
+use crate::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
 use crate::tx::{
     ProcessTxResponse, TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM,
     TX_BRIDGE_POOL_WASM, TX_CHANGE_COMMISSION_WASM,
@@ -489,10 +488,12 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             recipient,
             asset,
             amount,
-            fee_amount: InputAmount::Unvalidated(token::DenominatedAmount {
-                amount: token::Amount::default(),
-                denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-            }),
+            fee_amount: InputAmount::Unvalidated(
+                token::DenominatedAmount::new(
+                    token::Amount::default(),
+                    NATIVE_MAX_DECIMAL_PLACES.into(),
+                ),
+            ),
             fee_payer: None,
             fee_token: self.native_token(),
             nut: false,

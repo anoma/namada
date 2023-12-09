@@ -2497,7 +2497,8 @@ where
     ) -> Result<(), storage_api::Error> {
         use namada_core::types::token;
 
-        if amount.amount != token::Amount::default() && src != dest {
+        let amount = amount.to_amount(token, self)?;
+        if amount != token::Amount::default() && src != dest {
             let src_key = token::balance_key(token, src);
             let dest_key = token::balance_key(token, dest);
             let src_bal = self.read::<token::Amount>(&src_key)?;
@@ -2505,10 +2506,10 @@ where
                 self.log_string(format!("src {} has no balance", src_key));
                 unreachable!()
             });
-            src_bal.spend(&amount.amount);
+            src_bal.spend(&amount);
             let mut dest_bal =
                 self.read::<token::Amount>(&dest_key)?.unwrap_or_default();
-            dest_bal.receive(&amount.amount);
+            dest_bal.receive(&amount);
             self.write(&src_key, src_bal)?;
             self.write(&dest_key, dest_bal)?;
         }
@@ -2530,15 +2531,16 @@ where
     ) -> Result<(), storage_api::Error> {
         use namada_core::types::token;
 
+        let amount = amount.to_amount(token, self)?;
         let target_key = token::balance_key(token, target);
         let mut target_bal =
             self.read::<token::Amount>(&target_key)?.unwrap_or_default();
-        target_bal.receive(&amount.amount);
+        target_bal.receive(&amount);
 
         let minted_key = token::minted_balance_key(token);
         let mut minted_bal =
             self.read::<token::Amount>(&minted_key)?.unwrap_or_default();
-        minted_bal.receive(&amount.amount);
+        minted_bal.receive(&amount);
 
         self.write(&target_key, target_bal)?;
         self.write(&minted_key, minted_bal)?;
@@ -2558,16 +2560,17 @@ where
     ) -> Result<(), storage_api::Error> {
         use namada_core::types::token;
 
+        let amount = amount.to_amount(token, self)?;
         let target_key = token::balance_key(token, target);
         let mut target_bal =
             self.read::<token::Amount>(&target_key)?.unwrap_or_default();
-        target_bal.spend(&amount.amount);
+        target_bal.spend(&amount);
 
         // burn the minted amount
         let minted_key = token::minted_balance_key(token);
         let mut minted_bal =
             self.read::<token::Amount>(&minted_key)?.unwrap_or_default();
-        minted_bal.spend(&amount.amount);
+        minted_bal.spend(&amount);
 
         self.write(&target_key, target_bal)?;
         self.write(&minted_key, minted_bal)
