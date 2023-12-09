@@ -160,7 +160,7 @@ fn payment_addresses_list(ctx: Context, io: &impl Io, is_pre_genesis: bool) {
         display_line!(
             io,
             "No known payment addresses. Try `gen-payment-addr --alias \
-             my-addr` to generate a new payment address.",
+             my-payment-addr` to generate a new payment address.",
         );
     } else {
         let stdout = io::stdout();
