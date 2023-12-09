@@ -30,3 +30,26 @@ pub struct UpdateStewardCommission {
     /// The new commission distribution
     pub commission: HashMap<Address, Dec>,
 }
+
+#[cfg(any(test, feature = "testing"))]
+/// Tests and strategies for PGF
+pub mod tests {
+    use proptest::{collection, prop_compose};
+
+    use crate::types::address::testing::arb_address;
+    use crate::types::dec::testing::arb_dec;
+    use crate::types::transaction::pgf::UpdateStewardCommission;
+
+    prop_compose! {
+        /// Generate an arbitraary steward commission update
+        pub fn arb_update_steward_commission()(
+            steward in arb_address(),
+            commission in collection::hash_map(arb_address(), arb_dec(), 0..10),
+        ) -> UpdateStewardCommission {
+            UpdateStewardCommission {
+                steward,
+                commission,
+            }
+        }
+    }
+}

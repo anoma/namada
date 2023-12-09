@@ -296,3 +296,179 @@ pub fn received_ibc_token(
     }
     Ok(storage::ibc_token(ibc_denom.to_string()))
 }
+
+#[cfg(any(test, feature = "testing"))]
+/// Tests ans strategies for IBC
+pub mod tests {
+    use std::str::FromStr;
+
+    use ibc::apps::transfer::types::packet::PacketData;
+    use ibc::apps::transfer::types::{
+        Amount, BaseDenom, Memo, PrefixedCoin, PrefixedDenom, TracePath,
+        TracePrefix,
+    };
+    use ibc::core::channel::types::timeout::TimeoutHeight;
+    use ibc::core::client::types::Height;
+    use ibc::core::host::types::identifiers::{ChannelId, PortId};
+    use ibc::core::primitives::Signer;
+    use ibc::primitives::proto::Any;
+    use ibc::primitives::{Msg, Timestamp};
+    use proptest::prelude::{Just, Strategy};
+    use proptest::{collection, prop_compose};
+
+    use crate::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
+
+    prop_compose! {
+        /// Generate an arbitrary port ID
+        pub fn arb_ibc_port_id()(id in "[a-zA-Z0-9_+.\\-\\[\\]#<>]{2,128}") -> PortId {
+            PortId::new(id).expect("generated invalid port ID")
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary channel ID
+        pub fn arb_ibc_channel_id()(id: u64) -> ChannelId {
+            ChannelId::new(id)
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary IBC height
+        pub fn arb_ibc_height()(
+            revision_number: u64,
+            revision_height in 1u64..,
+        ) -> Height {
+            Height::new(revision_number, revision_height)
+                .expect("generated invalid IBC height")
+        }
+    }
+
+    /// Generate arbitrary timeout data
+    pub fn arb_ibc_timeout_data() -> impl Strategy<Value = TimeoutHeight> {
+        arb_ibc_height()
+            .prop_map(TimeoutHeight::At)
+            .boxed()
+            .prop_union(Just(TimeoutHeight::Never).boxed())
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary IBC timestamp
+        pub fn arb_ibc_timestamp()(nanoseconds: u64) -> Timestamp {
+            Timestamp::from_nanoseconds(nanoseconds).expect("generated invalid IBC timestamp")
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary IBC memo
+        pub fn arb_ibc_memo()(memo in "[a-zA-Z0-9_]*") -> Memo {
+            memo.into()
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary IBC memo
+        pub fn arb_ibc_signer()(signer in "[a-zA-Z0-9_]*") -> Signer {
+            signer.into()
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary IBC trace prefix
+        pub fn arb_ibc_trace_prefix()(
+            port_id in arb_ibc_port_id(),
+            channel_id in arb_ibc_channel_id(),
+        ) -> TracePrefix {
+            TracePrefix::new(port_id, channel_id)
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary IBC trace path
+        pub fn arb_ibc_trace_path()(path in collection::vec(arb_ibc_trace_prefix(), 0..10)) -> TracePath {
+            TracePath::from(path)
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary IBC base denomination
+        pub fn arb_ibc_base_denom()(base_denom in "[a-zA-Z0-9_]+") -> BaseDenom {
+            BaseDenom::from_str(&base_denom).expect("generated invalid IBC base denomination")
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary IBC prefixed denomination
+        pub fn arb_ibc_prefixed_denom()(
+            trace_path in arb_ibc_trace_path(),
+            base_denom in arb_ibc_base_denom(),
+        ) -> PrefixedDenom {
+            PrefixedDenom {
+                trace_path,
+                base_denom,
+            }
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary IBC amount
+        pub fn arb_ibc_amount()(value: [u64; 4]) -> Amount {
+            value.into()
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary prefixed coin
+        pub fn arb_ibc_prefixed_coin()(
+            denom in arb_ibc_prefixed_denom(),
+            amount in arb_ibc_amount(),
+        ) -> PrefixedCoin {
+            PrefixedCoin {
+                denom,
+                amount,
+            }
+        }
+    }
+
+    prop_compose! {
+        /// Generate arbitrary packet data
+        pub fn arb_ibc_packet_data()(
+            token in arb_ibc_prefixed_coin(),
+            sender in arb_ibc_signer(),
+            receiver in arb_ibc_signer(),
+            memo in arb_ibc_memo(),
+        ) -> PacketData {
+            PacketData {
+                token,
+                sender,
+                receiver,
+                memo,
+            }
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary IBC transfer message
+        pub fn arb_ibc_msg_transfer()(
+            port_id_on_a in arb_ibc_port_id(),
+            chan_id_on_a in arb_ibc_channel_id(),
+            packet_data in arb_ibc_packet_data(),
+            timeout_height_on_b in arb_ibc_timeout_data(),
+            timeout_timestamp_on_b in arb_ibc_timestamp(),
+        ) -> MsgTransfer {
+            MsgTransfer {
+                port_id_on_a,
+                chan_id_on_a,
+                packet_data,
+                timeout_height_on_b,
+                timeout_timestamp_on_b,
+            }
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary IBC any object
+        pub fn arb_ibc_any()(msg_transfer in arb_ibc_msg_transfer()) -> Any {
+            msg_transfer.to_any()
+        }
+    }
+}

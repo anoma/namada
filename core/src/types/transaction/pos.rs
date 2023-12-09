@@ -206,3 +206,138 @@ pub struct ConsensusKeyChange {
     /// The new consensus key
     pub consensus_key: common::PublicKey,
 }
+
+#[cfg(any(test, feature = "testing"))]
+/// Tests and strategies for proof-of-stake
+pub mod tests {
+    use proptest::{option, prop_compose};
+
+    use super::*;
+    use crate::types::address::testing::arb_address;
+    use crate::types::dec::testing::arb_dec;
+    use crate::types::key::testing::{arb_common_pk, arb_pk};
+    use crate::types::token::testing::arb_amount;
+
+    prop_compose! {
+        /// Generate a bond
+        pub fn arb_bond()(
+            validator in arb_address(),
+            amount in arb_amount(),
+            source in option::of(arb_address()),
+        ) -> Bond {
+            Bond {
+                validator,
+                amount,
+                source,
+            }
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary withdraw
+        pub fn arb_withdraw()(
+            validator in arb_address(),
+            source in option::of(arb_address()),
+        ) -> Withdraw {
+            Withdraw {
+                validator,
+                source,
+            }
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary commission change
+        pub fn arb_commission_change()(
+            validator in arb_address(),
+            new_rate in arb_dec(),
+        ) -> CommissionChange {
+            CommissionChange {
+                validator,
+                new_rate,
+            }
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary metadata change
+        pub fn arb_metadata_change()(
+            validator in arb_address(),
+            email in option::of("[a-zA-Z0-9_]*"),
+            description in option::of("[a-zA-Z0-9_]*"),
+            website in option::of("[a-zA-Z0-9_]*"),
+            discord_handle in option::of("[a-zA-Z0-9_]*"),
+            commission_rate in option::of(arb_dec()),
+        ) -> MetaDataChange {
+            MetaDataChange {
+                validator,
+                email,
+                description,
+                website,
+                discord_handle,
+                commission_rate,
+            }
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary consensus key change
+        pub fn arb_consensus_key_change()(
+            validator in arb_address(),
+            consensus_key in arb_common_pk(),
+        ) -> ConsensusKeyChange {
+            ConsensusKeyChange {
+                validator,
+                consensus_key,
+            }
+        }
+    }
+
+    prop_compose! {
+        /// Generate a validator initialization
+        pub fn arb_become_validator()(
+            address in arb_address(),
+            consensus_key in arb_common_pk(),
+            eth_cold_key in arb_pk::<secp256k1::SigScheme>(),
+            eth_hot_key in arb_pk::<secp256k1::SigScheme>(),
+            protocol_key in arb_common_pk(),
+            commission_rate in arb_dec(),
+            max_commission_rate_change in arb_dec(),
+            email in "[a-zA-Z0-9_]*",
+            description in option::of("[a-zA-Z0-9_]*"),
+            website in option::of("[a-zA-Z0-9_]*"),
+            discord_handle in option::of("[a-zA-Z0-9_]*"),
+        ) -> BecomeValidator {
+            BecomeValidator {
+                address,
+                consensus_key,
+                eth_cold_key,
+                eth_hot_key,
+                protocol_key,
+                commission_rate,
+                max_commission_rate_change,
+                email,
+                description,
+                website,
+                discord_handle,
+            }
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary redelegation
+        pub fn arb_redelegation()(
+            src_validator in arb_address(),
+            dest_validator in arb_address(),
+            owner in arb_address(),
+            amount in arb_amount(),
+        ) -> Redelegation {
+            Redelegation {
+                src_validator,
+                dest_validator,
+                owner,
+                amount,
+            }
+        }
+    }
+}

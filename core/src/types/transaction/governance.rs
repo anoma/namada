@@ -164,3 +164,56 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
         })
     }
 }
+
+#[cfg(any(test, feature = "testing"))]
+/// Tests and strategies for governance
+pub mod tests {
+    use proptest::{collection, prop_compose};
+
+    use super::*;
+    use crate::ledger::governance::storage::proposal::tests::arb_proposal_type;
+    use crate::ledger::governance::storage::vote::tests::arb_proposal_vote;
+    use crate::types::address::testing::arb_address;
+    use crate::types::hash::tests::arb_hash;
+    use crate::types::storage::tests::arb_epoch;
+
+    prop_compose! {
+        /// Generate a proposal initialization
+        pub fn arb_init_proposal()(
+            id: Option<u64>,
+            content in arb_hash(),
+            author in arb_address(),
+            r#type in arb_proposal_type(),
+            voting_start_epoch in arb_epoch(),
+            voting_end_epoch in arb_epoch(),
+            grace_epoch in arb_epoch(),
+        ) -> InitProposalData {
+            InitProposalData {
+                id,
+                content,
+                author,
+                r#type,
+                voting_start_epoch,
+                voting_end_epoch,
+                grace_epoch,
+            }
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary vote proposal
+        pub fn arb_vote_proposal()(
+            id: u64,
+            vote in arb_proposal_vote(),
+            voter in arb_address(),
+            delegations in collection::vec(arb_address(), 0..10),
+        ) -> VoteProposalData {
+            VoteProposalData {
+                id,
+                vote,
+                voter,
+                delegations,
+            }
+        }
+    }
+}

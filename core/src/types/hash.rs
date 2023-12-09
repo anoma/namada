@@ -146,14 +146,17 @@ impl From<Hash> for crate::tendermint::Hash {
     }
 }
 
-#[cfg(test)]
-mod tests {
+#[cfg(any(test, feature = "testing"))]
+/// Tests and strategies for hashes
+pub mod tests {
     use proptest::prelude::*;
+    #[cfg(test)]
     use proptest::string::{string_regex, RegexGeneratorStrategy};
 
     use super::*;
 
     /// Returns a proptest strategy that yields hex encoded hashes.
+    #[cfg(test)]
     fn hex_encoded_hash_strat() -> RegexGeneratorStrategy<String> {
         string_regex(r"[a-fA-F0-9]{64}").unwrap()
     }
@@ -162,6 +165,13 @@ mod tests {
         #[test]
         fn test_hash_string(hex_hash in hex_encoded_hash_strat()) {
             let _: Hash = hex_hash.try_into().unwrap();
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary hash
+        pub fn arb_hash()(bytes: [u8; 32]) -> Hash {
+            Hash(bytes)
         }
     }
 }

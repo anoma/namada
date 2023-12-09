@@ -1303,9 +1303,51 @@ pub enum TransferError {
     NoToken,
 }
 
-#[cfg(test)]
-mod tests {
+#[cfg(any(test, feature = "testing"))]
+/// Tests and strategies for tokens
+pub mod tests {
+    use proptest::{option, prop_compose};
+
     use super::*;
+    use crate::types::address::testing::arb_address;
+    use crate::types::token::testing::arb_amount;
+
+    prop_compose! {
+        /// Generate an arbitrary denomination
+        pub fn arb_denomination()(denom in 0u8..) -> Denomination {
+            Denomination(denom)
+        }
+    }
+
+    prop_compose! {
+        /// Generate a denominated amount
+        pub fn arb_denominated_amount()(
+            amount in arb_amount(),
+            denom in arb_denomination(),
+        ) -> DenominatedAmount {
+            DenominatedAmount::new(amount, denom)
+        }
+    }
+
+    prop_compose! {
+        /// Generate a transfer
+        pub fn arb_transfer()(
+            source in arb_address(),
+            target in arb_address(),
+            token in arb_address(),
+            amount in arb_denominated_amount(),
+            key in option::of("[a-zA-Z0-9_]*"),
+        ) -> Transfer {
+            Transfer {
+                source,
+                target,
+                token,
+                amount,
+                key,
+                shielded: None,
+            }
+        }
+    }
 
     #[test]
     fn test_token_display() {

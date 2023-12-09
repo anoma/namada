@@ -302,6 +302,77 @@ pub struct GasFee {
     pub token: Address,
 }
 
+#[cfg(any(test, feature = "testing"))]
+/// Tests and strategies for the Ethereum bridge pool
+pub mod tests {
+    use proptest::prop_compose;
+
+    use super::*;
+    use crate::types::address::testing::arb_address;
+    use crate::types::ethereum_events::testing::arb_eth_address;
+    use crate::types::token::testing::arb_amount;
+
+    prop_compose! {
+        /// Generate an arbitrary pending transfer
+        pub fn arb_pending_transfer()(
+            transfer in arb_transfer_to_ethereum(),
+            gas_fee in arb_gas_fee(),
+        ) -> PendingTransfer {
+            PendingTransfer {
+                transfer,
+                gas_fee,
+            }
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary Ethereum gas fee
+        pub fn arb_gas_fee()(
+            amount in arb_amount(),
+            payer in arb_address(),
+            token in arb_address(),
+        ) -> GasFee {
+            GasFee {
+                amount,
+                payer,
+                token,
+            }
+        }
+    }
+
+    prop_compose! {
+        /// Generate the kind of a transfer to ethereum
+        pub fn arb_transfer_to_ethereum_kind()(
+            discriminant in 0..2,
+        ) -> TransferToEthereumKind {
+            match discriminant {
+                0 => TransferToEthereumKind::Erc20,
+                1 => TransferToEthereumKind::Nut,
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary transfer to Ethereum
+        pub fn arb_transfer_to_ethereum()(
+            kind in arb_transfer_to_ethereum_kind(),
+            asset in arb_eth_address(),
+            recipient in arb_eth_address(),
+            sender in arb_address(),
+            amount in arb_amount(),
+        ) -> TransferToEthereum {
+            TransferToEthereum {
+                kind,
+                asset,
+                recipient,
+                sender,
+                amount,
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod test_eth_bridge_pool_types {
     use super::*;
