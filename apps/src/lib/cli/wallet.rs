@@ -1141,7 +1141,7 @@ fn transparent_secret_key_add(
     );
 }
 
-/// Add an address to the wallet.
+/// Add a transparent address to the wallet.
 fn transparent_address_add(
     ctx: Context,
     io: &impl Io,
