@@ -13,6 +13,7 @@ use namada_core::types::dec::Dec;
 use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::keccak::KeccakHash;
 use namada_core::types::key::{common, SchemeType};
+use namada_core::types::masp::PaymentAddress;
 use namada_core::types::storage::Epoch;
 use namada_core::types::time::DateTimeUtc;
 use namada_core::types::transaction::GasLimit;
@@ -1938,23 +1939,6 @@ pub struct KeyDerive {
     pub use_device: bool,
 }
 
-/// Wallet key lookup arguments
-#[derive(Clone, Debug)]
-pub struct KeyFind {
-    /// Whether to find a MASP address by alias
-    pub shielded: bool,
-    /// Key alias to lookup keypair with
-    pub alias: Option<String>,
-    /// Public key to lookup keypair with
-    pub public_key: Option<common::PublicKey>,
-    /// Public key hash to lookup keypair with
-    pub value: Option<String>,
-    /// Find a key pre-genesis instead of a current chain
-    pub is_pre_genesis: bool,
-    /// Show secret keys to user
-    pub unsafe_show_secret: bool,
-}
-
 /// Wallet list arguments
 #[derive(Clone, Debug)]
 pub struct KeyAddressList {
@@ -1972,17 +1956,30 @@ pub struct KeyAddressList {
     pub unsafe_show_secret: bool,
 }
 
-/// Wallet address lookup arguments
+/// Wallet key / address lookup arguments
 #[derive(Clone, Debug)]
-pub struct AddressFind {
+pub struct KeyAddressFind {
+    /// Whether to find MASP keys / addresses
+    pub shielded: bool,
     /// Alias to find
     pub alias: Option<String>,
     /// Address to find
     pub address: Option<Address>,
+    /// Public key to lookup keypair with
+    pub public_key: Option<common::PublicKey>,
+    /// Public key hash to lookup keypair with
+    pub public_key_hash: Option<String>,
+    /// Payment address to find
+    pub payment_address: Option<PaymentAddress>,
+    /// Find keys only
+    pub keys_only: bool,
+    /// Find addresses only
+    pub addresses_only: bool,
     /// Lookup address pre-genesis instead of a current chain
     pub is_pre_genesis: bool,
+    /// Show secret keys to user
+    pub unsafe_show_secret: bool,
 }
-
 /// Wallet key export arguments
 #[derive(Clone, Debug)]
 pub struct KeyExport {
