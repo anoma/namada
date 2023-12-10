@@ -6216,7 +6216,7 @@ pub mod args {
                     .required(true),
             )
             .arg(LIST_FIND_KEYS_ONLY.def().help("Find keys only."))
-            .arg(LIST_FIND_ADDRESSES_ONLY.def().help("List addresses only."))
+            .arg(LIST_FIND_ADDRESSES_ONLY.def().help("Find addresses only."))
             .group(ArgGroup::new("only_group").args([
                 LIST_FIND_KEYS_ONLY.name,
                 LIST_FIND_ADDRESSES_ONLY.name,
