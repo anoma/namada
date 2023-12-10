@@ -28,12 +28,8 @@ fn wallet_encrypted_key_cmds() -> Result<()> {
     let password = "VeRySeCuR3";
 
     // 1. key gen
-    let mut cmd = run!(
-        test,
-        Bin::Wallet,
-        &["key", "gen", "--alias", key_alias],
-        Some(20),
-    )?;
+    let mut cmd =
+        run!(test, Bin::Wallet, &["gen", "--alias", key_alias], Some(20),)?;
 
     cmd.exp_string("Enter your encryption password:")?;
     cmd.send_line(password)?;
@@ -50,7 +46,7 @@ fn wallet_encrypted_key_cmds() -> Result<()> {
     let mut cmd = run!(
         test,
         Bin::Wallet,
-        &["key", "find", "--alias", key_alias],
+        &["find", "--keys", "--alias", key_alias],
         Some(20),
     )?;
 
@@ -60,7 +56,7 @@ fn wallet_encrypted_key_cmds() -> Result<()> {
     cmd.exp_string("Public key:")?;
 
     // 3. key list
-    let mut cmd = run!(test, Bin::Wallet, &["key", "list"], Some(20))?;
+    let mut cmd = run!(test, Bin::Wallet, &["list", "--keys"], Some(20))?;
     cmd.exp_string(&format!(
         "Alias \"{}\" (encrypted):",
         key_alias.to_lowercase()
@@ -82,12 +78,8 @@ fn wallet_encrypted_key_cmds_env_var() -> Result<()> {
     env::set_var("NAMADA_WALLET_PASSWORD", password);
 
     // 1. key gen
-    let mut cmd = run!(
-        test,
-        Bin::Wallet,
-        &["key", "gen", "--alias", key_alias],
-        Some(20),
-    )?;
+    let mut cmd =
+        run!(test, Bin::Wallet, &["gen", "--alias", key_alias], Some(20),)?;
 
     cmd.exp_string("Enter BIP39 passphrase (empty for none): ")?;
     cmd.send_line("")?;
@@ -101,7 +93,7 @@ fn wallet_encrypted_key_cmds_env_var() -> Result<()> {
     let mut cmd = run!(
         test,
         Bin::Wallet,
-        &["key", "find", "--alias", key_alias],
+        &["find", "--keys", "--alias", key_alias],
         Some(20),
     )?;
 
@@ -109,7 +101,7 @@ fn wallet_encrypted_key_cmds_env_var() -> Result<()> {
     cmd.exp_string("Public key:")?;
 
     // 3. key list
-    let mut cmd = run!(test, Bin::Wallet, &["key", "list"], Some(20))?;
+    let mut cmd = run!(test, Bin::Wallet, &["list", "--keys"], Some(20))?;
     cmd.exp_string(&format!("Alias \"{}\" (encrypted):", key_alias))?;
 
     Ok(())
@@ -128,7 +120,7 @@ fn wallet_unencrypted_key_cmds() -> Result<()> {
     let mut cmd = run!(
         test,
         Bin::Wallet,
-        &["key", "gen", "--alias", key_alias, "--unsafe-dont-encrypt"],
+        &["gen", "--alias", key_alias, "--unsafe-dont-encrypt"],
         Some(20),
     )?;
     cmd.exp_string(&format!(
@@ -140,7 +132,7 @@ fn wallet_unencrypted_key_cmds() -> Result<()> {
     let mut cmd = run!(
         test,
         Bin::Wallet,
-        &["key", "find", "--alias", key_alias],
+        &["find", "--keys", "--alias", key_alias],
         Some(20),
     )?;
 
@@ -148,7 +140,7 @@ fn wallet_unencrypted_key_cmds() -> Result<()> {
     cmd.exp_string("Public key:")?;
 
     // 3. key list
-    let mut cmd = run!(test, Bin::Wallet, &["key", "list"], Some(20))?;
+    let mut cmd = run!(test, Bin::Wallet, &["list", "--keys"], Some(20))?;
     cmd.exp_string(&format!("Alias \"{}\" (not encrypted):", key_alias))?;
 
     Ok(())
@@ -170,13 +162,7 @@ fn wallet_address_cmds() -> Result<()> {
     let mut cmd = run!(
         test,
         Bin::Wallet,
-        &[
-            "address",
-            "gen",
-            "--alias",
-            gen_address_alias,
-            "--unsafe-dont-encrypt",
-        ],
+        &["gen", "--alias", gen_address_alias, "--unsafe-dont-encrypt"],
         Some(20),
     )?;
     cmd.exp_string(&format!(
@@ -188,14 +174,7 @@ fn wallet_address_cmds() -> Result<()> {
     let mut cmd = run!(
         test,
         Bin::Wallet,
-        &[
-            "address",
-            "add",
-            "--address",
-            add_address,
-            "--alias",
-            add_address_alias,
-        ],
+        &["add", "--value", add_address, "--alias", add_address_alias],
         Some(20),
     )?;
     cmd.exp_string(&format!(
@@ -207,13 +186,13 @@ fn wallet_address_cmds() -> Result<()> {
     let mut cmd = run!(
         test,
         Bin::Wallet,
-        &["address", "find", "--alias", gen_address_alias],
+        &["find", "--addr", "--alias", gen_address_alias],
         Some(20),
     )?;
     cmd.exp_string("Found address")?;
 
     // 4. address list
-    let mut cmd = run!(test, Bin::Wallet, &["address", "list"], Some(20))?;
+    let mut cmd = run!(test, Bin::Wallet, &["list", "--addr"], Some(20))?;
 
     cmd.exp_string(&format!("\"{}\":", gen_address_alias))?;
     cmd.exp_string(&format!("\"{}\":", add_address_alias))?;
