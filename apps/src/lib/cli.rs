@@ -6983,7 +6983,7 @@ pub mod args {
                     .help("Path to the directory with the template files."),
             )
             .arg(WASM_DIR.def().help(
-                "Can optionally provide a wasm directory as part of verifying \
+                "Optional wasm directory to provide as part of verifying \
                  genesis template files",
             ))
         }

@@ -700,6 +700,52 @@ where
         }
     }
 
+    pub fn run_validation(
+        &mut self,
+        chain_id: String,
+        genesis: config::genesis::chain::Finalized,
+    ) {
+        use crate::facade::tendermint::block::Size;
+        use crate::facade::tendermint::consensus::params::ValidatorParams;
+        use crate::facade::tendermint::consensus::Params;
+        use crate::facade::tendermint::evidence::{
+            Duration, Params as Evidence,
+        };
+        use crate::facade::tendermint::time::Time;
+
+        // craft a request to initialize the chain
+        let init = request::InitChain {
+            time: Time::now(),
+            chain_id,
+            consensus_params: Params {
+                block: Size {
+                    max_bytes: 0,
+                    max_gas: 0,
+                    time_iota_ms: 0,
+                },
+                evidence: Evidence {
+                    max_age_num_blocks: 0,
+                    max_age_duration: Duration(Default::default()),
+                    max_bytes: 0,
+                },
+                validator: ValidatorParams {
+                    pub_key_types: vec![],
+                },
+                version: None,
+                abci: Default::default(),
+            },
+            validators: vec![],
+            app_state_bytes: Default::default(),
+            initial_height: 0u32.into(),
+        };
+        self.run(
+            init,
+            genesis,
+            #[cfg(any(test, feature = "testing"))]
+            1,
+        );
+    }
+
     /// Print out a report of errors encountered while dry-running
     /// genesis files
     pub fn report(&self) {
