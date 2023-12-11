@@ -24,6 +24,7 @@ use sha2::{Digest, Sha256};
 use tokio::sync::RwLock;
 
 use crate::cli::args;
+use crate::cli::args::TestGenesis;
 use crate::cli::context::ENV_VAR_WASM_DIR;
 use crate::config::genesis::chain::DeriveEstablishedAddress;
 use crate::config::genesis::transactions::{
@@ -581,6 +582,29 @@ pub fn init_network(
             fs::copy(file, wasm_dir_full.join(&full_name)).unwrap();
         }
     }
+}
+
+pub fn test_genesis(args: TestGenesis) {
+    use crate::facade::tendermint::Timeout;
+
+    let templates = genesis::templates::load_and_validate(&args.path).unwrap();
+    let genesis = genesis::chain::finalize(
+        templates,
+        FromStr::from_str("namada-dryrun").unwrap(),
+        Default::default(),
+        Timeout::from_str("30s").unwrap(),
+    );
+    let chain_id = &genesis.metadata.chain_id;
+    let test_dir = tempfile::tempdir().unwrap();
+    let config = crate::config::Config::load(test_dir.path(), chain_id, None);
+    genesis
+        .write_toml_files(&test_dir.path().join(chain_id.to_string()))
+        .unwrap();
+    crate::node::ledger::test_genesis_files(
+        config.ledger,
+        genesis,
+        args.wasm_dir,
+    );
 }
 
 pub fn pk_to_tm_address(
