@@ -130,10 +130,20 @@ where
         transaction: &Transaction,
     ) -> Result<bool> {
         let mut revealed_nullifiers = HashSet::new();
-        for description in transaction
-            .sapling_bundle()
-            .map_or(&vec![], |description| &description.shielded_spends)
-        {
+        let shielded_spends = match transaction.sapling_bundle() {
+            Some(bundle) if !bundle.shielded_spends.is_empty() => {
+                &bundle.shielded_spends
+            }
+            _ => {
+                tracing::debug!(
+                    "Missing expected spend descriptions in shielded \
+                     transaction"
+                );
+                return Ok(false);
+            }
+        };
+
+        for description in shielded_spends {
             let nullifier_key = Key::from(MASP.to_db_key())
                 .push(&MASP_NULLIFIERS_KEY.to_owned())
                 .expect("Cannot obtain a storage key")
@@ -227,10 +237,20 @@ where
         &self,
         transaction: &Transaction,
     ) -> Result<bool> {
-        for description in transaction
-            .sapling_bundle()
-            .map_or(&vec![], |bundle| &bundle.shielded_spends)
-        {
+        let shielded_spends = match transaction.sapling_bundle() {
+            Some(bundle) if !bundle.shielded_spends.is_empty() => {
+                &bundle.shielded_spends
+            }
+            _ => {
+                tracing::debug!(
+                    "Missing expected spend descriptions in shielded \
+                     transaction"
+                );
+                return Ok(false);
+            }
+        };
+
+        for description in shielded_spends {
             let anchor_key = Key::from(MASP.to_db_key())
                 .push(&MASP_NOTE_COMMITMENT_ANCHOR_PREFIX.to_owned())
                 .expect("Cannot obtain a storage key")
@@ -406,6 +426,14 @@ where
                 // Non-masp sources add to transparent tx pool
                 transparent_tx_pool += transp_amt;
             }
+
+            // No shielded spends nor shielded converts are allowed
+            if shielded_tx.sapling_bundle().is_some_and(|bundle| {
+                !(bundle.shielded_spends.is_empty()
+                    && bundle.shielded_converts.is_empty())
+            }) {
+                return Ok(false);
+            }
         } else {
             // Handle shielded input
             // The following boundary conditions must be satisfied
@@ -532,6 +560,7 @@ where
             // Handle shielded output
             // The following boundary conditions must be satisfied
             // 1. Zero transparent output
+            // 2. At least one shielded output
 
             // Satisfies 1.
             if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
@@ -543,6 +572,14 @@ where
                     );
                     return Ok(false);
                 }
+            }
+
+            // Staisfies 2.
+            if shielded_tx
+                .sapling_bundle()
+                .is_some_and(|bundle| bundle.shielded_outputs.is_empty())
+            {
+                return Ok(false);
             }
         }
 
