@@ -1,4 +1,4 @@
-use crate::tx_builders;
+use crate::transaction;
 use borsh_ext::BorshSerializeExt;
 use namada_core::ledger::governance::storage::proposal::ProposalType;
 use namada_core::proto::Section;
@@ -22,8 +22,6 @@ use std::str::FromStr;
 
 use super::GlobalArgs;
 
-//FIXME: docs for all the structs
-
 const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
 const TX_REVEAL_PK_WASM: &str = "tx_reveal_pk.wasm";
 const TX_UPDATE_ACCOUNT_WASM: &str = "tx_update_account.wasm";
@@ -45,7 +43,7 @@ impl InitAccount {
                 threshold,
             };
 
-        Self(tx_builders::build_tx(
+        Self(transaction::build_tx(
             args,
             init_account,
             TX_INIT_ACCOUNT_WASM.to_string(),
@@ -53,10 +51,8 @@ impl InitAccount {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(mut self) -> (Self, Vec<u8>) {
-        let (tx, msg) = tx_builders::get_msg_to_sign(self.0);
-
-        (Self(tx), msg)
+    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+        transaction::get_msg_to_sign(&self.0)
     }
 
     /// Attach the provided signatures to the tx
@@ -64,7 +60,7 @@ impl InitAccount {
         mut self,
         signatures: Vec<SignatureIndex>,
     ) -> Self {
-        Self(tx_builders::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(self.0, signatures))
     }
 }
 
@@ -73,7 +69,7 @@ pub struct RevealPk(Tx);
 impl RevealPk {
     /// Build a raw Reveal Public Key transaction from the given parameters
     pub fn new(public_key: common::PublicKey, args: GlobalArgs) -> Self {
-        Self(tx_builders::build_tx(
+        Self(transaction::build_tx(
             args,
             public_key,
             TX_REVEAL_PK_WASM.to_string(),
@@ -81,10 +77,8 @@ impl RevealPk {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(mut self) -> (Self, Vec<u8>) {
-        let (tx, msg) = tx_builders::get_msg_to_sign(self.0);
-
-        (Self(tx), msg)
+    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+        transaction::get_msg_to_sign(&self.0)
     }
 
     /// Attach the provided signatures to the tx
@@ -92,7 +86,7 @@ impl RevealPk {
         mut self,
         signatures: Vec<SignatureIndex>,
     ) -> Self {
-        Self(tx_builders::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(self.0, signatures))
     }
 }
 
@@ -115,7 +109,7 @@ impl UpdateAccount {
                 threshold,
             };
 
-        Self(tx_builders::build_tx(
+        Self(transaction::build_tx(
             args,
             update_account,
             TX_UPDATE_ACCOUNT_WASM.to_string(),
@@ -123,10 +117,8 @@ impl UpdateAccount {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(mut self) -> (Self, Vec<u8>) {
-        let (tx, msg) = tx_builders::get_msg_to_sign(self.0);
-
-        (Self(tx), msg)
+    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+        transaction::get_msg_to_sign(&self.0)
     }
 
     /// Attach the provided signatures to the tx
@@ -134,6 +126,6 @@ impl UpdateAccount {
         mut self,
         signatures: Vec<SignatureIndex>,
     ) -> Self {
-        Self(tx_builders::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(self.0, signatures))
     }
 }

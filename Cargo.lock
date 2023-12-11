@@ -3826,7 +3826,9 @@ version = "0.27.0"
 dependencies = [
  "borsh",
  "borsh-ext",
+ "ibc",
  "namada_core",
+ "prost 0.12.1",
 ]
 
 [[package]]

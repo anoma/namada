@@ -1,4 +1,4 @@
-use crate::tx_builders;
+use crate::transaction;
 use namada_core::ledger::governance::storage::proposal::ProposalType;
 use namada_core::proto::Section;
 use namada_core::proto::SignatureIndex;
@@ -15,6 +15,7 @@ use namada_core::types::storage::Epoch;
 use namada_core::types::time::DateTimeUtc;
 use namada_core::types::token;
 use namada_core::types::token::{Amount, DenominatedAmount, MaspDenom};
+use namada_core::types::transaction::pos::Redelegation;
 use namada_core::types::transaction::Fee;
 use namada_core::types::transaction::GasLimit;
 use std::collections::BTreeMap;
@@ -52,28 +53,24 @@ impl Bond {
             source,
         };
 
-        Self(tx_builders::build_tx(
+        Self(transaction::build_tx(
             args,
             unbond,
             TX_BOND_WASM.to_string(),
         ))
     }
 
-    //FIXME: share
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(mut self) -> (Self, Vec<u8>) {
-        let (tx, msg) = tx_builders::get_msg_to_sign(self.0);
-
-        (Self(tx), msg)
+    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+        transaction::get_msg_to_sign(&self.0)
     }
 
-    //FIXME: share
     /// Attach the provided signatures to the tx
     pub fn attach_signatures(
         mut self,
         signatures: Vec<SignatureIndex>,
     ) -> Self {
-        Self(tx_builders::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(self.0, signatures))
     }
 }
 
@@ -94,7 +91,7 @@ impl Unbond {
             source,
         };
 
-        Self(tx_builders::build_tx(
+        Self(transaction::build_tx(
             args,
             unbond,
             TX_UNBOND_WASM.to_string(),
@@ -102,10 +99,8 @@ impl Unbond {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(mut self) -> (Self, Vec<u8>) {
-        let (tx, msg) = tx_builders::get_msg_to_sign(self.0);
-
-        (Self(tx), msg)
+    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+        transaction::get_msg_to_sign(&self.0)
     }
 
     /// Attach the provided signatures to the tx
@@ -113,7 +108,7 @@ impl Unbond {
         mut self,
         signatures: Vec<SignatureIndex>,
     ) -> Self {
-        Self(tx_builders::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(self.0, signatures))
     }
 }
 
@@ -154,7 +149,7 @@ impl InitValidator {
                 validator_vp_code_hash,
             };
 
-        Self(tx_builders::build_tx(
+        Self(transaction::build_tx(
             args,
             update_account,
             TX_INIT_VALIDATOR_WASM.to_string(),
@@ -162,10 +157,8 @@ impl InitValidator {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(mut self) -> (Self, Vec<u8>) {
-        let (tx, msg) = tx_builders::get_msg_to_sign(self.0);
-
-        (Self(tx), msg)
+    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+        transaction::get_msg_to_sign(&self.0)
     }
 
     /// Attach the provided signatures to the tx
@@ -173,7 +166,7 @@ impl InitValidator {
         mut self,
         signatures: Vec<SignatureIndex>,
     ) -> Self {
-        Self(tx_builders::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(self.0, signatures))
     }
 }
 
@@ -182,7 +175,7 @@ pub struct UnjailValidator(Tx);
 impl UnjailValidator {
     /// Build a raw Unjail validator transaction from the given parameters
     pub fn new(address: Address, args: GlobalArgs) -> Self {
-        Self(tx_builders::build_tx(
+        Self(transaction::build_tx(
             args,
             address,
             TX_UNJAIL_VALIDATOR_WASM.to_string(),
@@ -190,10 +183,8 @@ impl UnjailValidator {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(mut self) -> (Self, Vec<u8>) {
-        let (tx, msg) = tx_builders::get_msg_to_sign(self.0);
-
-        (Self(tx), msg)
+    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+        transaction::get_msg_to_sign(&self.0)
     }
 
     /// Attach the provided signatures to the tx
@@ -201,7 +192,7 @@ impl UnjailValidator {
         mut self,
         signatures: Vec<SignatureIndex>,
     ) -> Self {
-        Self(tx_builders::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(self.0, signatures))
     }
 }
 
@@ -210,7 +201,7 @@ pub struct DeactivateValidator(Tx);
 impl DeactivateValidator {
     /// Build a raw DeactivateValidator transaction from the given parameters
     pub fn new(address: Address, args: GlobalArgs) -> Self {
-        Self(tx_builders::build_tx(
+        Self(transaction::build_tx(
             args,
             address,
             TX_DEACTIVATE_VALIDATOR_WASM.to_string(),
@@ -218,10 +209,8 @@ impl DeactivateValidator {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(mut self) -> (Self, Vec<u8>) {
-        let (tx, msg) = tx_builders::get_msg_to_sign(self.0);
-
-        (Self(tx), msg)
+    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+        transaction::get_msg_to_sign(&self.0)
     }
 
     /// Attach the provided signatures to the tx
@@ -229,7 +218,7 @@ impl DeactivateValidator {
         mut self,
         signatures: Vec<SignatureIndex>,
     ) -> Self {
-        Self(tx_builders::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(self.0, signatures))
     }
 }
 
@@ -238,7 +227,7 @@ pub struct ReactivateValidator(Tx);
 impl ReactivateValidator {
     /// Build a raw ReactivateValidator transaction from the given parameters
     pub fn new(address: Address, args: GlobalArgs) -> Self {
-        Self(tx_builders::build_tx(
+        Self(transaction::build_tx(
             args,
             address,
             TX_REACTIVATE_VALIDATOR_WASM.to_string(),
@@ -246,10 +235,8 @@ impl ReactivateValidator {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(mut self) -> (Self, Vec<u8>) {
-        let (tx, msg) = tx_builders::get_msg_to_sign(self.0);
-
-        (Self(tx), msg)
+    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+        transaction::get_msg_to_sign(&self.0)
     }
 
     /// Attach the provided signatures to the tx
@@ -257,7 +244,7 @@ impl ReactivateValidator {
         mut self,
         signatures: Vec<SignatureIndex>,
     ) -> Self {
-        Self(tx_builders::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(self.0, signatures))
     }
 }
 
@@ -275,7 +262,7 @@ impl ClaimRewards {
             source,
         };
 
-        Self(tx_builders::build_tx(
+        Self(transaction::build_tx(
             args,
             init_proposal,
             TX_CLAIM_REWARDS_WASM.to_string(),
@@ -283,10 +270,8 @@ impl ClaimRewards {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(mut self) -> (Self, Vec<u8>) {
-        let (tx, msg) = tx_builders::get_msg_to_sign(self.0);
-
-        (Self(tx), msg)
+    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+        transaction::get_msg_to_sign(&self.0)
     }
 
     /// Attach the provided signatures to the tx
@@ -294,7 +279,7 @@ impl ClaimRewards {
         mut self,
         signatures: Vec<SignatureIndex>,
     ) -> Self {
-        Self(tx_builders::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(self.0, signatures))
     }
 }
 
@@ -321,7 +306,7 @@ impl ChangeMetaData {
                 commission_rate,
             };
 
-        Self(tx_builders::build_tx(
+        Self(transaction::build_tx(
             args,
             init_proposal,
             TX_CHANGE_METADATA_WASM.to_string(),
@@ -329,10 +314,8 @@ impl ChangeMetaData {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(mut self) -> (Self, Vec<u8>) {
-        let (tx, msg) = tx_builders::get_msg_to_sign(self.0);
-
-        (Self(tx), msg)
+    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+        transaction::get_msg_to_sign(&self.0)
     }
 
     /// Attach the provided signatures to the tx
@@ -340,7 +323,7 @@ impl ChangeMetaData {
         mut self,
         signatures: Vec<SignatureIndex>,
     ) -> Self {
-        Self(tx_builders::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(self.0, signatures))
     }
 }
 
@@ -359,7 +342,7 @@ impl ChangeConsensusKey {
                 consensus_key,
             };
 
-        Self(tx_builders::build_tx(
+        Self(transaction::build_tx(
             args,
             init_proposal,
             TX_CHANGE_CONSENSUS_KEY_WASM.to_string(),
@@ -367,10 +350,8 @@ impl ChangeConsensusKey {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(mut self) -> (Self, Vec<u8>) {
-        let (tx, msg) = tx_builders::get_msg_to_sign(self.0);
-
-        (Self(tx), msg)
+    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+        transaction::get_msg_to_sign(&self.0)
     }
 
     /// Attach the provided signatures to the tx
@@ -378,7 +359,7 @@ impl ChangeConsensusKey {
         mut self,
         signatures: Vec<SignatureIndex>,
     ) -> Self {
-        Self(tx_builders::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(self.0, signatures))
     }
 }
 
@@ -393,7 +374,7 @@ impl ChangeCommission {
                 new_rate,
             };
 
-        Self(tx_builders::build_tx(
+        Self(transaction::build_tx(
             args,
             init_proposal,
             TX_CHANGE_COMMISSION_WASM.to_string(),
@@ -401,10 +382,8 @@ impl ChangeCommission {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(mut self) -> (Self, Vec<u8>) {
-        let (tx, msg) = tx_builders::get_msg_to_sign(self.0);
-
-        (Self(tx), msg)
+    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+        transaction::get_msg_to_sign(&self.0)
     }
 
     /// Attach the provided signatures to the tx
@@ -412,7 +391,7 @@ impl ChangeCommission {
         mut self,
         signatures: Vec<SignatureIndex>,
     ) -> Self {
-        Self(tx_builders::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(self.0, signatures))
     }
 }
 
@@ -425,12 +404,13 @@ impl Withdraw {
         source: Option<Address>,
         args: GlobalArgs,
     ) -> Self {
+        //FIXME: request the correct type directly in the args instead of rebuilding it
         let init_proposal = namada_core::types::transaction::pos::Withdraw {
             validator,
             source,
         };
 
-        Self(tx_builders::build_tx(
+        Self(transaction::build_tx(
             args,
             init_proposal,
             TX_WITHDRAW_WASM.to_string(),
@@ -438,10 +418,8 @@ impl Withdraw {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(mut self) -> (Self, Vec<u8>) {
-        let (tx, msg) = tx_builders::get_msg_to_sign(self.0);
-
-        (Self(tx), msg)
+    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+        transaction::get_msg_to_sign(&self.0)
     }
 
     /// Attach the provided signatures to the tx
@@ -449,6 +427,45 @@ impl Withdraw {
         mut self,
         signatures: Vec<SignatureIndex>,
     ) -> Self {
-        Self(tx_builders::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(self.0, signatures))
+    }
+}
+
+pub struct Redelegate(Tx);
+
+impl Redelegate {
+    /// Build a raw Redelegate transaction from the given parameters
+    pub fn new(
+        src_validator: Address,
+        dest_validator: Address,
+        owner: Address,
+        amount: Amount,
+        args: GlobalArgs,
+    ) -> Self {
+        let redelegation = Redelegation {
+            src_validator,
+            dest_validator,
+            owner,
+            amount,
+        };
+
+        Self(transaction::build_tx(
+            args,
+            redelegation,
+            TX_REDELEGATE_WASM.to_string(),
+        ))
+    }
+
+    /// Get the bytes to sign for the given transaction
+    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+        transaction::get_msg_to_sign(&self.0)
+    }
+
+    /// Attach the provided signatures to the tx
+    pub fn attach_signatures(
+        mut self,
+        signatures: Vec<SignatureIndex>,
+    ) -> Self {
+        Self(transaction::attach_raw_signatures(self.0, signatures))
     }
 }

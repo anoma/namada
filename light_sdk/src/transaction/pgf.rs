@@ -1,4 +1,4 @@
-use crate::tx_builders;
+use crate::transaction;
 use borsh_ext::BorshSerializeExt;
 use namada_core::ledger::governance::storage::proposal::ProposalType;
 use namada_core::proto::Section;
@@ -31,7 +31,7 @@ pub struct ResignSteward(Tx);
 impl ResignSteward {
     /// Build a raw ResignSteward transaction from the given parameters
     pub fn new(steward: Address, args: GlobalArgs) -> Self {
-        Self(tx_builders::build_tx(
+        Self(transaction::build_tx(
             args,
             steward,
             TX_RESIGN_STEWARD.to_string(),
@@ -39,10 +39,8 @@ impl ResignSteward {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(mut self) -> (Self, Vec<u8>) {
-        let (tx, msg) = tx_builders::get_msg_to_sign(self.0);
-
-        (Self(tx), msg)
+    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+        transaction::get_msg_to_sign(&self.0)
     }
 
     /// Attach the provided signatures to the tx
@@ -50,7 +48,7 @@ impl ResignSteward {
         mut self,
         signatures: Vec<SignatureIndex>,
     ) -> Self {
-        Self(tx_builders::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(self.0, signatures))
     }
 }
 
@@ -69,7 +67,7 @@ impl UpdateStewardCommission {
                 commission,
             };
 
-        Self(tx_builders::build_tx(
+        Self(transaction::build_tx(
             args,
             update_commission,
             TX_UPDATE_STEWARD_COMMISSION.to_string(),
@@ -77,10 +75,8 @@ impl UpdateStewardCommission {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(mut self) -> (Self, Vec<u8>) {
-        let (tx, msg) = tx_builders::get_msg_to_sign(self.0);
-
-        (Self(tx), msg)
+    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+        transaction::get_msg_to_sign(&self.0)
     }
 
     /// Attach the provided signatures to the tx
@@ -88,6 +84,6 @@ impl UpdateStewardCommission {
         mut self,
         signatures: Vec<SignatureIndex>,
     ) -> Self {
-        Self(tx_builders::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(self.0, signatures))
     }
 }

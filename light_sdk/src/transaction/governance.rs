@@ -1,4 +1,4 @@
-use crate::tx_builders;
+use crate::transaction;
 use borsh_ext::BorshSerializeExt;
 use namada_core::ledger::governance::storage::proposal::ProposalType;
 use namada_core::ledger::governance::storage::vote::StorageProposalVote;
@@ -51,7 +51,7 @@ impl InitProposal {
                 grace_epoch,
             };
 
-        Self(tx_builders::build_tx(
+        Self(transaction::build_tx(
             args,
             init_proposal,
             TX_INIT_PROPOSAL_WASM.to_string(),
@@ -59,10 +59,8 @@ impl InitProposal {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(mut self) -> (Self, Vec<u8>) {
-        let (tx, msg) = tx_builders::get_msg_to_sign(self.0);
-
-        (Self(tx), msg)
+    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+        transaction::get_msg_to_sign(&self.0)
     }
 
     /// Attach the provided signatures to the tx
@@ -70,7 +68,7 @@ impl InitProposal {
         mut self,
         signatures: Vec<SignatureIndex>,
     ) -> Self {
-        Self(tx_builders::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(self.0, signatures))
     }
 }
 
@@ -93,7 +91,7 @@ impl VoteProposal {
                 delegations,
             };
 
-        Self(tx_builders::build_tx(
+        Self(transaction::build_tx(
             args,
             vote_proposal,
             TX_VOTE_PROPOSAL.to_string(),
@@ -101,10 +99,8 @@ impl VoteProposal {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(mut self) -> (Self, Vec<u8>) {
-        let (tx, msg) = tx_builders::get_msg_to_sign(self.0);
-
-        (Self(tx), msg)
+    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+        transaction::get_msg_to_sign(&self.0)
     }
 
     /// Attach the provided signatures to the tx
@@ -112,6 +108,6 @@ impl VoteProposal {
         mut self,
         signatures: Vec<SignatureIndex>,
     ) -> Self {
-        Self(tx_builders::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(self.0, signatures))
     }
 }

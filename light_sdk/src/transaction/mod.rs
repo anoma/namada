@@ -22,9 +22,13 @@ use std::collections::BTreeMap;
 use std::str::FromStr;
 
 pub mod account;
+pub mod bridge;
 pub mod governance;
+pub mod ibc;
 pub mod pgf;
 pub mod pos;
+pub mod transfer;
+pub mod wrapper;
 
 /// Generic arguments required to construct a transaction
 pub struct GlobalArgs {
@@ -34,7 +38,7 @@ pub struct GlobalArgs {
     chain_id: ChainId,
 }
 
-pub(in crate::tx_builders) fn build_tx(
+pub(in crate::transaction) fn build_tx(
     GlobalArgs {
         timestamp,
         expiration,
@@ -52,16 +56,15 @@ pub(in crate::tx_builders) fn build_tx(
     inner_tx
 }
 
-//FIXME: just take reference?
-pub(in crate::tx_builders) fn get_msg_to_sign(tx: Tx) -> (Tx, Vec<u8>) {
-    let msg = tx.raw_header_hash().serialize_to_vec();
-
-    (tx, msg)
+//FIXME: back to hash here
+//FIXME: actually I think we need to sign a vector of one hash
+pub(in crate::transaction) fn get_msg_to_sign(tx: &Tx) -> Vec<u8> {
+    tx.raw_header_hash().serialize_to_vec()
 }
 
-pub(in crate::tx_builders) fn attach_raw_signatures(
+pub(in crate::transaction) fn attach_raw_signatures(
+    //FIXME: make it as the wrapper function
     mut tx: Tx,
-    //FIXME: accept bytes here?
     signatures: Vec<SignatureIndex>,
 ) -> Tx {
     tx.add_signatures(signatures);
