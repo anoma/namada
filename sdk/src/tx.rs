@@ -129,8 +129,6 @@ pub enum ProcessTxResponse {
     Broadcast(Response),
     /// Result of dry running transaction
     DryRun,
-    /// Dump transaction to disk
-    Dump,
 }
 
 impl ProcessTxResponse {
