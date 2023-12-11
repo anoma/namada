@@ -1,7 +1,0 @@
-# Seeds for failure cases proptest has generated in the past. It is
-# automatically read and these particular cases re-run before any
-# novel cases are generated.
-#
-# It is recommended to check this file in to source control so that
-# everyone who runs the test benefits from these saved cases.
-cc 94189e4348e711536bd368fb077d15a64d5591b88bded0cedce7abf6035b7083 # shrinks to blocks_write_type = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 3, 3, 0, 2, 1, 4, 0, 0, 0, 4, 0, 3, 0, 4, 4, 1, 3, 3, 3, 3, 1, 1, 0, 2, 2, 4, 3, 1, 4, 3, 0, 2, 4, 1, 4, 1]
