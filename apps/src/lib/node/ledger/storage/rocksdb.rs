@@ -1453,17 +1453,21 @@ impl DB for RocksDB {
         &self,
         height: BlockHeight,
         last_height: BlockHeight,
-    ) -> Result<Uint> {
+    ) -> Result<Option<Uint>> {
         let nonce_key = bridge_pool::get_signed_root_key();
         let bytes = if height == BlockHeight(0) || height >= last_height {
             self.read_subspace_val(&nonce_key)?
         } else {
             self.read_subspace_val_with_height(&nonce_key, height, last_height)?
         };
-        let bytes = bytes.expect("Signed root should exist");
-        let bp_root_proof = BridgePoolRootProof::try_from_slice(&bytes)
-            .map_err(Error::BorshCodingError)?;
-        Ok(bp_root_proof.data.1)
+        match bytes {
+            Some(bytes) => {
+                let bp_root_proof = BridgePoolRootProof::try_from_slice(&bytes)
+                    .map_err(Error::BorshCodingError)?;
+                Ok(Some(bp_root_proof.data.1))
+            }
+            None => Ok(None),
+        }
     }
 
     fn write_replay_protection_entry(
