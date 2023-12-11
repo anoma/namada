@@ -542,11 +542,13 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
         tx: &mut Tx,
         args: &args::Tx,
         signing_data: SigningTxData,
-        with: impl Fn(Tx, common::PublicKey, HashSet<signing::Signable>, D) -> F,
+        with: impl Fn(Tx, common::PublicKey, HashSet<signing::Signable>, D) -> F
+        + MaybeSend
+        + MaybeSync,
         user_data: D,
     ) -> crate::error::Result<()>
     where
-        D: Clone,
+        D: Clone + MaybeSend + MaybeSync,
         F: MaybeSend
             + MaybeSync
             + std::future::Future<Output = crate::error::Result<Tx>>,

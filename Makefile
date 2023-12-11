@@ -84,7 +84,8 @@ check-mainnet:
 check-crates:
 	$(foreach p,$(crates), echo "Checking $(p)" && cargo +$(nightly) check -Z unstable-options --tests -p $(p) && ) \
 		make -C $(wasms_for_tests) check && \
-		cargo check --package namada --target wasm32-unknown-unknown --no-default-features --features "namada-sdk"
+		cargo check --package namada --target wasm32-unknown-unknown --no-default-features --features "namada-sdk" \
+		cargo check --package namada_sdk --all-features
 
 clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets -- -D warnings
 
