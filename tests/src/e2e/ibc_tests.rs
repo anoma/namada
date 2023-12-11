@@ -288,12 +288,12 @@ fn run_two_nets() -> Result<(NamadaCmd, NamadaCmd, Test, Test)> {
     let mut ledger_a =
         run_as!(test_a, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
     ledger_a.exp_string(LEDGER_STARTED)?;
+    ledger_a.exp_string(VALIDATOR_NODE)?;
     // Run Chain B
     std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
     let mut ledger_b =
         run_as!(test_b, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
     ledger_b.exp_string(LEDGER_STARTED)?;
-    ledger_a.exp_string(VALIDATOR_NODE)?;
     ledger_b.exp_string(VALIDATOR_NODE)?;
 
     wait_for_wasm_pre_compile(&mut ledger_a)?;

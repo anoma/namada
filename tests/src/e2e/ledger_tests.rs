@@ -76,7 +76,7 @@ fn start_namada_ledger_node(
     Ok(node)
 }
 
-pub fn start_namada_ledger_node_wait_wasm(
+fn start_namada_ledger_node_wait_wasm(
     test: &Test,
     idx: Option<u64>,
     timeout_sec: Option<u64>,
