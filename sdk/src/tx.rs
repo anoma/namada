@@ -45,7 +45,7 @@ use namada_core::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
 use namada_core::types::transaction::pgf::UpdateStewardCommission;
-use namada_core::types::transaction::pos;
+use namada_core::types::transaction::{pos, TxResult};
 use namada_core::types::{storage, token};
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
@@ -59,7 +59,8 @@ use crate::masp::{make_asset_type, ShieldedContext, ShieldedTransfer};
 use crate::proto::{MaspBuilder, Tx};
 use crate::queries::Client;
 use crate::rpc::{
-    self, query_wasm_code_hash, validate_amount, TxBroadcastData, TxResponse,
+    self, query_wasm_code_hash, validate_amount, InnerTxResult,
+    TxBroadcastData, TxResponse,
 };
 use crate::signing::{self, SigningTxData, TxSourcePostBalance};
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
@@ -128,7 +129,7 @@ pub enum ProcessTxResponse {
     /// Result of submitting a transaction to the mempool
     Broadcast(Response),
     /// Result of dry running transaction
-    DryRun,
+    DryRun(TxResult),
 }
 
 impl ProcessTxResponse {
@@ -137,6 +138,17 @@ impl ProcessTxResponse {
         match self {
             Self::Applied(result) => result.initialized_accounts.clone(),
             _ => vec![],
+        }
+    }
+
+    // Is the transaction applied and was it accepted by all VPs? Note that this
+    // always returns false for dry-run transactions.
+    pub fn is_applied_and_valid(&self) -> bool {
+        match self {
+            ProcessTxResponse::Applied(resp) => resp.code == 0.to_string(),
+            ProcessTxResponse::DryRun(_) | ProcessTxResponse::Broadcast(_) => {
+                false
+            }
         }
     }
 }
@@ -313,23 +325,18 @@ pub async fn broadcast_tx(
     )?;
 
     if response.code == 0.into() {
-        display_line!(
-            context.io(),
-            "Transaction added to mempool: {:?}",
-            response
-        );
+        display_line!(context.io(), "Transaction added to mempool.");
+        tracing::debug!("Transaction mempool response: {:?}", response);
         // Print the transaction identifiers to enable the extraction of
         // acceptance/application results later
         {
             display_line!(
                 context.io(),
-                "Wrapper transaction hash: {:?}",
-                wrapper_tx_hash
+                "Wrapper transaction hash: {wrapper_tx_hash}",
             );
             display_line!(
                 context.io(),
-                "Inner transaction hash: {:?}",
-                decrypted_tx_hash
+                "Inner transaction hash: {decrypted_tx_hash}",
             );
         }
         Ok(response)
@@ -377,24 +384,19 @@ pub async fn submit_tx(
         "Awaiting transaction approval",
     );
 
-    let parsed = {
+    let response = {
         let wrapper_query = rpc::TxEventQuery::Accepted(wrapper_hash.as_str());
         let event =
             rpc::query_tx_status(context, wrapper_query, deadline).await?;
-        let parsed = TxResponse::from_event(event);
-        let tx_to_str = |parsed| {
-            serde_json::to_string_pretty(parsed).map_err(|err| {
-                Error::from(EncodingError::Serde(err.to_string()))
-            })
-        };
-        display_line!(
-            context.io(),
-            "Transaction accepted with result: {}",
-            tx_to_str(&parsed)?
-        );
-        // The transaction is now on chain. We wait for it to be decrypted
-        // and applied
-        if parsed.code == 0.to_string() {
+        let wrapper_resp = TxResponse::from_event(event);
+
+        if display_wrapper_resp_and_get_result(context, &wrapper_resp) {
+            display_line!(
+                context.io(),
+                "Waiting for inner transaction result..."
+            );
+            // The transaction is now on chain. We wait for it to be decrypted
+            // and applied
             // We also listen to the event emitted when the encrypted
             // payload makes its way onto the blockchain
             let decrypted_query =
@@ -402,24 +404,85 @@ pub async fn submit_tx(
             let event =
                 rpc::query_tx_status(context, decrypted_query, deadline)
                     .await?;
-            let parsed = TxResponse::from_event(event);
-            display_line!(
-                context.io(),
-                "Transaction applied with result: {}",
-                tx_to_str(&parsed)?
-            );
-            Ok(parsed)
+            let inner_resp = TxResponse::from_event(event);
+
+            display_inner_resp(context, &inner_resp);
+            Ok(inner_resp)
         } else {
-            Ok(parsed)
+            Ok(wrapper_resp)
         }
     };
 
-    tracing::debug!(
-        transaction = ?to_broadcast,
-        "Transaction approved",
-    );
+    response
+}
 
-    parsed
+/// Display a result of a wrapper tx.
+/// Returns true if the wrapper tx was successful.
+pub fn display_wrapper_resp_and_get_result(
+    context: &impl Namada,
+    resp: &TxResponse,
+) -> bool {
+    let result = if resp.code != 0.to_string() {
+        display_line!(
+            context.io(),
+            "Wrapper transaction failed with error code {}. Used {} gas.",
+            resp.code,
+            resp.gas_used,
+        );
+        false
+    } else {
+        display_line!(
+            context.io(),
+            "Wrapper transaction accepted. Used {} gas.",
+            resp.gas_used,
+        );
+        true
+    };
+
+    tracing::debug!(
+        "Full wrapper result: {}",
+        serde_json::to_string_pretty(resp).unwrap()
+    );
+    result
+}
+
+/// Display a result of an inner tx.
+pub fn display_inner_resp(context: &impl Namada, resp: &TxResponse) {
+    match resp.inner_tx_result() {
+        InnerTxResult::Success(inner) => {
+            display_line!(
+                context.io(),
+                "Transaction was successfully applied. Used {} gas.",
+                inner.gas_used,
+            );
+        }
+        InnerTxResult::VpsRejected(inner) => {
+            let changed_keys: Vec<_> = inner
+                .changed_keys
+                .iter()
+                .map(storage::Key::to_string)
+                .collect();
+            edisplay_line!(
+                context.io(),
+                "Transaction was rejected by VPs: {}.\nChanged keys: {}",
+                serde_json::to_string_pretty(&inner.vps_result.rejected_vps)
+                    .unwrap(),
+                serde_json::to_string_pretty(&changed_keys).unwrap(),
+            );
+        }
+        InnerTxResult::OtherFailure => {
+            edisplay_line!(
+                context.io(),
+                "Transaction failed.\nDetails: {}",
+                serde_json::to_string_pretty(&resp).unwrap()
+            );
+        }
+    }
+
+    tracing::debug!(
+        "Full result: {}",
+        serde_json::to_string_pretty(&resp).unwrap()
+    );
 }
 
 /// decode components of a masp note
@@ -2650,8 +2713,8 @@ async fn expect_dry_broadcast(
 ) -> Result<ProcessTxResponse> {
     match to_broadcast {
         TxBroadcastData::DryRun(tx) => {
-            rpc::dry_run_tx(context, tx.to_bytes()).await?;
-            Ok(ProcessTxResponse::DryRun)
+            let result = rpc::dry_run_tx(context, tx.to_bytes()).await?;
+            Ok(ProcessTxResponse::DryRun(result))
         }
         TxBroadcastData::Live {
             tx,

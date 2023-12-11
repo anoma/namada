@@ -18,6 +18,7 @@ pub mod wrapper;
 
 use std::collections::BTreeSet;
 use std::fmt;
+use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
@@ -41,7 +42,15 @@ pub fn hash_tx(tx_bytes: &[u8]) -> Hash {
 
 /// Transaction application result
 // TODO derive BorshSchema after <https://github.com/near/borsh-rs/issues/82>
-#[derive(Clone, Debug, Default, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+)]
 pub struct TxResult {
     /// Total gas used by the transaction (includes the gas used by VPs)
     pub gas_used: Gas,
@@ -64,7 +73,15 @@ impl TxResult {
 
 /// Result of checking a transaction with validity predicates
 // TODO derive BorshSchema after <https://github.com/near/borsh-rs/issues/82>
-#[derive(Clone, Debug, Default, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+)]
 pub struct VpsResult {
     /// The addresses whose VPs accepted the transaction
     pub accepted_vps: BTreeSet<Address>,
@@ -80,18 +97,30 @@ pub struct VpsResult {
 
 impl fmt::Display for TxResult {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Transaction is {}. Gas used: {};{} VPs result: {}",
-            if self.is_accepted() {
-                "valid"
-            } else {
-                "invalid"
-            },
-            self.gas_used,
-            iterable_to_string("Changed keys", self.changed_keys.iter()),
-            self.vps_result,
-        )
+        if f.alternate() {
+            write!(
+                f,
+                "Transaction is {}. Gas used: {};{} VPs result: {}",
+                if self.is_accepted() {
+                    "valid"
+                } else {
+                    "invalid"
+                },
+                self.gas_used,
+                iterable_to_string("Changed keys", self.changed_keys.iter()),
+                self.vps_result,
+            )
+        } else {
+            write!(f, "{}", serde_json::to_string(self).unwrap())
+        }
+    }
+}
+
+impl FromStr for TxResult {
+    type Err = serde_json::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str(s)
     }
 }
 

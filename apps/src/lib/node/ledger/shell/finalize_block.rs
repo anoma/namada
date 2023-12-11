@@ -491,7 +491,8 @@ where
                         tx_event["code"] = ErrorCodes::InvalidTx.into();
                     }
                     tx_event["gas_used"] = result.gas_used.to_string();
-                    tx_event["info"] = result.to_string();
+                    tx_event["info"] = "Check inner_tx for result.".to_string();
+                    tx_event["inner_tx"] = result.to_string();
                 }
                 Err(msg) => {
                     tracing::info!(

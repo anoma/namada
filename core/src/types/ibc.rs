@@ -60,7 +60,15 @@ impl FromStr for IbcTokenHash {
 
 /// Wrapped IbcEvent
 #[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, BorshSchema, PartialEq, Eq,
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
 )]
 pub struct IbcEvent {
     /// The IBC event type
