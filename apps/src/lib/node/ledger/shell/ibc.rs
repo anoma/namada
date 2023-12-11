@@ -8,11 +8,11 @@ use namada::core::ledger::ibc::{
     IbcActions, IbcCommonContext, IbcStorageContext,
 };
 use namada::core::ledger::storage_api::Error;
-use namada::ibc::applications::transfer::msgs::transfer::MsgTransfer;
-use namada::ibc::applications::transfer::packet::PacketData;
-use namada::ibc::applications::transfer::PrefixedCoin;
-use namada::ibc::core::ics04_channel::timeout::TimeoutHeight;
-use namada::ibc::core::Msg;
+use namada::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
+use namada::ibc::apps::transfer::types::packet::PacketData;
+use namada::ibc::apps::transfer::types::PrefixedCoin;
+use namada::ibc::core::channel::types::timeout::TimeoutHeight;
+use namada::ibc::primitives::Msg;
 use namada::ledger::parameters::read_epoch_duration_parameter;
 use namada::ledger::storage::wl_storage::WriteLogAndStorage;
 use namada::ledger::storage::write_log::WriteLog;
