@@ -3586,6 +3586,21 @@ fn change_consensus_key() -> Result<()> {
         "--validator",
         "validator-0",
         "--signing-keys",
+        "validator-1-balance-key",
+        "--node",
+        &validator_0_rpc,
+        "--unsafe-dont-encrypt",
+    ];
+    let mut client =
+        run_as!(test, Who::Validator(1), Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction is invalid.")?;
+    client.assert_success();
+
+    let tx_args = vec![
+        "change-consensus-key",
+        "--validator",
+        "validator-0",
+        "--signing-keys",
         "validator-0-balance-key",
         "--node",
         &validator_0_rpc,

@@ -450,7 +450,7 @@ pub async fn submit_change_consensus_key(
         tx::dump_tx(namada.io(), &tx_args, tx);
     } else {
         sign(namada, &mut tx, &tx_args, signing_data).await?;
-        namada.submit(tx, &tx_args).await?;
+        let res = namada.submit(tx, &tx_args).await?;
 
         if !tx_args.dry_run {
             namada
@@ -459,15 +459,24 @@ pub async fn submit_change_consensus_key(
                 .save()
                 .unwrap_or_else(|err| edisplay_line!(namada.io(), "{}", err));
 
-            display_line!(
-                namada.io(),
-                "New consensus key stored with alias \
-                 \"{consensus_key_alias}\". It will become active \
-                 {EPOCH_SWITCH_BLOCKS_DELAY} blocks before pipeline offset \
-                 from the current epoch, at which point you'll need to give \
-                 the new key to CometBFT in order to be able to sign with it \
-                 in consensus.",
-            );
+            // TODO: handle parsing errors
+            if let ProcessTxResponse::Applied(resp) = res {
+                let tx_validity_str = resp.info.split('.').next().unwrap();
+                dbg!(tx_validity_str);
+                let is_valid = tx_validity_str.split(' ').last().unwrap();
+                dbg!(is_valid);
+                if is_valid == "valid" {
+                    display_line!(
+                        namada.io(),
+                        "New consensus key stored with alias \
+                         \"{consensus_key_alias}\". It will become active \
+                         {EPOCH_SWITCH_BLOCKS_DELAY} blocks before pipeline \
+                         offset from the current epoch, at which point you'll \
+                         need to give the new key to CometBFT in order to be \
+                         able to sign with it in consensus.",
+                    );
+                }
+            }
         } else {
             display_line!(
                 namada.io(),
