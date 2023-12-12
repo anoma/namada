@@ -36,15 +36,15 @@ pub struct UpdateStewardCommission {
 pub mod tests {
     use proptest::{collection, prop_compose};
 
-    use crate::types::address::testing::arb_address;
+    use crate::types::address::testing::arb_non_internal_address;
     use crate::types::dec::testing::arb_dec;
     use crate::types::transaction::pgf::UpdateStewardCommission;
 
     prop_compose! {
         /// Generate an arbitraary steward commission update
         pub fn arb_update_steward_commission()(
-            steward in arb_address(),
-            commission in collection::hash_map(arb_address(), arb_dec(), 0..10),
+            steward in arb_non_internal_address(),
+            commission in collection::hash_map(arb_non_internal_address(), arb_dec(), 0..10),
         ) -> UpdateStewardCommission {
             UpdateStewardCommission {
                 steward,

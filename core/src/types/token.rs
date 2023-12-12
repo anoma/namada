@@ -1309,7 +1309,9 @@ pub mod tests {
     use proptest::{option, prop_compose};
 
     use super::*;
-    use crate::types::address::testing::arb_address;
+    use crate::types::address::testing::{
+        arb_established_address, arb_non_internal_address,
+    };
     use crate::types::token::testing::arb_amount;
 
     prop_compose! {
@@ -1332,9 +1334,9 @@ pub mod tests {
     prop_compose! {
         /// Generate a transfer
         pub fn arb_transfer()(
-            source in arb_address(),
-            target in arb_address(),
-            token in arb_address(),
+            source in arb_non_internal_address(),
+            target in arb_non_internal_address(),
+            token in arb_established_address().prop_map(Address::Established),
             amount in arb_denominated_amount(),
             key in option::of("[a-zA-Z0-9_]*"),
         ) -> Transfer {

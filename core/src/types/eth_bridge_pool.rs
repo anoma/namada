@@ -306,9 +306,12 @@ pub struct GasFee {
 /// Tests and strategies for the Ethereum bridge pool
 pub mod tests {
     use proptest::prop_compose;
+    use proptest::strategy::Strategy;
 
     use super::*;
-    use crate::types::address::testing::arb_address;
+    use crate::types::address::testing::{
+        arb_established_address, arb_non_internal_address,
+    };
     use crate::types::ethereum_events::testing::arb_eth_address;
     use crate::types::token::testing::arb_amount;
 
@@ -329,8 +332,8 @@ pub mod tests {
         /// Generate an arbitrary Ethereum gas fee
         pub fn arb_gas_fee()(
             amount in arb_amount(),
-            payer in arb_address(),
-            token in arb_address(),
+            payer in arb_non_internal_address(),
+            token in arb_established_address().prop_map(Address::Established),
         ) -> GasFee {
             GasFee {
                 amount,
@@ -359,7 +362,7 @@ pub mod tests {
             kind in arb_transfer_to_ethereum_kind(),
             asset in arb_eth_address(),
             recipient in arb_eth_address(),
-            sender in arb_address(),
+            sender in arb_non_internal_address(),
             amount in arb_amount(),
         ) -> TransferToEthereum {
             TransferToEthereum {

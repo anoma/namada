@@ -319,7 +319,7 @@ pub mod tests {
     use proptest::{collection, option, prop_compose};
 
     use super::*;
-    use crate::types::address::testing::arb_address;
+    use crate::types::address::testing::arb_non_internal_address;
     use crate::types::hash::tests::arb_hash;
     use crate::types::token::testing::arb_amount;
 
@@ -338,7 +338,7 @@ pub mod tests {
     prop_compose! {
         /// Generate an arbitrary PGF target
         pub fn arb_pgf_target()(
-            target in arb_address(),
+            target in arb_non_internal_address(),
             amount in arb_amount(),
         ) -> PGFTarget {
             PGFTarget {
@@ -362,9 +362,12 @@ pub mod tests {
             .prop_map(ProposalType::Default)
             .boxed()
             .prop_union(
-                collection::hash_set(arb_add_remove(arb_address()), 0..10)
-                    .prop_map(ProposalType::PGFSteward)
-                    .boxed(),
+                collection::hash_set(
+                    arb_add_remove(arb_non_internal_address()),
+                    0..10,
+                )
+                .prop_map(ProposalType::PGFSteward)
+                .boxed(),
             )
             .or(collection::vec(arb_pgf_action(), 0..10)
                 .prop_map(ProposalType::PGFPayment)

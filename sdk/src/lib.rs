@@ -762,7 +762,9 @@ pub mod testing {
     use ibc::primitives::proto::Any;
     use namada_core::ledger::governance::storage::proposal::ProposalType;
     use namada_core::ledger::ibc::tests::arb_ibc_any;
-    use namada_core::types::address::testing::arb_address;
+    use namada_core::types::address::testing::{
+        arb_established_address, arb_non_internal_address,
+    };
     use namada_core::types::eth_bridge_pool::PendingTransfer;
     use namada_core::types::hash::tests::arb_hash;
     use namada_core::types::storage::tests::arb_epoch;
@@ -881,7 +883,7 @@ pub mod testing {
         // Generate an arbitrary fee
         pub fn arb_fee()(
             amount_per_gas_unit in arb_denominated_amount(),
-            token in arb_address(),
+            token in arb_established_address().prop_map(Address::Established),
         ) -> Fee {
             Fee {
                 amount_per_gas_unit,
@@ -1188,7 +1190,7 @@ pub mod testing {
         pub fn arb_unjail_validator_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
-            address in arb_address(),
+            address in arb_non_internal_address(),
             code_hash in arb_hash(),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
@@ -1204,7 +1206,7 @@ pub mod testing {
         pub fn arb_deactivate_validator_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
-            address in arb_address(),
+            address in arb_non_internal_address(),
             code_hash in arb_hash(),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
@@ -1220,7 +1222,7 @@ pub mod testing {
         pub fn arb_reactivate_validator_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
-            address in arb_address(),
+            address in arb_non_internal_address(),
             code_hash in arb_hash(),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
@@ -1284,7 +1286,7 @@ pub mod testing {
         pub fn arb_resign_steward_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
-            steward in arb_address(),
+            steward in arb_non_internal_address(),
             code_hash in arb_hash(),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));

@@ -58,7 +58,7 @@ pub mod tests {
     use proptest::{collection, option, prop_compose};
 
     use super::*;
-    use crate::types::address::testing::arb_address;
+    use crate::types::address::testing::arb_non_internal_address;
     use crate::types::hash::tests::arb_hash;
     use crate::types::key::testing::arb_common_pk;
 
@@ -84,7 +84,7 @@ pub mod tests {
         pub fn arb_update_account()(
             public_keys in collection::vec(arb_common_pk(), 0..10),
         )(
-            addr in arb_address(),
+            addr in arb_non_internal_address(),
             vp_code_hash in option::of(arb_hash()),
             threshold in option::of(0..=public_keys.len() as u8),
             public_keys in Just(public_keys),
