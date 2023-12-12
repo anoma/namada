@@ -18,7 +18,7 @@ fn validate_tx(
     tx_data: Vec<u8>,
     // Address of this VP
     addr: Address,
-    // Storage keys that have been modified by the transation, relevant to this VP
+    // Storage keys that have been modified by the transaction, relevant to this VP
     keys_changed: BTreeSet<storage::Key>,
     // Set of all the addresses whose VP was triggered by the transaction
     verifiers: BTreeSet<Address>,
