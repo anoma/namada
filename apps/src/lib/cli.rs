@@ -2948,6 +2948,7 @@ pub mod args {
     pub const TOKEN: Arg<WalletAddress> = arg("token");
     pub const TRANSFER_SOURCE: Arg<WalletTransferSource> = arg("source");
     pub const TRANSFER_TARGET: Arg<WalletTransferTarget> = arg("target");
+    pub const TRANSPARENT: ArgFlag = flag("transparent");
     pub const TX_HASH: Arg<String> = arg("tx-hash");
     pub const THRESHOLD: ArgOpt<u8> = arg_opt("threshold");
     pub const UNSAFE_DONT_ENCRYPT: ArgFlag = flag("unsafe-dont-encrypt");
@@ -6110,14 +6111,16 @@ pub mod args {
 
     impl Args for KeyAddressList {
         fn parse(matches: &ArgMatches) -> Self {
-            let shielded = SHIELDED.parse(matches);
             let decrypt = DECRYPT.parse(matches);
+            let transparent_only = TRANSPARENT.parse(matches);
+            let shielded_only = SHIELDED.parse(matches);
             let keys_only = LIST_FIND_KEYS_ONLY.parse(matches);
             let addresses_only = LIST_FIND_ADDRESSES_ONLY.parse(matches);
             let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
             Self {
-                shielded,
                 decrypt,
+                transparent_only,
+                shielded_only,
                 keys_only,
                 addresses_only,
                 unsafe_show_secret,
@@ -6125,22 +6128,34 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(SHIELDED.def().help(
-                "List viewing / spending keys and payment addresses for the \
-                 shielded pool.",
-            ))
-            .arg(DECRYPT.def().help("Decrypt keys that are encrypted."))
-            .arg(LIST_FIND_KEYS_ONLY.def().help("List keys only."))
-            .arg(LIST_FIND_ADDRESSES_ONLY.def().help("List addresses only."))
-            .group(ArgGroup::new("only_group").args([
-                LIST_FIND_KEYS_ONLY.name,
-                LIST_FIND_ADDRESSES_ONLY.name,
-            ]))
-            .arg(
-                UNSAFE_SHOW_SECRET
-                    .def()
-                    .help("UNSAFE: Print the secret / spending keys."),
-            )
+            app.arg(DECRYPT.def().help("Decrypt keys that are encrypted."))
+                .arg(
+                    TRANSPARENT
+                        .def()
+                        .help("List transparent keys / addresses only."),
+                )
+                .arg(
+                    SHIELDED.def().help(
+                        "List keys / addresses of the shielded pool only.",
+                    ),
+                )
+                .group(
+                    ArgGroup::new("only_group_1")
+                        .args([TRANSPARENT.name, SHIELDED.name]),
+                )
+                .arg(LIST_FIND_KEYS_ONLY.def().help("List keys only."))
+                .arg(
+                    LIST_FIND_ADDRESSES_ONLY.def().help("List addresses only."),
+                )
+                .group(ArgGroup::new("only_group_2").args([
+                    LIST_FIND_KEYS_ONLY.name,
+                    LIST_FIND_ADDRESSES_ONLY.name,
+                ]))
+                .arg(
+                    UNSAFE_SHOW_SECRET
+                        .def()
+                        .help("UNSAFE: Print the secret / spending keys."),
+                )
         }
     }
 

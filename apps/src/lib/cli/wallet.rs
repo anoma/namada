@@ -73,21 +73,23 @@ impl CliApi {
 
 /// List spending keys.
 fn spending_keys_list(
-    ctx: Context,
+    wallet: &Wallet<CliWalletUtils>,
     io: &impl Io,
     decrypt: bool,
     unsafe_show_secret: bool,
+    show_hint: bool,
 ) {
-    let wallet = load_wallet(ctx);
     let known_view_keys = wallet.get_viewing_keys();
     let known_spend_keys = wallet.get_spending_keys();
     if known_view_keys.is_empty() {
-        display_line!(
-            io,
-            "No known keys. Try `add --alias my-addr --value ...` to add a \
-             new key to the wallet, or `gen --shielded --alias my-key` to \
-             generate a new key.",
-        );
+        if show_hint {
+            display_line!(
+                io,
+                "No known keys. Try `add --alias my-addr --value ...` to add \
+                 a new key to the wallet, or `gen --shielded --alias my-key` \
+                 to generate a new key.",
+            );
+        }
     } else {
         let stdout = io::stdout();
         let mut w = stdout.lock();
@@ -147,15 +149,20 @@ fn spending_keys_list(
 }
 
 /// List payment addresses.
-fn payment_addresses_list(ctx: Context, io: &impl Io) {
-    let wallet = load_wallet(ctx);
+fn payment_addresses_list(
+    wallet: &Wallet<CliWalletUtils>,
+    io: &impl Io,
+    show_hint: bool,
+) {
     let known_addresses = wallet.get_payment_addrs();
     if known_addresses.is_empty() {
-        display_line!(
-            io,
-            "No known payment addresses. Try `gen-payment-addr --alias \
-             my-payment-addr` to generate a new payment address.",
-        );
+        if show_hint {
+            display_line!(
+                io,
+                "No known payment addresses. Try `gen-payment-addr --alias \
+                 my-payment-addr` to generate a new payment address.",
+            );
+        }
     } else {
         let stdout = io::stdout();
         let mut w = stdout.lock();
@@ -488,47 +495,52 @@ async fn key_derive(
     }
 }
 
-/// List keys
-fn key_list(
-    ctx: Context,
-    io: &impl Io,
-    args::KeyAddressList {
-        shielded,
-        decrypt,
-        unsafe_show_secret,
-        ..
-    }: args::KeyAddressList,
-) {
-    if !shielded {
-        transparent_keys_list(ctx, io, decrypt, unsafe_show_secret)
-    } else {
-        spending_keys_list(ctx, io, decrypt, unsafe_show_secret)
-    }
-}
-
-/// List addresses
-fn address_list(
-    ctx: Context,
-    io: &impl Io,
-    args::KeyAddressList { shielded, .. }: args::KeyAddressList,
-) {
-    if !shielded {
-        transparent_addresses_list(ctx, io)
-    } else {
-        payment_addresses_list(ctx, io)
-    }
-}
-
 /// List keys and addresses
 fn key_address_list(
     ctx: Context,
     io: &impl Io,
-    args_key_address_list: args::KeyAddressList,
+    args::KeyAddressList {
+        decrypt,
+        transparent_only,
+        shielded_only,
+        keys_only,
+        addresses_only,
+        unsafe_show_secret,
+    }: args::KeyAddressList,
 ) {
-    if !args_key_address_list.addresses_only {
-        key_list(ctx, io, args_key_address_list)
-    } else if !args_key_address_list.keys_only {
-        address_list(ctx, io, args_key_address_list)
+    let wallet = load_wallet(ctx);
+    if !shielded_only {
+        if !addresses_only {
+            transparent_keys_list(
+                &wallet,
+                io,
+                decrypt,
+                unsafe_show_secret,
+                transparent_only && keys_only,
+            )
+        }
+        if !keys_only {
+            transparent_addresses_list(
+                &wallet,
+                io,
+                transparent_only && addresses_only,
+            )
+        }
+    }
+
+    if !transparent_only {
+        if !addresses_only {
+            spending_keys_list(
+                &wallet,
+                io,
+                decrypt,
+                unsafe_show_secret,
+                shielded_only && keys_only,
+            )
+        }
+        if !keys_only {
+            payment_addresses_list(&wallet, io, shielded_only && addresses_only)
+        }
     }
 }
 
@@ -892,18 +904,21 @@ fn shielded_key_address_find_by_alias(
 
 /// List all known keys.
 fn transparent_keys_list(
-    ctx: Context,
+    wallet: &Wallet<CliWalletUtils>,
     io: &impl Io,
     decrypt: bool,
     unsafe_show_secret: bool,
+    show_hint: bool,
 ) {
-    let wallet = load_wallet(ctx);
     let known_public_keys = wallet.get_public_keys();
     if known_public_keys.is_empty() {
-        display_line!(
-            io,
-            "No known keys. Try `gen --alias my-key` to generate a new key.",
-        );
+        if show_hint {
+            display_line!(
+                io,
+                "No known keys. Try `gen --alias my-key` to generate a new \
+                 key.",
+            );
+        }
     } else {
         let stdout = io::stdout();
         let mut w = stdout.lock();
@@ -1010,15 +1025,20 @@ fn key_import(
 }
 
 /// List all known transparent addresses.
-fn transparent_addresses_list(ctx: Context, io: &impl Io) {
-    let wallet = load_wallet(ctx);
+fn transparent_addresses_list(
+    wallet: &Wallet<CliWalletUtils>,
+    io: &impl Io,
+    show_hint: bool,
+) {
     let known_addresses = wallet.get_addresses();
     if known_addresses.is_empty() {
-        display_line!(
-            io,
-            "No known addresses. Try `gen --alias my-addr` to generate a new \
-             implicit address.",
-        );
+        if show_hint {
+            display_line!(
+                io,
+                "No known addresses. Try `gen --alias my-addr` to generate a \
+                 new implicit address.",
+            );
+        }
     } else {
         let stdout = io::stdout();
         let mut w = stdout.lock();

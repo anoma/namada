@@ -2079,12 +2079,14 @@ pub struct KeyDerive {
 }
 
 /// Wallet list arguments
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct KeyAddressList {
-    /// Whether to list MASP spending keys
-    pub shielded: bool,
-    /// Don't decrypt keys
+    /// Whether to decrypt secret / spending keys
     pub decrypt: bool,
+    /// Whether to list transparent secret keys only
+    pub transparent_only: bool,
+    /// Whether to list MASP spending keys only
+    pub shielded_only: bool,
     /// List keys only
     pub keys_only: bool,
     /// List addresses only
