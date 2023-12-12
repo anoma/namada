@@ -59,7 +59,7 @@ pub mod tests {
 
     use super::*;
     use crate::types::address::testing::arb_non_internal_address;
-    use crate::types::hash::tests::arb_hash;
+    use crate::types::hash::testing::arb_hash;
     use crate::types::key::testing::arb_common_pk;
 
     prop_compose! {

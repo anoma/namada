@@ -303,8 +303,8 @@ pub struct GasFee {
 }
 
 #[cfg(any(test, feature = "testing"))]
-/// Tests and strategies for the Ethereum bridge pool
-pub mod tests {
+/// Testing helpers and strategies for the Ethereum bridge pool
+pub mod testing {
     use proptest::prop_compose;
     use proptest::strategy::Strategy;
 

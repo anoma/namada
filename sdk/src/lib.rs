@@ -761,14 +761,14 @@ where
 pub mod testing {
     use ibc::primitives::proto::Any;
     use namada_core::ledger::governance::storage::proposal::ProposalType;
-    use namada_core::ledger::ibc::tests::arb_ibc_any;
+    use namada_core::ledger::ibc::testing::arb_ibc_any;
     use namada_core::types::address::testing::{
         arb_established_address, arb_non_internal_address,
     };
     use namada_core::types::eth_bridge_pool::PendingTransfer;
-    use namada_core::types::hash::tests::arb_hash;
-    use namada_core::types::storage::tests::arb_epoch;
-    use namada_core::types::token::tests::{
+    use namada_core::types::hash::testing::arb_hash;
+    use namada_core::types::storage::testing::arb_epoch;
+    use namada_core::types::token::testing::{
         arb_denominated_amount, arb_transfer,
     };
     use namada_core::types::token::Transfer;
@@ -789,7 +789,7 @@ pub mod testing {
 
     use super::*;
     use crate::core::types::chain::ChainId;
-    use crate::core::types::eth_bridge_pool::tests::arb_pending_transfer;
+    use crate::core::types::eth_bridge_pool::testing::arb_pending_transfer;
     use crate::core::types::key::testing::arb_common_pk;
     use crate::core::types::time::{DateTime, DateTimeUtc, Utc};
     use crate::core::types::transaction::account::tests::{

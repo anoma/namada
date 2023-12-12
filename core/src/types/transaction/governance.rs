@@ -171,10 +171,10 @@ pub mod tests {
     use proptest::{collection, prop_compose};
 
     use super::*;
-    use crate::ledger::governance::storage::proposal::tests::arb_proposal_type;
-    use crate::ledger::governance::storage::vote::tests::arb_proposal_vote;
+    use crate::ledger::governance::storage::proposal::testing::arb_proposal_type;
+    use crate::ledger::governance::storage::vote::testing::arb_proposal_vote;
     use crate::types::address::testing::arb_non_internal_address;
-    use crate::types::hash::tests::arb_hash;
+    use crate::types::hash::testing::arb_hash;
     use crate::types::storage::testing::arb_epoch;
 
     prop_compose! {

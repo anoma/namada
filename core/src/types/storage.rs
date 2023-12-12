@@ -1433,21 +1433,13 @@ impl<E> GetEventNonce for InnerEthEventsQueue<E> {
     }
 }
 
-#[cfg(any(test, feature = "testing"))]
+#[cfg(test)]
 /// Tests and strategies for storage
 pub mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    #[cfg(test)]
     use crate::types::address::testing::arb_address;
-
-    prop_compose! {
-        /// Generate an arbitrary epoch
-        pub fn arb_epoch()(epoch: u64) -> Epoch {
-            Epoch(epoch)
-        }
-    }
 
     proptest! {
         /// Tests that any key that doesn't contain reserved prefixes is valid.
@@ -1879,6 +1871,13 @@ pub mod testing {
     use crate::types::address::testing::{
         arb_address, arb_non_internal_address,
     };
+
+    prop_compose! {
+        /// Generate an arbitrary epoch
+        pub fn arb_epoch()(epoch: u64) -> Epoch {
+            Epoch(epoch)
+        }
+    }
 
     /// Generate an arbitrary [`Key`].
     pub fn arb_key() -> impl Strategy<Value = Key> {

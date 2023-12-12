@@ -298,8 +298,8 @@ pub fn received_ibc_token(
 }
 
 #[cfg(any(test, feature = "testing"))]
-/// Tests ans strategies for IBC
-pub mod tests {
+/// Testing helpers ans strategies for IBC
+pub mod testing {
     use std::str::FromStr;
 
     use ibc::apps::transfer::types::packet::PacketData;

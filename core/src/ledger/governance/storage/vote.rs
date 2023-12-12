@@ -146,8 +146,8 @@ impl PartialEq<VoteType> for ProposalType {
 }
 
 #[cfg(any(test, feature = "testing"))]
-/// Tests and strategies for governance votes
-pub mod tests {
+/// Testing helpers and strategies for governance votes
+pub mod testing {
     use proptest::prelude::{Just, Strategy};
     use proptest::prop_compose;
 
