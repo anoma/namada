@@ -458,179 +458,6 @@ where
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
-fn insert_into_consensus_and_demote_to_below_cap<S>(
-    storage: &mut S,
-    validator: &Address,
-    tokens_post: token::Amount,
-    min_consensus_amount: token::Amount,
-    current_epoch: Epoch,
-    offset: u64,
-    consensus_set: &ConsensusValidatorSet,
-    below_capacity_set: &BelowCapacityValidatorSet,
-) -> storage_api::Result<()>
-where
-    S: StorageRead + StorageWrite,
-{
-    // First, remove the last position min consensus validator
-    let consensus_vals_min = consensus_set.at(&min_consensus_amount);
-    let last_position_of_min_consensus_vals =
-        find_last_position(&consensus_vals_min, storage)?
-            .expect("There must be always be at least 1 consensus validator");
-    let removed_min_consensus = consensus_vals_min
-        .remove(storage, &last_position_of_min_consensus_vals)?
-        .expect("There must be always be at least 1 consensus validator");
-
-    let offset_epoch = current_epoch + offset;
-
-    // Insert the min consensus validator into the below-capacity
-    // set
-    insert_validator_into_set(
-        &below_capacity_set.at(&min_consensus_amount.into()),
-        storage,
-        &offset_epoch,
-        &removed_min_consensus,
-    )?;
-    validator_state_handle(&removed_min_consensus).set(
-        storage,
-        ValidatorState::BelowCapacity,
-        current_epoch,
-        offset,
-    )?;
-
-    // Insert the current validator into the consensus set
-    insert_validator_into_set(
-        &consensus_set.at(&tokens_post),
-        storage,
-        &offset_epoch,
-        validator,
-    )?;
-    validator_state_handle(validator).set(
-        storage,
-        ValidatorState::Consensus,
-        current_epoch,
-        offset,
-    )?;
-    Ok(())
-}
-
-/// Find the first (lowest) position in a validator set if it is not empty
-pub fn find_first_position<S>(
-    handle: &ValidatorPositionAddresses,
-    storage: &S,
-) -> storage_api::Result<Option<Position>>
-where
-    S: StorageRead,
-{
-    let lowest_position = handle
-        .iter(storage)?
-        .next()
-        .transpose()?
-        .map(|(position, _addr)| position);
-    Ok(lowest_position)
-}
-
-/// Find the last (greatest) position in a validator set if it is not empty
-fn find_last_position<S>(
-    handle: &ValidatorPositionAddresses,
-    storage: &S,
-) -> storage_api::Result<Option<Position>>
-where
-    S: StorageRead,
-{
-    let position = handle
-        .iter(storage)?
-        .last()
-        .transpose()?
-        .map(|(position, _addr)| position);
-    Ok(position)
-}
-
-/// Find next position in a validator set or 0 if empty
-fn find_next_position<S>(
-    handle: &ValidatorPositionAddresses,
-    storage: &S,
-) -> storage_api::Result<Position>
-where
-    S: StorageRead,
-{
-    let position_iter = handle.iter(storage)?;
-    let next = position_iter
-        .last()
-        .transpose()?
-        .map(|(position, _address)| position.next())
-        .unwrap_or_default();
-    Ok(next)
-}
-
-fn get_min_consensus_validator_amount<S>(
-    handle: &ConsensusValidatorSet,
-    storage: &S,
-) -> storage_api::Result<token::Amount>
-where
-    S: StorageRead,
-{
-    Ok(handle
-        .iter(storage)?
-        .next()
-        .transpose()?
-        .map(|(subkey, _address)| match subkey {
-            NestedSubKey::Data {
-                key,
-                nested_sub_key: _,
-            } => key,
-        })
-        .unwrap_or_default())
-}
-
-/// Returns `Ok(None)` when the below capacity set is empty.
-pub fn get_max_below_capacity_validator_amount<S>(
-    handle: &BelowCapacityValidatorSet,
-    storage: &S,
-) -> storage_api::Result<Option<token::Amount>>
-where
-    S: StorageRead,
-{
-    Ok(handle
-        .iter(storage)?
-        .next()
-        .transpose()?
-        .map(|(subkey, _address)| match subkey {
-            NestedSubKey::Data {
-                key,
-                nested_sub_key: _,
-            } => token::Amount::from(key),
-        }))
-}
-
-/// Inserts a validator into the provided `handle` within some validator set at
-/// the next position. Also updates the validator set position for the
-/// validator.
-pub fn insert_validator_into_set<S>(
-    handle: &ValidatorPositionAddresses,
-    storage: &mut S,
-    epoch: &Epoch,
-    address: &Address,
-) -> storage_api::Result<()>
-where
-    S: StorageRead + StorageWrite,
-{
-    let next_position = find_next_position(handle, storage)?;
-    tracing::debug!(
-        "Inserting validator {} into position {:?} at epoch {}",
-        address.clone(),
-        next_position.clone(),
-        epoch.clone()
-    );
-    handle.insert(storage, next_position, address.clone())?;
-    validator_set_positions_handle().at(epoch).insert(
-        storage,
-        address.clone(),
-        next_position,
-    )?;
-    Ok(())
-}
-
 /// Remove a validator from the consensus validator set
 pub fn remove_consensus_validator<S>(
     storage: &mut S,
@@ -1049,6 +876,179 @@ where
     // Purge old epochs of all validator addresses
     validator_addresses_handle.update_data(storage, params, current_epoch)?;
 
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn insert_into_consensus_and_demote_to_below_cap<S>(
+    storage: &mut S,
+    validator: &Address,
+    tokens_post: token::Amount,
+    min_consensus_amount: token::Amount,
+    current_epoch: Epoch,
+    offset: u64,
+    consensus_set: &ConsensusValidatorSet,
+    below_capacity_set: &BelowCapacityValidatorSet,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    // First, remove the last position min consensus validator
+    let consensus_vals_min = consensus_set.at(&min_consensus_amount);
+    let last_position_of_min_consensus_vals =
+        find_last_position(&consensus_vals_min, storage)?
+            .expect("There must be always be at least 1 consensus validator");
+    let removed_min_consensus = consensus_vals_min
+        .remove(storage, &last_position_of_min_consensus_vals)?
+        .expect("There must be always be at least 1 consensus validator");
+
+    let offset_epoch = current_epoch + offset;
+
+    // Insert the min consensus validator into the below-capacity
+    // set
+    insert_validator_into_set(
+        &below_capacity_set.at(&min_consensus_amount.into()),
+        storage,
+        &offset_epoch,
+        &removed_min_consensus,
+    )?;
+    validator_state_handle(&removed_min_consensus).set(
+        storage,
+        ValidatorState::BelowCapacity,
+        current_epoch,
+        offset,
+    )?;
+
+    // Insert the current validator into the consensus set
+    insert_validator_into_set(
+        &consensus_set.at(&tokens_post),
+        storage,
+        &offset_epoch,
+        validator,
+    )?;
+    validator_state_handle(validator).set(
+        storage,
+        ValidatorState::Consensus,
+        current_epoch,
+        offset,
+    )?;
+    Ok(())
+}
+
+/// Find the first (lowest) position in a validator set if it is not empty
+fn find_first_position<S>(
+    handle: &ValidatorPositionAddresses,
+    storage: &S,
+) -> storage_api::Result<Option<Position>>
+where
+    S: StorageRead,
+{
+    let lowest_position = handle
+        .iter(storage)?
+        .next()
+        .transpose()?
+        .map(|(position, _addr)| position);
+    Ok(lowest_position)
+}
+
+/// Find the last (greatest) position in a validator set if it is not empty
+fn find_last_position<S>(
+    handle: &ValidatorPositionAddresses,
+    storage: &S,
+) -> storage_api::Result<Option<Position>>
+where
+    S: StorageRead,
+{
+    let position = handle
+        .iter(storage)?
+        .last()
+        .transpose()?
+        .map(|(position, _addr)| position);
+    Ok(position)
+}
+
+/// Find next position in a validator set or 0 if empty
+fn find_next_position<S>(
+    handle: &ValidatorPositionAddresses,
+    storage: &S,
+) -> storage_api::Result<Position>
+where
+    S: StorageRead,
+{
+    let position_iter = handle.iter(storage)?;
+    let next = position_iter
+        .last()
+        .transpose()?
+        .map(|(position, _address)| position.next())
+        .unwrap_or_default();
+    Ok(next)
+}
+
+fn get_min_consensus_validator_amount<S>(
+    handle: &ConsensusValidatorSet,
+    storage: &S,
+) -> storage_api::Result<token::Amount>
+where
+    S: StorageRead,
+{
+    Ok(handle
+        .iter(storage)?
+        .next()
+        .transpose()?
+        .map(|(subkey, _address)| match subkey {
+            NestedSubKey::Data {
+                key,
+                nested_sub_key: _,
+            } => key,
+        })
+        .unwrap_or_default())
+}
+
+/// Returns `Ok(None)` when the below capacity set is empty.
+fn get_max_below_capacity_validator_amount<S>(
+    handle: &BelowCapacityValidatorSet,
+    storage: &S,
+) -> storage_api::Result<Option<token::Amount>>
+where
+    S: StorageRead,
+{
+    Ok(handle
+        .iter(storage)?
+        .next()
+        .transpose()?
+        .map(|(subkey, _address)| match subkey {
+            NestedSubKey::Data {
+                key,
+                nested_sub_key: _,
+            } => token::Amount::from(key),
+        }))
+}
+
+/// Inserts a validator into the provided `handle` within some validator set at
+/// the next position. Also updates the validator set position for the
+/// validator.
+fn insert_validator_into_set<S>(
+    handle: &ValidatorPositionAddresses,
+    storage: &mut S,
+    epoch: &Epoch,
+    address: &Address,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let next_position = find_next_position(handle, storage)?;
+    tracing::debug!(
+        "Inserting validator {} into position {:?} at epoch {}",
+        address.clone(),
+        next_position.clone(),
+        epoch.clone()
+    );
+    handle.insert(storage, next_position, address.clone())?;
+    validator_set_positions_handle().at(epoch).insert(
+        storage,
+        address.clone(),
+        next_position,
+    )?;
     Ok(())
 }
 

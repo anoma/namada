@@ -34,63 +34,6 @@ use crate::{
     FoldRedelegatedBondsResult, OwnedPosParams, PosParams,
 };
 
-/// Calculate the cubic slashing rate using all slashes within a window around
-/// the given infraction epoch. There is no cap on the rate applied within this
-/// function.
-pub fn compute_cubic_slash_rate<S>(
-    storage: &S,
-    params: &PosParams,
-    infraction_epoch: Epoch,
-) -> storage_api::Result<Dec>
-where
-    S: StorageRead,
-{
-    tracing::debug!(
-        "Computing the cubic slash rate for infraction epoch \
-         {infraction_epoch}."
-    );
-    let mut sum_vp_fraction = Dec::zero();
-    let (start_epoch, end_epoch) =
-        params.cubic_slash_epoch_window(infraction_epoch);
-
-    for epoch in Epoch::iter_bounds_inclusive(start_epoch, end_epoch) {
-        let consensus_stake =
-            Dec::from(get_total_consensus_stake(storage, epoch, params)?);
-        tracing::debug!(
-            "Total consensus stake in epoch {}: {}",
-            epoch,
-            consensus_stake
-        );
-        let processing_epoch = epoch + params.slash_processing_epoch_offset();
-        let slashes = enqueued_slashes_handle().at(&processing_epoch);
-        let infracting_stake = slashes.iter(storage)?.fold(
-            Ok(Dec::zero()),
-            |acc: storage_api::Result<Dec>, res| {
-                let acc = acc?;
-                let (
-                    NestedSubKey::Data {
-                        key: validator,
-                        nested_sub_key: _,
-                    },
-                    _slash,
-                ) = res?;
-
-                let validator_stake =
-                    read_validator_stake(storage, params, &validator, epoch)?;
-                // tracing::debug!("Val {} stake: {}", &validator,
-                // validator_stake);
-
-                Ok(acc + Dec::from(validator_stake))
-            },
-        )?;
-        sum_vp_fraction += infracting_stake / consensus_stake;
-    }
-    let cubic_rate =
-        Dec::new(9, 0).unwrap() * sum_vp_fraction * sum_vp_fraction;
-    tracing::debug!("Cubic slash rate: {}", cubic_rate);
-    Ok(cubic_rate)
-}
-
 /// Record a slash for a misbehavior that has been received from Tendermint and
 /// then jail the validator, removing it from the validator set. The slash rate
 /// will be computed at a later epoch.
@@ -298,94 +241,6 @@ where
         // TODO: should we clear some storage here as is done in Quint??
         // Possibly make the `unbonded` LazyMaps epoched so that it is done
         // automatically?
-    }
-
-    Ok(())
-}
-
-/// Process a slash by (i) slashing the misbehaving validator; and (ii) any
-/// validator to which it has redelegated some tokens and the slash misbehaving
-/// epoch is wihtin the redelegation slashing window.
-///
-/// `validator` - the misbehaving validator.
-/// `slash_rate` - the slash rate.
-/// `slashed_amounts_map` - a map from validator address to a map from epoch to
-/// already processed slash amounts.
-///
-/// Adds any newly processed slash amount of any involved validator to
-/// `slashed_amounts_map`.
-// Quint `processSlash`
-fn process_validator_slash<S>(
-    storage: &mut S,
-    params: &PosParams,
-    validator: &Address,
-    slash_rate: Dec,
-    current_epoch: Epoch,
-    slashed_amount_map: &mut EagerRedelegatedBondsMap,
-) -> storage_api::Result<()>
-where
-    S: StorageRead + StorageWrite,
-{
-    // `resultSlashValidator
-    let result_slash = slash_validator(
-        storage,
-        params,
-        validator,
-        slash_rate,
-        current_epoch,
-        &slashed_amount_map
-            .get(validator)
-            .cloned()
-            .unwrap_or_default(),
-    )?;
-
-    // `updatedSlashedAmountMap`
-    let validator_slashes =
-        slashed_amount_map.entry(validator.clone()).or_default();
-    *validator_slashes = result_slash;
-
-    // `outgoingRedelegation`
-    let outgoing_redelegations =
-        validator_outgoing_redelegations_handle(validator);
-
-    // Final loop in `processSlash`
-    let dest_validators = outgoing_redelegations
-        .iter(storage)?
-        .map(|res| {
-            let (
-                NestedSubKey::Data {
-                    key: dest_validator,
-                    nested_sub_key: _,
-                },
-                _redelegation,
-            ) = res?;
-            Ok(dest_validator)
-        })
-        .collect::<storage_api::Result<BTreeSet<_>>>()?;
-
-    for dest_validator in dest_validators {
-        let to_modify = slashed_amount_map
-            .entry(dest_validator.clone())
-            .or_default();
-
-        tracing::debug!(
-            "Slashing {} redelegation to {}",
-            validator,
-            &dest_validator
-        );
-
-        // `slashValidatorRedelegation`
-        slash_validator_redelegation(
-            storage,
-            params,
-            validator,
-            current_epoch,
-            &outgoing_redelegations.at(&dest_validator),
-            &validator_slashes_handle(validator),
-            &validator_total_redelegated_unbonded_handle(&dest_validator),
-            slash_rate,
-            to_modify,
-        )?;
     }
 
     Ok(())
@@ -1127,4 +982,149 @@ where
     }
 
     Ok(result_slashing)
+}
+
+/// Process a slash by (i) slashing the misbehaving validator; and (ii) any
+/// validator to which it has redelegated some tokens and the slash misbehaving
+/// epoch is wihtin the redelegation slashing window.
+///
+/// `validator` - the misbehaving validator.
+/// `slash_rate` - the slash rate.
+/// `slashed_amounts_map` - a map from validator address to a map from epoch to
+/// already processed slash amounts.
+///
+/// Adds any newly processed slash amount of any involved validator to
+/// `slashed_amounts_map`.
+// Quint `processSlash`
+fn process_validator_slash<S>(
+    storage: &mut S,
+    params: &PosParams,
+    validator: &Address,
+    slash_rate: Dec,
+    current_epoch: Epoch,
+    slashed_amount_map: &mut EagerRedelegatedBondsMap,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    // `resultSlashValidator
+    let result_slash = slash_validator(
+        storage,
+        params,
+        validator,
+        slash_rate,
+        current_epoch,
+        &slashed_amount_map
+            .get(validator)
+            .cloned()
+            .unwrap_or_default(),
+    )?;
+
+    // `updatedSlashedAmountMap`
+    let validator_slashes =
+        slashed_amount_map.entry(validator.clone()).or_default();
+    *validator_slashes = result_slash;
+
+    // `outgoingRedelegation`
+    let outgoing_redelegations =
+        validator_outgoing_redelegations_handle(validator);
+
+    // Final loop in `processSlash`
+    let dest_validators = outgoing_redelegations
+        .iter(storage)?
+        .map(|res| {
+            let (
+                NestedSubKey::Data {
+                    key: dest_validator,
+                    nested_sub_key: _,
+                },
+                _redelegation,
+            ) = res?;
+            Ok(dest_validator)
+        })
+        .collect::<storage_api::Result<BTreeSet<_>>>()?;
+
+    for dest_validator in dest_validators {
+        let to_modify = slashed_amount_map
+            .entry(dest_validator.clone())
+            .or_default();
+
+        tracing::debug!(
+            "Slashing {} redelegation to {}",
+            validator,
+            &dest_validator
+        );
+
+        // `slashValidatorRedelegation`
+        slash_validator_redelegation(
+            storage,
+            params,
+            validator,
+            current_epoch,
+            &outgoing_redelegations.at(&dest_validator),
+            &validator_slashes_handle(validator),
+            &validator_total_redelegated_unbonded_handle(&dest_validator),
+            slash_rate,
+            to_modify,
+        )?;
+    }
+
+    Ok(())
+}
+
+/// Calculate the cubic slashing rate using all slashes within a window around
+/// the given infraction epoch. There is no cap on the rate applied within this
+/// function.
+fn compute_cubic_slash_rate<S>(
+    storage: &S,
+    params: &PosParams,
+    infraction_epoch: Epoch,
+) -> storage_api::Result<Dec>
+where
+    S: StorageRead,
+{
+    tracing::debug!(
+        "Computing the cubic slash rate for infraction epoch \
+         {infraction_epoch}."
+    );
+    let mut sum_vp_fraction = Dec::zero();
+    let (start_epoch, end_epoch) =
+        params.cubic_slash_epoch_window(infraction_epoch);
+
+    for epoch in Epoch::iter_bounds_inclusive(start_epoch, end_epoch) {
+        let consensus_stake =
+            Dec::from(get_total_consensus_stake(storage, epoch, params)?);
+        tracing::debug!(
+            "Total consensus stake in epoch {}: {}",
+            epoch,
+            consensus_stake
+        );
+        let processing_epoch = epoch + params.slash_processing_epoch_offset();
+        let slashes = enqueued_slashes_handle().at(&processing_epoch);
+        let infracting_stake = slashes.iter(storage)?.fold(
+            Ok(Dec::zero()),
+            |acc: storage_api::Result<Dec>, res| {
+                let acc = acc?;
+                let (
+                    NestedSubKey::Data {
+                        key: validator,
+                        nested_sub_key: _,
+                    },
+                    _slash,
+                ) = res?;
+
+                let validator_stake =
+                    read_validator_stake(storage, params, &validator, epoch)?;
+                // tracing::debug!("Val {} stake: {}", &validator,
+                // validator_stake);
+
+                Ok(acc + Dec::from(validator_stake))
+            },
+        )?;
+        sum_vp_fraction += infracting_stake / consensus_stake;
+    }
+    let cubic_rate =
+        Dec::new(9, 0).unwrap() * sum_vp_fraction * sum_vp_fraction;
+    tracing::debug!("Cubic slash rate: {}", cubic_rate);
+    Ok(cubic_rate)
 }
