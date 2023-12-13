@@ -951,23 +951,23 @@ pub async fn submit_transfer(
 
             let result = namada.submit(tx, &args.tx).await?;
 
-            let submission_epoch = rpc::query_and_print_epoch(namada).await;
-
             match result {
                 ProcessTxResponse::Applied(resp) if
-                // If a transaction is shielded
+                    // If a transaction is shielded
                     tx_epoch.is_some() &&
-                // And it is rejected by a VP
-                    matches!(resp.inner_tx_result(), InnerTxResult::VpsRejected(_)) &&
-                // And its submission epoch doesn't match construction epoch
-                    tx_epoch.unwrap() != submission_epoch =>
+                    // And it is rejected by a VP
+                    matches!(resp.inner_tx_result(), InnerTxResult::VpsRejected(_)) =>
                 {
-                    // Then we probably straddled an epoch boundary. Let's retry...
-                    edisplay_line!(namada.io(),
-                        "MASP transaction rejected and this may be due to the \
-                        epoch changing. Attempting to resubmit transaction.",
-                    );
-                    continue;
+                    let submission_epoch = rpc::query_and_print_epoch(namada).await;
+                    // And its submission epoch doesn't match construction epoch
+                    if tx_epoch.unwrap() != submission_epoch {
+                        // Then we probably straddled an epoch boundary. Let's retry...
+                        edisplay_line!(namada.io(),
+                            "MASP transaction rejected and this may be due to the \
+                            epoch changing. Attempting to resubmit transaction.",
+                        );
+                        continue;
+                    }
                 },
                 // Otherwise either the transaction was successful or it will not
                 // benefit from resubmission
