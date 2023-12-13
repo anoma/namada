@@ -773,6 +773,9 @@ fn wrapper_disposable_signer() -> Result<()> {
         "--disposable-gas-payer",
         "--ledger-address",
         &validator_one_rpc,
+        // NOTE: Forcing the transaction will make the client produce a
+        // transfer without a masp object attached to it, so don't expect a
+        // failure from the masp vp here but from the check_fees function
         "--force",
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
