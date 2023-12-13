@@ -1052,6 +1052,9 @@ impl Parameters {
         wl_storage
             .write(&masp_kd_gain_key(address), kd_gain_nom)
             .expect("The nominal derivative gain must be initialized");
+        wl_storage
+            .write(&minted_balance_key(address), Amount::from_u64(0))
+            .expect("The total minted balance key must initialized");
     }
 }
 
