@@ -31,7 +31,7 @@ use borsh_ext::BorshSerializeExt;
 use masp_primitives::transaction::Transaction;
 use namada::core::hints;
 use namada::core::ledger::eth_bridge;
-pub use namada::core::types::transaction::ErrorCodes;
+pub use namada::core::types::transaction::ResultCode;
 use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
 use namada::ledger::gas::{Gas, TxGasMeter};
@@ -1064,7 +1064,7 @@ where
         if !validate_tx_bytes(&self.wl_storage, tx_bytes.len())
             .expect("Failed to get max tx bytes param from storage")
         {
-            response.code = ErrorCodes::TooLarge.into();
+            response.code = ResultCode::TooLarge.into();
             response.log = format!("{INVALID_MSG}: Tx too large");
             return response;
         }
@@ -1073,7 +1073,7 @@ where
         let tx = match Tx::try_from(tx_bytes).map_err(Error::TxDecoding) {
             Ok(t) => t,
             Err(msg) => {
-                response.code = ErrorCodes::InvalidTx.into();
+                response.code = ResultCode::InvalidTx.into();
                 response.log = format!("{INVALID_MSG}: {msg}");
                 return response;
             }
@@ -1081,7 +1081,7 @@ where
 
         // Tx chain id
         if tx.header.chain_id != self.chain_id {
-            response.code = ErrorCodes::InvalidChainId.into();
+            response.code = ResultCode::InvalidChainId.into();
             response.log = format!(
                 "{INVALID_MSG}: Tx carries a wrong chain id: expected {}, \
                  found {}",
@@ -1095,7 +1095,7 @@ where
             let last_block_timestamp = self.get_block_timestamp(None);
 
             if last_block_timestamp > exp {
-                response.code = ErrorCodes::ExpiredTx.into();
+                response.code = ResultCode::ExpiredTx.into();
                 response.log = format!(
                     "{INVALID_MSG}: Tx expired at {exp:#?}, last committed \
                      block time: {last_block_timestamp:#?}",
@@ -1108,7 +1108,7 @@ where
         let tx_type = match tx.validate_tx() {
             Ok(_) => tx.header(),
             Err(msg) => {
-                response.code = ErrorCodes::InvalidSig.into();
+                response.code = ResultCode::InvalidSig.into();
                 response.log = format!("{INVALID_MSG}: {msg}");
                 return response;
             }
@@ -1121,7 +1121,7 @@ where
                 match $result {
                     Ok(ext) => ext,
                     Err(err) => {
-                        $rsp.code = ErrorCodes::InvalidVoteExtension.into();
+                        $rsp.code = ResultCode::InvalidVoteExtension.into();
                         $rsp.log = format!(
                             "{INVALID_MSG}: Invalid {} vote extension: {err}",
                             $kind,
@@ -1146,7 +1146,7 @@ where
                             self.wl_storage.storage.get_last_block_height(),
                         )
                     {
-                        response.code = ErrorCodes::InvalidVoteExtension.into();
+                        response.code = ResultCode::InvalidVoteExtension.into();
                         response.log = format!(
                             "{INVALID_MSG}: Invalid Ethereum events vote \
                              extension: {err}",
@@ -1169,7 +1169,7 @@ where
                             self.wl_storage.storage.get_last_block_height(),
                         )
                     {
-                        response.code = ErrorCodes::InvalidVoteExtension.into();
+                        response.code = ResultCode::InvalidVoteExtension.into();
                         response.log = format!(
                             "{INVALID_MSG}: Invalid Brige pool roots vote \
                              extension: {err}",
@@ -1200,7 +1200,7 @@ where
                             self.wl_storage.storage.last_epoch,
                         )
                     {
-                        response.code = ErrorCodes::InvalidVoteExtension.into();
+                        response.code = ResultCode::InvalidVoteExtension.into();
                         response.log = format!(
                             "{INVALID_MSG}: Invalid validator set update vote \
                              extension: {err}",
@@ -1213,7 +1213,7 @@ where
                     }
                 }
                 _ => {
-                    response.code = ErrorCodes::InvalidTx.into();
+                    response.code = ResultCode::InvalidTx.into();
                     response.log = format!(
                         "{INVALID_MSG}: The given protocol tx cannot be added \
                          to the mempool"
@@ -1224,7 +1224,7 @@ where
                 // Tx gas limit
                 let mut gas_meter = TxGasMeter::new(wrapper.gas_limit);
                 if gas_meter.add_wrapper_gas(tx_bytes).is_err() {
-                    response.code = ErrorCodes::TxGasLimit.into();
+                    response.code = ResultCode::TxGasLimit.into();
                     response.log = "{INVALID_MSG}: Wrapper transactions \
                                     exceeds its gas limit"
                         .to_string();
@@ -1239,7 +1239,7 @@ where
                     .unwrap(),
                 );
                 if gas_meter.tx_gas_limit > block_gas_limit {
-                    response.code = ErrorCodes::AllocationError.into();
+                    response.code = ResultCode::AllocationError.into();
                     response.log = "{INVALID_MSG}: Wrapper transaction \
                                     exceeds the maximum block gas limit"
                         .to_string();
@@ -1254,7 +1254,7 @@ where
                     .has_replay_protection_entry(&tx.raw_header_hash())
                     .expect("Error while checking inner tx hash key in storage")
                 {
-                    response.code = ErrorCodes::ReplayTx.into();
+                    response.code = ResultCode::ReplayTx.into();
                     response.log = format!(
                         "{INVALID_MSG}: Inner transaction hash {} already in \
                          storage, replay attempt",
@@ -1274,7 +1274,7 @@ where
                         "Error while checking wrapper tx hash key in storage",
                     )
                 {
-                    response.code = ErrorCodes::ReplayTx.into();
+                    response.code = ResultCode::ReplayTx.into();
                     response.log = format!(
                         "{INVALID_MSG}: Wrapper transaction hash {} already \
                          in storage, replay attempt",
@@ -1293,27 +1293,27 @@ where
                     None,
                     false,
                 ) {
-                    response.code = ErrorCodes::FeeError.into();
+                    response.code = ResultCode::FeeError.into();
                     response.log = format!("{INVALID_MSG}: {e}");
                     return response;
                 }
             }
             TxType::Raw => {
-                response.code = ErrorCodes::InvalidTx.into();
+                response.code = ResultCode::InvalidTx.into();
                 response.log = format!(
                     "{INVALID_MSG}: Raw transactions cannot be accepted into \
                      the mempool"
                 );
             }
             TxType::Decrypted(_) => {
-                response.code = ErrorCodes::InvalidTx.into();
+                response.code = ResultCode::InvalidTx.into();
                 response.log = format!(
                     "{INVALID_MSG}: Decrypted txs cannot be sent by clients"
                 );
             }
         }
 
-        if response.code == ErrorCodes::Ok.into() {
+        if response.code == ResultCode::Ok.into() {
             response.log = VALID_MSG.into();
         }
         response
@@ -2375,7 +2375,7 @@ mod shell_tests {
                 .to_bytes();
             let rsp = shell.mempool_validate(&tx, Default::default());
             assert!(
-                rsp.code != ErrorCodes::Ok.into(),
+                rsp.code != ResultCode::Ok.into(),
                 "Validation should have failed"
             );
         }
@@ -2405,7 +2405,7 @@ mod shell_tests {
                 .to_bytes();
             let rsp = shell.mempool_validate(&tx, Default::default());
             assert!(
-                rsp.code == ErrorCodes::Ok.into(),
+                rsp.code == ResultCode::Ok.into(),
                 "Validation should have passed"
             );
         }
@@ -2459,7 +2459,7 @@ mod shell_tests {
         for (tx_bytes, err_msg) in txs_to_validate {
             let rsp = shell.mempool_validate(&tx_bytes, Default::default());
             assert!(
-                rsp.code == ErrorCodes::InvalidVoteExtension.into(),
+                rsp.code == ResultCode::InvalidVoteExtension.into(),
                 "{err_msg}"
             );
         }
@@ -2541,7 +2541,7 @@ mod shell_tests {
         }
         .to_bytes();
         let rsp = shell.mempool_validate(&tx, Default::default());
-        assert_eq!(rsp.code, ErrorCodes::InvalidVoteExtension.into());
+        assert_eq!(rsp.code, ResultCode::InvalidVoteExtension.into());
     }
 
     /// Mempool validation must reject unsigned wrappers
@@ -2573,12 +2573,12 @@ mod shell_tests {
             unsigned_wrapper.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, ErrorCodes::InvalidSig.into());
+        assert_eq!(result.code, ResultCode::InvalidSig.into());
         result = shell.mempool_validate(
             unsigned_wrapper.to_bytes().as_ref(),
             MempoolTxType::RecheckTransaction,
         );
-        assert_eq!(result.code, ErrorCodes::InvalidSig.into());
+        assert_eq!(result.code, ResultCode::InvalidSig.into());
     }
 
     /// Mempool validation must reject wrappers with an invalid signature
@@ -2621,12 +2621,12 @@ mod shell_tests {
             invalid_wrapper.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, ErrorCodes::InvalidSig.into());
+        assert_eq!(result.code, ResultCode::InvalidSig.into());
         result = shell.mempool_validate(
             invalid_wrapper.to_bytes().as_ref(),
             MempoolTxType::RecheckTransaction,
         );
-        assert_eq!(result.code, ErrorCodes::InvalidSig.into());
+        assert_eq!(result.code, ResultCode::InvalidSig.into());
     }
 
     /// Mempool validation must reject non-wrapper txs
@@ -2641,7 +2641,7 @@ mod shell_tests {
             tx.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, ErrorCodes::InvalidTx.into());
+        assert_eq!(result.code, ResultCode::InvalidTx.into());
         assert_eq!(
             result.log,
             "Mempool validation failed: Raw transactions cannot be accepted \
@@ -2695,7 +2695,7 @@ mod shell_tests {
             wrapper.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, ErrorCodes::ReplayTx.into());
+        assert_eq!(result.code, ResultCode::ReplayTx.into());
         assert_eq!(
             result.log,
             format!(
@@ -2709,7 +2709,7 @@ mod shell_tests {
             wrapper.to_bytes().as_ref(),
             MempoolTxType::RecheckTransaction,
         );
-        assert_eq!(result.code, ErrorCodes::ReplayTx.into());
+        assert_eq!(result.code, ResultCode::ReplayTx.into());
         assert_eq!(
             result.log,
             format!(
@@ -2736,7 +2736,7 @@ mod shell_tests {
             wrapper.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, ErrorCodes::ReplayTx.into());
+        assert_eq!(result.code, ResultCode::ReplayTx.into());
         assert_eq!(
             result.log,
             format!(
@@ -2750,7 +2750,7 @@ mod shell_tests {
             wrapper.to_bytes().as_ref(),
             MempoolTxType::RecheckTransaction,
         );
-        assert_eq!(result.code, ErrorCodes::ReplayTx.into());
+        assert_eq!(result.code, ResultCode::ReplayTx.into());
         assert_eq!(
             result.log,
             format!(
@@ -2778,7 +2778,7 @@ mod shell_tests {
             tx.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, ErrorCodes::InvalidChainId.into());
+        assert_eq!(result.code, ResultCode::InvalidChainId.into());
         assert_eq!(
             result.log,
             format!(
@@ -2806,7 +2806,7 @@ mod shell_tests {
             tx.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, ErrorCodes::ExpiredTx.into());
+        assert_eq!(result.code, ResultCode::ExpiredTx.into());
     }
 
     /// Check that a tx requiring more gas than the block limit gets rejected
@@ -2843,7 +2843,7 @@ mod shell_tests {
             wrapper.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, ErrorCodes::AllocationError.into());
+        assert_eq!(result.code, ResultCode::AllocationError.into());
     }
 
     // Check that a tx requiring more gas than its limit gets rejected
@@ -2876,7 +2876,7 @@ mod shell_tests {
             wrapper.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, ErrorCodes::TxGasLimit.into());
+        assert_eq!(result.code, ResultCode::TxGasLimit.into());
     }
 
     // Check that a wrapper using a non-whitelisted token for fee payment is
@@ -2911,7 +2911,7 @@ mod shell_tests {
             wrapper.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, ErrorCodes::FeeError.into());
+        assert_eq!(result.code, ResultCode::FeeError.into());
     }
 
     // Check that a wrapper setting a fee amount lower than the minimum required
@@ -2946,7 +2946,7 @@ mod shell_tests {
             wrapper.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, ErrorCodes::FeeError.into());
+        assert_eq!(result.code, ResultCode::FeeError.into());
     }
 
     // Check that a wrapper transactions whose fees cannot be paid is rejected
@@ -2980,7 +2980,7 @@ mod shell_tests {
             wrapper.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, ErrorCodes::FeeError.into());
+        assert_eq!(result.code, ResultCode::FeeError.into());
     }
 
     // Check that a fee overflow in the wrapper transaction is rejected
@@ -3014,7 +3014,7 @@ mod shell_tests {
             wrapper.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, ErrorCodes::FeeError.into());
+        assert_eq!(result.code, ResultCode::FeeError.into());
     }
 
     /// Test max tx bytes parameter in CheckTx
@@ -3061,13 +3061,13 @@ mod shell_tests {
             new_tx(50).to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert!(result.code != ErrorCodes::TooLarge.into());
+        assert!(result.code != ResultCode::TooLarge.into());
 
         // max tx bytes + 1, on the other hand, is not
         let result = shell.mempool_validate(
             new_tx(max_tx_bytes + 1).to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, ErrorCodes::TooLarge.into());
+        assert_eq!(result.code, ResultCode::TooLarge.into());
     }
 }

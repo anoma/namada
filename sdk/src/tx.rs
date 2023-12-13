@@ -45,7 +45,7 @@ use namada_core::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
 use namada_core::types::transaction::pgf::UpdateStewardCommission;
-use namada_core::types::transaction::{pos, ErrorCodes, TxResult};
+use namada_core::types::transaction::{pos, ResultCode, TxResult};
 use namada_core::types::{storage, token};
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
@@ -137,7 +137,13 @@ impl ProcessTxResponse {
     // always returns false for dry-run transactions.
     pub fn is_applied_and_valid(&self) -> bool {
         match self {
-            ProcessTxResponse::Applied(resp) => resp.code == ErrorCodes::Ok,
+            ProcessTxResponse::Applied(resp) => {
+                resp.code == ResultCode::Ok
+                    && matches!(
+                        resp.inner_tx_result(),
+                        InnerTxResult::Success(_)
+                    )
+            }
             ProcessTxResponse::DryRun(_) | ProcessTxResponse::Broadcast(_) => {
                 false
             }
@@ -418,7 +424,7 @@ pub fn display_wrapper_resp_and_get_result(
     context: &impl Namada,
     resp: &TxResponse,
 ) -> bool {
-    let result = if resp.code != ErrorCodes::Ok {
+    let result = if resp.code != ResultCode::Ok {
         display_line!(
             context.io(),
             "Wrapper transaction failed with error code {}. Used {} gas.",
@@ -429,7 +435,8 @@ pub fn display_wrapper_resp_and_get_result(
     } else {
         display_line!(
             context.io(),
-            "Wrapper transaction accepted. Used {} gas.",
+            "Wrapper transaction accepted at height {}. Used {} gas.",
+            resp.height,
             resp.gas_used,
         );
         true
@@ -448,7 +455,9 @@ pub fn display_inner_resp(context: &impl Namada, resp: &TxResponse) {
         InnerTxResult::Success(inner) => {
             display_line!(
                 context.io(),
-                "Transaction was successfully applied. Used {} gas.",
+                "Transaction was successfully applied at height {}. Used {} \
+                 gas.",
+                resp.height,
                 inner.gas_used,
             );
         }

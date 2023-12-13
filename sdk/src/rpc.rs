@@ -26,7 +26,7 @@ use namada_core::types::storage::{
 use namada_core::types::token::{
     Amount, DenominatedAmount, Denomination, MaspDenom,
 };
-use namada_core::types::transaction::{ErrorCodes, TxResult};
+use namada_core::types::transaction::{ResultCode, TxResult};
 use namada_core::types::{storage, token};
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{
@@ -533,11 +533,11 @@ pub struct TxResponse {
     /// Response log
     pub log: String,
     /// Block height
-    pub height: String,
+    pub height: BlockHeight,
     /// Transaction height
     pub hash: String,
     /// Response code
-    pub code: ErrorCodes,
+    pub code: ResultCode,
     /// Gas used. If there's an `inner_tx`, its gas is equal to this value.
     pub gas_used: String,
 }
@@ -575,11 +575,13 @@ impl TryFrom<Event> for TxResponse {
             .get("log")
             .ok_or_else(|| missing_field_err("log"))?
             .clone();
-        let height = event
-            .get("height")
-            .ok_or_else(|| missing_field_err("height"))?
-            .clone();
-        let code = ErrorCodes::from_str(
+        let height = BlockHeight::from_str(
+            event
+                .get("height")
+                .ok_or_else(|| missing_field_err("height"))?,
+        )
+        .map_err(|e| e.to_string())?;
+        let code = ResultCode::from_str(
             event.get("code").ok_or_else(|| missing_field_err("code"))?,
         )
         .map_err(|e| e.to_string())?;
@@ -681,13 +683,21 @@ pub async fn query_tx_response<C: crate::queries::Client + Sync>(
     // Summarize the transaction results that we were searching for
     let inner_tx = event_map
         .get("inner_tx")
-        .map(|s| TxResult::from_str(s).unwrap());
-    let code = ErrorCodes::from_str(event_map["code"]).unwrap();
+        .map(|s| {
+            TxResult::from_str(s).map_err(|_| {
+                TError::parse("Error parsing TxResult".to_string())
+            })
+        })
+        .transpose()?;
+    let code = ResultCode::from_str(event_map["code"])
+        .map_err(|_| TError::parse("Error parsing ResultCode".to_string()))?;
+    let height = BlockHeight::from_str(event_map["height"])
+        .map_err(|_| TError::parse("Error parsing BlockHeight".to_string()))?;
     let result = TxResponse {
         inner_tx,
         info: event_map["info"].to_string(),
         log: event_map["log"].to_string(),
-        height: event_map["height"].to_string(),
+        height,
         hash: event_map["hash"].to_string(),
         code,
         gas_used: event_map["gas_used"].to_string(),

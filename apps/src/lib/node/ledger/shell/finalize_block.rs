@@ -212,8 +212,8 @@ where
             };
             // If [`process_proposal`] rejected a Tx due to invalid signature,
             // emit an event here and move on to next tx.
-            if ErrorCodes::from_u32(processed_tx.result.code).unwrap()
-                == ErrorCodes::InvalidSig
+            if ResultCode::from_u32(processed_tx.result.code).unwrap()
+                == ResultCode::InvalidSig
             {
                 let mut tx_event = match tx.header().tx_type {
                     TxType::Wrapper(_) | TxType::Protocol(_) => {
@@ -247,8 +247,8 @@ where
             let tx_header = tx.header();
             // If [`process_proposal`] rejected a Tx, emit an event here and
             // move on to next tx
-            if ErrorCodes::from_u32(processed_tx.result.code).unwrap()
-                != ErrorCodes::Ok
+            if ResultCode::from_u32(processed_tx.result.code).unwrap()
+                != ResultCode::Ok
             {
                 let mut tx_event = Event::new_tx_event(&tx, height.0);
                 tx_event["code"] = processed_tx.result.code.to_string();
@@ -309,7 +309,7 @@ where
                                                 decrypted."
                                     .into();
                                 event["code"] =
-                                    ErrorCodes::Undecryptable.into();
+                                    ResultCode::Undecryptable.into();
                                 response.events.push(event);
                                 continue;
                             }
@@ -440,7 +440,7 @@ where
                         }
                         self.wl_storage.commit_tx();
                         if !tx_event.contains_key("code") {
-                            tx_event["code"] = ErrorCodes::Ok.into();
+                            tx_event["code"] = ResultCode::Ok.into();
                             self.wl_storage
                                 .storage
                                 .block
@@ -473,7 +473,7 @@ where
 
                         stats.increment_rejected_txs();
                         self.wl_storage.drop_tx();
-                        tx_event["code"] = ErrorCodes::InvalidTx.into();
+                        tx_event["code"] = ResultCode::InvalidTx.into();
                     }
                     tx_event["gas_used"] = result.gas_used.to_string();
                     tx_event["info"] = "Check inner_tx for result.".to_string();
@@ -525,9 +525,9 @@ where
                     tx_event["info"] = msg.to_string();
                     if let EventType::Accepted = tx_event.event_type {
                         // If wrapper, invalid tx error code
-                        tx_event["code"] = ErrorCodes::InvalidTx.into();
+                        tx_event["code"] = ResultCode::InvalidTx.into();
                     } else {
-                        tx_event["code"] = ErrorCodes::WasmRuntimeError.into();
+                        tx_event["code"] = ResultCode::WasmRuntimeError.into();
                     }
                 }
             }
@@ -1032,7 +1032,7 @@ mod test_finalize_block {
             ProcessedTx {
                 tx: tx.into(),
                 result: TxResult {
-                    code: ErrorCodes::Ok.into(),
+                    code: ResultCode::Ok.into(),
                     info: "".into(),
                 },
             },
@@ -1071,7 +1071,7 @@ mod test_finalize_block {
         ProcessedTx {
             tx: outer_tx.to_bytes().into(),
             result: TxResult {
-                code: ErrorCodes::Ok.into(),
+                code: ResultCode::Ok.into(),
                 info: "".into(),
             },
         }
@@ -1187,7 +1187,7 @@ mod test_finalize_block {
         let processed_tx = ProcessedTx {
             tx: outer_tx.to_bytes().into(),
             result: TxResult {
-                code: ErrorCodes::InvalidTx.into(),
+                code: ResultCode::InvalidTx.into(),
                 info: "".into(),
             },
         };
@@ -1202,7 +1202,7 @@ mod test_finalize_block {
         {
             assert_eq!(event.event_type.to_string(), String::from("applied"));
             let code = event.attributes.get("code").expect("Test failed");
-            assert_eq!(code, &String::from(ErrorCodes::InvalidTx));
+            assert_eq!(code, &String::from(ResultCode::InvalidTx));
         }
         // check that the corresponding wrapper tx was removed from the queue
         assert!(shell.wl_storage.storage.tx_queue.is_empty());
@@ -1231,7 +1231,7 @@ mod test_finalize_block {
                 .to_bytes()
                 .into(),
             result: TxResult {
-                code: ErrorCodes::Ok.into(),
+                code: ResultCode::Ok.into(),
                 info: "".into(),
             },
         };
@@ -1252,7 +1252,7 @@ mod test_finalize_block {
         {
             assert_eq!(event.event_type.to_string(), String::from("applied"));
             let code = event.attributes.get("code").expect("Test failed");
-            assert_eq!(code, &String::from(ErrorCodes::Undecryptable));
+            assert_eq!(code, &String::from(ResultCode::Undecryptable));
             let log = event.attributes.get("log").expect("Test failed");
             assert!(log.contains("Transaction could not be decrypted."))
         }
@@ -1311,7 +1311,7 @@ mod test_finalize_block {
                 );
                 let code =
                     event.attributes.get("code").expect("Test failed").as_str();
-                assert_eq!(code, String::from(ErrorCodes::Ok).as_str());
+                assert_eq!(code, String::from(ResultCode::Ok).as_str());
             } else {
                 // these should be accepted decrypted txs
                 assert_eq!(
@@ -1320,7 +1320,7 @@ mod test_finalize_block {
                 );
                 let code =
                     event.attributes.get("code").expect("Test failed").as_str();
-                assert_eq!(code, String::from(ErrorCodes::Ok).as_str());
+                assert_eq!(code, String::from(ResultCode::Ok).as_str());
             }
         }
 
@@ -1358,7 +1358,7 @@ mod test_finalize_block {
             txs: vec![ProcessedTx {
                 tx: tx.into(),
                 result: TxResult {
-                    code: ErrorCodes::InvalidTx.into(),
+                    code: ResultCode::InvalidTx.into(),
                     info: Default::default(),
                 },
             }],
@@ -1369,7 +1369,7 @@ mod test_finalize_block {
         let event = resp.remove(0);
         assert_eq!(event.event_type.to_string(), String::from("applied"));
         let code = event.attributes.get("code").expect("Test failed");
-        assert_eq!(code, &String::from(ErrorCodes::InvalidTx));
+        assert_eq!(code, &String::from(ResultCode::InvalidTx));
     }
 
     /// Test that once a validator's vote for an Ethereum event lands
@@ -1428,7 +1428,7 @@ mod test_finalize_block {
                     .to_bytes()
                     .into(),
                 result: TxResult {
-                    code: ErrorCodes::Ok.into(),
+                    code: ResultCode::Ok.into(),
                     info: "".into(),
                 },
             }
@@ -1445,7 +1445,7 @@ mod test_finalize_block {
             .expect("Test failed");
         assert_eq!(result.event_type.to_string(), String::from("applied"));
         let code = result.attributes.get("code").expect("Test failed").as_str();
-        assert_eq!(code, String::from(ErrorCodes::Ok).as_str());
+        assert_eq!(code, String::from(ResultCode::Ok).as_str());
 
         // --- The event is removed from the queue
         assert!(shell.new_ethereum_events().is_empty());
@@ -1488,7 +1488,7 @@ mod test_finalize_block {
                 .to_bytes()
                 .into(),
             result: TxResult {
-                code: ErrorCodes::Ok.into(),
+                code: ResultCode::Ok.into(),
                 info: "".into(),
             },
         };
@@ -1504,7 +1504,7 @@ mod test_finalize_block {
             .expect("Test failed");
         assert_eq!(result.event_type.to_string(), String::from("applied"));
         let code = result.attributes.get("code").expect("Test failed").as_str();
-        assert_eq!(code, String::from(ErrorCodes::Ok).as_str());
+        assert_eq!(code, String::from(ResultCode::Ok).as_str());
 
         // --- The event is removed from the queue
         assert!(shell.new_ethereum_events().is_empty());
@@ -1547,7 +1547,7 @@ mod test_finalize_block {
         let processed_tx = ProcessedTx {
             tx: tx.to_bytes().into(),
             result: TxResult {
-                code: ErrorCodes::Ok.into(),
+                code: ResultCode::Ok.into(),
                 info: "".into(),
             },
         };
@@ -2950,7 +2950,7 @@ mod test_finalize_block {
         failed",
             )
             .as_str();
-        assert_eq!(code, String::from(ErrorCodes::Ok).as_str());
+        assert_eq!(code, String::from(ResultCode::Ok).as_str());
 
         // the merkle tree root should not change after finalize_block
         let root_post = shell.shell.wl_storage.storage.block.tree.root();
@@ -3053,7 +3053,7 @@ mod test_finalize_block {
             processed_txs.push(ProcessedTx {
                 tx: inner.to_bytes().into(),
                 result: TxResult {
-                    code: ErrorCodes::Ok.into(),
+                    code: ResultCode::Ok.into(),
                     info: "".into(),
                 },
             })
@@ -3077,10 +3077,10 @@ mod test_finalize_block {
 
         assert_eq!(event[0].event_type.to_string(), String::from("applied"));
         let code = event[0].attributes.get("code").unwrap().as_str();
-        assert_eq!(code, String::from(ErrorCodes::Ok).as_str());
+        assert_eq!(code, String::from(ResultCode::Ok).as_str());
         assert_eq!(event[1].event_type.to_string(), String::from("applied"));
         let code = event[1].attributes.get("code").unwrap().as_str();
-        assert_eq!(code, String::from(ErrorCodes::WasmRuntimeError).as_str());
+        assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
 
         for (inner, wrapper) in [(inner, wrapper), (new_inner, new_wrapper)] {
             assert!(
@@ -3200,7 +3200,7 @@ mod test_finalize_block {
             processed_txs.push(ProcessedTx {
                 tx: inner.to_bytes().into(),
                 result: TxResult {
-                    code: ErrorCodes::Ok.into(),
+                    code: ResultCode::Ok.into(),
                     info: "".into(),
                 },
             })
@@ -3233,19 +3233,19 @@ mod test_finalize_block {
 
         assert_eq!(event[0].event_type.to_string(), String::from("applied"));
         let code = event[0].attributes.get("code").unwrap().as_str();
-        assert_eq!(code, String::from(ErrorCodes::WasmRuntimeError).as_str());
+        assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
         assert_eq!(event[1].event_type.to_string(), String::from("applied"));
         let code = event[1].attributes.get("code").unwrap().as_str();
-        assert_eq!(code, String::from(ErrorCodes::Undecryptable).as_str());
+        assert_eq!(code, String::from(ResultCode::Undecryptable).as_str());
         assert_eq!(event[2].event_type.to_string(), String::from("applied"));
         let code = event[2].attributes.get("code").unwrap().as_str();
-        assert_eq!(code, String::from(ErrorCodes::InvalidTx).as_str());
+        assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
         assert_eq!(event[3].event_type.to_string(), String::from("applied"));
         let code = event[3].attributes.get("code").unwrap().as_str();
-        assert_eq!(code, String::from(ErrorCodes::WasmRuntimeError).as_str());
+        assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
         assert_eq!(event[4].event_type.to_string(), String::from("applied"));
         let code = event[4].attributes.get("code").unwrap().as_str();
-        assert_eq!(code, String::from(ErrorCodes::WasmRuntimeError).as_str());
+        assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
 
         for (invalid_inner, valid_wrapper) in [
             (out_of_gas_inner, out_of_gas_wrapper),
@@ -3323,7 +3323,7 @@ mod test_finalize_block {
         let processed_txs = vec![ProcessedTx {
             tx: wrapper.to_bytes().into(),
             result: TxResult {
-                code: ErrorCodes::Ok.into(),
+                code: ResultCode::Ok.into(),
                 info: "".into(),
             },
         }];
@@ -3347,7 +3347,7 @@ mod test_finalize_block {
             .get("code")
             .expect("Test failed")
             .as_str();
-        assert_eq!(code, String::from(ErrorCodes::InvalidTx).as_str());
+        assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
 
         assert!(
             shell
@@ -3398,7 +3398,7 @@ mod test_finalize_block {
         let processed_tx = ProcessedTx {
             tx: wrapper.to_bytes().into(),
             result: TxResult {
-                code: ErrorCodes::Ok.into(),
+                code: ResultCode::Ok.into(),
                 info: "".into(),
             },
         };
@@ -3413,7 +3413,7 @@ mod test_finalize_block {
         // Check balance of fee payer is 0
         assert_eq!(event.event_type.to_string(), String::from("accepted"));
         let code = event.attributes.get("code").expect("Testfailed").as_str();
-        assert_eq!(code, String::from(ErrorCodes::InvalidTx).as_str());
+        assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
         let balance_key = namada::core::types::token::balance_key(
             &shell.wl_storage.storage.native_token,
             &Address::from(&keypair.to_public()),
@@ -3492,7 +3492,7 @@ mod test_finalize_block {
         let processed_tx = ProcessedTx {
             tx: wrapper.to_bytes().into(),
             result: TxResult {
-                code: ErrorCodes::Ok.into(),
+                code: ResultCode::Ok.into(),
                 info: "".into(),
             },
         };
@@ -3508,7 +3508,7 @@ mod test_finalize_block {
         // Check fee payment
         assert_eq!(event.event_type.to_string(), String::from("accepted"));
         let code = event.attributes.get("code").expect("Test failed").as_str();
-        assert_eq!(code, String::from(ErrorCodes::Ok).as_str());
+        assert_eq!(code, String::from(ResultCode::Ok).as_str());
 
         let new_proposer_balance = storage_api::token::read_balance(
             &shell.wl_storage,

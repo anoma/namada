@@ -113,7 +113,7 @@ where
         // deserialize properly, that have invalid signatures
         // and that have invalid wasm code to reach FinalizeBlock.
         let invalid_txs = tx_results.iter().any(|res| {
-            let error = ErrorCodes::from_u32(res.code).expect(
+            let error = ResultCode::from_u32(res.code).expect(
                 "All error codes returned from process_single_tx are valid",
             );
             !error.is_recoverable()
@@ -182,8 +182,8 @@ where
                     &mut tx_wasm_cache,
                     block_proposer,
                 );
-                let error_code = ErrorCodes::from_u32(result.code).unwrap();
-                if let ErrorCodes::Ok = error_code {
+                let error_code = ResultCode::from_u32(result.code).unwrap();
+                if let ResultCode::Ok = error_code {
                     temp_wl_storage.write_log.commit_tx();
                 } else {
                     tracing::info!(
@@ -217,12 +217,12 @@ where
     {
         if vote_extensions.all(|maybe_ext| maybe_ext.is_some()) {
             TxResult {
-                code: ErrorCodes::Ok.into(),
+                code: ResultCode::Ok.into(),
                 info: "Process proposal accepted this transaction".into(),
             }
         } else {
             TxResult {
-                code: ErrorCodes::InvalidVoteExtension.into(),
+                code: ResultCode::InvalidVoteExtension.into(),
                 info: "Process proposal rejected this proposal because at \
                        least one of the vote extensions included was invalid."
                     .into(),
@@ -275,7 +275,7 @@ where
             .expect("Failed to get max tx bytes param from storage")
         {
             return TxResult {
-                code: ErrorCodes::TooLarge.into(),
+                code: ResultCode::TooLarge.into(),
                 info: "Tx too large".into(),
             };
         }
@@ -283,7 +283,7 @@ where
         // try to allocate space for this tx
         if let Err(e) = metadata.txs_bin.try_dump(tx_bytes) {
             return TxResult {
-                code: ErrorCodes::AllocationError.into(),
+                code: ResultCode::AllocationError.into(),
                 info: match e {
                     AllocFailure::Rejected { .. } => {
                         "No more space left in the block"
@@ -305,7 +305,7 @@ where
                      PrepareProposal"
                 );
                 Err(TxResult {
-                    code: ErrorCodes::InvalidTx.into(),
+                    code: ResultCode::InvalidTx.into(),
                     info: "The submitted transaction was not deserializable"
                         .into(),
                 })
@@ -317,7 +317,7 @@ where
                     // This occurs if the wrapper / protocol tx signature is
                     // invalid
                     return Err(TxResult {
-                        code: ErrorCodes::InvalidSig.into(),
+                        code: ResultCode::InvalidSig.into(),
                         info: err.to_string(),
                     });
                 }
@@ -331,14 +331,14 @@ where
 
         if let Err(err) = tx.validate_tx() {
             return TxResult {
-                code: ErrorCodes::InvalidSig.into(),
+                code: ResultCode::InvalidSig.into(),
                 info: err.to_string(),
             };
         }
         match tx.header().tx_type {
             // If it is a raw transaction, we do no further validation
             TxType::Raw => TxResult {
-                code: ErrorCodes::InvalidTx.into(),
+                code: ResultCode::InvalidTx.into(),
                 info: "Transaction rejected: Non-encrypted transactions are \
                        not supported"
                     .into(),
@@ -347,7 +347,7 @@ where
                 // Tx chain id
                 if tx_chain_id != self.chain_id {
                     return TxResult {
-                        code: ErrorCodes::InvalidChainId.into(),
+                        code: ResultCode::InvalidChainId.into(),
                         info: format!(
                             "Tx carries a wrong chain id: expected {}, found \
                              {}",
@@ -360,7 +360,7 @@ where
                 if let Some(exp) = tx_expiration {
                     if block_time > exp {
                         return TxResult {
-                            code: ErrorCodes::ExpiredTx.into(),
+                            code: ResultCode::ExpiredTx.into(),
                             info: format!(
                                 "Tx expired at {:#?}, block time: {:#?}",
                                 exp, block_time
@@ -380,7 +380,7 @@ where
                                         .get_last_block_height(),
                                 )
                                 .map(|_| TxResult {
-                                    code: ErrorCodes::Ok.into(),
+                                    code: ResultCode::Ok.into(),
                                     info: "Process Proposal accepted this \
                                            transaction"
                                         .into(),
@@ -388,7 +388,7 @@ where
                                 .map_err(|err| err.to_string())
                             })
                             .unwrap_or_else(|err| TxResult {
-                                code: ErrorCodes::InvalidVoteExtension.into(),
+                                code: ResultCode::InvalidVoteExtension.into(),
                                 info: format!(
                                     "Process proposal rejected this proposal \
                                      because one of the included Ethereum \
@@ -407,7 +407,7 @@ where
                                         .get_last_block_height(),
                                 )
                                 .map(|_| TxResult {
-                                    code: ErrorCodes::Ok.into(),
+                                    code: ResultCode::Ok.into(),
                                     info: "Process Proposal accepted this \
                                            transaction"
                                         .into(),
@@ -415,7 +415,7 @@ where
                                 .map_err(|err| err.to_string())
                             })
                             .unwrap_or_else(|err| TxResult {
-                                code: ErrorCodes::InvalidVoteExtension.into(),
+                                code: ResultCode::InvalidVoteExtension.into(),
                                 info: format!(
                                     "Process proposal rejected this proposal \
                                      because one of the included Bridge pool \
@@ -439,7 +439,7 @@ where
                                 self.wl_storage.storage.get_current_epoch().0,
                             )
                             .map(|_| TxResult {
-                                code: ErrorCodes::Ok.into(),
+                                code: ResultCode::Ok.into(),
                                 info: "Process Proposal accepted this \
                                        transaction"
                                     .into(),
@@ -448,7 +448,7 @@ where
                         })
                         .unwrap_or_else(|err| {
                             TxResult {
-                                code: ErrorCodes::InvalidVoteExtension.into(),
+                                code: ResultCode::InvalidVoteExtension.into(),
                                 info: format!(
                                     "Process proposal rejected this proposal \
                                      because one of the included validator \
@@ -500,7 +500,7 @@ where
                             .must_send_valset_upd(SendValsetUpd::AtPrevHeight)
                         {
                             return TxResult {
-                                code: ErrorCodes::InvalidVoteExtension.into(),
+                                code: ResultCode::InvalidVoteExtension.into(),
                                 info: "Process proposal rejected a validator \
                                        set update vote extension issued at an \
                                        invalid block height"
@@ -528,7 +528,7 @@ where
                         if wrapper.tx.raw_header_hash() != tx.raw_header_hash()
                         {
                             TxResult {
-                                code: ErrorCodes::InvalidOrder.into(),
+                                code: ResultCode::InvalidOrder.into(),
                                 info: "Process proposal rejected a decrypted \
                                        transaction that violated the tx order \
                                        determined in the previous block"
@@ -540,14 +540,14 @@ where
                         ) {
                             // DKG is disabled, txs are not actually encrypted
                             TxResult {
-                                code: ErrorCodes::InvalidTx.into(),
+                                code: ResultCode::InvalidTx.into(),
                                 info: "The encrypted payload of tx was \
                                        incorrectly marked as un-decryptable"
                                     .into(),
                             }
                         } else {
                             TxResult {
-                                code: ErrorCodes::Ok.into(),
+                                code: ResultCode::Ok.into(),
                                 info: "Process Proposal accepted this \
                                        tranasction"
                                     .into(),
@@ -555,7 +555,7 @@ where
                         }
                     }
                     None => TxResult {
-                        code: ErrorCodes::ExtraTxs.into(),
+                        code: ResultCode::ExtraTxs.into(),
                         info: "Received more decrypted txs than expected"
                             .into(),
                     },
@@ -576,7 +576,7 @@ where
                         .try_dump(tx_bytes, u64::from(wrapper.gas_limit));
 
                     return TxResult {
-                        code: ErrorCodes::TxGasLimit.into(),
+                        code: ResultCode::TxGasLimit.into(),
                         info: "Wrapper transactions exceeds its gas limit"
                             .to_string(),
                     };
@@ -588,14 +588,14 @@ where
                     .try_dump(tx_bytes, u64::from(wrapper.gas_limit))
                 {
                     return TxResult {
-                        code: ErrorCodes::AllocationError.into(),
+                        code: ResultCode::AllocationError.into(),
                         info: e,
                     };
                 }
                 // decrypted txs shouldn't show up before wrapper txs
                 if metadata.has_decrypted_txs {
                     return TxResult {
-                        code: ErrorCodes::InvalidTx.into(),
+                        code: ResultCode::InvalidTx.into(),
                         info: "Decrypted txs should not be proposed before \
                                wrapper txs"
                             .into(),
@@ -603,7 +603,7 @@ where
                 }
                 if hints::unlikely(self.encrypted_txs_not_allowed()) {
                     return TxResult {
-                        code: ErrorCodes::AllocationError.into(),
+                        code: ResultCode::AllocationError.into(),
                         info: "Wrapper txs not allowed at the current block \
                                height"
                             .into(),
@@ -613,7 +613,7 @@ where
                 // ChainId check
                 if tx_chain_id != self.chain_id {
                     return TxResult {
-                        code: ErrorCodes::InvalidChainId.into(),
+                        code: ResultCode::InvalidChainId.into(),
                         info: format!(
                             "Tx carries a wrong chain id: expected {}, found \
                              {}",
@@ -626,7 +626,7 @@ where
                 if let Some(exp) = tx_expiration {
                     if block_time > exp {
                         return TxResult {
-                            code: ErrorCodes::ExpiredTx.into(),
+                            code: ResultCode::ExpiredTx.into(),
                             info: format!(
                                 "Tx expired at {:#?}, block time: {:#?}",
                                 exp, block_time
@@ -640,7 +640,7 @@ where
                     self.replay_protection_checks(&tx, temp_wl_storage)
                 {
                     return TxResult {
-                        code: ErrorCodes::ReplayTx.into(),
+                        code: ResultCode::ReplayTx.into(),
                         info: e.to_string(),
                     };
                 }
@@ -656,12 +656,12 @@ where
                     false,
                 ) {
                     Ok(()) => TxResult {
-                        code: ErrorCodes::Ok.into(),
+                        code: ResultCode::Ok.into(),
                         info: "Process proposal accepted this transaction"
                             .into(),
                     },
                     Err(e) => TxResult {
-                        code: ErrorCodes::FeeError.into(),
+                        code: ResultCode::FeeError.into(),
                         info: e.to_string(),
                     },
                 }
@@ -742,7 +742,7 @@ mod test_process_proposal {
             .expect("Test failed")
             .try_into()
             .expect("Test failed");
-        assert_eq!(resp.result.code, u32::from(ErrorCodes::Ok));
+        assert_eq!(resp.result.code, u32::from(ResultCode::Ok));
         deactivate_bridge(&mut shell);
         let response = if let Err(TestError::RejectProposal(resp)) =
             shell.process_proposal(request)
@@ -757,7 +757,7 @@ mod test_process_proposal {
         };
         assert_eq!(
             response.result.code,
-            u32::from(ErrorCodes::InvalidVoteExtension)
+            u32::from(ResultCode::InvalidVoteExtension)
         );
     }
 
@@ -794,7 +794,7 @@ mod test_process_proposal {
             .try_into()
             .expect("Test failed");
 
-        assert_eq!(resp.result.code, u32::from(ErrorCodes::Ok));
+        assert_eq!(resp.result.code, u32::from(ResultCode::Ok));
         deactivate_bridge(&mut shell);
         let response = if let Err(TestError::RejectProposal(resp)) =
             shell.process_proposal(request)
@@ -809,7 +809,7 @@ mod test_process_proposal {
         };
         assert_eq!(
             response.result.code,
-            u32::from(ErrorCodes::InvalidVoteExtension)
+            u32::from(ResultCode::InvalidVoteExtension)
         );
     }
 
@@ -835,7 +835,7 @@ mod test_process_proposal {
         };
         assert_eq!(
             response.result.code,
-            u32::from(ErrorCodes::InvalidVoteExtension)
+            u32::from(ResultCode::InvalidVoteExtension)
         );
     }
 
@@ -966,7 +966,7 @@ mod test_process_proposal {
 
         println!("{}", response.result.info);
 
-        assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidSig));
+        assert_eq!(response.result.code, u32::from(ResultCode::InvalidSig));
         assert_eq!(
             response.result.info,
             String::from(
@@ -1026,7 +1026,7 @@ mod test_process_proposal {
                                       invalid.";
                 assert_eq!(
                     response.result.code,
-                    u32::from(ErrorCodes::InvalidSig)
+                    u32::from(ResultCode::InvalidSig)
                 );
                 assert!(
                     response.result.info.contains(expected_error),
@@ -1091,7 +1091,7 @@ mod test_process_proposal {
                 panic!("Test failed")
             }
         };
-        assert_eq!(response.result.code, u32::from(ErrorCodes::FeeError));
+        assert_eq!(response.result.code, u32::from(ResultCode::FeeError));
         assert_eq!(
             response.result.info,
             String::from(
@@ -1157,7 +1157,7 @@ mod test_process_proposal {
                 panic!("Test failed")
             }
         };
-        assert_eq!(response.result.code, u32::from(ErrorCodes::FeeError));
+        assert_eq!(response.result.code, u32::from(ResultCode::FeeError));
         assert_eq!(
             response.result.info,
             String::from(
@@ -1220,7 +1220,7 @@ mod test_process_proposal {
                 panic!("Test failed")
             }
         };
-        assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidOrder));
+        assert_eq!(response.result.code, u32::from(ResultCode::InvalidOrder));
         assert_eq!(
             response.result.info,
             String::from(
@@ -1273,7 +1273,7 @@ mod test_process_proposal {
                 panic!("Test failed")
             }
         };
-        assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidTx));
+        assert_eq!(response.result.code, u32::from(ResultCode::InvalidTx));
         assert_eq!(
             response.result.info,
             String::from(
@@ -1340,7 +1340,7 @@ mod test_process_proposal {
         } else {
             panic!("Test failed")
         };
-        assert_eq!(response.result.code, u32::from(ErrorCodes::ExtraTxs));
+        assert_eq!(response.result.code, u32::from(ResultCode::ExtraTxs));
         assert_eq!(
             response.result.info,
             String::from("Received more decrypted txs than expected"),
@@ -1375,7 +1375,7 @@ mod test_process_proposal {
                 panic!("Test failed")
             }
         };
-        assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidTx));
+        assert_eq!(response.result.code, u32::from(ResultCode::InvalidTx));
         assert_eq!(
             response.result.info,
             String::from(
@@ -1436,7 +1436,7 @@ mod test_process_proposal {
             Err(TestError::RejectProposal(response)) => {
                 assert_eq!(
                     response[0].result.code,
-                    u32::from(ErrorCodes::ReplayTx)
+                    u32::from(ResultCode::ReplayTx)
                 );
                 assert_eq!(
                     response[0].result.info,
@@ -1495,10 +1495,10 @@ mod test_process_proposal {
         match shell.process_proposal(request) {
             Ok(_) => panic!("Test failed"),
             Err(TestError::RejectProposal(response)) => {
-                assert_eq!(response[0].result.code, u32::from(ErrorCodes::Ok));
+                assert_eq!(response[0].result.code, u32::from(ResultCode::Ok));
                 assert_eq!(
                     response[1].result.code,
-                    u32::from(ErrorCodes::ReplayTx)
+                    u32::from(ResultCode::ReplayTx)
                 );
                 assert_eq!(
                     response[1].result.info,
@@ -1561,7 +1561,7 @@ mod test_process_proposal {
             Err(TestError::RejectProposal(response)) => {
                 assert_eq!(
                     response[0].result.code,
-                    u32::from(ErrorCodes::ReplayTx)
+                    u32::from(ResultCode::ReplayTx)
                 );
                 assert_eq!(
                     response[0].result.info,
@@ -1678,7 +1678,7 @@ mod test_process_proposal {
                 for res in response {
                     assert_eq!(
                         res.result.code,
-                        u32::from(ErrorCodes::InvalidChainId)
+                        u32::from(ResultCode::InvalidChainId)
                     );
                     assert_eq!(
                         res.result.info,
@@ -1729,7 +1729,7 @@ mod test_process_proposal {
             Err(TestError::RejectProposal(response)) => {
                 assert_eq!(
                     response[0].result.code,
-                    u32::from(ErrorCodes::ExpiredTx)
+                    u32::from(ResultCode::ExpiredTx)
                 );
             }
         }
@@ -1775,7 +1775,7 @@ mod test_process_proposal {
             Err(TestError::RejectProposal(response)) => {
                 assert_eq!(
                     response[0].result.code,
-                    u32::from(ErrorCodes::AllocationError)
+                    u32::from(ResultCode::AllocationError)
                 );
             }
         }
@@ -1817,7 +1817,7 @@ mod test_process_proposal {
             Err(TestError::RejectProposal(response)) => {
                 assert_eq!(
                     response[0].result.code,
-                    u32::from(ErrorCodes::TxGasLimit)
+                    u32::from(ResultCode::TxGasLimit)
                 );
             }
         }
@@ -1860,7 +1860,7 @@ mod test_process_proposal {
             Err(TestError::RejectProposal(response)) => {
                 assert_eq!(
                     response[0].result.code,
-                    u32::from(ErrorCodes::FeeError)
+                    u32::from(ResultCode::FeeError)
                 );
             }
         }
@@ -1903,7 +1903,7 @@ mod test_process_proposal {
             Err(TestError::RejectProposal(response)) => {
                 assert_eq!(
                     response[0].result.code,
-                    u32::from(ErrorCodes::FeeError)
+                    u32::from(ResultCode::FeeError)
                 );
             }
         }
@@ -1946,7 +1946,7 @@ mod test_process_proposal {
             Err(TestError::RejectProposal(response)) => {
                 assert_eq!(
                     response[0].result.code,
-                    u32::from(ErrorCodes::FeeError)
+                    u32::from(ResultCode::FeeError)
                 );
             }
         }
@@ -1989,7 +1989,7 @@ mod test_process_proposal {
             Err(TestError::RejectProposal(response)) => {
                 assert_eq!(
                     response[0].result.code,
-                    u32::from(ErrorCodes::FeeError)
+                    u32::from(ResultCode::FeeError)
                 );
             }
         }
@@ -2043,7 +2043,7 @@ mod test_process_proposal {
             };
             assert_eq!(
                 response.result.code,
-                u32::from(ErrorCodes::AllocationError)
+                u32::from(ResultCode::AllocationError)
             );
             assert_eq!(
                 response.result.info,
@@ -2102,7 +2102,7 @@ mod test_process_proposal {
             Err(TestError::RejectProposal(response)) => {
                 assert_eq!(
                     response[0].result.code,
-                    u32::from(ErrorCodes::TooLarge)
+                    u32::from(ResultCode::TooLarge)
                 );
             }
         }
@@ -2114,7 +2114,7 @@ mod test_process_proposal {
             Ok(_) => panic!("Test failed"),
             Err(TestError::RejectProposal(response)) => {
                 assert!(
-                    response[0].result.code != u32::from(ErrorCodes::TooLarge)
+                    response[0].result.code != u32::from(ResultCode::TooLarge)
                 );
             }
         }

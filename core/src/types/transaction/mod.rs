@@ -36,7 +36,7 @@ use crate::types::ibc::IbcEvent;
 use crate::types::storage;
 use crate::types::transaction::protocol::ProtocolTx;
 
-/// The different error codes that the ledger may send back to a client
+/// The different result codes that the ledger may send back to a client
 /// indicating the status of their submitted tx
 #[derive(
     Debug,
@@ -49,7 +49,7 @@ use crate::types::transaction::protocol::ProtocolTx;
     Serialize,
     Deserialize,
 )]
-pub enum ErrorCodes {
+pub enum ResultCode {
     /// Success
     Ok = 0,
     /// Error in WASM tx execution
@@ -82,12 +82,12 @@ pub enum ErrorCodes {
     TooLarge = 14,
 }
 
-impl ErrorCodes {
-    /// Checks if the given [`ErrorCodes`] value is a protocol level error,
+impl ResultCode {
+    /// Checks if the given [`ResultCode`] value is a protocol level error,
     /// that can be recovered from at the finalize block stage.
     pub const fn is_recoverable(&self) -> bool {
-        use ErrorCodes::*;
-        // NOTE: pattern match on all `ErrorCodes` variants, in order
+        use ResultCode::*;
+        // NOTE: pattern match on all `ResultCode` variants, in order
         // to catch potential bugs when adding new codes
         match self {
             Ok | WasmRuntimeError => true,
@@ -109,25 +109,25 @@ impl ErrorCodes {
     }
 }
 
-impl From<ErrorCodes> for String {
-    fn from(code: ErrorCodes) -> String {
+impl From<ResultCode> for String {
+    fn from(code: ResultCode) -> String {
         code.to_string()
     }
 }
 
-impl From<ErrorCodes> for u32 {
-    fn from(code: ErrorCodes) -> u32 {
+impl From<ResultCode> for u32 {
+    fn from(code: ResultCode) -> u32 {
         code.to_u32()
     }
 }
 
-impl Display for ErrorCodes {
+impl Display for ResultCode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_u32())
     }
 }
 
-impl FromStr for ErrorCodes {
+impl FromStr for ResultCode {
     type Err = std::io::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -143,8 +143,8 @@ impl FromStr for ErrorCodes {
     }
 }
 
-impl From<ErrorCodes> for crate::tendermint::abci::Code {
-    fn from(value: ErrorCodes) -> Self {
+impl From<ResultCode> for crate::tendermint::abci::Code {
+    fn from(value: ResultCode) -> Self {
         Self::from(value.to_u32())
     }
 }
