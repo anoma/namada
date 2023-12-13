@@ -363,7 +363,7 @@ pub trait DB: std::fmt::Debug {
         &self,
         height: BlockHeight,
         last_height: BlockHeight,
-    ) -> Result<Uint>;
+    ) -> Result<Option<Uint>>;
 
     /// Write a replay protection entry
     fn write_replay_protection_entry(
@@ -1178,7 +1178,10 @@ where
             }
 
             // Prune the BridgePool subtree stores with invalid nonce
-            let mut epoch = self.get_oldest_epoch_with_valid_nonce()?;
+            let mut epoch = match self.get_oldest_epoch_with_valid_nonce()? {
+                Some(epoch) => epoch,
+                None => return Ok(()),
+            };
             while oldest_epoch < epoch {
                 epoch = epoch.prev();
                 self.db.prune_merkle_tree_store(
@@ -1216,11 +1219,15 @@ where
     }
 
     /// Get oldest epoch which has the valid signed nonce of the bridge pool
-    pub fn get_oldest_epoch_with_valid_nonce(&self) -> Result<Epoch> {
+    fn get_oldest_epoch_with_valid_nonce(&self) -> Result<Option<Epoch>> {
         let last_height = self.get_last_block_height();
-        let current_nonce = self
+        let current_nonce = match self
             .db
-            .read_bridge_pool_signed_nonce(last_height, last_height)?;
+            .read_bridge_pool_signed_nonce(last_height, last_height)?
+        {
+            Some(nonce) => nonce,
+            None => return Ok(None),
+        };
         let (mut epoch, _) = self.get_last_epoch();
         // We don't need to check the older epochs because their Merkle tree
         // snapshots have been already removed
@@ -1235,13 +1242,19 @@ where
                     Some(h) => h,
                     None => continue,
                 };
-            let nonce =
-                self.db.read_bridge_pool_signed_nonce(height, last_height)?;
+            let nonce = match self
+                .db
+                .read_bridge_pool_signed_nonce(height, last_height)?
+            {
+                Some(nonce) => nonce,
+                // skip pruning when the old epoch doesn't have the signed nonce
+                None => break,
+            };
             if nonce < current_nonce {
                 break;
             }
         }
-        Ok(epoch)
+        Ok(Some(epoch))
     }
 
     /// Check it the given transaction's hash is already present in storage
