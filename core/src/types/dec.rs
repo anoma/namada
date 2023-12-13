@@ -491,6 +491,27 @@ pub mod testing {
             |(mantissa, scale)| Dec::new(mantissa.into(), scale).unwrap(),
         )
     }
+
+    prop_compose! {
+        /// Generate an arbitrary uint
+        pub fn arb_uint()(value: [u64; 4]) -> Uint {
+            Uint(value)
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary signed 256-bit integer
+        pub fn arb_i256()(value in arb_uint()) -> I256 {
+            I256(value)
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary decimal wih the native denomination
+        pub fn arb_dec()(value in arb_i256()) -> Dec {
+            Dec(value)
+        }
+    }
 }
 
 #[cfg(test)]

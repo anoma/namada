@@ -447,6 +447,8 @@ pub mod tests {
 /// Test helpers
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
+    use proptest::prop_compose;
+
     use super::*;
     use crate::types::token::{self, Amount};
 
@@ -496,6 +498,13 @@ pub mod testing {
                 asset: arbitrary_eth_address(),
                 receiver,
             }],
+        }
+    }
+
+    prop_compose! {
+        // Generate an arbitrary Ethereum address
+        pub fn arb_eth_address()(bytes: [u8; 20]) -> EthAddress {
+            EthAddress(bytes)
         }
     }
 }

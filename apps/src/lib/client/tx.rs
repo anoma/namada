@@ -221,11 +221,7 @@ pub async fn submit_reveal_aux(
             let (mut tx, signing_data, _epoch) =
                 tx::build_reveal_pk(context, &args, &public_key).await?;
 
-            signing::generate_test_vector(context, &tx).await?;
-
             sign(context, &mut tx, &args, signing_data).await?;
-
-            signing::generate_test_vector(context, &tx).await?;
 
             context.submit(tx, &args).await?;
         }
@@ -241,16 +237,12 @@ pub async fn submit_bridge_pool_tx<N: Namada>(
     let tx_args = args.tx.clone();
     let (mut tx, signing_data, _epoch) = args.clone().build(namada).await?;
 
-    signing::generate_test_vector(namada, &tx).await?;
-
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         submit_reveal_aux(namada, tx_args.clone(), &args.sender).await?;
 
         sign(namada, &mut tx, &tx_args, signing_data).await?;
-
-        signing::generate_test_vector(namada, &tx).await?;
 
         namada.submit(tx, &tx_args).await?;
     }
@@ -269,14 +261,10 @@ where
 
     let (mut tx, signing_data, _epoch) = args.build(namada).await?;
 
-    signing::generate_test_vector(namada, &tx).await?;
-
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
-
-        signing::generate_test_vector(namada, &tx).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -293,14 +281,10 @@ where
 {
     let (mut tx, signing_data, _epoch) = args.build(namada).await?;
 
-    signing::generate_test_vector(namada, &tx).await?;
-
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
-
-        signing::generate_test_vector(namada, &tx).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -318,14 +302,10 @@ where
     let (mut tx, signing_data, _epoch) =
         tx::build_init_account(namada, &args).await?;
 
-    signing::generate_test_vector(namada, &tx).await?;
-
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
-
-        signing::generate_test_vector(namada, &tx).await?;
 
         let result = namada.submit(tx, &args.tx).await?;
         if let ProcessTxResponse::Applied(response) = result {
@@ -443,8 +423,6 @@ pub async fn submit_change_consensus_key(
         None,
     )
     .await?;
-
-    signing::generate_test_vector(namada, &tx).await?;
 
     if tx_args.dump_tx {
         tx::dump_tx(namada.io(), &tx_args, tx);
@@ -773,14 +751,10 @@ pub async fn submit_become_validator(
     )
     .await?;
 
-    signing::generate_test_vector(namada, &tx).await?;
-
     if tx_args.dump_tx {
         tx::dump_tx(namada.io(), &tx_args, tx);
     } else {
         sign(namada, &mut tx, &tx_args, signing_data).await?;
-
-        signing::generate_test_vector(namada, &tx).await?;
 
         namada.submit(tx, &tx_args).await?.initialized_accounts();
 
@@ -942,15 +916,12 @@ pub async fn submit_transfer(
 
         let (mut tx, signing_data, tx_epoch) =
             args.clone().build(namada).await?;
-        signing::generate_test_vector(namada, &tx).await?;
 
         if args.tx.dump_tx {
             tx::dump_tx(namada.io(), &args.tx, tx);
             break;
         } else {
             sign(namada, &mut tx, &args.tx, signing_data).await?;
-
-            signing::generate_test_vector(namada, &tx).await?;
 
             let result = namada.submit(tx, &args.tx).await?;
 
@@ -991,14 +962,11 @@ where
 {
     submit_reveal_aux(namada, args.tx.clone(), &args.source).await?;
     let (mut tx, signing_data, _epoch) = args.build(namada).await?;
-    signing::generate_test_vector(namada, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
-
-        signing::generate_test_vector(namada, &tx).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -1126,14 +1094,11 @@ where
 
         tx::build_default_proposal(namada, &args, proposal).await?
     };
-    signing::generate_test_vector(namada, &tx_builder).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx_builder);
     } else {
         sign(namada, &mut tx_builder, &args.tx, signing_data).await?;
-
-        signing::generate_test_vector(namada, &tx_builder).await?;
 
         namada.submit(tx_builder, &args.tx).await?;
     }
@@ -1212,14 +1177,11 @@ where
     } else {
         args.build(namada).await?
     };
-    signing::generate_test_vector(namada, &tx_builder).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx_builder);
     } else {
         sign(namada, &mut tx_builder, &args.tx, signing_data).await?;
-
-        signing::generate_test_vector(namada, &tx_builder).await?;
 
         namada.submit(tx_builder, &args.tx).await?;
     }
@@ -1332,14 +1294,11 @@ where
 
     let (mut tx, signing_data, _fee_unshield_epoch) =
         args.build(namada).await?;
-    signing::generate_test_vector(namada, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
-
-        signing::generate_test_vector(namada, &tx).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -1356,14 +1315,11 @@ where
 {
     let (mut tx, signing_data, _fee_unshield_epoch, latest_withdrawal_pre) =
         args.build(namada).await?;
-    signing::generate_test_vector(namada, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
-
-        signing::generate_test_vector(namada, &tx).await?;
 
         namada.submit(tx, &args.tx).await?;
 
@@ -1382,14 +1338,11 @@ where
 {
     let (mut tx, signing_data, _fee_unshield_epoch) =
         args.build(namada).await?;
-    signing::generate_test_vector(namada, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
-
-        signing::generate_test_vector(namada, &tx).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -1406,14 +1359,11 @@ where
 {
     let (mut tx, signing_data, _fee_unshield_epoch) =
         args.build(namada).await?;
-    signing::generate_test_vector(namada, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
-
-        signing::generate_test_vector(namada, &tx).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -1429,14 +1379,11 @@ where
     <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
 {
     let (mut tx, signing_data) = args.build(namada).await?;
-    signing::generate_test_vector(namada, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
-
-        signing::generate_test_vector(namada, &tx).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -1453,14 +1400,11 @@ where
 {
     let (mut tx, signing_data, _fee_unshield_epoch) =
         args.build(namada).await?;
-    signing::generate_test_vector(namada, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
-
-        signing::generate_test_vector(namada, &tx).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -1477,14 +1421,11 @@ where
 {
     let (mut tx, signing_data, _fee_unshield_epoch) =
         args.build(namada).await?;
-    signing::generate_test_vector(namada, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
-
-        signing::generate_test_vector(namada, &tx).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -1501,7 +1442,6 @@ where
 // {
 //     let (mut tx, signing_data, _fee_unshield_epoch) =
 //         args.build(namada).await?;
-//     signing::generate_test_vector(namada, &tx).await?;
 
 //     if args.tx.dump_tx {
 //         tx::dump_tx(namada.io(), &args.tx, tx);
@@ -1523,14 +1463,11 @@ where
 {
     let (mut tx, signing_data, _fee_unshield_epoch) =
         args.build(namada).await?;
-    signing::generate_test_vector(namada, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
-
-        signing::generate_test_vector(namada, &tx).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -1547,14 +1484,11 @@ where
 {
     let (mut tx, signing_data, _fee_unshield_epoch) =
         args.build(namada).await?;
-    signing::generate_test_vector(namada, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
-
-        signing::generate_test_vector(namada, &tx).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -1571,14 +1505,11 @@ where
 {
     let (mut tx, signing_data, _fee_unshield_epoch) =
         args.build(namada).await?;
-    signing::generate_test_vector(namada, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
-
-        signing::generate_test_vector(namada, &tx).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -1596,14 +1527,10 @@ where
     let (mut tx, signing_data, _fee_unshield_epoch) =
         args.build(namada).await?;
 
-    signing::generate_test_vector(namada, &tx).await?;
-
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
-
-        signing::generate_test_vector(namada, &tx).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -1620,14 +1547,10 @@ where
 {
     let (mut tx, signing_data, _epoch) = args.build(namada).await?;
 
-    signing::generate_test_vector(namada, &tx).await?;
-
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
-
-        signing::generate_test_vector(namada, &tx).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
