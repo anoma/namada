@@ -4440,6 +4440,7 @@ dependencies = [
  "fd-lock",
  "futures",
  "itertools 0.10.5",
+ "lazy_static",
  "masp_primitives",
  "masp_proofs",
  "namada_core",
