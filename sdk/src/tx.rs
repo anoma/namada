@@ -45,7 +45,7 @@ use namada_core::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
 use namada_core::types::transaction::pgf::UpdateStewardCommission;
-use namada_core::types::transaction::{pos, TxResult};
+use namada_core::types::transaction::{pos, ErrorCodes, TxResult};
 use namada_core::types::{storage, token};
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
@@ -137,7 +137,7 @@ impl ProcessTxResponse {
     // always returns false for dry-run transactions.
     pub fn is_applied_and_valid(&self) -> bool {
         match self {
-            ProcessTxResponse::Applied(resp) => resp.code == 0.to_string(),
+            ProcessTxResponse::Applied(resp) => resp.code == ErrorCodes::Ok,
             ProcessTxResponse::DryRun(_) | ProcessTxResponse::Broadcast(_) => {
                 false
             }
@@ -418,7 +418,7 @@ pub fn display_wrapper_resp_and_get_result(
     context: &impl Namada,
     resp: &TxResponse,
 ) -> bool {
-    let result = if resp.code != 0.to_string() {
+    let result = if resp.code != ErrorCodes::Ok {
         display_line!(
             context.io(),
             "Wrapper transaction failed with error code {}. Used {} gas.",

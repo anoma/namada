@@ -17,7 +17,7 @@ pub mod protocol;
 pub mod wrapper;
 
 use std::collections::BTreeSet;
-use std::fmt;
+use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -38,7 +38,17 @@ use crate::types::transaction::protocol::ProtocolTx;
 
 /// The different error codes that the ledger may send back to a client
 /// indicating the status of their submitted tx
-#[derive(Debug, Copy, Clone, FromPrimitive, ToPrimitive, PartialEq, Eq)]
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    FromPrimitive,
+    ToPrimitive,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+)]
 pub enum ErrorCodes {
     /// Success
     Ok = 0,
@@ -99,15 +109,37 @@ impl ErrorCodes {
     }
 }
 
+impl From<ErrorCodes> for String {
+    fn from(code: ErrorCodes) -> String {
+        code.to_string()
+    }
+}
+
 impl From<ErrorCodes> for u32 {
     fn from(code: ErrorCodes) -> u32 {
         code.to_u32()
     }
 }
 
-impl From<ErrorCodes> for String {
-    fn from(code: ErrorCodes) -> String {
-        code.to_u32().to_string()
+impl Display for ErrorCodes {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.to_u32())
+    }
+}
+
+impl FromStr for ErrorCodes {
+    type Err = std::io::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let raw = u32::from_str(s).map_err(|e| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, e)
+        })?;
+        Self::from_u32(raw).ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Unexpected error code",
+            )
+        })
     }
 }
 

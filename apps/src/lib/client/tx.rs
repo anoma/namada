@@ -960,7 +960,7 @@ pub async fn submit_transfer(
                 // If a transaction is shielded
                     tx_epoch.is_some() &&
                 // And it is rejected by a VP
-                    resp.code == 1.to_string() &&
+                    matches!(resp.inner_tx_result(), InnerTxResult::VpsRejected(_)) &&
                 // And its submission epoch doesn't match construction epoch
                     tx_epoch.unwrap() != submission_epoch =>
                 {
