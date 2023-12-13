@@ -454,21 +454,6 @@ where
                             event["height"] = height.to_string();
                             response.events.push(event);
                         }
-                        match serde_json::to_string(
-                            &result.initialized_accounts,
-                        ) {
-                            Ok(initialized_accounts) => {
-                                tx_event["initialized_accounts"] =
-                                    initialized_accounts;
-                            }
-                            Err(err) => {
-                                tracing::error!(
-                                    "Failed to serialize the initialized \
-                                     accounts: {}",
-                                    err
-                                );
-                            }
-                        }
                     } else {
                         tracing::trace!(
                             "some VPs rejected transaction {} storage \

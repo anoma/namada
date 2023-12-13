@@ -21,7 +21,7 @@ use namada::types::dec::Dec;
 use namada::types::io::Io;
 use namada::types::key::{self, *};
 use namada::types::transaction::pos::{BecomeValidator, ConsensusKeyChange};
-use namada_sdk::rpc::{TxBroadcastData, TxResponse};
+use namada_sdk::rpc::{InnerTxResult, TxBroadcastData, TxResponse};
 use namada_sdk::wallet::alias::validator_consensus_key;
 use namada_sdk::wallet::{Wallet, WalletIo};
 use namada_sdk::{display_line, edisplay_line, error, signing, tx, Namada};
@@ -328,9 +328,11 @@ where
 
         signing::generate_test_vector(namada, &tx).await?;
 
-        let result = namada.submit(tx, &args.tx).await?;
-        if let ProcessTxResponse::Applied(response) = result {
-            return Ok(response.initialized_accounts.first().cloned());
+        let response = namada.submit(tx, &args.tx).await?;
+        if let ProcessTxResponse::Applied(tx_resp) = response {
+            if let InnerTxResult::Success(result) = tx_resp.inner_tx_result() {
+                return Ok(result.initialized_accounts.first().cloned());
+            }
         }
     }
 
@@ -779,7 +781,7 @@ pub async fn submit_become_validator(
 
         signing::generate_test_vector(namada, &tx).await?;
 
-        namada.submit(tx, &tx_args).await?.initialized_accounts();
+        namada.submit(tx, &tx_args).await?;
 
         if !tx_args.dry_run {
             // add validator address and keys to the wallet

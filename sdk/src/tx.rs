@@ -133,14 +133,6 @@ pub enum ProcessTxResponse {
 }
 
 impl ProcessTxResponse {
-    /// Get the the accounts that were reported to be initialized
-    pub fn initialized_accounts(&self) -> Vec<Address> {
-        match self {
-            Self::Applied(result) => result.initialized_accounts.clone(),
-            _ => vec![],
-        }
-    }
-
     // Is the transaction applied and was it accepted by all VPs? Note that this
     // always returns false for dry-run transactions.
     pub fn is_applied_and_valid(&self) -> bool {
@@ -236,14 +228,18 @@ pub async fn process_tx(
                 .map(ProcessTxResponse::Broadcast)
         } else {
             match submit_tx(context, to_broadcast).await {
-                Ok(x) => {
-                    save_initialized_accounts(
-                        context,
-                        args,
-                        x.initialized_accounts.clone(),
-                    )
-                    .await;
-                    Ok(ProcessTxResponse::Applied(x))
+                Ok(resp) => {
+                    if let InnerTxResult::Success(result) =
+                        resp.inner_tx_result()
+                    {
+                        save_initialized_accounts(
+                            context,
+                            args,
+                            result.initialized_accounts.clone(),
+                        )
+                        .await;
+                    }
+                    Ok(ProcessTxResponse::Applied(resp))
                 }
                 Err(x) => Err(x),
             }

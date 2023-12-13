@@ -538,10 +538,8 @@ pub struct TxResponse {
     pub hash: String,
     /// Response code
     pub code: String,
-    /// Gas used
+    /// Gas used. If there's an `inner_tx`, its gas is equal to this value.
     pub gas_used: String,
-    /// Initialized accounts
-    pub initialized_accounts: Vec<Address>,
 }
 
 /// Determines a result of an inner tx from [`TxResponse::inner_tx_result`].
@@ -589,15 +587,6 @@ impl TryFrom<Event> for TxResponse {
             .get("gas_used")
             .ok_or_else(|| missing_field_err("gas_used"))?
             .clone();
-        let initialized_accounts = event
-            .get("initialized_accounts")
-            .map(String::as_str)
-            // TODO: fix finalize block, to return initialized accounts,
-            // even when we reject a tx?
-            .map_or(Ok(vec![]), |initialized_accounts| {
-                serde_json::from_str(initialized_accounts)
-                    .map_err(|err| format!("JSON decode error: {err}"))
-            })?;
 
         Ok(TxResponse {
             inner_tx,
@@ -607,7 +596,6 @@ impl TryFrom<Event> for TxResponse {
             height,
             code,
             gas_used,
-            initialized_accounts,
         })
     }
 }
@@ -702,10 +690,6 @@ pub async fn query_tx_response<C: crate::queries::Client + Sync>(
         hash: event_map["hash"].to_string(),
         code: event_map["code"].to_string(),
         gas_used: event_map["gas_used"].to_string(),
-        initialized_accounts: serde_json::from_str(
-            event_map["initialized_accounts"],
-        )
-        .unwrap_or_default(),
     };
     Ok(result)
 }
