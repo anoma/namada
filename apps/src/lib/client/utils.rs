@@ -112,10 +112,10 @@ pub async fn join_network(
     // Pre-load the validator pre-genesis wallet and its keys to validate that
     // everything is in place before downloading the network archive
     let validator_alias_and_pre_genesis_wallet =
-        validator_alias_and_dir.map(|(validator_alias, pre_genesis_dir)| {
+        validator_alias_and_dir.as_ref().map(|(validator_alias, pre_genesis_dir)| {
             (
                 alias::Alias::from(validator_alias),
-                pre_genesis::load(&pre_genesis_dir).unwrap_or_else(|err| {
+                pre_genesis::load(pre_genesis_dir).unwrap_or_else(|err| {
                     eprintln!(
                         "Error loading validator pre-genesis wallet {err}",
                     );
@@ -262,7 +262,15 @@ pub async fn join_network(
 
     // Try to load pre-genesis wallet, if any
     let pre_genesis_wallet_path = base_dir.join(PRE_GENESIS_DIR);
-    let pre_genesis_wallet = crate::wallet::load(&pre_genesis_wallet_path);
+    let pre_genesis_wallet =
+        if let Some(wallet) = crate::wallet::load(&pre_genesis_wallet_path) {
+            Some(wallet)
+        } else {
+            validator_alias_and_dir
+                .as_ref()
+                .and_then(|(_, path)| crate::wallet::load(path))
+        };
+
     // Derive wallet from genesis
     let wallet = genesis.derive_wallet(
         &chain_dir,
