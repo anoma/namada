@@ -3041,7 +3041,7 @@ fn test_epoch_sleep() -> Result<()> {
 
 /// Prepare proposal data in the test's temp dir from the given source address.
 /// This can be submitted with "init-proposal" command.
-fn prepare_proposal_data(
+pub fn prepare_proposal_data(
     test: &setup::Test,
     source: Address,
     data: impl serde::Serialize,

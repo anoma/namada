@@ -4,7 +4,6 @@ use data_encoding::HEXUPPER;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use masp_proofs::bls12_381;
-use namada::core::ledger::inflation;
 use namada::core::ledger::masp_conversions::update_allowed_conversions;
 use namada::core::ledger::pgf::inflation as pgf_inflation;
 use namada::core::types::storage::KeySeg;
@@ -144,7 +143,7 @@ where
             // Invariant: Process slashes before inflation as they may affect
             // the rewards in the current epoch.
             self.process_slashes();
-            self.apply_inflation(current_epoch)?;
+            self.apply_inflation(current_epoch, &mut response)?;
         }
 
         // Consensus set liveness check
@@ -660,7 +659,11 @@ where
     /// account, then update the reward products of the validators. This is
     /// executed while finalizing the first block of a new epoch and is applied
     /// with respect to the previous epoch.
-    fn apply_inflation(&mut self, current_epoch: Epoch) -> Result<()> {
+    fn apply_inflation(
+        &mut self,
+        current_epoch: Epoch,
+        response: &mut shim::response::FinalizeBlock,
+    ) -> Result<()> {
         let last_epoch = current_epoch.prev();
 
         // Get the number of blocks in the last epoch
@@ -683,6 +686,10 @@ where
 
         // Pgf inflation
         pgf_inflation::apply_inflation(&mut self.wl_storage)?;
+        for ibc_event in self.wl_storage.write_log_mut().take_ibc_events() {
+            let event = Event::from(ibc_event.clone());
+            response.events.push(event);
+        }
 
         Ok(())
     }

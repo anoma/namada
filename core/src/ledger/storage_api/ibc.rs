@@ -3,28 +3,26 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use namada::core::ledger::governance::storage::proposal::PGFIbcTarget;
-use namada::core::ledger::ibc::{
-    IbcActions, IbcCommonContext, IbcStorageContext,
-};
-use namada::core::ledger::storage_api::Error;
-use namada::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
-use namada::ibc::apps::transfer::types::packet::PacketData;
-use namada::ibc::apps::transfer::types::PrefixedCoin;
-use namada::ibc::core::channel::types::timeout::TimeoutHeight;
-use namada::ibc::primitives::Msg;
-use namada::ledger::parameters::read_epoch_duration_parameter;
-use namada::ledger::storage::wl_storage::WriteLogAndStorage;
-use namada::ledger::storage::write_log::WriteLog;
-use namada::ledger::storage::{DBIter, Storage, StorageHasher, WlStorage, DB};
-use namada::ledger::storage_api::{self, token, ResultExt, StorageWrite};
-use namada::tendermint::Time as TmTime;
-use namada::types::address::{Address, InternalAddress};
-use namada::types::hash::Hash;
-use namada::types::ibc::{IbcEvent, IbcShieldedTransfer};
-use namada::types::time::DateTimeUtc;
-use namada::types::token::DenominatedAmount;
+use crate::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
+use crate::ibc::apps::transfer::types::packet::PacketData;
+use crate::ibc::apps::transfer::types::PrefixedCoin;
+use crate::ibc::core::channel::types::timeout::TimeoutHeight;
+use crate::ibc::primitives::Msg;
+use crate::ledger::governance::storage::proposal::PGFIbcTarget;
+use crate::ledger::ibc::{IbcActions, IbcCommonContext, IbcStorageContext};
+use crate::ledger::parameters::read_epoch_duration_parameter;
+use crate::ledger::storage::wl_storage::WriteLogAndStorage;
+use crate::ledger::storage::write_log::{self, WriteLog};
+use crate::ledger::storage::{DBIter, Storage, StorageHasher, WlStorage, DB};
+use crate::ledger::storage_api::{self, token, Error, ResultExt, StorageWrite};
+use crate::tendermint::Time as TmTime;
+use crate::types::address::{Address, InternalAddress};
+use crate::types::hash::Hash;
+use crate::types::ibc::{IbcEvent, IbcShieldedTransfer};
+use crate::types::time::DateTimeUtc;
+use crate::types::token::DenominatedAmount;
 
+/// IBC protocol context
 #[derive(Debug)]
 pub struct IbcProtocolContext<'a, D, H>
 where
@@ -58,10 +56,7 @@ where
         self.wl_storage.split_borrow()
     }
 
-    fn write_tx_hash(
-        &mut self,
-        hash: Hash,
-    ) -> namada::ledger::storage::write_log::Result<()> {
+    fn write_tx_hash(&mut self, hash: Hash) -> write_log::Result<()> {
         self.wl_storage.write_tx_hash(hash)
     }
 }
@@ -99,7 +94,7 @@ where
         token: &Address,
         amount: DenominatedAmount,
     ) -> Result<(), Error> {
-        token::transfer(self, token, src, dest, amount.amount)
+        token::transfer(self, token, src, dest, amount.amount())
     }
 
     /// Handle masp tx
@@ -117,7 +112,7 @@ where
         token: &Address,
         amount: DenominatedAmount,
     ) -> Result<(), Error> {
-        token::credit_tokens(self.wl_storage, token, target, amount.amount)?;
+        token::credit_tokens(self.wl_storage, token, target, amount.amount())?;
         let minter_key = token::minter_key(token);
         self.wl_storage
             .write(&minter_key, Address::Internal(InternalAddress::Ibc))
@@ -130,7 +125,7 @@ where
         token: &Address,
         amount: DenominatedAmount,
     ) -> Result<(), Error> {
-        token::burn(self.wl_storage, token, target, amount.amount)
+        token::burn(self.wl_storage, token, target, amount.amount())
     }
 
     fn log_string(&self, message: String) {
@@ -145,6 +140,7 @@ where
 {
 }
 
+/// Transfer tokens over IBC
 pub fn transfer_over_ibc<D, H>(
     wl_storage: &mut WlStorage<D, H>,
     token: &Address,

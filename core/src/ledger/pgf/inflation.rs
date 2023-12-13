@@ -2,18 +2,23 @@
 
 use crate::ledger::governance::storage::proposal::PGFTarget;
 use crate::ledger::parameters::storage as params_storage;
+use crate::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
+use crate::ledger::storage_api::ibc::transfer_over_ibc;
 use crate::ledger::storage_api::pgf::{
     get_parameters, get_payments, get_stewards,
 };
-use crate::ledger::storage_api::token::credit_tokens;
-use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
+use crate::ledger::storage_api::token::{credit_tokens, transfer};
+use crate::ledger::storage_api::{self, StorageRead};
 use crate::types::dec::Dec;
 use crate::types::token;
 
 /// Apply the PGF inflation.
-pub fn apply_inflation<S>(storage: &mut S) -> storage_api::Result<()>
+pub fn apply_inflation<D, H>(
+    storage: &mut WlStorage<D, H>,
+) -> storage_api::Result<()>
 where
-    S: StorageRead + StorageWrite,
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
 {
     let pgf_parameters = get_parameters(storage)?;
     let staking_token = storage.get_native_token()?;
@@ -48,14 +53,14 @@ where
 
     for funding in pgf_fundings {
         let result = match &funding.detail {
-            PGFTarget::Internal(target) => storage_api::token::transfer(
+            PGFTarget::Internal(target) => transfer(
                 storage,
                 &staking_token,
                 &super::ADDRESS,
                 &target.target,
                 target.amount,
             ),
-            PGFTarget::Ibc(target) => ibc::transfer_over_ibc(
+            PGFTarget::Ibc(target) => transfer_over_ibc(
                 storage,
                 &staking_token,
                 &super::ADDRESS,

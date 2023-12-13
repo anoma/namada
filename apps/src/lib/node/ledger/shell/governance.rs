@@ -18,7 +18,7 @@ use namada::ledger::pos::BondId;
 use namada::ledger::protocol;
 use namada::ledger::storage::types::encode;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
-use namada::ledger::storage_api::{pgf, token, StorageWrite};
+use namada::ledger::storage_api::{ibc, pgf, token, StorageWrite};
 use namada::proof_of_stake::bond_amount;
 use namada::proof_of_stake::parameters::PosParams;
 use namada::proof_of_stake::storage::read_total_stake;
@@ -135,6 +135,13 @@ where
                              executed and passed.",
                             id
                         );
+
+                        for ibc_event in
+                            shell.wl_storage.write_log_mut().take_ibc_events()
+                        {
+                            let event = Event::from(ibc_event.clone());
+                            response.events.push(event);
+                        }
 
                         ProposalEvent::pgf_payments_proposal_event(id, result)
                             .into()
