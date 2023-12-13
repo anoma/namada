@@ -593,8 +593,8 @@ impl DB for MockDB {
         &self,
         _height: BlockHeight,
         _last_height: BlockHeight,
-    ) -> Result<Uint> {
-        Ok(Uint::default())
+    ) -> Result<Option<Uint>> {
+        Ok(None)
     }
 
     fn write_replay_protection_entry(
