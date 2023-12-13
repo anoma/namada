@@ -919,7 +919,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 validator_one_rpc,
             ],
-            Response::Ok("Transaction is valid"),
+            Response::Ok("Transaction was successfully applied"),
         ),
         // 3. Attempt to spend 10 ETH at SK(A) to PA(B)
         (
@@ -957,7 +957,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 validator_one_rpc,
             ],
-            Response::Ok("Transaction is valid"),
+            Response::Ok("Transaction was successfully applied"),
         ),
         // 5. Spend 7 BTC at SK(A) to PA(B)
         (
@@ -976,7 +976,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 validator_one_rpc,
             ],
-            Response::Ok("Transaction is valid"),
+            Response::Ok("Transaction was successfully applied"),
         ),
         // 6. Attempt to spend 7 BTC at SK(A) to PA(B)
         (
@@ -1014,7 +1014,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 validator_one_rpc,
             ],
-            Response::Ok("Transaction is valid"),
+            Response::Ok("Transaction was successfully applied"),
         ),
         // 8. Assert BTC balance at VK(A) is 0
         (
@@ -1070,7 +1070,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 validator_one_rpc,
             ],
-            Response::Ok("Transaction is valid"),
+            Response::Ok("Transaction was successfully applied"),
         ),
     ];
 
@@ -1093,7 +1093,7 @@ fn masp_txs_and_queries() -> Result<()> {
             let captured =
                 CapturedOutput::of(|| run(&node, Bin::Client, tx_args.clone()));
             match tx_result {
-                Response::Ok("Transaction is valid") => {
+                Response::Ok("Transaction was successfully applied") => {
                     assert!(
                         captured.result.is_ok(),
                         "{:?} failed with result {:?}.\n Unread output: {}",
@@ -1105,7 +1105,9 @@ fn masp_txs_and_queries() -> Result<()> {
                         node.assert_success();
                     } else {
                         assert!(
-                            captured.contains("Transaction is valid"),
+                            captured.contains(
+                                "Transaction was successfully applied"
+                            ),
                             "{:?} failed to contain needle 'Transaction is \
                              valid',\nGot output '{}'",
                             tx_args,

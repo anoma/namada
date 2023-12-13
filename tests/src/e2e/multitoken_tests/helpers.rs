@@ -53,11 +53,10 @@ pub fn init_multitoken_vp(test: &Test, rpc_addr: &str) -> Result<String> {
         "--ledger-address",
         rpc_addr,
     ];
-    let mut client_init_account =
-        run!(test, Bin::Client, init_account_args, Some(40))?;
-    client_init_account.exp_string("Transaction is valid.")?;
-    client_init_account.exp_string("Transaction applied")?;
-    client_init_account.assert_success();
+    let mut cmd = run!(test, Bin::Client, init_account_args, Some(40))?;
+    cmd.exp_string("Wrapper transaction accepted")?;
+    cmd.exp_string("Transaction was successfully applied")?;
+    cmd.assert_success();
     Ok(multitoken_alias.to_string())
 }
 
@@ -120,10 +119,10 @@ pub fn mint_red_tokens(
         "--ledger-address",
         rpc_addr,
     ];
-    let mut client_tx = run!(test, Bin::Client, tx_args, Some(40))?;
-    client_tx.exp_string("Transaction is valid.")?;
-    client_tx.exp_string("Transaction applied")?;
-    client_tx.assert_success();
+    let mut cmd = run!(test, Bin::Client, tx_args, Some(40))?;
+    cmd.exp_string("Wrapper transaction accepted")?;
+    cmd.exp_string("Transaction was successfully applied")?;
+    cmd.assert_success();
     Ok(())
 }
 

@@ -886,7 +886,8 @@ fn transfer_received_token(
         &rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction is valid.")?;
+    client.exp_string("Wrapper transaction accepted")?;
+    client.exp_string("Transaction was successfully applied")?;
     client.assert_success();
 
     Ok(())
@@ -1199,9 +1200,9 @@ fn submit_ibc_tx(
         ],
         Some(40)
     )?;
-    client.exp_string("Transaction applied")?;
+    client.exp_string("Transaction was successfully applied")?;
     if wait_reveal_pk {
-        client.exp_string("Transaction applied")?;
+        client.exp_string("Transaction was successfully applied")?;
     }
     check_tx_height(test, &mut client)
 }
@@ -1264,9 +1265,9 @@ fn transfer(
             Ok(0)
         }
         None => {
-            client.exp_string("Transaction applied")?;
+            client.exp_string("Transaction was successfully applied")?;
             if wait_reveal_pk {
-                client.exp_string("Transaction applied")?;
+                client.exp_string("Transaction was successfully applied")?;
             }
             check_tx_height(test, &mut client)
         }
@@ -1274,25 +1275,17 @@ fn transfer(
 }
 
 fn check_tx_height(test: &Test, client: &mut NamadaCmd) -> Result<u32> {
-    let (unread, matched) = client.exp_regex("\"height\": .*,")?;
+    let (_unread, matched) = client.exp_regex(r"height .*")?;
+    // Expecting e.g. "height 1337."
     let height_str = matched
         .trim()
-        .rsplit_once(' ')
+        .split_once(' ')
         .unwrap()
         .1
-        .replace(['"', ','], "");
-    let height = height_str.parse().unwrap();
-
-    let (_unread, matched) = client.exp_regex("\"code\": .*,")?;
-    let code = matched
-        .trim()
-        .rsplit_once(' ')
+        .split_once('.')
         .unwrap()
-        .1
-        .replace(['"', ','], "");
-    if code != "0" {
-        return Err(eyre!("The IBC transaction failed: unread {}", unread));
-    }
+        .0;
+    let height: u32 = height_str.parse().unwrap();
 
     // wait for the next block to use the app hash
     while height as u64 + 1 > query_height(test)?.revision_height() {

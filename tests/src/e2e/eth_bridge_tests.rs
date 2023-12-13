@@ -175,9 +175,8 @@ async fn test_roundtrip_eth_transfer() -> Result<()> {
         tx_args,
         Some(CLIENT_COMMAND_TIMEOUT_SECONDS)
     )?;
-    namadac_tx.exp_string("Transaction accepted")?;
-    namadac_tx.exp_string("Transaction applied")?;
-    namadac_tx.exp_string("Transaction is valid")?;
+    namadac_tx.exp_string("Wrapper transaction accepted")?;
+    namadac_tx.exp_string("Transaction was successfully applied")?;
     drop(namadac_tx);
 
     let mut namadar = run!(
@@ -367,9 +366,12 @@ async fn test_bridge_pool_e2e() {
         Some(CLIENT_COMMAND_TIMEOUT_SECONDS)
     )
     .unwrap();
-    namadac_tx.exp_string("Transaction accepted").unwrap();
-    namadac_tx.exp_string("Transaction applied").unwrap();
-    namadac_tx.exp_string("Transaction is valid").unwrap();
+    namadac_tx
+        .exp_string("Wrapper transaction accepted")
+        .unwrap();
+    namadac_tx
+        .exp_string("Transaction was successfully applied")
+        .unwrap();
     drop(namadac_tx);
 
     let mut namadar = run!(
@@ -767,8 +769,7 @@ async fn test_wdai_transfer_implicit_unauthorized() -> Result<()> {
             denom: 0u8.into(),
         },
     )?;
-    cmd.exp_string("Transaction is valid.")?;
-    cmd.exp_string("Transaction is invalid.")?;
+    cmd.exp_string("Transaction was rejected by VPs.")?;
     cmd.assert_success();
 
     // check balances are unchanged after an unsuccessful transfer
@@ -837,8 +838,8 @@ async fn test_wdai_transfer_established_unauthorized() -> Result<()> {
             denom: 0u8.into(),
         },
     )?;
-    cmd.exp_string("Transaction is valid.")?;
-    cmd.exp_string("Transaction is invalid.")?;
+    cmd.exp_string("Wrapper transaction accepted")?;
+    cmd.exp_string("Transaction was rejected by VPs")?;
     cmd.assert_success();
 
     // check balances are unchanged after an unsuccessful transfer
@@ -895,8 +896,8 @@ async fn test_wdai_transfer_implicit_to_implicit() -> Result<()> {
         &albert_addr.to_string(),
         second_transfer_amount,
     )?;
-    cmd.exp_string("Transaction is valid.")?;
-    cmd.exp_string("Transaction is valid.")?;
+    cmd.exp_string("Wrapper transaction accepted")?;
+    cmd.exp_string("Transaction was successfully applied")?;
     cmd.assert_success();
 
     let albert_wdai_balance = find_wrapped_erc20_balance(
@@ -973,8 +974,8 @@ async fn test_wdai_transfer_implicit_to_established() -> Result<()> {
         &albert_addr.to_string(),
         second_transfer_amount,
     )?;
-    cmd.exp_string("Transaction is valid.")?;
-    cmd.exp_string("Transaction is valid.")?;
+    cmd.exp_string("Wrapper transaction accepted")?;
+    cmd.exp_string("Transaction was successfully applied")?;
     cmd.assert_success();
 
     let albert_wdai_balance = find_wrapped_erc20_balance(
@@ -1054,8 +1055,8 @@ async fn test_wdai_transfer_established_to_implicit() -> Result<()> {
         &albert_established_addr.to_string(),
         second_transfer_amount,
     )?;
-    cmd.exp_string("Transaction is valid.")?;
-    cmd.exp_string("Transaction is valid.")?;
+    cmd.exp_string("Wrapper transaction accepted")?;
+    cmd.exp_string("Transaction was successfully applied")?;
     cmd.assert_success();
 
     let albert_established_wdai_balance = find_wrapped_erc20_balance(
@@ -1144,8 +1145,8 @@ async fn test_wdai_transfer_established_to_established() -> Result<()> {
         &albert_established_addr.to_string(),
         second_transfer_amount,
     )?;
-    cmd.exp_string("Transaction is valid.")?;
-    cmd.exp_string("Transaction is valid.")?;
+    cmd.exp_string("Wrapper transaction accepted")?;
+    cmd.exp_string("Transaction was successfully applied")?;
     cmd.assert_success();
 
     let albert_established_wdai_balance = find_wrapped_erc20_balance(
