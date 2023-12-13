@@ -18,7 +18,6 @@ use namada_core::types::eth_bridge_pool::{
 };
 use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::keccak::KeccakHash;
-use namada_core::types::storage::Epoch;
 use namada_core::types::token::{balance_key, Amount, DenominatedAmount};
 use namada_core::types::voting_power::FractionalVotingPower;
 use owo_colors::OwoColorize;
@@ -60,7 +59,7 @@ pub async fn build_bridge_pool_tx(
         fee_token,
         code_path,
     }: args::EthereumBridgePool,
-) -> Result<(Tx, SigningTxData, Option<Epoch>), Error> {
+) -> Result<(Tx, SigningTxData), Error> {
     let sender_ = sender.clone();
     let (transfer, tx_code_hash, signing_data) = futures::try_join!(
         validate_bridge_pool_tx(
@@ -98,7 +97,7 @@ pub async fn build_bridge_pool_tx(
     )
     .add_data(transfer);
 
-    let epoch = prepare_tx(
+    prepare_tx(
         context,
         &tx_args,
         &mut tx,
@@ -107,7 +106,7 @@ pub async fn build_bridge_pool_tx(
     )
     .await?;
 
-    Ok((tx, signing_data, epoch))
+    Ok((tx, signing_data))
 }
 
 /// Perform client validation checks on a Bridge pool transfer.

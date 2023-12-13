@@ -223,7 +223,7 @@ pub async fn submit_reveal_aux<'a>(
                 "Submitting a tx to reveal the public key for address \
                  {address}..."
             );
-            let (mut tx, signing_data, _epoch) =
+            let (mut tx, signing_data) =
                 tx::build_reveal_pk(context, &args, &public_key).await?;
 
             signing::generate_test_vector(context, &tx).await?;
@@ -244,7 +244,7 @@ pub async fn submit_bridge_pool_tx<'a, N: Namada<'a>>(
     args: args::EthereumBridgePool,
 ) -> Result<(), error::Error> {
     let tx_args = args.tx.clone();
-    let (mut tx, signing_data, _epoch) = args.clone().build(namada).await?;
+    let (mut tx, signing_data) = args.clone().build(namada).await?;
 
     signing::generate_test_vector(namada, &tx).await?;
 
@@ -272,7 +272,7 @@ where
 {
     submit_reveal_aux(namada, args.tx.clone(), &args.owner).await?;
 
-    let (mut tx, signing_data, _epoch) = args.build(namada).await?;
+    let (mut tx, signing_data) = args.build(namada).await?;
 
     signing::generate_test_vector(namada, &tx).await?;
 
@@ -296,7 +296,7 @@ pub async fn submit_update_account<'a, N: Namada<'a>>(
 where
     <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
 {
-    let (mut tx, signing_data, _epoch) = args.build(namada).await?;
+    let (mut tx, signing_data) = args.build(namada).await?;
 
     signing::generate_test_vector(namada, &tx).await?;
 
@@ -320,8 +320,7 @@ pub async fn submit_init_account<'a, N: Namada<'a>>(
 where
     <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
 {
-    let (mut tx, signing_data, _epoch) =
-        tx::build_init_account(namada, &args).await?;
+    let (mut tx, signing_data) = tx::build_init_account(namada, &args).await?;
 
     signing::generate_test_vector(namada, &tx).await?;
 
@@ -919,7 +918,7 @@ where
     <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
 {
     submit_reveal_aux(namada, args.tx.clone(), &args.source).await?;
-    let (mut tx, signing_data, _epoch) = args.build(namada).await?;
+    let (mut tx, signing_data) = args.build(namada).await?;
     signing::generate_test_vector(namada, &tx).await?;
 
     if args.tx.dump_tx {
@@ -945,8 +944,7 @@ where
     let current_epoch = rpc::query_and_print_epoch(namada).await;
     let governance_parameters =
         rpc::query_governance_parameters(namada.client()).await;
-    let (mut tx_builder, signing_data, _fee_unshield_epoch) = if args.is_offline
-    {
+    let (mut tx_builder, signing_data) = if args.is_offline {
         let proposal = OfflineProposal::try_from(args.proposal_data.as_ref())
             .map_err(|e| {
                 error::TxError::FailedGovernaneProposalDeserialize(
@@ -1071,8 +1069,7 @@ pub async fn submit_vote_proposal<'a, N: Namada<'a>>(
 where
     <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
 {
-    let (mut tx_builder, signing_data, _fee_unshield_epoch) = if args.is_offline
-    {
+    let (mut tx_builder, signing_data) = if args.is_offline {
         let default_signer = Some(args.voter.clone());
         let signing_data = aux_signing_data(
             namada,
@@ -1247,8 +1244,7 @@ where
     let default_address = args.source.clone().unwrap_or(args.validator.clone());
     submit_reveal_aux(namada, args.tx.clone(), &default_address).await?;
 
-    let (mut tx, signing_data, _fee_unshield_epoch) =
-        args.build(namada).await?;
+    let (mut tx, signing_data) = args.build(namada).await?;
     signing::generate_test_vector(namada, &tx).await?;
 
     if args.tx.dump_tx {
@@ -1271,7 +1267,7 @@ pub async fn submit_unbond<'a, N: Namada<'a>>(
 where
     <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
 {
-    let (mut tx, signing_data, _fee_unshield_epoch, latest_withdrawal_pre) =
+    let (mut tx, signing_data, latest_withdrawal_pre) =
         args.build(namada).await?;
     signing::generate_test_vector(namada, &tx).await?;
 
@@ -1297,8 +1293,7 @@ pub async fn submit_withdraw<'a, N: Namada<'a>>(
 where
     <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
 {
-    let (mut tx, signing_data, _fee_unshield_epoch) =
-        args.build(namada).await?;
+    let (mut tx, signing_data) = args.build(namada).await?;
     signing::generate_test_vector(namada, &tx).await?;
 
     if args.tx.dump_tx {
@@ -1321,8 +1316,7 @@ pub async fn submit_claim_rewards<'a, N: Namada<'a>>(
 where
     <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
 {
-    let (mut tx, signing_data, _fee_unshield_epoch) =
-        args.build(namada).await?;
+    let (mut tx, signing_data) = args.build(namada).await?;
     signing::generate_test_vector(namada, &tx).await?;
 
     if args.tx.dump_tx {
@@ -1368,8 +1362,7 @@ pub async fn submit_validator_commission_change<'a, N: Namada<'a>>(
 where
     <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
 {
-    let (mut tx, signing_data, _fee_unshield_epoch) =
-        args.build(namada).await?;
+    let (mut tx, signing_data) = args.build(namada).await?;
     signing::generate_test_vector(namada, &tx).await?;
 
     if args.tx.dump_tx {
@@ -1392,8 +1385,7 @@ pub async fn submit_validator_metadata_change<'a, N: Namada<'a>>(
 where
     <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
 {
-    let (mut tx, signing_data, _fee_unshield_epoch) =
-        args.build(namada).await?;
+    let (mut tx, signing_data) = args.build(namada).await?;
     signing::generate_test_vector(namada, &tx).await?;
 
     if args.tx.dump_tx {
@@ -1438,8 +1430,7 @@ pub async fn submit_unjail_validator<'a, N: Namada<'a>>(
 where
     <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
 {
-    let (mut tx, signing_data, _fee_unshield_epoch) =
-        args.build(namada).await?;
+    let (mut tx, signing_data) = args.build(namada).await?;
     signing::generate_test_vector(namada, &tx).await?;
 
     if args.tx.dump_tx {
@@ -1462,8 +1453,7 @@ pub async fn submit_deactivate_validator<'a, N: Namada<'a>>(
 where
     <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
 {
-    let (mut tx, signing_data, _fee_unshield_epoch) =
-        args.build(namada).await?;
+    let (mut tx, signing_data) = args.build(namada).await?;
     signing::generate_test_vector(namada, &tx).await?;
 
     if args.tx.dump_tx {
@@ -1486,8 +1476,7 @@ pub async fn submit_reactivate_validator<'a, N: Namada<'a>>(
 where
     <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
 {
-    let (mut tx, signing_data, _fee_unshield_epoch) =
-        args.build(namada).await?;
+    let (mut tx, signing_data) = args.build(namada).await?;
     signing::generate_test_vector(namada, &tx).await?;
 
     if args.tx.dump_tx {
@@ -1510,8 +1499,7 @@ pub async fn submit_update_steward_commission<'a, N: Namada<'a>>(
 where
     <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
 {
-    let (mut tx, signing_data, _fee_unshield_epoch) =
-        args.build(namada).await?;
+    let (mut tx, signing_data) = args.build(namada).await?;
 
     signing::generate_test_vector(namada, &tx).await?;
 
@@ -1535,7 +1523,7 @@ pub async fn submit_resign_steward<'a, N: Namada<'a>>(
 where
     <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
 {
-    let (mut tx, signing_data, _epoch) = args.build(namada).await?;
+    let (mut tx, signing_data) = args.build(namada).await?;
 
     signing::generate_test_vector(namada, &tx).await?;
 

@@ -179,14 +179,14 @@ pub async fn prepare_tx<'a>(
     tx: &mut Tx,
     fee_payer: common::PublicKey,
     tx_source_balance: Option<TxSourcePostBalance>,
-) -> Result<Option<Epoch>> {
+) -> Result<()> {
     if !args.dry_run {
         let epoch = rpc::query_epoch(context.client()).await?;
 
         signing::wrap_tx(context, tx, args, tx_source_balance, epoch, fee_payer)
             .await
     } else {
-        Ok(None)
+        Ok(())
     }
 }
 
@@ -270,7 +270,7 @@ pub async fn build_reveal_pk<'a>(
     context: &impl Namada<'a>,
     args: &args::Tx,
     public_key: &common::PublicKey,
-) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData)> {
     let signing_data =
         signing::aux_signing_data(context, args, None, Some(public_key.into()))
             .await?;
@@ -285,7 +285,7 @@ pub async fn build_reveal_pk<'a>(
         None,
     )
     .await
-    .map(|(tx, epoch)| (tx, signing_data, epoch))
+    .map(|tx| (tx, signing_data))
 }
 
 /// Broadcast a transaction to be included in the blockchain and checks that
@@ -514,7 +514,7 @@ pub async fn build_validator_commission_change<'a>(
         rate,
         tx_code_path,
     }: &args::CommissionRateChange,
-) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData)> {
     let default_signer = Some(validator.clone());
     let signing_data = signing::aux_signing_data(
         context,
@@ -614,7 +614,7 @@ pub async fn build_validator_commission_change<'a>(
         None,
     )
     .await
-    .map(|(tx, epoch)| (tx, signing_data, epoch))
+    .map(|tx| (tx, signing_data))
 }
 
 /// Submit validator metadata change
@@ -630,7 +630,7 @@ pub async fn build_validator_metadata_change<'a>(
         commission_rate,
         tx_code_path,
     }: &args::MetaDataChange,
-) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData)> {
     let default_signer = Some(validator.clone());
     let signing_data = signing::aux_signing_data(
         context,
@@ -743,7 +743,7 @@ pub async fn build_validator_metadata_change<'a>(
         None,
     )
     .await
-    .map(|(tx, epoch)| (tx, signing_data, epoch))
+    .map(|tx| (tx, signing_data))
 }
 
 /// Craft transaction to update a steward commission
@@ -755,7 +755,7 @@ pub async fn build_update_steward_commission<'a>(
         commission,
         tx_code_path,
     }: &args::UpdateStewardCommission,
-) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData)> {
     let default_signer = Some(steward.clone());
     let signing_data = signing::aux_signing_data(
         context,
@@ -802,7 +802,7 @@ pub async fn build_update_steward_commission<'a>(
         None,
     )
     .await
-    .map(|(tx, epoch)| (tx, signing_data, epoch))
+    .map(|tx| (tx, signing_data))
 }
 
 /// Craft transaction to resign as a steward
@@ -813,7 +813,7 @@ pub async fn build_resign_steward<'a>(
         steward,
         tx_code_path,
     }: &args::ResignSteward,
-) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData)> {
     let default_signer = Some(steward.clone());
     let signing_data = signing::aux_signing_data(
         context,
@@ -842,7 +842,7 @@ pub async fn build_resign_steward<'a>(
         None,
     )
     .await
-    .map(|(tx, epoch)| (tx, signing_data, epoch))
+    .map(|tx| (tx, signing_data))
 }
 
 /// Submit transaction to unjail a jailed validator
@@ -853,7 +853,7 @@ pub async fn build_unjail_validator<'a>(
         validator,
         tx_code_path,
     }: &args::TxUnjailValidator,
-) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData)> {
     let default_signer = Some(validator.clone());
     let signing_data = signing::aux_signing_data(
         context,
@@ -949,7 +949,7 @@ pub async fn build_unjail_validator<'a>(
         None,
     )
     .await
-    .map(|(tx, epoch)| (tx, signing_data, epoch))
+    .map(|tx| (tx, signing_data))
 }
 
 /// Submit transaction to deactivate a validator
@@ -960,7 +960,7 @@ pub async fn build_deactivate_validator<'a>(
         validator,
         tx_code_path,
     }: &args::TxDeactivateValidator,
-) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData)> {
     let default_signer = Some(validator.clone());
     let signing_data = signing::aux_signing_data(
         context,
@@ -1020,7 +1020,7 @@ pub async fn build_deactivate_validator<'a>(
         None,
     )
     .await
-    .map(|(tx, epoch)| (tx, signing_data, epoch))
+    .map(|tx| (tx, signing_data))
 }
 
 /// Submit transaction to deactivate a validator
@@ -1031,7 +1031,7 @@ pub async fn build_reactivate_validator<'a>(
         validator,
         tx_code_path,
     }: &args::TxReactivateValidator,
-) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData)> {
     let default_signer = Some(validator.clone());
     let signing_data = signing::aux_signing_data(
         context,
@@ -1090,7 +1090,7 @@ pub async fn build_reactivate_validator<'a>(
         None,
     )
     .await
-    .map(|(tx, epoch)| (tx, signing_data, epoch))
+    .map(|tx| (tx, signing_data))
 }
 
 /// Redelegate bonded tokens from one validator to another
@@ -1270,7 +1270,7 @@ pub async fn build_redelegation<'a>(
         None,
     )
     .await
-    .map(|(tx, _epoch)| (tx, signing_data))
+    .map(|tx| (tx, signing_data))
 }
 
 /// Submit transaction to withdraw an unbond
@@ -1282,7 +1282,7 @@ pub async fn build_withdraw<'a>(
         source,
         tx_code_path,
     }: &args::Withdraw,
-) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData)> {
     let default_address = source.clone().unwrap_or(validator.clone());
     let default_signer = Some(default_address.clone());
     let signing_data = signing::aux_signing_data(
@@ -1353,7 +1353,7 @@ pub async fn build_withdraw<'a>(
         None,
     )
     .await
-    .map(|(tx, epoch)| (tx, signing_data, epoch))
+    .map(|tx| (tx, signing_data))
 }
 
 /// Submit transaction to withdraw an unbond
@@ -1365,7 +1365,7 @@ pub async fn build_claim_rewards<'a>(
         source,
         tx_code_path,
     }: &args::ClaimRewards,
-) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData)> {
     let default_address = source.clone().unwrap_or(validator.clone());
     let default_signer = Some(default_address.clone());
     let signing_data = signing::aux_signing_data(
@@ -1401,7 +1401,7 @@ pub async fn build_claim_rewards<'a>(
         None,
     )
     .await
-    .map(|(tx, epoch)| (tx, signing_data, epoch))
+    .map(|tx| (tx, signing_data))
 }
 
 /// Submit a transaction to unbond
@@ -1414,12 +1414,7 @@ pub async fn build_unbond<'a>(
         source,
         tx_code_path,
     }: &args::Unbond,
-) -> Result<(
-    Tx,
-    SigningTxData,
-    Option<Epoch>,
-    Option<(Epoch, token::Amount)>,
-)> {
+) -> Result<(Tx, SigningTxData, Option<(Epoch, token::Amount)>)> {
     // Require a positive amount of tokens to be bonded
     if amount.is_zero() {
         edisplay_line!(
@@ -1498,7 +1493,7 @@ pub async fn build_unbond<'a>(
         source: source.clone(),
     };
 
-    let (tx, epoch) = build(
+    let tx = build(
         context,
         tx_args,
         tx_code_path.clone(),
@@ -1508,7 +1503,7 @@ pub async fn build_unbond<'a>(
         None,
     )
     .await?;
-    Ok((tx, signing_data, epoch, latest_withdrawal_pre))
+    Ok((tx, signing_data, latest_withdrawal_pre))
 }
 
 /// Query the unbonds post-tx
@@ -1593,7 +1588,7 @@ pub async fn build_bond<'a>(
         native_token,
         tx_code_path,
     }: &args::Bond,
-) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData)> {
     // Require a positive amount of tokens to be bonded
     if amount.is_zero() {
         edisplay_line!(
@@ -1693,7 +1688,7 @@ pub async fn build_bond<'a>(
         tx_source_balance,
     )
     .await
-    .map(|(tx, epoch)| (tx, signing_data, epoch))
+    .map(|tx| (tx, signing_data))
 }
 
 /// Build a default proposal governance
@@ -1709,7 +1704,7 @@ pub async fn build_default_proposal<'a>(
         tx_code_path,
     }: &args::InitProposal,
     proposal: DefaultProposal,
-) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData)> {
     let default_signer = Some(proposal.proposal.author.clone());
     let signing_data = signing::aux_signing_data(
         context,
@@ -1746,7 +1741,7 @@ pub async fn build_default_proposal<'a>(
         None, // TODO: need to pay the fee to submit a proposal
     )
     .await
-    .map(|(tx, epoch)| (tx, signing_data, epoch))
+    .map(|tx| (tx, signing_data))
 }
 
 /// Build a proposal vote
@@ -1762,7 +1757,7 @@ pub async fn build_vote_proposal<'a>(
         tx_code_path,
     }: &args::VoteProposal,
     epoch: Epoch,
-) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData)> {
     let default_signer = Some(voter.clone());
     let signing_data = signing::aux_signing_data(
         context,
@@ -1833,7 +1828,7 @@ pub async fn build_vote_proposal<'a>(
         None,
     )
     .await
-    .map(|(tx, epoch)| (tx, signing_data, epoch))
+    .map(|tx| (tx, signing_data))
 }
 
 /// Build a pgf funding proposal governance
@@ -1849,7 +1844,7 @@ pub async fn build_pgf_funding_proposal<'a>(
         tx_code_path,
     }: &args::InitProposal,
     proposal: PgfFundingProposal,
-) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData)> {
     let default_signer = Some(proposal.proposal.author.clone());
     let signing_data = signing::aux_signing_data(
         context,
@@ -1878,7 +1873,7 @@ pub async fn build_pgf_funding_proposal<'a>(
         None, // TODO: need to pay the fee to submit a proposal
     )
     .await
-    .map(|(tx, epoch)| (tx, signing_data, epoch))
+    .map(|tx| (tx, signing_data))
 }
 
 /// Build a pgf funding proposal governance
@@ -1894,7 +1889,7 @@ pub async fn build_pgf_stewards_proposal<'a>(
         tx_code_path,
     }: &args::InitProposal,
     proposal: PgfStewardProposal,
-) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData)> {
     let default_signer = Some(proposal.proposal.author.clone());
     let signing_data = signing::aux_signing_data(
         context,
@@ -1924,14 +1919,14 @@ pub async fn build_pgf_stewards_proposal<'a>(
         None, // TODO: need to pay the fee to submit a proposal
     )
     .await
-    .map(|(tx, epoch)| (tx, signing_data, epoch))
+    .map(|tx| (tx, signing_data))
 }
 
 /// Submit an IBC transfer
 pub async fn build_ibc_transfer<'a>(
     context: &impl Namada<'a>,
     args: &args::TxIbcTransfer,
-) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData)> {
     let default_signer = Some(args.source.clone());
     let signing_data = signing::aux_signing_data(
         context,
@@ -2043,7 +2038,7 @@ pub async fn build_ibc_transfer<'a>(
     )
     .add_serialized_data(data);
 
-    let epoch = prepare_tx(
+    prepare_tx(
         context,
         &args.tx,
         &mut tx,
@@ -2052,7 +2047,7 @@ pub async fn build_ibc_transfer<'a>(
     )
     .await?;
 
-    Ok((tx, signing_data, epoch))
+    Ok((tx, signing_data))
 }
 
 /// Abstraction for helping build transactions
@@ -2065,7 +2060,7 @@ pub async fn build<'a, F, D>(
     on_tx: F,
     gas_payer: &common::PublicKey,
     tx_source_balance: Option<TxSourcePostBalance>,
-) -> Result<(Tx, Option<Epoch>)>
+) -> Result<Tx>
 where
     F: FnOnce(&mut Tx, &mut D) -> Result<()>,
     D: BorshSerialize,
@@ -2091,7 +2086,7 @@ async fn build_pow_flag<'a, F, D>(
     on_tx: F,
     gas_payer: &common::PublicKey,
     tx_source_balance: Option<TxSourcePostBalance>,
-) -> Result<(Tx, Option<Epoch>)>
+) -> Result<Tx>
 where
     F: FnOnce(&mut Tx, &mut D) -> Result<()>,
     D: BorshSerialize,
@@ -2113,7 +2108,7 @@ where
         )
         .add_data(data);
 
-    let epoch = prepare_tx(
+    prepare_tx(
         context,
         tx_args,
         &mut tx_builder,
@@ -2121,7 +2116,7 @@ where
         tx_source_balance,
     )
     .await?;
-    Ok((tx_builder, epoch))
+    Ok(tx_builder)
 }
 
 /// Try to decode the given asset type and add its decoding to the supplied set.
@@ -2318,7 +2313,7 @@ pub async fn build_transfer<'a, N: Namada<'a>>(
         };
         Ok(())
     };
-    let (tx, unshielding_epoch) = build_pow_flag(
+    let tx = build_pow_flag(
         context,
         &args.tx,
         args.tx_code_path.clone(),
@@ -2328,26 +2323,7 @@ pub async fn build_transfer<'a, N: Namada<'a>>(
         tx_source_balance,
     )
     .await?;
-    // Manage the two masp epochs
-    let masp_epoch = match (unshielding_epoch, shielded_tx_epoch) {
-        (Some(fee_unshield_epoch), Some(transfer_unshield_epoch)) => {
-            // If the two masp epochs are different, either the wrapper or the
-            // inner tx will fail, so abort tx creation
-            if fee_unshield_epoch != transfer_unshield_epoch && !args.tx.force {
-                return Err(Error::Other(
-                    "Fee unshielding masp tx and inner tx masp transaction \
-                     were crafted on an epoch boundary"
-                        .to_string(),
-                ));
-            }
-            // Take the smaller of the two epochs
-            Some(fee_unshield_epoch.min(transfer_unshield_epoch))
-        }
-        (Some(_fee_unshielding_epoch), None) => unshielding_epoch,
-        (None, Some(_transfer_unshield_epoch)) => shielded_tx_epoch,
-        (None, None) => None,
-    };
-    Ok((tx, signing_data, masp_epoch))
+    Ok((tx, signing_data, shielded_tx_epoch))
 }
 
 /// Submit a transaction to initialize an account
@@ -2360,7 +2336,7 @@ pub async fn build_init_account<'a>(
         public_keys,
         threshold,
     }: &args::TxInitAccount,
-) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData)> {
     let signing_data =
         signing::aux_signing_data(context, tx_args, None, None).await?;
 
@@ -2402,7 +2378,7 @@ pub async fn build_init_account<'a>(
         None,
     )
     .await
-    .map(|(tx, epoch)| (tx, signing_data, epoch))
+    .map(|tx| (tx, signing_data))
 }
 
 /// Submit a transaction to update a VP
@@ -2416,7 +2392,7 @@ pub async fn build_update_account<'a>(
         public_keys,
         threshold,
     }: &args::TxUpdateAccount,
-) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData)> {
     let default_signer = Some(addr.clone());
     let signing_data = signing::aux_signing_data(
         context,
@@ -2484,7 +2460,7 @@ pub async fn build_update_account<'a>(
         None,
     )
     .await
-    .map(|(tx, epoch)| (tx, signing_data, epoch))
+    .map(|tx| (tx, signing_data))
 }
 
 /// Submit a custom transaction
@@ -2497,7 +2473,7 @@ pub async fn build_custom<'a>(
         serialized_tx,
         owner,
     }: &args::TxCustom,
-) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData)> {
     let default_signer = Some(owner.clone());
     let signing_data = signing::aux_signing_data(
         context,
@@ -2526,7 +2502,7 @@ pub async fn build_custom<'a>(
         tx
     };
 
-    let epoch = prepare_tx(
+    prepare_tx(
         context,
         tx_args,
         &mut tx,
@@ -2535,7 +2511,7 @@ pub async fn build_custom<'a>(
     )
     .await?;
 
-    Ok((tx, signing_data, epoch))
+    Ok((tx, signing_data))
 }
 
 /// Generate IBC shielded transfer
