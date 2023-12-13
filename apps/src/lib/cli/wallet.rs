@@ -71,8 +71,8 @@ impl CliApi {
     }
 }
 
-/// List spending keys.
-fn spending_keys_list(
+/// List shielded keys.
+fn shielded_keys_list(
     wallet: &Wallet<CliWalletUtils>,
     io: &impl Io,
     decrypt: bool,
@@ -94,21 +94,15 @@ fn spending_keys_list(
         let mut w_lock = io::stdout().lock();
         display_line!(io, &mut w_lock; "Known shielded keys:").unwrap();
         for (alias, key) in known_view_keys {
-            display!(io, &mut w_lock; "  Alias \"{}\"", alias).unwrap();
             let spending_key_opt = known_spend_keys.get(&alias);
             // If this alias is associated with a spending key, indicate whether
             // or not the spending key is encrypted
-            // TODO: consider turning if let into match
-            if let Some(spending_key) = spending_key_opt {
-                if spending_key.is_encrypted() {
-                    display_line!(io, &mut w_lock; " (encrypted):")
-                } else {
-                    display_line!(io, &mut w_lock; " (not encrypted):")
-                }
-                .unwrap();
-            } else {
-                display_line!(io, &mut w_lock; ":").unwrap();
-            }
+            let encrypted_status = match spending_key_opt {
+                None => "",
+                Some(spend_key) if spend_key.is_encrypted() => "(encrypted)",
+                _ => "(not encrypted)",
+            };
+            display!(io, &mut w_lock; "  Alias \"{}\" {}", alias, encrypted_status).unwrap();
             // Always print the corresponding viewing key
             display_line!(io, &mut w_lock; "    Viewing Key: {}", key).unwrap();
             // A subset of viewing keys will have corresponding spending keys.
@@ -529,7 +523,7 @@ fn key_address_list(
 
     if !transparent_only {
         if !addresses_only {
-            spending_keys_list(
+            shielded_keys_list(
                 &wallet,
                 io,
                 decrypt,
@@ -850,6 +844,7 @@ fn transparent_key_address_find_by_alias(
             )
             .unwrap();
             let pkh = PublicKeyHash::from(&public_key);
+            // Always print the public key and hash
             display_line!(io, &mut w_lock; "    Public key hash: {}", pkh)
                 .unwrap();
             display_line!(
@@ -860,7 +855,8 @@ fn transparent_key_address_find_by_alias(
             )
             .unwrap();
             if decrypt {
-                // Check if alias is also a secret key
+                // Check if alias is also a secret key. Decrypt and print it if
+                // requested.
                 if let Ok(keypair) = wallet.find_secret_key(&alias, None) {
                     if unsafe_show_secret {
                         display_line!(io, &mut w_lock; "    Secret key: {}", keypair)
@@ -918,10 +914,12 @@ fn shielded_key_address_find_by_alias(
                 "  Alias \"{}\" ({}):", alias, encrypted,
             )
             .unwrap();
+            // Always print the viewing key
             display_line!(io, &mut w_lock; "    Viewing key: {}", viewing_key)
                 .unwrap();
             if decrypt {
-                // Check if alias is also a spending key
+                // Check if alias is also a spending key. Decrypt and print it
+                // if requested.
                 match wallet.find_spending_key(&alias, None) {
                     Ok(spending_key) => {
                         if unsafe_show_secret {
@@ -987,10 +985,13 @@ fn transparent_keys_list(
                 "  Alias \"{}\" ({}):", alias, encrypted,
             )
             .unwrap();
+            // Always print the corresponding public key and hash
             display_line!(io, &mut w_lock; "    Public key hash: {}", PublicKeyHash::from(&public_key))
                 .unwrap();
             display_line!(io, &mut w_lock; "    Public key: {}", public_key)
                 .unwrap();
+            // A subset of public keys will have corresponding secret keys.
+            // Print those too if they are available and requested.
             if let Some((stored_keypair, _pkh)) = stored_keypair {
                 match stored_keypair.get::<CliWalletUtils>(decrypt, None) {
                     Ok(keypair) if unsafe_show_secret => {
