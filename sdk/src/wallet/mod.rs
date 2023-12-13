@@ -485,6 +485,26 @@ impl<U> Wallet<U> {
             .map(|(alias, value)| (alias.into(), value))
             .collect()
     }
+
+    /// Check if alias is an encrypted secret key
+    pub fn is_encrypted_secret_key(
+        &self,
+        alias: impl AsRef<str>,
+    ) -> Option<bool> {
+        self.store
+            .find_secret_key(alias)
+            .map(|stored_keypair| stored_keypair.is_encrypted())
+    }
+
+    /// Check if alias is an encrypted spending key
+    pub fn is_encrypted_spending_key(
+        &self,
+        alias: impl AsRef<str>,
+    ) -> Option<bool> {
+        self.store
+            .find_spending_key(alias)
+            .map(|stored_spend_key| stored_spend_key.is_encrypted())
+    }
 }
 
 impl<U: WalletStorage> Wallet<U> {
@@ -567,9 +587,8 @@ impl<U: WalletIo> Wallet<U> {
     /// the keypair for the alias.
     /// If no encryption password is provided, the keypair will be stored raw
     /// without encryption.
-    /// Stores the key in decrypted key cache and
-    /// returns the alias of the key and a reference-counting pointer to the
-    /// key.
+    /// Stores the key in decrypted key cache and returns the alias of the key
+    /// and a reference-counting pointer to the key.
     pub fn gen_store_secret_key(
         &mut self,
         scheme: SchemeType,

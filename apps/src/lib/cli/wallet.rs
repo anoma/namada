@@ -91,27 +91,26 @@ fn spending_keys_list(
             );
         }
     } else {
-        let stdout = io::stdout();
-        let mut w = stdout.lock();
-        display_line!(io, &mut w; "Known keys:").unwrap();
+        let mut w_lock = io::stdout().lock();
+        display_line!(io, &mut w_lock; "Known shielded keys:").unwrap();
         for (alias, key) in known_view_keys {
-            display!(io, &mut w; "  Alias \"{}\"", alias).unwrap();
+            display!(io, &mut w_lock; "  Alias \"{}\"", alias).unwrap();
             let spending_key_opt = known_spend_keys.get(&alias);
             // If this alias is associated with a spending key, indicate whether
             // or not the spending key is encrypted
             // TODO: consider turning if let into match
             if let Some(spending_key) = spending_key_opt {
                 if spending_key.is_encrypted() {
-                    display_line!(io, &mut w; " (encrypted):")
+                    display_line!(io, &mut w_lock; " (encrypted):")
                 } else {
-                    display_line!(io, &mut w; " (not encrypted):")
+                    display_line!(io, &mut w_lock; " (not encrypted):")
                 }
                 .unwrap();
             } else {
-                display_line!(io, &mut w; ":").unwrap();
+                display_line!(io, &mut w_lock; ":").unwrap();
             }
             // Always print the corresponding viewing key
-            display_line!(io, &mut w; "    Viewing Key: {}", key).unwrap();
+            display_line!(io, &mut w_lock; "    Viewing Key: {}", key).unwrap();
             // A subset of viewing keys will have corresponding spending keys.
             // Print those too if they are available and requested.
             if unsafe_show_secret {
@@ -121,7 +120,7 @@ fn spending_keys_list(
                         // decrypted
                         Ok(spending_key) => {
                             display_line!(io,
-                                &mut w;
+                                &mut w_lock;
                                 "    Spending key: {}", spending_key,
                             )
                             .unwrap();
@@ -135,7 +134,7 @@ fn spending_keys_list(
                         // been provided
                         Err(err) => {
                             display_line!(io,
-                                &mut w;
+                                &mut w_lock;
                                     "    Couldn't decrypt the spending key: {}",
                                     err,
                             )
@@ -164,11 +163,11 @@ fn payment_addresses_list(
             );
         }
     } else {
-        let stdout = io::stdout();
-        let mut w = stdout.lock();
-        display_line!(io, &mut w; "Known payment addresses:").unwrap();
+        let mut w_lock = io::stdout().lock();
+        display_line!(io, &mut w_lock; "Known payment addresses:").unwrap();
         for (alias, address) in sorted(known_addresses) {
-            display_line!(io, &mut w; "  \"{}\": {}", alias, address).unwrap();
+            display_line!(io, &mut w_lock; "  \"{}\": {}", alias, address)
+                .unwrap();
         }
     }
 }
@@ -549,7 +548,6 @@ fn key_address_find(
     ctx: Context,
     io: &impl Io,
     args::KeyAddressFind {
-        shielded,
         alias,
         address,
         public_key,
@@ -557,29 +555,33 @@ fn key_address_find(
         payment_address,
         keys_only,
         addresses_only,
+        decrypt,
         unsafe_show_secret,
     }: args::KeyAddressFind,
 ) {
     if let Some(alias) = alias {
         // Search keys and addresses by alias
-        if !shielded {
-            transparent_key_address_find_by_alias(
-                ctx,
-                io,
-                alias,
-                keys_only,
-                addresses_only,
-                unsafe_show_secret,
-            )
-        } else {
-            shielded_key_address_find_by_alias(
-                ctx,
-                io,
-                alias,
-                keys_only,
-                addresses_only,
-                unsafe_show_secret,
-            )
+        let mut wallet = load_wallet(ctx);
+        let found_transparent = transparent_key_address_find_by_alias(
+            &mut wallet,
+            io,
+            alias.clone(),
+            keys_only,
+            addresses_only,
+            decrypt,
+            unsafe_show_secret,
+        );
+        let found_shielded = shielded_key_address_find_by_alias(
+            &mut wallet,
+            io,
+            alias.clone(),
+            keys_only,
+            addresses_only,
+            decrypt,
+            unsafe_show_secret,
+        );
+        if !found_transparent && !found_shielded {
+            display_line!(io, "Alias \"{}\" not found.", alias);
         }
     } else if address.is_some() {
         // Search alias by address
@@ -707,7 +709,7 @@ fn transparent_key_find(
     let found_keypair = match public_key {
         Some(pk) => wallet.find_key_by_pk(&pk, None),
         None => {
-            let alias = alias.or(public_key_hash);
+            let alias = alias.map(|a| a.to_lowercase()).or(public_key_hash);
             match alias {
                 None => {
                     edisplay_line!(
@@ -717,9 +719,7 @@ fn transparent_key_find(
                     );
                     cli::safe_exit(1)
                 }
-                Some(alias) => {
-                    wallet.find_secret_key(alias.to_lowercase(), None)
-                }
+                Some(alias) => wallet.find_secret_key(alias, None),
             }
         }
     };
@@ -821,85 +821,133 @@ fn payment_address_or_alias_find(
 
 /// Find transparent addresses and keys by alias
 fn transparent_key_address_find_by_alias(
-    ctx: Context,
+    wallet: &mut Wallet<CliWalletUtils>,
     io: &impl Io,
     alias: String,
     keys_only: bool,
     addresses_only: bool,
+    decrypt: bool,
     unsafe_show_secret: bool,
-) {
-    let mut wallet = load_wallet(ctx);
+) -> bool {
     let alias = alias.to_lowercase();
-    if let Some(keypair) = (!addresses_only)
-        .then_some(())
-        .and_then(|_| wallet.find_secret_key(&alias, None).ok())
-    {
-        let pkh: PublicKeyHash = (&keypair.ref_to()).into();
-        display_line!(io, "Public key hash: {}", pkh);
-        display_line!(io, "Public key: {}", keypair.ref_to());
-        if unsafe_show_secret {
-            display_line!(io, "Secret key: {}", keypair);
+    let mut w_lock = io::stdout().lock();
+    let mut found = false;
+
+    // Find transparent keys
+    if !addresses_only {
+        // Check if alias is a public key
+        if let Ok(public_key) = wallet.find_public_key(&alias) {
+            found = true;
+            display_line!(io, &mut w_lock; "Found transparent keys:").unwrap();
+            let encrypted = match wallet.is_encrypted_secret_key(&alias) {
+                None => "external",
+                Some(res) if res => "encrypted",
+                _ => "not encrypted",
+            };
+            display_line!(io,
+                &mut w_lock;
+                "  Alias \"{}\" ({}):", alias, encrypted,
+            )
+            .unwrap();
+            let pkh = PublicKeyHash::from(&public_key);
+            display_line!(io, &mut w_lock; "    Public key hash: {}", pkh)
+                .unwrap();
+            display_line!(
+                io,
+                &mut w_lock;
+                "    Public key: {}",
+                public_key
+            )
+            .unwrap();
+            if decrypt {
+                // Check if alias is also a secret key
+                if let Ok(keypair) = wallet.find_secret_key(&alias, None) {
+                    if unsafe_show_secret {
+                        display_line!(io, &mut w_lock; "    Secret key: {}", keypair)
+                        .unwrap();
+                    }
+                }
+            }
         }
-    } else if let Some(address) = (!keys_only)
-        .then_some(())
-        .and_then(|_| wallet.find_address(&alias))
-    {
-        display_line!(io, "Found address {}", address.to_pretty_string());
-    } else if !addresses_only && !keys_only {
-        // Otherwise alias cannot be referring to any shielded value
-        display_line!(
-            io,
-            "No transparent address or key with alias {} found. Use the \
-             command `list` to see all the known transparent addresses and \
-             keys.",
-            alias
-        );
     }
+
+    // Find transparent address
+    if !keys_only {
+        if let Some(address) = wallet.find_address(&alias) {
+            found = true;
+            display_line!(io, &mut w_lock; "Found transparent address:")
+                .unwrap();
+            display_line!(io,
+                &mut w_lock;
+                "  \"{}\": {}", alias, address.to_pretty_string(),
+            )
+            .unwrap();
+        }
+    }
+
+    found
 }
 
 /// Find shielded payment address and keys by alias
 fn shielded_key_address_find_by_alias(
-    ctx: Context,
+    wallet: &mut Wallet<CliWalletUtils>,
     io: &impl Io,
     alias: String,
     keys_only: bool,
     addresses_only: bool,
+    decrypt: bool,
     unsafe_show_secret: bool,
-) {
-    let mut wallet = load_wallet(ctx);
+) -> bool {
     let alias = alias.to_lowercase();
-    if let Some(viewing_key) = (!addresses_only)
-        .then_some(())
-        .and_then(|_| wallet.find_viewing_key(&alias).ok())
-    {
+    let mut w_lock = io::stdout().lock();
+    let mut found = false;
+
+    // Find shielded keys
+    if !addresses_only {
+        let encrypted = match wallet.is_encrypted_spending_key(&alias) {
+            None => "external",
+            Some(res) if res => "encrypted",
+            _ => "not encrypted",
+        };
         // Check if alias is a viewing key
-        display_line!(io, "Viewing key: {}", viewing_key);
-        if unsafe_show_secret {
-            // Check if alias is also a spending key
-            match wallet.find_spending_key(&alias, None) {
-                Ok(spending_key) => {
-                    display_line!(io, "Spending key: {}", spending_key)
+        if let Ok(viewing_key) = wallet.find_viewing_key(&alias) {
+            found = true;
+            display_line!(io, &mut w_lock; "Found shielded keys:").unwrap();
+            display_line!(io,
+                &mut w_lock;
+                "  Alias \"{}\" ({}):", alias, encrypted,
+            )
+            .unwrap();
+            display_line!(io, &mut w_lock; "    Viewing key: {}", viewing_key)
+                .unwrap();
+            if decrypt {
+                // Check if alias is also a spending key
+                match wallet.find_spending_key(&alias, None) {
+                    Ok(spending_key) => {
+                        if unsafe_show_secret {
+                            display_line!(io, &mut w_lock; "    Spending key: {}", spending_key).unwrap();
+                        }
+                    }
+                    Err(FindKeyError::KeyNotFound(_)) => {}
+                    Err(err) => edisplay_line!(io, "{}", err),
                 }
-                Err(FindKeyError::KeyNotFound(_)) => {}
-                Err(err) => edisplay_line!(io, "{}", err),
             }
         }
-    } else if let Some(payment_addr) = (!keys_only)
-        .then_some(())
-        .and_then(|_| wallet.find_payment_addr(&alias))
-    {
-        // Failing that, check if alias is a payment address
-        display_line!(io, "Payment address: {}", payment_addr);
-    } else if !addresses_only && !keys_only {
-        // Otherwise alias cannot be referring to any shielded value
-        display_line!(
-            io,
-            "No shielded payment address or key with alias {} found. Use the \
-             command `list --shielded` to see all the known shielded \
-             addresses and keys.",
-            alias
-        );
     }
+
+    // Find payment addresses
+    if !keys_only {
+        if let Some(payment_addr) = wallet.find_payment_addr(&alias) {
+            found = true;
+            display_line!(io, &mut w_lock; "Found payment address:").unwrap();
+            display_line!(io,
+                &mut w_lock;
+                "  \"{}\": {}", alias, payment_addr.to_string(),
+            )
+            .unwrap();
+        }
+    }
+    found
 }
 
 /// List all known keys.
@@ -920,9 +968,8 @@ fn transparent_keys_list(
             );
         }
     } else {
-        let stdout = io::stdout();
-        let mut w = stdout.lock();
-        display_line!(io, &mut w; "Known keys:").unwrap();
+        let mut w_lock = io::stdout().lock();
+        display_line!(io, &mut w_lock; "Known transparent keys:").unwrap();
         let known_secret_keys = wallet.get_secret_keys();
         for (alias, public_key) in known_public_keys {
             let stored_keypair = known_secret_keys.get(&alias);
@@ -936,19 +983,19 @@ fn transparent_keys_list(
                 Some(_) => "not encrypted",
             };
             display_line!(io,
-                &mut w;
+                &mut w_lock;
                 "  Alias \"{}\" ({}):", alias, encrypted,
             )
             .unwrap();
-            display_line!(io, &mut w; "    Public key hash: {}", PublicKeyHash::from(&public_key))
+            display_line!(io, &mut w_lock; "    Public key hash: {}", PublicKeyHash::from(&public_key))
                 .unwrap();
-            display_line!(io, &mut w; "    Public key: {}", public_key)
+            display_line!(io, &mut w_lock; "    Public key: {}", public_key)
                 .unwrap();
             if let Some((stored_keypair, _pkh)) = stored_keypair {
                 match stored_keypair.get::<CliWalletUtils>(decrypt, None) {
                     Ok(keypair) if unsafe_show_secret => {
                         display_line!(io,
-                                      &mut w;
+                                      &mut w_lock;
                                       "    Secret key: {}", keypair,
                         )
                         .unwrap();
@@ -959,7 +1006,7 @@ fn transparent_keys_list(
                     }
                     Err(err) => {
                         display_line!(io,
-                                      &mut w;
+                                      &mut w_lock;
                                       "    Couldn't decrypt the keypair: {}", err,
                         )
                             .unwrap();
@@ -1040,12 +1087,11 @@ fn transparent_addresses_list(
             );
         }
     } else {
-        let stdout = io::stdout();
-        let mut w = stdout.lock();
-        display_line!(io, &mut w; "Known addresses:").unwrap();
+        let mut w_lock = io::stdout().lock();
+        display_line!(io, &mut w_lock; "Known transparent addresses:").unwrap();
         for (alias, address) in sorted(known_addresses) {
             display_line!(io,
-                &mut w;
+                &mut w_lock;
                 "  \"{}\": {}", alias, address.to_pretty_string(),
             )
             .unwrap();

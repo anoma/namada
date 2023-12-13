@@ -6111,57 +6111,54 @@ pub mod args {
 
     impl Args for KeyAddressList {
         fn parse(matches: &ArgMatches) -> Self {
-            let decrypt = DECRYPT.parse(matches);
             let transparent_only = TRANSPARENT.parse(matches);
             let shielded_only = SHIELDED.parse(matches);
             let keys_only = LIST_FIND_KEYS_ONLY.parse(matches);
             let addresses_only = LIST_FIND_ADDRESSES_ONLY.parse(matches);
+            let decrypt = DECRYPT.parse(matches);
             let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
             Self {
-                decrypt,
                 transparent_only,
                 shielded_only,
                 keys_only,
                 addresses_only,
+                decrypt,
                 unsafe_show_secret,
             }
         }
 
         fn def(app: App) -> App {
-            app.arg(DECRYPT.def().help("Decrypt keys that are encrypted."))
-                .arg(
-                    TRANSPARENT
-                        .def()
-                        .help("List transparent keys / addresses only."),
-                )
-                .arg(
-                    SHIELDED.def().help(
-                        "List keys / addresses of the shielded pool only.",
-                    ),
-                )
-                .group(
-                    ArgGroup::new("only_group_1")
-                        .args([TRANSPARENT.name, SHIELDED.name]),
-                )
-                .arg(LIST_FIND_KEYS_ONLY.def().help("List keys only."))
-                .arg(
-                    LIST_FIND_ADDRESSES_ONLY.def().help("List addresses only."),
-                )
-                .group(ArgGroup::new("only_group_2").args([
-                    LIST_FIND_KEYS_ONLY.name,
-                    LIST_FIND_ADDRESSES_ONLY.name,
-                ]))
-                .arg(
-                    UNSAFE_SHOW_SECRET
-                        .def()
-                        .help("UNSAFE: Print the secret / spending keys."),
-                )
+            app.arg(
+                TRANSPARENT
+                    .def()
+                    .help("List transparent keys / addresses only."),
+            )
+            .arg(
+                SHIELDED
+                    .def()
+                    .help("List keys / addresses of the shielded pool only."),
+            )
+            .group(
+                ArgGroup::new("only_group_1")
+                    .args([TRANSPARENT.name, SHIELDED.name]),
+            )
+            .arg(LIST_FIND_KEYS_ONLY.def().help("List keys only."))
+            .arg(LIST_FIND_ADDRESSES_ONLY.def().help("List addresses only."))
+            .group(ArgGroup::new("only_group_2").args([
+                LIST_FIND_KEYS_ONLY.name,
+                LIST_FIND_ADDRESSES_ONLY.name,
+            ]))
+            .arg(DECRYPT.def().help("Decrypt keys that are encrypted."))
+            .arg(
+                UNSAFE_SHOW_SECRET
+                    .def()
+                    .help("UNSAFE: Print the secret / spending keys."),
+            )
         }
     }
 
     impl Args for KeyAddressFind {
         fn parse(matches: &ArgMatches) -> Self {
-            let shielded = SHIELDED.parse(matches);
             let alias = ALIAS_OPT.parse(matches);
             let address = RAW_ADDRESS_OPT.parse(matches);
             let public_key = RAW_PUBLIC_KEY_OPT.parse(matches);
@@ -6169,9 +6166,9 @@ pub mod args {
             let payment_address = RAW_PAYMENT_ADDRESS_OPT.parse(matches);
             let keys_only = LIST_FIND_KEYS_ONLY.parse(matches);
             let addresses_only = LIST_FIND_ADDRESSES_ONLY.parse(matches);
+            let decrypt = DECRYPT.parse(matches);
             let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
             Self {
-                shielded,
                 alias,
                 address,
                 public_key,
@@ -6179,28 +6176,21 @@ pub mod args {
                 payment_address,
                 keys_only,
                 addresses_only,
+                decrypt,
                 unsafe_show_secret,
             }
         }
 
         fn def(app: App) -> App {
             app.arg(
-                SHIELDED.def().help(
-                    "Find keys and payment addresses for the shielded pool.",
-                ),
-            )
-            .arg(
                 ALIAS_OPT
                     .def()
                     .help("An alias associated with the keys / addresses."),
             )
             .arg(
-                RAW_ADDRESS_OPT
-                    .def()
-                    .help(
-                        "The bech32m encoded string of a transparent address.",
-                    )
-                    .conflicts_with(SHIELDED.name),
+                RAW_ADDRESS_OPT.def().help(
+                    "The bech32m encoded string of a transparent address.",
+                ),
             )
             .arg(
                 RAW_PUBLIC_KEY_OPT.def().help(
@@ -6210,15 +6200,9 @@ pub mod args {
             .arg(RAW_PUBLIC_KEY_HASH_OPT.def().help(
                 "A public key hash associated with the transparent keypair.",
             ))
-            .arg(
-                RAW_PAYMENT_ADDRESS_OPT
-                    .def()
-                    .help(
-                        "The bech32m encoded string of a shielded payment \
-                         address.",
-                    )
-                    .conflicts_with(SHIELDED.name),
-            )
+            .arg(RAW_PAYMENT_ADDRESS_OPT.def().help(
+                "The bech32m encoded string of a shielded payment address.",
+            ))
             .group(
                 ArgGroup::new("addr_find_args")
                     .args([
@@ -6240,6 +6224,7 @@ pub mod args {
                 "Use pre-genesis wallet, instead of for the current chain, if \
                  any.",
             ))
+            .arg(DECRYPT.def().help("Decrypt keys that are encrypted."))
             .arg(
                 UNSAFE_SHOW_SECRET
                     .def()

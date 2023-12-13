@@ -2081,8 +2081,6 @@ pub struct KeyDerive {
 /// Wallet list arguments
 #[derive(Clone, Copy, Debug)]
 pub struct KeyAddressList {
-    /// Whether to decrypt secret / spending keys
-    pub decrypt: bool,
     /// Whether to list transparent secret keys only
     pub transparent_only: bool,
     /// Whether to list MASP spending keys only
@@ -2091,6 +2089,8 @@ pub struct KeyAddressList {
     pub keys_only: bool,
     /// List addresses only
     pub addresses_only: bool,
+    /// Whether to decrypt secret / spending keys
+    pub decrypt: bool,
     /// Show secret keys to user
     pub unsafe_show_secret: bool,
 }
@@ -2098,8 +2098,6 @@ pub struct KeyAddressList {
 /// Wallet key / address lookup arguments
 #[derive(Clone, Debug)]
 pub struct KeyAddressFind {
-    /// Whether to find MASP keys / addresses
-    pub shielded: bool,
     /// Alias to find
     pub alias: Option<String>,
     /// Address to find
@@ -2114,6 +2112,8 @@ pub struct KeyAddressFind {
     pub keys_only: bool,
     /// Find addresses only
     pub addresses_only: bool,
+    /// Whether to decrypt secret / spending keys
+    pub decrypt: bool,
     /// Show secret keys to user
     pub unsafe_show_secret: bool,
 }
