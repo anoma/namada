@@ -100,6 +100,9 @@ where
             // new_epoch + pipeline_len
             namada_proof_of_stake::validator_set_update::copy_validator_sets_and_positions(
                 &mut self.wl_storage,
+                /// XXX: using pos params read before gov updates is a bug.
+                /// these might have been updated through wasm calling host fns
+                /// to update storage.
                 &pos_params,
                 current_epoch,
                 current_epoch + pos_params.pipeline_len,
