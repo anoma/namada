@@ -16,7 +16,6 @@ enum KeyType<'a> {
     Token { owner: &'a Address },
     PoS,
     Vp(&'a Address),
-    Masp,
     PgfStward(&'a Address),
     GovernanceVote(&'a Address),
     Unknown,
@@ -39,8 +38,6 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
             Self::PgfStward(address)
         } else if let Some(address) = key.is_validity_predicate() {
             Self::Vp(address)
-        } else if token::is_masp_key(key) {
-            Self::Masp
         } else {
             Self::Unknown
         }
@@ -158,7 +155,6 @@ fn validate_tx(
                     is_vp_whitelisted(ctx, &vp_hash)?
                 }
             }
-            KeyType::Masp => true,
             KeyType::Unknown => {
                 if key.segments.get(0) == Some(&addr.to_db_key()) {
                     // Unknown changes to this address space require a valid
