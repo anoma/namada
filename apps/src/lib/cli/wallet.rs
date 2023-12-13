@@ -600,6 +600,8 @@ fn key_address_find(
 pub enum TransparentValue {
     /// Transparent secret key
     TranspSecretKey(common::SecretKey),
+    /// Transparent public key
+    TranspPublicKey(common::PublicKey),
     /// Transparent address
     TranspAddress(Address),
 }
@@ -608,9 +610,13 @@ impl FromStr for TransparentValue {
     type Err = DecodeError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Try to decode this value first as a secret key, then as an address
+        // Try to decode this value first as a secret key, then as a public key,
+        // then as an address
         common::SecretKey::from_str(s)
             .map(Self::TranspSecretKey)
+            .or_else(|_| {
+                common::PublicKey::from_str(s).map(Self::TranspPublicKey)
+            })
             .or_else(|_| Address::from_str(s).map(Self::TranspAddress))
     }
 }
@@ -656,6 +662,9 @@ fn add_key_or_address(
                 unsafe_dont_encrypt,
             )
         }
+        KeyAddrAddValue::TranspValue(TransparentValue::TranspPublicKey(
+            pubkey,
+        )) => transparent_public_key_add(ctx, io, alias, alias_force, pubkey),
         KeyAddrAddValue::TranspValue(TransparentValue::TranspAddress(
             address,
         )) => transparent_address_add(ctx, io, alias, alias_force, address),
@@ -1129,6 +1138,33 @@ fn transparent_secret_key_add(
     );
 }
 
+/// Add a public key to the wallet.
+fn transparent_public_key_add(
+    ctx: Context,
+    io: &impl Io,
+    alias: String,
+    alias_force: bool,
+    pubkey: common::PublicKey,
+) {
+    let alias = alias.to_lowercase();
+    let mut wallet = load_wallet(ctx);
+    if wallet
+        .insert_public_key(alias.clone(), pubkey, None, None, alias_force)
+        .is_none()
+    {
+        edisplay_line!(io, "Public key not added");
+        cli::safe_exit(1);
+    }
+    wallet
+        .save()
+        .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
+    display_line!(
+        io,
+        "Successfully added public key with alias: \"{}\"",
+        alias
+    );
+}
+
 /// Add a transparent address to the wallet.
 fn transparent_address_add(
     ctx: Context,
@@ -1149,11 +1185,7 @@ fn transparent_address_add(
     wallet
         .save()
         .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
-    display_line!(
-        io,
-        "Successfully added a key and an address with alias: \"{}\"",
-        alias
-    );
+    display_line!(io, "Successfully added address with alias: \"{}\"", alias);
 }
 
 /// Load wallet for chain when `ctx.chain.is_some()` or pre-genesis wallet when

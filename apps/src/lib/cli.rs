@@ -6257,10 +6257,10 @@ pub mod args {
                 "Override the alias without confirmation if it already exists.",
             ))
             .arg(VALUE.def().help(
-                "Any value of the following:\n- transparent pool secret key \
-                 string\n- the bech32m encoded transparent address string\n- \
-                 shielded pool spending key\n- shielded pool viewing key\n- \
-                 shielded pool payment address ",
+                "Any value of the following:\n- transparent pool secret \
+                 key\n- transparent pool public key\n- transparent pool \
+                 address\n- shielded pool spending key\n- shielded pool \
+                 viewing key\n- shielded pool payment address ",
             ))
             .arg(UNSAFE_DONT_ENCRYPT.def().help(
                 "UNSAFE: Do not encrypt the added keys. Do not use this for \
