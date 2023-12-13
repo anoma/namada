@@ -1,13 +1,30 @@
 # CHANGELOG
 
+## v0.28.1
+
+Namada 0.28.1 is a patch release that makes improvements to the MASP, SDK, merkle trees, and chain initialization conditions.
+
+### BUG FIXES
+
+- Fix sdk compilation when using async-send feature flag.
+  ([\#2261](https://github.com/anoma/namada/pull/2261))
+- Added back missing changed storage keys in transaction results.
+  ([\#2263](https://github.com/anoma/namada/pull/2263))
+- Fix to skip pruning BridgePool Merkle trees when no signed nonce
+  ([\#2264](https://github.com/anoma/namada/issues/2264))
+- Initialize token total supply to zero at init chain.
+  ([\#2270](https://github.com/anoma/namada/pull/2270))
+
+### IMPROVEMENTS
+
+- Preload and cache MASP verifying keys on ledger start-up.
+  ([\#2272](https://github.com/anoma/namada/pull/2272))
+- Now join-network will try to look for non validator wallet in more places.
+  ([\#2273](https://github.com/anoma/namada/pull/2273))
+
 ## v0.28.0
 
 Namada 0.28.0 is a minor release that improves the genesis setup to allow signing with hardware wallet and contains various improvements including validator liveness jailing, accounts simplifications, bug fixes, stability improvements and more.
-<!--
-    Add a summary for the release here.
-
-    If you don't change this message, or if this file is empty, the release
-    will not be created. -->
 
 ### BUG FIXES
 
