@@ -188,8 +188,8 @@ fn write_log_read(c: &mut Criterion) {
         // than invert it to calculate the desired metric (time/byte)
         // NOTE: criterion states that the throughput is measured on the
         // processed bytes but in this case we are interested in the input +
-        // output bytes, i.e. the combined length of the key and value red, so we
-        // set this as the throughput parameter
+        // output bytes, i.e. the combined length of the key and value red, so
+        // we set this as the throughput parameter
         let throughput_len = value_len + key.len() as u64;
         group.throughput(criterion::Throughput::Bytes(throughput_len));
         // Generate random bytes for the value and write it to storage
@@ -219,8 +219,8 @@ fn storage_read(c: &mut Criterion) {
         // than invert it to calculate the desired metric (time/byte)
         // NOTE: criterion states that the throughput is measured on the
         // processed bytes but in this case we are interested in the input +
-        // output bytes, i.e. the combined length of the key and value red, so we
-        // set this as the throughput parameter
+        // output bytes, i.e. the combined length of the key and value red, so
+        // we set this as the throughput parameter
         let throughput_len = value_len + key.len() as u64;
         group.throughput(criterion::Throughput::Bytes(throughput_len));
         // Generate random bytes for the value and write it to storage

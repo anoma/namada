@@ -2542,8 +2542,8 @@ where
 }
 
 /// Compute a token amount after slashing, given the initial amount and a set of
-/// slashes. It is assumed that the input `slashes` are those committed while the
-/// `amount` was contributing to voting power.
+/// slashes. It is assumed that the input `slashes` are those committed while
+/// the `amount` was contributing to voting power.
 fn get_slashed_amount(
     params: &PosParams,
     amount: token::Amount,
