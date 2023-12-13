@@ -121,7 +121,7 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
     fn try_from(value: PgfFundingProposal) -> Result<Self, Self::Error> {
         let continous_fundings = value
             .data
-            .continuous
+            .continous
             .iter()
             .cloned()
             .map(|funding| {
