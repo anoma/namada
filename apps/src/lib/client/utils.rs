@@ -111,8 +111,9 @@ pub async fn join_network(
 
     // Pre-load the validator pre-genesis wallet and its keys to validate that
     // everything is in place before downloading the network archive
-    let validator_alias_and_pre_genesis_wallet =
-        validator_alias_and_dir.as_ref().map(|(validator_alias, pre_genesis_dir)| {
+    let validator_alias_and_pre_genesis_wallet = validator_alias_and_dir
+        .as_ref()
+        .map(|(validator_alias, pre_genesis_dir)| {
             (
                 alias::Alias::from(validator_alias),
                 pre_genesis::load(pre_genesis_dir).unwrap_or_else(|err| {
