@@ -2050,8 +2050,8 @@ mod tests {
             .expect("expected a temp dir")
             .into_path();
         let fake_params_paths =
-            [SPEND_NAME, CONVERT_NAME, OUTPUT_NAME].map(|p| tempdir.join(p));
-        for path in fake_params_paths {
+            [SPEND_NAME, OUTPUT_NAME, CONVERT_NAME].map(|p| tempdir.join(p));
+        for path in &fake_params_paths {
             let mut f =
                 std::fs::File::create(path).expect("expected a temp file");
             f.write_all(b"fake params")
@@ -2062,7 +2062,11 @@ mod tests {
 
         std::env::set_var(super::ENV_VAR_MASP_PARAMS_DIR, tempdir.as_os_str());
         // should panic here
-        super::load_pvks();
+        masp_proofs::load_parameters(
+            &fake_params_paths[0],
+            &fake_params_paths[1],
+            &fake_params_paths[2],
+        );
     }
 
     /// a more involved test, using dummy parameters with the right
@@ -2114,11 +2118,11 @@ mod tests {
         // TODO: get masp to export these consts
         let fake_params_paths = [
             (SPEND_NAME, 49848572u64),
-            (CONVERT_NAME, 22570940u64),
             (OUTPUT_NAME, 16398620u64),
+            (CONVERT_NAME, 22570940u64),
         ]
         .map(|(p, s)| (tempdir.join(p), s));
-        for (path, size) in fake_params_paths {
+        for (path, size) in &fake_params_paths {
             let mut f =
                 std::fs::File::create(path).expect("expected a temp file");
             fake_params
@@ -2128,14 +2132,19 @@ mod tests {
             // params should always be smaller than the large masp
             // circuit params. so this truncate extends the file, and
             // extra bytes at the end do not make it invalid.
-            f.set_len(size).expect("expected to truncate the temp file");
+            f.set_len(*size)
+                .expect("expected to truncate the temp file");
             f.sync_all()
                 .expect("expected a writable temp file (on sync)");
         }
 
         std::env::set_var(super::ENV_VAR_MASP_PARAMS_DIR, tempdir.as_os_str());
         // should panic here
-        super::load_pvks();
+        masp_proofs::load_parameters(
+            &fake_params_paths[0].0,
+            &fake_params_paths[1].0,
+            &fake_params_paths[2].0,
+        );
     }
 }
 
