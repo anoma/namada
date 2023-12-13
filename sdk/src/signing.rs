@@ -63,7 +63,7 @@ use crate::tx::{
 };
 pub use crate::wallet::store::AddressVpType;
 use crate::wallet::{Wallet, WalletIo};
-use crate::{args, display_line, rpc, Namada};
+use crate::{args, display_line, rpc, MaybeSend, Namada};
 
 #[cfg(feature = "std")]
 /// Env. var specifying where to store signing test vectors
@@ -222,7 +222,7 @@ pub async fn sign_tx<'a, D, F, U>(
     user_data: D,
 ) -> Result<(), Error>
 where
-    D: Clone,
+    D: Clone + MaybeSend,
     U: WalletIo,
     F: std::future::Future<Output = Result<Tx, Error>>,
 {
