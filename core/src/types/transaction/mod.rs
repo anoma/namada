@@ -23,6 +23,8 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 pub use decrypted::*;
+use num_derive::{FromPrimitive, ToPrimitive};
+use num_traits::{FromPrimitive, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 pub use wrapper::*;
@@ -33,6 +35,87 @@ use crate::types::hash::Hash;
 use crate::types::ibc::IbcEvent;
 use crate::types::storage;
 use crate::types::transaction::protocol::ProtocolTx;
+
+/// The different error codes that the ledger may send back to a client
+/// indicating the status of their submitted tx
+#[derive(Debug, Copy, Clone, FromPrimitive, ToPrimitive, PartialEq, Eq)]
+pub enum ErrorCodes {
+    /// Success
+    Ok = 0,
+    /// Error in WASM tx execution
+    WasmRuntimeError = 1,
+    /// Invalid tx
+    InvalidTx = 2,
+    /// Invalid signature
+    InvalidSig = 3,
+    /// Tx is in invalid order
+    InvalidOrder = 4,
+    /// Tx wasn't expected
+    ExtraTxs = 5,
+    /// Undecryptable
+    Undecryptable = 6,
+    /// The block is full
+    AllocationError = 7,
+    /// Replayed tx
+    ReplayTx = 8,
+    /// Invalid chain ID
+    InvalidChainId = 9,
+    /// Expired tx
+    ExpiredTx = 10,
+    /// Exceeded gas limit
+    TxGasLimit = 11,
+    /// Error in paying tx fee
+    FeeError = 12,
+    /// Invalid vote extension
+    InvalidVoteExtension = 13,
+    /// Tx is too large
+    TooLarge = 14,
+}
+
+impl ErrorCodes {
+    /// Checks if the given [`ErrorCodes`] value is a protocol level error,
+    /// that can be recovered from at the finalize block stage.
+    pub const fn is_recoverable(&self) -> bool {
+        use ErrorCodes::*;
+        // NOTE: pattern match on all `ErrorCodes` variants, in order
+        // to catch potential bugs when adding new codes
+        match self {
+            Ok | WasmRuntimeError => true,
+            InvalidTx | InvalidSig | InvalidOrder | ExtraTxs
+            | Undecryptable | AllocationError | ReplayTx | InvalidChainId
+            | ExpiredTx | TxGasLimit | FeeError | InvalidVoteExtension
+            | TooLarge => false,
+        }
+    }
+
+    /// Convert to `u32`.
+    pub fn to_u32(&self) -> u32 {
+        ToPrimitive::to_u32(self).unwrap()
+    }
+
+    /// Convert from `u32`.
+    pub fn from_u32(raw: u32) -> Option<Self> {
+        FromPrimitive::from_u32(raw)
+    }
+}
+
+impl From<ErrorCodes> for u32 {
+    fn from(code: ErrorCodes) -> u32 {
+        code.to_u32()
+    }
+}
+
+impl From<ErrorCodes> for String {
+    fn from(code: ErrorCodes) -> String {
+        code.to_u32().to_string()
+    }
+}
+
+impl From<ErrorCodes> for crate::tendermint::abci::Code {
+    fn from(value: ErrorCodes) -> Self {
+        Self::from(value.to_u32())
+    }
+}
 
 /// Get the hash of a transaction
 pub fn hash_tx(tx_bytes: &[u8]) -> Hash {

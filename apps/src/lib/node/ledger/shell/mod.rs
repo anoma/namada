@@ -31,6 +31,7 @@ use borsh_ext::BorshSerializeExt;
 use masp_primitives::transaction::Transaction;
 use namada::core::hints;
 use namada::core::ledger::eth_bridge;
+pub use namada::core::types::transaction::ErrorCodes;
 use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
 use namada::ledger::gas::{Gas, TxGasMeter};
@@ -67,8 +68,6 @@ use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::{WasmCacheAccess, WasmCacheRwAccess};
 use namada_sdk::eth_bridge::{EthBridgeQueries, EthereumOracleConfig};
 use namada_sdk::tendermint::AppHash;
-use num_derive::{FromPrimitive, ToPrimitive};
-use num_traits::{FromPrimitive, ToPrimitive};
 use thiserror::Error;
 use tokio::sync::mpsc::{Receiver, UnboundedSender};
 
@@ -133,63 +132,6 @@ impl From<Error> for TxResult {
             code: 1,
             info: err.to_string(),
         }
-    }
-}
-
-/// The different error codes that the ledger may
-/// send back to a client indicating the status
-/// of their submitted tx
-#[derive(Debug, Copy, Clone, FromPrimitive, ToPrimitive, PartialEq, Eq)]
-pub enum ErrorCodes {
-    Ok = 0,
-    WasmRuntimeError = 1,
-    InvalidTx = 2,
-    InvalidSig = 3,
-    InvalidOrder = 4,
-    ExtraTxs = 5,
-    Undecryptable = 6,
-    AllocationError = 7,
-    ReplayTx = 8,
-    InvalidChainId = 9,
-    ExpiredTx = 10,
-    TxGasLimit = 11,
-    FeeError = 12,
-    InvalidVoteExtension = 13,
-    TooLarge = 14,
-}
-
-impl ErrorCodes {
-    /// Checks if the given [`ErrorCodes`] value is a protocol level error,
-    /// that can be recovered from at the finalize block stage.
-    pub const fn is_recoverable(&self) -> bool {
-        use ErrorCodes::*;
-        // NOTE: pattern match on all `ErrorCodes` variants, in order
-        // to catch potential bugs when adding new codes
-        match self {
-            Ok | WasmRuntimeError => true,
-            InvalidTx | InvalidSig | InvalidOrder | ExtraTxs
-            | Undecryptable | AllocationError | ReplayTx | InvalidChainId
-            | ExpiredTx | TxGasLimit | FeeError | InvalidVoteExtension
-            | TooLarge => false,
-        }
-    }
-}
-
-impl From<ErrorCodes> for u32 {
-    fn from(code: ErrorCodes) -> u32 {
-        code.to_u32().unwrap()
-    }
-}
-
-impl From<ErrorCodes> for String {
-    fn from(code: ErrorCodes) -> String {
-        u32::from(code).to_string()
-    }
-}
-
-impl From<ErrorCodes> for crate::facade::tendermint::abci::Code {
-    fn from(value: ErrorCodes) -> Self {
-        Self::from(u32::from(value))
     }
 }
 
