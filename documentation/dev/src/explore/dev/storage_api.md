@@ -39,7 +39,7 @@ All the methods in the `StorageRead` and `StorageWrite` return `storage_api::Res
 A custom `storage_api::Error` can be constructed from a static str with `new_const`, or from another Error type with `new`. Furthermore, you can wrap your custom `Result` with `into_storage_result` using the `trait ResultExt`.
 
 ```admonish warning
-In library code written over `storage_api`, it is critical to propagate errors correctly (no `unwrap/expect`) to be able to re-use these in native environment.
+In library code written over `storage_api`, it is critical to propagate errors correctly (no `unwrap/expect`) to be able to reuse these in native environment.
 ```
 
 In native VPs the `storage_api` methods may return an error when we run out of gas in the current execution and a panic would crash the node. This is a good motivation to document error conditions of your functions. Furthermore, adding new error conditions to existing functions should be considered a breaking change and reviewed carefully!

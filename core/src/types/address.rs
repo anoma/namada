@@ -28,7 +28,7 @@ pub const ESTABLISHED_ADDRESS_BYTES_LEN: usize = 21;
 /// The length of [`Address`] encoded with Bech32m.
 // NOTE: This must be kept in sync with the bech32 HRP.
 // Uppercase prefixes might result in a different length,
-// so tread carefully when changing this value.
+// so treat carefully when changing this value.
 pub const ADDRESS_LEN: usize =
     string_encoding::hrp_len::<Address>() + 1 + HASH_HEX_LEN;
 

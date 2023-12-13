@@ -36,7 +36,7 @@ pub enum RuntimeError {
     MemoryError(Box<dyn std::error::Error + Sync + Send + 'static>),
     #[error("Trying to read a temporary value with read_post")]
     ReadTemporaryValueError,
-    #[error("Trying to read a permament value with read_temp")]
+    #[error("Trying to read a permanent value with read_temp")]
     ReadPermanentValueError,
     #[error("Invalid transaction code hash")]
     InvalidCodeHash,

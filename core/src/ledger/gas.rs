@@ -35,7 +35,7 @@ const STORAGE_OCCUPATION_GAS_PER_BYTE: u64 =
 // codebase. For these two reasons we just set an arbitrary value (based on
 // actual SSDs latency) per byte here
 const PHYSICAL_STORAGE_LATENCY_PER_BYTE: u64 = 75;
-// This is based on the global avarage bandwidth
+// This is based on the global average bandwidth
 const NETWORK_TRANSMISSION_GAS_PER_BYTE: u64 = 13;
 
 /// The cost of accessing data from memory (both read and write mode), per byte
@@ -46,7 +46,7 @@ pub const STORAGE_ACCESS_GAS_PER_BYTE: u64 =
 /// The cost of writing data to storage, per byte
 pub const STORAGE_WRITE_GAS_PER_BYTE: u64 =
     MEMORY_ACCESS_GAS_PER_BYTE + 848 + STORAGE_OCCUPATION_GAS_PER_BYTE;
-/// The cost of verifying a signle signature of a transaction
+/// The cost of verifying a single signature of a transaction
 pub const VERIFY_TX_SIG_GAS: u64 = 9_793;
 /// The cost for requesting one more page in wasm (64KiB)
 pub const WASM_MEMORY_PAGE_GAS: u32 =
@@ -152,7 +152,7 @@ impl Display for Gas {
 }
 
 impl From<GasLimit> for Gas {
-    // Derive a Gas instance with a sub amount which is exaclty a whole amount
+    // Derive a Gas instance with a sub amount which is exactly a whole amount
     // since the limit represents gas in whole units
     fn from(value: GasLimit) -> Self {
         Self {

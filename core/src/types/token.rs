@@ -275,7 +275,7 @@ impl Amount {
 
 /// Given a number represented as `M*B^D`, then
 /// `M` is the matissa, `B` is the base and `D`
-/// is the denomination, represented by this stuct.
+/// is the denomination, represented by this struct.
 #[derive(
     Debug,
     Copy,

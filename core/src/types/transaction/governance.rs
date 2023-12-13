@@ -76,7 +76,7 @@ pub struct VoteProposalData {
     pub vote: StorageProposalVote,
     /// The proposal author address
     pub voter: Address,
-    /// Delegator addreses
+    /// Delegator addresses
     pub delegations: Vec<Address>,
 }
 
@@ -121,7 +121,7 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
     fn try_from(value: PgfFundingProposal) -> Result<Self, Self::Error> {
         let continous_fundings = value
             .data
-            .continous
+            .continuous
             .iter()
             .cloned()
             .map(|funding| {

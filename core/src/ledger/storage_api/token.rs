@@ -90,7 +90,7 @@ where
 
 /// Transfer `token` from `src` to `dest`. Returns an `Err` if `src` has
 /// insufficient balance or if the transfer the `dest` would overflow (This can
-/// only happen if the total supply does't fit in `token::Amount`).
+/// only happen if the total supply doesn't fit in `token::Amount`).
 pub fn transfer<S>(
     storage: &mut S,
     token: &Address,

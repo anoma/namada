@@ -94,7 +94,7 @@ pub struct WriteLog {
     tx_write_log: HashMap<storage::Key, StorageModification>,
     /// A precommit bucket for the `tx_write_log`. This is useful for
     /// validation when a clean `tx_write_log` is needed without committing any
-    /// modification already in there. These modifications can be temporarely
+    /// modification already in there. These modifications can be temporarily
     /// stored here and then discarded or committed to the `block_write_log`,
     /// together with th content of `tx_write_log`. No direct key
     /// write/update/delete should ever happen on this field, this log should

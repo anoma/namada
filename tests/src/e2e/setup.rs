@@ -100,7 +100,7 @@ pub fn update_actor_config<F>(
         .unwrap();
 }
 
-/// Configure validator p2p settings to allow duplicat ips
+/// Configure validator p2p settings to allow duplicate ips
 pub fn allow_duplicate_ips(test: &Test, chain_id: &ChainId, who: &Who) {
     update_actor_config(test, chain_id, who, |config| {
         config.ledger.cometbft.p2p.allow_duplicate_ip = true;

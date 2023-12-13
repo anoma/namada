@@ -1879,8 +1879,8 @@ where
 }
 
 /// Verify a transaction signature
-/// TODO: this is just a warkaround to track gas for multiple singature
-/// verifications. When the runtime gas meter is implemented, this funcion can
+/// TODO: this is just a warkaround to track gas for multiple signature
+/// verifications. When the runtime gas meter is implemented, this function can
 /// be removed
 #[allow(clippy::too_many_arguments)]
 pub fn vp_verify_tx_section_signature<MEM, DB, H, EVAL, CA>(

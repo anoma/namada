@@ -8,7 +8,7 @@ For safety critical parts it is good to add redundancy in safety checks, especia
 
 A very related concern to correctness is error handling. Whenever possible, it is best to rule out errors using the type system, i.e. make invalid states impossible to represent using the type system. However, there are many places where that is not practical or possible (for example, when we consume some values from Tendermint, in complex logic or in IO operations like reading and writing from/to storage). How errors should be handled depends on the context.
 
-When you're not sure which context some piece of code falls into or if you want to make it re-usable in different settings, the default should be "defensive coding" approach, with any possible issues captured in `Result`'s errors and propagated up to the caller. The caller can then decide how to handle errors.
+When you're not sure which context some piece of code falls into or if you want to make it reusable in different settings, the default should be "defensive coding" approach, with any possible issues captured in `Result`'s errors and propagated up to the caller. The caller can then decide how to handle errors.
 
 ### Native code that doesn't depend on interactions
 

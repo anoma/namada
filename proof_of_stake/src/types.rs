@@ -259,7 +259,7 @@ pub type LivenessMissedVotes = NestedMap<Address, LazySet<u64>>;
 
 /// The sum of missed votes within some interval for each of the consensus
 /// validators. The value in this map should in principle be the number of
-/// elements in the correspoding inner LazySet of [`LivenessMissedVotes`].
+/// elements in the corresponding inner LazySet of [`LivenessMissedVotes`].
 pub type LivenessSumMissedVotes = LazyMap<Address, u64>;
 
 #[derive(
@@ -673,7 +673,7 @@ impl Display for SlashType {
 pub fn into_tm_voting_power(votes_per_token: Dec, tokens: Amount) -> i64 {
     let pow = votes_per_token
         * u128::try_from(tokens).expect("Voting power out of bounds");
-    i64::try_from(pow.to_uint().expect("Cant fail"))
+    i64::try_from(pow.to_uint().expect("Can't fail"))
         .expect("Invalid voting power")
 }
 

@@ -685,7 +685,7 @@ fn ledger_txs_and_queries() -> Result<()> {
 /// Test the optional disposable keypair for wrapper signing
 ///
 /// 1. Test that a tx requesting a disposable signer with a correct unshielding
-/// operation is succesful
+/// operation is successful
 /// 2. Test that a tx requesting a disposable signer
 /// providing an insufficient unshielding fails
 #[test]
@@ -2083,7 +2083,7 @@ fn proposal_submission() -> Result<()> {
 
 /// Test submission and vote of a PGF proposal
 ///
-/// 1 - Sumbit two proposals
+/// 1 - Submit two proposals
 /// 2 - Check balance
 /// 3 - Vote for the accepted proposals
 /// 4 - Check one proposal passed and the other one didn't

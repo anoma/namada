@@ -30,7 +30,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// A 256 bit number with [`POS_DECIMAL_PRECISION`] number of Dec places.
 ///
-/// To be precise, an instance X of this type should be interpeted as the Dec
+/// To be precise, an instance X of this type should be interpreted as the Dec
 /// X * 10 ^ (-[`POS_DECIMAL_PRECISION`])
 #[derive(
     Clone,
@@ -159,7 +159,7 @@ impl Dec {
     }
 
     /// Do multiply two [`Dec`]s. Return `None` if overflow.
-    /// This methods will overflow incorretly if both arguments are greater than
+    /// This methods will overflow incorrectly if both arguments are greater than
     /// 128bit.
     pub fn checked_mul(&self, other: &Self) -> Option<Self> {
         let result = self.0.checked_mul(&other.0)?;

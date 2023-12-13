@@ -23,7 +23,7 @@ pub struct Account {
 }
 
 impl Account {
-    /// Retrive a public key from the index
+    /// Retrieve a public key from the index
     pub fn get_public_key_from_index(
         &self,
         index: u8,
@@ -31,7 +31,7 @@ impl Account {
         self.public_keys_map.get_public_key_from_index(index)
     }
 
-    /// Retrive the index of a public key
+    /// Retrieve the index of a public key
     pub fn get_index_from_public_key(
         &self,
         public_key: &common::PublicKey,
@@ -49,7 +49,7 @@ impl Account {
     Deserialize,
     Default,
 )]
-/// Holds the public key map data as a bimap for efficient quering
+/// Holds the public key map data as a bimap for efficient querying
 pub struct AccountPublicKeysMap {
     /// Hashmap from public key to index
     pub pk_to_idx: HashMap<common::PublicKey, u8>,
@@ -80,7 +80,7 @@ impl FromIterator<common::PublicKey> for AccountPublicKeysMap {
 }
 
 impl AccountPublicKeysMap {
-    /// Retrive a public key from the index
+    /// Retrieve a public key from the index
     pub fn get_public_key_from_index(
         &self,
         index: u8,
@@ -88,7 +88,7 @@ impl AccountPublicKeysMap {
         self.idx_to_pk.get(&index).cloned()
     }
 
-    /// Retrive the index of a public key
+    /// Retrieve the index of a public key
     pub fn get_index_from_public_key(
         &self,
         public_key: &common::PublicKey,

@@ -4,7 +4,7 @@ The benchmarks are built with [criterion.rs](https://bheisler.github.io/criterio
 
 Measurements are taken on the elapsed wall-time.
 
-The benchmarks only focus on sucessfull transactions and vps: in case of failure, the bench function shall panic to avoid timing incomplete execution paths.
+The benchmarks only focus on successful transactions and vps: in case of failure, the bench function shall panic to avoid timing incomplete execution paths.
 
 In addition, this crate also contains benchmarks for `WrapperTx` (`namada::core::types::transaction::wrapper::WrapperTx`) validation and `host_env` (`namada::vm::host_env`) exposed functions that define the gas constants of `gas` (`namada::core::ledger::gas`).
 

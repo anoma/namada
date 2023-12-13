@@ -1268,7 +1268,7 @@ pub async fn query_pgf(context: &impl Namada, _args: args::QueryPgf) {
         true => {
             display_line!(
                 context.io(),
-                "Pgf stewards: no stewards are currectly set."
+                "Pgf stewards: no stewards are currently set."
             )
         }
         false => {
@@ -1375,7 +1375,7 @@ pub async fn query_protocol_parameters(
     let epoch_duration: EpochDuration =
         query_storage_value(context.client(), &key)
             .await
-            .expect("Parameter should be definied.");
+            .expect("Parameter should be defined.");
     display_line!(
         context.io(),
         "{:4}Min. epoch duration: {}",
@@ -2487,7 +2487,7 @@ pub async fn query_has_storage_key<
 }
 
 /// Call the corresponding `tx_event_query` RPC method, to fetch
-/// the current status of a transation.
+/// the current status of a transaction.
 pub async fn query_tx_events<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     tx_event_query: namada_sdk::rpc::TxEventQuery<'_>,

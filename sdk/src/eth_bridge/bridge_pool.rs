@@ -416,7 +416,7 @@ pub async fn query_relay_progress(
     Ok(())
 }
 
-/// Internal methdod to construct a proof that a set of transfers are in the
+/// Internal method to construct a proof that a set of transfers are in the
 /// bridge pool.
 async fn construct_bridge_pool_proof(
     client: &(impl Client + Sync),

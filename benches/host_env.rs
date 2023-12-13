@@ -188,7 +188,7 @@ fn write_log_read(c: &mut Criterion) {
         // than invert it to calculate the desired metric (time/byte)
         // NOTE: criterion states that the throughput is measured on the
         // processed bytes but in this case we are interested in the input +
-        // output bytes, i.e. the combined legth of the key and value red, so we
+        // output bytes, i.e. the combined length of the key and value red, so we
         // set this as the throughput parameter
         let throughput_len = value_len + key.len() as u64;
         group.throughput(criterion::Throughput::Bytes(throughput_len));
@@ -219,7 +219,7 @@ fn storage_read(c: &mut Criterion) {
         // than invert it to calculate the desired metric (time/byte)
         // NOTE: criterion states that the throughput is measured on the
         // processed bytes but in this case we are interested in the input +
-        // output bytes, i.e. the combined legth of the key and value red, so we
+        // output bytes, i.e. the combined length of the key and value red, so we
         // set this as the throughput parameter
         let throughput_len = value_len + key.len() as u64;
         group.throughput(criterion::Throughput::Bytes(throughput_len));
@@ -259,7 +259,7 @@ fn write_log_write(c: &mut Criterion) {
         // than invert it to calculate the desired metric (time/byte)
         // NOTE: criterion states that the throughput is measured on the
         // processed bytes but in this case we are interested in the input +
-        // output bytes, i.e. the combined legth of the key and value written,
+        // output bytes, i.e. the combined length of the key and value written,
         // so we set this as the throughput parameter
         let throughput_len = value_len + key.len() as u64;
         group.throughput(criterion::Throughput::Bytes(throughput_len));
@@ -294,7 +294,7 @@ fn storage_write(c: &mut Criterion) {
         // than invert it to calculate the desired metric (time/byte)
         // NOTE: criterion states that the throughput is measured on the
         // processed bytes but in this case we are interested in the input +
-        // output bytes, i.e. the combined legth of the key and value written,
+        // output bytes, i.e. the combined length of the key and value written,
         // so we set this as the throughput parameter
         let throughput_len = value_len + key.len() as u64;
         group.throughput(criterion::Throughput::Bytes(throughput_len));

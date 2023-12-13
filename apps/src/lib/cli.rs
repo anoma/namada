@@ -1293,7 +1293,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Query pgf stewards and continous funding.")
+                .about("Query pgf stewards and continuous funding.")
                 .add_args::<args::QueryPgf<args::CliTypes>>()
         }
     }
@@ -4784,7 +4784,7 @@ pub mod args {
                         .def()
                         .help(
                             "Flag if the proposal is of type pgf-funding. \
-                             Used to control continous/retro pgf fundings.",
+                             Used to control continuous/retro pgf fundings.",
                         )
                         .conflicts_with_all([
                             PROPOSAL_ETH.name,
@@ -6003,7 +6003,7 @@ pub mod args {
             .arg(FEE_TOKEN.def().help("The token for paying the gas"))
             .arg(FEE_UNSHIELD_SPENDING_KEY.def().help(
                 "The spending key to be used for fee unshielding. If none is \
-                 provided, fee will be payed from the unshielded balance only.",
+                 provided, fee will be paid from the unshielded balance only.",
             ))
             .arg(GAS_LIMIT.def().help(
                 "The multiplier of the gas limit resolution defining the \

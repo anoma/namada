@@ -43,7 +43,7 @@ async-client = [
 
 async-send = []
 
-# for integration tests and test utilies
+# for integration tests and test utilities
 testing = [
   "namada_core/testing",
   "namada_ethereum_bridge/testing",

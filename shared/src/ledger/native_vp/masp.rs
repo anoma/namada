@@ -182,7 +182,7 @@ where
             if !(1..=4).contains(&out_length) {
                 tracing::debug!(
                     "Transparent output to a transaction to the masp must be \
-                     beteween 1 and 4 but is {}",
+                     between 1 and 4 but is {}",
                     transp_bundle.vout.len()
                 );
 

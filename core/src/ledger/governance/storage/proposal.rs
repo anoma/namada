@@ -21,7 +21,7 @@ pub enum ProposalTypeError {
     InvalidProposalType,
 }
 
-/// Storage struture for pgf fundings
+/// Storage structure for pgf fundings
 #[derive(
     Debug,
     Clone,

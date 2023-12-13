@@ -2305,7 +2305,7 @@ where
             remaining = token::Amount::zero();
 
             // NOTE: When there are multiple `src_validators` from which we're
-            // unbonding, `validator_to_modify` cannot get overriden, because
+            // unbonding, `validator_to_modify` cannot get overridden, because
             // only one of them can be a partial unbond (`new_entry`
             // is partial unbond)
             if let Some((bond_epoch, new_bond_amount)) =
@@ -2542,7 +2542,7 @@ where
 }
 
 /// Compute a token amount after slashing, given the initial amount and a set of
-/// slashes. It is assumed that the input `slashes` are those commited while the
+/// slashes. It is assumed that the input `slashes` are those committed while the
 /// `amount` was contributing to voting power.
 fn get_slashed_amount(
     params: &PosParams,
@@ -4651,7 +4651,7 @@ where
 
 /// Process a slash by (i) slashing the misbehaving validator; and (ii) any
 /// validator to which it has redelegated some tokens and the slash misbehaving
-/// epoch is wihtin the redelegation slashing window.
+/// epoch is within the redelegation slashing window.
 ///
 /// `validator` - the misbehaving validator.
 /// `slash_rate` - the slash rate.
@@ -4740,7 +4740,7 @@ where
 /// In the context of a redelegation, the function computes how much a validator
 /// (the destination validator of the redelegation) should be slashed due to the
 /// misbehaving of a second validator (the source validator of the
-/// redelegation). The function computes how much the validator whould be
+/// redelegation). The function computes how much the validator would be
 /// slashed at all epochs between the current epoch (curEpoch) + 1 and the
 /// current epoch + 1 + PIPELINE_OFFSET, accounting for any tokens of the
 /// redelegation already unbonded.
@@ -5783,8 +5783,8 @@ where
                         Some(missed_votes) => missed_votes + 1,
                         None => {
                             // Missing liveness data for the validator (newly
-                            // added to the conensus
-                            // set), intialize it
+                            // added to the consensus
+                            // set), initialize it
                             1
                         }
                     }
@@ -5869,7 +5869,7 @@ pub mod test_utils {
     use crate::parameters::PosParams;
     use crate::types::GenesisValidator;
 
-    /// Helper function to intialize storage with PoS data
+    /// Helper function to initialize storage with PoS data
     /// about validators for tests.
     pub fn init_genesis_helper<S>(
         storage: &mut S,

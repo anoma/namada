@@ -5685,7 +5685,7 @@ fn test_from_sm_case_1() {
             - unbond_amount,
         new_bond_amount
     );
-    // The current bond should be sum of redelegations fom the modified epoch
+    // The current bond should be sum of redelegations from the modified epoch
     let cur_bond_amount = bonds_handle
         .get_delta_val(&storage, new_entry_epoch)
         .unwrap()

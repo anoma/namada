@@ -67,7 +67,7 @@ const ENV_VAR_LEDGER_LOG_PATH: &str = "NAMADA_LEDGER_LOG_PATH";
 /// Env. var specifying where to store transaction debug outputs
 const ENV_VAR_TX_LOG_PATH: &str = "NAMADA_TX_LOG_PATH";
 
-/// A struture holding the signing data to craft a transaction
+/// A structure holding the signing data to craft a transaction
 #[derive(Clone)]
 pub struct SigningTxData {
     /// The address owning the transaction
@@ -132,7 +132,7 @@ pub fn find_key_by_pk<U: WalletIo>(
     public_key: &common::PublicKey,
 ) -> Result<common::SecretKey, Error> {
     if *public_key == masp_tx_key().ref_to() {
-        // We already know the secret key corresponding to the MASP sentinal key
+        // We already know the secret key corresponding to the MASP sentinel key
         Ok(masp_tx_key())
     } else {
         // Otherwise we need to search the wallet for the secret key
@@ -425,7 +425,7 @@ pub async fn init_validator_signing_data(
     })
 }
 
-/// Informations about the post-tx balance of the tx's source. Used to correctly
+/// Information about the post-tx balance of the tx's source. Used to correctly
 /// handle fee validation in the wrapper tx
 pub struct TxSourcePostBalance {
     /// The balance of the tx source after the tx has been applied
@@ -944,7 +944,7 @@ pub async fn generate_test_vector(
 }
 
 /// Convert decimal numbers into the format used by Ledger. Specifically remove
-/// all insignificant zeros occuring after decimal point.
+/// all insignificant zeros occurring after decimal point.
 fn to_ledger_decimal(amount: &str) -> String {
     if amount.contains('.') {
         let mut amount = amount.trim_end_matches('0').to_string();

@@ -155,7 +155,7 @@ where
 
         for counter in pre_counter..post_counter {
             // Construct the set of expected keys
-            // NOTE: we don't check the existance of committing_epoch because
+            // NOTE: we don't check the existence of committing_epoch because
             // it's going to be checked later into the VP
             let mandatory_keys = BTreeSet::from([
                 counter_key.clone(),

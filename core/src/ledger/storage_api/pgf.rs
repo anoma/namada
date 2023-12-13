@@ -61,7 +61,7 @@ where
     Ok(())
 }
 
-/// Query the current pgf continous payments
+/// Query the current pgf continuous payments
 pub fn get_payments<S>(
     storage: &S,
 ) -> storage_api::Result<Vec<StoragePgfFunding>>

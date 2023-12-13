@@ -38,7 +38,7 @@ pub enum ProposalValidation {
          epoch must be at most {1}, but found {0}"
     )]
     InvalidProposalPeriod(u64, u64),
-    /// The proposal author does not have enought balance to pay for proposal
+    /// The proposal author does not have enough balance to pay for proposal
     /// fees
     #[error(
         "Invalid proposal minimum funds: the author address has {0} but \

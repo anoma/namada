@@ -1230,7 +1230,7 @@ pub fn validate_established_account(
 
     let established_address = tx.derive_address();
     if tx.threshold == 0 {
-        eprintln!("An established account may not have zero thresold");
+        eprintln!("An established account may not have zero threshold");
         is_valid = false;
     }
     if tx.threshold as usize > tx.public_keys.len() {

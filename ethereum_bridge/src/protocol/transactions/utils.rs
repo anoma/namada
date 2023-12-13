@@ -13,7 +13,7 @@ use namada_proof_of_stake::types::WeightedValidator;
 pub(super) trait GetVoters {
     /// Extract all the voters and the block heights at which they voted from
     /// the given proof.
-    // TODO(feature = "abcipp"): we do not neet to return block heights
+    // TODO(feature = "abcipp"): we do not need to return block heights
     // anymore. votes will always be from `storage.last_height`.
     fn get_voters(self) -> HashSet<(Address, BlockHeight)>;
 }
@@ -190,7 +190,7 @@ mod tests {
 
     #[test]
     /// Assert we error if we are passed an `(Address, BlockHeight)` but are not
-    /// given a corrseponding set of validators for the block height
+    /// given a corresponding set of validators for the block height
     fn test_get_voting_powers_for_selected_no_consensus_validators_for_height()
     {
         let all_consensus = BTreeMap::default();

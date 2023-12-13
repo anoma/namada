@@ -311,7 +311,7 @@ where
         Ok(true)
     }
 
-    /// Deteremine the debit and credit amounts that should be checked.
+    /// Determine the debit and credit amounts that should be checked.
     fn determine_escrow_checks<'trans, 'this: 'trans>(
         &'this self,
         wnam_address: &EthAddress,
@@ -513,7 +513,7 @@ fn sum_gas_and_token_amounts(
         .checked_add(transfer.transfer.amount)
         .ok_or_else(|| {
             Error(eyre!(
-                "Addition oveflowed adding gas fee + transfer amount."
+                "Addition overflowed adding gas fee + transfer amount."
             ))
         })
 }

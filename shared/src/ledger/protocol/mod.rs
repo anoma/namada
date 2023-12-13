@@ -461,7 +461,7 @@ where
 
 /// Transfer `token` from `src` to `dest`. Returns an `Err` if `src` has
 /// insufficient balance or if the transfer the `dest` would overflow (This can
-/// only happen if the total supply does't fit in `token::Amount`). Contrary to
+/// only happen if the total supply doesn't fit in `token::Amount`). Contrary to
 /// `storage_api::token::transfer` this function updates the tx write log and
 /// not the block write log.
 fn token_transfer<WLS>(
@@ -1034,7 +1034,7 @@ where
                     // transaction from consuming resources that have not
                     // been acquired in the corresponding wrapper tx. For
                     // all the other errors we keep evaluating the vps. This
-                    // allows to display a consistent VpsResult accross all
+                    // allows to display a consistent VpsResult across all
                     // nodes and find any invalid signatures
                     Error::GasError(_) => {
                         return Err(err);
