@@ -5,7 +5,10 @@ use std::collections::{BTreeSet, HashSet};
 
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
+use masp_primitives::merkle_tree::CommitmentTree;
+use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::I128Sum;
+use masp_primitives::transaction::Transaction;
 use namada_core::ledger::gas::MASP_VERIFY_SHIELDED_TX_GAS;
 use namada_core::ledger::storage;
 use namada_core::ledger::storage_api::OptionExt;
@@ -15,7 +18,9 @@ use namada_core::types::address::InternalAddress::Masp;
 use namada_core::types::address::{Address, MASP};
 use namada_core::types::storage::{Epoch, Key, KeySeg};
 use namada_core::types::token::{
-    self, is_masp_nullifier_key, MASP_NULLIFIERS_KEY_PREFIX,
+    self, is_masp_anchor_key, is_masp_nullifier_key,
+    MASP_NOTE_COMMITMENT_ANCHOR_PREFIX, MASP_NOTE_COMMITMENT_TREE_KEY,
+    MASP_NULLIFIERS_KEY_PREFIX,
 };
 use namada_sdk::masp::verify_shielded_tx;
 use ripemd::Digest as RipemdDigest;
@@ -92,6 +97,156 @@ fn convert_amount(
         .expect("invalid value or asset type for amount")
 }
 
+impl<'a, DB, H, CA> MaspVp<'a, DB, H, CA>
+where
+    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: 'static + storage::StorageHasher,
+    CA: 'static + WasmCacheAccess,
+{
+    // Check that the transaction correctly revealed the nullifiers
+    fn valid_nullifiers_reveal(
+        &self,
+        keys_changed: &BTreeSet<Key>,
+        transaction: &Transaction,
+    ) -> Result<bool> {
+        let mut revealed_nullifiers = HashSet::new();
+        for description in transaction
+            .sapling_bundle()
+            .map_or(&vec![], |description| &description.shielded_spends)
+        {
+            let nullifier_key = Key::from(MASP.to_db_key())
+                .push(&MASP_NULLIFIERS_KEY_PREFIX.to_owned())
+                .expect("Cannot obtain a storage key")
+                .push(&namada_core::types::hash::Hash(description.nullifier.0))
+                .expect("Cannot obtain a storage key");
+            if self.ctx.has_key_pre(&nullifier_key)?
+                || revealed_nullifiers.contains(&nullifier_key)
+            {
+                tracing::debug!(
+                    "MASP double spending attempt, the nullifier {:#?} has \
+                     already been revealed previously",
+                    description.nullifier.0
+                );
+                return Ok(false);
+            }
+
+            // Check that the nullifier is indeed committed (no temp write
+            // and no delete) and carries no associated data (the latter not
+            // strictly necessary for validation, but we don't expect any
+            // value for this key anyway)
+            match self.ctx.read_bytes_post(&nullifier_key)? {
+                Some(value) if value.is_empty() => (),
+                _ => return Ok(false),
+            }
+
+            revealed_nullifiers.insert(nullifier_key);
+        }
+
+        for nullifier_key in
+            keys_changed.iter().filter(|key| is_masp_nullifier_key(key))
+        {
+            if !revealed_nullifiers.contains(nullifier_key) {
+                tracing::debug!(
+                    "An unexpected MASP nullifier key {nullifier_key} has \
+                     been revealed by the transaction"
+                );
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
+    }
+
+    // Check that a transaction carrying output descriptions correctly updates
+    // the tree and anchor in storage
+    fn valid_note_commitment_update(
+        &self,
+        keys_changed: &BTreeSet<Key>,
+        transaction: &Transaction,
+    ) -> Result<bool> {
+        // Check that the merkle tree in storage has been correctly updated with
+        // the output descriptions cmu
+        let tree_key = Key::from(MASP.to_db_key())
+            .push(&MASP_NOTE_COMMITMENT_TREE_KEY.to_owned())
+            .expect("Cannot obtain a storage key");
+        let mut previous_tree: CommitmentTree<Node> =
+            self.ctx.read_pre(&tree_key)?.ok_or(Error::NativeVpError(
+                native_vp::Error::SimpleMessage("Cannot read storage"),
+            ))?;
+        let post_tree: CommitmentTree<Node> =
+            self.ctx.read_post(&tree_key)?.ok_or(Error::NativeVpError(
+                native_vp::Error::SimpleMessage("Cannot read storage"),
+            ))?;
+
+        // Based on the output descriptions of the transaction, update the
+        // previous tree in storage
+        for description in transaction
+            .sapling_bundle()
+            .map_or(&vec![], |bundle| &bundle.shielded_outputs)
+        {
+            previous_tree
+                .append(Node::from_scalar(description.cmu))
+                .map_err(|()| {
+                    Error::NativeVpError(native_vp::Error::SimpleMessage(
+                        "Failed to update the commitment tree",
+                    ))
+                })?;
+        }
+        // Check that the updated previous tree matches the actual post tree.
+        // This verifies that all and only the necessary notes have been
+        // appended to the tree
+        if previous_tree != post_tree {
+            tracing::debug!("The note commitment tree was incorrectly updated");
+            return Ok(false);
+        }
+
+        // Check that no anchor was published (this is to be done by the
+        // protocol)
+        if keys_changed
+            .iter()
+            .filter(|key| is_masp_anchor_key(key))
+            .count()
+            != 0
+        {
+            tracing::debug!(
+                "The transaction revealed one or more MASP anchor keys"
+            );
+            return Ok(false);
+        }
+
+        Ok(true)
+    }
+
+    // Check that the spend descriptions anchors of a transaction are valid
+    fn valid_spend_descriptions_anchor(
+        &self,
+        transaction: &Transaction,
+    ) -> Result<bool> {
+        for description in transaction
+            .sapling_bundle()
+            .map_or(&vec![], |bundle| &bundle.shielded_spends)
+        {
+            let anchor_key = Key::from(MASP.to_db_key())
+                .push(&MASP_NOTE_COMMITMENT_ANCHOR_PREFIX.to_owned())
+                .expect("Cannot obtain a storage key")
+                .push(&namada_core::types::hash::Hash(
+                    description.anchor.to_bytes(),
+                ))
+                .expect("Cannot obtain a storage key");
+
+            // Check if the provided anchor was published before
+            if !self.ctx.has_key_pre(&anchor_key)? {
+                tracing::debug!(
+                    "Spend description refers to an invalid anchor"
+                );
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
+    }
+}
+
 impl<'a, DB, H, CA> NativeVp for MaspVp<'a, DB, H, CA>
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -138,7 +293,8 @@ where
             // 2. the transparent transaction value pool's amount must equal
             // the containing wrapper transaction's fee
             // amount Satisfies 1.
-            // 3. The nullifiers provided by the transaction have not been
+            // 3. The spend descriptions' anchors are valid
+            // 4. The nullifiers provided by the transaction have not been
             // revealed previously (even in the same tx) and no unneeded
             // nullifier is being revealed by the tx
             if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
@@ -152,52 +308,17 @@ where
                 }
             }
 
-            let mut revealed_nullifiers = HashSet::new();
-            for description in shielded_tx
-                .sapling_bundle()
-                .map_or(&vec![], |description| &description.shielded_spends)
+            if !(self.valid_spend_descriptions_anchor(&shielded_tx)?
+                && self.valid_nullifiers_reveal(keys_changed, &shielded_tx)?)
             {
-                let nullifier_key = Key::from(MASP.to_db_key())
-                    .push(&MASP_NULLIFIERS_KEY_PREFIX.to_owned())
-                    .expect("Cannot obtain a storage key")
-                    .push(&namada_core::types::hash::Hash(
-                        description.nullifier.0,
-                    ))
-                    .expect("Cannot obtain a storage key");
-                if self.ctx.has_key_pre(&nullifier_key)?
-                    || revealed_nullifiers.contains(&nullifier_key)
-                {
-                    tracing::debug!(
-                        "MASP double spending attempt, the nullifier {:#?} \
-                         has already been revealed previously",
-                        description.nullifier.0
-                    );
-                    return Ok(false);
-                }
-
-                // Check that the nullifier is indeed committed (no temp write
-                // and no delete) and carries no associated data (the latter not
-                // strictly necessary for validation, but we don't expect any
-                // value for this key anyway)
-                match self.ctx.read_bytes_post(&nullifier_key)? {
-                    Some(value) if value.is_empty() => (),
-                    _ => return Ok(false),
-                }
-
-                revealed_nullifiers.insert(nullifier_key);
+                return Ok(false);
             }
+        }
 
-            for nullifier_key in
-                keys_changed.iter().filter(|key| is_masp_nullifier_key(key))
-            {
-                if !revealed_nullifiers.contains(nullifier_key) {
-                    tracing::debug!(
-                        "An unexpected MASP nullifier key {nullifier_key} has \
-                         been revealed by the transaction"
-                    );
-                    return Ok(false);
-                }
-            }
+        // The transaction must correctly update the note commitment tree
+        // in storage with the new output descriptions
+        if !self.valid_note_commitment_update(keys_changed, &shielded_tx)? {
+            return Ok(false);
         }
 
         if transfer.target != Address::Internal(Masp) {
