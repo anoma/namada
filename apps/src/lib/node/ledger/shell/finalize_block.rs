@@ -446,6 +446,8 @@ where
                                 tx: wrapper.expect("Missing expected wrapper"),
                                 gas: tx_gas_meter.get_available_gas(),
                             });
+                            // XXX: possible bug? we do not increment the nr
+                            // of successful txs if we are a wrapper tx
                         } else {
                             tracing::trace!(
                                 "all VPs accepted transaction {} storage \
@@ -463,6 +465,8 @@ where
                             }
                             changed_keys
                                 .extend(result.changed_keys.iter().cloned());
+                            // XXX: non-wrapper txs are incremented (see note on
+                            // if-branch above)
                             stats.increment_successful_txs();
                             if let Some(wrapper) = embedding_wrapper {
                                 self.commit_inner_tx_hash(wrapper);
