@@ -4393,7 +4393,7 @@ dependencies = [
 
 [[package]]
 name = "namada_examples"
-version = "0.28.0"
+version = "0.28.1"
 dependencies = [
  "masp_proofs",
  "namada_sdk",
