@@ -1118,10 +1118,10 @@ mod test {
         genesis.transactions.bond = Some(vec![transactions::BondTx {
             source: GenesisAddress::EstablishedAddress(albert_address.clone()),
             validator: defaults::albert_address(),
-            amount: token::DenominatedAmount {
-                amount: token::Amount::from_uint(1, 6).unwrap(),
-                denom: 6.into(),
-            },
+            amount: token::DenominatedAmount::new(
+                token::Amount::from_uint(1, 6).unwrap(),
+                6.into(),
+            ),
         }]);
 
         // bonds should fail since no balances have been initialized
@@ -1130,10 +1130,10 @@ mod test {
         let expected = vec![Warning::FailedBond(
             albert_address_str.clone(),
             albert_address_str.clone(),
-            token::DenominatedAmount {
-                amount: token::Amount::from_uint(1, 6).unwrap(),
-                denom: 6.into(),
-            },
+            token::DenominatedAmount::new(
+                token::Amount::from_uint(1, 6).unwrap(),
+                6.into(),
+            ),
             "Insufficient source balance".to_string(),
         )];
         assert_eq!(expected, initializer.warnings);
@@ -1147,10 +1147,10 @@ mod test {
         let expected = vec![Warning::FailedBond(
             albert_address_str.clone(),
             albert_address_str.clone(),
-            token::DenominatedAmount {
-                amount: token::Amount::from_uint(1, 6).unwrap(),
-                denom: 6.into(),
-            },
+            token::DenominatedAmount::new(
+                token::Amount::from_uint(1, 6).unwrap(),
+                6.into(),
+            ),
             format!(
                 "The given address {} is not a validator address",
                 albert_address_str
