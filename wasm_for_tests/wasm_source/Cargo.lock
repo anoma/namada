@@ -3486,6 +3486,7 @@ dependencies = [
  "owo-colors",
  "parse_duration",
  "paste",
+ "proptest",
  "prost 0.12.3",
  "rand 0.8.5",
  "rand_core 0.6.4",
