@@ -99,3 +99,4 @@
 pub mod reading;
 pub mod transaction;
 pub mod writing;
+pub use namada_core;

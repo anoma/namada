@@ -1,27 +1,14 @@
-use crate::transaction;
-use namada_core::ledger::governance::storage::proposal::ProposalType;
-use namada_core::proto::Section;
-use namada_core::proto::SignatureIndex;
-use namada_core::proto::Signer;
-use namada_core::proto::TxError;
-use namada_core::proto::{Signature, Tx};
-use namada_core::types::account::AccountPublicKeysMap;
+use namada_core::proto::Tx;
 use namada_core::types::address::Address;
-use namada_core::types::chain::ChainId;
 use namada_core::types::dec::Dec;
 use namada_core::types::hash::Hash;
 use namada_core::types::key::{common, secp256k1};
-use namada_core::types::storage::Epoch;
-use namada_core::types::time::DateTimeUtc;
 use namada_core::types::token;
-use namada_core::types::token::{Amount, DenominatedAmount, MaspDenom};
+use namada_core::types::token::Amount;
 use namada_core::types::transaction::pos::Redelegation;
-use namada_core::types::transaction::Fee;
-use namada_core::types::transaction::GasLimit;
-use std::collections::BTreeMap;
-use std::str::FromStr;
 
 use super::GlobalArgs;
+use crate::transaction;
 
 const TX_BOND_WASM: &str = "tx_bond.wasm";
 const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
@@ -61,16 +48,19 @@ impl Bond {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+    pub fn get_msg_to_sign(&self) -> Vec<Hash> {
         transaction::get_msg_to_sign(&self.0)
     }
 
     /// Attach the provided signatures to the tx
     pub fn attach_signatures(
-        mut self,
-        signatures: Vec<SignatureIndex>,
+        self,
+        signer: common::PublicKey,
+        signature: common::Signature,
     ) -> Self {
-        Self(transaction::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(
+            self.0, signer, signature,
+        ))
     }
 }
 
@@ -99,16 +89,19 @@ impl Unbond {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+    pub fn get_msg_to_sign(&self) -> Vec<Hash> {
         transaction::get_msg_to_sign(&self.0)
     }
 
     /// Attach the provided signatures to the tx
     pub fn attach_signatures(
-        mut self,
-        signatures: Vec<SignatureIndex>,
+        self,
+        signer: common::PublicKey,
+        signature: common::Signature,
     ) -> Self {
-        Self(transaction::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(
+            self.0, signer, signature,
+        ))
     }
 }
 
@@ -157,16 +150,19 @@ impl InitValidator {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+    pub fn get_msg_to_sign(&self) -> Vec<Hash> {
         transaction::get_msg_to_sign(&self.0)
     }
 
     /// Attach the provided signatures to the tx
     pub fn attach_signatures(
-        mut self,
-        signatures: Vec<SignatureIndex>,
+        self,
+        signer: common::PublicKey,
+        signature: common::Signature,
     ) -> Self {
-        Self(transaction::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(
+            self.0, signer, signature,
+        ))
     }
 }
 
@@ -183,16 +179,19 @@ impl UnjailValidator {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+    pub fn get_msg_to_sign(&self) -> Vec<Hash> {
         transaction::get_msg_to_sign(&self.0)
     }
 
     /// Attach the provided signatures to the tx
     pub fn attach_signatures(
-        mut self,
-        signatures: Vec<SignatureIndex>,
+        self,
+        signer: common::PublicKey,
+        signature: common::Signature,
     ) -> Self {
-        Self(transaction::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(
+            self.0, signer, signature,
+        ))
     }
 }
 
@@ -209,16 +208,19 @@ impl DeactivateValidator {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+    pub fn get_msg_to_sign(&self) -> Vec<Hash> {
         transaction::get_msg_to_sign(&self.0)
     }
 
     /// Attach the provided signatures to the tx
     pub fn attach_signatures(
-        mut self,
-        signatures: Vec<SignatureIndex>,
+        self,
+        signer: common::PublicKey,
+        signature: common::Signature,
     ) -> Self {
-        Self(transaction::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(
+            self.0, signer, signature,
+        ))
     }
 }
 
@@ -235,16 +237,19 @@ impl ReactivateValidator {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+    pub fn get_msg_to_sign(&self) -> Vec<Hash> {
         transaction::get_msg_to_sign(&self.0)
     }
 
     /// Attach the provided signatures to the tx
     pub fn attach_signatures(
-        mut self,
-        signatures: Vec<SignatureIndex>,
+        self,
+        signer: common::PublicKey,
+        signature: common::Signature,
     ) -> Self {
-        Self(transaction::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(
+            self.0, signer, signature,
+        ))
     }
 }
 
@@ -270,16 +275,19 @@ impl ClaimRewards {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+    pub fn get_msg_to_sign(&self) -> Vec<Hash> {
         transaction::get_msg_to_sign(&self.0)
     }
 
     /// Attach the provided signatures to the tx
     pub fn attach_signatures(
-        mut self,
-        signatures: Vec<SignatureIndex>,
+        self,
+        signer: common::PublicKey,
+        signature: common::Signature,
     ) -> Self {
-        Self(transaction::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(
+            self.0, signer, signature,
+        ))
     }
 }
 
@@ -314,16 +322,19 @@ impl ChangeMetaData {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+    pub fn get_msg_to_sign(&self) -> Vec<Hash> {
         transaction::get_msg_to_sign(&self.0)
     }
 
     /// Attach the provided signatures to the tx
     pub fn attach_signatures(
-        mut self,
-        signatures: Vec<SignatureIndex>,
+        self,
+        signer: common::PublicKey,
+        signature: common::Signature,
     ) -> Self {
-        Self(transaction::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(
+            self.0, signer, signature,
+        ))
     }
 }
 
@@ -350,16 +361,19 @@ impl ChangeConsensusKey {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+    pub fn get_msg_to_sign(&self) -> Vec<Hash> {
         transaction::get_msg_to_sign(&self.0)
     }
 
     /// Attach the provided signatures to the tx
     pub fn attach_signatures(
-        mut self,
-        signatures: Vec<SignatureIndex>,
+        self,
+        signer: common::PublicKey,
+        signature: common::Signature,
     ) -> Self {
-        Self(transaction::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(
+            self.0, signer, signature,
+        ))
     }
 }
 
@@ -382,16 +396,19 @@ impl ChangeCommission {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+    pub fn get_msg_to_sign(&self) -> Vec<Hash> {
         transaction::get_msg_to_sign(&self.0)
     }
 
     /// Attach the provided signatures to the tx
     pub fn attach_signatures(
-        mut self,
-        signatures: Vec<SignatureIndex>,
+        self,
+        signer: common::PublicKey,
+        signature: common::Signature,
     ) -> Self {
-        Self(transaction::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(
+            self.0, signer, signature,
+        ))
     }
 }
 
@@ -404,7 +421,8 @@ impl Withdraw {
         source: Option<Address>,
         args: GlobalArgs,
     ) -> Self {
-        //FIXME: request the correct type directly in the args instead of rebuilding it
+        // FIXME: request the correct type directly in the args instead of
+        // rebuilding it
         let init_proposal = namada_core::types::transaction::pos::Withdraw {
             validator,
             source,
@@ -418,16 +436,19 @@ impl Withdraw {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+    pub fn get_msg_to_sign(&self) -> Vec<Hash> {
         transaction::get_msg_to_sign(&self.0)
     }
 
     /// Attach the provided signatures to the tx
     pub fn attach_signatures(
-        mut self,
-        signatures: Vec<SignatureIndex>,
+        self,
+        signer: common::PublicKey,
+        signature: common::Signature,
     ) -> Self {
-        Self(transaction::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(
+            self.0, signer, signature,
+        ))
     }
 }
 
@@ -457,15 +478,18 @@ impl Redelegate {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(&self) -> Vec<u8> {
+    pub fn get_msg_to_sign(&self) -> Vec<Hash> {
         transaction::get_msg_to_sign(&self.0)
     }
 
     /// Attach the provided signatures to the tx
     pub fn attach_signatures(
-        mut self,
-        signatures: Vec<SignatureIndex>,
+        self,
+        signer: common::PublicKey,
+        signature: common::Signature,
     ) -> Self {
-        Self(transaction::attach_raw_signatures(self.0, signatures))
+        Self(transaction::attach_raw_signatures(
+            self.0, signer, signature,
+        ))
     }
 }

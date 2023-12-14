@@ -1,7 +1,3 @@
-pub mod blocking {
+pub mod blocking {}
 
-}
-
-pub mod unblocking {
-
-}
+pub mod unblocking {}

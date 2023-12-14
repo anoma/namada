@@ -1,8 +1,4 @@
 // query tx status
-pub mod tx {
+pub mod tx {}
 
-}
-
-pub mod account {
-
-}
+pub mod account {}

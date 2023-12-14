@@ -1,24 +1,11 @@
-use borsh_ext::BorshSerializeExt;
-use namada_core::ledger::governance::storage::proposal::ProposalType;
-use namada_core::proto::Section;
-use namada_core::proto::Signer;
-use namada_core::proto::TxError;
-use namada_core::proto::{Signature, Tx};
-use namada_core::types::address::Address;
-use namada_core::types::chain::ChainId;
-use namada_core::types::dec::Dec;
+use namada_core::proto::{Section, Signature, Signer, Tx, TxError};
 use namada_core::types::hash::Hash;
-use namada_core::types::key::{common, secp256k1};
+use namada_core::types::key::common;
 use namada_core::types::storage::Epoch;
-use namada_core::types::time::DateTimeUtc;
-use namada_core::types::token;
-use namada_core::types::token::{Amount, DenominatedAmount, MaspDenom};
-use namada_core::types::transaction::Fee;
-use namada_core::types::transaction::GasLimit;
-use std::collections::BTreeMap;
-use std::str::FromStr;
+use namada_core::types::transaction::{Fee, GasLimit};
 
-//FIXME: instead of this file would be better to call finalize(args) on every transaction type that would produce a signed wrapper with the provided args
+// FIXME: instead of this file would be better to call finalize(args) on every
+// transaction type that would produce a signed wrapper with the provided args
 pub struct Wrapper(Tx);
 
 impl Wrapper {
@@ -29,7 +16,7 @@ impl Wrapper {
         fee: Fee,
         fee_payer: common::PublicKey,
         gas_limit: GasLimit,
-        //FIXME: fix masp unshielding
+        // FIXME: fix masp unshielding
         unshield_hash: Option<Hash>,
     ) -> Self {
         tx.add_wrapper(
@@ -69,7 +56,7 @@ impl Wrapper {
     /// Validate this wrapper transaction
     pub fn validate_tx(
         &self,
-    ) -> std::result::Result<Option<&Signature>, TxError> {
+    ) -> Result<Option<&Signature>, TxError> {
         self.0.validate_tx()
     }
 }
