@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use itertools::Either;
+use lazy_static::lazy_static;
 use masp_primitives::asset_type::AssetType;
 #[cfg(feature = "mainnet")]
 use masp_primitives::consensus::MainNetwork;
@@ -137,38 +138,61 @@ pub enum TransferErr {
     General(#[from] Error),
 }
 
-fn load_pvks() -> (
-    PreparedVerifyingKey<Bls12>,
-    PreparedVerifyingKey<Bls12>,
-    PreparedVerifyingKey<Bls12>,
-) {
-    let params_dir = get_params_dir();
-    let [spend_path, convert_path, output_path] =
-        [SPEND_NAME, CONVERT_NAME, OUTPUT_NAME].map(|p| params_dir.join(p));
+/// MASP verifying keys
+pub struct PVKs {
+    /// spend verifying key
+    spend_vk: PreparedVerifyingKey<Bls12>,
+    /// convert verifying key
+    convert_vk: PreparedVerifyingKey<Bls12>,
+    /// output verifying key
+    output_vk: PreparedVerifyingKey<Bls12>,
+}
 
-    #[cfg(feature = "download-params")]
-    if !spend_path.exists() || !convert_path.exists() || !output_path.exists() {
-        let paths = masp_proofs::download_masp_parameters(None).expect(
-            "MASP parameters were not present, expected the download to \
-             succeed",
-        );
-        if paths.spend != spend_path
-            || paths.convert != convert_path
-            || paths.output != output_path
+lazy_static! {
+    /// MASP verifying keys load from parameters
+    static ref VERIFIYING_KEYS: PVKs =
         {
-            panic!(
-                "unrecoverable: downloaded missing masp params, but to an \
-                 unfamiliar path"
-            )
+        let params_dir = get_params_dir();
+        let [spend_path, convert_path, output_path] =
+            [SPEND_NAME, CONVERT_NAME, OUTPUT_NAME].map(|p| params_dir.join(p));
+
+        #[cfg(feature = "download-params")]
+        if !spend_path.exists() || !convert_path.exists() || !output_path.exists() {
+            let paths = masp_proofs::download_masp_parameters(None).expect(
+                "MASP parameters were not present, expected the download to \
+                succeed",
+            );
+            if paths.spend != spend_path
+                || paths.convert != convert_path
+                || paths.output != output_path
+            {
+                panic!(
+                    "unrecoverable: downloaded missing masp params, but to an \
+                    unfamiliar path"
+                )
+            }
         }
-    }
-    // size and blake2b checked here
-    let params = masp_proofs::load_parameters(
-        spend_path.as_path(),
-        output_path.as_path(),
-        convert_path.as_path(),
-    );
-    (params.spend_vk, params.convert_vk, params.output_vk)
+        // size and blake2b checked here
+        let params = masp_proofs::load_parameters(
+            spend_path.as_path(),
+            output_path.as_path(),
+            convert_path.as_path(),
+        );
+        PVKs {
+            spend_vk: params.spend_vk,
+            convert_vk: params.convert_vk,
+            output_vk: params.output_vk
+        }
+    };
+}
+
+/// Make sure the MASP params are present and load verifying keys into memory
+pub fn preload_verifying_keys() -> &'static PVKs {
+    &VERIFIYING_KEYS
+}
+
+fn load_pvks() -> &'static PVKs {
+    &VERIFIYING_KEYS
 }
 
 /// check_spend wrapper
@@ -300,20 +324,25 @@ pub fn verify_shielded_tx(transaction: &Transaction) -> bool {
 
     tracing::info!("sighash computed");
 
-    let (spend_pvk, convert_pvk, output_pvk) = load_pvks();
+    let PVKs {
+        spend_vk,
+        convert_vk,
+        output_vk,
+    } = load_pvks();
 
     let mut ctx = SaplingVerificationContext::new(true);
-    let spends_valid = sapling_bundle.shielded_spends.iter().all(|spend| {
-        check_spend(spend, sighash.as_ref(), &mut ctx, &spend_pvk)
-    });
+    let spends_valid = sapling_bundle
+        .shielded_spends
+        .iter()
+        .all(|spend| check_spend(spend, sighash.as_ref(), &mut ctx, spend_vk));
     let converts_valid = sapling_bundle
         .shielded_converts
         .iter()
-        .all(|convert| check_convert(convert, &mut ctx, &convert_pvk));
+        .all(|convert| check_convert(convert, &mut ctx, convert_vk));
     let outputs_valid = sapling_bundle
         .shielded_outputs
         .iter()
-        .all(|output| check_output(output, &mut ctx, &output_pvk));
+        .all(|output| check_output(output, &mut ctx, output_vk));
 
     if !(spends_valid && outputs_valid && converts_valid) {
         return false;
@@ -2021,8 +2050,8 @@ mod tests {
             .expect("expected a temp dir")
             .into_path();
         let fake_params_paths =
-            [SPEND_NAME, CONVERT_NAME, OUTPUT_NAME].map(|p| tempdir.join(p));
-        for path in fake_params_paths {
+            [SPEND_NAME, OUTPUT_NAME, CONVERT_NAME].map(|p| tempdir.join(p));
+        for path in &fake_params_paths {
             let mut f =
                 std::fs::File::create(path).expect("expected a temp file");
             f.write_all(b"fake params")
@@ -2033,7 +2062,11 @@ mod tests {
 
         std::env::set_var(super::ENV_VAR_MASP_PARAMS_DIR, tempdir.as_os_str());
         // should panic here
-        super::load_pvks();
+        masp_proofs::load_parameters(
+            &fake_params_paths[0],
+            &fake_params_paths[1],
+            &fake_params_paths[2],
+        );
     }
 
     /// a more involved test, using dummy parameters with the right
@@ -2085,11 +2118,11 @@ mod tests {
         // TODO: get masp to export these consts
         let fake_params_paths = [
             (SPEND_NAME, 49848572u64),
-            (CONVERT_NAME, 22570940u64),
             (OUTPUT_NAME, 16398620u64),
+            (CONVERT_NAME, 22570940u64),
         ]
         .map(|(p, s)| (tempdir.join(p), s));
-        for (path, size) in fake_params_paths {
+        for (path, size) in &fake_params_paths {
             let mut f =
                 std::fs::File::create(path).expect("expected a temp file");
             fake_params
@@ -2099,14 +2132,19 @@ mod tests {
             // params should always be smaller than the large masp
             // circuit params. so this truncate extends the file, and
             // extra bytes at the end do not make it invalid.
-            f.set_len(size).expect("expected to truncate the temp file");
+            f.set_len(*size)
+                .expect("expected to truncate the temp file");
             f.sync_all()
                 .expect("expected a writable temp file (on sync)");
         }
 
         std::env::set_var(super::ENV_VAR_MASP_PARAMS_DIR, tempdir.as_os_str());
         // should panic here
-        super::load_pvks();
+        masp_proofs::load_parameters(
+            &fake_params_paths[0].0,
+            &fake_params_paths[1].0,
+            &fake_params_paths[2].0,
+        );
     }
 }
 

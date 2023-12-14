@@ -591,11 +591,8 @@ mod tests {
         );
         let new_epoch_start = BlockHeight(1);
         let signed_root_key = bridge_pool::get_signed_root_key();
+        // the first nonce isn't written for a test skipping pruning
         let nonce = Uint::default();
-        let root_proof =
-            BridgePoolRootProof::new((KeccakHash::default(), nonce));
-        let bytes = types::encode(&root_proof);
-        storage.write(&signed_root_key, bytes).unwrap();
 
         storage
             .begin_block(BlockHash::default(), new_epoch_start)
@@ -622,11 +619,8 @@ mod tests {
             .write(&key, types::encode(&value))
             .expect("write failed");
 
+        // the second nonce isn't written for a test skipping pruning
         let nonce = nonce + 1;
-        let root_proof =
-            BridgePoolRootProof::new((KeccakHash::default(), nonce));
-        let bytes = types::encode(&root_proof);
-        storage.write(&signed_root_key, bytes).unwrap();
 
         storage.block.epoch = storage.block.epoch.next();
         storage.block.pred_epochs.new_epoch(new_epoch_start);

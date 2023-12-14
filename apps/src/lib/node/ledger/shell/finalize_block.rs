@@ -431,7 +431,8 @@ where
                                 tx_event["hash"],
                                 result
                             );
-                            changed_keys.append(&mut result.changed_keys);
+                            changed_keys
+                                .extend(result.changed_keys.iter().cloned());
                             stats.increment_successful_txs();
                             if let Some(wrapper) = embedding_wrapper {
                                 self.commit_inner_tx_hash(wrapper);
