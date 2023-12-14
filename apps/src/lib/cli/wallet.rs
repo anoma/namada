@@ -884,11 +884,15 @@ fn transparent_key_address_find_by_alias(
             if decrypt {
                 // Check if alias is also a secret key. Decrypt and print it if
                 // requested.
-                if let Ok(keypair) = wallet.find_secret_key(&alias, None) {
-                    if unsafe_show_secret {
-                        display_line!(io, &mut w_lock; "    Secret key: {}", keypair)
+                match wallet.find_secret_key(&alias, None) {
+                    Ok(keypair) => {
+                        if unsafe_show_secret {
+                            display_line!(io, &mut w_lock; "    Secret key: {}", keypair)
                         .unwrap();
+                        }
                     }
+                    Err(FindKeyError::KeyNotFound(_)) => {}
+                    Err(err) => edisplay_line!(io, "{}", err),
                 }
             }
         }
