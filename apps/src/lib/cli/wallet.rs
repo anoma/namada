@@ -101,11 +101,11 @@ fn shielded_keys_list(
             // If this alias is associated with a spending key, indicate whether
             // or not the spending key is encrypted
             let encrypted_status = match spending_key_opt {
-                None => "",
-                Some(spend_key) if spend_key.is_encrypted() => "(encrypted)",
-                _ => "(not encrypted)",
+                None => "external",
+                Some(spend_key) if spend_key.is_encrypted() => "encrypted",
+                _ => "not encrypted",
             };
-            display!(io, &mut w_lock; "  Alias \"{}\" {}", alias, encrypted_status).unwrap();
+            display!(io, &mut w_lock; "  Alias \"{}\" ({})", alias, encrypted_status).unwrap();
             // Always print the corresponding viewing key
             display_line!(io, &mut w_lock; "    Viewing Key: {}", key).unwrap();
             // A subset of viewing keys will have corresponding spending keys.
