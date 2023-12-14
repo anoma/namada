@@ -112,7 +112,7 @@ where
         ))]
         let genesis = {
             let chain_dir = self.base_dir.join(chain_id);
-            genesis::make_dev_genesis(_num_validators, chain_dir)
+            genesis::make_dev_genesis(_num_validators, &chain_dir)
         };
         #[cfg(all(
             any(test, feature = "benches"),
@@ -953,8 +953,8 @@ mod test {
     fn test_dry_run_lookup_vp() {
         let (mut shell, _x, _y, _z) = TestShell::new_at_height(0);
         shell.wasm_dir = PathBuf::new();
+        let mut genesis = genesis::make_dev_genesis(1, &shell.base_dir);
         let mut initializer = InitChainValidation::new(&mut shell, true);
-        let mut genesis = genesis::make_dev_genesis(1, PathBuf::new());
 
         let mut vp_cache = HashMap::new();
         let code = initializer.lookup_vp("vp_user", &genesis, &mut vp_cache);
@@ -996,8 +996,8 @@ mod test {
         let test_dir = tempfile::tempdir().unwrap();
         shell.wasm_dir = test_dir.path().into();
 
+        let genesis = genesis::make_dev_genesis(1, &shell.base_dir);
         let mut initializer = InitChainValidation::new(&mut shell, true);
-        let genesis = genesis::make_dev_genesis(1, PathBuf::new());
 
         let res = initializer
             .store_wasms(&genesis.get_chain_parameters(PathBuf::new()));
@@ -1062,8 +1062,8 @@ mod test {
     fn test_dry_run_init_token_balance() {
         let (mut shell, _x, _y, _z) = TestShell::new_at_height(0);
         shell.wasm_dir = PathBuf::new();
+        let mut genesis = genesis::make_dev_genesis(1, &shell.base_dir);
         let mut initializer = InitChainValidation::new(&mut shell, true);
-        let mut genesis = genesis::make_dev_genesis(1, PathBuf::new());
         let token_alias = Alias::from_str("apfel").unwrap();
         genesis
             .tokens
@@ -1088,8 +1088,8 @@ mod test {
     fn test_dry_run_genesis_bonds() {
         let (mut shell, _x, _y, _z) = TestShell::new_at_height(0);
         shell.wasm_dir = PathBuf::new();
+        let mut genesis = genesis::make_dev_genesis(1, &shell.base_dir);
         let mut initializer = InitChainValidation::new(&mut shell, true);
-        let mut genesis = genesis::make_dev_genesis(1, PathBuf::new());
         let default_addresses: HashMap<Alias, Address> =
             defaults::addresses().into_iter().collect();
         let albert_address = if let Some(Address::Established(albert)) =
