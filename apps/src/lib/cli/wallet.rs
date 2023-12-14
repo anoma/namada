@@ -15,7 +15,7 @@ use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::types::address::{Address, DecodeError};
 use namada::types::io::Io;
 use namada::types::key::*;
-use namada::types::masp::{MaspValue, PaymentAddress};
+use namada::types::masp::{ExtendedSpendingKey, MaspValue, PaymentAddress};
 use namada_sdk::masp::find_valid_diversifier;
 use namada_sdk::wallet::{
     DecryptionError, DerivationPath, DerivationPathError, FindKeyError, Wallet,
@@ -1086,17 +1086,37 @@ fn key_import(
         unsafe_dont_encrypt,
     }: args::KeyImport,
 ) {
-    let file_data = std::fs::read_to_string(file_path).unwrap_or_else(|err| {
+    let file_data = std::fs::read(file_path).unwrap_or_else(|err| {
         edisplay_line!(io, "{}", err);
         display_line!(io, "No changes are persisted. Exiting.");
         cli::safe_exit(1)
     });
-    let value = KeyAddrAddValue::from_str(&file_data).unwrap_or_else(|err| {
-        edisplay_line!(io, "{}", err);
+    if let Ok(sk) = common::SecretKey::try_from_slice(&file_data) {
+        transparent_secret_key_add(
+            ctx,
+            io,
+            alias,
+            alias_force,
+            sk,
+            unsafe_dont_encrypt,
+        );
+    } else if let Ok(spend_key) =
+        ExtendedSpendingKey::try_from_slice(&file_data)
+    {
+        let masp_value = MaspValue::ExtendedSpendingKey(spend_key);
+        shielded_key_address_add(
+            ctx,
+            io,
+            alias,
+            alias_force,
+            masp_value,
+            unsafe_dont_encrypt,
+        );
+    } else {
+        display_line!(io, "Could not parse the data.");
         display_line!(io, "No changes are persisted. Exiting.");
         cli::safe_exit(1)
-    });
-    add_key_or_address(ctx, io, alias, alias_force, value, unsafe_dont_encrypt)
+    }
 }
 
 /// List all known transparent addresses.
