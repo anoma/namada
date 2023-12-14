@@ -105,7 +105,7 @@ fn shielded_keys_list(
                 Some(spend_key) if spend_key.is_encrypted() => "encrypted",
                 _ => "not encrypted",
             };
-            display!(io, &mut w_lock; "  Alias \"{}\" ({})", alias, encrypted_status).unwrap();
+            display_line!(io, &mut w_lock; "  Alias \"{}\" ({}):", alias, encrypted_status).unwrap();
             // Always print the corresponding viewing key
             display_line!(io, &mut w_lock; "    Viewing Key: {}", key).unwrap();
             // A subset of viewing keys will have corresponding spending keys.
@@ -1201,7 +1201,7 @@ fn transparent_public_key_add(
         .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
     display_line!(
         io,
-        "Successfully added public key with alias: \"{}\"",
+        "Successfully added a public key with alias: \"{}\"",
         alias
     );
 }
@@ -1226,7 +1226,11 @@ fn transparent_address_add(
     wallet
         .save()
         .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
-    display_line!(io, "Successfully added address with alias: \"{}\"", alias);
+    display_line!(
+        io,
+        "Successfully added an address with alias: \"{}\"",
+        alias
+    );
 }
 
 /// Load wallet for chain when `ctx.chain.is_some()` or pre-genesis wallet when
