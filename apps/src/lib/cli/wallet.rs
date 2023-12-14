@@ -972,6 +972,7 @@ fn shielded_key_address_find_by_alias(
             .unwrap();
         }
     }
+
     found
 }
 
