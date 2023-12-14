@@ -47,7 +47,7 @@ use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use namada::types::storage::{BlockHeight, BlockResults, Epoch, Key, KeySeg};
 use namada::types::token::{Change, MaspDenom};
 use namada::types::{storage, token};
-use namada_sdk::error::{is_pinned_error, Error, PinnedBalanceError};
+use namada_sdk::error::{is_pinned_error, Error, PinnedBalanceError, QueryError};
 use namada_sdk::masp::{Conversions, MaspAmount, MaspChange};
 use namada_sdk::proof_of_stake::types::ValidatorMetaData;
 use namada_sdk::rpc::{
@@ -336,6 +336,9 @@ pub async fn query_transparent_balance(
                             token_alias,
                             balance
                         );
+                    }
+                    Err(QueryError::NoSuchKey(_)) => {
+                        display_line!(context.io(), "Querying error: {:?}", QueryError::NoSuchKey);
                     }
                     Err(e) => {
                         display_line!(context.io(), "Querying error: {e}");
