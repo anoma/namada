@@ -2152,6 +2152,15 @@ pub struct KeyAddressAdd {
     pub unsafe_dont_encrypt: bool,
 }
 
+/// Wallet key / address remove arguments
+#[derive(Clone, Debug)]
+pub struct KeyAddressRemove {
+    /// Address alias
+    pub alias: String,
+    /// Confirmation to remove the alias
+    pub do_it: bool,
+}
+
 /// Generate payment address arguments
 #[derive(Clone, Debug)]
 pub struct PayAddressGen<C: NamadaTypes = SdkTypes> {

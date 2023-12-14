@@ -60,6 +60,9 @@ impl CliApi {
             cmds::NamadaWallet::KeyAddrAdd(cmds::WalletAddKeyAddress(args)) => {
                 key_address_add(ctx, io, args)
             }
+            cmds::NamadaWallet::KeyAddrRemove(
+                cmds::WalletRemoveKeyAddress(args),
+            ) => key_address_remove(ctx, io, args),
             cmds::NamadaWallet::PayAddrGen(cmds::WalletGenPaymentAddress(
                 args,
             )) => {
@@ -697,6 +700,21 @@ fn key_address_add(
         cli::safe_exit(1)
     });
     add_key_or_address(ctx, io, alias, alias_force, value, unsafe_dont_encrypt)
+}
+
+/// Remove keys and addresses
+fn key_address_remove(
+    ctx: Context,
+    io: &impl Io,
+    args::KeyAddressRemove { alias, .. }: args::KeyAddressRemove,
+) {
+    let alias = alias.to_lowercase();
+    let mut wallet = load_wallet(ctx);
+    wallet.remove_all_by_alias(alias.clone());
+    wallet
+        .save()
+        .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
+    display_line!(io, "Successfully removed alias: \"{}\"", alias);
 }
 
 /// Find a keypair in the wallet store.

@@ -483,6 +483,8 @@ pub mod cmds {
         KeyGen(WalletGen),
         /// Key derivation
         KeyDerive(WalletDerive),
+        /// Payment address generation
+        PayAddrGen(WalletGenPaymentAddress),
         /// Key / address list
         KeyAddrList(WalletListKeysAddresses),
         /// Key / address search
@@ -493,38 +495,42 @@ pub mod cmds {
         KeyImport(WalletImportKey),
         /// Key / address add
         KeyAddrAdd(WalletAddKeyAddress),
-        /// Payment address generation
-        PayAddrGen(WalletGenPaymentAddress),
+        /// Key / address remove
+        KeyAddrRemove(WalletRemoveKeyAddress),
     }
 
     impl Cmd for NamadaWallet {
         fn add_sub(app: App) -> App {
             app.subcommand(WalletGen::def())
                 .subcommand(WalletDerive::def())
+                .subcommand(WalletGenPaymentAddress::def())
                 .subcommand(WalletListKeysAddresses::def())
                 .subcommand(WalletFindKeysAddresses::def())
                 .subcommand(WalletExportKey::def())
                 .subcommand(WalletImportKey::def())
                 .subcommand(WalletAddKeyAddress::def())
-                .subcommand(WalletGenPaymentAddress::def())
+                .subcommand(WalletRemoveKeyAddress::def())
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             let gen = SubCmd::parse(matches).map(Self::KeyGen);
             let derive = SubCmd::parse(matches).map(Self::KeyDerive);
+            let pay_addr_gen = SubCmd::parse(matches).map(Self::PayAddrGen);
             let key_addr_list = SubCmd::parse(matches).map(Self::KeyAddrList);
             let key_addr_find = SubCmd::parse(matches).map(Self::KeyAddrFind);
             let export = SubCmd::parse(matches).map(Self::KeyExport);
             let import = SubCmd::parse(matches).map(Self::KeyImport);
             let key_addr_add = SubCmd::parse(matches).map(Self::KeyAddrAdd);
-            let pay_addr_gen = SubCmd::parse(matches).map(Self::PayAddrGen);
+            let key_addr_remove =
+                SubCmd::parse(matches).map(Self::KeyAddrRemove);
             gen.or(derive)
+                .or(pay_addr_gen)
                 .or(key_addr_list)
                 .or(key_addr_find)
                 .or(export)
                 .or(import)
                 .or(key_addr_add)
-                .or(pay_addr_gen)
+                .or(key_addr_remove)
         }
     }
 
@@ -728,6 +734,29 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Adds the given key or address to the wallet.")
                 .add_args::<args::KeyAddressAdd>()
+        }
+    }
+
+    /// Remove key / address
+    #[derive(Clone, Debug)]
+    pub struct WalletRemoveKeyAddress(pub args::KeyAddressRemove);
+
+    impl SubCmd for WalletRemoveKeyAddress {
+        const CMD: &'static str = "remove";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::KeyAddressRemove::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Remove the given alias and all associated keys / \
+                     addresses from the wallet.",
+                )
+                .add_args::<args::KeyAddressRemove>()
         }
     }
 
@@ -2808,6 +2837,7 @@ pub mod args {
     pub const DESTINATION_VALIDATOR: Arg<WalletAddress> =
         arg("destination-validator");
     pub const DISCORD_OPT: ArgOpt<String> = arg_opt("discord-handle");
+    pub const DO_IT: ArgFlag = flag("do-it");
     pub const DONT_ARCHIVE: ArgFlag = flag("dont-archive");
     pub const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
     pub const DRY_RUN_TX: ArgFlag = flag("dry-run");
@@ -6266,6 +6296,19 @@ pub mod args {
                 "UNSAFE: Do not encrypt the added keys. Do not use this for \
                  keys used in a live network.",
             ))
+        }
+    }
+
+    impl Args for KeyAddressRemove {
+        fn parse(matches: &ArgMatches) -> Self {
+            let alias = ALIAS.parse(matches);
+            let do_it = DO_IT.parse(matches);
+            Self { alias, do_it }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(ALIAS.def().help("An alias to be removed."))
+                .arg(DO_IT.def().help("Confirm alias removal.").required(true))
         }
     }
 

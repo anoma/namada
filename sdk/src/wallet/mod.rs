@@ -989,4 +989,9 @@ impl<U: WalletIo> Wallet<U> {
     pub fn extend(&mut self, wallet: Self) {
         self.store.extend(wallet.store)
     }
+
+    /// Remove keys and addresses associated with the given alias
+    pub fn remove_all_by_alias(&mut self, alias: String) {
+        self.store.remove_alias(&alias.into())
+    }
 }
