@@ -110,7 +110,8 @@ pub fn find_address(test: &Test, alias: impl AsRef<str>) -> Result<Address> {
         &["find", "--addr", "--alias", alias.as_ref()],
         Some(10)
     )?;
-    let (unread, matched) = find.exp_regex("Found address .*")?;
+    find.exp_string("Found transparent address:")?;
+    let (unread, matched) = find.exp_regex("\".*\": .*")?;
     let address_str = strip_trailing_newline(&matched)
         .trim()
         .rsplit_once(' ')
@@ -249,6 +250,7 @@ pub fn find_keypair(
             "--keys",
             "--alias",
             alias.as_ref(),
+            "--decrypt",
             "--unsafe-show-secret"
         ],
         Some(10)

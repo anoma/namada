@@ -46,14 +46,19 @@ fn wallet_encrypted_key_cmds() -> Result<()> {
     let mut cmd = run!(
         test,
         Bin::Wallet,
-        &["find", "--keys", "--alias", key_alias],
+        &["find", "--keys", "--alias", key_alias, "--decrypt"],
         Some(20),
     )?;
 
+    cmd.exp_string("Found transparent keys:")?;
+    cmd.exp_string(&format!(
+        "  Alias \"{}\" (encrypted):",
+        key_alias.to_lowercase()
+    ))?;
+    cmd.exp_string("    Public key hash:")?;
+    cmd.exp_string("    Public key:")?;
     cmd.exp_string("Enter your decryption password:")?;
     cmd.send_line(password)?;
-    cmd.exp_string("Public key hash:")?;
-    cmd.exp_string("Public key:")?;
 
     // 3. key list
     let mut cmd = run!(test, Bin::Wallet, &["list", "--keys"], Some(20))?;
@@ -72,7 +77,7 @@ fn wallet_encrypted_key_cmds() -> Result<()> {
 #[test]
 fn wallet_encrypted_key_cmds_env_var() -> Result<()> {
     let test = setup::single_node_net()?;
-    let key_alias = "test_key_1";
+    let key_alias = "Test_Key_1";
     let password = "VeRySeCuR3";
 
     env::set_var("NAMADA_WALLET_PASSWORD", password);
@@ -86,23 +91,31 @@ fn wallet_encrypted_key_cmds_env_var() -> Result<()> {
 
     cmd.exp_string(&format!(
         "Successfully added a key and an address with alias: \"{}\"",
-        key_alias
+        key_alias.to_lowercase()
     ))?;
 
     // 2. key find
     let mut cmd = run!(
         test,
         Bin::Wallet,
-        &["find", "--keys", "--alias", key_alias],
+        &["find", "--keys", "--alias", key_alias, "--decrypt"],
         Some(20),
     )?;
 
-    cmd.exp_string("Public key hash:")?;
-    cmd.exp_string("Public key:")?;
+    cmd.exp_string("Found transparent keys:")?;
+    cmd.exp_string(&format!(
+        "  Alias \"{}\" (encrypted):",
+        key_alias.to_lowercase()
+    ))?;
+    cmd.exp_string("    Public key hash:")?;
+    cmd.exp_string("    Public key:")?;
 
     // 3. key list
     let mut cmd = run!(test, Bin::Wallet, &["list", "--keys"], Some(20))?;
-    cmd.exp_string(&format!("Alias \"{}\" (encrypted):", key_alias))?;
+    cmd.exp_string(&format!(
+        "  Alias \"{}\" (encrypted):",
+        key_alias.to_lowercase()
+    ))?;
 
     Ok(())
 }
@@ -114,7 +127,7 @@ fn wallet_encrypted_key_cmds_env_var() -> Result<()> {
 #[test]
 fn wallet_unencrypted_key_cmds() -> Result<()> {
     let test = setup::single_node_net()?;
-    let key_alias = "test_key_1";
+    let key_alias = "Test_Key_1";
 
     // 1. key gen
     let mut cmd = run!(
@@ -125,7 +138,7 @@ fn wallet_unencrypted_key_cmds() -> Result<()> {
     )?;
     cmd.exp_string(&format!(
         "Successfully added a key and an address with alias: \"{}\"",
-        key_alias
+        key_alias.to_lowercase()
     ))?;
 
     // 2. key find
@@ -136,12 +149,20 @@ fn wallet_unencrypted_key_cmds() -> Result<()> {
         Some(20),
     )?;
 
-    cmd.exp_string("Public key hash:")?;
-    cmd.exp_string("Public key:")?;
+    cmd.exp_string("Found transparent keys:")?;
+    cmd.exp_string(&format!(
+        "  Alias \"{}\" (not encrypted):",
+        key_alias.to_lowercase()
+    ))?;
+    cmd.exp_string("    Public key hash:")?;
+    cmd.exp_string("    Public key:")?;
 
     // 3. key list
     let mut cmd = run!(test, Bin::Wallet, &["list", "--keys"], Some(20))?;
-    cmd.exp_string(&format!("Alias \"{}\" (not encrypted):", key_alias))?;
+    cmd.exp_string(&format!(
+        "  Alias \"{}\" (not encrypted):",
+        key_alias.to_lowercase()
+    ))?;
 
     Ok(())
 }
@@ -154,8 +175,8 @@ fn wallet_unencrypted_key_cmds() -> Result<()> {
 #[test]
 fn wallet_address_cmds() -> Result<()> {
     let test = setup::single_node_net()?;
-    let gen_address_alias = "test_address_1";
-    let add_address_alias = "test_address_2";
+    let gen_address_alias = "Test_Address_1";
+    let add_address_alias = "Test_Address_2";
     let add_address = "tnam1q82t25z5f9gmnv5sztyr8ht9tqhrw4u875qjhy56";
 
     // 1. address gen
@@ -167,7 +188,7 @@ fn wallet_address_cmds() -> Result<()> {
     )?;
     cmd.exp_string(&format!(
         "Successfully added a key and an address with alias: \"{}\"",
-        gen_address_alias
+        gen_address_alias.to_lowercase()
     ))?;
 
     // 2. address add
@@ -178,8 +199,8 @@ fn wallet_address_cmds() -> Result<()> {
         Some(20),
     )?;
     cmd.exp_string(&format!(
-        "Successfully added a key and an address with alias: \"{}\"",
-        add_address_alias
+        "Successfully added an address with alias: \"{}\"",
+        add_address_alias.to_lowercase()
     ))?;
 
     // 3. address find
@@ -189,13 +210,14 @@ fn wallet_address_cmds() -> Result<()> {
         &["find", "--addr", "--alias", gen_address_alias],
         Some(20),
     )?;
-    cmd.exp_string("Found address")?;
+    cmd.exp_string("Found transparent address:")?;
 
     // 4. address list
     let mut cmd = run!(test, Bin::Wallet, &["list", "--addr"], Some(20))?;
 
-    cmd.exp_string(&format!("\"{}\":", gen_address_alias))?;
-    cmd.exp_string(&format!("\"{}\":", add_address_alias))?;
+    cmd.exp_string("Known transparent addresses:")?;
+    cmd.exp_string(&format!("\"{}\":", gen_address_alias.to_lowercase()))?;
+    cmd.exp_string(&format!("\"{}\":", add_address_alias.to_lowercase()))?;
 
     Ok(())
 }
