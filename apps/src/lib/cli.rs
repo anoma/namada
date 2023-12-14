@@ -6314,18 +6314,14 @@ pub mod args {
 
     impl Args for KeyExport {
         fn parse(matches: &ArgMatches) -> Self {
-            let shielded = SHIELDED.parse(matches);
             let alias = ALIAS.parse(matches);
-            Self { shielded, alias }
+            Self { alias }
         }
 
         fn def(app: App) -> App {
             app.arg(
-                SHIELDED
-                    .def()
-                    .help("Whether to export the shielded spending key."),
+                ALIAS.def().help("The alias of the key you wish to export."),
             )
-            .arg(ALIAS.def().help("The alias of the key you wish to export."))
         }
     }
 
@@ -6354,8 +6350,8 @@ pub mod args {
                     .help("An alias to be associated with the imported entry."),
             )
             .arg(UNSAFE_DONT_ENCRYPT.def().help(
-                "UNSAFE: Do not encrypt the added keys. Do not use this for \
-                 keys used in a live network.",
+                "UNSAFE: Do not encrypt the imported keys. Do not use this \
+                 for keys used in a live network.",
             ))
         }
     }
