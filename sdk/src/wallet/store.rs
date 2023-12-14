@@ -576,7 +576,7 @@ impl Store {
     }
 
     /// Completely remove the given alias from all maps in the wallet
-    fn remove_alias(&mut self, alias: &Alias) {
+    pub fn remove_alias(&mut self, alias: &Alias) {
         self.payment_addrs.remove_by_left(alias);
         self.view_keys.remove(alias);
         self.spend_keys.remove(alias);
