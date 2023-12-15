@@ -6,6 +6,7 @@ use namada_core::types::address::{self, Address};
 pub mod cli;
 /// governance parameters
 pub mod parameters;
+pub mod pgf;
 /// governance storage
 pub mod storage;
 /// Governance utility functions/structs
