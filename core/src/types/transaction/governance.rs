@@ -4,14 +4,11 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::ledger::governance::cli::onchain::{
-    DefaultProposal, PgfFundingProposal, PgfStewardProposal,
-};
-use crate::ledger::governance::storage::proposal::{
-    AddRemove, PGFAction, PGFTarget, ProposalType,
-};
-use crate::ledger::governance::storage::vote::StorageProposalVote;
 use crate::types::address::Address;
+use crate::types::governance::{
+    AddRemove, DefaultProposal, PGFAction, PGFTarget, PgfFundingProposal,
+    PgfStewardProposal, ProposalType, StorageProposalVote,
+};
 use crate::types::hash::Hash;
 use crate::types::storage::Epoch;
 
@@ -171,9 +168,10 @@ pub mod tests {
     use proptest::{collection, prop_compose};
 
     use super::*;
-    use crate::ledger::governance::storage::proposal::testing::arb_proposal_type;
-    use crate::ledger::governance::storage::vote::testing::arb_proposal_vote;
     use crate::types::address::testing::arb_non_internal_address;
+    use crate::types::governance::testing::{
+        arb_proposal_type, arb_proposal_vote,
+    };
     use crate::types::hash::testing::arb_hash;
     use crate::types::storage::testing::arb_epoch;
 

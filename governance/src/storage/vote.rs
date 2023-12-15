@@ -6,46 +6,6 @@ use serde::{Deserialize, Serialize};
 use super::super::cli::onchain::ProposalVote;
 use super::proposal::ProposalType;
 
-/// The type of a governance vote with the optional associated Memo
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    BorshSerialize,
-    BorshDeserialize,
-    Eq,
-    Serialize,
-    Deserialize,
-)]
-pub enum VoteType {
-    /// A default vote without Memo
-    Default,
-    /// A vote for the PGF stewards
-    PGFSteward,
-    /// A vote for a PGF payment proposal
-    PGFPayment,
-}
-
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    BorshSerialize,
-    BorshDeserialize,
-    Eq,
-    Serialize,
-    Deserialize,
-)]
-/// The vote for a proposal
-pub enum StorageProposalVote {
-    /// Yes
-    Yay(VoteType),
-    /// No
-    Nay,
-    /// Abstain
-    Abstain,
-}
-
 impl StorageProposalVote {
     /// Check if a vote is yay
     pub fn is_yay(&self) -> bool {
@@ -142,35 +102,5 @@ impl PartialEq<VoteType> for ProposalType {
                 matches!(other, VoteType::PGFPayment)
             }
         }
-    }
-}
-
-#[cfg(any(test, feature = "testing"))]
-/// Testing helpers and strategies for governance votes
-pub mod testing {
-    use proptest::prelude::{Just, Strategy};
-    use proptest::prop_compose;
-
-    use super::*;
-
-    prop_compose! {
-        /// Geerate an arbitrary vote type
-        pub fn arb_vote_type()(discriminant in 0..3) -> VoteType {
-            match discriminant {
-                0 => VoteType::Default,
-                1 => VoteType::PGFSteward,
-                2 => VoteType::PGFPayment,
-                _ => unreachable!(),
-            }
-        }
-    }
-
-    /// Generate an arbitrary proposal vote
-    pub fn arb_proposal_vote() -> impl Strategy<Value = StorageProposalVote> {
-        arb_vote_type()
-            .prop_map(StorageProposalVote::Yay)
-            .boxed()
-            .prop_union(Just(StorageProposalVote::Nay).boxed())
-            .or(Just(StorageProposalVote::Abstain).boxed())
     }
 }
