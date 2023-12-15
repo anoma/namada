@@ -20,23 +20,6 @@ use crate::types::storage::Epoch;
 use crate::types::token::{self, DenominatedAmount, MaspDenom};
 use crate::types::uint::Uint;
 
-/// A representation of the conversion state
-#[derive(Debug, Default, BorshSerialize, BorshDeserialize)]
-pub struct ConversionState {
-    /// The last amount of the native token distributed
-    pub normed_inflation: Option<u128>,
-    /// The tree currently containing all the conversions
-    pub tree: FrozenCommitmentTree<Node>,
-    /// A map from token alias to actual address.
-    pub tokens: BTreeMap<String, Address>,
-    /// Map assets to their latest conversion and position in Merkle tree
-    #[allow(clippy::type_complexity)]
-    pub assets: BTreeMap<
-        AssetType,
-        ((Address, MaspDenom), Epoch, AllowedConversion, usize),
-    >,
-}
-
 /// Compute the MASP rewards by applying the PD-controller to the genesis
 /// parameters and the last inflation and last locked rewards ratio values.
 pub fn calculate_masp_rewards<D, H>(

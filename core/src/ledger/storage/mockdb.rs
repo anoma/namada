@@ -16,7 +16,6 @@ use super::merkle_tree::{
 use super::{
     BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error, Result, DB,
 };
-use crate::ledger::masp_conversions::ConversionState;
 use crate::ledger::replay_protection;
 use crate::ledger::storage::types::{self, KVBytes, PrefixIterator};
 use crate::types::ethereum_events::Uint;
@@ -28,6 +27,7 @@ use crate::types::storage::{
     KEY_SEGMENT_SEPARATOR,
 };
 use crate::types::time::DateTimeUtc;
+use crate::types::token::ConversionState;
 
 /// An in-memory DB for testing.
 #[derive(Debug, Default)]
