@@ -10,9 +10,9 @@ use super::validation::{
     ProposalValidation,
 };
 use crate::ledger::governance::parameters::GovernanceParameters;
-use crate::ledger::storage_api::token;
 use crate::types::address::Address;
 use crate::types::storage::Epoch;
+use crate::types::token;
 
 #[derive(
     Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,

@@ -9,10 +9,10 @@ use crate::ledger::governance::cli::onchain::{
     PgfAction, PgfContinous, PgfRetro, PgfSteward, StewardsUpdate,
 };
 use crate::ledger::governance::utils::{ProposalStatus, TallyType};
-use crate::ledger::storage_api::token::Amount;
 use crate::types::address::Address;
 use crate::types::hash::Hash;
 use crate::types::storage::Epoch;
+use crate::types::token;
 
 #[allow(missing_docs)]
 #[derive(Debug, Error)]
@@ -85,7 +85,7 @@ pub struct PGFTarget {
     /// The target address
     pub target: Address,
     /// The amount of token to fund the target address
-    pub amount: Amount,
+    pub amount: token::Amount,
 }
 
 /// The actions that a PGF Steward can propose to execute

@@ -7,7 +7,6 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use thiserror::Error;
 
 use super::storage::types;
-use super::storage_api::token::Amount;
 use super::storage_api::{self, ResultExt, StorageRead, StorageWrite};
 use crate::ledger::storage as ledger_storage;
 use crate::types::address::{Address, InternalAddress};
@@ -379,11 +378,11 @@ where
 pub fn read_gas_cost<S>(
     storage: &S,
     token: &Address,
-) -> storage_api::Result<Option<Amount>>
+) -> storage_api::Result<Option<token::Amount>>
 where
     S: StorageRead,
 {
-    let gas_cost_table: BTreeMap<Address, Amount> = storage
+    let gas_cost_table: BTreeMap<Address, token::Amount> = storage
         .read(&storage::get_gas_cost_key())?
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
