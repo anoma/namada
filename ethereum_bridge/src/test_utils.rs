@@ -23,7 +23,7 @@ use namada_proof_of_stake::{
     staking_token_address, BecomeValidator,
 };
 
-use crate::parameters::{
+use crate::storage::parameters::{
     ContractVersion, Contracts, EthereumBridgeParams, MinimumConfirmations,
     UpgradeableContract,
 };

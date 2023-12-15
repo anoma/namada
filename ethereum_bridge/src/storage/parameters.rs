@@ -374,10 +374,6 @@ mod tests {
     use namada_core::types::ethereum_events::EthAddress;
 
     use super::*;
-    use crate::parameters::{
-        ContractVersion, Contracts, EthereumBridgeParams, MinimumConfirmations,
-        UpgradeableContract,
-    };
 
     /// Ensure we can serialize and deserialize a [`Config`] struct to and from
     /// TOML. This can fail if complex fields are ordered before simple fields

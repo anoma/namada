@@ -1,5 +1,6 @@
 //! Functionality for accessing the storage subspace
 pub mod eth_bridge_queries;
+pub mod parameters;
 pub mod proof;
 pub mod vote_tallies;
 pub mod vp;
