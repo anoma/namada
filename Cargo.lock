@@ -4460,6 +4460,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "namada_governance"
+version = "0.29.0"
+dependencies = [
+ "namada_core",
+]
+
+[[package]]
 name = "namada_light_sdk"
 version = "0.29.0"
 dependencies = [
@@ -4618,7 +4625,7 @@ dependencies = [
 
 [[package]]
 name = "namada_trans_token"
-version = "0.28.1"
+version = "0.29.0"
 dependencies = [
  "namada_core",
 ]

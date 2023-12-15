@@ -1,4 +1,11 @@
-//! Governance
+//! Governance storage
+
+/// Governance proposal keys
+pub mod keys;
+/// Proposal structures
+pub mod proposal;
+/// Vote structures
+pub mod vote;
 
 use std::collections::BTreeMap;
 

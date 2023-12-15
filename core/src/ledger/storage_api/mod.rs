@@ -4,7 +4,6 @@
 pub mod account;
 pub mod collections;
 mod error;
-pub mod governance;
 pub mod key;
 pub mod pgf;
 pub mod tx;

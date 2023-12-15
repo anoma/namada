@@ -9,6 +9,7 @@ members = [
   "ethereum_bridge",
   "light_sdk",
   "macros",
+  "governance",
   "proof_of_stake",
   "sdk",
   "shared",
