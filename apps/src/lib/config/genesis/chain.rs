@@ -284,11 +284,10 @@ impl Finalized {
             .get(&implicit_vp)
             .expect("Implicit VP must be present")
             .filename;
-
-        let implicit_vp_code_hash =
+        let implicit_vp =
             wasm_loader::read_wasm(&wasm_dir, implicit_vp_filename)
-                .ok()
-                .map(Hash::sha256);
+                .expect("Implicit VP WASM code couldn't get read");
+        let implicit_vp_code_hash = Hash::sha256(implicit_vp);
 
         let min_duration: i64 = 60 * 60 * 24 * 365 / (epochs_per_year as i64);
         let epoch_duration = EpochDuration {

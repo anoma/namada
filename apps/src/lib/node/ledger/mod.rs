@@ -743,39 +743,6 @@ async fn maybe_start_ethereum_oracle(
     }
 }
 
-/// This function runs `Shell::init_chain` on the provided genesis files.
-/// This is to check that all the transactions included therein run
-/// successfully on chain initialization.
-pub fn test_genesis_files(
-    config: config::Ledger,
-    genesis: config::genesis::chain::Finalized,
-    wasm_dir: PathBuf,
-) {
-    use namada::ledger::storage::mockdb::MockDB;
-    use namada::ledger::storage::Sha256Hasher;
-
-    // Channels for validators to send protocol txs to be broadcast to the
-    // broadcaster service
-    let (broadcast_sender, _broadcaster_receiver) = mpsc::unbounded_channel();
-
-    // Start dummy broadcaster
-    let _broadcaster = spawn_dummy_task(());
-    let chain_id = config.chain_id.to_string();
-    // start an instance of the ledger
-    let mut shell = Shell::<MockDB, Sha256Hasher>::new(
-        config,
-        wasm_dir,
-        broadcast_sender,
-        None,
-        None,
-        50 * 1024 * 1024,
-        50 * 1024 * 1024,
-    );
-    let mut initializer = shell::InitChainValidation::new(&mut shell, true);
-    initializer.run_validation(chain_id, genesis);
-    initializer.report();
-}
-
 /// Spawn a dummy asynchronous task into the runtime,
 /// which will resolve instantly.
 fn spawn_dummy_task<T: Send + 'static>(ready: T) -> task::JoinHandle<T> {

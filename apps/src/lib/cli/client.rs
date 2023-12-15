@@ -677,9 +677,6 @@ impl CliApi {
                 Utils::ValidateGenesisTemplates(ValidateGenesisTemplates(
                     args,
                 )) => utils::validate_genesis_templates(global_args, args),
-                Utils::TestGenesis(TestGenesis(args)) => {
-                    utils::test_genesis(args)
-                }
                 Utils::SignGenesisTxs(SignGenesisTxs(args)) => {
                     utils::sign_genesis_tx(global_args, args).await
                 }

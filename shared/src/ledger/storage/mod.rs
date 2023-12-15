@@ -1,5 +1,7 @@
 //! Ledger's state storage with key-value backed store and a merkle tree
 
+#[cfg(any(test, feature = "testing"))]
+pub use namada_core::ledger::storage::mockdb;
 pub use namada_core::ledger::storage::{
-    mockdb, traits, write_log, PrefixIter, WlStorage, *,
+    traits, write_log, PrefixIter, WlStorage, *,
 };

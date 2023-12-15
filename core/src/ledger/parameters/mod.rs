@@ -50,7 +50,7 @@ pub struct Parameters {
     /// Whitelisted tx hashes (read only)
     pub tx_whitelist: Vec<String>,
     /// Implicit accounts validity predicate WASM code hash
-    pub implicit_vp_code_hash: Option<Hash>,
+    pub implicit_vp_code_hash: Hash,
     /// Expected number of epochs per year (read only)
     pub epochs_per_year: u64,
     /// Maximum number of signature per transaction
@@ -196,10 +196,7 @@ impl Parameters {
         let implicit_vp_key = storage::get_implicit_vp_key();
         // Using `fn write_bytes` here, because implicit_vp code hash doesn't
         // need to be encoded, it's bytes already.
-        storage.write_bytes(
-            &implicit_vp_key,
-            implicit_vp_code_hash.unwrap_or_default(),
-        )?;
+        storage.write_bytes(&implicit_vp_key, implicit_vp_code_hash)?;
 
         let epochs_per_year_key = storage::get_epochs_per_year_key();
         storage.write(&epochs_per_year_key, epochs_per_year)?;
@@ -567,7 +564,7 @@ where
         max_block_gas,
         vp_whitelist,
         tx_whitelist,
-        implicit_vp_code_hash: Some(implicit_vp_code_hash),
+        implicit_vp_code_hash,
         epochs_per_year,
         max_signatures_per_transaction,
         pos_gain_p,
