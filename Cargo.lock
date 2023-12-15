@@ -4505,7 +4505,11 @@ dependencies = [
 
 [[package]]
 name = "namada_parameters"
-version = "0.1.0"
+version = "0.28.1"
+dependencies = [
+ "namada_core",
+ "namada_storage",
+]
 
 [[package]]
 name = "namada_proof_of_stake"

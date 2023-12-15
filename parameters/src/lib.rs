@@ -4,17 +4,14 @@ pub mod storage;
 use std::collections::BTreeMap;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_core::storage_api::{self, ResultExt, StorageRead, StorageWrite};
+use namada_core::types::address::{Address, InternalAddress};
+use namada_core::types::chain::ProposalBytes;
+use namada_core::types::dec::Dec;
+use namada_core::types::hash::Hash;
+use namada_core::types::time::DurationSecs;
+use namada_core::types::token;
 use thiserror::Error;
-
-use super::storage::types;
-use super::storage_api::{self, ResultExt, StorageRead, StorageWrite};
-use crate::ledger::storage as ledger_storage;
-use crate::types::address::{Address, InternalAddress};
-use crate::types::chain::ProposalBytes;
-use crate::types::dec::Dec;
-use crate::types::hash::Hash;
-use crate::types::time::DurationSecs;
-use crate::types::token;
 
 /// The internal address for storage keys representing parameters than
 /// can be changed via governance.
