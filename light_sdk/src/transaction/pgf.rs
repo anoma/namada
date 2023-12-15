@@ -25,8 +25,8 @@ impl ResignSteward {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(&self) -> Vec<Hash> {
-        transaction::get_msg_to_sign(&self.0)
+    pub fn get_sign_bytes(&self) -> Vec<Hash> {
+        transaction::get_sign_bytes(&self.0)
     }
 
     /// Attach the provided signatures to the tx
@@ -65,8 +65,8 @@ impl UpdateStewardCommission {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(&self) -> Vec<Hash> {
-        transaction::get_msg_to_sign(&self.0)
+    pub fn get_sign_bytes(&self) -> Vec<Hash> {
+        transaction::get_sign_bytes(&self.0)
     }
 
     /// Attach the provided signatures to the tx

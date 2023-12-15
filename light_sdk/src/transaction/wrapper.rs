@@ -31,7 +31,7 @@ impl Wrapper {
     }
 
     /// Returns the message to be signed for this transaction
-    pub fn get_msg_to_sign(mut self) -> (Self, Vec<Hash>) {
+    pub fn get_sign_bytes(mut self) -> (Self, Vec<Hash>) {
         self.0.protocol_filter();
         let msg = self.0.sechashes();
 
@@ -54,9 +54,7 @@ impl Wrapper {
     }
 
     /// Validate this wrapper transaction
-    pub fn validate_tx(
-        &self,
-    ) -> Result<Option<&Signature>, TxError> {
+    pub fn validate_tx(&self) -> Result<Option<&Signature>, TxError> {
         self.0.validate_tx()
     }
 }

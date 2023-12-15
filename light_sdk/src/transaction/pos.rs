@@ -48,8 +48,8 @@ impl Bond {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(&self) -> Vec<Hash> {
-        transaction::get_msg_to_sign(&self.0)
+    pub fn get_sign_bytes(&self) -> Vec<Hash> {
+        transaction::get_sign_bytes(&self.0)
     }
 
     /// Attach the provided signatures to the tx
@@ -89,8 +89,8 @@ impl Unbond {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(&self) -> Vec<Hash> {
-        transaction::get_msg_to_sign(&self.0)
+    pub fn get_sign_bytes(&self) -> Vec<Hash> {
+        transaction::get_sign_bytes(&self.0)
     }
 
     /// Attach the provided signatures to the tx
@@ -150,8 +150,8 @@ impl InitValidator {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(&self) -> Vec<Hash> {
-        transaction::get_msg_to_sign(&self.0)
+    pub fn get_sign_bytes(&self) -> Vec<Hash> {
+        transaction::get_sign_bytes(&self.0)
     }
 
     /// Attach the provided signatures to the tx
@@ -179,8 +179,8 @@ impl UnjailValidator {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(&self) -> Vec<Hash> {
-        transaction::get_msg_to_sign(&self.0)
+    pub fn get_sign_bytes(&self) -> Vec<Hash> {
+        transaction::get_sign_bytes(&self.0)
     }
 
     /// Attach the provided signatures to the tx
@@ -208,8 +208,8 @@ impl DeactivateValidator {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(&self) -> Vec<Hash> {
-        transaction::get_msg_to_sign(&self.0)
+    pub fn get_sign_bytes(&self) -> Vec<Hash> {
+        transaction::get_sign_bytes(&self.0)
     }
 
     /// Attach the provided signatures to the tx
@@ -237,8 +237,8 @@ impl ReactivateValidator {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(&self) -> Vec<Hash> {
-        transaction::get_msg_to_sign(&self.0)
+    pub fn get_sign_bytes(&self) -> Vec<Hash> {
+        transaction::get_sign_bytes(&self.0)
     }
 
     /// Attach the provided signatures to the tx
@@ -275,8 +275,8 @@ impl ClaimRewards {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(&self) -> Vec<Hash> {
-        transaction::get_msg_to_sign(&self.0)
+    pub fn get_sign_bytes(&self) -> Vec<Hash> {
+        transaction::get_sign_bytes(&self.0)
     }
 
     /// Attach the provided signatures to the tx
@@ -322,8 +322,8 @@ impl ChangeMetaData {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(&self) -> Vec<Hash> {
-        transaction::get_msg_to_sign(&self.0)
+    pub fn get_sign_bytes(&self) -> Vec<Hash> {
+        transaction::get_sign_bytes(&self.0)
     }
 
     /// Attach the provided signatures to the tx
@@ -361,8 +361,8 @@ impl ChangeConsensusKey {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(&self) -> Vec<Hash> {
-        transaction::get_msg_to_sign(&self.0)
+    pub fn get_sign_bytes(&self) -> Vec<Hash> {
+        transaction::get_sign_bytes(&self.0)
     }
 
     /// Attach the provided signatures to the tx
@@ -396,8 +396,8 @@ impl ChangeCommission {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(&self) -> Vec<Hash> {
-        transaction::get_msg_to_sign(&self.0)
+    pub fn get_sign_bytes(&self) -> Vec<Hash> {
+        transaction::get_sign_bytes(&self.0)
     }
 
     /// Attach the provided signatures to the tx
@@ -436,8 +436,8 @@ impl Withdraw {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(&self) -> Vec<Hash> {
-        transaction::get_msg_to_sign(&self.0)
+    pub fn get_sign_bytes(&self) -> Vec<Hash> {
+        transaction::get_sign_bytes(&self.0)
     }
 
     /// Attach the provided signatures to the tx
@@ -478,8 +478,8 @@ impl Redelegate {
     }
 
     /// Get the bytes to sign for the given transaction
-    pub fn get_msg_to_sign(&self) -> Vec<Hash> {
-        transaction::get_msg_to_sign(&self.0)
+    pub fn get_sign_bytes(&self) -> Vec<Hash> {
+        transaction::get_sign_bytes(&self.0)
     }
 
     /// Attach the provided signatures to the tx

@@ -39,7 +39,7 @@ pub(in crate::transaction) fn build_tx(
     inner_tx
 }
 
-pub(in crate::transaction) fn get_msg_to_sign(tx: &Tx) -> Vec<Hash> {
+pub(in crate::transaction) fn get_sign_bytes(tx: &Tx) -> Vec<Hash> {
     vec![tx.raw_header_hash()]
 }
 
