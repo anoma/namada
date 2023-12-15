@@ -245,7 +245,7 @@ impl EthereumBridgeParams {
         // Initialize the storage for the Ethereum Bridge VP.
         vp::ethereum_bridge::init_storage(wl_storage);
         // Initialize the storage for the Bridge Pool VP.
-        bridge_storage::bridge_pool_vp::init_storage(wl_storage);
+        vp::bridge_pool::init_storage(wl_storage);
     }
 }
 
