@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use crate::storage::eth_bridge_queries::{
     EthBridgeEnabled, EthBridgeQueries, EthBridgeStatus,
 };
-use crate::{bridge_pool_vp, storage as bridge_storage, vp};
+use crate::{storage as bridge_storage, vp};
 
 /// An ERC20 token whitelist entry.
 #[derive(
@@ -244,7 +244,7 @@ impl EthereumBridgeParams {
         // Initialize the storage for the Ethereum Bridge VP.
         vp::init_storage(wl_storage);
         // Initialize the storage for the Bridge Pool VP.
-        bridge_pool_vp::init_storage(wl_storage);
+        bridge_storage::bridge_pool_vp::init_storage(wl_storage);
     }
 }
 

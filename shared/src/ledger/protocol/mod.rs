@@ -1117,8 +1117,8 @@ mod tests {
     };
     use namada_ethereum_bridge::storage::eth_bridge_queries::EthBridgeQueries;
     use namada_ethereum_bridge::storage::proof::EthereumProof;
-    use namada_ethereum_bridge::storage::vote_tallies;
-    use namada_ethereum_bridge::{bridge_pool_vp, test_utils};
+    use namada_ethereum_bridge::storage::{bridge_pool_vp, vote_tallies};
+    use namada_ethereum_bridge::test_utils;
 
     use super::*;
 

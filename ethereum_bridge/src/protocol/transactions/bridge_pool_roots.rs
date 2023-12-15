@@ -241,7 +241,8 @@ mod test_apply_bp_roots_to_storage {
     use crate::protocol::transactions::votes::{
         EpochedVotingPower, EpochedVotingPowerExt,
     };
-    use crate::{bridge_pool_vp, test_utils};
+    use crate::storage::bridge_pool_vp;
+    use crate::test_utils;
 
     /// The data needed to run a test.
     struct TestPackage {
