@@ -7,7 +7,6 @@ mod error;
 pub mod governance;
 pub mod key;
 pub mod pgf;
-pub mod token;
 pub mod tx;
 pub mod validation;
 

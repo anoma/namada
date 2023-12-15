@@ -44,6 +44,7 @@ crates += namada_proof_of_stake
 crates += namada_sdk
 crates += namada_test_utils
 crates += namada_tests
+crates += namada_trans_token
 crates += namada_tx_prelude
 crates += namada_vm_env
 crates += namada_vp_prelude

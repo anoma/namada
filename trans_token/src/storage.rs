@@ -1,13 +1,52 @@
-//! Token storage_api functions
+use namada_core::ledger::storage_api;
+use namada_core::types::address::{Address, InternalAddress};
+use namada_core::types::token;
 
 use super::{StorageRead, StorageWrite};
-use crate::ledger::storage_api;
-use crate::types::address::{Address, InternalAddress};
-use crate::types::token;
-pub use crate::types::token::{
-    balance_key, is_any_minted_balance_key, is_balance_key, minted_balance_key,
-    minter_key, Amount, Change,
-};
+
+impl token::Parameters {
+    /// Initialize parameters for the token in storage during the genesis block.
+    pub fn init_storage<DB, H>(
+        &self,
+        address: &Address,
+        wl_storage: &mut ledger_storage::WlStorage<DB, H>,
+    ) where
+        DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+        H: ledger_storage::StorageHasher,
+    {
+        let Self {
+            max_reward_rate: max_rate,
+            kd_gain_nom,
+            kp_gain_nom,
+            locked_ratio_target: locked_target,
+        } = self;
+        wl_storage
+            .write(&masp_last_inflation_key(address), Amount::zero())
+            .expect(
+                "last inflation key for the given asset must be initialized",
+            );
+        wl_storage
+            .write(&masp_last_locked_ratio_key(address), Dec::zero())
+            .expect(
+                "last locked ratio key for the given asset must be initialized",
+            );
+        wl_storage
+            .write(&masp_max_reward_rate_key(address), max_rate)
+            .expect("max reward rate for the given asset must be initialized");
+        wl_storage
+            .write(&masp_locked_ratio_target_key(address), locked_target)
+            .expect("locked ratio must be initialized");
+        wl_storage
+            .write(&masp_kp_gain_key(address), kp_gain_nom)
+            .expect("The nominal proportional gain must be initialized");
+        wl_storage
+            .write(&masp_kd_gain_key(address), kd_gain_nom)
+            .expect("The nominal derivative gain must be initialized");
+        wl_storage
+            .write(&minted_balance_key(address), Amount::zero())
+            .expect("The total minted balance key must initialized");
+    }
+}
 
 /// Read the balance of a given token and owner.
 pub fn read_balance<S>(
