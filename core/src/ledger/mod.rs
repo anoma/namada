@@ -3,8 +3,6 @@
 pub mod eth_bridge;
 pub mod gas;
 pub mod inflation;
-pub mod masp_conversions;
-pub mod masp_utils;
 pub mod parameters;
 pub mod replay_protection;
 pub mod storage;

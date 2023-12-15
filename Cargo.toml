@@ -16,6 +16,7 @@ members = [
   "proof_of_stake",
   "sdk",
   "shared",
+  "shielded_token",
   "test_utils",
   "tests",
   "trans_token",

@@ -4569,6 +4569,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "namada_shielded_token"
+version = "0.1.0"
+
+[[package]]
 name = "namada_test_utils"
 version = "0.29.0"
 dependencies = [
