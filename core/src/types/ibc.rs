@@ -17,7 +17,6 @@ use crate::ibc::core::handler::types::events::{
     Error as IbcEventError, IbcEvent as RawIbcEvent,
 };
 use crate::ibc::primitives::proto::Protobuf;
-pub use crate::ledger::ibc::storage::is_ibc_key;
 use crate::tendermint::abci::Event as AbciEvent;
 use crate::types::masp::PaymentAddress;
 use crate::types::token::Transfer;

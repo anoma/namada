@@ -2,7 +2,6 @@
 
 pub mod eth_bridge;
 pub mod gas;
-pub mod ibc;
 pub mod inflation;
 pub mod masp_conversions;
 pub mod masp_utils;

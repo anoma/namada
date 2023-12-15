@@ -9,7 +9,10 @@ members = [
   "ethereum_bridge",
   "light_sdk",
   "macros",
+  "examples",
   "governance",
+  "ibc",
+  "macros",
   "proof_of_stake",
   "sdk",
   "shared",
@@ -19,7 +22,6 @@ members = [
   "tx_prelude",
   "vm_env",
   "vp_prelude",
-  "examples",
 ]
 
 # wasm packages have to be built separately
