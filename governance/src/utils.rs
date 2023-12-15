@@ -2,13 +2,13 @@ use std::collections::HashMap;
 use std::fmt::Display;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::types::address::Address;
+use namada_core::types::storage::Epoch;
+use namada_core::types::token;
 
 use super::cli::offline::OfflineVote;
 use super::storage::proposal::ProposalType;
 use super::storage::vote::StorageProposalVote;
-use crate::types::address::Address;
-use crate::types::storage::Epoch;
-use crate::types::token;
 
 /// Proposal status
 pub enum ProposalStatus {

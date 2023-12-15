@@ -1,6 +1,9 @@
 use std::collections::BTreeMap;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::types::address::Address;
+use namada_core::types::storage::Epoch;
+use namada_core::types::token;
 use serde::{Deserialize, Serialize};
 
 use super::validation::{
@@ -9,10 +12,7 @@ use super::validation::{
     is_valid_pgf_stewards_data, is_valid_proposal_period, is_valid_start_epoch,
     ProposalValidation,
 };
-use crate::ledger::governance::parameters::GovernanceParameters;
-use crate::types::address::Address;
-use crate::types::storage::Epoch;
-use crate::types::token;
+use crate::parameters::GovernanceParameters;
 
 #[derive(
     Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,

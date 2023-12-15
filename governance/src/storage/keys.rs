@@ -1,8 +1,8 @@
+use namada_core::types::address::Address;
+use namada_core::types::storage::{DbKeySeg, Key, KeySeg};
 use namada_macros::StorageKeys;
 
-use crate::ledger::governance::ADDRESS;
-use crate::types::address::Address;
-use crate::types::storage::{DbKeySeg, Key, KeySeg};
+use crate::ADDRESS;
 
 /// Storage keys for governance internal address.
 #[derive(StorageKeys)]

@@ -1,8 +1,8 @@
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::ledger::storage_api::{self, StorageRead, StorageWrite};
+use namada_core::types::token;
 
 use super::storage::keys as goverance_storage;
-use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
-use crate::types::token;
 
 #[derive(
     Clone,

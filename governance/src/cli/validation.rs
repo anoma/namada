@@ -1,11 +1,11 @@
 use std::collections::BTreeMap;
 
+use namada_core::types::address::Address;
+use namada_core::types::storage::Epoch;
+use namada_core::types::token;
 use thiserror::Error;
 
 use super::onchain::{PgfFunding, StewardsUpdate};
-use crate::types::address::Address;
-use crate::types::storage::Epoch;
-use crate::types::token;
 
 /// This enum raprresent a proposal data
 #[derive(Clone, Debug, PartialEq, Error)]

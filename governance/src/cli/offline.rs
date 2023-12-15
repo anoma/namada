@@ -4,16 +4,16 @@ use std::path::PathBuf;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
+use namada_core::proto::SignatureIndex;
+use namada_core::types::account::AccountPublicKeysMap;
+use namada_core::types::address::Address;
+use namada_core::types::hash::Hash;
+use namada_core::types::key::{common, RefTo, SigScheme};
+use namada_core::types::storage::Epoch;
 use serde::{Deserialize, Serialize};
 
 use super::onchain::ProposalVote;
 use super::validation::{is_valid_tally_epoch, ProposalValidation};
-use crate::proto::SignatureIndex;
-use crate::types::account::AccountPublicKeysMap;
-use crate::types::address::Address;
-use crate::types::hash::Hash;
-use crate::types::key::{common, RefTo, SigScheme};
-use crate::types::storage::Epoch;
 
 #[derive(
     Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,

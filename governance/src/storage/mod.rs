@@ -10,22 +10,20 @@ pub mod vote;
 use std::collections::BTreeMap;
 
 use borsh::BorshDeserialize;
-
-use super::token;
-use crate::ledger::governance::parameters::GovernanceParameters;
-use crate::ledger::governance::storage::keys as governance_keys;
-use crate::ledger::governance::storage::proposal::{
-    ProposalType, StorageProposal,
-};
-use crate::ledger::governance::storage::vote::StorageProposalVote;
-use crate::ledger::governance::utils::Vote;
-use crate::ledger::governance::ADDRESS as governance_address;
-use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
-use crate::types::address::Address;
-use crate::types::storage::Epoch;
-use crate::types::transaction::governance::{
+use namada_core::ledger::storage_api::{self, StorageRead, StorageWrite};
+use namada_core::types::address::Address;
+use namada_core::types::storage::Epoch;
+use namada_core::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
+
+use super::token;
+use crate::parameters::GovernanceParameters;
+use crate::storage::keys as governance_keys;
+use crate::storage::proposal::{ProposalType, StorageProposal};
+use crate::storage::vote::StorageProposalVote;
+use crate::utils::Vote;
+use crate::ADDRESS as governance_address;
 
 /// A proposal creation transaction.
 pub fn init_proposal<S>(
