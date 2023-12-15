@@ -550,8 +550,6 @@ mod tests {
             implicit_vp_code_hash: Default::default(),
             epochs_per_year: 365,
             max_signatures_per_transaction: 10,
-            pos_gain_p: Default::default(),
-            pos_gain_d: Default::default(),
             staked_ratio: Default::default(),
             pos_inflation_amount: Default::default(),
             fee_unshielding_gas_limit: 0,

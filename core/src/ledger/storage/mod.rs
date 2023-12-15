@@ -1460,8 +1460,6 @@ mod tests {
                 implicit_vp_code_hash: Hash::zero(),
                 epochs_per_year: 100,
                 max_signatures_per_transaction: 15,
-                pos_gain_p: Dec::new(1,1).expect("Cannot fail"),
-                pos_gain_d: Dec::new(1,1).expect("Cannot fail"),
                 staked_ratio: Dec::new(1,1).expect("Cannot fail"),
                 pos_inflation_amount: token::Amount::zero(),
                 fee_unshielding_gas_limit: 20_000,

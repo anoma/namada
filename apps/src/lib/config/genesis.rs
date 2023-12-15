@@ -287,10 +287,6 @@ pub struct Parameters {
     pub epochs_per_year: u64,
     /// Maximum amount of signatures per transaction
     pub max_signatures_per_transaction: u8,
-    /// PoS gain p (read only)
-    pub pos_gain_p: Dec,
-    /// PoS gain d (read only)
-    pub pos_gain_d: Dec,
     /// PoS staked ratio (read + write for every epoch)
     pub staked_ratio: Dec,
     /// PoS inflation amount from the last epoch (read + write for every epoch)
