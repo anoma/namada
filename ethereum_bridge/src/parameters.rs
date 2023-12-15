@@ -14,10 +14,11 @@ use namada_core::types::storage::Key;
 use namada_core::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
 use serde::{Deserialize, Serialize};
 
+use crate::storage as bridge_storage;
 use crate::storage::eth_bridge_queries::{
     EthBridgeEnabled, EthBridgeQueries, EthBridgeStatus,
 };
-use crate::{storage as bridge_storage, vp};
+use crate::storage::vp;
 
 /// An ERC20 token whitelist entry.
 #[derive(
@@ -242,7 +243,7 @@ impl EthereumBridgeParams {
             wl_storage.write_bytes(&key, encode(denom)).unwrap();
         }
         // Initialize the storage for the Ethereum Bridge VP.
-        vp::init_storage(wl_storage);
+        vp::ethereum_bridge::init_storage(wl_storage);
         // Initialize the storage for the Bridge Pool VP.
         bridge_storage::bridge_pool_vp::init_storage(wl_storage);
     }
