@@ -28,9 +28,6 @@ use crate::ledger::eth_bridge::storage::bridge_pool::is_pending_transfer_key;
 use crate::ledger::gas::{
     STORAGE_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE,
 };
-pub use crate::ledger::masp_conversions::{
-    calculate_masp_rewards, encode_asset_type, ConversionState,
-};
 use crate::ledger::parameters::{self, EpochDuration, Parameters};
 use crate::ledger::storage::merkle_tree::{
     Error as MerkleTreeError, MerkleRoot,
@@ -48,6 +45,7 @@ use crate::types::storage::{
     BLOCK_HEIGHT_LENGTH, EPOCH_TYPE_LENGTH,
 };
 use crate::types::time::DateTimeUtc;
+pub use crate::types::token::ConversionState;
 
 /// A result of a function that may fail
 pub type Result<T> = std::result::Result<T, Error>;

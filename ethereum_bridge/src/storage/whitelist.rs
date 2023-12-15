@@ -5,19 +5,19 @@
 
 use std::str::FromStr;
 
-use super::super::ADDRESS as BRIDGE_ADDRESS;
+use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
+use namada_core::types::ethereum_events::EthAddress;
+use namada_core::types::storage;
+use namada_core::types::storage::DbKeySeg;
+use namada_trans_token::storage_key::{denom_key, minted_balance_key};
+
 use super::{prefix as ethbridge_key_prefix, wrapped_erc20s};
-use crate::types::ethereum_events::EthAddress;
-use crate::types::storage;
-use crate::types::storage::DbKeySeg;
-use crate::types::token::{denom_key, minted_balance_key};
 
 mod segments {
     //! Storage key segments under the token whitelist.
+    use namada_core::types::address::Address;
+    use namada_core::types::storage::{DbKeySeg, Key};
     use namada_macros::StorageKeys;
-
-    use crate::types::address::Address;
-    use crate::types::storage::{DbKeySeg, Key};
 
     /// The name of the main storage segment.
     pub(super) const MAIN_SEGMENT: &str = "whitelist";
@@ -118,8 +118,9 @@ pub fn is_cap_or_whitelisted_key(key: &storage::Key) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use namada_core::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
+
     use super::*;
-    use crate::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
 
     /// Test that storage key serialization yields the expected value.
     #[test]

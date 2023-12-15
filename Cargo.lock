@@ -4438,6 +4438,7 @@ dependencies = [
  "namada_core",
  "namada_macros",
  "namada_proof_of_stake",
+ "namada_trans_token",
  "rand 0.8.5",
  "serde 1.0.193",
  "serde_json",
