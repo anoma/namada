@@ -4504,6 +4504,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "namada_parameters"
+version = "0.28.1"
+dependencies = [
+ "namada_core",
+ "namada_storage",
+]
+
+[[package]]
 name = "namada_proof_of_stake"
 version = "0.29.0"
 dependencies = [
@@ -4581,6 +4589,13 @@ name = "namada_shielded_token"
 version = "0.1.0"
 
 [[package]]
+name = "namada_storage"
+version = "0.28.1"
+dependencies = [
+ "namada_core",
+]
+
+[[package]]
 name = "namada_test_utils"
 version = "0.29.0"
 dependencies = [
@@ -4645,6 +4660,23 @@ name = "namada_trans_token"
 version = "0.29.0"
 dependencies = [
  "namada_core",
+]
+
+[[package]]
+name = "namada_tx"
+version = "0.28.1"
+dependencies = [
+ "namada_core",
+ "namada_gas",
+ "tonic-build",
+]
+
+[[package]]
+name = "namada_tx_env"
+version = "0.28.1"
+dependencies = [
+ "namada_core",
+ "namada_state",
 ]
 
 [[package]]

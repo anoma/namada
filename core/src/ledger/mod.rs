@@ -5,7 +5,6 @@ pub mod gas;
 pub mod inflation;
 pub mod parameters;
 pub mod replay_protection;
-pub mod storage;
 pub mod storage_api;
 pub mod tx_env;
 pub mod vp_env;

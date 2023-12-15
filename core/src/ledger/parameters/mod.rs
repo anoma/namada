@@ -91,9 +91,9 @@ pub struct EpochDuration {
 #[derive(Error, Debug)]
 pub enum ReadError {
     #[error("Storage error: {0}")]
-    StorageError(ledger_storage::Error),
+    StorageError(namada_state::Error),
     #[error("Storage type error: {0}")]
-    StorageTypeError(types::Error),
+    StorageTypeError(namada_state::types::Error),
     #[error("Protocol parameters are missing, they must be always set")]
     ParametersMissing,
 }
@@ -102,7 +102,7 @@ pub enum ReadError {
 #[derive(Error, Debug)]
 pub enum WriteError {
     #[error("Storage error: {0}")]
-    StorageError(ledger_storage::Error),
+    StorageError(namada_state::Error),
     #[error("Serialize error: {0}")]
     SerializeError(String),
 }

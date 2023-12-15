@@ -18,6 +18,7 @@ members = [
   "sdk",
   "shared",
   "shielded_token",
+  "state",
   "test_utils",
   "tests",
   "trans_token",
