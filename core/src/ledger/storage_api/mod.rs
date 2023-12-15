@@ -5,7 +5,6 @@ pub mod account;
 pub mod collections;
 mod error;
 pub mod key;
-pub mod tx;
 pub mod validation;
 
 use borsh::{BorshDeserialize, BorshSerialize};
