@@ -5,12 +5,10 @@ use std::fmt::Display;
 use std::ops::Div;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_core::storage_api::{self, StorageRead};
+use namada_core::types::transaction::wrapper::GasLimit;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-
-use super::parameters;
-use super::storage_api::{self, StorageRead};
-use crate::types::transaction::wrapper::GasLimit;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
@@ -71,7 +69,7 @@ pub fn get_max_block_gas(
     storage: &impl StorageRead,
 ) -> std::result::Result<u64, storage_api::Error> {
     storage
-        .read(&parameters::storage::get_max_block_gas_key())?
+        .read(&namada_parameters::storage::get_max_block_gas_key())?
         .ok_or(storage_api::Error::SimpleMessage(
             "Missing max_block_gas parameter from storage",
         ))
