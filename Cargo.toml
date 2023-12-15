@@ -13,6 +13,7 @@ members = [
   "governance",
   "ibc",
   "macros",
+  "merkle_tree",
   "proof_of_stake",
   "sdk",
   "shared",

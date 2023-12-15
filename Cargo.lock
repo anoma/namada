@@ -4398,7 +4398,6 @@ dependencies = [
  "serde 1.0.193",
  "serde_json",
  "sha2 0.9.9",
- "sparse-merkle-tree",
  "tendermint",
  "tendermint-proto",
  "test-log",
@@ -4494,6 +4493,14 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "namada_merkle_tree"
+version = "0.28.1"
+dependencies = [
+ "namada_core",
+ "sparse-merkle-tree",
 ]
 
 [[package]]
