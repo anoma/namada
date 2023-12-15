@@ -20,7 +20,7 @@ use namada_sdk::masp::find_valid_diversifier;
 use namada_sdk::wallet::{
     DecryptionError, DerivationPath, DerivationPathError, FindKeyError, Wallet,
 };
-use namada_sdk::{display, display_line, edisplay_line};
+use namada_sdk::{display_line, edisplay_line};
 use rand_core::OsRng;
 
 use crate::cli;
