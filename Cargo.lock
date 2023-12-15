@@ -4460,6 +4460,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "namada_gas"
+version = "0.28.1"
+dependencies = [
+ "namada_core",
+ "namada_parameters",
+]
+
+[[package]]
 name = "namada_governance"
 version = "0.29.0"
 dependencies = [

@@ -10,6 +10,7 @@ members = [
   "light_sdk",
   "macros",
   "examples",
+  "gas",
   "governance",
   "ibc",
   "macros",
