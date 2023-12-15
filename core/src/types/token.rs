@@ -14,8 +14,6 @@ use thiserror::Error;
 
 use super::dec::POS_DECIMAL_PRECISION;
 use crate::ibc::apps::transfer::types::Amount as IbcAmount;
-use crate::ledger::storage_api::token::read_denom;
-use crate::ledger::storage_api::{self, StorageRead};
 use crate::types::address::{Address, DecodeError as AddressError};
 use crate::types::dec::Dec;
 use crate::types::hash::Hash;
@@ -218,23 +216,6 @@ impl Amount {
         .to_string_precise()
     }
 
-    /// Add denomination info if it exists in storage.
-    pub fn denominated(
-        &self,
-        token: &Address,
-        storage: &impl StorageRead,
-    ) -> storage_api::Result<DenominatedAmount> {
-        let denom = read_denom(storage, token)?.ok_or_else(|| {
-            storage_api::Error::SimpleMessage(
-                "No denomination found in storage for the given token",
-            )
-        })?;
-        Ok(DenominatedAmount {
-            amount: *self,
-            denom,
-        })
-    }
-
     /// Return a denominated native token amount.
     #[inline]
     pub const fn native_denominated(self) -> DenominatedAmount {
@@ -406,22 +387,6 @@ impl DenominatedAmount {
                 denom,
             })
             .ok_or(AmountParseError::PrecisionOverflow)
-    }
-
-    /// Convert this denominated amount into a plain amount by increasing its
-    /// precision to the given token's denomination and then taking the
-    /// significand.
-    pub fn to_amount(
-        self,
-        token: &Address,
-        storage: &impl StorageRead,
-    ) -> storage_api::Result<Amount> {
-        let denom = read_denom(storage, token)?.ok_or_else(|| {
-            storage_api::Error::SimpleMessage(
-                "No denomination found in storage for the given token",
-            )
-        })?;
-        self.scale(denom).map_err(storage_api::Error::new)
     }
 
     /// Multiply this number by 10^denom and return the computed integer if

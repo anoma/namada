@@ -225,3 +225,33 @@ where
     let total_supply_key = token::minted_balance_key(token);
     storage.write(&total_supply_key, new_total_supply)
 }
+
+/// Add denomination info if it exists in storage.
+pub fn denominated(
+    amount: token::Amount,
+    token: &Address,
+    storage: &impl StorageRead,
+) -> storage_api::Result<DenominatedAmount> {
+    let denom = read_denom(storage, token)?.ok_or_else(|| {
+        storage_api::Error::SimpleMessage(
+            "No denomination found in storage for the given token",
+        )
+    })?;
+    Ok(DenominatedAmount { amount, denom })
+}
+
+/// Convert this denominated amount into a plain amount by increasing its
+/// precision to the given token's denomination and then taking the
+/// significand.
+pub fn denom_to_amount(
+    denom_amount: DenominatedAmount,
+    token: &Address,
+    storage: &impl StorageRead,
+) -> storage_api::Result<Amount> {
+    let denom = read_denom(storage, token)?.ok_or_else(|| {
+        storage_api::Error::SimpleMessage(
+            "No denomination found in storage for the given token",
+        )
+    })?;
+    denom_amount.scale(denom).map_err(storage_api::Error::new)
+}
