@@ -14,6 +14,7 @@ members = [
   "ibc",
   "macros",
   "merkle_tree",
+  "parameters",
   "proof_of_stake",
   "sdk",
   "shared",

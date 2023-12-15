@@ -43,6 +43,7 @@ crates += namada_governance
 crates += namada_ibc
 crates += namada_macros
 crates += namada_merkle_tree
+crates += namada_parameters
 crates += namada_proof_of_stake
 crates += namada_sdk
 crates += namada_shielded_token
