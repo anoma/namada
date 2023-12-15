@@ -24,6 +24,7 @@ members = [
   "test_utils",
   "tests",
   "trans_token",
+  "tx",
   "tx_prelude",
   "vm_env",
   "vp_prelude",

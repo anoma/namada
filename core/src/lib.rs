@@ -9,7 +9,6 @@
 pub mod bytes;
 pub mod hints;
 pub mod ledger;
-pub mod proto;
 pub mod types;
 
 pub use {ibc, tendermint, tendermint_proto};

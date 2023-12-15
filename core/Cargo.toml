@@ -85,6 +85,3 @@ rayon = {version = "=1.5.3"}
 test-log.workspace = true
 toml.workspace = true
 tracing-subscriber.workspace = true
-
-[build-dependencies]
-tonic-build.workspace = true

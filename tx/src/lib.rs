@@ -1,6 +1,6 @@
 #![allow(missing_docs)]
 
-pub mod generated;
+pub mod proto::generated;
 mod types;
 
 pub use types::{
