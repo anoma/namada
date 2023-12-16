@@ -341,7 +341,7 @@ pub async fn query_transparent_balance<'a>(
                         );
                     }
                     Err(namada_sdk::error::Error::Query(QueryError::NoSuchKey(_))) => {
-                        display_line!(context.io(), "Querying error: {:?}", QueryError::NoSuchKey);
+			return;
                     }
                     Err(e) => {
                         display_line!(
