@@ -49,7 +49,7 @@ Guide.
 make build-wasm-scripts-docker
 ```
 
-### Before submitting a PR, pls make sure to run the following
+## Before submitting a PR, pls make sure to run the following
 
 ```shell
 # Format the code
