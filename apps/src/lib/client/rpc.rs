@@ -341,7 +341,7 @@ pub async fn query_transparent_balance<'a>(
                         );
                     }
                     Err(e) => {
-                        if matches!(e, Err(Pinned(QueryError::NoSuchKey(_)))) {
+                        if matches!(e, Err(Query(QueryError::NoSuchKey(_)))) {
 			    display_line!(
                                 context.io(),
                             	"No {} balance found for {}",
