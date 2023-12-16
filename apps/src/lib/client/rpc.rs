@@ -343,8 +343,7 @@ pub async fn query_transparent_balance<'a>(
                     Err(namada_sdk::error::Error::Query(QueryError::NoSuchKey(_))) => {
 			return;
                     }
-                    Err(e) => {
-                        display_line!(context.io(), "Querying error: {e}");
+                    Err(_) => {
                         display_line!(
                             context.io(),
                             "No {} balance found for {}",
