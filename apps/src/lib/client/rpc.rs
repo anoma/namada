@@ -340,8 +340,15 @@ pub async fn query_transparent_balance<'a>(
                             balance
                         );
                     }
-                    Err(QueryError::NoSuchKey(_)) => {
-                        display_line!(context.io(), "Querying error: {:?}", QueryError::NoSuchKey);
+                    Err(e) => {
+                        if e != QueryError::NoSuchKey {
+			    display_line!(
+                                context.io(),
+                            	"No {} balance found for {}",
+                            	token_alias,
+                            	owner
+                            )
+			}
                     }
                 }
             }
