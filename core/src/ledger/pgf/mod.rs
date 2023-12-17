@@ -4,6 +4,8 @@ use crate::types::address::{Address, InternalAddress};
 
 /// Pgf CLI
 pub mod cli;
+/// Pgf inflation code
+pub mod inflation;
 /// Pgf parameters
 pub mod parameters;
 /// Pgf storage
