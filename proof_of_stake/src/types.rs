@@ -259,7 +259,7 @@ pub type LivenessMissedVotes = NestedMap<Address, LazySet<u64>>;
 
 /// The sum of missed votes within some interval for each of the consensus
 /// validators. The value in this map should in principle be the number of
-/// elements in the correspoding inner LazySet of [`LivenessMissedVotes`].
+/// elements in the corresponding inner LazySet of [`LivenessMissedVotes`].
 pub type LivenessSumMissedVotes = LazyMap<Address, u64>;
 
 #[derive(
