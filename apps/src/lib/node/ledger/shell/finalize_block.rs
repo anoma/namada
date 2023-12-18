@@ -622,6 +622,9 @@ where
             // send the latest oracle configs. These may have changed due to
             // governance.
             self.update_eth_oracle(&changed_keys);
+            // XXX: this is likely a bug. the eth oracle config
+            // should be updated every time a governance proposal
+            // is executed
         }
 
         write_last_block_proposer_address(
