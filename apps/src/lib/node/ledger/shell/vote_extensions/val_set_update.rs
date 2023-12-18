@@ -3,11 +3,8 @@
 
 use std::collections::HashMap;
 
-use namada::ledger::pos::PosQueries;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
-use namada::types::storage::Epoch;
-use namada::types::token;
 use namada::types::vote_extensions::validator_set_update;
 
 use super::*;
@@ -18,144 +15,6 @@ where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
 {
-    /// Validates a validator set update vote extension issued at the
-    /// epoch provided as an argument.
-    ///
-    /// # Validation checks
-    ///
-    /// To validate a [`validator_set_update::SignedVext`], Namada nodes
-    /// check if:
-    ///
-    ///  * The signing validator is a consensus validator during the epoch
-    ///    `signing_epoch` inside the extension.
-    ///  * A validator set update proof is not available yet for
-    ///    `signing_epoch`.
-    ///  * The validator correctly signed the extension, with its Ethereum hot
-    ///    key.
-    ///  * The validator signed over the epoch inside of the extension, whose
-    ///    value should not be greater than `last_epoch`.
-    ///  * The voting powers in the vote extension correspond to the voting
-    ///    powers of the validators of `signing_epoch + 1`.
-    ///  * The voting powers signed over were Ethereum ABI encoded, normalized
-    ///    to `2^32`, and sorted in descending order.
-    #[inline]
-    #[allow(dead_code)]
-    pub fn validate_valset_upd_vext(
-        &self,
-        ext: validator_set_update::SignedVext,
-        signing_epoch: Epoch,
-    ) -> bool {
-        self.validate_valset_upd_vext_and_get_it_back(ext, signing_epoch)
-            .is_ok()
-    }
-
-    /// This method behaves exactly like [`Self::validate_valset_upd_vext`],
-    /// with the added bonus of returning the vote extension back, if it
-    /// is valid.
-    pub fn validate_valset_upd_vext_and_get_it_back(
-        &self,
-        ext: validator_set_update::SignedVext,
-        last_epoch: Epoch,
-    ) -> std::result::Result<
-        (token::Amount, validator_set_update::SignedVext),
-        VoteExtensionError,
-    > {
-        if self.wl_storage.storage.last_block.is_none() {
-            tracing::debug!(
-                "Dropping validator set update vote extension issued at \
-                 genesis"
-            );
-            return Err(VoteExtensionError::UnexpectedBlockHeight);
-        }
-        let signing_epoch = ext.data.signing_epoch;
-        if signing_epoch > last_epoch {
-            tracing::debug!(
-                vext_epoch = ?signing_epoch,
-                ?last_epoch,
-                "Validator set update vote extension issued for an epoch \
-                 greater than the last one.",
-            );
-            return Err(VoteExtensionError::UnexpectedEpoch);
-        }
-        if self
-            .wl_storage
-            .ethbridge_queries()
-            .valset_upd_seen(signing_epoch.next())
-        {
-            let err = VoteExtensionError::ValsetUpdProofAvailable;
-            tracing::debug!(
-                proof_epoch = ?signing_epoch.next(),
-                "{err}"
-            );
-            return Err(err);
-        }
-        // verify if the new epoch validators' voting powers in storage match
-        // the voting powers in the vote extension
-        for (eth_addr_book, namada_addr, namada_power) in self
-            .wl_storage
-            .ethbridge_queries()
-            .get_consensus_eth_addresses(Some(signing_epoch.next()))
-            .iter()
-        {
-            let &ext_power = match ext.data.voting_powers.get(&eth_addr_book) {
-                Some(voting_power) => voting_power,
-                _ => {
-                    tracing::debug!(
-                        ?eth_addr_book,
-                        "Could not find expected Ethereum addresses in valset \
-                         upd vote extension",
-                    );
-                    return Err(
-                        VoteExtensionError::ValidatorMissingFromExtension,
-                    );
-                }
-            };
-            if namada_power != ext_power {
-                tracing::debug!(
-                    validator = %namada_addr,
-                    expected = ?namada_power,
-                    got = ?ext_power,
-                    "Found unexpected voting power value in valset upd vote extension",
-                );
-                return Err(VoteExtensionError::DivergesFromStorage);
-            }
-        }
-        // get the public key associated with this validator
-        let validator = &ext.data.validator_addr;
-        let (voting_power, _) = self
-            .wl_storage
-            .pos_queries()
-            .get_validator_from_address(validator, Some(signing_epoch))
-            .map_err(|err| {
-                tracing::debug!(
-                    ?err,
-                    %validator,
-                    "Could not get public key from Storage for some validator, \
-                     while validating valset upd vote extension"
-                );
-                VoteExtensionError::PubKeyNotInStorage
-            })?;
-        let pk = self
-            .wl_storage
-            .pos_queries()
-            .read_validator_eth_hot_key(validator, Some(signing_epoch))
-            .expect("We should have this hot key in storage");
-        // verify the signature of the vote extension
-        ext.verify(&pk)
-            .map_err(|err| {
-                tracing::debug!(
-                    ?err,
-                    ?ext.sig,
-                    ?pk,
-                    %validator,
-                    "Failed to verify the signature of a valset upd vote \
-                     extension issued by some validator"
-                );
-                VoteExtensionError::VerifySigFailed
-            })
-            .map(|_| (voting_power, ext))
-    }
-
     /// Takes an iterator over validator set update vote extension instances,
     /// and returns another iterator. The latter yields
     /// valid validator set update vote extensions, or the reason why these
@@ -167,15 +26,17 @@ where
         + 'static,
     ) -> impl Iterator<
         Item = std::result::Result<
-            (token::Amount, validator_set_update::SignedVext),
+            validator_set_update::SignedVext,
             VoteExtensionError,
         >,
     > + '_ {
         vote_extensions.into_iter().map(|vote_extension| {
-            self.validate_valset_upd_vext_and_get_it_back(
-                vote_extension,
+            validate_valset_upd_vext(
+                &self.wl_storage,
+                &vote_extension,
                 self.wl_storage.storage.get_current_epoch().0,
-            )
+            )?;
+            Ok(vote_extension)
         })
     }
 
@@ -186,8 +47,7 @@ where
         &self,
         vote_extensions: impl IntoIterator<Item = validator_set_update::SignedVext>
         + 'static,
-    ) -> impl Iterator<Item = (token::Amount, validator_set_update::SignedVext)> + '_
-    {
+    ) -> impl Iterator<Item = validator_set_update::SignedVext> + '_ {
         self.validate_valset_upd_vext_list(vote_extensions)
             .filter_map(|ext| ext.ok())
     }
@@ -208,7 +68,7 @@ where
         let mut voting_powers = None;
         let mut signatures = HashMap::new();
 
-        for (_validator_voting_power, mut vote_extension) in
+        for mut vote_extension in
             self.filter_invalid_valset_upd_vexts(vote_extensions)
         {
             if voting_powers.is_none() {
@@ -269,6 +129,7 @@ mod test_vote_extensions {
     use namada::types::vote_extensions::validator_set_update;
     use namada_sdk::eth_bridge::EthBridgeQueries;
 
+    use super::validate_valset_upd_vext;
     use crate::node::ledger::shell::test_utils::{self, get_pkh_from_address};
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;
@@ -308,10 +169,14 @@ mod test_vote_extensions {
             }
             .sign(eth_bridge_key),
         );
-        assert!(!shell.validate_valset_upd_vext(
-            validator_set_update.unwrap(),
-            signing_epoch,
-        ))
+        assert!(
+            validate_valset_upd_vext(
+                &shell.wl_storage,
+                &validator_set_update.unwrap(),
+                signing_epoch,
+            )
+            .is_err()
+        )
     }
 
     /// Test that validator set update vote extensions signed by
@@ -346,10 +211,14 @@ mod test_vote_extensions {
             }
             .sign(&eth_bridge_key),
         );
-        assert!(!shell.validate_valset_upd_vext(
-            validator_set_update.unwrap(),
-            signing_epoch,
-        ));
+        assert!(
+            validate_valset_upd_vext(
+                &shell.wl_storage,
+                &validator_set_update.unwrap(),
+                signing_epoch,
+            )
+            .is_err()
+        );
     }
 
     /// Test the validation of a validator set update emitted for
@@ -468,7 +337,14 @@ mod test_vote_extensions {
                 .is_ok()
         );
 
-        assert!(shell.validate_valset_upd_vext(vote_ext, signing_epoch));
+        assert!(
+            validate_valset_upd_vext(
+                &shell.wl_storage,
+                &vote_ext,
+                signing_epoch
+            )
+            .is_ok()
+        );
     }
 
     /// Test if a [`validator_set_update::Vext`] with an incorrect signature
@@ -506,10 +382,14 @@ mod test_vote_extensions {
             ext.sig = test_utils::invalidate_signature(ext.sig);
             Some(ext)
         };
-        assert!(!shell.validate_valset_upd_vext(
-            validator_set_update.unwrap(),
-            signing_epoch,
-        ));
+        assert!(
+            validate_valset_upd_vext(
+                &shell.wl_storage,
+                &validator_set_update.unwrap(),
+                signing_epoch,
+            )
+            .is_err()
+        );
     }
 
     /// Test if a [`validator_set_update::Vext`] is signed with a secp key

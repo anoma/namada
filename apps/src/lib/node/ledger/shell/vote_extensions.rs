@@ -4,6 +4,7 @@ pub mod bridge_pool_vext;
 pub mod eth_events;
 pub mod val_set_update;
 
+pub use namada::eth_bridge::protocol::validation::VoteExtensionError;
 use namada::proto::{SignableEthMessage, Signed};
 use namada::types::keccak::keccak_hash;
 use namada::types::transaction::protocol::EthereumTxData;
@@ -17,51 +18,6 @@ use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
 /// Message to be passed to `.expect()` calls in this module.
 const VALIDATOR_EXPECT_MSG: &str = "Only validators receive this method call.";
-
-/// The error yielded from validating faulty vote extensions in the shell
-#[derive(Error, Debug)]
-pub enum VoteExtensionError {
-    #[error(
-        "A validator set update proof is already available in storage for the \
-         given epoch"
-    )]
-    ValsetUpdProofAvailable,
-    #[error("The length of the transfers and their validity map differ")]
-    TransfersLenMismatch,
-    #[error("The nonce in the Ethereum event is invalid")]
-    InvalidEthEventNonce,
-    #[error("The vote extension was issued for an unexpected block height")]
-    UnexpectedBlockHeight,
-    #[error("The vote extension was issued for an unexpected epoch")]
-    UnexpectedEpoch,
-    #[error(
-        "The vote extension contains duplicate or non-sorted Ethereum events"
-    )]
-    HaveDupesOrNonSorted,
-    #[error(
-        "The public key of the vote extension's associated validator could \
-         not be found in storage"
-    )]
-    PubKeyNotInStorage,
-    #[error("The vote extension's signature is invalid")]
-    VerifySigFailed,
-    #[error(
-        "Validator is missing from an expected field in the vote extension"
-    )]
-    ValidatorMissingFromExtension,
-    #[error(
-        "Found value for a field in the vote extension diverging from the \
-         equivalent field in storage"
-    )]
-    DivergesFromStorage,
-    #[error("The signature of the Bridge pool root is invalid")]
-    InvalidBPRootSig,
-    #[error(
-        "Received a vote extension for the Ethereum bridge which is currently \
-         not active"
-    )]
-    EthereumBridgeInactive,
-}
 
 impl<D, H> Shell<D, H>
 where
