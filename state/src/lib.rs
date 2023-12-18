@@ -4,6 +4,7 @@ pub mod ics23_specs;
 #[cfg(any(test, feature = "testing"))]
 pub mod mockdb;
 pub mod traits;
+pub mod tx_queue;
 pub mod types;
 pub mod wl_storage;
 pub mod write_log;
