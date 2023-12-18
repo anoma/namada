@@ -19,7 +19,6 @@ pub mod storage;
 pub mod string_encoding;
 pub mod time;
 pub mod token;
-pub mod transaction;
 pub mod uint;
 pub mod validity_predicate;
 pub mod vote_extensions;

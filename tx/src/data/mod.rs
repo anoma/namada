@@ -1,4 +1,4 @@
-//! Types that are used in transactions.
+//! Data-Types that are used in transactions.
 
 /// txs to manage accounts
 pub mod account;
