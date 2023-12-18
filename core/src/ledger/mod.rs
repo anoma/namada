@@ -5,4 +5,3 @@ pub mod inflation;
 pub mod replay_protection;
 pub mod storage_api;
 pub mod tx_env;
-pub mod vp_env;
