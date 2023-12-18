@@ -21,6 +21,7 @@ members = [
   "shared",
   "shielded_token",
   "state",
+  "storage",
   "test_utils",
   "tests",
   "trans_token",

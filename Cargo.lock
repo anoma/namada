@@ -4596,7 +4596,7 @@ name = "namada_shielded_token"
 version = "0.1.0"
 
 [[package]]
-name = "namada_storage"
+name = "namada_state"
 version = "0.28.1"
 dependencies = [
  "ics23",
@@ -4604,6 +4604,13 @@ dependencies = [
  "namada_gas",
  "namada_tx",
  "sparse-merkle-tree",
+]
+
+[[package]]
+name = "namada_storage"
+version = "0.28.1"
+dependencies = [
+ "namada_core",
 ]
 
 [[package]]

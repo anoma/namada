@@ -49,6 +49,7 @@ crates += namada_proof_of_stake
 crates += namada_sdk
 crates += namada_shielded_token
 crates += namada_state
+crates += namada_storage
 crates += namada_test_utils
 crates += namada_tests
 crates += namada_trans_token
