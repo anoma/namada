@@ -4444,6 +4444,7 @@ dependencies = [
  "tendermint",
  "tendermint-proto",
  "tendermint-rpc",
+ "thiserror",
  "toml 0.5.11",
  "tracing",
 ]
