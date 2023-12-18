@@ -26,8 +26,6 @@ struct Keys {
     // ========================================
     // PoS parameters
     // ========================================
-    pos_gain_d: &'static str,
-    pos_gain_p: &'static str,
     pos_inflation_amount: &'static str,
     staked_ratio: &'static str,
     // ========================================
@@ -96,16 +94,6 @@ pub fn is_epochs_per_year_key(key: &Key) -> bool {
     is_epochs_per_year_key_at_addr(key, &ADDRESS)
 }
 
-/// Returns if the key is the pos_gain_p key.
-pub fn is_pos_gain_p_key(key: &Key) -> bool {
-    is_pos_gain_p_key_at_addr(key, &ADDRESS)
-}
-
-/// Returns if the key is the pos_gain_d key.
-pub fn is_pos_gain_d_key(key: &Key) -> bool {
-    is_pos_gain_d_key_at_addr(key, &ADDRESS)
-}
-
 /// Returns if the key is the staked ratio key.
 pub fn is_staked_ratio_key(key: &Key) -> bool {
     is_staked_ratio_key_at_addr(key, &ADDRESS)
@@ -164,16 +152,6 @@ pub fn get_implicit_vp_key() -> Key {
 /// Storage key used for epochs_per_year parameter.
 pub fn get_epochs_per_year_key() -> Key {
     get_epochs_per_year_key_at_addr(ADDRESS)
-}
-
-/// Storage key used for pos_gain_p parameter.
-pub fn get_pos_gain_p_key() -> Key {
-    get_pos_gain_p_key_at_addr(ADDRESS)
-}
-
-/// Storage key used for pos_gain_d parameter.
-pub fn get_pos_gain_d_key() -> Key {
-    get_pos_gain_d_key_at_addr(ADDRESS)
 }
 
 /// Storage key used for staked ratio parameter.

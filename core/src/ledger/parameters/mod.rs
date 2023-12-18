@@ -55,10 +55,6 @@ pub struct Parameters {
     pub epochs_per_year: u64,
     /// Maximum number of signature per transaction
     pub max_signatures_per_transaction: u8,
-    /// PoS gain p (read only)
-    pub pos_gain_p: Dec,
-    /// PoS gain d (read only)
-    pub pos_gain_d: Dec,
     /// PoS staked ratio (read + write for every epoch)
     pub staked_ratio: Dec,
     /// PoS inflation amount from the last epoch (read + write for every epoch)
@@ -129,8 +125,6 @@ impl Parameters {
             implicit_vp_code_hash,
             epochs_per_year,
             max_signatures_per_transaction,
-            pos_gain_p,
-            pos_gain_d,
             staked_ratio,
             pos_inflation_amount,
             minimum_gas_price,
@@ -207,12 +201,6 @@ impl Parameters {
             &max_signatures_per_transaction_key,
             max_signatures_per_transaction,
         )?;
-
-        let pos_gain_p_key = storage::get_pos_gain_p_key();
-        storage.write(&pos_gain_p_key, pos_gain_p)?;
-
-        let pos_gain_d_key = storage::get_pos_gain_d_key();
-        storage.write(&pos_gain_d_key, pos_gain_d)?;
 
         let staked_ratio_key = storage::get_staked_ratio_key();
         storage.write(&staked_ratio_key, staked_ratio)?;
@@ -312,32 +300,6 @@ where
     S: StorageRead + StorageWrite,
 {
     let key = storage::get_epochs_per_year_key();
-    storage.write(&key, value)
-}
-
-/// Update the PoS P-gain parameter in storage. Returns the parameters and gas
-/// cost.
-pub fn update_pos_gain_p_parameter<S>(
-    storage: &mut S,
-    value: &Dec,
-) -> storage_api::Result<()>
-where
-    S: StorageRead + StorageWrite,
-{
-    let key = storage::get_pos_gain_p_key();
-    storage.write(&key, value)
-}
-
-/// Update the PoS D-gain parameter in storage. Returns the parameters and gas
-/// cost.
-pub fn update_pos_gain_d_parameter<S>(
-    storage: &mut S,
-    value: &Dec,
-) -> storage_api::Result<()>
-where
-    S: StorageRead + StorageWrite,
-{
-    let key = storage::get_pos_gain_d_key();
     storage.write(&key, value)
 }
 
@@ -514,20 +476,6 @@ where
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 
-    // read PoS gain P
-    let pos_gain_p_key = storage::get_pos_gain_p_key();
-    let value = storage.read(&pos_gain_p_key)?;
-    let pos_gain_p = value
-        .ok_or(ReadError::ParametersMissing)
-        .into_storage_result()?;
-
-    // read PoS gain D
-    let pos_gain_d_key = storage::get_pos_gain_d_key();
-    let value = storage.read(&pos_gain_d_key)?;
-    let pos_gain_d = value
-        .ok_or(ReadError::ParametersMissing)
-        .into_storage_result()?;
-
     // read staked ratio
     let staked_ratio_key = storage::get_staked_ratio_key();
     let value = storage.read(&staked_ratio_key)?;
@@ -567,8 +515,6 @@ where
         implicit_vp_code_hash,
         epochs_per_year,
         max_signatures_per_transaction,
-        pos_gain_p,
-        pos_gain_d,
         staked_ratio,
         pos_inflation_amount,
         minimum_gas_price,

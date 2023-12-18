@@ -17,10 +17,6 @@ tx_whitelist = []
 implicit_vp = "vp_implicit"
 # Expected number of epochs per year (also sets the min duration of an epoch in seconds)
 epochs_per_year = 31_536_000
-# The P gain factor in the Proof of Stake rewards controller
-pos_gain_p = "0.1"
-# The D gain factor in the Proof of Stake rewards controller
-pos_gain_d = "0.1"
 # Maximum number of signature per transaction
 max_signatures_per_transaction = 15
 # Max gas for block
@@ -72,6 +68,10 @@ liveness_window_check = 100
 # The minimum required activity of consensus validators, in percentage, over 
 # the `liveness_window_check`
 liveness_threshold = "0.9"
+# The P gain factor in the Proof of Stake rewards controller
+rewards_gain_p = "0.25"
+# The D gain factor in the Proof of Stake rewards controller
+rewards_gain_d = "0.25"
 
 # Governance parameters.
 [gov_params]

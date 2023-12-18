@@ -267,8 +267,6 @@ impl Finalized {
             tx_whitelist,
             implicit_vp,
             epochs_per_year,
-            pos_gain_p,
-            pos_gain_d,
             max_signatures_per_transaction,
             fee_unshielding_gas_limit,
             fee_unshielding_descriptions_limit,
@@ -311,8 +309,6 @@ impl Finalized {
             tx_whitelist,
             implicit_vp_code_hash,
             epochs_per_year,
-            pos_gain_p,
-            pos_gain_d,
             staked_ratio,
             pos_inflation_amount: Amount::native_whole(pos_inflation_amount),
             max_proposal_bytes,
@@ -350,6 +346,8 @@ impl Finalized {
             validator_stake_threshold,
             liveness_window_check,
             liveness_threshold,
+            rewards_gain_p,
+            rewards_gain_d,
         } = self.parameters.pos_params.clone();
 
         namada::proof_of_stake::parameters::PosParams {
@@ -368,6 +366,8 @@ impl Finalized {
                 validator_stake_threshold,
                 liveness_window_check,
                 liveness_threshold,
+                rewards_gain_p,
+                rewards_gain_d,
             },
             max_proposal_period: self.parameters.gov_params.max_proposal_period,
         }
