@@ -156,6 +156,7 @@ pub enum ErrorCodes {
     FeeError = 12,
     InvalidVoteExtension = 13,
     TooLarge = 14,
+    ExpiredDecryptedTx = 15,
 }
 
 impl ErrorCodes {
@@ -166,7 +167,7 @@ impl ErrorCodes {
         // NOTE: pattern match on all `ErrorCodes` variants, in order
         // to catch potential bugs when adding new codes
         match self {
-            Ok | WasmRuntimeError => true,
+            Ok | WasmRuntimeError | ExpiredDecryptedTx => true,
             InvalidTx | InvalidSig | InvalidOrder | ExtraTxs
             | Undecryptable | AllocationError | ReplayTx | InvalidChainId
             | ExpiredTx | TxGasLimit | FeeError | InvalidVoteExtension
