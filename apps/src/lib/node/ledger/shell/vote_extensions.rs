@@ -4,14 +4,16 @@ pub mod bridge_pool_vext;
 pub mod eth_events;
 pub mod val_set_update;
 
+use namada::eth_bridge::protocol::transactions::bridge_pool_roots::sign_bridge_pool_root;
+use namada::eth_bridge::protocol::transactions::ethereum_events::sign_ethereum_events;
+use namada::eth_bridge::protocol::transactions::validator_set_update::sign_validator_set_update;
 pub use namada::eth_bridge::protocol::validation::VoteExtensionError;
-use namada::proto::{SignableEthMessage, Signed};
-use namada::types::keccak::keccak_hash;
+use namada::proto::Signed;
 use namada::types::transaction::protocol::EthereumTxData;
 use namada::types::vote_extensions::{
     bridge_pool_roots, ethereum_events, validator_set_update, VoteExtension,
 };
-use namada_sdk::eth_bridge::{EthBridgeQueries, SendValsetUpd};
+use namada_sdk::eth_bridge::EthBridgeQueries;
 
 use super::*;
 use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
@@ -48,120 +50,63 @@ where
     /// Sign the given Ethereum events, and return the associated
     /// vote extension protocol transaction.
     pub fn sign_ethereum_events(
-        &mut self,
+        &self,
         ethereum_events: Vec<EthereumEvent>,
     ) -> Option<Signed<ethereum_events::Vext>> {
-        if !self.wl_storage.ethbridge_queries().is_bridge_active() {
-            return None;
-        }
         let validator_addr = self
             .mode
             .get_validator_address()
-            .expect(VALIDATOR_EXPECT_MSG)
-            .to_owned();
-
-        let ext = ethereum_events::Vext {
-            block_height: self.wl_storage.storage.get_last_block_height(),
-            ethereum_events,
-            validator_addr,
-        };
-        if !ext.ethereum_events.is_empty() {
-            tracing::info!(
-                new_ethereum_events.len = ext.ethereum_events.len(),
-                ?ext.block_height,
-                "Voting for new Ethereum events"
-            );
-            tracing::debug!("New Ethereum events - {:#?}", ext.ethereum_events);
-        }
-
+            .expect(VALIDATOR_EXPECT_MSG);
         let protocol_key = match &self.mode {
             ShellMode::Validator { data, .. } => &data.keys.protocol_keypair,
             _ => unreachable!("{VALIDATOR_EXPECT_MSG}"),
         };
-
-        Some(ext.sign(protocol_key))
+        sign_ethereum_events(
+            &self.wl_storage,
+            validator_addr,
+            protocol_key,
+            ethereum_events,
+        )
     }
 
     /// Extend PreCommit votes with [`bridge_pool_roots::Vext`] instances.
     pub fn extend_vote_with_bp_roots(
         &self,
     ) -> Option<Signed<bridge_pool_roots::Vext>> {
-        if !self.wl_storage.ethbridge_queries().is_bridge_active() {
-            return None;
-        }
         let validator_addr = self
             .mode
             .get_validator_address()
-            .expect(VALIDATOR_EXPECT_MSG)
-            .to_owned();
-        let bp_root =
-            self.wl_storage.ethbridge_queries().get_bridge_pool_root().0;
-        let nonce = self
-            .wl_storage
-            .ethbridge_queries()
-            .get_bridge_pool_nonce()
-            .to_bytes();
-        let to_sign =
-            keccak_hash([bp_root.as_slice(), nonce.as_slice()].concat());
-        let eth_key = self
+            .expect(VALIDATOR_EXPECT_MSG);
+        let eth_hot_key = self
             .mode
             .get_eth_bridge_keypair()
             .expect(VALIDATOR_EXPECT_MSG);
-        let signed = Signed::<_, SignableEthMessage>::new(eth_key, to_sign);
-        let ext = bridge_pool_roots::Vext {
-            block_height: self.wl_storage.storage.get_last_block_height(),
-            validator_addr,
-            sig: signed.sig,
+        let protocol_key = match &self.mode {
+            ShellMode::Validator { data, .. } => &data.keys.protocol_keypair,
+            _ => unreachable!("{VALIDATOR_EXPECT_MSG}"),
         };
-        let protocol_key =
-            self.mode.get_protocol_key().expect(VALIDATOR_EXPECT_MSG);
-        Some(ext.sign(protocol_key))
+        sign_bridge_pool_root(
+            &self.wl_storage,
+            validator_addr,
+            eth_hot_key,
+            protocol_key,
+        )
     }
 
     /// Extend PreCommit votes with [`validator_set_update::Vext`]
     /// instances.
     pub fn extend_vote_with_valset_update(
-        &mut self,
+        &self,
     ) -> Option<validator_set_update::SignedVext> {
-        self.wl_storage
-            .ethbridge_queries()
-            .must_send_valset_upd(SendValsetUpd::Now)
-            .then(|| {
-                let next_epoch =
-                    self.wl_storage.storage.get_current_epoch().0.next();
-
-                let validator_addr = self
-                    .mode
-                    .get_validator_address()
-                    .expect(VALIDATOR_EXPECT_MSG)
-                    .to_owned();
-
-                let voting_powers = self
-                    .wl_storage
-                    .ethbridge_queries()
-                    .get_consensus_eth_addresses(Some(next_epoch))
-                    .iter()
-                    .map(|(eth_addr_book, _, voting_power)| {
-                        (eth_addr_book, voting_power)
-                    })
-                    .collect();
-
-                let ext = validator_set_update::Vext {
-                    validator_addr,
-                    voting_powers,
-                    signing_epoch: self
-                        .wl_storage
-                        .storage
-                        .get_current_epoch()
-                        .0,
-                };
-
-                let eth_key = self
-                    .mode
-                    .get_eth_bridge_keypair()
-                    .expect("{VALIDATOR_EXPECT_MSG}");
-                ext.sign(eth_key)
-            })
+        let validator_addr = self
+            .mode
+            .get_validator_address()
+            .expect(VALIDATOR_EXPECT_MSG);
+        let eth_hot_key = self
+            .mode
+            .get_eth_bridge_keypair()
+            .expect("{VALIDATOR_EXPECT_MSG}");
+        sign_validator_set_update(&self.wl_storage, validator_addr, eth_hot_key)
     }
 
     /// Given a slice of [`TxBytes`], return an iterator over the

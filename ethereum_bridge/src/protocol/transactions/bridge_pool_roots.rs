@@ -4,10 +4,14 @@ use eyre::Result;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::get_signed_root_key;
 use namada_core::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
 use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
+use namada_core::proto::{SignableEthMessage, Signed};
 use namada_core::types::address::Address;
+use namada_core::types::keccak::keccak_hash;
+use namada_core::types::key::common;
 use namada_core::types::storage::BlockHeight;
 use namada_core::types::token::Amount;
 use namada_core::types::transaction::TxResult;
+use namada_core::types::vote_extensions::bridge_pool_roots;
 use namada_core::types::vote_extensions::bridge_pool_roots::MultiSignedVext;
 use namada_proof_of_stake::pos_queries::PosQueries;
 
@@ -18,6 +22,37 @@ use crate::protocol::transactions::{utils, votes, ChangedKeys};
 use crate::storage::eth_bridge_queries::EthBridgeQueries;
 use crate::storage::proof::BridgePoolRootProof;
 use crate::storage::vote_tallies::{self, BridgePoolRoot};
+
+/// Sign the latest Bridge pool root, and return the associated
+/// vote extension protocol transaction.
+pub fn sign_bridge_pool_root<D, H>(
+    wl_storage: &WlStorage<D, H>,
+    validator_addr: &Address,
+    eth_hot_key: &common::SecretKey,
+    protocol_key: &common::SecretKey,
+) -> Option<bridge_pool_roots::SignedVext>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    if !wl_storage.ethbridge_queries().is_bridge_active() {
+        return None;
+    }
+    let bp_root = wl_storage.ethbridge_queries().get_bridge_pool_root().0;
+    let nonce = wl_storage
+        .ethbridge_queries()
+        .get_bridge_pool_nonce()
+        .to_bytes();
+    let to_sign = keccak_hash([bp_root.as_slice(), nonce.as_slice()].concat());
+    let signed = Signed::<_, SignableEthMessage>::new(eth_hot_key, to_sign);
+    let ext = bridge_pool_roots::Vext {
+        block_height: wl_storage.storage.get_last_block_height(),
+        validator_addr: validator_addr.clone(),
+        sig: signed.sig,
+    };
+    Some(ext.sign(protocol_key))
+}
+
 /// Applies a tally of signatures on over the Ethereum
 /// bridge pool root and nonce. Note that every signature
 /// passed into this function will be for the same
@@ -227,12 +262,10 @@ mod test_apply_bp_roots_to_storage {
     };
     use namada_core::ledger::storage::testing::TestWlStorage;
     use namada_core::ledger::storage_api::StorageRead;
-    use namada_core::proto::{SignableEthMessage, Signed};
     use namada_core::types::address;
     use namada_core::types::ethereum_events::Uint;
     use namada_core::types::keccak::{keccak_hash, KeccakHash};
     use namada_core::types::storage::Key;
-    use namada_core::types::vote_extensions::bridge_pool_roots;
     use namada_core::types::voting_power::FractionalVotingPower;
     use namada_proof_of_stake::parameters::OwnedPosParams;
     use namada_proof_of_stake::storage::write_pos_params;
