@@ -246,6 +246,7 @@ pub mod cmds {
                 .subcommand(QueryAccount::def().display_order(5))
                 .subcommand(QueryTransfers::def().display_order(5))
                 .subcommand(QueryConversions::def().display_order(5))
+                .subcommand(QueryMaspRewardTokens::def().display_order(5))
                 .subcommand(QueryBlock::def().display_order(5))
                 .subcommand(QueryBalance::def().display_order(5))
                 .subcommand(QueryBonds::def().display_order(5))
@@ -313,6 +314,8 @@ pub mod cmds {
             let query_transfers = Self::parse_with_ctx(matches, QueryTransfers);
             let query_conversions =
                 Self::parse_with_ctx(matches, QueryConversions);
+            let query_masp_reward_tokens =
+                Self::parse_with_ctx(matches, QueryMaspRewardTokens);
             let query_block = Self::parse_with_ctx(matches, QueryBlock);
             let query_balance = Self::parse_with_ctx(matches, QueryBalance);
             let query_bonds = Self::parse_with_ctx(matches, QueryBonds);
@@ -370,6 +373,7 @@ pub mod cmds {
                 .or(query_epoch)
                 .or(query_transfers)
                 .or(query_conversions)
+                .or(query_masp_reward_tokens)
                 .or(query_block)
                 .or(query_balance)
                 .or(query_bonds)
@@ -456,6 +460,7 @@ pub mod cmds {
         QueryAccount(QueryAccount),
         QueryTransfers(QueryTransfers),
         QueryConversions(QueryConversions),
+        QueryMaspRewardTokens(QueryMaspRewardTokens),
         QueryBlock(QueryBlock),
         QueryBalance(QueryBalance),
         QueryBonds(QueryBonds),
@@ -1667,6 +1672,28 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Query currently applicable conversions.")
                 .add_args::<args::QueryConversions<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryMaspRewardTokens(pub args::Query<args::CliTypes>);
+
+    impl SubCmd for QueryMaspRewardTokens {
+        const CMD: &'static str = "masp-reward-tokens";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryMaspRewardTokens(args::Query::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Query the tokens which can earn MASP rewards while \
+                     shielded.",
+                )
+                .add_args::<args::Query<args::CliTypes>>()
         }
     }
 

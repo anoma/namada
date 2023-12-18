@@ -2428,6 +2428,17 @@ pub async fn query_conversion<C: namada::ledger::queries::Client + Sync>(
     namada_sdk::rpc::query_conversion(client, asset_type).await
 }
 
+/// Query to read the tokens that earn masp rewards.
+pub async fn query_masp_reward_tokens(context: &impl Namada) {
+    let tokens = namada_sdk::rpc::query_masp_reward_tokens(context.client())
+        .await
+        .expect("The tokens that may earn MASP rewards should be defined");
+    display_line!(context.io(), "The following tokens may ear MASP rewards:");
+    for (alias, address) in tokens {
+        display_line!(context.io(), "{}: {}", alias, address);
+    }
+}
+
 /// Query a wasm code hash
 pub async fn query_wasm_code_hash(
     context: &impl Namada,

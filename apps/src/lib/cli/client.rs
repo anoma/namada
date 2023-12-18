@@ -416,6 +416,16 @@ impl CliApi {
                         let namada = ctx.to_sdk(client, io);
                         rpc::query_conversions(&namada, args).await;
                     }
+                    Sub::QueryMaspRewardTokens(QueryMaspRewardTokens(
+                        mut args,
+                    )) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(&mut args.ledger_address)
+                        });
+                        client.wait_until_node_is_synced(&io).await?;
+                        let namada = ctx.to_sdk(client, io);
+                        rpc::query_masp_reward_tokens(&namada).await;
+                    }
                     Sub::QueryBlock(QueryBlock(mut args)) => {
                         let client = client.unwrap_or_else(|| {
                             C::from_tendermint_address(&mut args.ledger_address)

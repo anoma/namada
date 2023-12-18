@@ -283,6 +283,13 @@ pub async fn query_conversions<C: crate::queries::Client + Sync>(
     convert_response::<C, _>(RPC.shell().read_conversions(client).await)
 }
 
+/// Query to read the tokens that earn masp rewards.
+pub async fn query_masp_reward_tokens<C: crate::queries::Client + Sync>(
+    client: &C,
+) -> Result<BTreeMap<String, Address>, Error> {
+    convert_response::<C, _>(RPC.shell().masp_reward_tokens(client).await)
+}
+
 /// Query a wasm code hash
 pub async fn query_wasm_code_hash(
     context: &impl Namada,
