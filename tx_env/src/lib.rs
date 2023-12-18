@@ -2,11 +2,10 @@
 //! inside a tx.
 
 use borsh::BorshSerialize;
-
-use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
-use crate::types::address::Address;
-use crate::types::ibc::IbcEvent;
-use crate::types::storage;
+use namada_core::types::address::Address;
+use namada_core::types::ibc::IbcEvent;
+use namada_core::types::storage;
+use namada_storage::{self, StorageRead, StorageWrite};
 
 /// Transaction host functions
 pub trait TxEnv: StorageRead + StorageWrite {
