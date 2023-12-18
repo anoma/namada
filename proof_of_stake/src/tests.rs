@@ -11,6 +11,7 @@ use std::str::FromStr;
 
 use assert_matches::assert_matches;
 use namada_core::ledger::storage::testing::TestWlStorage;
+use namada_core::ledger::storage::WlStorage;
 use namada_core::ledger::storage_api::collections::lazy_map::{
     self, Collectable, NestedMap,
 };
@@ -42,7 +43,7 @@ use crate::epoched::DEFAULT_NUM_PAST_EPOCHS;
 use crate::parameters::testing::arb_pos_params;
 use crate::parameters::{OwnedPosParams, PosParams};
 use crate::rewards::PosRewardsCalculator;
-use crate::test_utils::test_init_genesis;
+use crate::test_utils::{init_genesis_helper, test_init_genesis};
 use crate::types::{
     into_tm_voting_power, BondDetails, BondId, BondsAndUnbondsDetails,
     ConsensusValidator, EagerRedelegatedBondsMap, GenesisValidator, Position,
@@ -70,7 +71,7 @@ use crate::{
     slash_redelegation, slash_validator, slash_validator_redelegation,
     staking_token_address, total_bonded_handle, total_deltas_handle,
     total_unbonded_handle, unbond_handle, unbond_tokens, unjail_validator,
-    update_validator_deltas, update_validator_set,
+    update_validator_deltas, update_validator_set, validator_addresses_handle,
     validator_consensus_key_handle, validator_incoming_redelegations_handle,
     validator_outgoing_redelegations_handle, validator_set_positions_handle,
     validator_set_update_tendermint, validator_slashes_handle,
@@ -130,6 +131,22 @@ proptest! {
     ) {
         test_become_validator_aux(pos_params, new_validator,
             new_validator_consensus_key, genesis_validators)
+    }
+}
+
+proptest! {
+    // Generate arb valid input for `test_purge_validator_information_aux`
+    #![proptest_config(Config {
+        cases: 1,
+        .. Config::default()
+    })]
+    #[test]
+    fn test_purge_validator_information(
+
+        genesis_validators in arb_genesis_validators(4..5, None),
+
+    ) {
+        test_purge_validator_information_aux( genesis_validators)
     }
 }
 
@@ -6880,4 +6897,103 @@ fn test_is_delegator_aux(mut validators: Vec<GenesisValidator>) {
         )
         .unwrap()
     );
+}
+
+/// Test validator initialization.
+fn test_purge_validator_information_aux(validators: Vec<GenesisValidator>) {
+    let owned = OwnedPosParams {
+        unbonding_len: 4,
+        ..Default::default()
+    };
+
+    let mut s = TestWlStorage::default();
+    let mut current_epoch = s.storage.block.epoch;
+
+    // Genesis
+    let gov_params =
+        namada_core::ledger::governance::parameters::GovernanceParameters {
+            max_proposal_period: 5,
+            ..Default::default()
+        };
+
+    gov_params.init_storage(&mut s).unwrap();
+    let params = crate::read_non_pos_owned_params(&s, owned).unwrap();
+    init_genesis_helper(&mut s, &params, validators.into_iter(), current_epoch)
+        .unwrap();
+
+    s.commit_block().unwrap();
+
+    let default_past_epochs = 2;
+    let consensus_val_set_len =
+        gov_params.max_proposal_period + default_past_epochs;
+
+    let consensus_val_set = consensus_validator_set_handle();
+    // let below_cap_val_set = below_capacity_validator_set_handle();
+    let validator_positions = validator_set_positions_handle();
+    let all_validator_addresses = validator_addresses_handle();
+
+    let check_is_data = |storage: &WlStorage<_, _>,
+                         start: Epoch,
+                         end: Epoch| {
+        for ep in Epoch::iter_bounds_inclusive(start, end) {
+            assert!(!consensus_val_set.at(&ep).is_empty(storage).unwrap());
+            // assert!(!below_cap_val_set.at(&ep).is_empty(storage).
+            // unwrap());
+            assert!(!validator_positions.at(&ep).is_empty(storage).unwrap());
+            assert!(
+                !all_validator_addresses.at(&ep).is_empty(storage).unwrap()
+            );
+        }
+    };
+
+    // Check that there is validator data for epochs 0 - pipeline_len
+    check_is_data(&s, current_epoch, Epoch(params.owned.pipeline_len));
+
+    // Advance to epoch 1
+    for _ in 0..default_past_epochs {
+        current_epoch = advance_epoch(&mut s, &params);
+    }
+    assert_eq!(s.storage.block.epoch.0, default_past_epochs);
+    assert_eq!(current_epoch.0, default_past_epochs);
+
+    check_is_data(
+        &s,
+        Epoch(0),
+        Epoch(params.owned.pipeline_len + default_past_epochs),
+    );
+
+    current_epoch = advance_epoch(&mut s, &params);
+    assert_eq!(current_epoch.0, default_past_epochs + 1);
+
+    check_is_data(
+        &s,
+        Epoch(1),
+        Epoch(params.pipeline_len + default_past_epochs + 1),
+    );
+    assert!(!consensus_val_set.at(&Epoch(0)).is_empty(&s).unwrap());
+    assert!(validator_positions.at(&Epoch(0)).is_empty(&s).unwrap());
+    assert!(all_validator_addresses.at(&Epoch(0)).is_empty(&s).unwrap());
+
+    // Advance to the epoch `consensus_val_set_len` + 1
+    loop {
+        assert!(!consensus_val_set.at(&Epoch(0)).is_empty(&s).unwrap());
+
+        current_epoch = advance_epoch(&mut s, &params);
+        if current_epoch.0 == consensus_val_set_len + 1 {
+            break;
+        }
+    }
+
+    assert!(consensus_val_set.at(&Epoch(0)).is_empty(&s).unwrap());
+
+    current_epoch = advance_epoch(&mut s, &params);
+    for ep in Epoch::default().iter_range(2) {
+        assert!(consensus_val_set.at(&ep).is_empty(&s).unwrap());
+    }
+    for ep in Epoch::iter_bounds_inclusive(
+        Epoch(2),
+        current_epoch + params.pipeline_len,
+    ) {
+        assert!(!consensus_val_set.at(&ep).is_empty(&s).unwrap());
+    }
 }

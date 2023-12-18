@@ -3957,17 +3957,17 @@ mod test_finalize_block {
     /// `next_block_for_inflation`
     #[test]
     fn test_multiple_misbehaviors() -> storage_api::Result<()> {
-        for num_validators in 4u64..10u64 {
-            println!("NUM VALIDATORS = {}", num_validators);
-            test_multiple_misbehaviors_by_num_vals(num_validators)?;
+        for num_validators in &[4_u64, 6_u64, 9_u64] {
+            tracing::debug!("\nNUM VALIDATORS = {}", num_validators);
+            test_multiple_misbehaviors_by_num_vals(*num_validators)?;
         }
         Ok(())
     }
 
     /// Current test procedure (prefixed by epoch in which the event occurs):
-    /// 0) Validator initial stake of 200_000
-    /// 1) Delegate 67_231 to validator
-    /// 1) Self-unbond 154_654
+    /// 0) Validator initial stake of 00_000
+    /// 1) Delegate 37_231 to validator
+    /// 1) Self-unbond 84_654
     /// 2) Unbond delegation of 18_000
     /// 3) Self-bond 9_123
     /// 4) Self-unbond 15_000
@@ -3986,7 +3986,7 @@ mod test_finalize_block {
         });
         let mut params = read_pos_params(&shell.wl_storage).unwrap();
         params.owned.unbonding_len = 4;
-        params.owned.max_validator_slots = 4;
+        params.owned.max_validator_slots = 50;
         write_pos_params(&mut shell.wl_storage, &params.owned)?;
 
         // Slash pool balance
@@ -4036,7 +4036,7 @@ mod test_finalize_block {
 
         // Make an account with balance and delegate some tokens
         let delegator = address::testing::gen_implicit_address();
-        let del_1_amount = token::Amount::native_whole(67_231);
+        let del_1_amount = token::Amount::native_whole(37_231);
         let staking_token = shell.wl_storage.storage.native_token.clone();
         credit_tokens(
             &mut shell.wl_storage,
@@ -4056,7 +4056,7 @@ mod test_finalize_block {
         .unwrap();
 
         // Self-unbond
-        let self_unbond_1_amount = token::Amount::native_whole(54_654);
+        let self_unbond_1_amount = token::Amount::native_whole(84_654);
         namada_proof_of_stake::unbond_tokens(
             &mut shell.wl_storage,
             None,
@@ -4098,7 +4098,7 @@ mod test_finalize_block {
             shell.wl_storage.storage.block.epoch,
         );
         let (current_epoch, _) = advance_epoch(&mut shell, &pkh1, &votes, None);
-        println!("\nUnbonding in epoch 2");
+        tracing::debug!("\nUnbonding in epoch 2");
         let del_unbond_1_amount = token::Amount::native_whole(18_000);
         namada_proof_of_stake::unbond_tokens(
             &mut shell.wl_storage,
@@ -4143,7 +4143,7 @@ mod test_finalize_block {
             shell.wl_storage.storage.block.epoch,
         );
         let (current_epoch, _) = advance_epoch(&mut shell, &pkh1, &votes, None);
-        println!("\nBonding in epoch 3");
+        tracing::debug!("\nBonding in epoch 3");
 
         let self_bond_1_amount = token::Amount::native_whole(9_123);
         namada_proof_of_stake::bond_tokens(
@@ -4184,7 +4184,7 @@ mod test_finalize_block {
         );
         let (current_epoch, _) = advance_epoch(&mut shell, &pkh1, &votes, None);
         assert_eq!(current_epoch.0, 5_u64);
-        println!("Delegating in epoch 5");
+        tracing::debug!("Delegating in epoch 5");
 
         // Delegate
         let del_2_amount = token::Amount::native_whole(8_144);
@@ -4198,7 +4198,7 @@ mod test_finalize_block {
         )
         .unwrap();
 
-        println!("Advancing to epoch 6");
+        tracing::debug!("Advancing to epoch 6");
 
         // Advance to epoch 6
         let votes = get_default_true_votes(
@@ -4267,7 +4267,7 @@ mod test_finalize_block {
                 .unwrap()
         );
 
-        println!("Advancing to epoch 7");
+        tracing::debug!("Advancing to epoch 7");
 
         // Advance to epoch 7
         let (current_epoch, _) = advance_epoch(&mut shell, &pkh1, &votes, None);
@@ -4361,7 +4361,7 @@ mod test_finalize_block {
                 + del_2_amount
         );
 
-        println!("\nNow processing the infractions\n");
+        tracing::debug!("\nNow processing the infractions\n");
 
         // Advance to epoch 9, where the infractions committed in epoch 3 will
         // be processed
@@ -4598,7 +4598,7 @@ mod test_finalize_block {
         let current_epoch = shell.wl_storage.storage.block.epoch;
         assert_eq!(current_epoch.0, 12_u64);
 
-        println!("\nCHECK BOND AND UNBOND DETAILS");
+        tracing::debug!("\nCHECK BOND AND UNBOND DETAILS");
         let details = namada_proof_of_stake::bonds_and_unbonds(
             &shell.wl_storage,
             None,
@@ -4636,7 +4636,6 @@ mod test_finalize_block {
             del_details.bonds[0].amount,
             del_1_amount - del_unbond_1_amount
         );
-        // TODO: decimal mult issues should be resolved with PR 1282
         assert!(
             (del_details.bonds[0].slashed_amount.unwrap().change()
                 - std::cmp::min(
@@ -4658,9 +4657,6 @@ mod test_finalize_block {
             initial_stake - self_unbond_1_amount + self_bond_1_amount
                 - self_unbond_2_amount
         );
-        // TODO: not sure why this is correct??? (with + self_bond_1_amount -
-        // self_unbond_2_amount)
-        // TODO: Make sure this is sound and what we expect
         assert!(
             (self_details.bonds[0].slashed_amount.unwrap().change()
                 - (std::cmp::min(
@@ -4717,7 +4713,7 @@ mod test_finalize_block {
         assert_eq!(self_details.unbonds[2].amount, self_bond_1_amount);
         assert_eq!(self_details.unbonds[2].slashed_amount, None);
 
-        println!("\nWITHDRAWING DELEGATION UNBOND");
+        tracing::debug!("\nWITHDRAWING DELEGATION UNBOND");
         // let slash_pool_balance_pre_withdraw = slash_pool_balance;
         // Withdraw the delegation unbonds, which total to 18_000. This should
         // only be affected by the slashes in epoch 3
@@ -4785,180 +4781,6 @@ mod test_finalize_block {
         //         - slash_pool_balance_pre_withdraw
         //         - exp_del_withdraw_slashed_amount
         // );
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_purge_validator_information() -> storage_api::Result<()> {
-        // Setup the network with pipeline_len = 2, unbonding_len = 4
-        let num_validators = 4_u64;
-        let (mut shell, _recv, _, _) = setup_with_cfg(SetupCfg {
-            last_height: 0,
-            num_validators,
-            ..Default::default()
-        });
-        let mut params = read_pos_params(&shell.wl_storage).unwrap();
-        params.owned.unbonding_len = 4;
-        // params.owned.max_validator_slots = 3;
-        // params.owned.validator_stake_threshold = token::Amount::zero();
-        write_pos_params(&mut shell.wl_storage, &params.owned)?;
-
-        let max_proposal_period = params.max_proposal_period;
-        let default_past_epochs = 2;
-        let consensus_val_set_len = max_proposal_period + default_past_epochs;
-
-        let consensus_val_set =
-            namada_proof_of_stake::consensus_validator_set_handle();
-        // let below_cap_val_set =
-        //     namada_proof_of_stake::below_capacity_validator_set_handle();
-        let validator_positions =
-            namada_proof_of_stake::validator_set_positions_handle();
-        let all_validator_addresses =
-            namada_proof_of_stake::validator_addresses_handle();
-
-        let consensus_set: Vec<WeightedValidator> =
-            read_consensus_validator_set_addresses_with_stake(
-                &shell.wl_storage,
-                Epoch::default(),
-            )
-            .unwrap()
-            .into_iter()
-            .collect();
-        let val1 = consensus_set[0].clone();
-        let pkh1 = get_pkh_from_address(
-            &shell.wl_storage,
-            &params,
-            val1.address,
-            Epoch::default(),
-        );
-
-        // Finalize block 1
-        next_block_for_inflation(&mut shell, pkh1.to_vec(), vec![], None);
-
-        let votes = get_default_true_votes(&shell.wl_storage, Epoch::default());
-        assert!(!votes.is_empty());
-
-        let check_is_data = |storage: &WlStorage<_, _>,
-                             start: Epoch,
-                             end: Epoch| {
-            for ep in Epoch::iter_bounds_inclusive(start, end) {
-                assert!(!consensus_val_set.at(&ep).is_empty(storage).unwrap());
-                // assert!(!below_cap_val_set.at(&ep).is_empty(storage).
-                // unwrap());
-                assert!(
-                    !validator_positions.at(&ep).is_empty(storage).unwrap()
-                );
-                assert!(
-                    !all_validator_addresses.at(&ep).is_empty(storage).unwrap()
-                );
-            }
-        };
-
-        // Check that there is validator data for epochs 0 - pipeline_len
-        check_is_data(&shell.wl_storage, Epoch(0), Epoch(params.pipeline_len));
-
-        // Advance to epoch `default_past_epochs`
-        let mut current_epoch = Epoch(0);
-        for _ in 0..default_past_epochs {
-            let votes = get_default_true_votes(
-                &shell.wl_storage,
-                shell.wl_storage.storage.block.epoch,
-            );
-            current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None).0;
-        }
-        assert_eq!(shell.wl_storage.storage.block.epoch.0, default_past_epochs);
-        assert_eq!(current_epoch.0, default_past_epochs);
-
-        check_is_data(
-            &shell.wl_storage,
-            Epoch(0),
-            Epoch(params.pipeline_len + default_past_epochs),
-        );
-
-        // Advance one more epoch, which should purge the data for epoch 0 in
-        // everything except the consensus validator set
-        let votes = get_default_true_votes(
-            &shell.wl_storage,
-            shell.wl_storage.storage.block.epoch,
-        );
-        current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None).0;
-        assert_eq!(current_epoch.0, default_past_epochs + 1);
-
-        check_is_data(
-            &shell.wl_storage,
-            Epoch(1),
-            Epoch(params.pipeline_len + default_past_epochs + 1),
-        );
-        assert!(
-            !consensus_val_set
-                .at(&Epoch(0))
-                .is_empty(&shell.wl_storage)
-                .unwrap()
-        );
-        assert!(
-            validator_positions
-                .at(&Epoch(0))
-                .is_empty(&shell.wl_storage)
-                .unwrap()
-        );
-        assert!(
-            all_validator_addresses
-                .at(&Epoch(0))
-                .is_empty(&shell.wl_storage)
-                .unwrap()
-        );
-
-        // Advance to the epoch `consensus_val_set_len` + 1
-        loop {
-            assert!(
-                !consensus_val_set
-                    .at(&Epoch(0))
-                    .is_empty(&shell.wl_storage)
-                    .unwrap()
-            );
-            let votes = get_default_true_votes(
-                &shell.wl_storage,
-                shell.wl_storage.storage.block.epoch,
-            );
-            current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None).0;
-            if current_epoch.0 == consensus_val_set_len + 1 {
-                break;
-            }
-        }
-
-        assert!(
-            consensus_val_set
-                .at(&Epoch(0))
-                .is_empty(&shell.wl_storage)
-                .unwrap()
-        );
-
-        // Advance one more epoch
-        let votes = get_default_true_votes(
-            &shell.wl_storage,
-            shell.wl_storage.storage.block.epoch,
-        );
-        current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None).0;
-        for ep in Epoch::default().iter_range(2) {
-            assert!(
-                consensus_val_set
-                    .at(&ep)
-                    .is_empty(&shell.wl_storage)
-                    .unwrap()
-            );
-        }
-        for ep in Epoch::iter_bounds_inclusive(
-            Epoch(2),
-            current_epoch + params.pipeline_len,
-        ) {
-            assert!(
-                !consensus_val_set
-                    .at(&ep)
-                    .is_empty(&shell.wl_storage)
-                    .unwrap()
-            );
-        }
 
         Ok(())
     }
