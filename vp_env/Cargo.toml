@@ -1,6 +1,6 @@
 [package]
 name = "namada_vp_env"
-description = "Namada validity predicate environment"
+description = "Namada validity predicate execution environment"
 resolver = "2"
 authors.workspace = true
 edition.workspace = true

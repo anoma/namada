@@ -4691,6 +4691,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "namada_tx_env"
+version = "0.28.1"
+dependencies = [
+ "namada_core",
+ "namada_storage",
+]
+
+[[package]]
 name = "namada_tx_prelude"
 version = "0.29.0"
 dependencies = [
