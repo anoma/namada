@@ -1672,7 +1672,7 @@ fn set_max_open_files(cf_opts: &mut rocksdb::Options) {
     #[cfg(unix)]
     imp::set_max_open_files(cf_opts);
     #[cfg(unix)]
-    imp::increase_stack_limit();
+    let _ = imp::increase_stack_limit();
     // Nothing to do on non-unix
     #[cfg(not(unix))]
     let _ = cf_opts;
@@ -1685,7 +1685,7 @@ mod imp {
     use rlimit::{Resource, Rlim};
 
     const DEFAULT_NOFILE_LIMIT: Rlim = Rlim::from_raw(16384);
-    const DEFAULT_STACK_LIMIT: Rlim = Rlim::from_raw(65536);
+    const DEFAULT_STACK_LIMIT: Rlim = Rlim::INFINITY;
 
     pub fn set_max_open_files(cf_opts: &mut rocksdb::Options) {
         let max_open_files = match increase_nofile_limit() {
