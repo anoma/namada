@@ -32,7 +32,7 @@ use super::setup::{
     ENV_VAR_USE_PREBUILT_BINARIES,
 };
 use crate::e2e::setup::{Bin, Who, APPS_PACKAGE};
-use crate::strings::{TX_ACCEPTED, TX_APPLIED_SUCCESS};
+use crate::strings::{LEDGER_STARTED, TX_ACCEPTED, TX_APPLIED_SUCCESS};
 use crate::{run, run_as};
 
 /// Instantiate a new [`HttpClient`] to perform RPC requests with.
@@ -67,7 +67,7 @@ pub fn setup_single_node_test() -> Result<(Test, NamadaBgCmd)> {
 pub fn run_single_node_test_from(test: Test) -> Result<(Test, NamadaBgCmd)> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
-    ledger.exp_string("Namada ledger node started")?;
+    ledger.exp_string(LEDGER_STARTED)?;
     // TODO(namada#867): we only need to wait until the RPC server is available,
     // not necessarily for a block to be committed
     // ledger.exp_string("Starting RPC HTTP server on")?;

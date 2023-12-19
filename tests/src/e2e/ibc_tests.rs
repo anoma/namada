@@ -88,7 +88,9 @@ use crate::e2e::helpers::{
 use crate::e2e::setup::{
     self, sleep, working_dir, Bin, NamadaCmd, Test, TestDir, Who,
 };
-use crate::strings::{TX_ACCEPTED, TX_APPLIED_SUCCESS, TX_FAILED};
+use crate::strings::{
+    LEDGER_STARTED, TX_ACCEPTED, TX_APPLIED_SUCCESS, TX_FAILED, VALIDATOR_NODE,
+};
 use crate::{run, run_as};
 
 #[test]
@@ -117,7 +119,7 @@ fn run_ledger_ibc() -> Result<()> {
         &["ledger", "run"],
         Some(40)
     )?;
-    ledger_a.exp_string("Namada ledger node started")?;
+    ledger_a.exp_string(LEDGER_STARTED)?;
     // Run Chain B
     let mut ledger_b = run_as!(
         test_b,
@@ -126,9 +128,9 @@ fn run_ledger_ibc() -> Result<()> {
         &["ledger", "run"],
         Some(40)
     )?;
-    ledger_b.exp_string("Namada ledger node started")?;
-    ledger_a.exp_string("This node is a validator")?;
-    ledger_b.exp_string("This node is a validator")?;
+    ledger_b.exp_string(LEDGER_STARTED)?;
+    ledger_a.exp_string(VALIDATOR_NODE)?;
+    ledger_b.exp_string(VALIDATOR_NODE)?;
 
     wait_for_wasm_pre_compile(&mut ledger_a)?;
     wait_for_wasm_pre_compile(&mut ledger_b)?;

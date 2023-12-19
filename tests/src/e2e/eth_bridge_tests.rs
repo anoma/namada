@@ -46,7 +46,9 @@ use crate::e2e::setup::constants::{
     ALBERT, ALBERT_KEY, BERTHA, BERTHA_KEY, NAM,
 };
 use crate::e2e::setup::{Bin, Who};
-use crate::strings::{TX_ACCEPTED, TX_APPLIED_SUCCESS};
+use crate::strings::{
+    LEDGER_STARTED, TX_ACCEPTED, TX_APPLIED_SUCCESS, VALIDATOR_NODE,
+};
 use crate::{run, run_as};
 
 /// # Examples
@@ -82,7 +84,7 @@ fn run_ledger_with_ethereum_events_endpoint() -> Result<()> {
     ledger.exp_string(
         "Starting to listen for Borsh-serialized Ethereum events",
     )?;
-    ledger.exp_string("Namada ledger node started")?;
+    ledger.exp_string(LEDGER_STARTED)?;
 
     ledger.send_control(ControlCode::EndOfText)?;
     ledger.exp_string(
@@ -539,8 +541,8 @@ async fn test_wnam_transfer() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, vec!["ledger"], Some(40))?;
 
-    ledger.exp_string("Namada ledger node started")?;
-    ledger.exp_string("This node is a validator")?;
+    ledger.exp_string(LEDGER_STARTED)?;
+    ledger.exp_string(VALIDATOR_NODE)?;
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
 
     let bg_ledger = ledger.background();
@@ -635,8 +637,8 @@ fn test_configure_oracle_from_storage() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, vec!["ledger"], Some(40))?;
 
-    ledger.exp_string("Namada ledger node started")?;
-    ledger.exp_string("This node is a validator")?;
+    ledger.exp_string(LEDGER_STARTED)?;
+    ledger.exp_string(VALIDATOR_NODE)?;
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
     // check that the oracle has been configured with the values from storage
     let initial_config = oracle::config::Config {

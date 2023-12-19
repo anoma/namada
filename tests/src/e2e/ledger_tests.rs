@@ -51,7 +51,10 @@ use crate::e2e::setup::{
     self, allow_duplicate_ips, default_port_offset, set_validators, sleep, Bin,
     Who,
 };
-use crate::strings::{TX_ACCEPTED, TX_APPLIED_SUCCESS, TX_FAILED, TX_REJECTED};
+use crate::strings::{
+    LEDGER_SHUTDOWN, LEDGER_STARTED, NON_VALIDATOR_NODE, TX_ACCEPTED,
+    TX_APPLIED_SUCCESS, TX_FAILED, TX_REJECTED, VALIDATOR_NODE,
+};
 use crate::{run, run_as};
 
 fn start_namada_ledger_node(
@@ -64,11 +67,11 @@ fn start_namada_ledger_node(
         _ => Who::NonValidator,
     };
     let mut node = run_as!(test, who, Bin::Node, &["ledger"], timeout_sec)?;
-    node.exp_string("Namada ledger node started")?;
+    node.exp_string(LEDGER_STARTED)?;
     if let Who::Validator(_) = who {
-        node.exp_string("This node is a validator")?;
+        node.exp_string(VALIDATOR_NODE)?;
     } else {
-        node.exp_string("This node is not a validator")?;
+        node.exp_string(NON_VALIDATOR_NODE)?;
     }
     Ok(node)
 }
@@ -104,16 +107,16 @@ fn run_ledger() -> Result<()> {
     for args in &cmd_combinations {
         let mut ledger =
             run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
-        ledger.exp_string("Namada ledger node started")?;
-        ledger.exp_string("This node is a validator")?;
+        ledger.exp_string(LEDGER_STARTED)?;
+        ledger.exp_string(VALIDATOR_NODE)?;
     }
 
     // Start the ledger as a non-validator
     for args in &cmd_combinations {
         let mut ledger =
             run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
-        ledger.exp_string("Namada ledger node started")?;
-        ledger.exp_string("This node is not a validator")?;
+        ledger.exp_string(LEDGER_STARTED)?;
+        ledger.exp_string(NON_VALIDATOR_NODE)?;
     }
 
     Ok(())
@@ -258,7 +261,7 @@ fn test_namada_shuts_down_if_tendermint_dies() -> Result<()> {
     ledger.exp_string("Tendermint node is no longer running.")?;
 
     // 4. Check that the ledger node shuts down
-    ledger.exp_string("Namada ledger node has shut down.")?;
+    ledger.exp_string(LEDGER_SHUTDOWN)?;
     ledger.exp_eof()?;
 
     Ok(())
@@ -300,7 +303,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     ledger.interrupt()?;
     // Wait for the node to stop running to finish writing the state and tx
     // queue
-    ledger.exp_string("Namada ledger node has shut down.")?;
+    ledger.exp_string(LEDGER_SHUTDOWN)?;
     ledger.exp_eof()?;
     drop(ledger);
 
@@ -352,7 +355,7 @@ fn suspend_ledger() -> Result<()> {
         Some(40)
     )?;
 
-    ledger.exp_string("Namada ledger node started")?;
+    ledger.exp_string(LEDGER_STARTED)?;
     // There should be no previous state
     ledger.exp_string("No state could be found")?;
     // Wait to commit a block
@@ -375,7 +378,7 @@ fn suspend_ledger() -> Result<()> {
     ledger.interrupt()?;
     // Wait for the node to stop running to finish writing the state and tx
     // queue
-    ledger.exp_string("Namada ledger node has shut down.")?;
+    ledger.exp_string(LEDGER_SHUTDOWN)?;
     ledger.exp_eof()?;
     Ok(())
 }
@@ -394,7 +397,7 @@ fn stop_ledger_at_height() -> Result<()> {
         Some(40)
     )?;
 
-    ledger.exp_string("Namada ledger node started")?;
+    ledger.exp_string(LEDGER_STARTED)?;
     // There should be no previous state
     ledger.exp_string("No state could be found")?;
     // Wait to commit a block
@@ -837,7 +840,7 @@ fn invalid_transactions() -> Result<()> {
     ledger.interrupt()?;
     // Wait for the node to stop running to finish writing the state and tx
     // queue
-    ledger.exp_string("Namada ledger node has shut down.")?;
+    ledger.exp_string(LEDGER_SHUTDOWN)?;
     ledger.exp_eof()?;
     drop(ledger);
 
@@ -1628,8 +1631,8 @@ fn pos_init_validator() -> Result<()> {
         loc,
     )?;
 
-    validator_1.exp_string("Namada ledger node started")?;
-    validator_1.exp_string("This node is a validator")?;
+    validator_1.exp_string(LEDGER_STARTED)?;
+    validator_1.exp_string(VALIDATOR_NODE)?;
     validator_1.exp_string("Committed block hash")?;
     let _bg_validator_1 = validator_1.background();
 
@@ -2608,14 +2611,14 @@ fn double_signing_gets_slashed() -> Result<()> {
 
     let mut validator_2 =
         run_as!(test, Who::Validator(2), Bin::Node, &["ledger"], Some(40))?;
-    validator_2.exp_string("Namada ledger node started")?;
-    validator_2.exp_string("This node is a validator")?;
+    validator_2.exp_string(LEDGER_STARTED)?;
+    validator_2.exp_string(VALIDATOR_NODE)?;
     let _bg_validator_2 = validator_2.background();
 
     let mut validator_3 =
         run_as!(test, Who::Validator(3), Bin::Node, &["ledger"], Some(40))?;
-    validator_3.exp_string("Namada ledger node started")?;
-    validator_3.exp_string("This node is a validator")?;
+    validator_3.exp_string(LEDGER_STARTED)?;
+    validator_3.exp_string(VALIDATOR_NODE)?;
     let _bg_validator_3 = validator_3.background();
 
     // 2. Copy the first genesis validator base-dir
@@ -2706,8 +2709,8 @@ fn double_signing_gets_slashed() -> Result<()> {
         validator_0_base_dir_copy,
         loc,
     )?;
-    validator_0_copy.exp_string("Namada ledger node started")?;
-    validator_0_copy.exp_string("This node is a validator")?;
+    validator_0_copy.exp_string(LEDGER_STARTED)?;
+    validator_0_copy.exp_string(VALIDATOR_NODE)?;
     let _bg_validator_0_copy = validator_0_copy.background();
 
     // 5. Submit a valid token transfer tx to validator 0
@@ -2845,7 +2848,7 @@ fn double_signing_gets_slashed() -> Result<()> {
     validator_1.interrupt()?;
     // Wait for the node to stop running to finish writing the state and tx
     // queue
-    validator_1.exp_string("Namada ledger node has shut down.")?;
+    validator_1.exp_string(LEDGER_SHUTDOWN)?;
     validator_1.assert_success();
 
     Ok(())
@@ -3605,7 +3608,7 @@ fn change_consensus_key() -> Result<()> {
     let mut validator_0 = bg_validator_0.foreground();
     validator_0.interrupt().unwrap();
     // Wait for the node to stop running
-    validator_0.exp_string("Namada ledger node has shut down.")?;
+    validator_0.exp_string(LEDGER_SHUTDOWN)?;
     validator_0.exp_eof()?;
     drop(validator_0);
 
