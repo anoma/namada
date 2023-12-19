@@ -1671,6 +1671,8 @@ fn unknown_key_error(key: &str) -> Result<()> {
 fn set_max_open_files(cf_opts: &mut rocksdb::Options) {
     #[cfg(unix)]
     imp::set_max_open_files(cf_opts);
+    #[cfg(unix)]
+    imp::increase_stack_limit();
     // Nothing to do on non-unix
     #[cfg(not(unix))]
     let _ = cf_opts;
@@ -1683,6 +1685,7 @@ mod imp {
     use rlimit::{Resource, Rlim};
 
     const DEFAULT_NOFILE_LIMIT: Rlim = Rlim::from_raw(16384);
+    const DEFAULT_STACK_LIMIT: Rlim = Rlim::from_raw(65536);
 
     pub fn set_max_open_files(cf_opts: &mut rocksdb::Options) {
         let max_open_files = match increase_nofile_limit() {
@@ -1701,13 +1704,31 @@ mod imp {
 
     /// Try to increase NOFILE limit and return the current soft limit.
     fn increase_nofile_limit() -> std::io::Result<Rlim> {
-        let (soft, hard) = Resource::NOFILE.get()?;
-        tracing::debug!("Current NOFILE limit, soft={}, hard={}", soft, hard);
+        increase_resource_limit(Resource::NOFILE, DEFAULT_NOFILE_LIMIT)
+    }
 
-        let target = std::cmp::min(DEFAULT_NOFILE_LIMIT, hard);
+    // Try to increase STACK limit and return the current soft limit.
+    pub fn increase_stack_limit() -> std::io::Result<Rlim> {
+        increase_resource_limit(Resource::STACK, DEFAULT_STACK_LIMIT)
+    }
+
+    fn increase_resource_limit(
+        resource: Resource,
+        limit: Rlim,
+    ) -> std::io::Result<Rlim> {
+        let (soft, hard) = resource.get()?;
+        tracing::debug!(
+            "Current {:?} limit, soft={}, hard={}",
+            resource,
+            soft,
+            hard
+        );
+
+        let target = std::cmp::min(limit, hard);
         if soft >= target {
             tracing::debug!(
-                "NOFILE limit already large enough, not attempting to increase"
+                "{:?} limit already large enough, not attempting to increase",
+                resource
             );
             Ok(soft)
         } else {
@@ -1716,7 +1737,8 @@ mod imp {
 
             let (soft, hard) = Resource::NOFILE.get()?;
             tracing::debug!(
-                "Increased NOFILE limit, soft={}, hard={}",
+                "Increased {:?} limit, soft={}, hard={}",
+                resource,
                 soft,
                 hard
             );
