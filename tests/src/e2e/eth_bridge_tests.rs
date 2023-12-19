@@ -46,6 +46,7 @@ use crate::e2e::setup::constants::{
     ALBERT, ALBERT_KEY, BERTHA, BERTHA_KEY, NAM,
 };
 use crate::e2e::setup::{Bin, Who};
+use crate::strings::TX_APPLIED_SUCCESS;
 use crate::{run, run_as};
 
 /// # Examples
@@ -176,7 +177,7 @@ async fn test_roundtrip_eth_transfer() -> Result<()> {
         Some(CLIENT_COMMAND_TIMEOUT_SECONDS)
     )?;
     namadac_tx.exp_string("Wrapper transaction accepted")?;
-    namadac_tx.exp_string("Transaction was successfully applied")?;
+    namadac_tx.exp_string(TX_APPLIED_SUCCESS)?;
     drop(namadac_tx);
 
     let mut namadar = run!(
@@ -369,9 +370,7 @@ async fn test_bridge_pool_e2e() {
     namadac_tx
         .exp_string("Wrapper transaction accepted")
         .unwrap();
-    namadac_tx
-        .exp_string("Transaction was successfully applied")
-        .unwrap();
+    namadac_tx.exp_string(TX_APPLIED_SUCCESS).unwrap();
     drop(namadac_tx);
 
     let mut namadar = run!(
@@ -897,7 +896,7 @@ async fn test_wdai_transfer_implicit_to_implicit() -> Result<()> {
         second_transfer_amount,
     )?;
     cmd.exp_string("Wrapper transaction accepted")?;
-    cmd.exp_string("Transaction was successfully applied")?;
+    cmd.exp_string(TX_APPLIED_SUCCESS)?;
     cmd.assert_success();
 
     let albert_wdai_balance = find_wrapped_erc20_balance(
@@ -975,7 +974,7 @@ async fn test_wdai_transfer_implicit_to_established() -> Result<()> {
         second_transfer_amount,
     )?;
     cmd.exp_string("Wrapper transaction accepted")?;
-    cmd.exp_string("Transaction was successfully applied")?;
+    cmd.exp_string(TX_APPLIED_SUCCESS)?;
     cmd.assert_success();
 
     let albert_wdai_balance = find_wrapped_erc20_balance(
@@ -1056,7 +1055,7 @@ async fn test_wdai_transfer_established_to_implicit() -> Result<()> {
         second_transfer_amount,
     )?;
     cmd.exp_string("Wrapper transaction accepted")?;
-    cmd.exp_string("Transaction was successfully applied")?;
+    cmd.exp_string(TX_APPLIED_SUCCESS)?;
     cmd.assert_success();
 
     let albert_established_wdai_balance = find_wrapped_erc20_balance(
@@ -1146,7 +1145,7 @@ async fn test_wdai_transfer_established_to_established() -> Result<()> {
         second_transfer_amount,
     )?;
     cmd.exp_string("Wrapper transaction accepted")?;
-    cmd.exp_string("Transaction was successfully applied")?;
+    cmd.exp_string(TX_APPLIED_SUCCESS)?;
     cmd.assert_success();
 
     let albert_established_wdai_balance = find_wrapped_erc20_balance(

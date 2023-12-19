@@ -17,6 +17,7 @@ use super::setup::constants::NAM;
 use super::setup::{Bin, NamadaCmd, Test};
 use crate::e2e::setup::constants::ALBERT;
 use crate::run;
+use crate::strings::TX_APPLIED_SUCCESS;
 
 const MULTITOKEN_KEY_SEGMENT: &str = "tokens";
 const BALANCE_KEY_SEGMENT: &str = "balance";
@@ -55,7 +56,7 @@ pub fn init_multitoken_vp(test: &Test, rpc_addr: &str) -> Result<String> {
     ];
     let mut cmd = run!(test, Bin::Client, init_account_args, Some(40))?;
     cmd.exp_string("Wrapper transaction accepted")?;
-    cmd.exp_string("Transaction was successfully applied")?;
+    cmd.exp_string(TX_APPLIED_SUCCESS)?;
     cmd.assert_success();
     Ok(multitoken_alias.to_string())
 }
@@ -121,7 +122,7 @@ pub fn mint_red_tokens(
     ];
     let mut cmd = run!(test, Bin::Client, tx_args, Some(40))?;
     cmd.exp_string("Wrapper transaction accepted")?;
-    cmd.exp_string("Transaction was successfully applied")?;
+    cmd.exp_string(TX_APPLIED_SUCCESS)?;
     cmd.assert_success();
     Ok(())
 }

@@ -88,6 +88,7 @@ use crate::e2e::helpers::{
 use crate::e2e::setup::{
     self, sleep, working_dir, Bin, NamadaCmd, Test, TestDir, Who,
 };
+use crate::strings::TX_APPLIED_SUCCESS;
 use crate::{run, run_as};
 
 #[test]
@@ -887,7 +888,7 @@ fn transfer_received_token(
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string("Wrapper transaction accepted")?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     Ok(())
@@ -1200,9 +1201,9 @@ fn submit_ibc_tx(
         ],
         Some(40)
     )?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     if wait_reveal_pk {
-        client.exp_string("Transaction was successfully applied")?;
+        client.exp_string(TX_APPLIED_SUCCESS)?;
     }
     check_tx_height(test, &mut client)
 }
@@ -1265,9 +1266,9 @@ fn transfer(
             Ok(0)
         }
         None => {
-            client.exp_string("Transaction was successfully applied")?;
+            client.exp_string(TX_APPLIED_SUCCESS)?;
             if wait_reveal_pk {
-                client.exp_string("Transaction was successfully applied")?;
+                client.exp_string(TX_APPLIED_SUCCESS)?;
             }
             check_tx_height(test, &mut client)
         }

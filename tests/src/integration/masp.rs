@@ -14,6 +14,7 @@ use crate::e2e::setup::constants::{
     BB_PAYMENT_ADDRESS, BERTHA, BERTHA_KEY, BTC, B_SPENDING_KEY, CHRISTEL,
     CHRISTEL_KEY, ETH, MASP, NAM,
 };
+use crate::strings::TX_APPLIED_SUCCESS;
 
 /// In this test we verify that users of the MASP receive the correct rewards
 /// for leaving their assets in the pool for varying periods of time.
@@ -919,7 +920,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 validator_one_rpc,
             ],
-            Response::Ok("Transaction was successfully applied"),
+            Response::Ok(TX_APPLIED_SUCCESS),
         ),
         // 3. Attempt to spend 10 ETH at SK(A) to PA(B)
         (
@@ -957,7 +958,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 validator_one_rpc,
             ],
-            Response::Ok("Transaction was successfully applied"),
+            Response::Ok(TX_APPLIED_SUCCESS),
         ),
         // 5. Spend 7 BTC at SK(A) to PA(B)
         (
@@ -976,7 +977,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 validator_one_rpc,
             ],
-            Response::Ok("Transaction was successfully applied"),
+            Response::Ok(TX_APPLIED_SUCCESS),
         ),
         // 6. Attempt to spend 7 BTC at SK(A) to PA(B)
         (
@@ -1014,7 +1015,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 validator_one_rpc,
             ],
-            Response::Ok("Transaction was successfully applied"),
+            Response::Ok(TX_APPLIED_SUCCESS),
         ),
         // 8. Assert BTC balance at VK(A) is 0
         (
@@ -1070,7 +1071,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 validator_one_rpc,
             ],
-            Response::Ok("Transaction was successfully applied"),
+            Response::Ok(TX_APPLIED_SUCCESS),
         ),
     ];
 
@@ -1093,7 +1094,7 @@ fn masp_txs_and_queries() -> Result<()> {
             let captured =
                 CapturedOutput::of(|| run(&node, Bin::Client, tx_args.clone()));
             match tx_result {
-                Response::Ok("Transaction was successfully applied") => {
+                Response::Ok(TX_APPLIED_SUCCESS) => {
                     assert!(
                         captured.result.is_ok(),
                         "{:?} failed with result {:?}.\n Unread output: {}",
@@ -1105,9 +1106,7 @@ fn masp_txs_and_queries() -> Result<()> {
                         node.assert_success();
                     } else {
                         assert!(
-                            captured.contains(
-                                "Transaction was successfully applied"
-                            ),
+                            captured.contains(TX_APPLIED_SUCCESS),
                             "{:?} failed to contain needle 'Transaction is \
                              valid',\nGot output '{}'",
                             tx_args,

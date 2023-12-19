@@ -51,6 +51,7 @@ use crate::e2e::setup::{
     self, allow_duplicate_ips, default_port_offset, set_validators, sleep, Bin,
     Who,
 };
+use crate::strings::TX_APPLIED_SUCCESS;
 use crate::{run, run_as};
 
 fn start_namada_ledger_node(
@@ -184,7 +185,7 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 4. Check that all the nodes processed the tx with the same result
@@ -574,7 +575,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             if !dry_run {
                 client.exp_string("Wrapper transaction accepted")?;
             }
-            client.exp_string("Transaction was successfully applied")?;
+            client.exp_string(TX_APPLIED_SUCCESS)?;
             client.assert_success();
         }
     }
@@ -728,7 +729,7 @@ fn wrapper_disposable_signer() -> Result<()> {
     let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
 
     client.exp_string("Wrapper transaction accepted")?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
 
     let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
     let tx_args = vec![
@@ -750,7 +751,7 @@ fn wrapper_disposable_signer() -> Result<()> {
     let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
 
     client.exp_string("Wrapper transaction accepted")?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
     let tx_args = vec![
         "transfer",
@@ -955,7 +956,7 @@ fn pos_bonds() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 3. Submit a delegation to the first genesis validator
@@ -973,7 +974,7 @@ fn pos_bonds() -> Result<()> {
         &validator_0_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 4. Submit a re-delegation from the first to the second genesis validator
@@ -993,7 +994,7 @@ fn pos_bonds() -> Result<()> {
         &validator_0_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 5. Submit an unbond of the self-bond
@@ -1089,7 +1090,7 @@ fn pos_bonds() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 10. Submit a withdrawal of the delegation
@@ -1105,7 +1106,7 @@ fn pos_bonds() -> Result<()> {
         &validator_0_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 11. Submit an withdrawal of the re-delegation
@@ -1121,7 +1122,7 @@ fn pos_bonds() -> Result<()> {
         &validator_0_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     Ok(())
@@ -1267,7 +1268,7 @@ fn pos_rewards() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // Query the validator balance again and check that the balance has grown
@@ -1340,7 +1341,7 @@ fn test_bond_queries() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 3. Submit a delegation to the genesis validator
@@ -1358,7 +1359,7 @@ fn test_bond_queries() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 3. Wait for epoch 4
@@ -1389,7 +1390,7 @@ fn test_bond_queries() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 5. Submit an unbond of the delegation
@@ -1407,7 +1408,7 @@ fn test_bond_queries() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     let (_, res) = client
         .exp_regex(r"withdrawable starting from epoch [0-9]+")
         .unwrap();
@@ -1526,7 +1527,7 @@ fn pos_init_validator() -> Result<()> {
         "--unsafe-dont-encrypt",
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 3. Submit a delegation to the new validator
@@ -1547,7 +1548,7 @@ fn pos_init_validator() -> Result<()> {
         &non_validator_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
     //     Then self-bond the tokens:
     let delegation = 5_u64;
@@ -1566,7 +1567,7 @@ fn pos_init_validator() -> Result<()> {
         &non_validator_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 4. Transfer some NAM to the new validator
@@ -1587,7 +1588,7 @@ fn pos_init_validator() -> Result<()> {
         &non_validator_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 5. Submit a self-bond for the new validator
@@ -1601,7 +1602,7 @@ fn pos_init_validator() -> Result<()> {
         &non_validator_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // Stop the non-validator node and run it as the new validator
@@ -1722,7 +1723,7 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
                 args.push(&*validator_one_rpc);
                 let mut client = run!(*test, Bin::Client, args, Some(80))?;
                 client.exp_string("Wrapper transaction accepted")?;
-                client.exp_string("Transaction was successfully applied")?;
+                client.exp_string(TX_APPLIED_SUCCESS)?;
                 client.assert_success();
                 let res: Result<()> = Ok(());
                 res
@@ -1797,7 +1798,7 @@ fn proposal_submission() -> Result<()> {
         &validator_0_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 2. Submit valid proposal
@@ -1820,7 +1821,7 @@ fn proposal_submission() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // Wait for the proposal to be committed
@@ -1949,7 +1950,7 @@ fn proposal_submission() -> Result<()> {
         submit_proposal_vote,
         Some(15)
     )?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     let submit_proposal_vote_delagator = vec![
@@ -1966,7 +1967,7 @@ fn proposal_submission() -> Result<()> {
 
     let mut client =
         run!(test, Bin::Client, submit_proposal_vote_delagator, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 10. Send a yay vote from a non-validator/non-delegator user
@@ -1985,7 +1986,7 @@ fn proposal_submission() -> Result<()> {
     // this is valid because the client filter ALBERT delegation and there are
     // none
     let mut client = run!(test, Bin::Client, submit_proposal_vote, Some(15))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 11. Query the proposal and check the result
@@ -2121,7 +2122,7 @@ fn pgf_governance_proposal() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 1 - Submit proposal
@@ -2144,7 +2145,7 @@ fn pgf_governance_proposal() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 2 - Query the proposal
@@ -2217,7 +2218,7 @@ fn pgf_governance_proposal() -> Result<()> {
         submit_proposal_vote,
         Some(15)
     )?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // Send different yay vote from delegator to check majority on 1/3
@@ -2235,7 +2236,7 @@ fn pgf_governance_proposal() -> Result<()> {
 
     let mut client =
         run!(test, Bin::Client, submit_proposal_vote_delagator, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 4 - Query the proposal and check the result is the one voted by the
@@ -2333,7 +2334,7 @@ fn pgf_governance_proposal() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 2 - Query the funding proposal
@@ -2424,7 +2425,7 @@ fn proposal_offline() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 2. Create an offline proposal
@@ -2808,7 +2809,7 @@ fn double_signing_gets_slashed() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // Wait until pipeline epoch to see if the validator is back in consensus
@@ -3143,7 +3144,7 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(1), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     let deactivate_epoch = get_epoch(&test, &validator_1_rpc)?;
@@ -3186,7 +3187,7 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(1), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     let reactivate_epoch = get_epoch(&test, &validator_1_rpc)?;
@@ -3279,7 +3280,7 @@ fn change_validator_metadata() -> Result<()> {
         metadata_change_args,
         Some(40)
     )?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 4. Query the metadata after the change
@@ -3312,7 +3313,7 @@ fn change_validator_metadata() -> Result<()> {
         metadata_change_args,
         Some(40)
     )?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 6. Query the metadata to see that the validator website is removed
@@ -3444,7 +3445,7 @@ fn test_invalid_validator_txs() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(1), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     let deactivate_epoch = get_epoch(&test, &validator_1_rpc)?;
@@ -3556,7 +3557,7 @@ fn change_consensus_key() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction was successfully applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // =========================================================================

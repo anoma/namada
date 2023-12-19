@@ -32,6 +32,7 @@ use super::setup::{
     ENV_VAR_USE_PREBUILT_BINARIES,
 };
 use crate::e2e::setup::{Bin, Who, APPS_PACKAGE};
+use crate::strings::TX_APPLIED_SUCCESS;
 use crate::{run, run_as};
 
 /// Instantiate a new [`HttpClient`] to perform RPC requests with.
@@ -96,7 +97,7 @@ pub fn init_established_account(
     ];
     let mut cmd = run!(test, Bin::Client, init_account_args, Some(40))?;
     cmd.exp_string("Wrapper transaction accepted")?;
-    cmd.exp_string("Transaction was successfully applied")?;
+    cmd.exp_string(TX_APPLIED_SUCCESS)?;
     cmd.assert_success();
     Ok(())
 }
