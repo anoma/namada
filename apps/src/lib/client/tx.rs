@@ -428,24 +428,24 @@ pub async fn submit_change_consensus_key(
         tx::dump_tx(namada.io(), &tx_args, tx);
     } else {
         sign(namada, &mut tx, &tx_args, signing_data).await?;
-        namada.submit(tx, &tx_args).await?;
+        let resp = namada.submit(tx, &tx_args).await?;
 
         if !tx_args.dry_run {
-            namada
-                .wallet_mut()
-                .await
-                .save()
-                .unwrap_or_else(|err| edisplay_line!(namada.io(), "{}", err));
+            if resp.is_applied_and_valid().is_some() {
+                namada.wallet_mut().await.save().unwrap_or_else(|err| {
+                    edisplay_line!(namada.io(), "{}", err)
+                });
 
-            display_line!(
-                namada.io(),
-                "New consensus key stored with alias \
-                 \"{consensus_key_alias}\". It will become active \
-                 {EPOCH_SWITCH_BLOCKS_DELAY} blocks before pipeline offset \
-                 from the current epoch, at which point you'll need to give \
-                 the new key to CometBFT in order to be able to sign with it \
-                 in consensus.",
-            );
+                display_line!(
+                    namada.io(),
+                    "New consensus key stored with alias \
+                     \"{consensus_key_alias}\". It will become active \
+                     {EPOCH_SWITCH_BLOCKS_DELAY} blocks before pipeline \
+                     offset from the current epoch, at which point you'll \
+                     need to give the new key to CometBFT in order to be able \
+                     to sign with it in consensus.",
+                );
+            }
         } else {
             display_line!(
                 namada.io(),
@@ -753,70 +753,74 @@ pub async fn submit_become_validator(
     } else {
         sign(namada, &mut tx, &tx_args, signing_data).await?;
 
-        namada.submit(tx, &tx_args).await?;
+        let resp = namada.submit(tx, &tx_args).await?;
 
         if !tx_args.dry_run {
-            // add validator address and keys to the wallet
-            let mut wallet = namada.wallet_mut().await;
-            wallet.add_validator_data(address.clone(), validator_keys);
-            wallet
-                .save()
-                .unwrap_or_else(|err| edisplay_line!(namada.io(), "{}", err));
+            if resp.is_applied_and_valid().is_some() {
+                // add validator address and keys to the wallet
+                let mut wallet = namada.wallet_mut().await;
+                wallet.add_validator_data(address.clone(), validator_keys);
+                wallet.save().unwrap_or_else(|err| {
+                    edisplay_line!(namada.io(), "{}", err)
+                });
 
-            let tendermint_home = config.ledger.cometbft_dir();
-            tendermint_node::write_validator_key(
-                &tendermint_home,
-                &wallet
-                    .find_key_by_pk(&consensus_key, None)
-                    .expect("unable to find consensus key pair in the wallet"),
-            );
-            // To avoid wallet deadlocks in following operations
-            drop(wallet);
-            tendermint_node::write_validator_state(tendermint_home);
+                let tendermint_home = config.ledger.cometbft_dir();
+                tendermint_node::write_validator_key(
+                    &tendermint_home,
+                    &wallet.find_key_by_pk(&consensus_key, None).expect(
+                        "unable to find consensus key pair in the wallet",
+                    ),
+                );
+                // To avoid wallet deadlocks in following operations
+                drop(wallet);
+                tendermint_node::write_validator_state(tendermint_home);
 
-            // Write Namada config stuff or figure out how to do the above
-            // tendermint_node things two epochs in the future!!!
-            config.ledger.shell.tendermint_mode = TendermintMode::Validator;
-            config
-                .write(
-                    &config.ledger.shell.base_dir,
-                    &config.ledger.chain_id,
-                    true,
-                )
-                .unwrap();
+                // Write Namada config stuff or figure out how to do the above
+                // tendermint_node things two epochs in the future!!!
+                config.ledger.shell.tendermint_mode = TendermintMode::Validator;
+                config
+                    .write(
+                        &config.ledger.shell.base_dir,
+                        &config.ledger.chain_id,
+                        true,
+                    )
+                    .unwrap();
 
-            let pos_params = rpc::query_pos_parameters(namada.client()).await;
+                let pos_params =
+                    rpc::query_pos_parameters(namada.client()).await;
 
-            display_line!(namada.io(), "");
-            display_line!(
-                namada.io(),
-                "The keys for validator \"{alias}\" were stored in the wallet:"
-            );
-            display_line!(
-                namada.io(),
-                "  Validator account key \"{}\"",
-                validator_key_alias
-            );
-            display_line!(
-                namada.io(),
-                "  Consensus key \"{}\"",
-                consensus_key_alias
-            );
-            display_line!(
-                namada.io(),
-                "The ledger node has been setup to use this validator's \
-                 address and consensus key."
-            );
-            display_line!(
-                namada.io(),
-                "Your validator will be active in {} epochs. Be sure to \
-                 restart your node for the changes to take effect!",
-                pos_params.pipeline_len
-            );
+                display_line!(namada.io(), "");
+                display_line!(
+                    namada.io(),
+                    "The keys for validator \"{alias}\" were stored in the \
+                     wallet:"
+                );
+                display_line!(
+                    namada.io(),
+                    "  Validator account key \"{}\"",
+                    validator_key_alias
+                );
+                display_line!(
+                    namada.io(),
+                    "  Consensus key \"{}\"",
+                    consensus_key_alias
+                );
+                display_line!(
+                    namada.io(),
+                    "The ledger node has been setup to use this validator's \
+                     address and consensus key."
+                );
+                display_line!(
+                    namada.io(),
+                    "Your validator will be active in {} epochs. Be sure to \
+                     restart your node for the changes to take effect!",
+                    pos_params.pipeline_len
+                );
+            }
         } else {
             display_line!(
                 namada.io(),
-                "Transaction dry run. No addresses have been saved."
+                "Transaction dry run. No key or addresses have been saved."
             );
         }
     }
@@ -922,23 +926,23 @@ pub async fn submit_transfer(
 
             let result = namada.submit(tx, &args.tx).await?;
 
-            let submission_epoch = rpc::query_and_print_epoch(namada).await;
-
             match result {
                 ProcessTxResponse::Applied(resp) if
-                // If a transaction is shielded
+                    // If a transaction is shielded
                     tx_epoch.is_some() &&
-                // And it is rejected by a VP
-                    matches!(resp.inner_tx_result(), InnerTxResult::VpsRejected(_)) &&
-                // And its submission epoch doesn't match construction epoch
-                    tx_epoch.unwrap() != submission_epoch =>
+                    // And it is rejected by a VP
+                    matches!(resp.inner_tx_result(), InnerTxResult::VpsRejected(_)) =>
                 {
-                    // Then we probably straddled an epoch boundary. Let's retry...
-                    edisplay_line!(namada.io(),
-                        "MASP transaction rejected and this may be due to the \
-                        epoch changing. Attempting to resubmit transaction.",
-                    );
-                    continue;
+                    let submission_epoch = rpc::query_and_print_epoch(namada).await;
+                    // And its submission epoch doesn't match construction epoch
+                    if tx_epoch.unwrap() != submission_epoch {
+                        // Then we probably straddled an epoch boundary. Let's retry...
+                        edisplay_line!(namada.io(),
+                            "MASP transaction rejected and this may be due to the \
+                            epoch changing. Attempting to resubmit transaction.",
+                        );
+                        continue;
+                    }
                 },
                 // Otherwise either the transaction was successful or it will not
                 // benefit from resubmission
@@ -1318,9 +1322,12 @@ where
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
 
-        namada.submit(tx, &args.tx).await?;
+        let resp = namada.submit(tx, &args.tx).await?;
 
-        tx::query_unbonds(namada, args.clone(), latest_withdrawal_pre).await?;
+        if !args.tx.dry_run && resp.is_applied_and_valid().is_some() {
+            tx::query_unbonds(namada, args.clone(), latest_withdrawal_pre)
+                .await?;
+        }
     }
 
     Ok(())
@@ -1429,27 +1436,6 @@ where
 
     Ok(())
 }
-
-// pub async fn submit_change_consensus_key<N: Namada>(
-//     namada: &N,
-//     args: args::ConsensusKeyChange,
-// ) -> Result<(), error::Error>
-// where
-//     <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
-// {
-//     let (mut tx, signing_data, _fee_unshield_epoch) =
-//         args.build(namada).await?;
-
-//     if args.tx.dump_tx {
-//         tx::dump_tx(namada.io(), &args.tx, tx);
-//     } else {
-//         namada.sign(&mut tx, &args.tx, signing_data).await?;
-
-//         namada.submit(tx, &args.tx).await?;
-//     }
-
-//     Ok(())
-// }
 
 pub async fn submit_unjail_validator<N: Namada>(
     namada: &N,
