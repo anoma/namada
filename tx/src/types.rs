@@ -1239,14 +1239,10 @@ impl Tx {
                             signer,
                             &mut consume_verify_sig_gas,
                         )
-                        .map_err(|e| {
-                            if let VerifySigError::OutOfGas(inner) = e {
-                                Error::OutOfGas(inner)
-                            } else {
-                                Error::InvalidSectionSignature(
-                                    "found invalid signature.".to_string(),
-                                )
-                            }
+                        .map_err(|_e| {
+                            Error::InvalidSectionSignature(
+                                "found invalid signature.".to_string(),
+                            )
                         });
                     // Record the section witnessing these signatures
                     if amt_verifieds? > 0 {

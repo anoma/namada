@@ -33,8 +33,6 @@ pub enum VerifySigError {
     MissingData,
     #[error("Signature belongs to a different scheme from the public key.")]
     MismatchedScheme,
-    #[error("Signature verification went out of gas: {0}")]
-    OutOfGas(#[from] crate::ledger::gas::Error),
     #[error(
         "The number of valid signatures did not meet the required threshold, \
          required {0} got {1}"
