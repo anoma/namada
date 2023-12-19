@@ -17,10 +17,18 @@ use namada_vp_prelude::*;
 use once_cell::unsync::Lazy;
 use proof_of_stake::storage::{read_pos_params, validator_state_handle};
 use proof_of_stake::storage_key::{
-    is_bond_key, is_pos_key, is_unbond_key, is_validator_commission_rate_key,
-    is_validator_metadata_key, is_validator_state_key,
+    is_below_capacity_validator_set_key, is_bond_epoched_meta_key, is_bond_key,
+    is_consensus_keys_key, is_consensus_validator_set_key,
+    is_delegator_redelegations_key, is_last_pos_reward_claim_epoch_key,
+    is_pos_key, is_rewards_counter_key, is_total_consensus_stake_key,
+    is_total_deltas_key, is_unbond_key, is_validator_address_raw_hash_key,
+    is_validator_addresses_key, is_validator_commission_rate_key,
+    is_validator_deltas_key, is_validator_eth_cold_key_key,
+    is_validator_eth_hot_key_key, is_validator_max_commission_rate_change_key,
+    is_validator_metadata_key, is_validator_redelegations_key,
+    is_validator_set_positions_key, is_validator_state_epoched_meta_key,
+    is_validator_state_key, is_validator_total_bond_or_unbond_key,
 };
-use proof_of_stake::types::ValidatorState;
 
 enum KeyType<'a> {
     TokenBalance { owner: &'a Address },
@@ -163,16 +171,12 @@ fn validate_pos_changes(
     key: &storage::Key,
     valid_sig: &impl Deref<Target = bool>,
 ) -> VpResult {
-    use proof_of_stake::storage;
-
     // Bond or unbond
     let is_valid_bond_or_unbond_change = || {
-        let bond_id = storage::is_bond_key(key)
+        let bond_id = is_bond_key(key)
             .map(|(bond_id, _)| bond_id)
-            .or_else(|| storage::is_bond_epoched_meta_key(key))
-            .or_else(|| {
-                storage::is_unbond_key(key).map(|(bond_id, _, _)| bond_id)
-            });
+            .or_else(|| is_bond_epoched_meta_key(key))
+            .or_else(|| is_unbond_key(key).map(|(bond_id, _, _)| bond_id));
         if let Some(bond_id) = bond_id {
             // Bonds and unbonds changes for this address must be signed
             return &bond_id.source != owner || **valid_sig;
@@ -183,8 +187,7 @@ fn validate_pos_changes(
 
     // Commission rate changes must be signed by the validator
     let is_valid_commission_rate_change = || {
-        if let Some(validator) = storage::is_validator_commission_rate_key(key)
-        {
+        if let Some(validator) = is_validator_commission_rate_key(key) {
             return validator == owner && **valid_sig;
         }
         false
@@ -193,7 +196,7 @@ fn validate_pos_changes(
     // Metadata changes must be signed by the validator whose
     // metadata is manipulated
     let is_valid_metadata_change = || {
-        let metadata = storage::is_validator_metadata_key(key);
+        let metadata = is_validator_metadata_key(key);
         match metadata {
             Some(address) => address == owner && **valid_sig,
             None => false,
@@ -202,18 +205,22 @@ fn validate_pos_changes(
 
     // Changes in validator state
     let is_valid_state_change = || {
-        let state_change = storage::is_validator_state_key(key);
+        let state_change = is_validator_state_key(key);
         let is_valid_state = match state_change {
             Some((address, epoch)) => {
-                let params_pre = proof_of_stake::read_pos_params(&ctx.pre())?;
-                let state_pre = proof_of_stake::validator_state_handle(address)
-                    .get(&ctx.pre(), epoch, &params_pre)?;
+                let params_pre = read_pos_params(&ctx.pre())?;
+                let state_pre = validator_state_handle(address).get(
+                    &ctx.pre(),
+                    epoch,
+                    &params_pre,
+                )?;
 
-                let params_post = proof_of_stake::read_pos_params(&ctx.post())?;
-                let state_post = proof_of_stake::validator_state_handle(
-                    address,
-                )
-                .get(&ctx.post(), epoch, &params_post)?;
+                let params_post = read_pos_params(&ctx.post())?;
+                let state_post = validator_state_handle(address).get(
+                    &ctx.post(),
+                    epoch,
+                    &params_post,
+                )?;
 
                 match (state_pre, state_post) {
                     (Some(pre), Some(post)) => {
@@ -268,19 +275,18 @@ fn validate_pos_changes(
 
         VpResult::Ok(
             is_valid_state
-                || storage::is_validator_state_epoched_meta_key(key)
-                || storage::is_consensus_validator_set_key(key)
-                || storage::is_below_capacity_validator_set_key(key),
+                || is_validator_state_epoched_meta_key(key)
+                || is_consensus_validator_set_key(key)
+                || is_below_capacity_validator_set_key(key),
         )
     };
 
     let is_valid_reward_claim = || {
-        if let Some(bond_id) = storage::is_last_pos_reward_claim_epoch_key(key)
-        {
+        if let Some(bond_id) = is_last_pos_reward_claim_epoch_key(key) {
             // Claims for this address must be signed
             return &bond_id.source != owner || **valid_sig;
         }
-        if let Some(bond_id) = storage::is_rewards_counter_key(key) {
+        if let Some(bond_id) = is_rewards_counter_key(key) {
             // Claims for this address must be signed
             return &bond_id.source != owner || **valid_sig;
         }
@@ -288,14 +294,14 @@ fn validate_pos_changes(
     };
 
     let is_valid_redelegation = || {
-        if storage::is_validator_redelegations_key(key) {
+        if is_validator_redelegations_key(key) {
             return true;
         }
-        if let Some(delegator) = storage::is_delegator_redelegations_key(key) {
+        if let Some(delegator) = is_delegator_redelegations_key(key) {
             // Redelegations for this address must be signed
             return delegator != owner || **valid_sig;
         }
-        if let Some(bond_id) = storage::is_rewards_counter_key(key) {
+        if let Some(bond_id) = is_rewards_counter_key(key) {
             // Redelegations auto-claim rewards
             return &bond_id.source != owner || **valid_sig;
         }
@@ -303,13 +309,12 @@ fn validate_pos_changes(
     };
 
     let is_valid_become_validator = || {
-        if storage::is_validator_addresses_key(key)
-            || storage::is_consensus_keys_key(key)
-            || storage::is_validator_eth_cold_key_key(key).is_some()
-            || storage::is_validator_eth_hot_key_key(key).is_some()
-            || storage::is_validator_max_commission_rate_change_key(key)
-                .is_some()
-            || storage::is_validator_address_raw_hash_key(key).is_some()
+        if is_validator_addresses_key(key)
+            || is_consensus_keys_key(key)
+            || is_validator_eth_cold_key_key(key).is_some()
+            || is_validator_eth_hot_key_key(key).is_some()
+            || is_validator_max_commission_rate_change_key(key).is_some()
+            || is_validator_address_raw_hash_key(key).is_some()
         {
             // A signature is required to become validator
             return **valid_sig;
@@ -318,11 +323,11 @@ fn validate_pos_changes(
     };
 
     Ok(is_valid_bond_or_unbond_change()
-        || storage::is_total_deltas_key(key)
-        || storage::is_validator_deltas_key(key)
-        || storage::is_validator_total_bond_or_unbond_key(key)
-        || storage::is_validator_set_positions_key(key)
-        || storage::is_total_consensus_stake_key(key)
+        || is_total_deltas_key(key)
+        || is_validator_deltas_key(key)
+        || is_validator_total_bond_or_unbond_key(key)
+        || is_validator_set_positions_key(key)
+        || is_total_consensus_stake_key(key)
         || is_valid_state_change()?
         || is_valid_reward_claim()
         || is_valid_redelegation()
