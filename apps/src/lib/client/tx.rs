@@ -21,7 +21,7 @@ use namada::types::dec::Dec;
 use namada::types::io::Io;
 use namada::types::key::{self, *};
 use namada::types::transaction::pos::{BecomeValidator, ConsensusKeyChange};
-use namada_sdk::rpc::{TxBroadcastData, TxResponse};
+use namada_sdk::rpc::{InnerTxResult, TxBroadcastData, TxResponse};
 use namada_sdk::wallet::alias::validator_consensus_key;
 use namada_sdk::wallet::{Wallet, WalletIo};
 use namada_sdk::{display_line, edisplay_line, error, signing, tx, Namada};
@@ -308,9 +308,9 @@ where
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
 
-        let result = namada.submit(tx, &args.tx).await?;
-        if let ProcessTxResponse::Applied(response) = result {
-            return Ok(response.initialized_accounts.first().cloned());
+        let response = namada.submit(tx, &args.tx).await?;
+        if let Some(result) = response.is_applied_and_valid() {
+            return Ok(result.initialized_accounts.first().cloned());
         }
     }
 
@@ -753,7 +753,7 @@ pub async fn submit_become_validator(
     } else {
         sign(namada, &mut tx, &tx_args, signing_data).await?;
 
-        namada.submit(tx, &tx_args).await?.initialized_accounts();
+        namada.submit(tx, &tx_args).await?;
 
         if !tx_args.dry_run {
             // add validator address and keys to the wallet
@@ -929,7 +929,7 @@ pub async fn submit_transfer(
                 // If a transaction is shielded
                     tx_epoch.is_some() &&
                 // And it is rejected by a VP
-                    resp.code == 1.to_string() &&
+                    matches!(resp.inner_tx_result(), InnerTxResult::VpsRejected(_)) &&
                 // And its submission epoch doesn't match construction epoch
                     tx_epoch.unwrap() != submission_epoch =>
                 {

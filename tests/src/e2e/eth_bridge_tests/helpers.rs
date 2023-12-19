@@ -23,6 +23,7 @@ use crate::e2e::helpers::{
 use crate::e2e::setup::{
     self, set_ethereum_bridge_mode, Bin, NamadaBgCmd, NamadaCmd, Test, Who,
 };
+use crate::strings::{LEDGER_STARTED, VALIDATOR_NODE};
 use crate::{run, run_as};
 
 /// The default listen address for a self-hosted events endpoint.
@@ -121,8 +122,8 @@ pub fn setup_single_validator_test() -> Result<(Test, NamadaBgCmd)> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, vec!["ledger"], Some(40))?;
 
-    ledger.exp_string("Namada ledger node started")?;
-    ledger.exp_string("This node is a validator")?;
+    ledger.exp_string(LEDGER_STARTED)?;
+    ledger.exp_string(VALIDATOR_NODE)?;
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
 
     let bg_ledger = ledger.background();

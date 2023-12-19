@@ -88,6 +88,9 @@ use crate::e2e::helpers::{
 use crate::e2e::setup::{
     self, sleep, working_dir, Bin, NamadaCmd, Test, TestDir, Who,
 };
+use crate::strings::{
+    LEDGER_STARTED, TX_ACCEPTED, TX_APPLIED_SUCCESS, TX_FAILED, VALIDATOR_NODE,
+};
 use crate::{run, run_as};
 
 #[test]
@@ -116,7 +119,7 @@ fn run_ledger_ibc() -> Result<()> {
         &["ledger", "run"],
         Some(40)
     )?;
-    ledger_a.exp_string("Namada ledger node started")?;
+    ledger_a.exp_string(LEDGER_STARTED)?;
     // Run Chain B
     let mut ledger_b = run_as!(
         test_b,
@@ -125,9 +128,9 @@ fn run_ledger_ibc() -> Result<()> {
         &["ledger", "run"],
         Some(40)
     )?;
-    ledger_b.exp_string("Namada ledger node started")?;
-    ledger_a.exp_string("This node is a validator")?;
-    ledger_b.exp_string("This node is a validator")?;
+    ledger_b.exp_string(LEDGER_STARTED)?;
+    ledger_a.exp_string(VALIDATOR_NODE)?;
+    ledger_b.exp_string(VALIDATOR_NODE)?;
 
     wait_for_wasm_pre_compile(&mut ledger_a)?;
     wait_for_wasm_pre_compile(&mut ledger_b)?;
@@ -338,11 +341,11 @@ fn create_client(test_a: &Test, test_b: &Test) -> Result<(ClientId, ClientId)> {
     let height_b = submit_ibc_tx(test_b, message, ALBERT, ALBERT_KEY, false)?;
 
     let events = get_events(test_a, height_a)?;
-    let client_id_a = get_client_id_from_events(&events)
-        .ok_or(eyre!("Transaction failed"))?;
+    let client_id_a =
+        get_client_id_from_events(&events).ok_or(eyre!(TX_FAILED))?;
     let events = get_events(test_b, height_b)?;
-    let client_id_b = get_client_id_from_events(&events)
-        .ok_or(eyre!("Transaction failed"))?;
+    let client_id_b =
+        get_client_id_from_events(&events).ok_or(eyre!(TX_FAILED))?;
 
     // `client_id_a` represents the ID of the B's client on Chain A
     Ok((client_id_a, client_id_b))
@@ -617,8 +620,8 @@ fn channel_handshake(
     };
     let height = submit_ibc_tx(test_a, msg, ALBERT, ALBERT_KEY, false)?;
     let events = get_events(test_a, height)?;
-    let channel_id_a = get_channel_id_from_events(&events)
-        .ok_or(eyre!("Transaction failed"))?;
+    let channel_id_a =
+        get_channel_id_from_events(&events).ok_or(eyre!(TX_FAILED))?;
 
     // get the proofs from Chain A
     let height_a = query_height(test_a)?;
@@ -644,8 +647,8 @@ fn channel_handshake(
     // OpenTryChannel on Chain B
     let height = submit_ibc_tx(test_b, msg, ALBERT, ALBERT_KEY, false)?;
     let events = get_events(test_b, height)?;
-    let channel_id_b = get_channel_id_from_events(&events)
-        .ok_or(eyre!("Transaction failed"))?;
+    let channel_id_b =
+        get_channel_id_from_events(&events).ok_or(eyre!(TX_FAILED))?;
 
     // get the A's proofs on Chain B
     let height_b = query_height(test_b)?;
@@ -757,8 +760,7 @@ fn transfer_token(
         false,
     )?;
     let events = get_events(test_a, height)?;
-    let packet =
-        get_packet_from_events(&events).ok_or(eyre!("Transaction failed"))?;
+    let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
     check_ibc_packet_query(test_a, &"send_packet".parse().unwrap(), &packet)?;
 
     let height_a = query_height(test_a)?;
@@ -775,10 +777,8 @@ fn transfer_token(
     // Receive the token on Chain B
     let height = submit_ibc_tx(test_b, msg, ALBERT, ALBERT_KEY, false)?;
     let events = get_events(test_b, height)?;
-    let packet =
-        get_packet_from_events(&events).ok_or(eyre!("Transaction failed"))?;
-    let ack =
-        get_ack_from_events(&events).ok_or(eyre!("Transaction failed"))?;
+    let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
+    let ack = get_ack_from_events(&events).ok_or(eyre!(TX_FAILED))?;
     check_ibc_packet_query(
         test_b,
         &"write_acknowledgement".parse().unwrap(),
@@ -886,7 +886,8 @@ fn transfer_received_token(
         &rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction is valid.")?;
+    client.exp_string(TX_ACCEPTED)?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     Ok(())
@@ -921,8 +922,7 @@ fn transfer_back(
         false,
     )?;
     let events = get_events(test_b, height)?;
-    let packet =
-        get_packet_from_events(&events).ok_or(eyre!("Transaction failed"))?;
+    let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
 
     let height_b = query_height(test_b)?;
     let proof = get_commitment_proof(test_b, &packet, height_b)?;
@@ -937,10 +937,8 @@ fn transfer_back(
     // Receive the token on Chain A
     let height = submit_ibc_tx(test_a, msg, ALBERT, ALBERT_KEY, false)?;
     let events = get_events(test_a, height)?;
-    let packet =
-        get_packet_from_events(&events).ok_or(eyre!("Transaction failed"))?;
-    let ack =
-        get_ack_from_events(&events).ok_or(eyre!("Transaction failed"))?;
+    let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
+    let ack = get_ack_from_events(&events).ok_or(eyre!(TX_FAILED))?;
 
     // get the proof on Chain A
     let height_a = query_height(test_a)?;
@@ -985,8 +983,7 @@ fn transfer_timeout(
         false,
     )?;
     let events = get_events(test_a, height)?;
-    let packet =
-        get_packet_from_events(&events).ok_or(eyre!("Transaction failed"))?;
+    let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
 
     // wait for the timeout
     sleep(5);
@@ -1063,8 +1060,7 @@ fn shielded_transfer(
         false,
     )?;
     let events = get_events(test_a, height)?;
-    let packet =
-        get_packet_from_events(&events).ok_or(eyre!("Transaction failed"))?;
+    let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
     check_ibc_packet_query(test_a, &"send_packet".parse().unwrap(), &packet)?;
 
     let height_a = query_height(test_a)?;
@@ -1081,10 +1077,8 @@ fn shielded_transfer(
     // Receive the token on Chain B
     let height = submit_ibc_tx(test_b, msg, ALBERT, ALBERT_KEY, false)?;
     let events = get_events(test_b, height)?;
-    let packet =
-        get_packet_from_events(&events).ok_or(eyre!("Transaction failed"))?;
-    let ack =
-        get_ack_from_events(&events).ok_or(eyre!("Transaction failed"))?;
+    let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
+    let ack = get_ack_from_events(&events).ok_or(eyre!(TX_FAILED))?;
     check_ibc_packet_query(
         test_b,
         &"write_acknowledgement".parse().unwrap(),
@@ -1199,9 +1193,9 @@ fn submit_ibc_tx(
         ],
         Some(40)
     )?;
-    client.exp_string("Transaction applied")?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     if wait_reveal_pk {
-        client.exp_string("Transaction applied")?;
+        client.exp_string(TX_APPLIED_SUCCESS)?;
     }
     check_tx_height(test, &mut client)
 }
@@ -1264,9 +1258,9 @@ fn transfer(
             Ok(0)
         }
         None => {
-            client.exp_string("Transaction applied")?;
+            client.exp_string(TX_APPLIED_SUCCESS)?;
             if wait_reveal_pk {
-                client.exp_string("Transaction applied")?;
+                client.exp_string(TX_APPLIED_SUCCESS)?;
             }
             check_tx_height(test, &mut client)
         }
@@ -1274,25 +1268,17 @@ fn transfer(
 }
 
 fn check_tx_height(test: &Test, client: &mut NamadaCmd) -> Result<u32> {
-    let (unread, matched) = client.exp_regex("\"height\": .*,")?;
+    let (_unread, matched) = client.exp_regex(r"height .*")?;
+    // Expecting e.g. "height 1337."
     let height_str = matched
         .trim()
-        .rsplit_once(' ')
+        .split_once(' ')
         .unwrap()
         .1
-        .replace(['"', ','], "");
-    let height = height_str.parse().unwrap();
-
-    let (_unread, matched) = client.exp_regex("\"code\": .*,")?;
-    let code = matched
-        .trim()
-        .rsplit_once(' ')
+        .split_once('.')
         .unwrap()
-        .1
-        .replace(['"', ','], "");
-    if code != "0" {
-        return Err(eyre!("The IBC transaction failed: unread {}", unread));
-    }
+        .0;
+    let height: u32 = height_str.parse().unwrap();
 
     // wait for the next block to use the app hash
     while height as u64 + 1 > query_height(test)?.revision_height() {
