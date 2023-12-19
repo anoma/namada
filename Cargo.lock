@@ -4733,6 +4733,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "namada_vote_ext"
+version = "0.28.1"
+dependencies = [
+ "namada_core",
+ "namada_tx",
+]
+
+[[package]]
 name = "namada_vp_env"
 version = "0.28.1"
 dependencies = [

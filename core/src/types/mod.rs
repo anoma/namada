@@ -20,5 +20,4 @@ pub mod time;
 pub mod token;
 pub mod uint;
 pub mod validity_predicate;
-pub mod vote_extensions;
 pub mod voting_power;

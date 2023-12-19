@@ -30,6 +30,7 @@ members = [
   "tx_env",
   "tx_prelude",
   "vm_env",
+  "vote_ext",
   "vp_env",
   "vp_prelude",
 ]
