@@ -8,7 +8,7 @@ use borsh_ext::BorshSerializeExt;
 use ethabi::token::Token;
 use serde::{Deserialize, Serialize};
 
-use crate::ledger::eth_bridge::storage::wrapped_erc20s;
+use super::address::InternalAddress;
 use crate::types::address::Address;
 use crate::types::eth_abi::Encode;
 use crate::types::ethereum_events::{
@@ -173,16 +173,26 @@ pub struct PendingTransfer {
     pub gas_fee: GasFee,
 }
 
+/// Construct a token address from an ERC20 address.
+pub fn erc20_token_address(address: &EthAddress) -> Address {
+    Address::Internal(InternalAddress::Erc20(*address))
+}
+
+/// Construct a NUT token address from an ERC20 address.
+pub fn erc20_nut_address(address: &EthAddress) -> Address {
+    Address::Internal(InternalAddress::Nut(*address))
+}
+
 impl PendingTransfer {
     /// Get a token [`Address`] from this [`PendingTransfer`].
     #[inline]
     pub fn token_address(&self) -> Address {
         match &self.transfer.kind {
             TransferToEthereumKind::Erc20 => {
-                wrapped_erc20s::token(&self.transfer.asset)
+                erc20_token_address(&self.transfer.asset)
             }
             TransferToEthereumKind::Nut => {
-                wrapped_erc20s::nut(&self.transfer.asset)
+                erc20_nut_address(&self.transfer.asset)
             }
         }
     }
