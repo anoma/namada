@@ -23,6 +23,8 @@ use crate::vm::types::VpInput;
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("Offset {0}+{1} overflows 32 bits storage")]
+    OverflowingOffset(u64, usize),
     #[error("Failed initializing the memory: {0}")]
     InitMemoryError(wasmer::MemoryError),
     #[error("Memory ouf of bounds: {0}")]
@@ -167,22 +169,44 @@ pub fn write_vp_inputs(
 
 /// Check that the given offset and length fits into the memory bounds. If not,
 /// it will try to grow the memory.
-fn check_bounds(memory: &Memory, offset: u64, len: usize) -> Result<()> {
+fn check_bounds(memory: &Memory, base_offset: u64, len: usize) -> Result<()> {
     tracing::debug!(
-        "check_bounds pages {}, data_size {}, offset + len {}",
+        "check_bounds pages {}, data_size {}, base_offset + len {}",
         memory.size().0,
         memory.data_size(),
-        offset + len as u64
+        base_offset + len as u64
     );
-    if memory.data_size() < offset + len as u64 {
+    let desired_offset = base_offset
+        .checked_add(len as u64)
+        .and_then(|off| {
+            if off < u32::MAX as u64 {
+                // wasm pointers are 32 bits wide, therefore we can't
+                // read from/write to offsets past `u32::MAX`
+                Some(off)
+            } else {
+                None
+            }
+        })
+        .ok_or(Error::OverflowingOffset(base_offset, len))?;
+    if memory.data_size() < desired_offset {
         let cur_pages = memory.size().0;
         let capacity = cur_pages as usize * wasmer::WASM_PAGE_SIZE;
-        let missing = offset as usize + len - capacity;
-        // Ceiling division
+        // usizes should be at least 32 bits wide on most architectures,
+        // so this cast shouldn't cause panics, given the invariant that
+        // `desired_offset` is at most a 32 bit wide value. moreover,
+        // `capacity` should not be larger than `memory.data_size()`,
+        // so this subtraction should never fail
+        let missing = desired_offset as usize - capacity;
+        // extrapolate the number of pages missing to allow addressing
+        // the desired memory offset
         let req_pages = ((missing + wasmer::WASM_PAGE_SIZE - 1)
             / wasmer::WASM_PAGE_SIZE) as u32;
-        tracing::info!("trying to grow memory by {} pages", req_pages);
+        tracing::debug!(req_pages, "Attempting to grow wasm memory");
         memory.grow(req_pages).map_err(Error::MemoryOutOfBounds)?;
+        tracing::debug!(
+            mem_size = memory.data_size(),
+            "Wasm memory size has been successfully extended"
+        );
     }
     Ok(())
 }
