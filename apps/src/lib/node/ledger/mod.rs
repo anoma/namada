@@ -17,6 +17,8 @@ use futures::future::TryFutureExt;
 use namada::core::ledger::governance::storage::keys as governance_storage;
 use namada::eth_bridge::ethers::providers::{Http, Provider};
 use namada::types::storage::Key;
+use namada::types::time::{DateTimeUtc, Utc};
+use namada_sdk::control_flow::install_shutdown_signal;
 use namada_sdk::tendermint::abci::request::CheckTxKind;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
@@ -249,6 +251,10 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
 
     // Start Tendermint node
     let tendermint_node = start_tendermint(&mut spawner, &config);
+    // wait for genesis time
+    let genesis_time = DateTimeUtc::try_from(config.genesis_time.clone())
+        .expect("Should be able to parse genesis time");
+    sleep_until(genesis_time).await;
 
     // Start oracle if necessary
     let (eth_oracle_channels, eth_oracle) =
@@ -747,4 +753,32 @@ async fn maybe_start_ethereum_oracle(
 /// which will resolve instantly.
 fn spawn_dummy_task<T: Send + 'static>(ready: T) -> task::JoinHandle<T> {
     tokio::spawn(async { std::future::ready(ready).await })
+}
+
+/// Sleep until the genesis time if necessary.
+async fn sleep_until(time: DateTimeUtc) {
+    let shutdown_signal = install_shutdown_signal();
+    // Sleep until start time if needed
+    let sleep = async {
+        if let Ok(sleep_time) =
+            time.0.signed_duration_since(Utc::now()).to_std()
+        {
+            if !sleep_time.is_zero() {
+                tracing::info!(
+                    "Waiting for ledger genesis time: {:?}, time left: {:?}",
+                    time,
+                    sleep_time
+                );
+                tokio::time::sleep(sleep_time).await
+            }
+        }
+    };
+    tokio::select! {
+        _ = shutdown_signal => {
+            tracing::info!("Shutdown signal receiving, shutting down");
+        }
+        _ = sleep => {
+            tracing::info!("Genesis time reached, starting ledger");
+        }
+    };
 }
