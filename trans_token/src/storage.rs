@@ -1,18 +1,20 @@
-use namada_core::ledger::storage_api;
+use namada_core::hints;
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::token;
+use namada_storage as storage;
+use namada_storage::{StorageRead, StorageWrite};
 
-use super::{StorageRead, StorageWrite};
+use crate::storage_key::*;
 
 impl token::Parameters {
     /// Initialize parameters for the token in storage during the genesis block.
-    pub fn init_storage<DB, H>(
+    pub fn init_storage<S>(
         &self,
+        storage: &mut S,
         address: &Address,
-        wl_storage: &mut ledger_storage::WlStorage<DB, H>,
-    ) where
-        DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
-        H: ledger_storage::StorageHasher,
+    ) -> storage::Result<()>
+    where
+        S: StorageRead + StorageWrite,
     {
         let Self {
             max_reward_rate: max_rate,
@@ -20,31 +22,14 @@ impl token::Parameters {
             kp_gain_nom,
             locked_ratio_target: locked_target,
         } = self;
-        wl_storage
-            .write(&masp_last_inflation_key(address), Amount::zero())
-            .expect(
-                "last inflation key for the given asset must be initialized",
-            );
-        wl_storage
-            .write(&masp_last_locked_ratio_key(address), Dec::zero())
-            .expect(
-                "last locked ratio key for the given asset must be initialized",
-            );
-        wl_storage
-            .write(&masp_max_reward_rate_key(address), max_rate)
-            .expect("max reward rate for the given asset must be initialized");
-        wl_storage
-            .write(&masp_locked_ratio_target_key(address), locked_target)
-            .expect("locked ratio must be initialized");
-        wl_storage
-            .write(&masp_kp_gain_key(address), kp_gain_nom)
-            .expect("The nominal proportional gain must be initialized");
-        wl_storage
-            .write(&masp_kd_gain_key(address), kd_gain_nom)
-            .expect("The nominal derivative gain must be initialized");
-        wl_storage
-            .write(&minted_balance_key(address), Amount::zero())
-            .expect("The total minted balance key must initialized");
+        storage.write(&masp_last_inflation_key(address), Amount::zero())?;
+        storage.write(&masp_last_locked_ratio_key(address), Dec::zero())?;
+        storage.write(&masp_max_reward_rate_key(address), max_rate)?;
+        storage.write(&masp_locked_ratio_target_key(address), locked_target)?;
+        storage.write(&masp_kp_gain_key(address), kp_gain_nom)?;
+        storage.write(&masp_kd_gain_key(address), kd_gain_nom)?;
+        storage.write(&minted_balance_key(address), Amount::zero())?;
+        Ok(())
     }
 }
 
@@ -53,11 +38,11 @@ pub fn read_balance<S>(
     storage: &S,
     token: &Address,
     owner: &Address,
-) -> storage_api::Result<token::Amount>
+) -> storage::Result<token::Amount>
 where
     S: StorageRead,
 {
-    let key = token::balance_key(token, owner);
+    let key = balance_key(token, owner);
     let balance = storage.read::<token::Amount>(&key)?.unwrap_or_default();
     Ok(balance)
 }
@@ -66,11 +51,11 @@ where
 pub fn read_total_supply<S>(
     storage: &S,
     token: &Address,
-) -> storage_api::Result<token::Amount>
+) -> storage::Result<token::Amount>
 where
     S: StorageRead,
 {
-    let key = token::minted_balance_key(token);
+    let key = minted_balance_key(token);
     let balance = storage.read::<token::Amount>(&key)?.unwrap_or_default();
     Ok(balance)
 }
@@ -81,7 +66,7 @@ where
 pub fn read_denom<S>(
     storage: &S,
     token: &Address,
-) -> storage_api::Result<Option<token::Denomination>>
+) -> storage::Result<Option<token::Denomination>>
 where
     S: StorageRead,
 {
@@ -91,12 +76,12 @@ where
             // NB: always use the equivalent ERC20's smallest
             // denomination to specify amounts, if we cannot
             // find a denom in storage
-            (token::denom_key(&token), true)
+            (denom_key(&token), true)
         }
         Address::Internal(InternalAddress::IbcToken(_)) => {
             return Ok(Some(0u8.into()));
         }
-        token => (token::denom_key(token), false),
+        token => (denom_key(token), false),
     };
     storage.read(&key).map(|opt_denom| {
         Some(opt_denom.unwrap_or_else(|| {
@@ -107,7 +92,7 @@ where
                 // assume the same behavior as NUTs? maybe this branch
                 // is unreachable, anyway. when would regular tokens
                 // ever not be denominated?
-                crate::hints::cold();
+                hints::cold();
                 token::NATIVE_MAX_DECIMAL_PLACES.into()
             }
         }))
@@ -119,11 +104,11 @@ pub fn write_denom<S>(
     storage: &mut S,
     token: &Address,
     denom: token::Denomination,
-) -> storage_api::Result<()>
+) -> storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
-    let key = token::denom_key(token);
+    let key = denom_key(token);
     storage.write(&key, denom)
 }
 
@@ -136,32 +121,30 @@ pub fn transfer<S>(
     src: &Address,
     dest: &Address,
     amount: token::Amount,
-) -> storage_api::Result<()>
+) -> storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
     if amount.is_zero() {
         return Ok(());
     }
-    let src_key = token::balance_key(token, src);
+    let src_key = balance_key(token, src);
     let src_balance = read_balance(storage, token, src)?;
     match src_balance.checked_sub(amount) {
         Some(new_src_balance) => {
-            let dest_key = token::balance_key(token, dest);
+            let dest_key = balance_key(token, dest);
             let dest_balance = read_balance(storage, token, dest)?;
             match dest_balance.checked_add(amount) {
                 Some(new_dest_balance) => {
                     storage.write(&src_key, new_src_balance)?;
                     storage.write(&dest_key, new_dest_balance)
                 }
-                None => Err(storage_api::Error::new_const(
+                None => Err(storage::Error::new_const(
                     "The transfer would overflow destination balance",
                 )),
             }
         }
-        None => {
-            Err(storage_api::Error::new_const("Insufficient source balance"))
-        }
+        None => Err(storage::Error::new_const("Insufficient source balance")),
     }
 }
 
@@ -172,22 +155,22 @@ pub fn credit_tokens<S>(
     token: &Address,
     dest: &Address,
     amount: token::Amount,
-) -> storage_api::Result<()>
+) -> storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
-    let balance_key = token::balance_key(token, dest);
+    let balance_key = balance_key(token, dest);
     let cur_balance = read_balance(storage, token, dest)?;
-    let new_balance = cur_balance.checked_add(amount).ok_or_else(|| {
-        storage_api::Error::new_const("Token balance overflow")
-    })?;
+    let new_balance = cur_balance
+        .checked_add(amount)
+        .ok_or_else(|| storage::Error::new_const("Token balance overflow"))?;
 
-    let total_supply_key = token::minted_balance_key(token);
+    let total_supply_key = minted_balance_key(token);
     let cur_supply = storage
         .read::<Amount>(&total_supply_key)?
         .unwrap_or_default();
     let new_supply = cur_supply.checked_add(amount).ok_or_else(|| {
-        storage_api::Error::new_const("Token total supply overflow")
+        storage::Error::new_const("Token total supply overflow")
     })?;
 
     storage.write(&balance_key, new_balance)?;
@@ -200,11 +183,11 @@ pub fn burn<S>(
     token: &Address,
     source: &Address,
     amount: token::Amount,
-) -> storage_api::Result<()>
+) -> storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
-    let key = token::balance_key(token, source);
+    let key = balance_key(token, source);
     let balance = read_balance(storage, token, source)?;
 
     let amount_to_burn = match balance.checked_sub(amount) {
@@ -222,7 +205,7 @@ where
     let new_total_supply =
         total_supply.checked_sub(amount_to_burn).unwrap_or_default();
 
-    let total_supply_key = token::minted_balance_key(token);
+    let total_supply_key = minted_balance_key(token);
     storage.write(&total_supply_key, new_total_supply)
 }
 
@@ -231,9 +214,9 @@ pub fn denominated(
     amount: token::Amount,
     token: &Address,
     storage: &impl StorageRead,
-) -> storage_api::Result<DenominatedAmount> {
+) -> storage::Result<DenominatedAmount> {
     let denom = read_denom(storage, token)?.ok_or_else(|| {
-        storage_api::Error::SimpleMessage(
+        storage::Error::SimpleMessage(
             "No denomination found in storage for the given token",
         )
     })?;
@@ -247,11 +230,11 @@ pub fn denom_to_amount(
     denom_amount: DenominatedAmount,
     token: &Address,
     storage: &impl StorageRead,
-) -> storage_api::Result<Amount> {
+) -> storage::Result<Amount> {
     let denom = read_denom(storage, token)?.ok_or_else(|| {
-        storage_api::Error::SimpleMessage(
+        storage::Error::SimpleMessage(
             "No denomination found in storage for the given token",
         )
     })?;
-    denom_amount.scale(denom).map_err(storage_api::Error::new)
+    denom_amount.scale(denom).map_err(storage::Error::new)
 }
