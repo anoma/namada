@@ -3,6 +3,8 @@
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
+use arse_merkle_tree::traits::Hasher;
+use arse_merkle_tree::H256;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::HEXUPPER;
 use serde::{Deserialize, Serialize};
@@ -143,6 +145,127 @@ impl Hash {
 impl From<Hash> for crate::tendermint::Hash {
     fn from(hash: Hash) -> Self {
         Self::Sha256(hash.0)
+    }
+}
+
+/// The storage hasher used for the merkle tree.
+pub trait StorageHasher: Hasher + fmt::Debug + Default {
+    /// Hash the value to store
+    fn hash(value: impl AsRef<[u8]>) -> H256;
+}
+
+/// The storage hasher used for the merkle tree.
+#[derive(Default)]
+pub struct Sha256Hasher(Sha256);
+
+impl Hasher for Sha256Hasher {
+    fn write_bytes(&mut self, h: &[u8]) {
+        self.0.update(h)
+    }
+
+    fn finish(self) -> H256 {
+        let hash = self.0.finalize();
+        let bytes: [u8; 32] = hash
+            .as_slice()
+            .try_into()
+            .expect("Sha256 output conversion to fixed array shouldn't fail");
+        bytes.into()
+    }
+
+    fn hash_op() -> ics23::HashOp {
+        ics23::HashOp::Sha256
+    }
+}
+
+impl StorageHasher for Sha256Hasher {
+    fn hash(value: impl AsRef<[u8]>) -> H256 {
+        let mut hasher = Sha256::new();
+        hasher.update(value.as_ref());
+        let hash = hasher.finalize();
+        let bytes: [u8; 32] = hash
+            .as_slice()
+            .try_into()
+            .expect("Sha256 output conversion to fixed array shouldn't fail");
+        bytes.into()
+    }
+}
+
+impl fmt::Debug for Sha256Hasher {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Sha256Hasher")
+    }
+}
+
+/// A Keccak hasher algorithm.
+pub struct KeccakHasher(tiny_keccak::Keccak);
+
+impl fmt::Debug for KeccakHasher {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "KeccakHasher")
+    }
+}
+
+impl Default for KeccakHasher {
+    fn default() -> Self {
+        Self(tiny_keccak::Keccak::v256())
+    }
+}
+
+impl StorageHasher for KeccakHasher {
+    fn hash(value: impl AsRef<[u8]>) -> H256 {
+        use tiny_keccak::{Hasher, Keccak};
+
+        let mut output = [0u8; 32];
+        let mut hasher = Keccak::v256();
+        hasher.update(value.as_ref());
+        hasher.finalize(&mut output);
+        output.into()
+    }
+}
+
+impl Hasher for KeccakHasher {
+    fn write_bytes(&mut self, h: &[u8]) {
+        use tiny_keccak::Hasher;
+
+        self.0.update(h);
+    }
+
+    fn finish(self) -> H256 {
+        use tiny_keccak::Hasher;
+        let mut output = [0; 32];
+
+        self.0.finalize(&mut output);
+        output.into()
+    }
+}
+
+/// A [`StorageHasher`] which can never be called.
+#[derive(Debug)]
+pub enum DummyHasher {}
+
+const DUMMY_HASHER_PANIC_MSG: &str = "A storage hasher was called, which \
+                                      should never have been reachable from \
+                                      any code path";
+
+impl Default for DummyHasher {
+    fn default() -> Self {
+        unreachable!("{DUMMY_HASHER_PANIC_MSG}")
+    }
+}
+
+impl StorageHasher for DummyHasher {
+    fn hash(_: impl AsRef<[u8]>) -> H256 {
+        unreachable!("{DUMMY_HASHER_PANIC_MSG}")
+    }
+}
+
+impl Hasher for DummyHasher {
+    fn write_bytes(&mut self, _: &[u8]) {
+        unreachable!("{DUMMY_HASHER_PANIC_MSG}")
+    }
+
+    fn finish(self) -> H256 {
+        unreachable!("{DUMMY_HASHER_PANIC_MSG}")
     }
 }
 

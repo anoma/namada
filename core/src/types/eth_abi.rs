@@ -7,8 +7,8 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 #[doc(inline)]
 pub use ethabi::token::Token;
 
-use crate::proto::{Signable, SignableEthMessage};
 use crate::types::keccak::{keccak_hash, KeccakHash};
+use crate::types::key::{Signable, SignableEthMessage};
 
 /// A container for data types that are able to be Ethereum ABI-encoded.
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]

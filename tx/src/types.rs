@@ -75,59 +75,6 @@ pub struct SignedTxData {
     pub sig: common::Signature,
 }
 
-/// A serialization method to provide to [`Signed`], such
-/// that we may sign serialized data.
-///
-/// This is a higher level version of [`key::SignableBytes`].
-pub trait Signable<T> {
-    /// A byte vector containing the serialized data.
-    type Output: key::SignableBytes;
-
-    /// The hashing algorithm to use to sign serialized
-    /// data with.
-    type Hasher: 'static + StorageHasher;
-
-    /// Encodes `data` as a byte vector, with some arbitrary serialization
-    /// method.
-    ///
-    /// The returned output *must* be deterministic based on
-    /// `data`, so that two callers signing the same `data` will be
-    /// signing the same `Self::Output`.
-    fn as_signable(data: &T) -> Self::Output;
-}
-
-/// Tag type that indicates we should use [`BorshSerialize`]
-/// to sign data in a [`Signed`] wrapper.
-#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub struct SerializeWithBorsh;
-
-/// Tag type that indicates we should use ABI serialization
-/// to sign data in a [`Signed`] wrapper.
-#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub struct SignableEthMessage;
-
-impl<T: BorshSerialize> Signable<T> for SerializeWithBorsh {
-    type Hasher = Sha256Hasher;
-    type Output = Vec<u8>;
-
-    fn as_signable(data: &T) -> Vec<u8> {
-        data.serialize_to_vec()
-    }
-}
-
-impl Signable<KeccakHash> for SignableEthMessage {
-    type Hasher = KeccakHasher;
-    type Output = KeccakHash;
-
-    fn as_signable(hash: &KeccakHash) -> KeccakHash {
-        keccak_hash({
-            let mut eth_message = Vec::from("\x19Ethereum Signed Message:\n32");
-            eth_message.extend_from_slice(hash.as_ref());
-            eth_message
-        })
-    }
-}
-
 /// A generic signed data wrapper for serialize-able types.
 ///
 /// The default serialization method is [`BorshSerialize`].

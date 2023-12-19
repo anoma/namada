@@ -4407,6 +4407,7 @@ dependencies = [
  "serde 1.0.193",
  "serde_json",
  "sha2 0.9.9",
+ "sparse-merkle-tree",
  "tendermint",
  "tendermint-proto",
  "test-log",
