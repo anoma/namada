@@ -2,8 +2,6 @@
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
-use crate::types::ethereum_events::EthereumEvent;
-
 /// A result of a wasm call to host functions that may fail.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HostEnvResult {
