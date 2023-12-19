@@ -249,12 +249,14 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
     // from Tendermint
     let mut spawner = AbortableSpawner::new();
 
-    // Start Tendermint node
-    let tendermint_node = start_tendermint(&mut spawner, &config);
     // wait for genesis time
     let genesis_time = DateTimeUtc::try_from(config.genesis_time.clone())
         .expect("Should be able to parse genesis time");
-    sleep_until(genesis_time).await;
+    if let std::ops::ControlFlow::Break(_) = sleep_until(genesis_time).await {
+        return;
+    }
+    // Start Tendermint node
+    let tendermint_node = start_tendermint(&mut spawner, &config);
 
     // Start oracle if necessary
     let (eth_oracle_channels, eth_oracle) =
@@ -756,7 +758,7 @@ fn spawn_dummy_task<T: Send + 'static>(ready: T) -> task::JoinHandle<T> {
 }
 
 /// Sleep until the genesis time if necessary.
-async fn sleep_until(time: DateTimeUtc) {
+async fn sleep_until(time: DateTimeUtc) -> std::ops::ControlFlow<()> {
     let shutdown_signal = install_shutdown_signal();
     // Sleep until start time if needed
     let sleep = async {
@@ -776,9 +778,11 @@ async fn sleep_until(time: DateTimeUtc) {
     tokio::select! {
         _ = shutdown_signal => {
             tracing::info!("Shutdown signal received, shutting down");
+            std::ops::ControlFlow::Break(())
         }
         _ = sleep => {
             tracing::info!("Genesis time reached, starting ledger");
+            std::ops::ControlFlow::Continue(())
         }
-    };
+    }
 }
