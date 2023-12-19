@@ -4,7 +4,6 @@ use data_encoding::HEXUPPER;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use masp_proofs::bls12_381;
-use namada::core::ledger::inflation;
 use namada::core::ledger::masp_conversions::update_allowed_conversions;
 use namada::core::ledger::pgf::inflation as pgf_inflation;
 use namada::core::types::storage::KeySeg;
@@ -15,7 +14,7 @@ use namada::ledger::protocol;
 use namada::ledger::storage::wl_storage::WriteLogAndStorage;
 use namada::ledger::storage::write_log::StorageModification;
 use namada::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
-use namada::ledger::storage_api::{ResultExt, StorageRead};
+use namada::ledger::storage_api::{ResultExt, StorageRead, StorageWrite};
 use namada::proof_of_stake::storage::{
     find_validator_by_raw_hash, read_last_block_proposer_address,
     write_last_block_proposer_address,
@@ -674,7 +673,7 @@ where
             self.wl_storage.storage.block.height.0 - first_block_of_last_epoch;
 
         // PoS inflation
-        namada_proof_of_stake::apply_inflation(
+        namada_proof_of_stake::rewards::apply_inflation(
             &mut self.wl_storage,
             last_epoch,
             num_blocks_in_last_epoch,
@@ -836,7 +835,7 @@ mod test_finalize_block {
     use namada::proof_of_stake::storage::{
         enqueued_slashes_handle, get_num_consensus_validators,
         read_consensus_validator_set_addresses_with_stake, read_total_stake,
-        read_validator_stake, rewards_accumulator_handle, unjail_validator,
+        read_validator_stake, rewards_accumulator_handle,
         validator_consensus_key_handle, validator_rewards_products_handle,
         validator_slashes_handle, validator_state_handle, write_pos_params,
     };
