@@ -185,6 +185,13 @@ test-unit:
 		-- --skip e2e --skip integration --skip pos_state_machine_test \
 		-Z unstable-options --report-time
 
+test-unit-with-coverage:
+	$(cargo) +$(nightly) llvm-cov --output-dir target \
+		--features namada/testing \
+		--html \
+		-- --skip e2e --skip pos_state_machine_test --skip integration \
+		-Z unstable-options --report-time
+
 test-unit-mainnet:
 	$(cargo) +$(nightly) test \
 		--features "mainnet" \
