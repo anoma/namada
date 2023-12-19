@@ -18,6 +18,9 @@ version.workspace = true
 [dependencies]
 borsh.workspace = true
 borsh-ext.workspace = true
-namada_core = {path = "../core"}
-prost.workspace = true
 ibc = "0.47.0"
+namada_core = {path = "../core"}
+namada_sdk = {path = "../sdk"}
+prost.workspace = true
+tendermint-config.workspace = true
+tokio = {workspace = true, features = ["rt"]}

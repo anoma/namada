@@ -421,8 +421,6 @@ impl Withdraw {
         source: Option<Address>,
         args: GlobalArgs,
     ) -> Self {
-        // FIXME: request the correct type directly in the args instead of
-        // rebuilding it
         let init_proposal = namada_core::types::transaction::pos::Withdraw {
             validator,
             source,

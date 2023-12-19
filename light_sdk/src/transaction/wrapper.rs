@@ -4,8 +4,6 @@ use namada_core::types::key::common;
 use namada_core::types::storage::Epoch;
 use namada_core::types::transaction::{Fee, GasLimit};
 
-// FIXME: instead of this file would be better to call finalize(args) on every
-// transaction type that would produce a signed wrapper with the provided args
 pub struct Wrapper(Tx);
 
 impl Wrapper {

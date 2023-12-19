@@ -48,6 +48,7 @@ pub(in crate::transaction) fn attach_raw_signatures(
     signer: common::PublicKey,
     signature: common::Signature,
 ) -> Tx {
+    tx.protocol_filter();
     tx.add_section(Section::Signature(Signature {
         targets: vec![tx.raw_header_hash()],
         signer: Signer::PubKeys(vec![signer]),
