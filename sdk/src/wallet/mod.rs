@@ -656,8 +656,9 @@ impl<U: WalletIo> Wallet<U> {
             alias = format!("disposable_{ctr}");
         }
         // Generate a disposable keypair to sign the wrapper if requested
-        // TODO: once the wrapper transaction has been accepted, this key can be
-        // deleted from wallet
+        // TODO: once the wrapper transaction has been applied, this key can be
+        // deleted from wallet (the transaction being accepted is not enough
+        // cause we could end up doing a rollback)
         let (alias, disposable_keypair) = self
             .gen_store_secret_key(
                 SchemeType::Ed25519,
