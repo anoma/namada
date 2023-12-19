@@ -329,10 +329,8 @@ where
         signing::generate_test_vector(namada, &tx).await?;
 
         let response = namada.submit(tx, &args.tx).await?;
-        if let ProcessTxResponse::Applied(tx_resp) = response {
-            if let InnerTxResult::Success(result) = tx_resp.inner_tx_result() {
-                return Ok(result.initialized_accounts.first().cloned());
-            }
+        if let Some(result) = response.is_applied_and_valid() {
+            return Ok(result.initialized_accounts.first().cloned());
         }
     }
 

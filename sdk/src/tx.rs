@@ -133,19 +133,22 @@ pub enum ProcessTxResponse {
 }
 
 impl ProcessTxResponse {
-    // Is the transaction applied and was it accepted by all VPs? Note that this
-    // always returns false for dry-run transactions.
-    pub fn is_applied_and_valid(&self) -> bool {
+    // Returns a `TxResult` if the transaction applied and was it accepted by
+    // all VPs. Note that this always returns false for dry-run transactions.
+    pub fn is_applied_and_valid(&self) -> Option<&TxResult> {
         match self {
             ProcessTxResponse::Applied(resp) => {
-                resp.code == ResultCode::Ok
-                    && matches!(
-                        resp.inner_tx_result(),
-                        InnerTxResult::Success(_)
-                    )
+                if resp.code == ResultCode::Ok {
+                    if let InnerTxResult::Success(result) =
+                        resp.inner_tx_result()
+                    {
+                        return Some(result);
+                    }
+                }
+                None
             }
             ProcessTxResponse::DryRun(_) | ProcessTxResponse::Broadcast(_) => {
-                false
+                None
             }
         }
     }
