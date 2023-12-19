@@ -88,7 +88,7 @@ use crate::e2e::helpers::{
 use crate::e2e::setup::{
     self, sleep, working_dir, Bin, NamadaCmd, Test, TestDir, Who,
 };
-use crate::strings::TX_APPLIED_SUCCESS;
+use crate::strings::{TX_ACCEPTED, TX_APPLIED_SUCCESS, TX_FAILED};
 use crate::{run, run_as};
 
 #[test]
@@ -339,11 +339,11 @@ fn create_client(test_a: &Test, test_b: &Test) -> Result<(ClientId, ClientId)> {
     let height_b = submit_ibc_tx(test_b, message, ALBERT, ALBERT_KEY, false)?;
 
     let events = get_events(test_a, height_a)?;
-    let client_id_a = get_client_id_from_events(&events)
-        .ok_or(eyre!("Transaction failed"))?;
+    let client_id_a =
+        get_client_id_from_events(&events).ok_or(eyre!(TX_FAILED))?;
     let events = get_events(test_b, height_b)?;
-    let client_id_b = get_client_id_from_events(&events)
-        .ok_or(eyre!("Transaction failed"))?;
+    let client_id_b =
+        get_client_id_from_events(&events).ok_or(eyre!(TX_FAILED))?;
 
     // `client_id_a` represents the ID of the B's client on Chain A
     Ok((client_id_a, client_id_b))
@@ -618,8 +618,8 @@ fn channel_handshake(
     };
     let height = submit_ibc_tx(test_a, msg, ALBERT, ALBERT_KEY, false)?;
     let events = get_events(test_a, height)?;
-    let channel_id_a = get_channel_id_from_events(&events)
-        .ok_or(eyre!("Transaction failed"))?;
+    let channel_id_a =
+        get_channel_id_from_events(&events).ok_or(eyre!(TX_FAILED))?;
 
     // get the proofs from Chain A
     let height_a = query_height(test_a)?;
@@ -645,8 +645,8 @@ fn channel_handshake(
     // OpenTryChannel on Chain B
     let height = submit_ibc_tx(test_b, msg, ALBERT, ALBERT_KEY, false)?;
     let events = get_events(test_b, height)?;
-    let channel_id_b = get_channel_id_from_events(&events)
-        .ok_or(eyre!("Transaction failed"))?;
+    let channel_id_b =
+        get_channel_id_from_events(&events).ok_or(eyre!(TX_FAILED))?;
 
     // get the A's proofs on Chain B
     let height_b = query_height(test_b)?;
@@ -758,8 +758,7 @@ fn transfer_token(
         false,
     )?;
     let events = get_events(test_a, height)?;
-    let packet =
-        get_packet_from_events(&events).ok_or(eyre!("Transaction failed"))?;
+    let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
     check_ibc_packet_query(test_a, &"send_packet".parse().unwrap(), &packet)?;
 
     let height_a = query_height(test_a)?;
@@ -776,10 +775,8 @@ fn transfer_token(
     // Receive the token on Chain B
     let height = submit_ibc_tx(test_b, msg, ALBERT, ALBERT_KEY, false)?;
     let events = get_events(test_b, height)?;
-    let packet =
-        get_packet_from_events(&events).ok_or(eyre!("Transaction failed"))?;
-    let ack =
-        get_ack_from_events(&events).ok_or(eyre!("Transaction failed"))?;
+    let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
+    let ack = get_ack_from_events(&events).ok_or(eyre!(TX_FAILED))?;
     check_ibc_packet_query(
         test_b,
         &"write_acknowledgement".parse().unwrap(),
@@ -887,7 +884,7 @@ fn transfer_received_token(
         &rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Wrapper transaction accepted")?;
+    client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
@@ -923,8 +920,7 @@ fn transfer_back(
         false,
     )?;
     let events = get_events(test_b, height)?;
-    let packet =
-        get_packet_from_events(&events).ok_or(eyre!("Transaction failed"))?;
+    let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
 
     let height_b = query_height(test_b)?;
     let proof = get_commitment_proof(test_b, &packet, height_b)?;
@@ -939,10 +935,8 @@ fn transfer_back(
     // Receive the token on Chain A
     let height = submit_ibc_tx(test_a, msg, ALBERT, ALBERT_KEY, false)?;
     let events = get_events(test_a, height)?;
-    let packet =
-        get_packet_from_events(&events).ok_or(eyre!("Transaction failed"))?;
-    let ack =
-        get_ack_from_events(&events).ok_or(eyre!("Transaction failed"))?;
+    let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
+    let ack = get_ack_from_events(&events).ok_or(eyre!(TX_FAILED))?;
 
     // get the proof on Chain A
     let height_a = query_height(test_a)?;
@@ -987,8 +981,7 @@ fn transfer_timeout(
         false,
     )?;
     let events = get_events(test_a, height)?;
-    let packet =
-        get_packet_from_events(&events).ok_or(eyre!("Transaction failed"))?;
+    let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
 
     // wait for the timeout
     sleep(5);
@@ -1065,8 +1058,7 @@ fn shielded_transfer(
         false,
     )?;
     let events = get_events(test_a, height)?;
-    let packet =
-        get_packet_from_events(&events).ok_or(eyre!("Transaction failed"))?;
+    let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
     check_ibc_packet_query(test_a, &"send_packet".parse().unwrap(), &packet)?;
 
     let height_a = query_height(test_a)?;
@@ -1083,10 +1075,8 @@ fn shielded_transfer(
     // Receive the token on Chain B
     let height = submit_ibc_tx(test_b, msg, ALBERT, ALBERT_KEY, false)?;
     let events = get_events(test_b, height)?;
-    let packet =
-        get_packet_from_events(&events).ok_or(eyre!("Transaction failed"))?;
-    let ack =
-        get_ack_from_events(&events).ok_or(eyre!("Transaction failed"))?;
+    let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
+    let ack = get_ack_from_events(&events).ok_or(eyre!(TX_FAILED))?;
     check_ibc_packet_query(
         test_b,
         &"write_acknowledgement".parse().unwrap(),

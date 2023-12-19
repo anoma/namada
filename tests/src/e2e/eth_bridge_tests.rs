@@ -46,7 +46,7 @@ use crate::e2e::setup::constants::{
     ALBERT, ALBERT_KEY, BERTHA, BERTHA_KEY, NAM,
 };
 use crate::e2e::setup::{Bin, Who};
-use crate::strings::TX_APPLIED_SUCCESS;
+use crate::strings::{TX_ACCEPTED, TX_APPLIED_SUCCESS};
 use crate::{run, run_as};
 
 /// # Examples
@@ -176,7 +176,7 @@ async fn test_roundtrip_eth_transfer() -> Result<()> {
         tx_args,
         Some(CLIENT_COMMAND_TIMEOUT_SECONDS)
     )?;
-    namadac_tx.exp_string("Wrapper transaction accepted")?;
+    namadac_tx.exp_string(TX_ACCEPTED)?;
     namadac_tx.exp_string(TX_APPLIED_SUCCESS)?;
     drop(namadac_tx);
 
@@ -367,9 +367,7 @@ async fn test_bridge_pool_e2e() {
         Some(CLIENT_COMMAND_TIMEOUT_SECONDS)
     )
     .unwrap();
-    namadac_tx
-        .exp_string("Wrapper transaction accepted")
-        .unwrap();
+    namadac_tx.exp_string(TX_ACCEPTED).unwrap();
     namadac_tx.exp_string(TX_APPLIED_SUCCESS).unwrap();
     drop(namadac_tx);
 
@@ -768,7 +766,7 @@ async fn test_wdai_transfer_implicit_unauthorized() -> Result<()> {
             denom: 0u8.into(),
         },
     )?;
-    cmd.exp_string("Transaction was rejected by VPs.")?;
+    cmd.exp_string(TX_REJECTED)?;
     cmd.assert_success();
 
     // check balances are unchanged after an unsuccessful transfer
@@ -837,8 +835,8 @@ async fn test_wdai_transfer_established_unauthorized() -> Result<()> {
             denom: 0u8.into(),
         },
     )?;
-    cmd.exp_string("Wrapper transaction accepted")?;
-    cmd.exp_string("Transaction was rejected by VPs")?;
+    cmd.exp_string(TX_ACCEPTED)?;
+    cmd.exp_string(TX_REJECTED)?;
     cmd.assert_success();
 
     // check balances are unchanged after an unsuccessful transfer
@@ -895,7 +893,7 @@ async fn test_wdai_transfer_implicit_to_implicit() -> Result<()> {
         &albert_addr.to_string(),
         second_transfer_amount,
     )?;
-    cmd.exp_string("Wrapper transaction accepted")?;
+    cmd.exp_string(TX_ACCEPTED)?;
     cmd.exp_string(TX_APPLIED_SUCCESS)?;
     cmd.assert_success();
 
@@ -973,7 +971,7 @@ async fn test_wdai_transfer_implicit_to_established() -> Result<()> {
         &albert_addr.to_string(),
         second_transfer_amount,
     )?;
-    cmd.exp_string("Wrapper transaction accepted")?;
+    cmd.exp_string(TX_ACCEPTED)?;
     cmd.exp_string(TX_APPLIED_SUCCESS)?;
     cmd.assert_success();
 
@@ -1054,7 +1052,7 @@ async fn test_wdai_transfer_established_to_implicit() -> Result<()> {
         &albert_established_addr.to_string(),
         second_transfer_amount,
     )?;
-    cmd.exp_string("Wrapper transaction accepted")?;
+    cmd.exp_string(TX_ACCEPTED)?;
     cmd.exp_string(TX_APPLIED_SUCCESS)?;
     cmd.assert_success();
 
@@ -1144,7 +1142,7 @@ async fn test_wdai_transfer_established_to_established() -> Result<()> {
         &albert_established_addr.to_string(),
         second_transfer_amount,
     )?;
-    cmd.exp_string("Wrapper transaction accepted")?;
+    cmd.exp_string(TX_ACCEPTED)?;
     cmd.exp_string(TX_APPLIED_SUCCESS)?;
     cmd.assert_success();
 

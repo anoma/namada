@@ -51,7 +51,7 @@ use crate::e2e::setup::{
     self, allow_duplicate_ips, default_port_offset, set_validators, sleep, Bin,
     Who,
 };
-use crate::strings::TX_APPLIED_SUCCESS;
+use crate::strings::{TX_ACCEPTED, TX_APPLIED_SUCCESS, TX_FAILED, TX_REJECTED};
 use crate::{run, run_as};
 
 fn start_namada_ledger_node(
@@ -573,7 +573,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
 
             if !dry_run {
-                client.exp_string("Wrapper transaction accepted")?;
+                client.exp_string(TX_ACCEPTED)?;
             }
             client.exp_string(TX_APPLIED_SUCCESS)?;
             client.assert_success();
@@ -728,7 +728,7 @@ fn wrapper_disposable_signer() -> Result<()> {
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
 
-    client.exp_string("Wrapper transaction accepted")?;
+    client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
 
     let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
@@ -750,7 +750,7 @@ fn wrapper_disposable_signer() -> Result<()> {
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
 
-    client.exp_string("Wrapper transaction accepted")?;
+    client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
     let tx_args = vec![
@@ -823,8 +823,8 @@ fn invalid_transactions() -> Result<()> {
     ];
 
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Wrapper transaction accepted")?;
-    client.exp_string("Transaction was rejected by VPs")?;
+    client.exp_string(TX_ACCEPTED)?;
+    client.exp_string(TX_REJECTED)?;
 
     client.assert_success();
     let mut ledger = bg_ledger.foreground();
@@ -875,8 +875,8 @@ fn invalid_transactions() -> Result<()> {
     ];
 
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Wrapper transaction accepted")?;
-    client.exp_string("Transaction failed.")?;
+    client.exp_string(TX_ACCEPTED)?;
+    client.exp_string(TX_FAILED)?;
     client.assert_success();
     Ok(())
 }
@@ -1722,7 +1722,7 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
                 let mut args = (*tx_args).clone();
                 args.push(&*validator_one_rpc);
                 let mut client = run!(*test, Bin::Client, args, Some(80))?;
-                client.exp_string("Wrapper transaction accepted")?;
+                client.exp_string(TX_ACCEPTED)?;
                 client.exp_string(TX_APPLIED_SUCCESS)?;
                 client.assert_success();
                 let res: Result<()> = Ok(());
@@ -3398,7 +3398,7 @@ fn test_invalid_validator_txs() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction was rejected by VPs")?;
+    client.exp_string(TX_REJECTED)?;
     client.assert_success();
 
     // Try to deactivate validator-1 as validator-0
@@ -3413,7 +3413,7 @@ fn test_invalid_validator_txs() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction was rejected by VPs")?;
+    client.exp_string(TX_REJECTED)?;
     client.assert_success();
 
     // Try to change the validator-1 website as validator-0
@@ -3430,7 +3430,7 @@ fn test_invalid_validator_txs() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction was rejected by VPs")?;
+    client.exp_string(TX_REJECTED)?;
     client.assert_success();
 
     // Deactivate validator-1
@@ -3488,7 +3488,7 @@ fn test_invalid_validator_txs() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction was rejected by VPs")?;
+    client.exp_string(TX_REJECTED)?;
     client.assert_success();
 
     Ok(())
