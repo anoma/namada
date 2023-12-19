@@ -1974,7 +1974,8 @@ pub async fn build_ibc_transfer(
             .map_err(|e| Error::from(QueryError::Wasm(e.to_string())))?;
 
     let ibc_denom =
-        rpc::query_ibc_denom(context, &args.token, Some(&source)).await;
+        rpc::query_ibc_denom(context, &args.token.to_string(), Some(&source))
+            .await;
     let token = PrefixedCoin {
         denom: ibc_denom.parse().expect("Invalid IBC denom"),
         // Set the IBC amount as an integer

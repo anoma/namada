@@ -3164,6 +3164,7 @@ pub mod args {
     pub const TM_ADDRESS: Arg<String> = arg("tm-address");
     pub const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
     pub const TOKEN: Arg<WalletAddress> = arg("token");
+    pub const TOKEN_STR: Arg<String> = arg("token");
     pub const TRANSFER_SOURCE: Arg<WalletTransferSource> = arg("source");
     pub const TRANSFER_TARGET: Arg<WalletTransferTarget> = arg("target");
     pub const TX_HASH: Arg<String> = arg("tx-hash");
@@ -5654,7 +5655,7 @@ pub mod args {
                 query,
                 output_folder: self.output_folder,
                 target: chain_ctx.get(&self.target),
-                token: chain_ctx.get(&self.token),
+                token: self.token,
                 amount: self.amount,
                 port_id: self.port_id,
                 channel_id: self.channel_id,
@@ -5667,7 +5668,7 @@ pub mod args {
             let query = Query::parse(matches);
             let output_folder = OUTPUT_FOLDER_PATH.parse(matches);
             let target = TRANSFER_TARGET.parse(matches);
-            let token = TOKEN.parse(matches);
+            let token = TOKEN_STR.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let port_id = PORT_ID.parse(matches);
             let channel_id = CHANNEL_ID.parse(matches);

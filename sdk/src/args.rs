@@ -2418,8 +2418,8 @@ pub struct GenIbcShieldedTransafer<C: NamadaTypes = SdkTypes> {
     pub output_folder: Option<PathBuf>,
     /// The target address
     pub target: C::TransferTarget,
-    /// The token address
-    pub token: C::Address,
+    /// The token address which could be a non-namada address
+    pub token: String,
     /// Transferred token amount
     pub amount: InputAmount,
     /// Port ID via which the token is received
