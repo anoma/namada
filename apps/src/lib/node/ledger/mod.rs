@@ -775,7 +775,7 @@ async fn sleep_until(time: DateTimeUtc) {
     };
     tokio::select! {
         _ = shutdown_signal => {
-            tracing::info!("Shutdown signal receiving, shutting down");
+            tracing::info!("Shutdown signal received, shutting down");
         }
         _ = sleep => {
             tracing::info!("Genesis time reached, starting ledger");
