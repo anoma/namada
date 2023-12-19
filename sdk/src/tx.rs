@@ -328,7 +328,7 @@ pub async fn broadcast_tx(
 
     if response.code == 0.into() {
         display_line!(context.io(), "Transaction added to mempool.");
-        tracing::debug!("Transaction mempool response: {:?}", response);
+        tracing::debug!("Transaction mempool response: {response:#?}");
         // Print the transaction identifiers to enable the extraction of
         // acceptance/application results later
         {
