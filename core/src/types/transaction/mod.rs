@@ -37,7 +37,8 @@ use crate::types::storage;
 use crate::types::transaction::protocol::ProtocolTx;
 
 /// The different result codes that the ledger may send back to a client
-/// indicating the status of their submitted tx
+/// indicating the status of their submitted tx.
+/// The codes must not change with versions, only need ones may be added.
 #[derive(
     Debug,
     Copy,
@@ -50,6 +51,8 @@ use crate::types::transaction::protocol::ProtocolTx;
     Deserialize,
 )]
 pub enum ResultCode {
+    // WARN: These codes shouldn't be changed between version!
+    // =========================================================================
     /// Success
     Ok = 0,
     /// Error in WASM tx execution
@@ -80,6 +83,8 @@ pub enum ResultCode {
     InvalidVoteExtension = 13,
     /// Tx is too large
     TooLarge = 14,
+    // =========================================================================
+    // WARN: These codes shouldn't be changed between version!
 }
 
 impl ResultCode {
