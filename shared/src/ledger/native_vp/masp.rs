@@ -125,9 +125,8 @@ where
         let epoch = self.ctx.get_block_epoch()?;
         let (transfer, shielded_tx) = self.ctx.get_shielded_action(tx_data)?;
 
-        let expiry_height: u64 = shielded_tx.expiry_height().into();
-        if expiry_height != 0
-            && u64::from(self.ctx.get_block_height()?) > expiry_height
+        if u64::from(self.ctx.get_block_height()?)
+            > u64::from(shielded_tx.expiry_height())
         {
             tracing::debug!("MASP transaction is expired");
             return Ok(false);
