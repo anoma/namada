@@ -1,13 +1,14 @@
-//! Helper structures to manage accounts
+//! Support for signature based authorization of actions on a user account
+//! using public key(s) and signature threshold (minimum number of signatures
+//! needed to authorize an action) stored on-chain.
 
 use std::collections::{BTreeMap, HashMap};
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::address::Address;
+use namada_core::hints;
+use namada_core::key::{common, RefTo};
 use serde::{Deserialize, Serialize};
-
-use super::address::Address;
-use super::key::{common, RefTo};
-use crate::hints;
 
 #[derive(
     Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
