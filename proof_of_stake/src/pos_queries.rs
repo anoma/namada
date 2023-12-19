@@ -11,11 +11,12 @@ use namada_core::types::storage::{BlockHeight, Epoch};
 use namada_core::types::{key, token};
 use thiserror::Error;
 
+use crate::storage::find_validator_by_raw_hash;
 use crate::types::WeightedValidator;
 use crate::{
-    consensus_validator_set_handle, find_validator_by_raw_hash,
-    get_total_consensus_stake, read_pos_params, validator_eth_cold_key_handle,
-    validator_eth_hot_key_handle, ConsensusValidatorSet, PosParams,
+    consensus_validator_set_handle, get_total_consensus_stake, read_pos_params,
+    validator_eth_cold_key_handle, validator_eth_hot_key_handle,
+    ConsensusValidatorSet, PosParams,
 };
 
 /// Errors returned by [`PosQueries`] operations.
