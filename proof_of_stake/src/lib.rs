@@ -27,6 +27,8 @@ use std::cmp::{self};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 pub use error::*;
+use namada_core::ledger::inflation;
+use namada_core::ledger::parameters::storage as params_storage;
 use namada_core::ledger::storage_api::collections::lazy_map::{
     Collectable, LazyMap, NestedSubKey, SubKey,
 };
@@ -2733,5 +2735,83 @@ where
             offset,
         )?;
     }
+    Ok(())
+}
+
+/// Apply inflation to the Proof of Stake system.
+pub fn apply_inflation<S>(
+    storage: &mut S,
+    last_epoch: Epoch,
+    num_blocks_in_last_epoch: u64,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    // Read from Parameters storage
+    let epochs_per_year: u64 = storage
+        .read(&params_storage::get_epochs_per_year_key())?
+        .expect("Epochs per year should exist in storage");
+    let pos_p_gain_nom: Dec = storage
+        .read(&params_storage::get_pos_gain_p_key())?
+        .expect("PoS P-gain factor should exist in storage");
+    let pos_d_gain_nom: Dec = storage
+        .read(&params_storage::get_pos_gain_d_key())?
+        .expect("PoS D-gain factor should exist in storage");
+
+    let pos_last_staked_ratio: Dec = storage
+        .read(&params_storage::get_staked_ratio_key())?
+        .expect("PoS staked ratio should exist in storage");
+    let pos_last_inflation_amount: token::Amount = storage
+        .read(&params_storage::get_pos_inflation_amount_key())?
+        .expect("PoS inflation amount should exist in storage");
+
+    // Read from PoS storage
+    let params = read_pos_params(storage)?;
+    let staking_token = staking_token_address(storage);
+
+    let total_tokens: token::Amount = storage
+        .read(&token::minted_balance_key(&staking_token))?
+        .expect("Total NAM balance should exist in storage");
+    let pos_locked_supply = read_total_stake(storage, &params, last_epoch)?;
+    let pos_locked_ratio_target = params.target_staked_ratio;
+    let pos_max_inflation_rate = params.max_inflation_rate;
+
+    // Run rewards PD controller
+    let pos_controller = inflation::RewardsController {
+        locked_tokens: pos_locked_supply.raw_amount(),
+        total_tokens: total_tokens.raw_amount(),
+        total_native_tokens: total_tokens.raw_amount(),
+        locked_ratio_target: pos_locked_ratio_target,
+        locked_ratio_last: pos_last_staked_ratio,
+        max_reward_rate: pos_max_inflation_rate,
+        last_inflation_amount: pos_last_inflation_amount.raw_amount(),
+        p_gain_nom: pos_p_gain_nom,
+        d_gain_nom: pos_d_gain_nom,
+        epochs_per_year,
+    };
+    // Run the rewards controllers
+    let inflation::ValsToUpdate {
+        locked_ratio,
+        inflation,
+    } = pos_controller.run();
+
+    let inflation =
+        token::Amount::from_uint(inflation, 0).into_storage_result()?;
+
+    update_rewards_products_and_mint_inflation(
+        storage,
+        &params,
+        last_epoch,
+        num_blocks_in_last_epoch,
+        inflation,
+        &staking_token,
+    )?;
+
+    // Write new rewards parameters that will be used for the inflation of
+    // the current new epoch
+    storage
+        .write(&params_storage::get_pos_inflation_amount_key(), inflation)?;
+    storage.write(&params_storage::get_staked_ratio_key(), locked_ratio)?;
+
     Ok(())
 }

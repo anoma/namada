@@ -6,24 +6,21 @@ use masp_primitives::sapling::Node;
 use masp_proofs::bls12_381;
 use namada::core::ledger::inflation;
 use namada::core::ledger::masp_conversions::update_allowed_conversions;
-use namada::core::ledger::pgf::ADDRESS as pgf_address;
+use namada::core::ledger::pgf::inflation as pgf_inflation;
 use namada::core::types::storage::KeySeg;
 use namada::ledger::events::EventType;
 use namada::ledger::gas::{GasMetering, TxGasMeter};
-use namada::ledger::parameters::storage as params_storage;
-use namada::ledger::pos::{namada_proof_of_stake, staking_token_address};
+use namada::ledger::pos::namada_proof_of_stake;
 use namada::ledger::protocol;
 use namada::ledger::storage::wl_storage::WriteLogAndStorage;
 use namada::ledger::storage::write_log::StorageModification;
 use namada::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
-use namada::ledger::storage_api::token::credit_tokens;
-use namada::ledger::storage_api::{pgf, ResultExt, StorageRead, StorageWrite};
+use namada::ledger::storage_api::{ResultExt, StorageRead};
 use namada::proof_of_stake::storage::{
     find_validator_by_raw_hash, read_last_block_proposer_address,
-    read_pos_params, read_total_stake, write_last_block_proposer_address,
+    write_last_block_proposer_address,
 };
 use namada::types::address::MASP;
-use namada::types::dec::Dec;
 use namada::types::key::tm_raw_hash_to_string;
 use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
 use namada::types::token::{
@@ -664,55 +661,6 @@ where
     /// with respect to the previous epoch.
     fn apply_inflation(&mut self, current_epoch: Epoch) -> Result<()> {
         let last_epoch = current_epoch.prev();
-        // Get input values needed for the PD controller for PoS.
-        // Run the PD controllers to calculate new rates.
-
-        let params = read_pos_params(&self.wl_storage)?;
-
-        // Read from Parameters storage
-        let epochs_per_year: u64 = self
-            .read_storage_key(&params_storage::get_epochs_per_year_key())
-            .expect("Epochs per year should exist in storage");
-
-        let pos_last_staked_ratio: Dec = self
-            .read_storage_key(&params_storage::get_staked_ratio_key())
-            .expect("PoS staked ratio should exist in storage");
-        let pos_last_inflation_amount: token::Amount = self
-            .read_storage_key(&params_storage::get_pos_inflation_amount_key())
-            .expect("PoS inflation amount should exist in storage");
-
-        // Read from PoS storage
-        let total_tokens: token::Amount = self
-            .read_storage_key(&token::minted_balance_key(
-                &staking_token_address(&self.wl_storage),
-            ))
-            .expect("Total NAM balance should exist in storage");
-        let pos_locked_supply =
-            read_total_stake(&self.wl_storage, &params, last_epoch)?;
-        let pos_locked_ratio_target = params.target_staked_ratio;
-        let pos_max_inflation_rate = params.max_inflation_rate;
-        let pos_p_gain_nom = params.rewards_gain_p;
-        let pos_d_gain_nom = params.rewards_gain_d;
-
-        // Run rewards PD controller
-        let pos_controller = inflation::RewardsController {
-            locked_tokens: pos_locked_supply.raw_amount(),
-            total_tokens: total_tokens.raw_amount(),
-            total_native_tokens: total_tokens.raw_amount(),
-            locked_ratio_target: pos_locked_ratio_target,
-            locked_ratio_last: pos_last_staked_ratio,
-            max_reward_rate: pos_max_inflation_rate,
-            last_inflation_amount: pos_last_inflation_amount.raw_amount(),
-            p_gain_nom: pos_p_gain_nom,
-            d_gain_nom: pos_d_gain_nom,
-            epochs_per_year,
-        };
-
-        // Run the rewards controllers
-        let inflation::ValsToUpdate {
-            locked_ratio,
-            inflation,
-        } = pos_controller.run();
 
         // Get the number of blocks in the last epoch
         let first_block_of_last_epoch = self
@@ -725,116 +673,15 @@ where
         let num_blocks_in_last_epoch =
             self.wl_storage.storage.block.height.0 - first_block_of_last_epoch;
 
-        let staking_token = staking_token_address(&self.wl_storage);
-
-        let inflation = token::Amount::from_uint(inflation, 0)
-            .expect("Should not fail Uint -> Amount conversion");
-        namada_proof_of_stake::rewards::update_rewards_products_and_mint_inflation(
+        // PoS inflation
+        namada_proof_of_stake::apply_inflation(
             &mut self.wl_storage,
-            &params,
             last_epoch,
             num_blocks_in_last_epoch,
-            inflation,
-            &staking_token,
-        )
-        .expect(
-            "Must be able to update PoS rewards products and mint inflation",
-        );
-
-        // Write new rewards parameters that will be used for the inflation of
-        // the current new epoch
-        self.wl_storage
-            .write(&params_storage::get_pos_inflation_amount_key(), inflation)
-            .expect("unable to write new reward rate");
-        self.wl_storage
-            .write(&params_storage::get_staked_ratio_key(), locked_ratio)
-            .expect("unable to write new locked ratio");
-
-        // Pgf inflation
-        let pgf_parameters = pgf::get_parameters(&self.wl_storage)?;
-
-        let pgf_pd_rate =
-            pgf_parameters.pgf_inflation_rate / Dec::from(epochs_per_year);
-        let pgf_inflation = Dec::from(total_tokens) * pgf_pd_rate;
-        let pgf_inflation_amount = token::Amount::from(pgf_inflation);
-
-        credit_tokens(
-            &mut self.wl_storage,
-            &staking_token,
-            &pgf_address,
-            pgf_inflation_amount,
         )?;
 
-        tracing::info!(
-            "Minting {} tokens for PGF rewards distribution into the PGF \
-             account.",
-            pgf_inflation_amount.to_string_native()
-        );
-
-        let mut pgf_fundings = pgf::get_payments(&self.wl_storage)?;
-        // we want to pay first the oldest fundings
-        pgf_fundings.sort_by(|a, b| a.id.cmp(&b.id));
-
-        for funding in pgf_fundings {
-            if storage_api::token::transfer(
-                &mut self.wl_storage,
-                &staking_token,
-                &pgf_address,
-                &funding.detail.target,
-                funding.detail.amount,
-            )
-            .is_ok()
-            {
-                tracing::info!(
-                    "Paying {} tokens for {} project.",
-                    funding.detail.amount.to_string_native(),
-                    &funding.detail.target,
-                );
-            } else {
-                tracing::warn!(
-                    "Failed to pay {} tokens for {} project.",
-                    funding.detail.amount.to_string_native(),
-                    &funding.detail.target,
-                );
-            }
-        }
-
-        // Pgf steward inflation
-        let stewards = pgf::get_stewards(&self.wl_storage)?;
-        let pgf_stewards_pd_rate =
-            pgf_parameters.stewards_inflation_rate / Dec::from(epochs_per_year);
-        let pgf_steward_inflation =
-            Dec::from(total_tokens) * pgf_stewards_pd_rate;
-
-        for steward in stewards {
-            for (address, percentage) in steward.reward_distribution {
-                let pgf_steward_reward = pgf_steward_inflation
-                    .checked_mul(&percentage)
-                    .unwrap_or_default();
-                let reward_amount = token::Amount::from(pgf_steward_reward);
-
-                if credit_tokens(
-                    &mut self.wl_storage,
-                    &staking_token,
-                    &address,
-                    reward_amount,
-                )
-                .is_ok()
-                {
-                    tracing::info!(
-                        "Minting {} tokens for steward {}.",
-                        reward_amount.to_string_native(),
-                        address,
-                    );
-                } else {
-                    tracing::warn!(
-                        "Failed minting {} tokens for steward {}.",
-                        reward_amount.to_string_native(),
-                        address,
-                    );
-                }
-            }
-        }
+        // Pgf inflation
+        pgf_inflation::apply_inflation(&mut self.wl_storage)?;
 
         Ok(())
     }
@@ -988,8 +835,8 @@ mod test_finalize_block {
     use namada::ledger::storage_api::StorageWrite;
     use namada::proof_of_stake::storage::{
         enqueued_slashes_handle, get_num_consensus_validators,
-        read_consensus_validator_set_addresses_with_stake,
-        read_validator_stake, rewards_accumulator_handle,
+        read_consensus_validator_set_addresses_with_stake, read_total_stake,
+        read_validator_stake, rewards_accumulator_handle, unjail_validator,
         validator_consensus_key_handle, validator_rewards_products_handle,
         validator_slashes_handle, validator_state_handle, write_pos_params,
     };
@@ -1001,7 +848,7 @@ mod test_finalize_block {
     };
     use namada::proof_of_stake::{unjail_validator, ADDRESS as pos_address};
     use namada::proto::{Code, Data, Section, Signature};
-    use namada::types::dec::POS_DECIMAL_PRECISION;
+    use namada::types::dec::{Dec, POS_DECIMAL_PRECISION};
     use namada::types::ethereum_events::{EthAddress, Uint as ethUint};
     use namada::types::hash::Hash;
     use namada::types::keccak::KeccakHash;
@@ -2536,7 +2383,7 @@ mod test_finalize_block {
         let delegator = address::testing::gen_implicit_address();
         let del_amount = init_stake;
         let staking_token = shell.wl_storage.storage.native_token.clone();
-        credit_tokens(
+        storage_api::token::credit_tokens(
             &mut shell.wl_storage,
             &staking_token,
             &delegator,
@@ -2661,21 +2508,21 @@ mod test_finalize_block {
 
         // Give the validators some tokens for txs
         let staking_token = shell.wl_storage.storage.native_token.clone();
-        credit_tokens(
+        storage_api::token::credit_tokens(
             &mut shell.wl_storage,
             &staking_token,
             &validator1.address,
             init_stake,
         )
         .unwrap();
-        credit_tokens(
+        storage_api::token::credit_tokens(
             &mut shell.wl_storage,
             &staking_token,
             &validator2.address,
             init_stake,
         )
         .unwrap();
-        credit_tokens(
+        storage_api::token::credit_tokens(
             &mut shell.wl_storage,
             &staking_token,
             &validator3.address,
@@ -4052,7 +3899,7 @@ mod test_finalize_block {
         let delegator = address::testing::gen_implicit_address();
         let del_1_amount = token::Amount::native_whole(37_231);
         let staking_token = shell.wl_storage.storage.native_token.clone();
-        credit_tokens(
+        storage_api::token::credit_tokens(
             &mut shell.wl_storage,
             &staking_token,
             &delegator,
@@ -5151,7 +4998,8 @@ mod test_finalize_block {
         misbehaviors: Option<Vec<Misbehavior>>,
     ) -> (Epoch, token::Amount) {
         let current_epoch = shell.wl_storage.storage.block.epoch;
-        let staking_token = staking_token_address(&shell.wl_storage);
+        let staking_token =
+            namada_proof_of_stake::staking_token_address(&shell.wl_storage);
 
         // NOTE: assumed that the only change in pos address balance by
         // advancing to the next epoch is minted inflation - no change occurs
