@@ -11,7 +11,6 @@ use arse_merkle_tree::InternalKey;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use data_encoding::{BASE32HEX_NOPAD, HEXUPPER};
-use ics23::CommitmentProof;
 use index_set::vec::VecIndexSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -19,7 +18,6 @@ use thiserror::Error;
 use super::key::common;
 use crate::bytes::ByteBuf;
 use crate::hints;
-use crate::ledger::eth_bridge::storage::bridge_pool::BridgePoolProof;
 use crate::types::address::{self, Address};
 use crate::types::ethereum_events::{GetEventNonce, TransfersToNamada, Uint};
 use crate::types::hash::Hash;
@@ -495,26 +493,6 @@ impl From<Vec<u8>> for TreeBytes {
 impl From<TreeBytes> for Vec<u8> {
     fn from(bytes: TreeBytes) -> Self {
         bytes.0
-    }
-}
-
-/// Type of membership proof from a merkle tree
-pub enum MembershipProof {
-    /// ICS23 compliant membership proof
-    ICS23(CommitmentProof),
-    /// Bespoke membership proof for the Ethereum bridge pool
-    BridgePool(BridgePoolProof),
-}
-
-impl From<CommitmentProof> for MembershipProof {
-    fn from(proof: CommitmentProof) -> Self {
-        Self::ICS23(proof)
-    }
-}
-
-impl From<BridgePoolProof> for MembershipProof {
-    fn from(proof: BridgePoolProof) -> Self {
-        Self::BridgePool(proof)
     }
 }
 

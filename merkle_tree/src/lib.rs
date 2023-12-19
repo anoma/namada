@@ -11,6 +11,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use ics23::commitment_proof::Proof as Ics23Proof;
 use ics23::{CommitmentProof, ExistenceProof, NonExistenceProof};
+use namada_core::ledger::eth_bridge::storage::bridge_pool::BridgePoolProof;
 use thiserror::Error;
 
 use super::traits::{StorageHasher, SubTreeRead, SubTreeWrite};
@@ -24,9 +25,29 @@ use crate::types::address::{Address, InternalAddress};
 use crate::types::hash::Hash;
 use crate::types::keccak::KeccakHash;
 use crate::types::storage::{
-    self, DbKeySeg, Error as StorageError, Key, MembershipProof, StringKey,
-    TreeBytes, TreeKeyError, IBC_KEY_LIMIT,
+    self, DbKeySeg, Error as StorageError, Key, StringKey, TreeBytes,
+    TreeKeyError, IBC_KEY_LIMIT,
 };
+
+/// Type of membership proof from a merkle tree
+pub enum MembershipProof {
+    /// ICS23 compliant membership proof
+    ICS23(CommitmentProof),
+    /// Bespoke membership proof for the Ethereum bridge pool
+    BridgePool(BridgePoolProof),
+}
+
+impl From<CommitmentProof> for MembershipProof {
+    fn from(proof: CommitmentProof) -> Self {
+        Self::ICS23(proof)
+    }
+}
+
+impl From<BridgePoolProof> for MembershipProof {
+    fn from(proof: BridgePoolProof) -> Self {
+        Self::BridgePool(proof)
+    }
+}
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
