@@ -18,7 +18,6 @@ use namada::core::ledger::governance::storage::keys as governance_storage;
 use namada::eth_bridge::ethers::providers::{Http, Provider};
 use namada::types::storage::Key;
 use namada::types::time::{DateTimeUtc, Utc};
-use namada_sdk::control_flow::install_shutdown_signal;
 use namada_sdk::tendermint::abci::request::CheckTxKind;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
@@ -243,18 +242,18 @@ pub fn rollback(config: config::Ledger) -> Result<(), shell::Error> {
 ///
 /// All must be alive for correct functioning.
 async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
-    let setup_data = run_aux_setup(&config, &wasm_dir).await;
-
-    // Create an `AbortableSpawner` for signalling shut down from the shell or
-    // from Tendermint
-    let mut spawner = AbortableSpawner::new();
-
     // wait for genesis time
     let genesis_time = DateTimeUtc::try_from(config.genesis_time.clone())
         .expect("Should be able to parse genesis time");
     if let std::ops::ControlFlow::Break(_) = sleep_until(genesis_time).await {
         return;
     }
+    let setup_data = run_aux_setup(&config, &wasm_dir).await;
+
+    // Create an `AbortableSpawner` for signalling shut down from the shell or
+    // from Tendermint
+    let mut spawner = AbortableSpawner::new();
+
     // Start Tendermint node
     let tendermint_node = start_tendermint(&mut spawner, &config);
 
@@ -759,7 +758,6 @@ fn spawn_dummy_task<T: Send + 'static>(ready: T) -> task::JoinHandle<T> {
 
 /// Sleep until the genesis time if necessary.
 async fn sleep_until(time: DateTimeUtc) -> std::ops::ControlFlow<()> {
-    let shutdown_signal = install_shutdown_signal();
     // Sleep until start time if needed
     let sleep = async {
         if let Ok(sleep_time) =
@@ -775,9 +773,13 @@ async fn sleep_until(time: DateTimeUtc) -> std::ops::ControlFlow<()> {
             }
         }
     };
+    let shutdown_signal = async {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        namada_sdk::control_flow::shutdown_send(tx).await;
+        rx.await
+    };
     tokio::select! {
         _ = shutdown_signal => {
-            tracing::info!("Shutdown signal received, shutting down");
             std::ops::ControlFlow::Break(())
         }
         _ = sleep => {
