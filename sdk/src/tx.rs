@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use borsh::BorshSerialize;
+use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::transaction::builder;
 use masp_primitives::transaction::builder::Builder;
@@ -34,7 +35,7 @@ use namada_core::ledger::pgf::cli::steward::Commission;
 use namada_core::types::address::{Address, InternalAddress, MASP};
 use namada_core::types::dec::Dec;
 use namada_core::types::hash::Hash;
-use namada_core::types::ibc::IbcShieldedTransfer;
+use namada_core::types::ibc::{IbcShieldedTransfer, MsgShieldedTransfer};
 use namada_core::types::key::*;
 use namada_core::types::masp::{TransferSource, TransferTarget};
 use namada_core::types::storage::Epoch;
@@ -1924,18 +1925,17 @@ pub async fn build_ibc_transfer(
     context: &impl Namada,
     args: &args::TxIbcTransfer,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
-    let default_signer = Some(args.source.clone());
+    let source = args.source.effective_address();
     let signing_data = signing::aux_signing_data(
         context,
         &args.tx,
-        Some(args.source.clone()),
-        default_signer,
+        Some(source.clone()),
+        Some(source.clone()),
     )
     .await?;
     // Check that the source address exists on chain
     let source =
-        source_exists_or_err(args.source.clone(), args.tx.force, context)
-            .await?;
+        source_exists_or_err(source.clone(), args.tx.force, context).await?;
     // We cannot check the receiver
 
     // validate the amount given
@@ -1972,6 +1972,19 @@ pub async fn build_ibc_transfer(
         query_wasm_code_hash(context, args.tx_code_path.to_str().unwrap())
             .await
             .map_err(|e| Error::from(QueryError::Wasm(e.to_string())))?;
+
+    // For transfer from a spending key
+    let shielded_parts = construct_shielded_part(
+        context,
+        &args.source,
+        // Replace the target address as a MASP address because the target
+        // address could be a payment address, but the address isn't that
+        // of this chain.
+        &TransferTarget::Address(MASP),
+        &args.token,
+        validated_amount,
+    )
+    .await?;
 
     let ibc_denom =
         rpc::query_ibc_denom(context, &args.token, Some(&source)).await;
@@ -2014,7 +2027,7 @@ pub async fn build_ibc_transfer(
         IbcTimestamp::none()
     };
 
-    let msg = MsgTransfer {
+    let message = MsgTransfer {
         port_id_on_a: args.port_id.clone(),
         chan_id_on_a: args.channel_id.clone(),
         packet_data,
@@ -2022,13 +2035,41 @@ pub async fn build_ibc_transfer(
         timeout_timestamp_on_b: timeout_timestamp,
     };
 
-    let any_msg = msg.to_any();
-    let mut data = vec![];
-    prost::Message::encode(&any_msg, &mut data)
-        .map_err(TxError::EncodeFailure)?;
-
     let chain_id = args.tx.chain_id.clone().unwrap();
     let mut tx = Tx::new(chain_id, args.tx.expiration);
+
+    let data = match shielded_parts {
+        Some((shielded_transfer, asset_types)) => {
+            let masp_tx_hash =
+                tx.add_masp_tx_section(shielded_transfer.masp_tx).1;
+            let transfer = token::Transfer {
+                source: source.clone(),
+                target: MASP,
+                token: args.token.clone(),
+                amount: validated_amount,
+                // The address could be a payment address, but the address isn't
+                // that of this chain.
+                key: None,
+                // Link the Transfer to the MASP Transaction by hash code
+                shielded: Some(masp_tx_hash),
+            };
+            tx.add_masp_builder(MaspBuilder {
+                asset_types,
+                metadata: shielded_transfer.metadata,
+                builder: shielded_transfer.builder,
+                target: masp_tx_hash,
+            });
+            MsgShieldedTransfer { message, transfer }.serialize_to_vec()
+        }
+        None => {
+            let any_msg = message.to_any();
+            let mut data = vec![];
+            prost::Message::encode(&any_msg, &mut data)
+                .map_err(TxError::EncodeFailure)?;
+            data
+        }
+    };
+
     tx.add_code_from_hash(
         tx_code_hash,
         Some(args.tx_code_path.to_string_lossy().into_owned()),
@@ -2234,42 +2275,15 @@ pub async fn build_transfer<N: Namada>(
         _ => None,
     };
 
-    // Construct the shielded part of the transaction, if any
-    let stx_result =
-        ShieldedContext::<N::ShieldedUtils>::gen_shielded_transfer(
-            context,
-            &args.source,
-            &args.target,
-            &args.token,
-            validated_amount,
-        )
-        .await;
-
-    let shielded_parts = match stx_result {
-        Ok(stx) => Ok(stx),
-        Err(Build(builder::Error::InsufficientFunds(_))) => {
-            Err(TxError::NegativeBalanceAfterTransfer(
-                Box::new(source.clone()),
-                validated_amount.amount.to_string_native(),
-                Box::new(token.clone()),
-            ))
-        }
-        Err(err) => Err(TxError::MaspError(err.to_string())),
-    }?;
-
-    let shielded_tx_epoch = shielded_parts.clone().map(|trans| trans.epoch);
-
-    let asset_types = match shielded_parts.clone() {
-        None => None,
-        Some(transfer) => {
-            // Get the decoded asset types used in the transaction to give
-            // offline wallet users more information
-            let asset_types = used_asset_types(context, &transfer.builder)
-                .await
-                .unwrap_or_default();
-            Some(asset_types)
-        }
-    };
+    // if this transfer is shielded, `on_tx` adds the shielded part to the tx
+    let (on_tx, shielded_tx_epoch) = get_shielded_transfer_appender(
+        context,
+        &args.source,
+        &args.target,
+        &args.token,
+        validated_amount,
+    )
+    .await?;
 
     // Construct the corresponding transparent Transfer object
     let transfer = token::Transfer {
@@ -2282,40 +2296,12 @@ pub async fn build_transfer<N: Namada>(
         shielded: None,
     };
 
-    let add_shielded = |tx: &mut Tx, transfer: &mut token::Transfer| {
-        // Add the MASP Transaction and its Builder to facilitate validation
-        if let Some(ShieldedTransfer {
-            builder,
-            masp_tx,
-            metadata,
-            epoch: _,
-        }) = shielded_parts
-        {
-            // Add a MASP Transaction section to the Tx and get the tx hash
-            let masp_tx_hash = tx.add_masp_tx_section(masp_tx).1;
-            transfer.shielded = Some(masp_tx_hash);
-
-            tracing::debug!("Transfer data {:?}", transfer);
-
-            tx.add_masp_builder(MaspBuilder {
-                // Is safe
-                asset_types: asset_types.unwrap(),
-                // Store how the Info objects map to Descriptors/Outputs
-                metadata,
-                // Store the data that was used to construct the Transaction
-                builder,
-                // Link the Builder to the Transaction by hash code
-                target: masp_tx_hash,
-            });
-        };
-        Ok(())
-    };
     let (tx, unshielding_epoch) = build_pow_flag(
         context,
         &args.tx,
         args.tx_code_path.clone(),
         transfer,
-        add_shielded,
+        on_tx,
         &signing_data.fee_payer,
         tx_source_balance,
     )
@@ -2340,6 +2326,106 @@ pub async fn build_transfer<N: Namada>(
         (None, None) => None,
     };
     Ok((tx, signing_data, masp_epoch))
+}
+
+// Returns a function to add the shielded parts and the shielded epoch if this
+// transfer is shielded. Otherwise, it returns the function is `do_nothing` and
+// None as the shielded epoch
+async fn get_shielded_transfer_appender<N: Namada>(
+    context: &N,
+    source: &TransferSource,
+    target: &TransferTarget,
+    token: &Address,
+    amount: token::DenominatedAmount,
+) -> Result<(
+    Box<dyn FnOnce(&mut Tx, &mut token::Transfer) -> Result<()>>,
+    Option<Epoch>,
+)> {
+    match construct_shielded_part(context, &source, &target, &token, amount)
+        .await?
+    {
+        Some((shielded_parts, asset_types)) => {
+            let epoch = shielded_parts.epoch;
+            Ok((
+                add_shielded_transfer(shielded_parts, asset_types),
+                Some(epoch),
+            ))
+        }
+        None => Ok((
+            Box::new(do_nothing as fn(&mut Tx, &mut _) -> Result<()>)
+                as Box<dyn FnOnce(&mut Tx, &mut token::Transfer) -> Result<()>>,
+            None,
+        )),
+    }
+}
+
+// Construct the shielded part of the transaction, if any
+async fn construct_shielded_part<N: Namada>(
+    context: &N,
+    source: &TransferSource,
+    target: &TransferTarget,
+    token: &Address,
+    amount: token::DenominatedAmount,
+) -> Result<Option<(ShieldedTransfer, HashSet<(Address, MaspDenom, Epoch)>)>> {
+    let stx_result =
+        ShieldedContext::<N::ShieldedUtils>::gen_shielded_transfer(
+            context, source, target, token, amount,
+        )
+        .await;
+
+    let shielded_parts = match stx_result {
+        Ok(Some(stx)) => stx,
+        Ok(None) => return Ok(None),
+        Err(Build(builder::Error::InsufficientFunds(_))) => {
+            return Err(TxError::NegativeBalanceAfterTransfer(
+                Box::new(source.effective_address()),
+                amount.amount.to_string_native(),
+                Box::new(token.clone()),
+            )
+            .into());
+        }
+        Err(err) => return Err(TxError::MaspError(err.to_string()).into()),
+    };
+
+    // Get the decoded asset types used in the transaction to give offline
+    // wallet users more information
+    let asset_types = used_asset_types(context, &shielded_parts.builder)
+        .await
+        .unwrap_or_default();
+
+    Ok(Some((shielded_parts, asset_types)))
+}
+
+/// Add the MASP Transaction and its Builder to facilitate validation
+fn add_shielded_transfer(
+    shielded_parts: ShieldedTransfer,
+    asset_types: HashSet<(Address, MaspDenom, Epoch)>,
+) -> Box<dyn FnOnce(&mut Tx, &mut token::Transfer) -> Result<()>> {
+    Box::new(|tx: &mut Tx, transfer: &mut token::Transfer| {
+        let ShieldedTransfer {
+            builder,
+            masp_tx,
+            metadata,
+            epoch: _,
+        } = shielded_parts;
+        // Add a MASP Transaction section to the Tx and get the tx hash
+        let masp_tx_hash = tx.add_masp_tx_section(masp_tx).1;
+        transfer.shielded = Some(masp_tx_hash);
+
+        tracing::debug!("Transfer data {:?}", transfer);
+
+        tx.add_masp_builder(MaspBuilder {
+            // Is safe
+            asset_types,
+            // Store how the Info objects map to Descriptors/Outputs
+            metadata,
+            // Store the data that was used to construct the Transaction
+            builder,
+            // Link the Builder to the Transaction by hash code
+            target: masp_tx_hash,
+        });
+        Ok(())
+    })
 }
 
 /// Submit a transaction to initialize an account
