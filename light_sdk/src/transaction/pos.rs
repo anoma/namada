@@ -12,7 +12,7 @@ use crate::transaction;
 
 const TX_BOND_WASM: &str = "tx_bond.wasm";
 const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
-const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
+const TX_BECOME_VALIDATOR_WASM: &str = "tx_become_validator.wasm";
 const TX_UNJAIL_VALIDATOR_WASM: &str = "tx_unjail_validator.wasm";
 const TX_DEACTIVATE_VALIDATOR_WASM: &str = "tx_deactivate_validator.wasm";
 const TX_REACTIVATE_VALIDATOR_WASM: &str = "tx_reactivate_validator.wasm";
@@ -106,14 +106,13 @@ impl Unbond {
 }
 
 /// Transaction to initialize a new PoS validator
-pub struct InitValidator(Tx);
+pub struct BecomeValidator(Tx);
 
-impl InitValidator {
+impl BecomeValidator {
     /// Build a raw Init validator transaction from the given parameters
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        account_keys: Vec<common::PublicKey>,
-        threshold: u8,
+        address: Address,
         consensus_key: common::PublicKey,
         eth_cold_key: secp256k1::PublicKey,
         eth_hot_key: secp256k1::PublicKey,
@@ -124,13 +123,11 @@ impl InitValidator {
         description: Option<String>,
         website: Option<String>,
         discord_handle: Option<String>,
-        validator_vp_code_hash: Hash,
         args: GlobalArgs,
     ) -> Self {
         let update_account =
-            namada_core::types::transaction::pos::InitValidator {
-                account_keys,
-                threshold,
+            namada_core::types::transaction::pos::BecomeValidator {
+                address,
                 consensus_key,
                 eth_cold_key,
                 eth_hot_key,
@@ -141,13 +138,12 @@ impl InitValidator {
                 description,
                 website,
                 discord_handle,
-                validator_vp_code_hash,
             };
 
         Self(transaction::build_tx(
             args,
             update_account,
-            TX_INIT_VALIDATOR_WASM.to_string(),
+            TX_BECOME_VALIDATOR_WASM.to_string(),
         ))
     }
 
