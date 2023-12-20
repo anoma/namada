@@ -1,4 +1,7 @@
 //! The merkle tree in the storage
+
+pub mod ics23_specs;
+
 use std::fmt;
 use std::str::FromStr;
 
