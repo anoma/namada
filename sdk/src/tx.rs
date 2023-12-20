@@ -1974,7 +1974,7 @@ pub async fn build_ibc_transfer(
             .map_err(|e| Error::from(QueryError::Wasm(e.to_string())))?;
 
     // For transfer from a spending key
-    let shielded_parts = construct_shielded_part(
+    let shielded_parts = construct_shielded_parts(
         context,
         &args.source,
         // The token will be escrowed to IBC address
@@ -2282,7 +2282,7 @@ pub async fn build_transfer<N: Namada>(
         _ => None,
     };
 
-    let shielded_parts = construct_shielded_part(
+    let shielded_parts = construct_shielded_parts(
         context,
         &args.source,
         &args.target,
@@ -2367,7 +2367,7 @@ pub async fn build_transfer<N: Namada>(
 }
 
 // Construct the shielded part of the transaction, if any
-async fn construct_shielded_part<N: Namada>(
+async fn construct_shielded_parts<N: Namada>(
     context: &N,
     source: &TransferSource,
     target: &TransferTarget,
