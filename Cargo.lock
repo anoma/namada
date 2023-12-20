@@ -3877,21 +3877,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "light_sdk"
-version = "0.28.1"
-dependencies = [
- "borsh",
- "borsh-ext",
- "ibc 0.47.0",
- "namada_core",
- "namada_sdk",
- "prost 0.12.3",
- "tendermint-config",
- "tendermint-rpc",
- "tokio",
-]
-
-[[package]]
 name = "linked-hash-map"
 version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4460,6 +4445,21 @@ dependencies = [
  "tendermint-rpc",
  "toml 0.5.11",
  "tracing",
+]
+
+[[package]]
+name = "namada_light_sdk"
+version = "0.28.1"
+dependencies = [
+ "borsh",
+ "borsh-ext",
+ "ibc 0.47.0",
+ "namada_core",
+ "namada_sdk",
+ "prost 0.12.3",
+ "tendermint-config",
+ "tendermint-rpc",
+ "tokio",
 ]
 
 [[package]]
