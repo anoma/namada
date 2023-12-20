@@ -445,7 +445,7 @@ pub async fn wrap_tx<N: Namada>(
     tx_source_balance: Option<TxSourcePostBalance>,
     epoch: Epoch,
     fee_payer: common::PublicKey,
-) -> Result<Option<Epoch>, Error> {
+) -> Result<(), Error> {
     let fee_payer_address = Address::from(&fee_payer);
     // Validate fee amount and token
     let gas_cost_key = parameter_storage::get_gas_cost_key();
@@ -523,9 +523,7 @@ pub async fn wrap_tx<N: Namada>(
 
     let total_fee = fee_amount.amount() * u64::from(args.gas_limit);
 
-    let (unshield, unshielding_epoch) = match total_fee
-        .checked_sub(updated_balance)
-    {
+    let unshield = match total_fee.checked_sub(updated_balance) {
         Some(diff) if !diff.is_zero() => {
             if let Some(spending_key) = args.fee_unshield.clone() {
                 // Unshield funds for fee payment
@@ -555,7 +553,7 @@ pub async fn wrap_tx<N: Namada>(
                         builder: _,
                         masp_tx: transaction,
                         metadata: _data,
-                        epoch: unshielding_epoch,
+                        epoch: _unshielding_epoch,
                     })) => {
                         let spends = transaction
                             .sapling_bundle()
@@ -598,7 +596,7 @@ pub async fn wrap_tx<N: Namada>(
                         }
 
                         updated_balance += total_fee;
-                        (Some(transaction), Some(unshielding_epoch))
+                        Some(transaction)
                     }
                     Ok(None) => {
                         if !args.force {
@@ -610,7 +608,7 @@ pub async fn wrap_tx<N: Namada>(
                             ));
                         }
 
-                        (None, None)
+                        None
                     }
                     Err(e) => {
                         if !args.force {
@@ -619,7 +617,7 @@ pub async fn wrap_tx<N: Namada>(
                             ));
                         }
 
-                        (None, None)
+                        None
                     }
                 }
             } else {
@@ -639,7 +637,7 @@ pub async fn wrap_tx<N: Namada>(
                     )));
                 }
 
-                (None, None)
+                None
             }
         }
         _ => {
@@ -650,7 +648,7 @@ pub async fn wrap_tx<N: Namada>(
                      unshielding spending key will be ignored"
                 );
             }
-            (None, None)
+            None
         }
     };
 
@@ -674,7 +672,7 @@ pub async fn wrap_tx<N: Namada>(
         unshield_section_hash,
     );
 
-    Ok(unshielding_epoch)
+    Ok(())
 }
 
 #[allow(clippy::result_large_err)]

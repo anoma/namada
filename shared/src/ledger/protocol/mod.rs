@@ -453,11 +453,7 @@ where
                  This shouldn't happen."
             );
 
-            Err(Error::FeeError(format!(
-                "{}. All the available transparent funds have been moved to \
-                 the block proposer",
-                e
-            )))
+            Err(Error::FeeError(format!("{}", e)))
         }
     }
 }
