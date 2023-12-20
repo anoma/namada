@@ -4703,9 +4703,18 @@ dependencies = [
 name = "namada_tx"
 version = "0.28.1"
 dependencies = [
+ "ark-bls12-381",
+ "borsh",
+ "data-encoding",
+ "masp_primitives",
  "namada_core",
  "namada_gas",
- "namada_storage",
+ "prost 0.12.3",
+ "prost-types 0.12.3",
+ "serde 1.0.193",
+ "serde_json",
+ "sha2 0.9.9",
+ "thiserror",
  "tonic-build",
 ]
 

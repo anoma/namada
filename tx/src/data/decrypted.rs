@@ -3,8 +3,9 @@ pub use ark_bls12_381::Bls12_381 as EllipticCurve;
 /// Integration of Ferveo cryptographic primitives to enable decrypting txs.
 /// *Not wasm compatible*
 pub mod decrypted_tx {
-    use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-    use borsh_ext::BorshSerializeExt;
+    use namada_core::borsh::{
+        BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
+    };
     use sha2::{Digest, Sha256};
 
     #[derive(

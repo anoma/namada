@@ -5,35 +5,39 @@ use std::convert::TryFrom;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 
-use borsh::schema::{add_definition, Declaration, Definition};
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXUPPER;
 use masp_primitives::transaction::builder::Builder;
 use masp_primitives::transaction::components::sapling::builder::SaplingMetadata;
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::ExtendedFullViewingKey;
-use prost::Message;
+use namada_core::borsh::schema::{add_definition, Declaration, Definition};
+use namada_core::borsh::{
+    BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
+};
+use namada_core::types::address::Address;
+use namada_core::types::chain::ChainId;
+use namada_core::types::key::{AccountPublicKeysMap, *};
+use namada_core::types::storage::Epoch;
+use namada_core::types::time::DateTimeUtc;
+use namada_core::types::token::MaspDenom;
 use serde::de::Error as SerdeError;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use super::generated::types;
-use crate::ledger::gas;
-use crate::ledger::storage::{KeccakHasher, Sha256Hasher, StorageHasher};
-use crate::types::account::AccountPublicKeysMap;
-use crate::types::address::Address;
-use crate::types::chain::ChainId;
-use crate::types::keccak::{keccak_hash, KeccakHash};
-use crate::types::key::{self, *};
-use crate::types::storage::Epoch;
-use crate::types::time::DateTimeUtc;
-use crate::types::token::MaspDenom;
-use crate::types::transaction::protocol::ProtocolTx;
-use crate::types::transaction::{
-    hash_tx, DecryptedTx, Fee, GasLimit, TxType, WrapperTx,
-};
+use crate::data::protocol::ProtocolTx;
+use crate::data::{hash_tx, DecryptedTx, Fee, GasLimit, TxType, WrapperTx};
+use crate::proto;
+
+/// Represents an error in signature verification
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum VerifySigError {
+    #[error("{0}")]
+    VerifySig(#[from] namada_core::types::key::VerifySigError),
+    #[error("{0}")]
+    Gas(#[from] namada_gas::Error),
+}
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -54,7 +58,7 @@ pub enum Error {
     #[error("The wrapper signature is invalid.")]
     InvalidWrapperSignature,
     #[error("Signature verification went out of gas: {0}")]
-    OutOfGas(gas::Error),
+    OutOfGas(namada_gas::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -169,6 +173,7 @@ impl<T, S: Signable<T>> Signed<T, S> {
             &signed_bytes,
             &self.sig,
         )
+        .map_err(Into::into)
     }
 }
 
@@ -194,6 +199,7 @@ pub fn verify_standalone_sig<T, S: Signable<T>>(
         &signed_data,
         sig,
     )
+    .map_err(Into::into)
 }
 
 /// A section representing transaction data
@@ -242,7 +248,7 @@ pub struct CommitmentError;
 )]
 pub enum Commitment {
     /// Result of applying hash function to bytes
-    Hash(crate::types::hash::Hash),
+    Hash(namada_core::types::hash::Hash),
     /// Result of applying identity function to bytes
     Id(Vec<u8>),
 }
@@ -272,7 +278,7 @@ impl Commitment {
     }
 
     /// Return the contained hash commitment
-    pub fn hash(&self) -> crate::types::hash::Hash {
+    pub fn hash(&self) -> namada_core::types::hash::Hash {
         match self {
             Self::Id(code) => hash_tx(code),
             Self::Hash(hash) => *hash,
@@ -320,7 +326,7 @@ impl Code {
 
     /// Make a new code section with the given hash
     pub fn from_hash(
-        hash: crate::types::hash::Hash,
+        hash: namada_core::types::hash::Hash,
         tag: Option<String>,
     ) -> Self {
         Self {
@@ -431,7 +437,7 @@ pub enum Signer {
 )]
 pub struct Signature {
     /// The hash of the section being signed
-    pub targets: Vec<crate::types::hash::Hash>,
+    pub targets: Vec<namada_core::types::hash::Hash>,
     /// The public keys against which the signatures should be verified
     pub signer: Signer,
     /// The signature over the above hash
@@ -441,7 +447,7 @@ pub struct Signature {
 impl Signature {
     /// Sign the given section hash with the given key and return a section
     pub fn new(
-        targets: Vec<crate::types::hash::Hash>,
+        targets: Vec<namada_core::types::hash::Hash>,
         secret_keys: BTreeMap<u8, common::SecretKey>,
         signer: Option<Address>,
     ) -> Self {
@@ -491,13 +497,13 @@ impl Signature {
     }
 
     /// Get the hash of this section
-    pub fn get_hash(&self) -> crate::types::hash::Hash {
-        crate::types::hash::Hash(
+    pub fn get_hash(&self) -> namada_core::types::hash::Hash {
+        namada_core::types::hash::Hash(
             self.hash(&mut Sha256::new()).finalize_reset().into(),
         )
     }
 
-    pub fn get_raw_hash(&self) -> crate::types::hash::Hash {
+    pub fn get_raw_hash(&self) -> namada_core::types::hash::Hash {
         Self {
             signer: Signer::PubKeys(vec![]),
             signatures: BTreeMap::new(),
@@ -515,7 +521,7 @@ impl Signature {
         consume_verify_sig_gas: &mut F,
     ) -> std::result::Result<u8, VerifySigError>
     where
-        F: FnMut() -> std::result::Result<(), crate::ledger::gas::Error>,
+        F: FnMut() -> std::result::Result<(), namada_gas::Error>,
     {
         // Records whether there are any successful verifications
         let mut verifications = 0;
@@ -711,7 +717,7 @@ impl From<SaplingMetadataSerde> for Vec<u8> {
 )]
 pub struct MaspBuilder {
     /// The MASP transaction that this section witnesses
-    pub target: crate::types::hash::Hash,
+    pub target: namada_core::types::hash::Hash,
     /// The decoded set of asset types used by the transaction. Useful for
     /// offline wallets trying to display AssetTypes.
     pub asset_types: HashSet<(Address, MaspDenom, Epoch)>,
@@ -811,8 +817,8 @@ impl Section {
     }
 
     /// Get the hash of this section
-    pub fn get_hash(&self) -> crate::types::hash::Hash {
-        crate::types::hash::Hash(
+    pub fn get_hash(&self) -> namada_core::types::hash::Hash {
+        namada_core::types::hash::Hash(
             self.hash(&mut Sha256::new()).finalize_reset().into(),
         )
     }
@@ -918,9 +924,9 @@ pub struct Header {
     /// A transaction timestamp
     pub timestamp: DateTimeUtc,
     /// The SHA-256 hash of the transaction's code section
-    pub code_hash: crate::types::hash::Hash,
+    pub code_hash: namada_core::types::hash::Hash,
     /// The SHA-256 hash of the transaction's data section
-    pub data_hash: crate::types::hash::Hash,
+    pub data_hash: namada_core::types::hash::Hash,
     /// The type of this transaction
     pub tx_type: TxType,
 }
@@ -933,8 +939,8 @@ impl Header {
             chain_id: ChainId::default(),
             expiration: None,
             timestamp: DateTimeUtc::now(),
-            code_hash: crate::types::hash::Hash::default(),
-            data_hash: crate::types::hash::Hash::default(),
+            code_hash: namada_core::types::hash::Hash::default(),
+            data_hash: namada_core::types::hash::Hash::default(),
         }
     }
 
@@ -1008,7 +1014,9 @@ impl TryFrom<&[u8]> for Tx {
     type Error = Error;
 
     fn try_from(tx_bytes: &[u8]) -> Result<Self> {
-        let tx = types::Tx::decode(tx_bytes).map_err(Error::TxDecodingError)?;
+        use prost::Message;
+
+        let tx = proto::Tx::decode(tx_bytes).map_err(Error::TxDecodingError)?;
         BorshDeserialize::try_from_slice(&tx.data)
             .map_err(Error::TxDeserializingError)
     }
@@ -1069,12 +1077,12 @@ impl Tx {
     }
 
     /// Get the transaction header hash
-    pub fn header_hash(&self) -> crate::types::hash::Hash {
+    pub fn header_hash(&self) -> namada_core::types::hash::Hash {
         Section::Header(self.header.clone()).get_hash()
     }
 
     /// Gets the hash of the decrypted transaction's header
-    pub fn raw_header_hash(&self) -> crate::types::hash::Hash {
+    pub fn raw_header_hash(&self) -> namada_core::types::hash::Hash {
         let mut raw_header = self.header();
         raw_header.tx_type = TxType::Raw;
 
@@ -1082,7 +1090,7 @@ impl Tx {
     }
 
     /// Get hashes of all the sections in this transaction
-    pub fn sechashes(&self) -> Vec<crate::types::hash::Hash> {
+    pub fn sechashes(&self) -> Vec<namada_core::types::hash::Hash> {
         let mut hashes = vec![self.header_hash()];
         for sec in &self.sections {
             hashes.push(sec.get_hash());
@@ -1099,7 +1107,7 @@ impl Tx {
     /// Get the transaction section with the given hash
     pub fn get_section(
         &self,
-        hash: &crate::types::hash::Hash,
+        hash: &namada_core::types::hash::Hash,
     ) -> Option<Cow<Section>> {
         if self.header_hash() == *hash {
             return Some(Cow::Owned(Section::Header(self.header.clone())));
@@ -1123,12 +1131,12 @@ impl Tx {
     }
 
     /// Get the hash of this transaction's code from the heeader
-    pub fn code_sechash(&self) -> &crate::types::hash::Hash {
+    pub fn code_sechash(&self) -> &namada_core::types::hash::Hash {
         &self.header.code_hash
     }
 
     /// Set the transaction code hash stored in the header
-    pub fn set_code_sechash(&mut self, hash: crate::types::hash::Hash) {
+    pub fn set_code_sechash(&mut self, hash: namada_core::types::hash::Hash) {
         self.header.code_hash = hash
     }
 
@@ -1153,12 +1161,12 @@ impl Tx {
     }
 
     /// Get the transaction data hash stored in the header
-    pub fn data_sechash(&self) -> &crate::types::hash::Hash {
+    pub fn data_sechash(&self) -> &namada_core::types::hash::Hash {
         &self.header.data_hash
     }
 
     /// Set the transaction data hash stored in the header
-    pub fn set_data_sechash(&mut self, hash: crate::types::hash::Hash) {
+    pub fn set_data_sechash(&mut self, hash: namada_core::types::hash::Hash) {
         self.header.data_hash = hash
     }
 
@@ -1182,10 +1190,12 @@ impl Tx {
         }
     }
 
-    /// Convert this transaction into protobufs
+    /// Convert this transaction into protobufs bytes
     pub fn to_bytes(&self) -> Vec<u8> {
+        use prost::Message;
+
         let mut bytes = vec![];
-        let tx: types::Tx = types::Tx {
+        let tx: proto::Tx = proto::Tx {
             data: self.serialize_to_vec(),
         };
         tx.encode(&mut bytes)
@@ -1197,7 +1207,7 @@ impl Tx {
     /// public key
     pub fn verify_signatures<F>(
         &self,
-        hashes: &[crate::types::hash::Hash],
+        hashes: &[namada_core::types::hash::Hash],
         public_keys_index_map: AccountPublicKeysMap,
         signer: &Option<Address>,
         threshold: u8,
@@ -1205,7 +1215,7 @@ impl Tx {
         mut consume_verify_sig_gas: F,
     ) -> std::result::Result<Vec<&Signature>, Error>
     where
-        F: FnMut() -> std::result::Result<(), crate::ledger::gas::Error>,
+        F: FnMut() -> std::result::Result<(), namada_gas::Error>,
     {
         let max_signatures = max_signatures.unwrap_or(u8::MAX);
         // Records the public key indices used in successful signatures
@@ -1270,7 +1280,7 @@ impl Tx {
     pub fn verify_signature(
         &self,
         public_key: &common::PublicKey,
-        hashes: &[crate::types::hash::Hash],
+        hashes: &[namada_core::types::hash::Hash],
     ) -> Result<&Signature> {
         self.verify_signatures(
             hashes,
@@ -1408,9 +1418,9 @@ impl Tx {
     /// Add an extra section to the tx builder by hash
     pub fn add_extra_section_from_hash(
         &mut self,
-        hash: crate::types::hash::Hash,
+        hash: namada_core::types::hash::Hash,
         tag: Option<String>,
-    ) -> crate::types::hash::Hash {
+    ) -> namada_core::types::hash::Hash {
         let sechash = self
             .add_section(Section::ExtraData(Code::from_hash(hash, tag)))
             .get_hash();
@@ -1422,7 +1432,7 @@ impl Tx {
         &mut self,
         code: Vec<u8>,
         tag: Option<String>,
-    ) -> (&mut Self, crate::types::hash::Hash) {
+    ) -> (&mut Self, namada_core::types::hash::Hash) {
         let sechash = self
             .add_section(Section::ExtraData(Code::new(code, tag)))
             .get_hash();
@@ -1433,7 +1443,7 @@ impl Tx {
     pub fn add_masp_tx_section(
         &mut self,
         tx: Transaction,
-    ) -> (&mut Self, crate::types::hash::Hash) {
+    ) -> (&mut Self, namada_core::types::hash::Hash) {
         let sechash = self.add_section(Section::MaspTx(tx)).get_hash();
         (self, sechash)
     }
@@ -1447,7 +1457,7 @@ impl Tx {
     /// Add wasm code to the tx builder from hash
     pub fn add_code_from_hash(
         &mut self,
-        code_hash: crate::types::hash::Hash,
+        code_hash: namada_core::types::hash::Hash,
         tag: Option<String>,
     ) -> &mut Self {
         self.set_code(Code::from_hash(code_hash, tag));
@@ -1484,7 +1494,7 @@ impl Tx {
         fee_payer: common::PublicKey,
         epoch: Epoch,
         gas_limit: GasLimit,
-        fee_unshield_hash: Option<crate::types::hash::Hash>,
+        fee_unshield_hash: Option<namada_core::types::hash::Hash>,
     ) -> &mut Self {
         self.header.tx_type = TxType::Wrapper(Box::new(WrapperTx::new(
             fee,

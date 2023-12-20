@@ -1,16 +1,15 @@
 use std::collections::HashSet;
 
-use borsh::{BorshDeserialize, BorshSerialize};
-use serde::{Deserialize, Serialize};
-use thiserror::Error;
-
-use crate::types::address::Address;
-use crate::types::governance::{
+use namada_core::borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::types::address::Address;
+use namada_core::types::governance::{
     AddRemove, DefaultProposal, PGFAction, PGFTarget, PgfFundingProposal,
     PgfStewardProposal, ProposalType, StorageProposalVote,
 };
-use crate::types::hash::Hash;
-use crate::types::storage::Epoch;
+use namada_core::types::hash::Hash;
+use namada_core::types::storage::Epoch;
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 #[allow(missing_docs)]
 #[derive(Debug, Error)]
@@ -165,15 +164,15 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
 #[cfg(any(test, feature = "testing"))]
 /// Tests and strategies for governance
 pub mod tests {
+    use namada_core::types::address::testing::arb_non_internal_address;
+    use namada_core::types::governance::testing::{
+        arb_proposal_type, arb_proposal_vote,
+    };
+    use namada_core::types::hash::testing::arb_hash;
+    use namada_core::types::storage::testing::arb_epoch;
     use proptest::{collection, prop_compose};
 
     use super::*;
-    use crate::types::address::testing::arb_non_internal_address;
-    use crate::types::governance::testing::{
-        arb_proposal_type, arb_proposal_vote,
-    };
-    use crate::types::hash::testing::arb_hash;
-    use crate::types::storage::testing::arb_epoch;
 
     prop_compose! {
         /// Generate a proposal initialization

@@ -1,12 +1,11 @@
 //! Types used for PoS system transactions
 
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_core::types::address::Address;
+use namada_core::types::dec::Dec;
+use namada_core::types::key::{common, secp256k1};
+use namada_core::types::token;
 use serde::{Deserialize, Serialize};
-
-use crate::types::address::Address;
-use crate::types::dec::Dec;
-use crate::types::key::{common, secp256k1};
-use crate::types::token;
 
 /// A tx data type to become a validator account.
 #[derive(
@@ -210,13 +209,13 @@ pub struct ConsensusKeyChange {
 #[cfg(any(test, feature = "testing"))]
 /// Tests and strategies for proof-of-stake
 pub mod tests {
+    use namada_core::types::address::testing::arb_non_internal_address;
+    use namada_core::types::dec::testing::arb_dec;
+    use namada_core::types::key::testing::{arb_common_pk, arb_pk};
+    use namada_core::types::token::testing::arb_amount;
     use proptest::{option, prop_compose};
 
     use super::*;
-    use crate::types::address::testing::arb_non_internal_address;
-    use crate::types::dec::testing::arb_dec;
-    use crate::types::key::testing::{arb_common_pk, arb_pk};
-    use crate::types::token::testing::arb_amount;
 
     prop_compose! {
         /// Generate a bond

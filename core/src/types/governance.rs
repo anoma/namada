@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, HashSet};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::types::address::Address;
 use crate::types::hash::Hash;
@@ -139,6 +140,29 @@ pub struct StewardsUpdate {
     pub add: Option<Address>,
     /// The stewards to remove
     pub remove: Vec<Address>,
+}
+
+#[allow(missing_docs)]
+#[derive(Debug, Error)]
+pub enum ProposalTypeError {
+    #[error("Invalid proposal type.")]
+    InvalidProposalType,
+}
+
+impl TryFrom<StewardsUpdate> for HashSet<AddRemove<Address>> {
+    type Error = ProposalTypeError;
+
+    fn try_from(value: StewardsUpdate) -> Result<Self, Self::Error> {
+        let mut data = HashSet::default();
+
+        if value.add.is_some() {
+            data.insert(AddRemove::Add(value.add.unwrap()));
+        }
+        for steward in value.remove {
+            data.insert(AddRemove::Remove(steward));
+        }
+        Ok(data)
+    }
 }
 
 /// An add or remove action for PGF

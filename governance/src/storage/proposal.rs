@@ -14,14 +14,7 @@ use crate::cli::onchain::{
 };
 use crate::utils::{ProposalStatus, TallyType};
 
-#[allow(missing_docs)]
-#[derive(Debug, Error)]
-pub enum ProposalTypeError {
-    #[error("Invalid proposal type.")]
-    InvalidProposalType,
-}
-
-/// Storage structure for pgf fundings
+/// Storage struture for pgf fundings
 #[derive(
     Debug,
     Clone,
@@ -61,22 +54,6 @@ impl Display for ProposalType {
             ProposalType::PGFSteward(_) => write!(f, "Pgf steward"),
             ProposalType::PGFPayment(_) => write!(f, "Pgf funding"),
         }
-    }
-}
-
-impl TryFrom<StewardsUpdate> for HashSet<AddRemove<Address>> {
-    type Error = ProposalTypeError;
-
-    fn try_from(value: StewardsUpdate) -> Result<Self, Self::Error> {
-        let mut data = HashSet::default();
-
-        if value.add.is_some() {
-            data.insert(AddRemove::Add(value.add.unwrap()));
-        }
-        for steward in value.remove {
-            data.insert(AddRemove::Remove(steward));
-        }
-        Ok(data)
     }
 }
 

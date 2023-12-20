@@ -15,7 +15,17 @@ version.workspace = true
 [dependencies]
 namada_core = { path = "../core", default-features = false }
 namada_gas = { path = "../gas" }
-namada_storage = { path = "../storage" }
+
+ark-bls12-381.workspace = true
+borsh.workspace = true
+data-encoding.workspace = true
+masp_primitives.workspace = true
+prost.workspace = true
+prost-types.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
 
 [build-dependencies]
 tonic-build.workspace = true

@@ -1,17 +1,14 @@
 //! Types for sending and verifying txs
 //! used in Namada protocols
 
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
-use serde::{Deserialize, Serialize};
-
-use crate::proto::{Data, Section, Signature, Tx, TxError};
-use crate::types::chain::ChainId;
-use crate::types::key::*;
-use crate::types::transaction::{Digest, Sha256, TxType};
-use crate::types::vote_extensions::{
-    bridge_pool_roots, ethereum_events, validator_set_update,
+use namada_core::borsh::{
+    BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
 };
+use namada_core::types::key::*;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+
+use crate::TxError;
 
 #[derive(
     Clone,

@@ -1,6 +1,6 @@
 use std::{env, str};
 
-/// Path to the .proto source files, relative to `core` directory
+/// Path to the .proto source files, relative to `tx` crate directory
 const PROTO_SRC: &str = "./proto";
 
 fn main() {

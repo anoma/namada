@@ -7,21 +7,23 @@ pub mod wrapper_tx {
     use std::str::FromStr;
 
     pub use ark_bls12_381::Bls12_381 as EllipticCurve;
-    use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-    use borsh_ext::BorshSerializeExt;
     use masp_primitives::transaction::Transaction;
+    use namada_core::borsh::{
+        BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
+    };
+    use namada_core::types::address::{Address, MASP};
+    use namada_core::types::hash::Hash;
+    use namada_core::types::key::*;
+    use namada_core::types::storage::Epoch;
+    use namada_core::types::token::{Amount, DenominatedAmount, Transfer};
+    use namada_core::types::uint::Uint;
     use namada_gas::Gas;
     use serde::{Deserialize, Serialize};
     use sha2::{Digest, Sha256};
     use thiserror::Error;
 
-    use crate::proto::{Code, Data, Section, Tx};
-    use crate::types::address::{Address, MASP};
-    use crate::types::hash::Hash;
-    use crate::types::key::*;
-    use crate::types::storage::Epoch;
-    use crate::types::token::{Amount, DenominatedAmount, Transfer};
-    use crate::types::uint::Uint;
+    use crate::data::{DecryptedTx, TxType};
+    use crate::{Code, Data, Section, Tx};
 
     /// TODO: Determine a sane number for this
     const GAS_LIMIT_RESOLUTION: u64 = 1;
@@ -168,9 +170,7 @@ pub mod wrapper_tx {
         // Derive a Gas instance with a sub amount which is exactly a whole
         // amount since the limit represents gas in whole units
         fn from(value: GasLimit) -> Self {
-            Self {
-                sub: u64::from(value) * gas::SCALE,
-            }
+            Self::from_whole_units(u64::from(value))
         }
     }
 
@@ -297,9 +297,7 @@ pub mod wrapper_tx {
             unshield: Transaction,
         ) -> Result<Tx, WrapperTxErr> {
             let mut tx =
-                Tx::from_type(crate::types::transaction::TxType::Decrypted(
-                    crate::types::transaction::DecryptedTx::Decrypted,
-                ));
+                Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
             let masp_section = tx.add_section(Section::MaspTx(unshield));
             let masp_hash = Hash(
                 masp_section

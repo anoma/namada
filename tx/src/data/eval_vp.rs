@@ -1,8 +1,8 @@
-use borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::types::hash::Hash;
 use serde::{Deserialize, Serialize};
 
-use crate::proto::Tx;
+use crate::Tx;
 
 /// A validity predicate with an input that is intended to be invoked via `eval`
 /// host function.

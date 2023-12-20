@@ -1,11 +1,10 @@
 use std::collections::HashMap;
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::types::address::Address;
+use namada_core::types::dec::Dec;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-
-use crate::types::address::Address;
-use crate::types::dec::Dec;
 
 #[allow(missing_docs)]
 #[derive(Debug, Error)]
@@ -34,11 +33,10 @@ pub struct UpdateStewardCommission {
 #[cfg(any(test, feature = "testing"))]
 /// Tests and strategies for PGF
 pub mod tests {
+    use namada_core::types::address::testing::arb_non_internal_address;
+    use namada_core::types::dec::testing::arb_dec;
+    use namada_core::types::transaction::pgf::UpdateStewardCommission;
     use proptest::{collection, prop_compose};
-
-    use crate::types::address::testing::arb_non_internal_address;
-    use crate::types::dec::testing::arb_dec;
-    use crate::types::transaction::pgf::UpdateStewardCommission;
 
     prop_compose! {
         /// Generate an arbitraary steward commission update

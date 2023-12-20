@@ -1,9 +1,8 @@
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_core::types::address::Address;
+use namada_core::types::hash::Hash;
+use namada_core::types::key::common;
 use serde::{Deserialize, Serialize};
-
-use crate::types::address::Address;
-use crate::types::hash::Hash;
-use crate::types::key::common;
 
 /// A tx data type to initialize a new established account
 #[derive(
@@ -54,13 +53,13 @@ pub struct UpdateAccount {
 #[cfg(any(test, feature = "testing"))]
 /// Tests and strategies for accounts
 pub mod tests {
+    use namada_core::types::address::testing::arb_non_internal_address;
+    use namada_core::types::hash::testing::arb_hash;
+    use namada_core::types::key::testing::arb_common_pk;
     use proptest::prelude::Just;
     use proptest::{collection, option, prop_compose};
 
     use super::*;
-    use crate::types::address::testing::arb_non_internal_address;
-    use crate::types::hash::testing::arb_hash;
-    use crate::types::key::testing::arb_common_pk;
 
     prop_compose! {
         /// Generate an account initialization

@@ -21,22 +21,23 @@ use std::collections::BTreeSet;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
 pub use decrypted::*;
+use namada_core::borsh::{
+    BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
+};
+use namada_core::types::address::Address;
+use namada_core::types::ethereum_structs::EthBridgeEvent;
+use namada_core::types::hash::Hash;
+use namada_core::types::ibc::IbcEvent;
+use namada_core::types::storage;
+use namada_gas::{Gas, VpsGas};
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 pub use wrapper::*;
 
-use crate::ledger::gas::{Gas, VpsGas};
-use crate::types::address::Address;
-use crate::types::ethereum_structs::EthBridgeEvent;
-use crate::types::hash::Hash;
-use crate::types::ibc::IbcEvent;
-use crate::types::storage;
-use crate::types::transaction::protocol::ProtocolTx;
+use crate::data::protocol::ProtocolTx;
 
 /// The different result codes that the ledger may send back to a client
 /// indicating the status of their submitted tx.
@@ -343,12 +344,13 @@ impl TxSentinel {
 
 #[cfg(test)]
 mod test_process_tx {
+    use namada_core::types::address::nam;
+    use namada_core::types::key::*;
+    use namada_core::types::storage::Epoch;
+    use namada_core::types::token::{Amount, DenominatedAmount};
+
     use super::*;
     use crate::proto::{Code, Data, Section, Signature, Tx, TxError};
-    use crate::types::address::nam;
-    use crate::types::key::*;
-    use crate::types::storage::Epoch;
-    use crate::types::token::{Amount, DenominatedAmount};
 
     fn gen_keypair() -> common::SecretKey {
         use rand::prelude::ThreadRng;
@@ -506,8 +508,9 @@ fn test_process_tx_decrypted_unsigned() {
 /// signature
 #[test]
 fn test_process_tx_decrypted_signed() {
+    use namada_core::types::key::*;
+
     use crate::proto::{Code, Data, Section, Signature, Tx};
-    use crate::types::key::*;
 
     fn gen_keypair() -> common::SecretKey {
         use rand::prelude::ThreadRng;
@@ -517,7 +520,7 @@ fn test_process_tx_decrypted_signed() {
         ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap()
     }
 
-    use crate::types::key::Signature as S;
+    use namada_core::types::key::Signature as S;
     let mut decrypted =
         Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
     // Invalid signed data

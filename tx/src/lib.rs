@@ -1,13 +1,12 @@
 #![allow(missing_docs)]
 
-pub mod proto::generated;
 pub mod data;
+pub mod proto;
 mod types;
 
 pub use types::{
     standalone_signature, verify_standalone_sig, Code, Commitment,
-    CompressedSignature, Data, Error, Header, MaspBuilder, Section,
-    SerializeWithBorsh, Signable, SignableEthMessage, Signature,
+    CompressedSignature, Data, Error, Header, MaspBuilder, Section, Signature,
     SignatureIndex, Signed, Signer, Tx, TxError,
 };
 
