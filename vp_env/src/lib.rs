@@ -1,20 +1,20 @@
 //! Validity predicate environment contains functions that can be called from
 //! inside validity predicates.
 
-use borsh::BorshDeserialize;
-use masp_primitives::transaction::Transaction;
+pub mod collection_validation;
 
-use super::storage_api::{self, OptionExt, ResultExt, StorageRead};
-use crate::proto::Tx;
-use crate::types::address::Address;
-use crate::types::hash::Hash;
-use crate::types::ibc::{
+use masp_primitives::transaction::Transaction;
+use namada_core::borsh::BorshDeserialize;
+use namada_core::types::address::Address;
+use namada_core::types::hash::Hash;
+use namada_core::types::ibc::{
     get_shielded_transfer, IbcEvent, MsgShieldedTransfer, EVENT_TYPE_PACKET,
 };
-use crate::types::storage::{
+use namada_core::types::storage::{
     BlockHash, BlockHeight, Epoch, Header, Key, TxIndex,
 };
-use crate::types::token::Transfer;
+use namada_core::types::token::Transfer;
+use namada_storage::{OptionExt, ResultExt, StorageRead};
 
 /// Validity predicate's environment is available for native VPs and WASM VPs
 pub trait VpEnv<'view>
@@ -44,54 +44,54 @@ where
     fn read_temp<T: BorshDeserialize>(
         &self,
         key: &Key,
-    ) -> Result<Option<T>, storage_api::Error>;
+    ) -> Result<Option<T>, namada_storage::Error>;
 
     /// Storage read temporary state raw bytes (after tx execution). It will try
     /// to read from only the write log.
     fn read_bytes_temp(
         &self,
         key: &Key,
-    ) -> Result<Option<Vec<u8>>, storage_api::Error>;
+    ) -> Result<Option<Vec<u8>>, namada_storage::Error>;
 
     /// Getting the chain ID.
-    fn get_chain_id(&self) -> Result<String, storage_api::Error>;
+    fn get_chain_id(&self) -> Result<String, namada_storage::Error>;
 
     /// Getting the block height. The height is that of the block to which the
     /// current transaction is being applied.
-    fn get_block_height(&self) -> Result<BlockHeight, storage_api::Error>;
+    fn get_block_height(&self) -> Result<BlockHeight, namada_storage::Error>;
 
     /// Getting the block header.
     fn get_block_header(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<Header>, storage_api::Error>;
+    ) -> Result<Option<Header>, namada_storage::Error>;
 
     /// Getting the block hash. The height is that of the block to which the
     /// current transaction is being applied.
-    fn get_block_hash(&self) -> Result<BlockHash, storage_api::Error>;
+    fn get_block_hash(&self) -> Result<BlockHash, namada_storage::Error>;
 
     /// Getting the block epoch. The epoch is that of the block to which the
     /// current transaction is being applied.
-    fn get_block_epoch(&self) -> Result<Epoch, storage_api::Error>;
+    fn get_block_epoch(&self) -> Result<Epoch, namada_storage::Error>;
 
     /// Get the shielded transaction index.
-    fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error>;
+    fn get_tx_index(&self) -> Result<TxIndex, namada_storage::Error>;
 
     /// Get the address of the native token.
-    fn get_native_token(&self) -> Result<Address, storage_api::Error>;
+    fn get_native_token(&self) -> Result<Address, namada_storage::Error>;
 
     /// Get the IBC events.
     fn get_ibc_events(
         &self,
         event_type: String,
-    ) -> Result<Vec<IbcEvent>, storage_api::Error>;
+    ) -> Result<Vec<IbcEvent>, namada_storage::Error>;
 
     /// Storage prefix iterator, ordered by storage keys. It will try to get an
     /// iterator from the storage.
     fn iter_prefix<'iter>(
         &'iter self,
         prefix: &Key,
-    ) -> Result<Self::PrefixIter<'iter>, storage_api::Error>;
+    ) -> Result<Self::PrefixIter<'iter>, namada_storage::Error>;
 
     /// Evaluate a validity predicate with given data. The address, changed
     /// storage keys and verifiers will have the same values as the input to
@@ -103,16 +103,16 @@ where
         &self,
         vp_code: Hash,
         input_data: Tx,
-    ) -> Result<bool, storage_api::Error>;
+    ) -> Result<bool, namada_storage::Error>;
 
     /// Get a tx hash
-    fn get_tx_code_hash(&self) -> Result<Option<Hash>, storage_api::Error>;
+    fn get_tx_code_hash(&self) -> Result<Option<Hash>, namada_storage::Error>;
 
     /// Get the shielded action including the transfer and the masp tx
     fn get_shielded_action(
         &self,
         tx_data: &Tx,
-    ) -> Result<(Transfer, Transaction), storage_api::Error> {
+    ) -> Result<(Transfer, Transaction), namada_storage::Error> {
         let signed = tx_data;
         let data = signed.data().ok_or_err_msg("No transaction data")?;
         if let Ok(transfer) = Transfer::try_from_slice(&data) {
@@ -137,7 +137,7 @@ where
         let events = self.get_ibc_events(EVENT_TYPE_PACKET.to_string())?;
         // The receiving event should be only one in the single IBC transaction
         let event = events.first().ok_or_else(|| {
-            storage_api::Error::new_const(
+            namada_storage::Error::new_const(
                 "No IBC event for the shielded action",
             )
         })?;
@@ -145,14 +145,14 @@ where
             .into_storage_result()?
             .map(|shielded| (shielded.transfer, shielded.masp_tx))
             .ok_or_else(|| {
-                storage_api::Error::new_const(
+                namada_storage::Error::new_const(
                     "No shielded transfer in the IBC event",
                 )
             })
     }
 
     /// Charge the provided gas for the current vp
-    fn charge_gas(&self, used_gas: u64) -> Result<(), storage_api::Error>;
+    fn charge_gas(&self, used_gas: u64) -> Result<(), namada_storage::Error>;
 
     // ---- Methods below have default implementation via `pre/post` ----
 
@@ -161,7 +161,7 @@ where
     fn read_pre<T: BorshDeserialize>(
         &'view self,
         key: &Key,
-    ) -> Result<Option<T>, storage_api::Error> {
+    ) -> Result<Option<T>, namada_storage::Error> {
         self.pre().read(key)
     }
 
@@ -170,7 +170,7 @@ where
     fn read_bytes_pre(
         &'view self,
         key: &Key,
-    ) -> Result<Option<Vec<u8>>, storage_api::Error> {
+    ) -> Result<Option<Vec<u8>>, namada_storage::Error> {
         self.pre().read_bytes(key)
     }
 
@@ -180,7 +180,7 @@ where
     fn read_post<T: BorshDeserialize>(
         &'view self,
         key: &Key,
-    ) -> Result<Option<T>, storage_api::Error> {
+    ) -> Result<Option<T>, namada_storage::Error> {
         self.post().read(key)
     }
 
@@ -190,13 +190,16 @@ where
     fn read_bytes_post(
         &'view self,
         key: &Key,
-    ) -> Result<Option<Vec<u8>>, storage_api::Error> {
+    ) -> Result<Option<Vec<u8>>, namada_storage::Error> {
         self.post().read_bytes(key)
     }
 
     /// Storage `has_key` in prior state (before tx execution). It will try to
     /// read from the storage.
-    fn has_key_pre(&'view self, key: &Key) -> Result<bool, storage_api::Error> {
+    fn has_key_pre(
+        &'view self,
+        key: &Key,
+    ) -> Result<bool, namada_storage::Error> {
         self.pre().has_key(key)
     }
 
@@ -205,7 +208,7 @@ where
     fn has_key_post(
         &'view self,
         key: &Key,
-    ) -> Result<bool, storage_api::Error> {
+    ) -> Result<bool, namada_storage::Error> {
         self.post().has_key(key)
     }
 }

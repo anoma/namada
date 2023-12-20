@@ -14,4 +14,7 @@ version.workspace = true
 
 [dependencies]
 namada_core = { path = "../core", default-features = false }
+namada_storage = { path = "../storage" }
 namada_tx = { path = "../tx" }
+
+thiserror.workspace = true

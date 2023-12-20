@@ -4620,7 +4620,6 @@ dependencies = [
 name = "namada_storage"
 version = "0.28.1"
 dependencies = [
- "derivative",
  "itertools 0.10.5",
  "namada_core",
  "thiserror",
@@ -4749,7 +4748,9 @@ name = "namada_vp_env"
 version = "0.28.1"
 dependencies = [
  "namada_core",
+ "namada_storage",
  "namada_tx",
+ "thiserror",
 ]
 
 [[package]]

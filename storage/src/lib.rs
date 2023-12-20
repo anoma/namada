@@ -3,7 +3,6 @@
 
 pub mod collections;
 mod error;
-pub mod validation;
 
 pub use error::{CustomError, Error, OptionExt, Result, ResultExt};
 use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};

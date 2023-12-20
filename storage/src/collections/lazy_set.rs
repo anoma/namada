@@ -33,16 +33,6 @@ pub enum SubKey<K> {
     Data(K),
 }
 
-/// Possible actions that can modify a [`LazySet`]. This roughly corresponds to
-/// the methods that have `StorageWrite` access.
-#[derive(Clone, Debug)]
-pub enum Action<K> {
-    /// Insert a key `K` in a [`LazySet<K>`].
-    Insert(K),
-    /// Remove a key `K` from a [`LazySet<K>`].
-    Remove(K),
-}
-
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum ValidationError {
@@ -50,16 +40,11 @@ pub enum ValidationError {
     InvalidSubKey(storage::Key),
 }
 
-/// [`LazySet`] validation result
-pub type ValidationResult<T> = std::result::Result<T, ValidationError>;
-
 impl<K> LazyCollection for LazySet<K>
 where
     K: storage::KeySeg + Debug,
 {
-    type Action = Action<K>;
     type SubKey = SubKey<K>;
-    type SubKeyWithData = Action<K>;
     type Value = ();
 
     /// Create or use an existing map with the given storage `key`.
@@ -108,24 +93,6 @@ where
 
     fn is_data_sub_key(&self, key: &storage::Key) -> bool {
         matches!(self.is_valid_sub_key(key), Ok(Some(_)))
-    }
-
-    fn read_sub_key_data<ENV>(
-        env: &ENV,
-        storage_key: &storage::Key,
-        sub_key: Self::SubKey,
-    ) -> crate::Result<Option<Self::SubKeyWithData>>
-    where
-        ENV: for<'a> VpEnv<'a>,
-    {
-        let SubKey::Data(key) = sub_key;
-        determine_action(env, storage_key, key)
-    }
-
-    fn validate_changed_sub_keys(
-        keys: Vec<Self::SubKeyWithData>,
-    ) -> crate::Result<Vec<Self::Action>> {
-        Ok(keys)
     }
 }
 
@@ -242,32 +209,6 @@ where
             Ok(key)
         }))
     }
-}
-
-/// Determine what action was taken from the pre/post state
-pub fn determine_action<ENV, K>(
-    env: &ENV,
-    storage_key: &storage::Key,
-    parsed_key: K,
-) -> crate::Result<Option<Action<K>>>
-where
-    ENV: for<'a> VpEnv<'a>,
-{
-    let pre = env.read_pre(storage_key)?;
-    let post = env.read_post(storage_key)?;
-    Ok(match (pre, post) {
-        (None, None) => {
-            // If the key was inserted and then deleted in the same tx, we don't
-            // need to validate it as it's not visible to any VPs
-            None
-        }
-        (None, Some(())) => Some(Action::Insert(parsed_key)),
-        (Some(()), None) => Some(Action::Remove(parsed_key)),
-        (Some(()), Some(())) => {
-            // Because the value for set is a unit, we can skip this too
-            None
-        }
-    })
 }
 
 #[cfg(test)]
