@@ -5,15 +5,14 @@ use std::fmt::Debug;
 use std::hash::Hash;
 use std::marker::PhantomData;
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::types::storage::{self, DbKeySeg, KeySeg};
 use thiserror::Error;
 
 use super::super::Result;
 use super::{LazyCollection, ReadError};
-use crate::ledger::storage_api::validation::{self, Data};
-use crate::ledger::storage_api::{self, ResultExt, StorageRead, StorageWrite};
-use crate::ledger::vp_env::VpEnv;
-use crate::types::storage::{self, DbKeySeg, KeySeg};
+use crate::validation::{self, Data};
+use crate::{ResultExt, StorageRead, StorageWrite};
 
 /// Subkey corresponding to the data elements of the LazyMap
 pub const DATA_SUBKEY: &str = "data";
@@ -135,7 +134,7 @@ pub trait Collectable {
     fn collect_map<S: StorageRead>(
         &self,
         storage: &S,
-    ) -> storage_api::Result<Self::Collected>;
+    ) -> crate::Result<Self::Collected>;
 }
 
 impl<K, V> Collectable for LazyMap<K, V, super::Nested>
@@ -145,10 +144,7 @@ where
 {
     type Collected = BTreeMap<K, V::Collected>;
 
-    fn collect_map<S>(
-        &self,
-        storage: &S,
-    ) -> storage_api::Result<Self::Collected>
+    fn collect_map<S>(&self, storage: &S) -> crate::Result<Self::Collected>
     where
         S: StorageRead,
     {
@@ -175,10 +171,7 @@ where
 {
     type Collected = BTreeMap<K, V>;
 
-    fn collect_map<S>(
-        &self,
-        storage: &S,
-    ) -> storage_api::Result<Self::Collected>
+    fn collect_map<S>(&self, storage: &S) -> crate::Result<Self::Collected>
     where
         S: StorageRead,
     {
@@ -190,17 +183,6 @@ where
         Ok(map)
     }
 }
-
-// impl<V: BorshSerialize + BorshDeserialize + Clone> Collectable for V {
-//     type Collected = Self;
-
-//     fn collect_map<S>(
-//         &self,
-//         _storage: &S,
-//     ) -> storage_api::Result<Self::Collected> {
-//         Ok(self.clone())
-//     }
-// }
 
 /// [`LazyMap`] validation result
 pub type ValidationResult<T> = std::result::Result<T, ValidationError>;
@@ -228,7 +210,7 @@ where
     fn is_valid_sub_key(
         &self,
         key: &storage::Key,
-    ) -> storage_api::Result<Option<Self::SubKey>> {
+    ) -> crate::Result<Option<Self::SubKey>> {
         let suffix = match key.split_prefix(&self.key) {
             None => {
                 // not matching prefix, irrelevant
@@ -298,7 +280,7 @@ where
         env: &ENV,
         storage_key: &storage::Key,
         sub_key: Self::SubKey,
-    ) -> storage_api::Result<Option<Self::SubKeyWithData>>
+    ) -> crate::Result<Option<Self::SubKeyWithData>>
     where
         ENV: for<'a> VpEnv<'a>,
     {
@@ -323,7 +305,7 @@ where
 
     fn validate_changed_sub_keys(
         keys: Vec<Self::SubKeyWithData>,
-    ) -> storage_api::Result<Vec<Self::Action>> {
+    ) -> crate::Result<Vec<Self::Action>> {
         // We have to group the nested sub-keys by the key from this map
         let mut grouped_by_key: HashMap<
             K,
@@ -378,7 +360,7 @@ where
     fn is_valid_sub_key(
         &self,
         key: &storage::Key,
-    ) -> storage_api::Result<Option<Self::SubKey>> {
+    ) -> crate::Result<Option<Self::SubKey>> {
         let suffix = match key.split_prefix(&self.key) {
             None => {
                 // not matching prefix, irrelevant
@@ -427,7 +409,7 @@ where
         env: &ENV,
         storage_key: &storage::Key,
         sub_key: Self::SubKey,
-    ) -> storage_api::Result<Option<Self::SubKeyWithData>>
+    ) -> crate::Result<Option<Self::SubKeyWithData>>
     where
         ENV: for<'a> VpEnv<'a>,
     {
@@ -438,7 +420,7 @@ where
 
     fn validate_changed_sub_keys(
         keys: Vec<Self::SubKeyWithData>,
-    ) -> storage_api::Result<Vec<Self::Action>> {
+    ) -> crate::Result<Vec<Self::Action>> {
         Ok(keys
             .into_iter()
             .map(|change| {
@@ -491,7 +473,7 @@ where
         S: StorageRead,
     {
         let prefix = self.get_data_key(key);
-        let mut iter = storage_api::iter_prefix_bytes(storage, &prefix)?;
+        let mut iter = crate::iter_prefix_bytes(storage, &prefix)?;
         Ok(iter.next().is_some())
     }
 
@@ -527,7 +509,7 @@ where
             )>,
         > + 'iter,
     > {
-        let iter = storage_api::iter_prefix_with_filter(
+        let iter = crate::iter_prefix_with_filter(
             storage,
             &self.get_data_prefix(),
             |key| self.is_data_sub_key(key),
@@ -547,7 +529,7 @@ where
         S: StorageRead,
     {
         let mut iter =
-            storage_api::iter_prefix_bytes(storage, &self.get_data_prefix())?;
+            crate::iter_prefix_bytes(storage, &self.get_data_prefix())?;
         Ok(iter.next().is_none())
     }
 }
@@ -638,7 +620,7 @@ where
         S: StorageRead,
     {
         let mut iter =
-            storage_api::iter_prefix_bytes(storage, &self.get_data_prefix())?;
+            crate::iter_prefix_bytes(storage, &self.get_data_prefix())?;
         Ok(iter.next().is_none())
     }
 
@@ -652,8 +634,7 @@ where
     where
         S: StorageRead,
     {
-        let iter =
-            storage_api::iter_prefix_bytes(storage, &self.get_data_prefix())?;
+        let iter = crate::iter_prefix_bytes(storage, &self.get_data_prefix())?;
         iter.count().try_into().into_storage_result()
     }
 
@@ -668,7 +649,7 @@ where
         &self,
         storage: &'iter impl StorageRead,
     ) -> Result<impl Iterator<Item = Result<(K, V)>> + 'iter> {
-        let iter = storage_api::iter_prefix(storage, &self.get_data_prefix())?;
+        let iter = crate::iter_prefix(storage, &self.get_data_prefix())?;
         Ok(iter.map(|key_val_res| {
             let (key, val) = key_val_res?;
             let last_key_seg = key
@@ -722,7 +703,7 @@ mod test {
     use crate::types::address::{self, Address};
 
     #[test]
-    fn test_lazy_map_basics() -> storage_api::Result<()> {
+    fn test_lazy_map_basics() -> crate::Result<()> {
         let mut storage = TestWlStorage::default();
 
         let key = storage::Key::parse("test").unwrap();
@@ -816,7 +797,7 @@ mod test {
     }
 
     #[test]
-    fn test_lazy_map_with_addr_key() -> storage_api::Result<()> {
+    fn test_lazy_map_with_addr_key() -> crate::Result<()> {
         let mut storage = TestWlStorage::default();
 
         let key = storage::Key::parse("test").unwrap();
@@ -864,7 +845,7 @@ mod test {
     }
 
     #[test]
-    fn test_nested_lazy_map_with_addr_key() -> storage_api::Result<()> {
+    fn test_nested_lazy_map_with_addr_key() -> crate::Result<()> {
         let mut storage = TestWlStorage::default();
 
         let key = storage::Key::parse("test").unwrap();
@@ -917,7 +898,7 @@ mod test {
     }
 
     #[test]
-    fn test_nested_map_basics() -> storage_api::Result<()> {
+    fn test_nested_map_basics() -> crate::Result<()> {
         let mut storage = TestWlStorage::default();
         let key = storage::Key::parse("testing").unwrap();
 

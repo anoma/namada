@@ -1,18 +1,14 @@
 //! The common storage read trait is implemented in the storage, client RPC, tx
 //! and VPs (both native and WASM).
 
-pub mod account;
 pub mod collections;
 mod error;
-pub mod key;
 pub mod validation;
 
-use borsh::{BorshDeserialize, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
 pub use error::{CustomError, Error, OptionExt, Result, ResultExt};
-
-use crate::types::address::Address;
-use crate::types::storage::{
+use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
+use namada_core::types::address::Address;
+use namada_core::types::storage::{
     self, BlockHash, BlockHeight, Epoch, Header, TxIndex,
 };
 
@@ -145,7 +141,7 @@ pub trait StorageWrite {
 /// Iterate items matching the given prefix, ordered by the storage keys.
 pub fn iter_prefix_bytes<'a>(
     storage: &'a impl StorageRead,
-    prefix: &crate::types::storage::Key,
+    prefix: &storage::Key,
 ) -> Result<impl Iterator<Item = Result<(storage::Key, Vec<u8>)>> + 'a> {
     let iter = storage.iter_prefix(prefix)?;
     let iter = itertools::unfold(iter, |iter| {
@@ -174,7 +170,7 @@ pub fn iter_prefix_bytes<'a>(
 /// storage keys.
 pub fn iter_prefix<'a, T>(
     storage: &'a impl StorageRead,
-    prefix: &crate::types::storage::Key,
+    prefix: &storage::Key,
 ) -> Result<impl Iterator<Item = Result<(storage::Key, T)>> + 'a>
 where
     T: BorshDeserialize,
@@ -220,7 +216,7 @@ where
 /// don't pass the filter. For `iter_prefix_bytes`, `filter` works fine.
 pub fn iter_prefix_with_filter<'a, T, F>(
     storage: &'a impl StorageRead,
-    prefix: &crate::types::storage::Key,
+    prefix: &storage::Key,
     filter: F,
 ) -> Result<impl Iterator<Item = Result<(storage::Key, T)>> + 'a>
 where

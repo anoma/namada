@@ -3,13 +3,12 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
+use namada_core::types::storage::{self, DbKeySeg, KeySeg};
 use thiserror::Error;
 
 use super::super::Result;
 use super::{LazyCollection, ReadError};
-use crate::ledger::storage_api::{self, ResultExt, StorageRead, StorageWrite};
-use crate::ledger::vp_env::VpEnv;
-use crate::types::storage::{self, DbKeySeg, KeySeg};
+use crate::{ResultExt, StorageRead, StorageWrite};
 
 /// A lazy set.
 ///
@@ -74,7 +73,7 @@ where
     fn is_valid_sub_key(
         &self,
         key: &storage::Key,
-    ) -> storage_api::Result<Option<Self::SubKey>> {
+    ) -> crate::Result<Option<Self::SubKey>> {
         let suffix = match key.split_prefix(&self.key) {
             None => {
                 // not matching prefix, irrelevant
@@ -115,7 +114,7 @@ where
         env: &ENV,
         storage_key: &storage::Key,
         sub_key: Self::SubKey,
-    ) -> storage_api::Result<Option<Self::SubKeyWithData>>
+    ) -> crate::Result<Option<Self::SubKeyWithData>>
     where
         ENV: for<'a> VpEnv<'a>,
     {
@@ -125,7 +124,7 @@ where
 
     fn validate_changed_sub_keys(
         keys: Vec<Self::SubKeyWithData>,
-    ) -> storage_api::Result<Vec<Self::Action>> {
+    ) -> crate::Result<Vec<Self::Action>> {
         Ok(keys)
     }
 }
@@ -176,7 +175,7 @@ where
     {
         let present = self.contains(storage, &key)?;
         if present {
-            return Err(storage_api::Error::new_const("Occupied"));
+            return Err(crate::Error::new_const("Occupied"));
         }
 
         let key = self.get_key(&key);
@@ -204,7 +203,7 @@ where
     where
         S: StorageRead,
     {
-        let mut iter = storage_api::iter_prefix_bytes(storage, &self.key)?;
+        let mut iter = crate::iter_prefix_bytes(storage, &self.key)?;
         Ok(iter.next().is_none())
     }
 
@@ -218,7 +217,7 @@ where
     where
         S: StorageRead,
     {
-        let iter = storage_api::iter_prefix_bytes(storage, &self.key)?;
+        let iter = crate::iter_prefix_bytes(storage, &self.key)?;
         iter.count().try_into().into_storage_result()
     }
 
@@ -232,7 +231,7 @@ where
         &self,
         storage: &'iter impl StorageRead,
     ) -> Result<impl Iterator<Item = Result<K>> + 'iter> {
-        let iter = storage_api::iter_prefix(storage, &self.key)?;
+        let iter = crate::iter_prefix(storage, &self.key)?;
         Ok(iter.map(|key_val_res| {
             let (key, ()) = key_val_res?;
             let last_key_seg = key
@@ -250,7 +249,7 @@ pub fn determine_action<ENV, K>(
     env: &ENV,
     storage_key: &storage::Key,
     parsed_key: K,
-) -> storage_api::Result<Option<Action<K>>>
+) -> crate::Result<Option<Action<K>>>
 where
     ENV: for<'a> VpEnv<'a>,
 {
@@ -278,7 +277,7 @@ mod test {
     use crate::types::address::{self, Address};
 
     #[test]
-    fn test_lazy_set_basics() -> storage_api::Result<()> {
+    fn test_lazy_set_basics() -> crate::Result<()> {
         let mut storage = TestWlStorage::default();
 
         let key = storage::Key::parse("test").unwrap();
@@ -358,7 +357,7 @@ mod test {
     }
 
     #[test]
-    fn test_lazy_set_with_addr_key() -> storage_api::Result<()> {
+    fn test_lazy_set_with_addr_key() -> crate::Result<()> {
         let mut storage = TestWlStorage::default();
 
         let key = storage::Key::parse("test").unwrap();

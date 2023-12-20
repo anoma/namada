@@ -4,15 +4,14 @@ use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::types::storage::{self, DbKeySeg, KeySeg};
 use thiserror::Error;
 
 use super::super::Result;
 use super::LazyCollection;
-use crate::ledger::storage_api::validation::{self, Data};
-use crate::ledger::storage_api::{self, ResultExt, StorageRead, StorageWrite};
-use crate::ledger::vp_env::VpEnv;
-use crate::types::storage::{self, DbKeySeg, KeySeg};
+use crate::validation::{self, Data};
+use crate::{ResultExt, StorageRead, StorageWrite};
 
 /// Subkey pointing to the length of the LazyVec
 pub const LEN_SUBKEY: &str = "len";
@@ -130,7 +129,7 @@ where
     fn is_valid_sub_key(
         &self,
         key: &storage::Key,
-    ) -> storage_api::Result<Option<SubKey>> {
+    ) -> crate::Result<Option<SubKey>> {
         let suffix = match key.split_prefix(&self.key) {
             None => {
                 // not matching prefix, irrelevant
@@ -184,7 +183,7 @@ where
         env: &ENV,
         storage_key: &storage::Key,
         sub_key: Self::SubKey,
-    ) -> storage_api::Result<Option<Self::SubKeyWithData>>
+    ) -> crate::Result<Option<Self::SubKeyWithData>>
     where
         ENV: for<'a> VpEnv<'a>,
     {
@@ -211,7 +210,7 @@ where
     ///     monotonically increasing from zero)
     fn validate_changed_sub_keys(
         keys: Vec<Self::SubKeyWithData>,
-    ) -> storage_api::Result<Vec<Self::Action>> {
+    ) -> crate::Result<Vec<Self::Action>> {
         let mut actions = vec![];
 
         // We need to accumulate some values for what's changed
@@ -498,7 +497,7 @@ where
         &self,
         storage: &'iter impl StorageRead,
     ) -> Result<impl Iterator<Item = Result<T>> + 'iter> {
-        let iter = storage_api::iter_prefix(storage, &self.get_data_prefix())?;
+        let iter = crate::iter_prefix(storage, &self.get_data_prefix())?;
         Ok(iter.map(|key_val_res| {
             let (_key, val) = key_val_res?;
             Ok(val)
@@ -514,7 +513,7 @@ mod test {
     use crate::types::address::{self, Address};
 
     #[test]
-    fn test_lazy_vec_basics() -> storage_api::Result<()> {
+    fn test_lazy_vec_basics() -> crate::Result<()> {
         let mut storage = TestWlStorage::default();
 
         let key = storage::Key::parse("test").unwrap();
@@ -562,7 +561,7 @@ mod test {
     }
 
     #[test]
-    fn test_lazy_vec_with_addr() -> storage_api::Result<()> {
+    fn test_lazy_vec_with_addr() -> crate::Result<()> {
         let mut storage = TestWlStorage::default();
 
         let key = storage::Key::parse("test").unwrap();
@@ -605,7 +604,7 @@ mod test {
 
     /// Test iterator on a `LazyVec` nested inside a `LazyMap`
     #[test]
-    fn test_nested_lazy_vec_iter() -> storage_api::Result<()> {
+    fn test_nested_lazy_vec_iter() -> crate::Result<()> {
         let mut storage = TestWlStorage::default();
 
         let prefix = storage::Key::parse("test").unwrap();

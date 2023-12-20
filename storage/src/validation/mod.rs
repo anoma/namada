@@ -2,11 +2,8 @@
 
 use std::fmt::Debug;
 
-use borsh::BorshDeserialize;
-
-use crate::ledger::storage_api;
-use crate::ledger::vp_env::VpEnv;
-use crate::types::storage;
+use namada_core::borsh::BorshDeserialize;
+use namada_core::types::storage;
 
 /// Data update with prior and posterior state.
 #[derive(Clone, Debug)]
@@ -34,7 +31,7 @@ pub enum Data<T> {
 pub fn read_data<ENV, T>(
     env: &ENV,
     key: &storage::Key,
-) -> Result<Option<Data<T>>, storage_api::Error>
+) -> Result<Option<Data<T>>, crate::Error>
 where
     T: BorshDeserialize,
     ENV: for<'a> VpEnv<'a>,

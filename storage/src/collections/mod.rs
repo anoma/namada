@@ -9,8 +9,8 @@
 
 use std::fmt::Debug;
 
-use borsh::BorshDeserialize;
 use derivative::Derivative;
+use namada_core::borsh::BorshDeserialize;
 use thiserror::Error;
 
 pub mod lazy_map;
@@ -20,10 +20,7 @@ pub mod lazy_vec;
 pub use lazy_map::LazyMap;
 pub use lazy_set::LazySet;
 pub use lazy_vec::LazyVec;
-
-use crate::ledger::storage_api;
-use crate::ledger::vp_env::VpEnv;
-use crate::types::storage;
+use namada_core::types::storage;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -73,7 +70,7 @@ pub trait LazyCollection {
     fn is_valid_sub_key(
         &self,
         key: &storage::Key,
-    ) -> storage_api::Result<Option<Self::SubKey>>;
+    ) -> crate::Result<Option<Self::SubKey>>;
 
     /// Check if the given storage key is a valid data key.
     ///
@@ -91,7 +88,7 @@ pub trait LazyCollection {
         env: &ENV,
         storage_key: &storage::Key,
         sub_key: Self::SubKey,
-    ) -> storage_api::Result<Option<Self::SubKeyWithData>>
+    ) -> crate::Result<Option<Self::SubKeyWithData>>
     where
         ENV: for<'a> VpEnv<'a>;
 
@@ -99,7 +96,7 @@ pub trait LazyCollection {
     /// a vector of `Self::Action`s, if the changes are valid
     fn validate_changed_sub_keys(
         keys: Vec<Self::SubKeyWithData>,
-    ) -> storage_api::Result<Vec<Self::Action>>;
+    ) -> crate::Result<Vec<Self::Action>>;
 
     /// Accumulate storage changes inside a `ValidationBuilder`. This is
     /// typically done by the validity predicate while looping through the
@@ -114,7 +111,7 @@ pub trait LazyCollection {
         env: &ENV,
         builder: &mut Option<ValidationBuilder<Self::SubKeyWithData>>,
         key_changed: &storage::Key,
-    ) -> storage_api::Result<bool>
+    ) -> crate::Result<bool>
     where
         ENV: for<'a> VpEnv<'a>,
     {
@@ -135,7 +132,7 @@ pub trait LazyCollection {
     /// changes storage keys have been processed.
     fn validate(
         builder: ValidationBuilder<Self::SubKeyWithData>,
-    ) -> storage_api::Result<Vec<Self::Action>> {
+    ) -> crate::Result<Vec<Self::Action>> {
         Self::validate_changed_sub_keys(builder.changes)
     }
 }
