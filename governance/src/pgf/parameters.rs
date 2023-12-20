@@ -1,13 +1,13 @@
 use std::collections::BTreeSet;
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::types::address::Address;
+use namada_core::types::dec::Dec;
+use namada_storage::{Result, StorageRead, StorageWrite};
 use serde::{Deserialize, Serialize};
 
 use super::storage::keys as pgf_storage;
 use super::storage::steward::StewardDetail;
-use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
-use crate::types::address::Address;
-use crate::types::dec::Dec;
 
 #[derive(
     Clone,
@@ -44,7 +44,7 @@ impl Default for PgfParameters {
 
 impl PgfParameters {
     /// Initialize governance parameters into storage
-    pub fn init_storage<S>(&self, storage: &mut S) -> storage_api::Result<()>
+    pub fn init_storage<S>(&self, storage: &mut S) -> Result<()>
     where
         S: StorageRead + StorageWrite,
     {

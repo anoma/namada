@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::Display;
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::types::address::Address;
 use namada_core::types::storage::Epoch;
 use namada_core::types::token;

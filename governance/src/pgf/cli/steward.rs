@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 
+use namada_core::types::address::Address;
+use namada_core::types::dec::Dec;
 use serde::{Deserialize, Serialize};
-
-use crate::types::address::Address;
-use crate::types::dec::Dec;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 /// Struct holding data about a steward commission

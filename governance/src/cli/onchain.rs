@@ -14,6 +14,36 @@ use super::validation::{
 };
 use crate::parameters::GovernanceParameters;
 
+#[derive(
+    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+)]
+/// The proposal structure
+pub struct OnChainProposal {
+    /// The proposal id
+    pub id: Option<u64>,
+    /// The proposal content
+    pub content: BTreeMap<String, String>,
+    /// The proposal author address
+    pub author: Address,
+    /// The epoch from which voting is allowed
+    pub voting_start_epoch: Epoch,
+    /// The epoch from which voting is stopped
+    pub voting_end_epoch: Epoch,
+    /// The epoch from which this changes are executed
+    pub grace_epoch: Epoch,
+}
+
+/// Pgf default proposal
+#[derive(
+    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+)]
+pub struct DefaultProposal {
+    /// The proposal data
+    pub proposal: OnChainProposal,
+    /// The default proposal extra data
+    pub data: Option<Vec<u8>>,
+}
+
 impl DefaultProposal {
     /// Validate a default funding proposal
     pub fn validate(
@@ -74,6 +104,24 @@ impl TryFrom<&[u8]> for DefaultProposal {
     }
 }
 
+/// Pgf stewards proposal
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PgfStewardProposal {
+    /// The proposal data
+    pub proposal: OnChainProposal,
+    /// The Pgf steward proposal extra data
+    pub data: StewardsUpdate,
+}
+
+/// Pgf steward proposal extra data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StewardsUpdate {
+    /// The optional steward to add
+    pub add: Option<Address>,
+    /// The stewards to remove
+    pub remove: Vec<Address>,
+}
+
 impl PgfStewardProposal {
     /// Validate a Pgf stewards proposal
     pub fn validate(
@@ -129,6 +177,17 @@ impl TryFrom<&[u8]> for PgfStewardProposal {
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         serde_json::from_slice(value)
     }
+}
+
+/// Pgf funding proposal
+#[derive(
+    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+)]
+pub struct PgfFundingProposal {
+    /// The proposal data
+    pub proposal: OnChainProposal,
+    /// The Pgf funding proposal extra data
+    pub data: PgfFunding,
 }
 
 impl PgfFundingProposal {
@@ -194,11 +253,103 @@ pub struct PgfSteward {
     pub address: Address,
 }
 
+/// The target of a PGF payment
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+    Ord,
+    Eq,
+    PartialOrd,
+)]
+pub struct PGFTarget {
+    /// The target address
+    pub target: Address,
+    /// The amount of token to fund the target address
+    pub amount: token::Amount,
+}
+
+/// Pgf action
+#[derive(
+    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+)]
+pub enum PgfAction {
+    /// Add action
+    Add,
+    /// Remove action
+    Remove,
+}
+
 impl PgfAction {
     /// Check if a pgf action is adding a steward
     pub fn is_add(&self) -> bool {
         matches!(self, PgfAction::Add)
     }
+}
+
+/// Pgf fundings
+#[derive(
+    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+)]
+pub struct PgfFunding {
+    /// Pgf continuous funding
+    pub continuous: Vec<PgfFundingTarget>,
+    /// pgf retro fundings
+    pub retro: Vec<PgfFundingTarget>,
+}
+
+/// Pgf continous funding
+#[derive(
+    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+)]
+pub struct PgfContinous {
+    /// Pgf target
+    pub target: PgfFundingTarget,
+    /// Pgf action
+    pub action: PgfAction,
+}
+
+/// Pgf retro funding
+#[derive(
+    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+)]
+pub struct PgfRetro {
+    /// Pgf retro target
+    pub target: PgfFundingTarget,
+}
+
+/// Pgf Target
+#[derive(
+    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+)]
+pub struct PgfFundingTarget {
+    /// Target amount
+    pub amount: token::Amount,
+    /// Target address
+    pub address: Address,
+}
+
+/// Represent an proposal vote
+#[derive(
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+    PartialEq,
+)]
+pub enum ProposalVote {
+    /// Represent an yay proposal vote
+    Yay,
+    /// Represent an nay proposal vote
+    Nay,
+    /// Represent an abstain proposal vote
+    Abstain,
 }
 
 impl TryFrom<String> for ProposalVote {

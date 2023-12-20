@@ -4485,8 +4485,16 @@ dependencies = [
 name = "namada_governance"
 version = "0.29.0"
 dependencies = [
+ "borsh",
  "namada_core",
+ "namada_macros",
+ "namada_storage",
  "namada_trans_token",
+ "proptest",
+ "serde 1.0.193",
+ "serde_json",
+ "thiserror",
+ "tracing",
 ]
 
 [[package]]

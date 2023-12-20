@@ -9,15 +9,13 @@ pub mod vote;
 
 use std::collections::BTreeMap;
 
-use borsh::BorshDeserialize;
-use namada_core::ledger::storage_api::{self, StorageRead, StorageWrite};
+use namada_core::borsh::BorshDeserialize;
 use namada_core::types::address::Address;
 use namada_core::types::storage::Epoch;
-use namada_core::types::transaction::governance::{
-    InitProposalData, VoteProposalData,
-};
+use namada_storage::{iter_prefix, Error, Result, StorageRead, StorageWrite};
+use namada_trans_token as token;
 
-use super::token;
+use self::proposal::{InitProposalData, VoteProposalData};
 use crate::parameters::GovernanceParameters;
 use crate::storage::keys as governance_keys;
 use crate::storage::proposal::{ProposalType, StorageProposal};
@@ -31,7 +29,7 @@ pub fn init_proposal<S>(
     data: InitProposalData,
     content: Vec<u8>,
     code: Option<Vec<u8>>,
-) -> storage_api::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -55,9 +53,9 @@ where
             storage.write(&proposal_type_key, ProposalType::Default(None))?;
             let proposal_code_key =
                 governance_keys::get_proposal_code_key(proposal_id);
-            let proposal_code = code.clone().ok_or(
-                storage_api::Error::new_const("Missing proposal code"),
-            )?;
+            let proposal_code = code
+                .clone()
+                .ok_or(Error::new_const("Missing proposal code"))?;
             storage.write_bytes(&proposal_code_key, proposal_code)?
         }
         _ => storage.write(&proposal_type_key, data.r#type.clone())?,
@@ -78,7 +76,7 @@ where
         let proposal_code_key =
             governance_keys::get_proposal_code_key(proposal_id);
         let proposal_code =
-            code.ok_or(storage_api::Error::new_const("Missing proposal code"))?;
+            code.ok_or(Error::new_const("Missing proposal code"))?;
         storage.write_bytes(&proposal_code_key, proposal_code)?;
     }
 
@@ -109,10 +107,7 @@ where
 }
 
 /// A proposal vote transaction.
-pub fn vote_proposal<S>(
-    storage: &mut S,
-    data: VoteProposalData,
-) -> storage_api::Result<()>
+pub fn vote_proposal<S>(storage: &mut S, data: VoteProposalData) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -131,7 +126,7 @@ where
 pub fn get_proposal_by_id<S>(
     storage: &S,
     id: u64,
-) -> storage_api::Result<Option<StorageProposal>>
+) -> Result<Option<StorageProposal>>
 where
     S: StorageRead,
 {
@@ -164,19 +159,14 @@ where
 }
 
 /// Query all the votes for a proposal_id
-pub fn get_proposal_votes<S>(
-    storage: &S,
-    proposal_id: u64,
-) -> storage_api::Result<Vec<Vote>>
+pub fn get_proposal_votes<S>(storage: &S, proposal_id: u64) -> Result<Vec<Vote>>
 where
-    S: storage_api::StorageRead,
+    S: StorageRead,
 {
     let vote_prefix_key =
         governance_keys::get_proposal_vote_prefix_key(proposal_id);
-    let vote_iter = storage_api::iter_prefix::<StorageProposalVote>(
-        storage,
-        &vote_prefix_key,
-    )?;
+    let vote_iter =
+        iter_prefix::<StorageProposalVote>(storage, &vote_prefix_key)?;
 
     let votes = vote_iter
         .filter_map(|vote_result| {
@@ -205,12 +195,9 @@ where
 }
 
 /// Check if an accepted proposal is being executed
-pub fn is_proposal_accepted<S>(
-    storage: &S,
-    tx_data: &[u8],
-) -> storage_api::Result<bool>
+pub fn is_proposal_accepted<S>(storage: &S, tx_data: &[u8]) -> Result<bool>
 where
-    S: storage_api::StorageRead,
+    S: StorageRead,
 {
     let proposal_id = u64::try_from_slice(tx_data).ok();
     match proposal_id {
@@ -224,11 +211,9 @@ where
 }
 
 /// Get governance parameters
-pub fn get_parameters<S>(
-    storage: &S,
-) -> storage_api::Result<GovernanceParameters>
+pub fn get_parameters<S>(storage: &S) -> Result<GovernanceParameters>
 where
-    S: storage_api::StorageRead,
+    S: StorageRead,
 {
     let key = governance_keys::get_max_proposal_code_size_key();
     let max_proposal_code_size: u64 =
@@ -263,9 +248,9 @@ where
 }
 
 /// Get governance "max_proposal_period" parameter
-pub fn get_max_proposal_period<S>(storage: &S) -> storage_api::Result<u64>
+pub fn get_max_proposal_period<S>(storage: &S) -> Result<u64>
 where
-    S: storage_api::StorageRead,
+    S: StorageRead,
 {
     let key = governance_keys::get_max_proposal_period_key();
     let max_proposal_period: u64 =

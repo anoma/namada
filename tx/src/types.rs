@@ -39,14 +39,11 @@ pub enum VerifySigError {
     Gas(#[from] namada_gas::Error),
 }
 
+#[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Error decoding a transaction from bytes: {0}")]
     TxDecodingError(prost::DecodeError),
-    #[error("Error deserializing transaction field bytes: {0}")]
-    TxDeserializingError(std::io::Error),
-    #[error("Error deserializing transaction")]
-    OfflineTxDeserializationError,
     #[error("Timestamp is empty")]
     NoTimestampError,
     #[error("Timestamp is invalid: {0}")]
@@ -57,11 +54,7 @@ pub enum Error {
     InvalidJSONDeserialization(String),
     #[error("The wrapper signature is invalid.")]
     InvalidWrapperSignature,
-    #[error("Signature verification went out of gas: {0}")]
-    OutOfGas(namada_gas::Error),
 }
-
-pub type Result<T> = std::result::Result<T, Error>;
 
 /// This can be used to sign an arbitrary tx. The signature is produced and
 /// verified on the tx data concatenated with the tx code, however the tx code
@@ -342,69 +335,6 @@ impl Code {
         hasher.update(self.code.hash());
         hasher.update(self.tag.serialize_to_vec());
         hasher
-    }
-}
-
-#[derive(
-    Clone,
-    Debug,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-    Serialize,
-    Deserialize,
-    Eq,
-    PartialEq,
-)]
-pub struct SignatureIndex {
-    pub pubkey: common::PublicKey,
-    pub index: Option<(Address, u8)>,
-    pub signature: common::Signature,
-}
-
-impl SignatureIndex {
-    pub fn from_single_signature(
-        pubkey: common::PublicKey,
-        signature: common::Signature,
-    ) -> Self {
-        Self {
-            pubkey,
-            signature,
-            index: None,
-        }
-    }
-
-    pub fn to_vec(&self) -> Vec<Self> {
-        vec![self.clone()]
-    }
-
-    pub fn serialize(&self) -> String {
-        let signature_bytes = self.serialize_to_vec();
-        HEXUPPER.encode(&signature_bytes)
-    }
-
-    pub fn deserialize(data: &[u8]) -> Result<Self> {
-        if let Ok(hex) = serde_json::from_slice::<String>(data) {
-            match HEXUPPER.decode(hex.as_bytes()) {
-                Ok(bytes) => Self::try_from_slice(&bytes)
-                    .map_err(Error::TxDeserializingError),
-                Err(_) => Err(Error::OfflineTxDeserializationError),
-            }
-        } else {
-            Err(Error::OfflineTxDeserializationError)
-        }
-    }
-}
-
-impl Ord for SignatureIndex {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.pubkey.cmp(&other.pubkey)
-    }
-}
-
-impl PartialOrd for SignatureIndex {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
     }
 }
 

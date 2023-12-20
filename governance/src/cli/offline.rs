@@ -2,13 +2,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{File, ReadDir};
 use std::path::PathBuf;
 
-use borsh::{BorshDeserialize, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
-use namada_core::proto::SignatureIndex;
-use namada_core::types::account::AccountPublicKeysMap;
+use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
 use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
-use namada_core::types::key::{common, RefTo, SigScheme};
+use namada_core::types::key::{common, AccountPublicKeysMap, RefTo, SigScheme};
+use namada_core::types::sign::SignatureIndex;
 use namada_core::types::storage::Epoch;
 use serde::{Deserialize, Serialize};
 

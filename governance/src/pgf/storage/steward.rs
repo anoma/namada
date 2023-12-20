@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-
-use crate::types::address::Address;
-use crate::types::dec::Dec;
+use namada_core::types::address::Address;
+use namada_core::types::dec::Dec;
 
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, PartialEq)]
 /// Struct holding data about a pgf steward

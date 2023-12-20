@@ -6,8 +6,6 @@ pub mod account;
 /// non-decryptability
 pub mod decrypted;
 pub mod eval_vp;
-/// txs to manage governance
-pub mod governance;
 /// txs to manage pgf
 pub mod pgf;
 /// txs to manage pos
