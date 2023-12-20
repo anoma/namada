@@ -106,8 +106,8 @@ impl std::fmt::Display for IbcEvent {
 pub struct MsgShieldedTransfer {
     /// IBC transfer message
     pub message: MsgTransfer,
-    /// Token transfer with the masp section hash
-    pub transfer: Transfer,
+    /// MASP tx with token transfer
+    pub shielded_transfer: IbcShieldedTransfer,
 }
 
 impl BorshSerialize for MsgShieldedTransfer {
@@ -116,7 +116,7 @@ impl BorshSerialize for MsgShieldedTransfer {
         writer: &mut W,
     ) -> std::io::Result<()> {
         let encoded_msg = self.message.clone().encode_vec();
-        let members = (encoded_msg, self.transfer.clone());
+        let members = (encoded_msg, self.shielded_transfer.clone());
         BorshSerialize::serialize(&members, writer)
     }
 }
@@ -126,11 +126,14 @@ impl BorshDeserialize for MsgShieldedTransfer {
         reader: &mut R,
     ) -> std::io::Result<Self> {
         use std::io::{Error, ErrorKind};
-        let (msg, transfer): (Vec<u8>, Transfer) =
+        let (msg, shielded_transfer): (Vec<u8>, IbcShieldedTransfer) =
             BorshDeserialize::deserialize_reader(reader)?;
         let message = MsgTransfer::decode_vec(&msg)
             .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
-        Ok(Self { message, transfer })
+        Ok(Self {
+            message,
+            shielded_transfer,
+        })
     }
 }
 

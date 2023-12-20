@@ -8,7 +8,9 @@ use super::storage_api::{self, OptionExt, ResultExt, StorageRead};
 use crate::proto::Tx;
 use crate::types::address::Address;
 use crate::types::hash::Hash;
-use crate::types::ibc::{get_shielded_transfer, IbcEvent, EVENT_TYPE_PACKET};
+use crate::types::ibc::{
+    get_shielded_transfer, IbcEvent, MsgShieldedTransfer, EVENT_TYPE_PACKET,
+};
 use crate::types::storage::{
     BlockHash, BlockHeight, Epoch, Header, Key, TxIndex,
 };
@@ -112,9 +114,8 @@ where
         tx_data: &Tx,
     ) -> Result<(Transfer, Transaction), storage_api::Error> {
         let signed = tx_data;
-        if let Ok(transfer) =
-            Transfer::try_from_slice(&signed.data().unwrap()[..])
-        {
+        let data = signed.data().ok_or_err_msg("No transaction data")?;
+        if let Ok(transfer) = Transfer::try_from_slice(&data) {
             let shielded_hash = transfer
                 .shielded
                 .ok_or_err_msg("unable to find shielded hash")?;
@@ -123,6 +124,13 @@ where
                 .and_then(|x| x.as_ref().masp_tx())
                 .ok_or_err_msg("unable to find shielded section")?;
             return Ok((transfer, masp_tx));
+        }
+
+        if let Ok(message) = MsgShieldedTransfer::try_from_slice(&data) {
+            return Ok((
+                message.shielded_transfer.transfer,
+                message.shielded_transfer.masp_tx,
+            ));
         }
 
         // Shielded transfer over IBC

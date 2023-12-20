@@ -2041,7 +2041,7 @@ pub async fn build_ibc_transfer(
     let data = match shielded_parts {
         Some((shielded_transfer, asset_types)) => {
             let masp_tx_hash =
-                tx.add_masp_tx_section(shielded_transfer.masp_tx).1;
+                tx.add_masp_tx_section(shielded_transfer.masp_tx.clone()).1;
             let transfer = token::Transfer {
                 source: source.clone(),
                 target: MASP,
@@ -2059,7 +2059,15 @@ pub async fn build_ibc_transfer(
                 builder: shielded_transfer.builder,
                 target: masp_tx_hash,
             });
-            MsgShieldedTransfer { message, transfer }.serialize_to_vec()
+            let shielded_transfer = IbcShieldedTransfer {
+                transfer,
+                masp_tx: shielded_transfer.masp_tx,
+            };
+            MsgShieldedTransfer {
+                message,
+                shielded_transfer,
+            }
+            .serialize_to_vec()
         }
         None => {
             let any_msg = message.to_any();
