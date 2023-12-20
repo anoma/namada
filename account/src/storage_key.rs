@@ -1,7 +1,25 @@
+use namada_core::types::address::Address;
+use namada_core::types::key::common;
 use namada_core::types::storage::{self, DbKeySeg};
 use namada_macros::StorageKeys;
 use namada_storage::collections::lazy_map::LazyMap;
 use namada_storage::collections::{lazy_map, LazyCollection};
+use namada_storage::{StorageRead, StorageWrite};
+
+/// Reveal a PK of an implicit account - the PK is written into the storage
+/// of the address derived from the PK.
+pub fn reveal_pk<S>(
+    storage: &mut S,
+    public_key: &common::PublicKey,
+) -> Result<()>
+where
+    S: StorageWrite + StorageRead,
+{
+    let owner: Address = public_key.into();
+    pks_handle(&owner).insert(storage, 0, public_key.clone())?;
+
+    Ok(())
+}
 
 /// Storage keys for account.
 #[derive(StorageKeys)]
@@ -13,7 +31,7 @@ struct Keys {
 
 /// Obtain a storage key for user's public key.
 pub fn pks_key_prefix(owner: &Address) -> storage::Key {
-    Key {
+    storage::Key {
         segments: vec![
             DbKeySeg::AddressSeg(owner.to_owned()),
             DbKeySeg::StringSeg(Keys::VALUES.public_keys.to_string()),
@@ -58,7 +76,7 @@ pub fn is_threshold_key(key: &storage::Key) -> Option<&Address> {
 
 /// Obtain the storage key for a user threshold
 pub fn threshold_key(owner: &Address) -> storage::Key {
-    Key {
+    storage::Key {
         segments: vec![
             DbKeySeg::AddressSeg(owner.to_owned()),
             DbKeySeg::StringSeg(Keys::VALUES.threshold.to_string()),
@@ -68,7 +86,7 @@ pub fn threshold_key(owner: &Address) -> storage::Key {
 
 /// Obtain a storage key for user's protocol public key.
 pub fn protocol_pk_key(owner: &Address) -> storage::Key {
-    Key {
+    storage::Key {
         segments: vec![
             DbKeySeg::AddressSeg(owner.to_owned()),
             DbKeySeg::StringSeg(Keys::VALUES.protocol_public_keys.to_string()),
