@@ -7,8 +7,8 @@ use namada_core::types::token;
 use namada_sdk::error::Error;
 use namada_sdk::queries::RPC;
 use namada_sdk::rpc;
-use namada_sdk::tendermint_rpc::HttpClient;
 use tendermint_config::net::Address as TendermintAddress;
+use tendermint_rpc::HttpClient;
 use tokio::runtime::Runtime;
 
 /// Query the address of the native token
