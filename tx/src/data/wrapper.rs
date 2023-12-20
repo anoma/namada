@@ -10,6 +10,7 @@ pub mod wrapper_tx {
     use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
     use borsh_ext::BorshSerializeExt;
     use masp_primitives::transaction::Transaction;
+    use namada_gas::Gas;
     use serde::{Deserialize, Serialize};
     use sha2::{Digest, Sha256};
     use thiserror::Error;
@@ -160,6 +161,16 @@ pub mod wrapper_tx {
         fn from(limit: GasLimit) -> Amount {
             Amount::from_uint(limit.multiplier * GAS_LIMIT_RESOLUTION, 0)
                 .unwrap()
+        }
+    }
+
+    impl From<GasLimit> for Gas {
+        // Derive a Gas instance with a sub amount which is exactly a whole
+        // amount since the limit represents gas in whole units
+        fn from(value: GasLimit) -> Self {
+            Self {
+                sub: u64::from(value) * gas::SCALE,
+            }
         }
     }
 

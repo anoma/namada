@@ -15,3 +15,7 @@ version.workspace = true
 [dependencies]
 namada_core = { path = "../core", default-features = false }
 namada_parameters = { path = "../parameters" }
+namada_storage = { path = "../storage" }
+
+borsh.workspace = true
+thiserror.workspace = true

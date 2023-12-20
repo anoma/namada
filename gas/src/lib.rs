@@ -4,9 +4,8 @@
 use std::fmt::Display;
 use std::ops::Div;
 
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use namada_core::storage_api::{self, StorageRead};
-use namada_core::types::transaction::wrapper::GasLimit;
+use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_storage::StorageRead;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -61,16 +60,16 @@ pub const MASP_VERIFY_SHIELDED_TX_GAS: u64 = 62_381_957;
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Decimal scale of Gas units
-const SCALE: u64 = 10_000;
+pub const SCALE: u64 = 10_000;
 
 /// Helper function to retrieve the `max_block_gas` protocol parameter from
 /// storage
 pub fn get_max_block_gas(
     storage: &impl StorageRead,
-) -> std::result::Result<u64, storage_api::Error> {
+) -> std::result::Result<u64, namada_storage::Error> {
     storage
         .read(&namada_parameters::storage::get_max_block_gas_key())?
-        .ok_or(storage_api::Error::SimpleMessage(
+        .ok_or(namada_storage::Error::SimpleMessage(
             "Missing max_block_gas parameter from storage",
         ))
 }
@@ -149,16 +148,6 @@ impl Display for Gas {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Display the gas in whole amounts
         write!(f, "{}", self.get_whole_gas_units())
-    }
-}
-
-impl From<GasLimit> for Gas {
-    // Derive a Gas instance with a sub amount which is exactly a whole amount
-    // since the limit represents gas in whole units
-    fn from(value: GasLimit) -> Self {
-        Self {
-            sub: u64::from(value) * SCALE,
-        }
     }
 }
 
@@ -262,9 +251,9 @@ impl GasMetering for TxGasMeter {
 }
 
 impl TxGasMeter {
-    /// Initialize a new Tx gas meter. Requires the `GasLimit` for the specific
+    /// Initialize a new Tx gas meter. Requires a gas limit for the specific
     /// wrapper transaction
-    pub fn new(tx_gas_limit: GasLimit) -> Self {
+    pub fn new(tx_gas_limit: impl Into<Gas>) -> Self {
         Self {
             tx_gas_limit: tx_gas_limit.into(),
             transaction_gas: Gas::default(),
