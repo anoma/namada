@@ -1170,26 +1170,7 @@ pub async fn query_ibc_denom<N: Namada>(
         Ok(Address::Internal(InternalAddress::IbcToken(hash))) => {
             hash.to_string()
         }
-        Ok(_) => return token.as_ref().to_string(),
-        Err(_) => match namada_core::types::ibc::is_ibc_denom(token.as_ref()) {
-            Some((trace_path, base_denom)) => {
-                let base_token = context
-                    .wallet()
-                    .await
-                    .find_address(&base_denom)
-                    .map(|addr| addr.to_string())
-                    .unwrap_or(base_denom);
-                return format!("{trace_path}/{base_token}");
-            }
-            None => {
-                return context
-                    .wallet()
-                    .await
-                    .find_address(token.as_ref())
-                    .map(|addr| addr.to_string())
-                    .unwrap_or(token.as_ref().to_string());
-            }
-        },
+        _ => return token.as_ref().to_string(),
     };
 
     if let Some(owner) = owner {
