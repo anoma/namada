@@ -12,6 +12,11 @@ pub mod ledger;
 pub mod types;
 
 pub use {ibc, tendermint, tendermint_proto};
+/// Borsh binary encoding (re-exported) from official crate with custom ext.
+pub mod borsh {
+    pub use borsh::*;
+    pub use borsh_ext::*;
+}
 
 // A handy macro for tests
 #[cfg(test)]
