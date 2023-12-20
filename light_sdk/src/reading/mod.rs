@@ -56,14 +56,15 @@ pub mod tx {
     /// the current status of a transation.
     pub fn query_tx_events(
         tendermint_addr: &str,
-        tx_event_query: TxEventQuery<'_>,
-    ) -> std::result::Result<Option<Event>, Error> {
+        tx_hash: &str,
+    ) -> Result<Option<Event>, Error> {
         let client = HttpClient::new(
             TendermintAddress::from_str(tendermint_addr)
                 .map_err(|e| Error::Other(e.to_string()))?,
         )
         .map_err(|e| Error::Other(e.to_string()))?;
         let rt = Runtime::new().unwrap();
+        let tx_event_query= TxEventQuery::Applied(tx_hash);
         rt.block_on(
             rpc::query_tx_events(&client, tx_event_query)
         ) .map_err(|e| Error::Other(e.to_string()))
@@ -96,13 +97,14 @@ pub mod tx {
     /// Lookup the full response accompanying the specified transaction event
     pub fn query_tx_response(
         tendermint_addr: &str,
-        tx_query: TxEventQuery<'_>,
+        tx_hash: &str,
     ) -> Result<TxResponse, Error> {
         let client =
             HttpClient::new(
                 TendermintAddress::from_str(tendermint_addr).map_err(|e| Error::Other(e.to_string()))?
             )
             .map_err(|e| Error::Other(e.to_string()))?;
+        let tx_query = TxEventQuery::Applied(tx_hash);
         let rt = Runtime::new().unwrap();
         rt.block_on(rpc::query_tx_response(&client, tx_query)).map_err(|e| Error::Other(e.to_string()))
     }
@@ -110,20 +112,13 @@ pub mod tx {
     /// Query the status of a given transaction.
     pub async fn query_tx_status(
         tendermint_addr: &str,
-        status: TxEventQuery<'_>,
+        tx_hash: &str,
     ) -> Result<Event, Error> {
-        let maybe_event = query_tx_events(tendermint_addr, status)?;
+        let maybe_event = query_tx_events(tendermint_addr, tx_hash)?;
         if let Some(e) = maybe_event {
             Ok(e)
         } else {
-            Err(match status {
-                TxEventQuery::Accepted(_) => {
-                    Error::Tx(namada_sdk::error::TxError::AcceptTimeout)
-                }
-                TxEventQuery::Applied(_) => {
-                    Error::Tx(namada_sdk::error::TxError::AppliedTimeout)
-                }
-            })
+            Err(Error::Tx(namada_sdk::error::TxError::AppliedTimeout))
         }
     }
 }
