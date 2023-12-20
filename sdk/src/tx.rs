@@ -1983,6 +1983,7 @@ pub async fn build_ibc_transfer(
         validated_amount,
     )
     .await?;
+    let shielded_tx_epoch = shielded_parts.as_ref().map(|trans| trans.0.epoch);
 
     let ibc_denom =
         rpc::query_ibc_denom(context, &args.token, Some(&source)).await;
@@ -2083,7 +2084,7 @@ pub async fn build_ibc_transfer(
     )
     .add_serialized_data(data);
 
-    let epoch = prepare_tx(
+    let unshielding_epoch = prepare_tx(
         context,
         &args.tx,
         &mut tx,
@@ -2091,6 +2092,9 @@ pub async fn build_ibc_transfer(
         tx_source_balance,
     )
     .await?;
+
+    let epoch =
+        check_epochs(unshielding_epoch, shielded_tx_epoch, args.tx.force)?;
 
     Ok((tx, signing_data, epoch))
 }
@@ -2344,25 +2348,10 @@ pub async fn build_transfer<N: Namada>(
         tx_source_balance,
     )
     .await?;
-    // Manage the two masp epochs
-    let masp_epoch = match (unshielding_epoch, shielded_tx_epoch) {
-        (Some(fee_unshield_epoch), Some(transfer_unshield_epoch)) => {
-            // If the two masp epochs are different, either the wrapper or the
-            // inner tx will fail, so abort tx creation
-            if fee_unshield_epoch != transfer_unshield_epoch && !args.tx.force {
-                return Err(Error::Other(
-                    "Fee unshielding masp tx and inner tx masp transaction \
-                     were crafted on an epoch boundary"
-                        .to_string(),
-                ));
-            }
-            // Take the smaller of the two epochs
-            Some(fee_unshield_epoch.min(transfer_unshield_epoch))
-        }
-        (Some(_fee_unshielding_epoch), None) => unshielding_epoch,
-        (None, Some(_transfer_unshield_epoch)) => shielded_tx_epoch,
-        (None, None) => None,
-    };
+
+    let masp_epoch =
+        check_epochs(unshielding_epoch, shielded_tx_epoch, args.tx.force)?;
+
     Ok((tx, signing_data, masp_epoch))
 }
 
@@ -2401,6 +2390,31 @@ async fn construct_shielded_parts<N: Namada>(
         .unwrap_or_default();
 
     Ok(Some((shielded_parts, asset_types)))
+}
+
+fn check_epochs(
+    unshielding_epoch: Option<Epoch>,
+    shielded_tx_epoch: Option<Epoch>,
+    force: bool,
+) -> Result<Option<Epoch>> {
+    match (unshielding_epoch, shielded_tx_epoch) {
+        (Some(fee_unshield_epoch), Some(transfer_unshield_epoch)) => {
+            // If the two masp epochs are different, either the wrapper or the
+            // inner tx will fail, so abort tx creation
+            if fee_unshield_epoch != transfer_unshield_epoch && !force {
+                return Err(Error::Other(
+                    "Fee unshielding masp tx and inner tx masp transaction \
+                     were crafted on an epoch boundary"
+                        .to_string(),
+                ));
+            }
+            // Take the smaller of the two epochs
+            Ok(Some(fee_unshield_epoch.min(transfer_unshield_epoch)))
+        }
+        (Some(_fee_unshielding_epoch), None) => Ok(unshielding_epoch),
+        (None, Some(_transfer_unshield_epoch)) => Ok(shielded_tx_epoch),
+        (None, None) => Ok(None),
+    }
 }
 
 /// Submit a transaction to initialize an account
