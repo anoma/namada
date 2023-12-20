@@ -241,7 +241,8 @@ mod test_apply_bp_roots_to_storage {
     use crate::protocol::transactions::votes::{
         EpochedVotingPower, EpochedVotingPowerExt,
     };
-    use crate::{bridge_pool_vp, test_utils};
+    use crate::storage::vp;
+    use crate::test_utils;
 
     /// The data needed to run a test.
     struct TestPackage {
@@ -273,7 +274,7 @@ mod test_apply_bp_roots_to_storage {
         wl_storage.storage.block.height = 1.into();
         wl_storage.commit_block().unwrap();
 
-        bridge_pool_vp::init_storage(&mut wl_storage);
+        vp::bridge_pool::init_storage(&mut wl_storage);
         test_utils::commit_bridge_pool_root_at_height(
             &mut wl_storage,
             &KeccakHash([1; 32]),
@@ -813,7 +814,7 @@ mod test_apply_bp_roots_to_storage {
         );
 
         // set up the bridge pool's storage
-        bridge_pool_vp::init_storage(&mut wl_storage);
+        vp::bridge_pool::init_storage(&mut wl_storage);
         test_utils::commit_bridge_pool_root_at_height(
             &mut wl_storage,
             &KeccakHash([1; 32]),

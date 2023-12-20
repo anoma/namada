@@ -6,7 +6,7 @@ use std::path::Path;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada::core::types::{ethereum_structs, token};
-use namada::eth_bridge::parameters::{
+use namada::eth_bridge::storage::parameters::{
     Contracts, Erc20WhitelistEntry, MinimumConfirmations,
 };
 use namada::types::address::Address;

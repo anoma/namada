@@ -29,11 +29,11 @@ use namada_core::types::vote_extensions::validator_set_update::{
     ValidatorSetArgs, VotingPowersMap,
 };
 use namada_core::types::voting_power::FractionalVotingPower;
-use namada_ethereum_bridge::parameters::UpgradeableContract;
 use namada_ethereum_bridge::protocol::transactions::votes::{
     EpochedVotingPower, EpochedVotingPowerExt,
 };
 use namada_ethereum_bridge::storage::eth_bridge_queries::EthBridgeQueries;
+use namada_ethereum_bridge::storage::parameters::UpgradeableContract;
 use namada_ethereum_bridge::storage::proof::{sort_sigs, EthereumProof};
 use namada_ethereum_bridge::storage::vote_tallies::{eth_msgs_prefix, Keys};
 use namada_ethereum_bridge::storage::{
