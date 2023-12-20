@@ -4,8 +4,8 @@ use std::rc::Rc;
 use std::str::FromStr;
 
 use criterion::{criterion_group, criterion_main, Criterion};
+use masp_primitives::bls12_381;
 use masp_primitives::sapling::Node;
-use masp_proofs::bls12_381;
 use namada::core::ledger::governance::storage::proposal::ProposalType;
 use namada::core::ledger::governance::storage::vote::{
     StorageProposalVote, VoteType,

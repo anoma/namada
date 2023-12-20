@@ -16,11 +16,13 @@ use namada_core::ledger::vp_env::VpEnv;
 use namada_core::proto::Tx;
 use namada_core::types::address::InternalAddress::Masp;
 use namada_core::types::address::{Address, MASP};
-use namada_core::types::storage::{Epoch, Key, KeySeg};
+use namada_core::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
 use namada_core::types::token::{
-    self, is_masp_anchor_key, is_masp_nullifier_key,
-    MASP_NOTE_COMMITMENT_ANCHOR_PREFIX, MASP_NOTE_COMMITMENT_TREE_KEY,
-    MASP_NULLIFIERS_KEY_PREFIX,
+    self, is_masp_allowed_key, is_masp_key, is_masp_nullifier_key,
+    is_masp_tx_pin_key, is_masp_tx_prefix_key, Transfer, HEAD_TX_KEY,
+    MASP_CONVERT_ANCHOR_KEY, MASP_NOTE_COMMITMENT_ANCHOR_PREFIX,
+    MASP_NOTE_COMMITMENT_TREE_KEY, MASP_NULLIFIERS_KEY, PIN_KEY_PREFIX,
+    TX_KEY_PREFIX,
 };
 use namada_sdk::masp::verify_shielded_tx;
 use ripemd::Digest as RipemdDigest;
@@ -110,12 +112,22 @@ where
         transaction: &Transaction,
     ) -> Result<bool> {
         let mut revealed_nullifiers = HashSet::new();
-        for description in transaction
-            .sapling_bundle()
-            .map_or(&vec![], |description| &description.shielded_spends)
-        {
+        let shielded_spends = match transaction.sapling_bundle() {
+            Some(bundle) if !bundle.shielded_spends.is_empty() => {
+                &bundle.shielded_spends
+            }
+            _ => {
+                tracing::debug!(
+                    "Missing expected spend descriptions in shielded \
+                     transaction"
+                );
+                return Ok(false);
+            }
+        };
+
+        for description in shielded_spends {
             let nullifier_key = Key::from(MASP.to_db_key())
-                .push(&MASP_NULLIFIERS_KEY_PREFIX.to_owned())
+                .push(&MASP_NULLIFIERS_KEY.to_owned())
                 .expect("Cannot obtain a storage key")
                 .push(&namada_core::types::hash::Hash(description.nullifier.0))
                 .expect("Cannot obtain a storage key");
@@ -161,7 +173,6 @@ where
     // the tree and anchor in storage
     fn valid_note_commitment_update(
         &self,
-        keys_changed: &BTreeSet<Key>,
         transaction: &Transaction,
     ) -> Result<bool> {
         // Check that the merkle tree in storage has been correctly updated with
@@ -200,20 +211,6 @@ where
             return Ok(false);
         }
 
-        // Check that no anchor was published (this is to be done by the
-        // protocol)
-        if keys_changed
-            .iter()
-            .filter(|key| is_masp_anchor_key(key))
-            .count()
-            != 0
-        {
-            tracing::debug!(
-                "The transaction revealed one or more MASP anchor keys"
-            );
-            return Ok(false);
-        }
-
         Ok(true)
     }
 
@@ -222,10 +219,20 @@ where
         &self,
         transaction: &Transaction,
     ) -> Result<bool> {
-        for description in transaction
-            .sapling_bundle()
-            .map_or(&vec![], |bundle| &bundle.shielded_spends)
-        {
+        let shielded_spends = match transaction.sapling_bundle() {
+            Some(bundle) if !bundle.shielded_spends.is_empty() => {
+                &bundle.shielded_spends
+            }
+            _ => {
+                tracing::debug!(
+                    "Missing expected spend descriptions in shielded \
+                     transaction"
+                );
+                return Ok(false);
+            }
+        };
+
+        for description in shielded_spends {
             let anchor_key = Key::from(MASP.to_db_key())
                 .push(&MASP_NOTE_COMMITMENT_ANCHOR_PREFIX.to_owned())
                 .expect("Cannot obtain a storage key")
@@ -240,6 +247,120 @@ where
                     "Spend description refers to an invalid anchor"
                 );
                 return Ok(false);
+            }
+        }
+
+        Ok(true)
+    }
+
+    // Check that the convert descriptions anchors of a transaction are valid
+    fn valid_convert_descriptions_anchor(
+        &self,
+        transaction: &Transaction,
+    ) -> Result<bool> {
+        if let Some(bundle) = transaction.sapling_bundle() {
+            if !bundle.shielded_converts.is_empty() {
+                let anchor_key = Key::from(MASP.to_db_key())
+                    .push(&MASP_CONVERT_ANCHOR_KEY.to_owned())
+                    .expect("Cannot obtain a storage key");
+                let expected_anchor = self
+                    .ctx
+                    .read_pre::<namada_core::types::hash::Hash>(&anchor_key)?
+                    .ok_or(Error::NativeVpError(
+                        native_vp::Error::SimpleMessage("Cannot read storage"),
+                    ))?;
+
+                for description in &bundle.shielded_converts {
+                    // Check if the provided anchor matches the current
+                    // conversion tree's one
+                    if namada_core::types::hash::Hash(
+                        description.anchor.to_bytes(),
+                    ) != expected_anchor
+                    {
+                        tracing::debug!(
+                            "Convert description refers to an invalid anchor"
+                        );
+                        return Ok(false);
+                    }
+                }
+            }
+        }
+
+        Ok(true)
+    }
+
+    /// Check the correctness of the general storage changes that pertain to all
+    /// types of masp transfers
+    fn valid_state(
+        &self,
+        keys_changed: &BTreeSet<Key>,
+        transfer: &Transfer,
+        transaction: &Transaction,
+    ) -> Result<bool> {
+        // Check that the transaction didn't write unallowed masp keys, nor
+        // multiple variations of the same key prefixes
+        let mut found_tx_key = false;
+        let mut found_pin_key = false;
+        for key in keys_changed.iter().filter(|key| is_masp_key(key)) {
+            if !is_masp_allowed_key(key) {
+                return Ok(false);
+            } else if is_masp_tx_prefix_key(key) {
+                if found_tx_key {
+                    return Ok(false);
+                } else {
+                    found_tx_key = true;
+                }
+            } else if is_masp_tx_pin_key(key) {
+                if found_pin_key {
+                    return Ok(false);
+                } else {
+                    found_pin_key = true;
+                }
+            }
+        }
+
+        // Validate head tx
+        let head_tx_key = Key::from(MASP.to_db_key())
+            .push(&HEAD_TX_KEY.to_owned())
+            .expect("Cannot obtain a storage key");
+        let pre_head: u64 = self.ctx.read_pre(&head_tx_key)?.unwrap_or(0);
+        let post_head: u64 = self.ctx.read_post(&head_tx_key)?.unwrap_or(0);
+
+        if post_head != pre_head + 1 {
+            return Ok(false);
+        }
+
+        // Validate tx key
+        let current_tx_key = Key::from(MASP.to_db_key())
+            .push(&(TX_KEY_PREFIX.to_owned() + &pre_head.to_string()))
+            .expect("Cannot obtain a storage key");
+        match self
+            .ctx
+            .read_post::<(Epoch, BlockHeight, TxIndex, Transfer, Transaction)>(
+                &current_tx_key,
+            )? {
+            Some((
+                epoch,
+                height,
+                tx_index,
+                storage_transfer,
+                storage_transaction,
+            )) if (epoch == self.ctx.get_block_epoch()?
+                && height == self.ctx.get_block_height()?
+                && tx_index == self.ctx.get_tx_index()?
+                && &storage_transfer == transfer
+                && &storage_transaction == transaction) => {}
+            _ => return Ok(false),
+        }
+
+        // Validate pin key
+        if let Some(key) = &transfer.key {
+            let pin_key = Key::from(MASP.to_db_key())
+                .push(&(PIN_KEY_PREFIX.to_owned() + key))
+                .expect("Cannot obtain a storage key");
+            match self.ctx.read_post::<u64>(&pin_key)? {
+                Some(tx_idx) if tx_idx == pre_head => (),
+                _ => return Ok(false),
             }
         }
 
@@ -270,6 +391,10 @@ where
         // The Sapling value balance adds to the transparent tx pool
         transparent_tx_pool += shielded_tx.sapling_value_balance();
 
+        if !self.valid_state(keys_changed, &transfer, &shielded_tx)? {
+            return Ok(false);
+        }
+
         if transfer.source != Address::Internal(Masp) {
             // Handle transparent input
             // Note that the asset type is timestamped so shields
@@ -286,6 +411,14 @@ where
                 // Non-masp sources add to transparent tx pool
                 transparent_tx_pool += transp_amt;
             }
+
+            // No shielded spends nor shielded converts are allowed
+            if shielded_tx.sapling_bundle().is_some_and(|bundle| {
+                !(bundle.shielded_spends.is_empty()
+                    && bundle.shielded_converts.is_empty())
+            }) {
+                return Ok(false);
+            }
         } else {
             // Handle shielded input
             // The following boundary conditions must be satisfied
@@ -294,7 +427,8 @@ where
             // the containing wrapper transaction's fee
             // amount Satisfies 1.
             // 3. The spend descriptions' anchors are valid
-            // 4. The nullifiers provided by the transaction have not been
+            // 4. The convert descriptions's anchors are valid
+            // 5. The nullifiers provided by the transaction have not been
             // revealed previously (even in the same tx) and no unneeded
             // nullifier is being revealed by the tx
             if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
@@ -309,6 +443,7 @@ where
             }
 
             if !(self.valid_spend_descriptions_anchor(&shielded_tx)?
+                && self.valid_convert_descriptions_anchor(&shielded_tx)?
                 && self.valid_nullifiers_reveal(keys_changed, &shielded_tx)?)
             {
                 return Ok(false);
@@ -317,7 +452,7 @@ where
 
         // The transaction must correctly update the note commitment tree
         // in storage with the new output descriptions
-        if !self.valid_note_commitment_update(keys_changed, &shielded_tx)? {
+        if !self.valid_note_commitment_update(&shielded_tx)? {
             return Ok(false);
         }
 
@@ -413,6 +548,7 @@ where
             // Handle shielded output
             // The following boundary conditions must be satisfied
             // 1. Zero transparent output
+            // 2. At least one shielded output
 
             // Satisfies 1.
             if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
@@ -424,6 +560,14 @@ where
                     );
                     return Ok(false);
                 }
+            }
+
+            // Staisfies 2.
+            if shielded_tx
+                .sapling_bundle()
+                .is_some_and(|bundle| bundle.shielded_outputs.is_empty())
+            {
+                return Ok(false);
             }
         }
 

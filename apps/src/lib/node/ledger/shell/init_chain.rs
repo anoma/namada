@@ -18,7 +18,8 @@ use namada::types::hash::Hash as CodeHash;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::types::token::{
-    MASP_NOTE_COMMITMENT_ANCHOR_PREFIX, MASP_NOTE_COMMITMENT_TREE_KEY,
+    MASP_CONVERT_ANCHOR_KEY, MASP_NOTE_COMMITMENT_ANCHOR_PREFIX,
+    MASP_NOTE_COMMITMENT_TREE_KEY,
 };
 use namada::vm::validate_untrusted_wasm;
 use namada_sdk::eth_bridge::EthBridgeStatus;
@@ -197,6 +198,20 @@ where
         self.wl_storage
             .write(&commitment_tree_anchor_key, ())
             .unwrap();
+
+        // Init masp convert anchor
+        let convert_anchor_key = Key::from(MASP.to_db_key())
+            .push(&MASP_CONVERT_ANCHOR_KEY.to_owned())
+            .expect("Cannot obtain a storage key");
+        self.wl_storage.write(
+            &convert_anchor_key,
+            namada::core::types::hash::Hash(
+                bls12_381::Scalar::from(
+                    self.wl_storage.storage.conversion_state.tree.root(),
+                )
+                .to_bytes(),
+            ),
+        )?;
 
         // Set the initial validator set
         response.validators = self
