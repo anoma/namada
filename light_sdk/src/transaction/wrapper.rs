@@ -4,6 +4,7 @@ use namada_core::types::key::common;
 use namada_core::types::storage::Epoch;
 use namada_core::types::transaction::{Fee, GasLimit};
 
+#[allow(missing_docs)]
 pub struct Wrapper(Tx);
 
 impl Wrapper {

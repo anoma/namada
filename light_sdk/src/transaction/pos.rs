@@ -105,10 +105,12 @@ impl Unbond {
     }
 }
 
+/// Transaction to initialize a new PoS validator
 pub struct InitValidator(Tx);
 
 impl InitValidator {
     /// Build a raw Init validator transaction from the given parameters
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         account_keys: Vec<common::PublicKey>,
         threshold: u8,
@@ -166,6 +168,7 @@ impl InitValidator {
     }
 }
 
+/// Transaction to unjail a PoS validator
 pub struct UnjailValidator(Tx);
 
 impl UnjailValidator {
@@ -195,6 +198,7 @@ impl UnjailValidator {
     }
 }
 
+/// Transaction to deactivate a validator
 pub struct DeactivateValidator(Tx);
 
 impl DeactivateValidator {
@@ -224,6 +228,7 @@ impl DeactivateValidator {
     }
 }
 
+/// Transaction to reactivate a previously deactivated validator
 pub struct ReactivateValidator(Tx);
 
 impl ReactivateValidator {
@@ -253,6 +258,7 @@ impl ReactivateValidator {
     }
 }
 
+/// Transaction to claim PoS rewards
 pub struct ClaimRewards(Tx);
 
 impl ClaimRewards {
@@ -291,6 +297,7 @@ impl ClaimRewards {
     }
 }
 
+/// Transaction to change the validator's metadata
 pub struct ChangeMetaData(Tx);
 
 impl ChangeMetaData {
@@ -338,6 +345,7 @@ impl ChangeMetaData {
     }
 }
 
+/// Transaction to modify the validator's consensus key
 pub struct ChangeConsensusKey(Tx);
 
 impl ChangeConsensusKey {
@@ -377,6 +385,7 @@ impl ChangeConsensusKey {
     }
 }
 
+/// Transaction to modify the validator's commission rate
 pub struct ChangeCommission(Tx);
 
 impl ChangeCommission {
@@ -412,6 +421,7 @@ impl ChangeCommission {
     }
 }
 
+/// Transaction to withdraw previously unstaked funds
 pub struct Withdraw(Tx);
 
 impl Withdraw {
@@ -450,6 +460,7 @@ impl Withdraw {
     }
 }
 
+/// Transaction to redelegate
 pub struct Redelegate(Tx);
 
 impl Redelegate {

@@ -12,10 +12,12 @@ use crate::transaction;
 const TX_INIT_PROPOSAL_WASM: &str = "tx_init_proposal.wasm";
 const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
 
+/// Transaction to initialize a governance proposal
 pub struct InitProposal(Tx);
 
 impl InitProposal {
     /// Build a raw InitProposal transaction from the given parameters
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: Option<u64>,
         content: Hash,
@@ -61,6 +63,7 @@ impl InitProposal {
     }
 }
 
+/// Transaction to vote on a governance proposal
 pub struct VoteProposal(Tx);
 
 impl VoteProposal {

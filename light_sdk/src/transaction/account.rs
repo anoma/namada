@@ -10,6 +10,7 @@ const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
 const TX_REVEAL_PK_WASM: &str = "tx_reveal_pk.wasm";
 const TX_UPDATE_ACCOUNT_WASM: &str = "tx_update_account.wasm";
 
+/// Transaction to initialize an established account
 pub struct InitAccount(Tx);
 
 impl InitAccount {
@@ -51,6 +52,8 @@ impl InitAccount {
     }
 }
 
+/// Transaction to reveal a public key to the ledger to validate signatures of
+/// an implicit account
 pub struct RevealPk(pub Tx);
 
 impl RevealPk {
@@ -80,6 +83,7 @@ impl RevealPk {
     }
 }
 
+/// Transaction to update the parameters of an established account
 pub struct UpdateAccount(Tx);
 
 impl UpdateAccount {

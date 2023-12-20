@@ -12,6 +12,7 @@ use crate::transaction;
 const TX_RESIGN_STEWARD: &str = "tx_resign_steward.wasm";
 const TX_UPDATE_STEWARD_COMMISSION: &str = "tx_update_steward_commission.wasm";
 
+/// A transaction to resign from stewarding pgf
 pub struct ResignSteward(Tx);
 
 impl ResignSteward {
@@ -41,6 +42,7 @@ impl ResignSteward {
     }
 }
 
+/// Transaction to update a pgf steward's commission rate
 pub struct UpdateStewardCommission(Tx);
 
 impl UpdateStewardCommission {

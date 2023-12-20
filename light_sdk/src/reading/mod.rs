@@ -6,8 +6,8 @@ use namada_core::types::storage::BlockResults;
 use namada_core::types::token;
 use namada_sdk::error::Error;
 use namada_sdk::queries::RPC;
-use namada_sdk::tendermint_rpc::HttpClient;
 use namada_sdk::rpc;
+use namada_sdk::tendermint_rpc::HttpClient;
 use tendermint_config::net::Address as TendermintAddress;
 use tokio::runtime::Runtime;
 
@@ -64,10 +64,9 @@ pub mod tx {
         )
         .map_err(|e| Error::Other(e.to_string()))?;
         let rt = Runtime::new().unwrap();
-        let tx_event_query= TxEventQuery::Applied(tx_hash);
-        rt.block_on(
-            rpc::query_tx_events(&client, tx_event_query)
-        ) .map_err(|e| Error::Other(e.to_string()))
+        let tx_event_query = TxEventQuery::Applied(tx_hash);
+        rt.block_on(rpc::query_tx_events(&client, tx_event_query))
+            .map_err(|e| Error::Other(e.to_string()))
     }
 
     /// Dry run a transaction
@@ -99,14 +98,15 @@ pub mod tx {
         tendermint_addr: &str,
         tx_hash: &str,
     ) -> Result<TxResponse, Error> {
-        let client =
-            HttpClient::new(
-                TendermintAddress::from_str(tendermint_addr).map_err(|e| Error::Other(e.to_string()))?
-            )
-            .map_err(|e| Error::Other(e.to_string()))?;
+        let client = HttpClient::new(
+            TendermintAddress::from_str(tendermint_addr)
+                .map_err(|e| Error::Other(e.to_string()))?,
+        )
+        .map_err(|e| Error::Other(e.to_string()))?;
         let tx_query = TxEventQuery::Applied(tx_hash);
         let rt = Runtime::new().unwrap();
-        rt.block_on(rpc::query_tx_response(&client, tx_query)).map_err(|e| Error::Other(e.to_string()))
+        rt.block_on(rpc::query_tx_response(&client, tx_query))
+            .map_err(|e| Error::Other(e.to_string()))
     }
 
     /// Query the status of a given transaction.
@@ -662,7 +662,10 @@ pub mod pgf {
     use super::*;
 
     /// Check if the given address is a pgf steward.
-    pub async fn is_steward(tendermint_addr: &str, address: &Address) -> Result<bool, Error> {
+    pub async fn is_steward(
+        tendermint_addr: &str,
+        address: &Address,
+    ) -> Result<bool, Error> {
         let client = HttpClient::new(
             TendermintAddress::from_str(tendermint_addr)
                 .map_err(|e| Error::Other(e.to_string()))?,

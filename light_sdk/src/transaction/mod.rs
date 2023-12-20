@@ -15,7 +15,6 @@ pub mod transfer;
 pub mod wrapper;
 
 /// Generic arguments required to construct a transaction
-#[repr(C)]
 pub struct GlobalArgs {
     pub expiration: Option<DateTimeUtc>,
     pub code_hash: Hash,

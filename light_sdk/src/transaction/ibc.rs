@@ -10,6 +10,7 @@ use crate::transaction;
 
 const TX_IBC_WASM: &str = "tx_ibc.wasm";
 
+/// An IBC transfer
 pub struct IbcTransfer(Tx);
 
 impl IbcTransfer {
