@@ -502,7 +502,10 @@ fn start_abci_broadcaster_shell(
         });
 
     // Start the shell in a new OS thread
-    let thread_builder = thread::Builder::new().name("ledger-shell".into());
+    const SHELL_THREAD_MIN_STACK_SIZE: usize = 256 * 1024 * 1024; // 256 MiB
+    let thread_builder = thread::Builder::new()
+        .name("ledger-shell".into())
+        .stack_size(SHELL_THREAD_MIN_STACK_SIZE);
     let shell_handler = thread_builder
         .spawn(move || {
             tracing::info!("Namada ledger node started.");
