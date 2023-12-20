@@ -23,5 +23,5 @@ namada_core = {path = "../core"}
 namada_sdk = {path = "../sdk"}
 prost.workspace = true
 tendermint-config.workspace = true
-tendermint-rpc.workspace = true
+tendermint-rpc = { worskpace = true, features = ["http-client"] }
 tokio = {workspace = true, features = ["rt"]}
