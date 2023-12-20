@@ -128,7 +128,7 @@ where
                     .map_err(|e| Error::Context(Box::new(e)))?;
                 // the current ibc-rs execution doesn't store the denom for the
                 // token hash when transfer with MsgRecvPacket
-                self.store_denom(&envelope)?;
+                self.store_denom(envelope)?;
                 // For receiving the token to a shielded address
                 self.handle_masp_tx(message)
             }
