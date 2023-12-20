@@ -989,7 +989,12 @@ pub async fn submit_ibc_transfer<N: Namada>(
 where
     <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
 {
-    submit_reveal_aux(namada, args.tx.clone(), &args.source).await?;
+    submit_reveal_aux(
+        namada,
+        args.tx.clone(),
+        &args.source.effective_address(),
+    )
+    .await?;
     let (mut tx, signing_data, _epoch) = args.build(namada).await?;
     signing::generate_test_vector(namada, &tx).await?;
 

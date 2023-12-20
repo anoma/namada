@@ -4025,7 +4025,7 @@ pub mod args {
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
             TxIbcTransfer::<SdkTypes> {
                 tx,
-                source: chain_ctx.get(&self.source),
+                source: chain_ctx.get_cached(&self.source),
                 receiver: self.receiver,
                 token: chain_ctx.get(&self.token),
                 amount: self.amount,
@@ -4042,7 +4042,7 @@ pub mod args {
     impl Args for TxIbcTransfer<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
-            let source = SOURCE.parse(matches);
+            let source = TRANSFER_SOURCE.parse(matches);
             let receiver = RECEIVER.parse(matches);
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));

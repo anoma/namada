@@ -11,12 +11,15 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::address::HASH_LEN;
+use crate::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
 use crate::ibc::apps::transfer::types::{Memo, PrefixedDenom, TracePath};
 use crate::ibc::core::handler::types::events::{
     Error as IbcEventError, IbcEvent as RawIbcEvent,
 };
+use crate::ibc::primitives::proto::Protobuf;
 use crate::tendermint::abci::Event as AbciEvent;
 use crate::types::masp::PaymentAddress;
+use crate::types::token::Transfer;
 
 /// The event type defined in ibc-rs for receiving a token
 pub const EVENT_TYPE_PACKET: &str = "fungible_token_packet";
@@ -98,11 +101,44 @@ impl std::fmt::Display for IbcEvent {
     }
 }
 
+/// IBC transfer message to send from a shielded address
+#[derive(Debug, Clone)]
+pub struct MsgShieldedTransfer {
+    /// IBC transfer message
+    pub message: MsgTransfer,
+    /// Token transfer with the masp section hash
+    pub transfer: Transfer,
+}
+
+impl BorshSerialize for MsgShieldedTransfer {
+    fn serialize<W: std::io::Write>(
+        &self,
+        writer: &mut W,
+    ) -> std::io::Result<()> {
+        let encoded_msg = self.message.clone().encode_vec();
+        let members = (encoded_msg, self.transfer.clone());
+        BorshSerialize::serialize(&members, writer)
+    }
+}
+
+impl BorshDeserialize for MsgShieldedTransfer {
+    fn deserialize_reader<R: std::io::Read>(
+        reader: &mut R,
+    ) -> std::io::Result<Self> {
+        use std::io::{Error, ErrorKind};
+        let (msg, transfer): (Vec<u8>, Transfer) =
+            BorshDeserialize::deserialize_reader(reader)?;
+        let message = MsgTransfer::decode_vec(&msg)
+            .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
+        Ok(Self { message, transfer })
+    }
+}
+
 /// IBC shielded transfer
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 pub struct IbcShieldedTransfer {
     /// The IBC event type
-    pub transfer: crate::types::token::Transfer,
+    pub transfer: Transfer,
     /// The attributes of the IBC event
     pub masp_tx: masp_primitives::transaction::Transaction,
 }
