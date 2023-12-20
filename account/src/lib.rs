@@ -5,12 +5,9 @@
 mod storage;
 mod storage_key;
 
-use std::collections::{BTreeMap, HashMap};
-
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::address::Address;
-use namada_core::hints;
-use namada_core::key::{common, RefTo};
+use namada_core::types::address::Address;
+use namada_core::types::key::{common, AccountPublicKeysMap};
 use serde::{Deserialize, Serialize};
 pub use storage::*;
 pub use storage_key::*;

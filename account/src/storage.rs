@@ -1,10 +1,26 @@
 //! Cryptographic signature keys storage API
 
+use namada_core::types::address::Address;
+use namada_core::types::key::common;
+use namada_core::types::storage;
+use namada_storage::{Result, StorageRead, StorageWrite};
+
 use super::*;
-use crate::types::account::AccountPublicKeysMap;
-use crate::types::address::Address;
-use crate::types::key::*;
-use crate::types::storage::Key;
+
+/// Reveal a PK of an implicit account - the PK is written into the storage
+/// of the address derived from the PK.
+pub fn reveal_pk<S>(
+    storage: &mut S,
+    public_key: &common::PublicKey,
+) -> Result<()>
+where
+    S: StorageWrite + StorageRead,
+{
+    let owner: Address = public_key.into();
+    pks_handle(&owner).insert(storage, 0, public_key.clone())?;
+
+    Ok(())
+}
 
 /// Init the subspace of a new account
 pub fn init_account_storage<S>(
@@ -72,7 +88,7 @@ where
 {
     match owner {
         Address::Established(_) => {
-            let vp_key = Key::validity_predicate(owner);
+            let vp_key = storage::Key::validity_predicate(owner);
             storage.has_key(&vp_key)
         }
         Address::Implicit(_) => Ok(true),

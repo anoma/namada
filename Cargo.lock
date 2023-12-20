@@ -4252,9 +4252,11 @@ dependencies = [
 name = "namada_account"
 version = "0.28.1"
 dependencies = [
+ "borsh",
  "namada_core",
  "namada_macros",
  "namada_storage",
+ "serde 1.0.193",
 ]
 
 [[package]]

@@ -4,22 +4,6 @@ use namada_core::types::storage::{self, DbKeySeg};
 use namada_macros::StorageKeys;
 use namada_storage::collections::lazy_map::LazyMap;
 use namada_storage::collections::{lazy_map, LazyCollection};
-use namada_storage::{StorageRead, StorageWrite};
-
-/// Reveal a PK of an implicit account - the PK is written into the storage
-/// of the address derived from the PK.
-pub fn reveal_pk<S>(
-    storage: &mut S,
-    public_key: &common::PublicKey,
-) -> Result<()>
-where
-    S: StorageWrite + StorageRead,
-{
-    let owner: Address = public_key.into();
-    pks_handle(&owner).insert(storage, 0, public_key.clone())?;
-
-    Ok(())
-}
 
 /// Storage keys for account.
 #[derive(StorageKeys)]

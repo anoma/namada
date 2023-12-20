@@ -16,3 +16,6 @@ version.workspace = true
 namada_core = { path = "../core", default-features = false }
 namada_macros = { path = "../macros" }
 namada_storage = { path = "../storage" }
+
+borsh.workspace = true
+serde.workspace = true
