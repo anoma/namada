@@ -1,36 +1,35 @@
 use namada_core::hints;
 use namada_core::types::address::{Address, InternalAddress};
-use namada_core::types::token;
+use namada_core::types::dec::Dec;
+use namada_core::types::token::{self, Amount, DenominatedAmount};
 use namada_storage as storage;
 use namada_storage::{StorageRead, StorageWrite};
 
 use crate::storage_key::*;
 
-impl token::Parameters {
-    /// Initialize parameters for the token in storage during the genesis block.
-    pub fn init_storage<S>(
-        &self,
-        storage: &mut S,
-        address: &Address,
-    ) -> storage::Result<()>
-    where
-        S: StorageRead + StorageWrite,
-    {
-        let Self {
-            max_reward_rate: max_rate,
-            kd_gain_nom,
-            kp_gain_nom,
-            locked_ratio_target: locked_target,
-        } = self;
-        storage.write(&masp_last_inflation_key(address), Amount::zero())?;
-        storage.write(&masp_last_locked_ratio_key(address), Dec::zero())?;
-        storage.write(&masp_max_reward_rate_key(address), max_rate)?;
-        storage.write(&masp_locked_ratio_target_key(address), locked_target)?;
-        storage.write(&masp_kp_gain_key(address), kp_gain_nom)?;
-        storage.write(&masp_kd_gain_key(address), kd_gain_nom)?;
-        storage.write(&minted_balance_key(address), Amount::zero())?;
-        Ok(())
-    }
+/// Initialize parameters for the token in storage during the genesis block.
+pub fn write_params<S>(
+    params: &token::Parameters,
+    storage: &mut S,
+    address: &Address,
+) -> storage::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let token::Parameters {
+        max_reward_rate: max_rate,
+        kd_gain_nom,
+        kp_gain_nom,
+        locked_ratio_target: locked_target,
+    } = params;
+    storage.write(&masp_last_inflation_key(address), Amount::zero())?;
+    storage.write(&masp_last_locked_ratio_key(address), Dec::zero())?;
+    storage.write(&masp_max_reward_rate_key(address), max_rate)?;
+    storage.write(&masp_locked_ratio_target_key(address), locked_target)?;
+    storage.write(&masp_kp_gain_key(address), kp_gain_nom)?;
+    storage.write(&masp_kd_gain_key(address), kd_gain_nom)?;
+    storage.write(&minted_balance_key(address), Amount::zero())?;
+    Ok(())
 }
 
 /// Read the balance of a given token and owner.
@@ -220,7 +219,7 @@ pub fn denominated(
             "No denomination found in storage for the given token",
         )
     })?;
-    Ok(DenominatedAmount { amount, denom })
+    Ok(DenominatedAmount::new(amount, denom))
 }
 
 /// Convert this denominated amount into a plain amount by increasing its
