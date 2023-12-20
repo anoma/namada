@@ -1,10 +1,10 @@
 //! Parameters storage
 
+use namada_core::types::address::Address;
+use namada_core::types::storage::{DbKeySeg, Key};
 use namada_macros::StorageKeys;
 
 use super::ADDRESS;
-use crate::types::address::Address;
-use crate::types::storage::{DbKeySeg, Key};
 
 #[derive(StorageKeys)]
 struct Keys {
