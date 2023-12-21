@@ -1632,6 +1632,12 @@ impl<'a> Iterator for PersistentPrefixIterator<'a> {
                     if let Some(k) = key.strip_prefix(&self.0.db_prefix) {
                         let gas = k.len() + val.len();
                         return Some((k.to_owned(), val.to_vec(), gas as _));
+                    } else {
+                        tracing::warn!(
+                            "Unmatched prefix \"{}\" in iterator's key \
+                             \"{key}\"",
+                            self.0.db_prefix
+                        );
                     }
                 }
                 None => return None,
