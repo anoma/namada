@@ -15,10 +15,12 @@ use crate::borsh::{
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum SigIndexDecodeError {
-    #[error("Error deserializing transaction field bytes: {0}")]
-    TxDeserializingError(std::io::Error),
-    #[error("Error deserializing transaction")]
-    OfflineTxDeserializationError,
+    #[error("Invalid signature index bytes: {0}")]
+    InvalidEncoding(std::io::Error),
+    #[error("Invalid signature index JSON string")]
+    InvalidJsonString,
+    #[error("Invalid signature index: {0}")]
+    InvalidHex(data_encoding::DecodeError),
 }
 
 #[derive(
@@ -71,13 +73,11 @@ impl SignatureIndex {
         if let Ok(hex) = serde_json::from_slice::<String>(data) {
             match HEXUPPER.decode(hex.as_bytes()) {
                 Ok(bytes) => Self::try_from_slice(&bytes)
-                    .map_err(SigIndexDecodeError::TxDeserializingError),
-                Err(_) => {
-                    Err(SigIndexDecodeError::OfflineTxDeserializationError)
-                }
+                    .map_err(SigIndexDecodeError::InvalidEncoding),
+                Err(e) => Err(SigIndexDecodeError::InvalidHex(e)),
             }
         } else {
-            Err(SigIndexDecodeError::OfflineTxDeserializationError)
+            Err(SigIndexDecodeError::InvalidJsonString)
         }
     }
 }

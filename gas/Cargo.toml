@@ -18,4 +18,5 @@ namada_parameters = { path = "../parameters" }
 namada_storage = { path = "../storage" }
 
 borsh.workspace = true
+serde.workspace = true
 thiserror.workspace = true

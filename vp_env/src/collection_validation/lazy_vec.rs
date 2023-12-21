@@ -1,12 +1,17 @@
 //! LazyVec validation helpers
 
-use std::ops::Index;
+use std::collections::BTreeSet;
+use std::fmt::Debug;
 
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::types::storage;
-use namada_storage::collection::lazy_vec::{LazyVec, SubKey};
+use namada_storage::collections::lazy_vec::{
+    Index, LazyVec, SubKey, ValidationError,
+};
+use namada_storage::ResultExt;
 
-use super::{read_data, Data, LazyCollectionExt, ValidationBuilder};
+use super::{read_data, Data, LazyCollectionExt};
+use crate::VpEnv;
 
 /// Possible sub-keys of a [`LazyVec`], together with their [`validation::Data`]
 /// that contains prior and posterior state.

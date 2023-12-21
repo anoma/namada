@@ -1,12 +1,12 @@
 //! LazySet validation helpers
 
-use std::ops::Index;
+use std::fmt::Debug;
 
-use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::types::storage;
-use namada_storage::collection::lazy_set::{LazySet, SubKey};
+use namada_storage::collections::lazy_set::{LazySet, SubKey};
 
-use super::{Data, LazyCollectionExt, ValidationBuilder};
+use super::LazyCollectionExt;
+use crate::VpEnv;
 
 /// Possible actions that can modify a [`LazySet`]. This roughly corresponds to
 /// the methods that have `StorageWrite` access.
@@ -49,7 +49,7 @@ pub fn determine_action<ENV, K>(
     env: &ENV,
     storage_key: &storage::Key,
     parsed_key: K,
-) -> crate::Result<Option<Action<K>>>
+) -> namada_storage::Result<Option<Action<K>>>
 where
     ENV: for<'a> VpEnv<'a>,
 {

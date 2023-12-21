@@ -4,10 +4,11 @@ pub mod data;
 pub mod proto;
 mod types;
 
+pub use namada_core::types::sign::SignatureIndex;
 pub use types::{
     standalone_signature, verify_standalone_sig, Code, Commitment,
-    CompressedSignature, Data, Error, Header, MaspBuilder, Section, Signature,
-    SignatureIndex, Signed, Signer, Tx, TxError,
+    CompressedSignature, Data, DecodeError, Header, MaspBuilder, Section,
+    Signature, Signed, Signer, Tx, TxError,
 };
 
 #[cfg(test)]

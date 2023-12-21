@@ -1,16 +1,16 @@
 //! PGF lib code.
 
-use crate::ledger::parameters::storage as params_storage;
-use crate::ledger::storage_api::pgf::{
-    get_parameters, get_payments, get_stewards,
-};
-use crate::ledger::storage_api::token::credit_tokens;
-use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
-use crate::types::dec::Dec;
-use crate::types::token;
+use namada_core::types::dec::Dec;
+use namada_core::types::token;
+use namada_parameters::storage as params_storage;
+use namada_storage::{StorageRead, StorageWrite};
+use namada_trans_token::credit_tokens;
+use namada_trans_token::storage_key::minted_balance_key;
+
+use crate::pgf::storage::{get_parameters, get_payments, get_stewards};
 
 /// Apply the PGF inflation.
-pub fn apply_inflation<S>(storage: &mut S) -> storage_api::Result<()>
+pub fn apply_inflation<S>(storage: &mut S) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -21,7 +21,7 @@ where
         .read(&params_storage::get_epochs_per_year_key())?
         .expect("Epochs per year should exist in storage");
     let total_tokens: token::Amount = storage
-        .read(&token::minted_balance_key(&staking_token))?
+        .read(&minted_balance_key(&staking_token))?
         .expect("Total NAM balance should exist in storage");
 
     let pgf_pd_rate =
@@ -46,7 +46,7 @@ where
     pgf_fundings.sort_by(|a, b| a.id.cmp(&b.id));
 
     for funding in pgf_fundings {
-        if storage_api::token::transfer(
+        if namada_trans_token::transfer(
             storage,
             &staking_token,
             &super::ADDRESS,

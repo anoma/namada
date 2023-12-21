@@ -17,6 +17,7 @@ use namada_core::borsh::{
 use namada_core::types::address::Address;
 use namada_core::types::chain::ChainId;
 use namada_core::types::key::{AccountPublicKeysMap, *};
+use namada_core::types::sign::SignatureIndex;
 use namada_core::types::storage::Epoch;
 use namada_core::types::time::DateTimeUtc;
 use namada_core::types::token::MaspDenom;
@@ -37,23 +38,29 @@ pub enum VerifySigError {
     VerifySig(#[from] namada_core::types::key::VerifySigError),
     #[error("{0}")]
     Gas(#[from] namada_gas::Error),
+    #[error("The wrapper signature is invalid.")]
+    InvalidWrapperSignature,
+    #[error("The section signature is invalid: {0}")]
+    InvalidSectionSignature(String),
 }
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
-pub enum Error {
+pub enum DecodeError {
+    #[error("Invalid signature index bytes: {0}")]
+    InvalidEncoding(std::io::Error),
+    #[error("Invalid signature index JSON string")]
+    InvalidJsonString,
+    #[error("Invalid signature index: {0}")]
+    InvalidHex(data_encoding::DecodeError),
     #[error("Error decoding a transaction from bytes: {0}")]
     TxDecodingError(prost::DecodeError),
     #[error("Timestamp is empty")]
     NoTimestampError,
     #[error("Timestamp is invalid: {0}")]
     InvalidTimestamp(prost_types::TimestampError),
-    #[error("The section signature is invalid: {0}")]
-    InvalidSectionSignature(String),
     #[error("Couldn't serialize transaction from JSON at {0}")]
     InvalidJSONDeserialization(String),
-    #[error("The wrapper signature is invalid.")]
-    InvalidWrapperSignature,
 }
 
 /// This can be used to sign an arbitrary tx. The signature is produced and
@@ -941,14 +948,15 @@ pub struct Tx {
 
 /// Deserialize Tx from protobufs
 impl TryFrom<&[u8]> for Tx {
-    type Error = Error;
+    type Error = DecodeError;
 
-    fn try_from(tx_bytes: &[u8]) -> Result<Self> {
+    fn try_from(tx_bytes: &[u8]) -> Result<Self, DecodeError> {
         use prost::Message;
 
-        let tx = proto::Tx::decode(tx_bytes).map_err(Error::TxDecodingError)?;
+        let tx = proto::Tx::decode(tx_bytes)
+            .map_err(DecodeError::TxDecodingError)?;
         BorshDeserialize::try_from_slice(&tx.data)
-            .map_err(Error::TxDeserializingError)
+            .map_err(DecodeError::InvalidEncoding)
     }
 }
 
@@ -989,15 +997,15 @@ impl Tx {
     }
 
     // Deserialize from hex encoding
-    pub fn deserialize(data: &[u8]) -> Result<Self> {
+    pub fn deserialize(data: &[u8]) -> Result<Self, DecodeError> {
         if let Ok(hex) = serde_json::from_slice::<String>(data) {
             match HEXUPPER.decode(hex.as_bytes()) {
                 Ok(bytes) => Tx::try_from_slice(&bytes)
-                    .map_err(Error::TxDeserializingError),
-                Err(_) => Err(Error::OfflineTxDeserializationError),
+                    .map_err(DecodeError::InvalidEncoding),
+                Err(e) => Err(DecodeError::InvalidHex(e)),
             }
         } else {
-            Err(Error::OfflineTxDeserializationError)
+            Err(DecodeError::InvalidJsonString)
         }
     }
 
@@ -1143,7 +1151,7 @@ impl Tx {
         threshold: u8,
         max_signatures: Option<u8>,
         mut consume_verify_sig_gas: F,
-    ) -> std::result::Result<Vec<&Signature>, Error>
+    ) -> std::result::Result<Vec<&Signature>, VerifySigError>
     where
         F: FnMut() -> std::result::Result<(), namada_gas::Error>,
     {
@@ -1166,7 +1174,7 @@ impl Tx {
                     .all(|x| self.get_section(x).is_some())
                 {
                     if signatures.total_signatures() > max_signatures {
-                        return Err(Error::InvalidSectionSignature(
+                        return Err(VerifySigError::InvalidSectionSignature(
                             "too many signatures.".to_string(),
                         ));
                     }
@@ -1180,7 +1188,7 @@ impl Tx {
                             &mut consume_verify_sig_gas,
                         )
                         .map_err(|_e| {
-                            Error::InvalidSectionSignature(
+                            VerifySigError::InvalidSectionSignature(
                                 "found invalid signature.".to_string(),
                             )
                         });
@@ -1195,7 +1203,7 @@ impl Tx {
                 }
             }
         }
-        Err(Error::InvalidSectionSignature(format!(
+        Err(VerifySigError::InvalidSectionSignature(format!(
             "signature threshold not met: ({} < {})",
             verified_pks.len(),
             threshold
@@ -1211,7 +1219,7 @@ impl Tx {
         &self,
         public_key: &common::PublicKey,
         hashes: &[namada_core::types::hash::Hash],
-    ) -> Result<&Signature> {
+    ) -> Result<&Signature, VerifySigError> {
         self.verify_signatures(
             hashes,
             AccountPublicKeysMap::from_iter([public_key.clone()].into_iter()),
@@ -1221,7 +1229,7 @@ impl Tx {
             || Ok(()),
         )
         .map(|x| *x.first().unwrap())
-        .map_err(|_| Error::InvalidWrapperSignature)
+        .map_err(|_| VerifySigError::InvalidWrapperSignature)
     }
 
     pub fn compute_section_signature(

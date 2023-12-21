@@ -6,6 +6,7 @@ pub mod lazy_vec;
 
 use std::fmt::Debug;
 
+use derivative::Derivative;
 use namada_core::borsh::BorshDeserialize;
 use namada_core::types::storage;
 use namada_storage::collections::LazyCollection;

@@ -151,7 +151,7 @@ impl FromStr for ResultCode {
     }
 }
 
-impl From<ResultCode> for crate::tendermint::abci::Code {
+impl From<ResultCode> for namada_core::tendermint::abci::Code {
     fn from(value: ResultCode) -> Self {
         Self::from(value.to_u32())
     }

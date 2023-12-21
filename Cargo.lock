@@ -4478,6 +4478,7 @@ dependencies = [
  "namada_core",
  "namada_parameters",
  "namada_storage",
+ "serde 1.0.193",
  "thiserror",
 ]
 
@@ -4488,6 +4489,7 @@ dependencies = [
  "borsh",
  "namada_core",
  "namada_macros",
+ "namada_parameters",
  "namada_storage",
  "namada_trans_token",
  "proptest",
@@ -4729,6 +4731,8 @@ dependencies = [
  "masp_primitives",
  "namada_core",
  "namada_gas",
+ "num-derive",
+ "num-traits 0.2.17",
  "prost 0.12.3",
  "prost-types 0.12.3",
  "serde 1.0.193",
@@ -4782,6 +4786,8 @@ dependencies = [
 name = "namada_vp_env"
 version = "0.28.1"
 dependencies = [
+ "derivative",
+ "masp_primitives",
  "namada_core",
  "namada_storage",
  "namada_tx",

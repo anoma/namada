@@ -3,6 +3,7 @@
 
 pub mod collection_validation;
 
+// TODO: this should be re-exported from namada_shielded_token
 use masp_primitives::transaction::Transaction;
 use namada_core::borsh::BorshDeserialize;
 use namada_core::types::address::Address;
@@ -15,6 +16,7 @@ use namada_core::types::storage::{
 };
 use namada_core::types::token::Transfer;
 use namada_storage::{OptionExt, ResultExt, StorageRead};
+use namada_tx::Tx;
 
 /// Validity predicate's environment is available for native VPs and WASM VPs
 pub trait VpEnv<'view>

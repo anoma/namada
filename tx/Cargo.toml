@@ -20,10 +20,12 @@ ark-bls12-381.workspace = true
 borsh.workspace = true
 data-encoding.workspace = true
 masp_primitives.workspace = true
-prost.workspace = true
+num-derive.workspace = true
+num-traits.workspace = true
 prost-types.workspace = true
-serde.workspace = true
+prost.workspace = true
 serde_json.workspace = true
+serde.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 

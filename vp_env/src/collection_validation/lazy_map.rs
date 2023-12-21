@@ -1,12 +1,16 @@
 //! LazyMap validation helpers
 
-use std::ops::Index;
+use core::fmt::Debug;
+use core::hash::Hash;
+use std::collections::HashMap;
 
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::types::storage;
-use namada_storage::collection::lazy_map::{LazyMap, NestedSubKey, SubKey};
+use namada_storage::collections::lazy_map::{LazyMap, NestedSubKey, SubKey};
+use namada_storage::collections::{Nested, Simple};
 
-use super::{read_data, Data, LazyCollectionExt, ValidationBuilder};
+use super::{read_data, Data, LazyCollectionExt};
+use crate::VpEnv;
 
 /// Possible sub-keys of a [`LazyMap`], together with their [`validation::Data`]
 /// that contains prior and posterior state.
@@ -47,9 +51,9 @@ where
     K: storage::KeySeg + Clone + Hash + Eq + Debug,
     V: LazyCollectionExt + Debug,
 {
-    type Action = NestedAction<K, <V as LazyCollection>::Action>;
+    type Action = NestedAction<K, <V as LazyCollectionExt>::Action>;
     type SubKeyWithData =
-        NestedSubKey<K, <V as LazyCollection>::SubKeyWithData>;
+        NestedSubKey<K, <V as LazyCollectionExt>::SubKeyWithData>;
 
     fn read_sub_key_data<ENV>(
         env: &ENV,
@@ -65,7 +69,7 @@ where
             nested_sub_key,
         } = sub_key;
         // Try to read data from the nested collection
-        let nested_data = <V as LazyCollection>::read_sub_key_data(
+        let nested_data = <V as LazyCollectionExt>::read_sub_key_data(
             env,
             storage_key,
             nested_sub_key,
@@ -84,7 +88,7 @@ where
         // We have to group the nested sub-keys by the key from this map
         let mut grouped_by_key: HashMap<
             K,
-            Vec<<V as LazyCollection>::SubKeyWithData>,
+            Vec<<V as LazyCollectionExt>::SubKeyWithData>,
         > = HashMap::new();
         for NestedSubKey::Data {
             key,
@@ -101,7 +105,7 @@ where
         let mut actions = vec![];
         for (key, sub_keys) in grouped_by_key {
             let nested_actions =
-                <V as LazyCollection>::validate_changed_sub_keys(sub_keys)?;
+                <V as LazyCollectionExt>::validate_changed_sub_keys(sub_keys)?;
             actions.extend(
                 nested_actions
                     .into_iter()
