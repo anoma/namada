@@ -87,6 +87,19 @@ pub trait StorageRead {
     /// current transaction is being applied.
     fn get_block_epoch(&self) -> Result<Epoch>;
 
+    /// Get the height of the first block of the current epoch.
+    fn get_current_epoch_start_height(&self) -> Result<BlockHeight>;
+
+    /// Get the height of the first block of the given epoch.
+    fn get_epoch_start_height(
+        &self,
+        epoch: Epoch,
+    ) -> Result<Option<BlockHeight>>;
+
+    /// Given the epoch at the given block height.
+    fn get_epoch_at_height(&self, height: BlockHeight)
+    -> Result<Option<Epoch>>;
+
     /// Get the transaction index.
     fn get_tx_index(&self) -> Result<TxIndex>;
 

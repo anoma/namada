@@ -27,21 +27,14 @@ use std::cmp::{self};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 pub use error::*;
-use namada_account::protocol_pk_key;
-use namada_core::types::address::{self, Address, InternalAddress};
+use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::dec::Dec;
-use namada_core::types::key::{
-    common, tm_consensus_key_raw_hash, PublicKeyTmRawHash,
-};
+use namada_core::types::key::common;
 use namada_core::types::storage::BlockHeight;
 pub use namada_core::types::storage::{Epoch, Key, KeySeg};
-use namada_storage::collections::lazy_map::{
-    Collectable, LazyMap, NestedMap, NestedSubKey, SubKey,
-};
-use namada_storage::collections::{LazyCollection, LazySet};
-use namada_storage::{ResultExt, StorageRead, StorageWrite};
+use namada_storage::collections::lazy_map::{self, Collectable, LazyMap};
+use namada_storage::{StorageRead, StorageWrite};
 pub use namada_trans_token as token;
-use once_cell::unsync::Lazy;
 pub use parameters::{OwnedPosParams, PosParams};
 
 use crate::queries::{find_bonds, has_bonds};
@@ -321,7 +314,7 @@ where
         .fold(Ok(token::Amount::zero()), |acc, entry| {
             let acc = acc?;
             let (
-                NestedSubKey::Data {
+                lazy_map::NestedSubKey::Data {
                     key: amount,
                     nested_sub_key: _,
                 },
@@ -884,7 +877,7 @@ where
     let mut total_redelegated = token::Amount::zero();
     for rb in redelegated_bonds.iter(storage)? {
         let (
-            NestedSubKey::Data {
+            lazy_map::NestedSubKey::Data {
                 key: src_validator,
                 nested_sub_key: _,
             },
@@ -1100,9 +1093,9 @@ where
             {
                 for res in redelegated_bonds.at(&start).iter(storage).unwrap() {
                     let (
-                        NestedSubKey::Data {
+                        lazy_map::NestedSubKey::Data {
                             key: validator,
-                            nested_sub_key: SubKey::Data(epoch),
+                            nested_sub_key: lazy_map::SubKey::Data(epoch),
                         },
                         amount,
                     ) = res.unwrap();
@@ -1392,9 +1385,9 @@ where
 
     for unbond in unbond_handle.iter(storage)? {
         let (
-            NestedSubKey::Data {
+            lazy_map::NestedSubKey::Data {
                 key: start_epoch,
-                nested_sub_key: SubKey::Data(withdraw_epoch),
+                nested_sub_key: lazy_map::SubKey::Data(withdraw_epoch),
             },
             amount,
         ) = unbond?;
@@ -1417,9 +1410,9 @@ where
             redelegated_unbonds.at(&start_epoch).at(&withdraw_epoch);
         for ub in matching_redelegated_unbonds.iter(storage)? {
             let (
-                NestedSubKey::Data {
+                lazy_map::NestedSubKey::Data {
                     key: address,
-                    nested_sub_key: SubKey::Data(epoch),
+                    nested_sub_key: lazy_map::SubKey::Data(epoch),
                 },
                 amount,
             ) = ub?;
@@ -1587,9 +1580,9 @@ where
     let unbonds = unbond_handle(&bond_id.source, &bond_id.validator);
     for next in unbonds.iter(storage)? {
         let (
-            NestedSubKey::Data {
+            lazy_map::NestedSubKey::Data {
                 key: start,
-                nested_sub_key: SubKey::Data(withdrawable_epoch),
+                nested_sub_key: lazy_map::SubKey::Data(withdrawable_epoch),
             },
             delta,
         ) = next?;
@@ -1611,15 +1604,16 @@ where
             delegator_redelegated_bonds_handle(&bond_id.source);
         for res in redelegated_bonds.iter(storage)? {
             let (
-                NestedSubKey::Data {
+                lazy_map::NestedSubKey::Data {
                     key: _dest_validator,
                     nested_sub_key:
-                        NestedSubKey::Data {
+                        lazy_map::NestedSubKey::Data {
                             key: end,
                             nested_sub_key:
-                                NestedSubKey::Data {
+                                lazy_map::NestedSubKey::Data {
                                     key: src_validator,
-                                    nested_sub_key: SubKey::Data(start),
+                                    nested_sub_key:
+                                        lazy_map::SubKey::Data(start),
                                 },
                         },
                 },
@@ -1640,18 +1634,19 @@ where
             delegator_redelegated_unbonds_handle(&bond_id.source);
         for res in redelegated_unbonds.iter(storage)? {
             let (
-                NestedSubKey::Data {
+                lazy_map::NestedSubKey::Data {
                     key: _dest_validator,
                     nested_sub_key:
-                        NestedSubKey::Data {
+                        lazy_map::NestedSubKey::Data {
                             key: redelegation_epoch,
                             nested_sub_key:
-                                NestedSubKey::Data {
+                                lazy_map::NestedSubKey::Data {
                                     key: _withdraw_epoch,
                                     nested_sub_key:
-                                        NestedSubKey::Data {
+                                        lazy_map::NestedSubKey::Data {
                                             key: src_validator,
-                                            nested_sub_key: SubKey::Data(start),
+                                            nested_sub_key:
+                                                lazy_map::SubKey::Data(start),
                                         },
                                 },
                         },
@@ -1813,7 +1808,7 @@ where
 
     iter.map(|validator| {
         let (
-            NestedSubKey::Data {
+            lazy_map::NestedSubKey::Data {
                 key: new_stake,
                 nested_sub_key: _,
             },

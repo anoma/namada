@@ -1538,6 +1538,14 @@ where
             },
         )
     }
+
+    /// Check if we are at a given [`BlockHeight`] offset, `height_offset`,
+    /// within the current [`Epoch`].
+    pub fn is_deciding_offset_within_epoch(&self, height_offset: u64) -> bool {
+        self.wl_storage
+            .pos_queries()
+            .is_deciding_offset_within_epoch(height_offset)
+    }
 }
 
 /// for the shell

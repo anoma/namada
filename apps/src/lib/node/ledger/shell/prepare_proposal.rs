@@ -102,15 +102,13 @@ where
     /// [`EncryptedTxBatchAllocator::WithEncryptedTxs`] value.
     #[inline]
     fn get_encrypted_txs_allocator(&self) -> EncryptedTxBatchAllocator {
-        let pos_queries = self.wl_storage.pos_queries();
-
-        let is_2nd_height_off = pos_queries.is_deciding_offset_within_epoch(1);
-        let is_3rd_height_off = pos_queries.is_deciding_offset_within_epoch(2);
+        let is_2nd_height_off = self.is_deciding_offset_within_epoch(1);
+        let is_3rd_height_off = self.is_deciding_offset_within_epoch(2);
 
         if hints::unlikely(is_2nd_height_off || is_3rd_height_off) {
             tracing::warn!(
                 proposal_height =
-                    ?pos_queries.get_current_decision_height(),
+                    ?self.wl_storage.storage.block.height,
                 "No mempool txs are being included in the current proposal"
             );
             EncryptedTxBatchAllocator::WithoutEncryptedTxs(

@@ -4,14 +4,12 @@ use std::cmp;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use borsh::BorshDeserialize;
-use namada_core::ledger::storage_api::collections::lazy_map::{
-    NestedSubKey, SubKey,
-};
-use namada_core::ledger::storage_api::{self, StorageRead};
 use namada_core::types::address::Address;
 use namada_core::types::dec::Dec;
 use namada_core::types::storage::Epoch;
 use namada_core::types::token;
+use namada_storage::collections::lazy_map::{NestedSubKey, SubKey};
+use namada_storage::{self, StorageRead};
 
 use crate::slashing::{find_validator_slashes, get_slashed_amount};
 use crate::storage::{bond_handle, read_pos_params, unbond_handle};
@@ -26,20 +24,22 @@ use crate::{storage_key, PosParams};
 pub fn find_delegation_validators<S>(
     storage: &S,
     owner: &Address,
-) -> storage_api::Result<HashSet<Address>>
+) -> namada_storage::Result<HashSet<Address>>
 where
     S: StorageRead,
 {
     let bonds_prefix = storage_key::bonds_for_source_prefix(owner);
     let mut delegations: HashSet<Address> = HashSet::new();
 
-    for iter_result in storage_api::iter_prefix_bytes(storage, &bonds_prefix)? {
+    for iter_result in
+        namada_storage::iter_prefix_bytes(storage, &bonds_prefix)?
+    {
         let (key, _bond_bytes) = iter_result?;
         let validator_address = storage_key::get_validator_address_from_bond(
             &key,
         )
         .ok_or_else(|| {
-            storage_api::Error::new_const(
+            namada_storage::Error::new_const(
                 "Delegation key should contain validator address.",
             )
         })?;
@@ -54,7 +54,7 @@ pub fn find_delegations<S>(
     storage: &S,
     owner: &Address,
     epoch: &Epoch,
-) -> storage_api::Result<HashMap<Address, token::Amount>>
+) -> namada_storage::Result<HashMap<Address, token::Amount>>
 where
     S: StorageRead,
 {
@@ -62,13 +62,15 @@ where
     let params = read_pos_params(storage)?;
     let mut delegations: HashMap<Address, token::Amount> = HashMap::new();
 
-    for iter_result in storage_api::iter_prefix_bytes(storage, &bonds_prefix)? {
+    for iter_result in
+        namada_storage::iter_prefix_bytes(storage, &bonds_prefix)?
+    {
         let (key, _bond_bytes) = iter_result?;
         let validator_address = storage_key::get_validator_address_from_bond(
             &key,
         )
         .ok_or_else(|| {
-            storage_api::Error::new_const(
+            namada_storage::Error::new_const(
                 "Delegation key should contain validator address.",
             )
         })?;
@@ -81,7 +83,10 @@ where
 }
 
 /// Find if the given source address has any bonds.
-pub fn has_bonds<S>(storage: &S, source: &Address) -> storage_api::Result<bool>
+pub fn has_bonds<S>(
+    storage: &S,
+    source: &Address,
+) -> namada_storage::Result<bool>
 where
     S: StorageRead,
 {
@@ -99,7 +104,7 @@ pub fn find_bonds<S>(
     storage: &S,
     source: &Address,
     validator: &Address,
-) -> storage_api::Result<BTreeMap<Epoch, token::Amount>>
+) -> namada_storage::Result<BTreeMap<Epoch, token::Amount>>
 where
     S: StorageRead,
 {
@@ -114,7 +119,7 @@ pub fn find_unbonds<S>(
     storage: &S,
     source: &Address,
     validator: &Address,
-) -> storage_api::Result<BTreeMap<(Epoch, Epoch), token::Amount>>
+) -> namada_storage::Result<BTreeMap<(Epoch, Epoch), token::Amount>>
 where
     S: StorageRead,
 {
@@ -140,7 +145,7 @@ pub fn bonds_and_unbonds<S>(
     storage: &S,
     source: Option<Address>,
     validator: Option<Address>,
-) -> storage_api::Result<BondsAndUnbondsDetails>
+) -> namada_storage::Result<BondsAndUnbondsDetails>
 where
     S: StorageRead,
 {
@@ -161,7 +166,7 @@ fn get_multiple_bonds_and_unbonds<S>(
     params: &PosParams,
     source: Option<Address>,
     validator: Option<Address>,
-) -> storage_api::Result<BondsAndUnbondsDetails>
+) -> namada_storage::Result<BondsAndUnbondsDetails>
 where
     S: StorageRead,
 {
@@ -182,7 +187,7 @@ where
     };
     // We have to iterate raw bytes, cause the epoched data `last_update` field
     // gets matched here too
-    let mut raw_bonds = storage_api::iter_prefix_bytes(storage, &prefix)?
+    let mut raw_bonds = namada_storage::iter_prefix_bytes(storage, &prefix)?
         .filter_map(|result| {
             if let Ok((key, val_bytes)) = result {
                 if let Some((bond_id, start)) = storage_key::is_bond_key(&key) {
@@ -211,7 +216,7 @@ where
         Some(source) => storage_key::unbonds_for_source_prefix(source),
         None => storage_key::unbonds_prefix(),
     };
-    let mut raw_unbonds = storage_api::iter_prefix_bytes(storage, &prefix)?
+    let mut raw_unbonds = namada_storage::iter_prefix_bytes(storage, &prefix)?
         .filter_map(|result| {
             if let Ok((key, val_bytes)) = result {
                 if let Some((bond_id, start, withdraw)) =
@@ -269,7 +274,7 @@ where
             slashes,
             &mut applied_slashes,
         ));
-        Ok::<_, storage_api::Error>(())
+        Ok::<_, namada_storage::Error>(())
     })?;
 
     raw_unbonds.try_for_each(|(bond_id, start, withdraw, amount)| {
@@ -290,7 +295,7 @@ where
             slashes,
             &mut applied_slashes,
         ));
-        Ok::<_, storage_api::Error>(())
+        Ok::<_, namada_storage::Error>(())
     })?;
 
     Ok(bonds_and_unbonds
@@ -314,7 +319,7 @@ fn find_bonds_and_unbonds_details<S>(
     params: &PosParams,
     source: Address,
     validator: Address,
-) -> storage_api::Result<BondsAndUnbondsDetails>
+) -> namada_storage::Result<BondsAndUnbondsDetails>
 where
     S: StorageRead,
 {

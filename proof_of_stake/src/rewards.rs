@@ -3,17 +3,16 @@
 use std::collections::{HashMap, HashSet};
 
 use namada_core::ledger::inflation;
-use namada_core::ledger::parameters::storage as params_storage;
-use namada_core::ledger::storage_api::collections::lazy_map::NestedSubKey;
-use namada_core::ledger::storage_api::token::credit_tokens;
-use namada_core::ledger::storage_api::{
-    self, ResultExt, StorageRead, StorageWrite,
-};
 use namada_core::types::address::{self, Address};
 use namada_core::types::dec::Dec;
 use namada_core::types::storage::Epoch;
 use namada_core::types::token::{self, Amount};
 use namada_core::types::uint::{Uint, I256};
+use namada_parameters::storage as params_storage;
+use namada_storage::collections::lazy_map::NestedSubKey;
+use namada_storage::{ResultExt, StorageRead, StorageWrite};
+use namada_trans_token::credit_tokens;
+use namada_trans_token::storage_key::minted_balance_key;
 use thiserror::Error;
 
 use crate::storage::{
@@ -131,7 +130,7 @@ pub fn log_block_rewards<S>(
     epoch: impl Into<Epoch>,
     proposer_address: &Address,
     votes: Vec<VoteInfo>,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -264,7 +263,7 @@ pub fn apply_inflation<S>(
     storage: &mut S,
     last_epoch: Epoch,
     num_blocks_in_last_epoch: u64,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -286,7 +285,7 @@ where
     let pos_d_gain_nom = params.rewards_gain_d;
 
     let total_tokens: token::Amount = storage
-        .read(&token::minted_balance_key(&staking_token))?
+        .read(&minted_balance_key(&staking_token))?
         .expect("Total NAM balance should exist in storage");
     let pos_locked_supply = read_total_stake(storage, &params, last_epoch)?;
     let pos_locked_ratio_target = params.target_staked_ratio;
@@ -349,7 +348,7 @@ pub fn update_rewards_products_and_mint_inflation<S>(
     num_blocks_in_last_epoch: u64,
     inflation: token::Amount,
     staking_token: &Address,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -455,7 +454,7 @@ pub fn compute_current_rewards_from_bonds<S>(
     source: &Address,
     validator: &Address,
     current_epoch: Epoch,
-) -> storage_api::Result<token::Amount>
+) -> namada_storage::Result<token::Amount>
 where
     S: StorageRead,
 {
@@ -510,7 +509,7 @@ pub fn add_rewards_to_counter<S>(
     source: &Address,
     validator: &Address,
     new_rewards: token::Amount,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -525,7 +524,7 @@ pub fn take_rewards_from_counter<S>(
     storage: &mut S,
     source: &Address,
     validator: &Address,
-) -> storage_api::Result<token::Amount>
+) -> namada_storage::Result<token::Amount>
 where
     S: StorageRead + StorageWrite,
 {
@@ -541,7 +540,7 @@ pub fn read_rewards_counter<S>(
     storage: &S,
     source: &Address,
     validator: &Address,
-) -> storage_api::Result<token::Amount>
+) -> namada_storage::Result<token::Amount>
 where
     S: StorageRead,
 {

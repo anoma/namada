@@ -7,6 +7,7 @@ use namada_core::types::storage::{BlockHeight, Epoch};
 use namada_core::types::{key, token};
 use namada_parameters::storage::get_max_proposal_bytes_key;
 use namada_storage::collections::lazy_map::NestedSubKey;
+use namada_storage::StorageRead;
 use thiserror::Error;
 
 use crate::storage::find_validator_by_raw_hash;
@@ -22,7 +23,7 @@ use crate::{
 pub enum Error {
     /// A storage error occurred.
     #[error("Storage error: {0}")]
-    Storage(namada_storage::Error),
+    Storage(#[from] namada_storage::Error),
     /// The given address is not among the set of consensus validators for
     /// the corresponding epoch.
     #[error(
@@ -58,53 +59,50 @@ pub trait PosQueries {
     fn pos_queries(&self) -> PosQueriesHook<'_, Self::Storage>;
 }
 
-impl<D, H> PosQueries for WlStorage<D, H>
+impl<S> PosQueries for S
 where
-    D: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: 'static + storage::StorageHasher,
+    S: StorageRead,
 {
     type Storage = Self;
 
     #[inline]
     fn pos_queries(&self) -> PosQueriesHook<'_, Self> {
-        PosQueriesHook { wl_storage: self }
+        PosQueriesHook { storage: self }
     }
 }
 
 /// A handle to [`PosQueries`].
 ///
-/// This type is a wrapper around a pointer to a
-/// [`WlStorage`].
+/// This type is a wrapper around a pointer to a [`impl ReadStorage`].
 #[derive(Debug)]
 #[repr(transparent)]
-pub struct PosQueriesHook<'db, DB> {
-    wl_storage: &'db DB,
+pub struct PosQueriesHook<'db, S> {
+    storage: &'db S,
 }
 
-impl<'db, DB> Clone for PosQueriesHook<'db, DB> {
+impl<'db, S> Clone for PosQueriesHook<'db, S> {
     fn clone(&self) -> Self {
         Self {
-            wl_storage: self.wl_storage,
+            storage: self.storage,
         }
     }
 }
 
-impl<'db, DB> Copy for PosQueriesHook<'db, DB> {}
+impl<'db, S> Copy for PosQueriesHook<'db, S> {}
 
-impl<'db, D, H> PosQueriesHook<'db, WlStorage<D, H>>
+impl<'db, S> PosQueriesHook<'db, S>
 where
-    D: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: 'static + storage::StorageHasher,
+    S: StorageRead,
 {
-    /// Return a handle to the inner [`WlStorage`].
+    /// Return a handle to the inner storage.
     #[inline]
-    pub fn storage(self) -> &'db WlStorage<D, H> {
-        self.wl_storage
+    pub fn storage(self) -> &'db S {
+        self.storage
     }
 
     /// Read the proof-of-stake parameters from storage.
     pub fn get_pos_params(self) -> PosParams {
-        read_pos_params(self.wl_storage)
+        read_pos_params(self.storage)
             .expect("Should be able to read PosParams from storage")
     }
 
@@ -114,11 +112,11 @@ where
     pub fn get_consensus_validators(
         self,
         epoch: Option<Epoch>,
-    ) -> ConsensusValidators<'db, D, H> {
-        let epoch = epoch
-            .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
+    ) -> ConsensusValidators<'db, S> {
+        let epoch =
+            epoch.unwrap_or_else(|| self.storage.get_block_epoch().unwrap());
         ConsensusValidators {
-            wl_storage: self.wl_storage,
+            wl_storage: self.storage,
             validator_set: consensus_validator_set_handle().at(&epoch),
         }
     }
@@ -126,10 +124,10 @@ where
     /// Lookup the total voting power for an epoch (defaulting to the
     /// epoch of the current yet-to-be-committed block).
     pub fn get_total_voting_power(self, epoch: Option<Epoch>) -> token::Amount {
-        let epoch = epoch
-            .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
+        let epoch =
+            epoch.unwrap_or_else(|| self.storage.get_block_epoch().unwrap());
         let pos_params = self.get_pos_params();
-        get_total_consensus_stake(self.wl_storage, epoch, &pos_params)
+        get_total_consensus_stake(self.storage, epoch, &pos_params)
             // NB: the only reason this call should fail is if we request
             // an epoch that hasn't been reached yet. let's "fail" by
             // returning a total stake of 0 NAM
@@ -142,16 +140,17 @@ where
         pk: &key::common::PublicKey,
         epoch: Option<Epoch>,
     ) -> Result<WeightedValidator> {
-        let params = crate::read_pos_params(self.wl_storage)
+        let params = crate::read_pos_params(self.storage)
             .expect("Failed to fetch Pos params");
         let epoch = epoch
-            .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
+            .map(Ok)
+            .unwrap_or_else(|| self.storage.get_block_epoch())?;
         self.get_consensus_validators(Some(epoch))
             .iter()
             .find(|validator| {
                 let protocol_keys =
                     crate::validator_protocol_key_handle(&validator.address);
-                match protocol_keys.get(self.wl_storage, epoch, &params) {
+                match protocol_keys.get(self.storage, epoch, &params) {
                     Ok(Some(key)) => key == *pk,
                     _ => false,
                 }
@@ -165,10 +164,11 @@ where
         address: &Address,
         epoch: Option<Epoch>,
     ) -> Result<(token::Amount, key::common::PublicKey)> {
-        let params = crate::read_pos_params(self.wl_storage)
+        let params = crate::read_pos_params(self.storage)
             .expect("Failed to fetch Pos params");
         let epoch = epoch
-            .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
+            .map(Ok)
+            .unwrap_or_else(|| self.storage.get_block_epoch())?;
         self.get_consensus_validators(Some(epoch))
             .iter()
             .find(|validator| address == &validator.address)
@@ -176,7 +176,7 @@ where
                 let protocol_keys =
                     crate::validator_protocol_key_handle(&validator.address);
                 let protocol_pk = protocol_keys
-                    .get(self.wl_storage, epoch, &params)
+                    .get(self.storage, epoch, &params)
                     .unwrap()
                     .expect(
                         "Protocol public key should be set in storage after \
@@ -196,7 +196,7 @@ where
         tm_address: impl AsRef<str>,
     ) -> Result<Address> {
         let addr_hash = tm_address.as_ref();
-        let validator = find_validator_by_raw_hash(self.wl_storage, addr_hash)
+        let validator = find_validator_by_raw_hash(self.storage, addr_hash)
             .map_err(Error::Storage)?;
         validator.ok_or_else(|| Error::NotValidatorKeyHash(addr_hash.into()))
     }
@@ -206,22 +206,11 @@ where
     pub fn is_deciding_offset_within_epoch(self, height_offset: u64) -> bool {
         let current_decision_height = self.get_current_decision_height();
 
-        // NOTE: the first stored height in `fst_block_heights_of_each_epoch`
-        // is 0, because of a bug (should be 1), so this code needs to
-        // handle that case
-        //
-        // we can remove this check once that's fixed
-        if self.wl_storage.storage.get_current_epoch().0 == Epoch(0) {
-            let height_offset_within_epoch = BlockHeight(1 + height_offset);
-            return current_decision_height == height_offset_within_epoch;
-        }
-
-        let fst_heights_of_each_epoch = self
-            .wl_storage
+        let pred_epochs = self
             .storage
-            .block
-            .pred_epochs
-            .first_block_heights();
+            .get_pred_epochs()
+            .expect("Must be able to read pred epochs");
+        let fst_heights_of_each_epoch = pred_epochs.first_block_heights();
 
         fst_heights_of_each_epoch
             .last()
@@ -238,7 +227,7 @@ where
     /// been purged from Namada, or if it is not available yet.
     #[inline]
     pub fn get_epoch(self, height: BlockHeight) -> Option<Epoch> {
-        self.wl_storage.storage.block.pred_epochs.get_epoch(height)
+        self.storage.get_epoch_at_height(height).unwrap()
     }
 
     /// Given some [`Epoch`], return the corresponding [`BlockHeight`].
@@ -247,23 +236,19 @@ where
     /// been purged from Namada, or if it is not available yet.
     #[inline]
     pub fn get_height(self, epoch: Epoch) -> Option<BlockHeight> {
-        self.wl_storage
-            .storage
-            .block
-            .pred_epochs
-            .get_start_height_of_epoch(epoch)
+        self.storage.get_epoch_start_height(epoch).unwrap()
     }
 
     /// Retrieves the [`BlockHeight`] that is currently being decided.
     #[inline]
     pub fn get_current_decision_height(self) -> BlockHeight {
-        self.wl_storage.storage.get_last_block_height() + 1
+        self.storage.get_block_height().unwrap()
     }
 
     /// Retrieve the `max_proposal_bytes` consensus parameter from storage.
     pub fn get_max_proposal_bytes(self) -> ProposalBytes {
         namada_storage::StorageRead::read(
-            self.wl_storage,
+            self.storage,
             &get_max_proposal_bytes_key(),
         )
         .expect("Must be able to read ProposalBytes from storage")
@@ -274,22 +259,7 @@ where
     /// committed to storage.
     #[inline]
     pub fn get_epoch_start_height(self) -> BlockHeight {
-        // NOTE: the first stored height in `fst_block_heights_of_each_epoch`
-        // is 0, because of a bug (should be 1), so this code needs to
-        // handle that case
-        //
-        // we can remove this check once that's fixed
-        if self.wl_storage.storage.last_epoch.0 == 0 {
-            return BlockHeight(1);
-        }
-        self.wl_storage
-            .storage
-            .block
-            .pred_epochs
-            .first_block_heights()
-            .last()
-            .copied()
-            .expect("The block height of the current epoch should be known")
+        self.storage.get_current_epoch_start_height().unwrap()
     }
 
     /// Get a validator's Ethereum hot key from storage, at the given epoch, or
@@ -299,11 +269,11 @@ where
         validator: &Address,
         epoch: Option<Epoch>,
     ) -> Option<key::common::PublicKey> {
-        let epoch = epoch
-            .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
+        let epoch =
+            epoch.unwrap_or_else(|| self.storage.get_block_epoch().unwrap());
         let params = self.get_pos_params();
         validator_eth_hot_key_handle(validator)
-            .get(self.wl_storage, epoch, &params)
+            .get(self.storage, epoch, &params)
             .ok()
             .flatten()
     }
@@ -315,11 +285,11 @@ where
         validator: &Address,
         epoch: Option<Epoch>,
     ) -> Option<key::common::PublicKey> {
-        let epoch = epoch
-            .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
+        let epoch =
+            epoch.unwrap_or_else(|| self.storage.get_block_epoch().unwrap());
         let params = self.get_pos_params();
         validator_eth_cold_key_handle(validator)
-            .get(self.wl_storage, epoch, &params)
+            .get(self.storage, epoch, &params)
             .ok()
             .flatten()
     }
@@ -327,19 +297,17 @@ where
 
 /// A handle to the set of consensus validators in Namada,
 /// at some given epoch.
-pub struct ConsensusValidators<'db, D, H>
+pub struct ConsensusValidators<'db, S>
 where
-    D: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: 'static + storage::StorageHasher,
+    S: StorageRead,
 {
-    wl_storage: &'db WlStorage<D, H>,
+    wl_storage: &'db S,
     validator_set: ConsensusValidatorSet,
 }
 
-impl<'db, D, H> ConsensusValidators<'db, D, H>
+impl<'db, S> ConsensusValidators<'db, S>
 where
-    D: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: 'static + storage::StorageHasher,
+    S: StorageRead,
 {
     /// Iterate over the set of consensus validators in Namada, at some given
     /// epoch.
