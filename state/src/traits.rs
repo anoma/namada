@@ -22,36 +22,6 @@ use crate::types::storage::{
     BlockHeight, Key, MembershipProof, StringKey, TreeBytes, IBC_KEY_LIMIT,
 };
 
-/// Trait for reading from a merkle tree that is a sub-tree
-/// of the global merkle tree.
-pub trait SubTreeRead {
-    /// Get the root of a subtree in raw bytes.
-    fn root(&self) -> MerkleRoot;
-    /// Check if a key is present in the sub-tree
-    fn subtree_has_key(&self, key: &Key) -> Result<bool, Error>;
-    /// Get the height at which the key is inserted
-    fn subtree_get(&self, key: &Key) -> Result<Vec<u8>, Error>;
-    /// Get a membership proof for various key-value pairs
-    fn subtree_membership_proof(
-        &self,
-        keys: &[Key],
-        values: Vec<StorageBytes>,
-    ) -> Result<MembershipProof, Error>;
-}
-
-/// Trait for updating a merkle tree that is a sub-tree
-/// of the global merkle tree
-pub trait SubTreeWrite {
-    /// Add a key-value pair to the sub-tree
-    fn subtree_update(
-        &mut self,
-        key: &Key,
-        value: StorageBytes,
-    ) -> Result<Hash, Error>;
-    /// Delete a key from the sub-tree
-    fn subtree_delete(&mut self, key: &Key) -> Result<Hash, Error>;
-}
-
 impl<'a, H: StorageHasher + Default> SubTreeRead for &'a Smt<H> {
     fn root(&self) -> MerkleRoot {
         Smt::<H>::root(self).into()

@@ -13,6 +13,11 @@ repository.workspace = true
 version.workspace = true
 
 [dependencies]
-namada_core = {path = "../core", default-features = false}
+namada_core = { path = "../core", default-features = false }
+namada_ethereum_bridge = { path = "../ethereum_bridge" }
 
 arse-merkle-tree.workspace = true
+borsh.workspace = true
+ics23.workspace = true
+prost.workspace = true
+thiserror.workspace = true

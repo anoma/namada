@@ -10,27 +10,52 @@ use arse_merkle_tree::error::Error as MtError;
 use arse_merkle_tree::{
     Hash as SmtHash, Key as TreeKey, SparseMerkleTree as ArseMerkleTree, H256,
 };
-use borsh::{BorshDeserialize, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
 use ics23::commitment_proof::Proof as Ics23Proof;
 use ics23::{CommitmentProof, ExistenceProof, NonExistenceProof};
-use namada_core::ledger::eth_bridge::storage::bridge_pool::BridgePoolProof;
+use ics23_specs::ibc_leaf_spec;
+use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
+use namada_core::bytes::ByteBuf;
+use namada_core::types::address::{Address, InternalAddress};
+use namada_core::types::hash::{Hash, StorageHasher};
+use namada_core::types::keccak::KeccakHash;
+use namada_core::types::storage::{
+    self, BlockHeight, DbKeySeg, Epoch, Error as StorageError, Key, KeySeg,
+    StringKey, TreeBytes, TreeKeyError, IBC_KEY_LIMIT,
+};
+use namada_ethereum_bridge::storage::bridge_pool::{
+    is_pending_transfer_key, BridgePoolProof, BridgePoolTree,
+};
 use thiserror::Error;
 
-use super::traits::{StorageHasher, SubTreeRead, SubTreeWrite};
-use crate::bytes::ByteBuf;
-use crate::ledger::eth_bridge::storage::bridge_pool::{
-    is_pending_transfer_key, BridgePoolTree,
-};
-use crate::ledger::storage::ics23_specs::ibc_leaf_spec;
-use crate::ledger::storage::{ics23_specs, types, BlockHeight, Epoch, KeySeg};
-use crate::types::address::{Address, InternalAddress};
-use crate::types::hash::Hash;
-use crate::types::keccak::KeccakHash;
-use crate::types::storage::{
-    self, DbKeySeg, Error as StorageError, Key, StringKey, TreeBytes,
-    TreeKeyError, IBC_KEY_LIMIT,
-};
+/// Trait for reading from a merkle tree that is a sub-tree
+/// of the global merkle tree.
+pub trait SubTreeRead {
+    /// Get the root of a subtree in raw bytes.
+    fn root(&self) -> MerkleRoot;
+    /// Check if a key is present in the sub-tree
+    fn subtree_has_key(&self, key: &Key) -> Result<bool>;
+    /// Get the height at which the key is inserted
+    fn subtree_get(&self, key: &Key) -> Result<Vec<u8>>;
+    /// Get a membership proof for various key-value pairs
+    fn subtree_membership_proof(
+        &self,
+        keys: &[Key],
+        values: Vec<StorageBytes>,
+    ) -> Result<MembershipProof>;
+}
+
+/// Trait for updating a merkle tree that is a sub-tree
+/// of the global merkle tree
+pub trait SubTreeWrite {
+    /// Add a key-value pair to the sub-tree
+    fn subtree_update(
+        &mut self,
+        key: &Key,
+        value: StorageBytes,
+    ) -> Result<Hash>;
+    /// Delete a key from the sub-tree
+    fn subtree_delete(&mut self, key: &Key) -> Result<Hash>;
+}
 
 /// Type of membership proof from a merkle tree
 pub enum MembershipProof {
@@ -81,7 +106,7 @@ pub enum Error {
 type Result<T> = std::result::Result<T, Error>;
 
 /// Type alias for bytes to be put into the Merkle storage
-pub(super) type StorageBytes<'a> = &'a [u8];
+pub type StorageBytes<'a> = &'a [u8];
 
 // Type aliases for the different merkle trees and backing stores
 /// Sparse-merkle-tree store
@@ -759,7 +784,7 @@ pub struct Proof {
     pub base_proof: CommitmentProof,
 }
 
-impl From<Proof> for crate::tendermint::merkle::proof::ProofOps {
+impl From<Proof> for namada_core::tendermint::merkle::proof::ProofOps {
     fn from(
         Proof {
             key,
@@ -767,9 +792,8 @@ impl From<Proof> for crate::tendermint::merkle::proof::ProofOps {
             base_proof,
         }: Proof,
     ) -> Self {
+        use namada_core::tendermint::merkle::proof::ProofOp;
         use prost::Message;
-
-        use crate::tendermint::merkle::proof::ProofOp;
 
         let mut data = vec![];
         sub_proof
@@ -801,11 +825,13 @@ impl From<Proof> for crate::tendermint::merkle::proof::ProofOps {
 #[cfg(test)]
 mod test {
     use ics23::HostFunctionsManager;
+    use namada_core::ledger::storage::ics23_specs::{
+        ibc_proof_specs, proof_specs,
+    };
+    use namada_core::ledger::storage::traits::Sha256Hasher;
+    use namada_core::types::storage::KeySeg;
 
     use super::*;
-    use crate::ledger::storage::ics23_specs::{ibc_proof_specs, proof_specs};
-    use crate::ledger::storage::traits::Sha256Hasher;
-    use crate::types::storage::KeySeg;
 
     #[test]
     fn test_crud_value() {

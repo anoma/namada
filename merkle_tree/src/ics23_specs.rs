@@ -2,8 +2,7 @@
 
 use arse_merkle_tree::H256;
 use ics23::{HashOp, LeafOp, LengthOp, ProofSpec};
-
-use super::traits::StorageHasher;
+use namada_core::types::hash::StorageHasher;
 
 /// Get the leaf spec for the base tree. The key is stored after hashing,
 /// but the stored value is the subtree's root without hashing.
