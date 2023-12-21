@@ -52,6 +52,7 @@ use namada::core::ledger::masp_conversions::ConversionState;
 use namada::core::types::ethereum_structs;
 use namada::eth_bridge::storage::proof::BridgePoolRootProof;
 use namada::ledger::eth_bridge::storage::bridge_pool;
+use namada::ledger::replay_protection;
 use namada::ledger::storage::merkle_tree::{
     base_tree_key_prefix, subtree_key_prefix,
 };
@@ -509,7 +510,8 @@ impl RocksDB {
         // Delete the tx hashes included in the last block
         let reprot_cf = self.get_column_family(REPLAY_PROTECTION_CF)?;
         tracing::info!("Removing replay protection hashes");
-        batch.delete_cf(reprot_cf, "last");
+        batch
+            .delete_cf(reprot_cf, replay_protection::last_prefix().to_string());
 
         // Execute next step in parallel
         let batch = Mutex::new(batch);
@@ -1163,11 +1165,10 @@ impl DB for RocksDB {
         let replay_protection_cf =
             self.get_column_family(REPLAY_PROTECTION_CF)?;
 
-        for prefix in ["last", "all"] {
-            let key = Key::parse(prefix)
-                .map_err(Error::KeyError)?
-                .push(&hash.to_string())
-                .map_err(Error::KeyError)?;
+        for key in [
+            replay_protection::last_key(hash),
+            replay_protection::all_key(hash),
+        ] {
             if self
                 .0
                 .get_pinned_cf(replay_protection_cf, key.to_string())
@@ -1546,7 +1547,13 @@ impl<'iter> DBIter<'iter> for RocksDB {
             .get_column_family(REPLAY_PROTECTION_CF)
             .expect("{REPLAY_PROTECTION_CF} column family should exist");
 
-        iter_prefix(self, replay_protection_cf, "last".to_string(), None)
+        let db_prefix = "".to_owned();
+        iter_prefix(
+            self,
+            replay_protection_cf,
+            db_prefix,
+            Some(replay_protection::last_prefix().to_string()),
+        )
     }
 }
 

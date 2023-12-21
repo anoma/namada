@@ -17,6 +17,7 @@ use super::{
     BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error, Result, DB,
 };
 use crate::ledger::masp_conversions::ConversionState;
+use crate::ledger::replay_protection;
 use crate::ledger::storage::types::{self, KVBytes, PrefixIterator};
 use crate::types::ethereum_events::Uint;
 use crate::types::ethereum_structs;
@@ -444,15 +445,10 @@ impl DB for MockDB {
     }
 
     fn has_replay_protection_entry(&self, hash: &Hash) -> Result<bool> {
-        let prefix_key =
-            Key::parse("replay_protection").map_err(Error::KeyError)?;
-        for prefix in ["last", "all"] {
-            let key = prefix_key
-                .push(&prefix.to_string())
-                .map_err(Error::KeyError)?
-                .push(&hash.to_string())
-                .map_err(Error::KeyError)?;
-
+        for key in [
+            replay_protection::last_key(hash),
+            replay_protection::all_key(hash),
+        ] {
             if self.0.borrow().contains_key(&key.to_string()) {
                 return Ok(true);
             }
@@ -702,11 +698,11 @@ impl<'iter> DBIter<'iter> for MockDB {
     }
 
     fn iter_replay_protection(&'iter self) -> Self::PrefixIter {
-        let db_prefix = "replay_protection/".to_owned();
+        let db_prefix = "".to_owned();
         let iter = self.0.borrow().clone().into_iter();
         MockPrefixIterator::new(
             MockIterator {
-                prefix: "last".to_string(),
+                prefix: replay_protection::last_prefix().to_string(),
                 iter,
             },
             db_prefix,
