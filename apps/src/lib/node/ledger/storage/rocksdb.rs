@@ -1622,21 +1622,20 @@ impl<'a> Iterator for PersistentPrefixIterator<'a> {
 
     /// Returns the next pair and the gas cost
     fn next(&mut self) -> Option<(String, Vec<u8>, u64)> {
-        match self.0.iter.next() {
-            Some(result) => {
-                let (key, val) =
-                    result.expect("Prefix iterator shouldn't fail");
-                let key = String::from_utf8(key.to_vec())
-                    .expect("Cannot convert from bytes to key string");
-                match key.strip_prefix(&self.0.db_prefix) {
-                    Some(k) => {
+        loop {
+            match self.0.iter.next() {
+                Some(result) => {
+                    let (key, val) =
+                        result.expect("Prefix iterator shouldn't fail");
+                    let key = String::from_utf8(key.to_vec())
+                        .expect("Cannot convert from bytes to key string");
+                    if let Some(k) = key.strip_prefix(&self.0.db_prefix) {
                         let gas = k.len() + val.len();
-                        Some((k.to_owned(), val.to_vec(), gas as _))
+                        return Some((k.to_owned(), val.to_vec(), gas as _));
                     }
-                    None => self.next(),
                 }
+                None => return None,
             }
-            None => None,
         }
     }
 }
