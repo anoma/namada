@@ -1,14 +1,12 @@
 //! Storage API for querying data about Proof-of-stake related
 //! data. This includes validator and epoch related data.
 
-use namada_core::ledger::parameters::storage::get_max_proposal_bytes_key;
-use namada_core::ledger::storage::WlStorage;
-use namada_core::ledger::storage_api::collections::lazy_map::NestedSubKey;
-use namada_core::ledger::{storage, storage_api};
 use namada_core::types::address::Address;
 use namada_core::types::chain::ProposalBytes;
 use namada_core::types::storage::{BlockHeight, Epoch};
 use namada_core::types::{key, token};
+use namada_parameters::storage::get_max_proposal_bytes_key;
+use namada_storage::collections::lazy_map::NestedSubKey;
 use thiserror::Error;
 
 use crate::storage::find_validator_by_raw_hash;
@@ -24,7 +22,7 @@ use crate::{
 pub enum Error {
     /// A storage error occurred.
     #[error("Storage error: {0}")]
-    Storage(storage_api::Error),
+    Storage(namada_storage::Error),
     /// The given address is not among the set of consensus validators for
     /// the corresponding epoch.
     #[error(
@@ -264,7 +262,7 @@ where
 
     /// Retrieve the `max_proposal_bytes` consensus parameter from storage.
     pub fn get_max_proposal_bytes(self) -> ProposalBytes {
-        storage_api::StorageRead::read(
+        namada_storage::StorageRead::read(
             self.wl_storage,
             &get_max_proposal_bytes_key(),
         )

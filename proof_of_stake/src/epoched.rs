@@ -7,13 +7,11 @@ use std::marker::PhantomData;
 use std::{cmp, ops};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use namada_core::ledger::storage_api;
-use namada_core::ledger::storage_api::collections::lazy_map::{
-    LazyMap, NestedMap,
-};
-use namada_core::ledger::storage_api::collections::{self, LazyCollection};
-use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::storage::{self, Epoch};
+use namada_storage;
+use namada_storage::collections::lazy_map::{LazyMap, NestedMap};
+use namada_storage::collections::{self, LazyCollection};
+use namada_storage::{StorageRead, StorageWrite};
 
 use crate::parameters::PosParams;
 use crate::read_pos_params;
@@ -80,7 +78,7 @@ where
         storage: &mut S,
         value: Data,
         current_epoch: Epoch,
-    ) -> storage_api::Result<()>
+    ) -> namada_storage::Result<()>
     where
         S: StorageWrite + StorageRead,
     {
@@ -96,7 +94,7 @@ where
         storage: &S,
         epoch: Epoch,
         params: &PosParams,
-    ) -> storage_api::Result<Option<Data>>
+    ) -> namada_storage::Result<Option<Data>>
     where
         S: StorageRead,
     {
@@ -138,7 +136,7 @@ where
         value: Data,
         current_epoch: Epoch,
         offset: u64,
-    ) -> storage_api::Result<()>
+    ) -> namada_storage::Result<()>
     where
         S: StorageWrite + StorageRead,
     {
@@ -153,7 +151,7 @@ where
         value: Data,
         current_epoch: Epoch,
         offset: u64,
-    ) -> storage_api::Result<()>
+    ) -> namada_storage::Result<()>
     where
         S: StorageWrite + StorageRead,
     {
@@ -173,7 +171,7 @@ where
         storage: &mut S,
         params: &PosParams,
         current_epoch: Epoch,
-    ) -> storage_api::Result<()>
+    ) -> namada_storage::Result<()>
     where
         S: StorageWrite + StorageRead,
     {
@@ -248,7 +246,7 @@ where
     fn get_last_update<S>(
         &self,
         storage: &S,
-    ) -> storage_api::Result<Option<Epoch>>
+    ) -> namada_storage::Result<Option<Epoch>>
     where
         S: StorageRead,
     {
@@ -279,7 +277,7 @@ where
     fn get_oldest_epoch<S>(
         &self,
         storage: &S,
-    ) -> storage_api::Result<Option<Epoch>>
+    ) -> namada_storage::Result<Option<Epoch>>
     where
         S: StorageRead,
     {
@@ -291,7 +289,7 @@ where
         &self,
         storage: &mut S,
         new_oldest_epoch: Epoch,
-    ) -> storage_api::Result<()>
+    ) -> namada_storage::Result<()>
     where
         S: StorageRead + StorageWrite,
     {
@@ -326,7 +324,7 @@ where
         &self,
         storage: &mut S,
         epoch: Epoch,
-    ) -> storage_api::Result<()>
+    ) -> namada_storage::Result<()>
     where
         S: StorageWrite + StorageRead,
     {
@@ -345,7 +343,7 @@ where
     pub fn get_last_update<S>(
         &self,
         storage: &S,
-    ) -> storage_api::Result<Option<Epoch>>
+    ) -> namada_storage::Result<Option<Epoch>>
     where
         S: StorageRead,
     {
@@ -358,7 +356,7 @@ where
         &self,
         storage: &mut S,
         current_epoch: Epoch,
-    ) -> storage_api::Result<()>
+    ) -> namada_storage::Result<()>
     where
         S: StorageWrite + StorageRead,
     {
@@ -375,7 +373,7 @@ where
     fn get_oldest_epoch<S>(
         &self,
         storage: &S,
-    ) -> storage_api::Result<Option<Epoch>>
+    ) -> namada_storage::Result<Option<Epoch>>
     where
         S: StorageRead,
     {
@@ -387,7 +385,7 @@ where
         &self,
         storage: &mut S,
         new_oldest_epoch: Epoch,
-    ) -> storage_api::Result<()>
+    ) -> namada_storage::Result<()>
     where
         S: StorageRead + StorageWrite,
     {
@@ -407,7 +405,7 @@ where
         storage: &mut S,
         params: &PosParams,
         current_epoch: Epoch,
-    ) -> storage_api::Result<()>
+    ) -> namada_storage::Result<()>
     where
         S: StorageRead + StorageWrite,
     {
@@ -487,7 +485,7 @@ where
         storage: &mut S,
         value: Data,
         current_epoch: Epoch,
-    ) -> storage_api::Result<()>
+    ) -> namada_storage::Result<()>
     where
         S: StorageWrite + StorageRead,
     {
@@ -502,7 +500,7 @@ where
         &self,
         storage: &S,
         epoch: Epoch,
-    ) -> storage_api::Result<Option<Data>>
+    ) -> namada_storage::Result<Option<Data>>
     where
         S: StorageRead,
     {
@@ -515,7 +513,7 @@ where
         storage: &S,
         epoch: Epoch,
         params: &PosParams,
-    ) -> storage_api::Result<Option<Data>>
+    ) -> namada_storage::Result<Option<Data>>
     where
         S: StorageRead,
     {
@@ -557,7 +555,7 @@ where
         value: Data,
         current_epoch: Epoch,
         offset: u64,
-    ) -> storage_api::Result<()>
+    ) -> namada_storage::Result<()>
     where
         S: StorageWrite + StorageRead,
         Data: Default,
@@ -577,7 +575,7 @@ where
         value: Data,
         current_epoch: Epoch,
         offset: u64,
-    ) -> storage_api::Result<()>
+    ) -> namada_storage::Result<()>
     where
         S: StorageWrite + StorageRead,
     {
@@ -592,7 +590,7 @@ where
         value: Data,
         current_epoch: Epoch,
         offset: u64,
-    ) -> storage_api::Result<()>
+    ) -> namada_storage::Result<()>
     where
         S: StorageWrite + StorageRead,
     {
@@ -610,7 +608,7 @@ where
         storage: &mut S,
         params: &PosParams,
         current_epoch: Epoch,
-    ) -> storage_api::Result<()>
+    ) -> namada_storage::Result<()>
     where
         S: StorageWrite + StorageRead,
     {
@@ -692,7 +690,7 @@ where
     pub fn get_last_update<S>(
         &self,
         storage: &S,
-    ) -> storage_api::Result<Option<Epoch>>
+    ) -> namada_storage::Result<Option<Epoch>>
     where
         S: StorageRead,
     {
@@ -713,7 +711,7 @@ where
     pub fn to_hashmap<S>(
         &self,
         storage: &S,
-    ) -> storage_api::Result<HashMap<Epoch, Data>>
+    ) -> namada_storage::Result<HashMap<Epoch, Data>>
     where
         S: StorageRead,
     {
@@ -736,7 +734,7 @@ where
     fn get_oldest_epoch<S>(
         &self,
         storage: &S,
-    ) -> storage_api::Result<Option<Epoch>>
+    ) -> namada_storage::Result<Option<Epoch>>
     where
         S: StorageRead,
     {
@@ -748,7 +746,7 @@ where
         &self,
         storage: &mut S,
         new_oldest_epoch: Epoch,
-    ) -> storage_api::Result<()>
+    ) -> namada_storage::Result<()>
     where
         S: StorageRead + StorageWrite,
     {
@@ -1097,7 +1095,7 @@ mod test {
     use crate::types::GenesisValidator;
 
     #[test]
-    fn test_epoched_data_trimming() -> storage_api::Result<()> {
+    fn test_epoched_data_trimming() -> namada_storage::Result<()> {
         let mut s = init_storage()?;
 
         let key_prefix = storage::Key::parse("test").unwrap();
@@ -1168,7 +1166,7 @@ mod test {
     }
 
     #[test]
-    fn test_epoched_without_data_trimming() -> storage_api::Result<()> {
+    fn test_epoched_without_data_trimming() -> namada_storage::Result<()> {
         let mut s = init_storage()?;
 
         let key_prefix = storage::Key::parse("test").unwrap();
@@ -1236,7 +1234,7 @@ mod test {
     }
 
     #[test]
-    fn test_epoched_delta_data_trimming() -> storage_api::Result<()> {
+    fn test_epoched_delta_data_trimming() -> namada_storage::Result<()> {
         let mut s = init_storage()?;
 
         let key_prefix = storage::Key::parse("test").unwrap();
@@ -1309,7 +1307,8 @@ mod test {
     }
 
     #[test]
-    fn test_epoched_delta_without_data_trimming() -> storage_api::Result<()> {
+    fn test_epoched_delta_without_data_trimming() -> namada_storage::Result<()>
+    {
         let mut s = init_storage()?;
 
         // Nothing should ever get trimmed
@@ -1393,9 +1392,10 @@ mod test {
         Ok(())
     }
 
-    fn init_storage() -> storage_api::Result<TestWlStorage> {
+    fn init_storage() -> namada_storage::Result<TestWlStorage> {
         let mut s = TestWlStorage::default();
-        let gov_params = namada_core::ledger::governance::parameters::GovernanceParameters::default();
+        let gov_params =
+            namada_governance::parameters::GovernanceParameters::default();
         gov_params.init_storage(&mut s)?;
         crate::test_utils::init_genesis_helper(
             &mut s,

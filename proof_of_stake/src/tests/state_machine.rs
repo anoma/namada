@@ -7,17 +7,17 @@ use std::ops::Deref;
 use assert_matches::assert_matches;
 use itertools::Itertools;
 use namada_core::ledger::storage::testing::TestWlStorage;
-use namada_core::ledger::storage_api::collections::lazy_map::{
-    Collectable, NestedSubKey, SubKey,
-};
-use namada_core::ledger::storage_api::token::read_balance;
-use namada_core::ledger::storage_api::{token, StorageRead};
 use namada_core::types::address::{self, Address};
 use namada_core::types::dec::Dec;
 use namada_core::types::key;
 use namada_core::types::key::common::PublicKey;
 use namada_core::types::storage::Epoch;
 use namada_core::types::token::Change;
+use namada_namada_trans_token::read_balance;
+use namada_storage::collections::lazy_map::{
+    Collectable, NestedSubKey, SubKey,
+};
+use namada_storage::{token, StorageRead};
 use proptest::prelude::*;
 use proptest::test_runner::Config;
 use proptest_state_machine::{
