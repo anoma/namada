@@ -445,10 +445,13 @@ impl DB for MockDB {
     }
 
     fn has_replay_protection_entry(&self, hash: &Hash) -> Result<bool> {
-        for key in [
+        let prefix_key =
+            Key::parse("replay_protection").map_err(Error::KeyError)?;
+        for subkey in [
             replay_protection::last_key(hash),
             replay_protection::all_key(hash),
         ] {
+            let key = prefix_key.join(&subkey);
             if self.0.borrow().contains_key(&key.to_string()) {
                 return Ok(true);
             }
@@ -698,7 +701,7 @@ impl<'iter> DBIter<'iter> for MockDB {
     }
 
     fn iter_replay_protection(&'iter self) -> Self::PrefixIter {
-        let db_prefix = "".to_owned();
+        let db_prefix = "replay_protection/".to_owned();
         let iter = self.0.borrow().clone().into_iter();
         MockPrefixIterator::new(
             MockIterator {
