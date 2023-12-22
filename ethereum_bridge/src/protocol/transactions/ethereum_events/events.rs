@@ -18,6 +18,7 @@ use namada_core::ledger::storage::traits::StorageHasher;
 use namada_core::ledger::storage::{DBIter, WlStorage, DB};
 use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::address::Address;
+use namada_core::types::eth_abi::Encode;
 use namada_core::types::eth_bridge_pool::{
     PendingTransfer, TransferToEthereumKind,
 };
@@ -25,6 +26,7 @@ use namada_core::types::ethereum_events::{
     EthAddress, EthereumEvent, TransferToEthereum, TransferToNamada,
     TransfersToNamada,
 };
+use namada_core::types::ethereum_structs::EthBridgeEvent;
 use namada_core::types::storage::{BlockHeight, Key, KeySeg};
 use namada_core::types::token;
 use namada_core::types::token::{balance_key, minted_balance_key};
@@ -39,7 +41,7 @@ use crate::storage::parameters::read_native_erc20_address;
 pub(super) fn act_on<D, H>(
     wl_storage: &mut WlStorage<D, H>,
     event: EthereumEvent,
-) -> Result<BTreeSet<Key>>
+) -> Result<(BTreeSet<Key>, BTreeSet<EthBridgeEvent>)>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -58,7 +60,7 @@ where
         } => act_on_transfers_to_eth(wl_storage, transfers, relayer),
         _ => {
             tracing::debug!(?event, "No actions taken for Ethereum event");
-            Ok(BTreeSet::default())
+            Ok(Default::default())
         }
     }
 }
@@ -66,7 +68,7 @@ where
 fn act_on_transfers_to_namada<'tx, D, H>(
     wl_storage: &mut WlStorage<D, H>,
     transfer_event: TransfersToNamada,
-) -> Result<BTreeSet<Key>>
+) -> Result<(BTreeSet<Key>, BTreeSet<EthBridgeEvent>)>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -88,7 +90,11 @@ where
             transfers.iter(),
         )?;
     }
-    Ok(changed_keys)
+    Ok((
+        changed_keys,
+        // no tx events when we get a transfer to namada
+        BTreeSet::new(),
+    ))
 }
 
 fn update_transfers_to_namada_state<'tx, D, H>(
@@ -301,13 +307,14 @@ fn act_on_transfers_to_eth<D, H>(
     wl_storage: &mut WlStorage<D, H>,
     transfers: &[TransferToEthereum],
     relayer: &Address,
-) -> Result<BTreeSet<Key>>
+) -> Result<(BTreeSet<Key>, BTreeSet<EthBridgeEvent>)>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
     tracing::debug!(?transfers, "Acting on transfers to Ethereum");
     let mut changed_keys = BTreeSet::default();
+    let mut tx_events = BTreeSet::default();
 
     // the BP nonce should always be incremented, even if no valid
     // transfers to Ethereum were relayed. failing to do this
@@ -363,10 +370,13 @@ where
         _ = changed_keys.insert(key);
         _ = changed_keys.insert(pool_balance_key);
         _ = changed_keys.insert(relayer_rewards_key);
+        _ = tx_events.insert(EthBridgeEvent::new_bridge_pool_relayed(
+            pending_transfer.keccak256(),
+        ));
     }
 
     if pending_keys.is_empty() {
-        return Ok(changed_keys);
+        return Ok((changed_keys, tx_events));
     }
 
     // TODO the timeout height is min_num_blocks of an epoch for now
@@ -383,13 +393,15 @@ where
             )
             .expect("BlockHeight should be decoded");
             if inserted_height <= timeout_height {
-                let mut keys = refund_transfer(wl_storage, key)?;
+                let (mut keys, mut new_tx_events) =
+                    refund_transfer(wl_storage, key)?;
                 changed_keys.append(&mut keys);
+                tx_events.append(&mut new_tx_events);
             }
         }
     }
 
-    Ok(changed_keys)
+    Ok((changed_keys, tx_events))
 }
 
 fn increment_bp_nonce<D, H>(
@@ -412,12 +424,13 @@ where
 fn refund_transfer<D, H>(
     wl_storage: &mut WlStorage<D, H>,
     key: Key,
-) -> Result<BTreeSet<Key>>
+) -> Result<(BTreeSet<Key>, BTreeSet<EthBridgeEvent>)>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
     let mut changed_keys = BTreeSet::default();
+    let mut tx_events = BTreeSet::default();
 
     let transfer = match wl_storage.read_bytes(&key)? {
         Some(v) => PendingTransfer::try_from_slice(&v[..])?,
@@ -430,7 +443,12 @@ where
     wl_storage.delete(&key)?;
     _ = changed_keys.insert(key);
 
-    Ok(changed_keys)
+    // Emit expiration event
+    _ = tx_events.insert(EthBridgeEvent::new_bridge_pool_expired(
+        transfer.keccak256(),
+    ));
+
+    Ok((changed_keys, tx_events))
 }
 
 fn refund_transfer_fees<D, H>(
@@ -1034,7 +1052,7 @@ mod tests {
                 .expect("Test failed"),
         )
         .expect("Test failed");
-        let mut changed_keys = act_on(&mut wl_storage, event).unwrap();
+        let (mut changed_keys, _) = act_on(&mut wl_storage, event).unwrap();
 
         for erc20 in [
             random_erc20_token,
