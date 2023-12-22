@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## v0.28.2
+
+Namada 0.28.2 is a patch release that fixes a stack overflow issue for nodes.
+
+### BUG FIXES
+
+- Fixed DB prefix iterators to avoid iterators with key that don't match the
+  given prefix, which was triggering recursive call that was growing stack with
+  every new applied tx and on reading state from disk on start-up. Replaced
+  recursion from RocksDB that was growing stack size with a loop.
+  ([\#2325](https://github.com/anoma/namada/pull/2325))
+
 ## v0.28.1
 
 Namada 0.28.1 is a patch release that makes improvements to the MASP, SDK, merkle trees, and chain initialization conditions.
