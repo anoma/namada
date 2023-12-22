@@ -1129,6 +1129,17 @@ impl RevealPk {
     }
 }
 
+/// Query proposal votes
+#[derive(Clone, Debug)]
+pub struct QueryProposalVotes<C: NamadaTypes = SdkTypes> {
+    /// Common query args
+    pub query: Query<C>,
+    /// Proposal id
+    pub proposal_id: u64,
+    /// Voter address
+    pub voter: Option<C::Address>,
+}
+
 /// Query proposal
 #[derive(Clone, Debug)]
 pub struct QueryProposal<C: NamadaTypes = SdkTypes> {

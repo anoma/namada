@@ -44,6 +44,15 @@ pub struct Vote {
     pub data: StorageProposalVote,
 }
 
+impl Display for Vote {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Proposal vote")?;
+        writeln!(f, "Validator: {}", self.validator)?;
+        writeln!(f, "Delegator: {}", self.delegator)?;
+        writeln!(f, "Vote: {}", self.data)
+    }
+}
+
 impl Vote {
     /// Check if a vote is from a validator
     pub fn is_validator(&self) -> bool {

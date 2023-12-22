@@ -257,6 +257,7 @@ pub mod cmds {
                 .subcommand(QueryResult::def().display_order(5))
                 .subcommand(QueryRawBytes::def().display_order(5))
                 .subcommand(QueryProposal::def().display_order(5))
+                .subcommand(QueryProposalVotes::def().display_order(5))
                 .subcommand(QueryProposalResult::def().display_order(5))
                 .subcommand(QueryProtocolParameters::def().display_order(5))
                 .subcommand(QueryPgf::def().display_order(5))
@@ -330,6 +331,8 @@ pub mod cmds {
             let query_result = Self::parse_with_ctx(matches, QueryResult);
             let query_raw_bytes = Self::parse_with_ctx(matches, QueryRawBytes);
             let query_proposal = Self::parse_with_ctx(matches, QueryProposal);
+            let query_proposal_votes =
+                Self::parse_with_ctx(matches, QueryProposalVotes);
             let query_proposal_result =
                 Self::parse_with_ctx(matches, QueryProposalResult);
             let query_protocol_parameters =
@@ -385,6 +388,7 @@ pub mod cmds {
                 .or(query_result)
                 .or(query_raw_bytes)
                 .or(query_proposal)
+                .or(query_proposal_votes)
                 .or(query_proposal_result)
                 .or(query_protocol_parameters)
                 .or(query_pgf)
@@ -472,6 +476,7 @@ pub mod cmds {
         QueryFindValidator(QueryFindValidator),
         QueryRawBytes(QueryRawBytes),
         QueryProposal(QueryProposal),
+        QueryProposalVotes(QueryProposalVotes),
         QueryProposalResult(QueryProposalResult),
         QueryProtocolParameters(QueryProtocolParameters),
         QueryPgf(QueryPgf),
@@ -1008,6 +1013,28 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Query the result of a transaction.")
                 .add_args::<args::QueryResult<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct QueryProposalVotes(pub args::QueryProposalVotes<args::CliTypes>);
+
+    impl SubCmd for QueryProposalVotes {
+        const CMD: &'static str = "query-proposal-votes";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryProposalVotes(args::QueryProposalVotes::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query votes for the proposal.")
+                .add_args::<args::QueryProposalVotes<args::CliTypes>>()
         }
     }
 
@@ -3058,6 +3085,7 @@ pub mod args {
     pub const VALIDATOR_ETH_HOT_KEY: ArgOpt<WalletPublicKey> =
         arg_opt("eth-hot-key");
     pub const VALUE: Arg<String> = arg("value");
+    pub const VOTER_OPT: ArgOpt<WalletAddress> = arg_opt("voter");
     pub const VIEWING_KEY: Arg<WalletViewingKey> = arg("key");
     pub const VP: ArgOpt<String> = arg_opt("vp");
     pub const WALLET_ALIAS_FORCE: ArgFlag = flag("wallet-alias-force");
@@ -4785,6 +4813,36 @@ pub mod args {
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>()
                 .arg(PROPOSAL_ID_OPT.def().help("The proposal identifier."))
+        }
+    }
+
+    impl CliToSdk<QueryProposalVotes<SdkTypes>> for QueryProposalVotes<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryProposalVotes<SdkTypes> {
+            QueryProposalVotes::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                proposal_id: self.proposal_id,
+                voter: self.voter.map(|x| ctx.borrow_chain_or_exit().get(&x)),
+            }
+        }
+    }
+
+    impl Args for QueryProposalVotes<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let proposal_id = PROPOSAL_ID.parse(matches);
+            let voter = VOTER_OPT.parse(matches);
+
+            Self {
+                query,
+                proposal_id,
+                voter,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query<CliTypes>>()
+                .arg(PROPOSAL_ID_OPT.def().help("The proposal identifier."))
+                .arg(VOTER_OPT.def().help("The address of the proposal voter."))
         }
     }
 
