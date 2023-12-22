@@ -46,10 +46,8 @@ pub struct Vote {
 
 impl Display for Vote {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Proposal vote")?;
-        writeln!(f, "Validator: {}", self.validator)?;
-        writeln!(f, "Delegator: {}", self.delegator)?;
-        writeln!(f, "Vote: {}", self.data)
+        writeln!(f, "Voter: {}", self.delegator)?;
+        write!(f, "Vote: {}", self.data)
     }
 }
 
@@ -192,12 +190,13 @@ impl Display for ProposalResult {
 
         write!(
             f,
-            "{} with {} yay votes, {} nay votes and {} abstain votes, \
-             threshold was: {}",
+            "{} with {} yay votes, {} nay votes and {} abstain votes, total \
+             voting power: {} threshold was: {}",
             self.result,
             self.total_yay_power.to_string_native(),
             self.total_nay_power.to_string_native(),
             self.total_abstain_power.to_string_native(),
+            self.total_voting_power.to_string_native(),
             threshold.to_string_native()
         )
     }

@@ -741,13 +741,7 @@ pub async fn query_proposal_votes(
     match args.voter {
         Some(voter) => {
             match result.into_iter().find(|vote| vote.delegator == voter) {
-                Some(vote) => display_line!(
-                    context.io(),
-                    "The address {} voted {} on proposal {}",
-                    voter,
-                    vote,
-                    args.proposal_id
-                ),
+                Some(vote) => display_line!(context.io(), "{}", vote,),
                 None => display_line!(
                     context.io(),
                     "The address {} has not voted on proposal {}",
@@ -759,11 +753,11 @@ pub async fn query_proposal_votes(
         None => {
             display_line!(
                 context.io(),
-                "Votes for proposal id {}",
+                "Votes for proposal id {}\n",
                 args.proposal_id
             );
             for vote in result {
-                display_line!(context.io(), "{}", vote);
+                display_line!(context.io(), "{}\n", vote);
             }
         }
     }
