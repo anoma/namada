@@ -1417,9 +1417,7 @@ mod test_process_proposal {
         let mut batch =
             namada::core::ledger::storage::testing::TestStorage::batch();
         let wrapper_unsigned_hash = wrapper.header_hash();
-        let hash_key = replay_protection::get_replay_protection_last_subkey(
-            &wrapper_unsigned_hash,
-        );
+        let hash_key = replay_protection::last_key(&wrapper_unsigned_hash);
         shell
             .wl_storage
             .storage
@@ -1543,9 +1541,7 @@ mod test_process_proposal {
         // Write inner hash to storage
         let mut batch =
             namada::core::ledger::storage::testing::TestStorage::batch();
-        let hash_key = replay_protection::get_replay_protection_last_subkey(
-            &wrapper.raw_header_hash(),
-        );
+        let hash_key = replay_protection::last_key(&wrapper.raw_header_hash());
         shell
             .wl_storage
             .storage
