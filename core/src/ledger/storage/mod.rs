@@ -2,7 +2,6 @@
 
 pub mod ics23_specs;
 pub mod merkle_tree;
-#[cfg(any(test, feature = "testing"))]
 pub mod mockdb;
 pub mod traits;
 pub mod types;
@@ -1457,7 +1456,7 @@ mod tests {
                 max_expected_time_per_block: Duration::seconds(max_expected_time_per_block).into(),
                 vp_whitelist: vec![],
                 tx_whitelist: vec![],
-                implicit_vp_code_hash: Hash::zero(),
+                implicit_vp_code_hash: Some(Hash::zero()),
                 epochs_per_year: 100,
                 max_signatures_per_transaction: 15,
                 staked_ratio: Dec::new(1,1).expect("Cannot fail"),
