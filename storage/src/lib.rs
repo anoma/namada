@@ -8,7 +8,7 @@ pub use error::{CustomError, Error, OptionExt, Result, ResultExt};
 use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
 use namada_core::types::address::Address;
 use namada_core::types::storage::{
-    self, BlockHash, BlockHeight, Epoch, Header, TxIndex,
+    self, BlockHash, BlockHeight, Epoch, Epochs, Header, TxIndex,
 };
 
 /// Common storage read interface
@@ -90,21 +90,32 @@ pub trait StorageRead {
     /// Get the height of the first block of the current epoch.
     fn get_current_epoch_start_height(&self) -> Result<BlockHeight>;
 
-    /// Get the height of the first block of the given epoch.
-    fn get_epoch_start_height(
-        &self,
-        epoch: Epoch,
-    ) -> Result<Option<BlockHeight>>;
-
-    /// Given the epoch at the given block height.
-    fn get_epoch_at_height(&self, height: BlockHeight)
-    -> Result<Option<Epoch>>;
+    /// Given the information about predecessor block epochs
+    fn get_pred_epochs(&self) -> Result<Epochs>;
 
     /// Get the transaction index.
     fn get_tx_index(&self) -> Result<TxIndex>;
 
     /// Get the native token address
     fn get_native_token(&self) -> Result<Address>;
+
+    /// Get the height of the first block of the given epoch.
+    fn get_epoch_start_height(
+        &self,
+        epoch: Epoch,
+    ) -> Result<Option<BlockHeight>> {
+        let epochs = self.get_pred_epochs()?;
+        Ok(epochs.get_start_height_of_epoch(epoch))
+    }
+
+    /// Given the epoch at the given block height.
+    fn get_epoch_at_height(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<Epoch>> {
+        let epochs = self.get_pred_epochs()?;
+        Ok(epochs.get_epoch(height))
+    }
 }
 
 /// Common storage write interface
