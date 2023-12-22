@@ -54,7 +54,7 @@ impl InitAccount {
 
 /// Transaction to reveal a public key to the ledger to validate signatures of
 /// an implicit account
-pub struct RevealPk(pub Tx);
+pub struct RevealPk(Tx);
 
 impl RevealPk {
     /// Build a raw Reveal Public Key transaction from the given parameters
