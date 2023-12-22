@@ -1284,12 +1284,8 @@ where
     pub fn iter_replay_protection(
         &self,
     ) -> Box<dyn Iterator<Item = Hash> + '_> {
-        Box::new(self.db.iter_replay_protection().map(|(key, _, _)| {
-            key.rsplit_once('/')
-                .expect("Missing tx hash in storage key")
-                .1
-                .parse()
-                .expect("Failed hash conversion")
+        Box::new(self.db.iter_replay_protection().map(|(raw_key, _, _)| {
+            raw_key.parse().expect("Failed hash conversion")
         }))
     }
 }
