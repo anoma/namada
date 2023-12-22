@@ -1,9 +1,11 @@
+use std::str::FromStr;
+
 use borsh::BorshSerialize;
 use namada_core::proto::{Section, Signature, Signer, Tx};
 use namada_core::types::chain::ChainId;
 use namada_core::types::hash::Hash;
 use namada_core::types::key::common;
-use namada_core::types::time::{DateTimeUtc, MIN_UTC};
+use namada_core::types::time::DateTimeUtc;
 
 pub mod account;
 pub mod bridge;
@@ -31,7 +33,9 @@ pub(in crate::transaction) fn build_tx(
     code_tag: String,
 ) -> Tx {
     let mut inner_tx = Tx::new(chain_id, expiration);
-    inner_tx.header.timestamp = MIN_UTC;
+
+    inner_tx.header.timestamp =
+        DateTimeUtc::from_str("2000-01-01T00:00:00Z").unwrap();
     inner_tx.add_code_from_hash(code_hash, Some(code_tag));
     inner_tx.add_data(data);
 

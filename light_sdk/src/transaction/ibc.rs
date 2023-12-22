@@ -1,9 +1,11 @@
+use std::str::FromStr;
+
 pub use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
 use namada_core::ibc::primitives::Msg;
 use namada_core::proto::Tx;
 use namada_core::types::hash::Hash;
 use namada_core::types::key::common;
-use namada_core::types::time::MIN_UTC;
+use namada_core::types::time::DateTimeUtc;
 
 use super::GlobalArgs;
 use crate::transaction;
@@ -24,7 +26,8 @@ impl IbcTransfer {
         }: GlobalArgs,
     ) -> Self {
         let mut tx = Tx::new(chain_id, expiration);
-        tx.header.timestamp = MIN_UTC;
+        tx.header.timestamp =
+            DateTimeUtc::from_str("2000-01-01T00:00:00Z").unwrap();
         tx.add_code_from_hash(code_hash, Some(TX_IBC_WASM.to_string()));
 
         let mut data = vec![];
