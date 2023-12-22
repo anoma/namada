@@ -62,6 +62,11 @@ impl Bond {
             self.0, signer, signature,
         ))
     }
+
+    /// Generates the protobuf encoding of this transaction
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.0.to_bytes()
+    }
 }
 
 /// An unbond transaction
@@ -102,6 +107,11 @@ impl Unbond {
         Self(transaction::attach_raw_signatures(
             self.0, signer, signature,
         ))
+    }
+
+    /// Generates the protobuf encoding of this transaction
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.0.to_bytes()
     }
 }
 
@@ -162,6 +172,11 @@ impl BecomeValidator {
             self.0, signer, signature,
         ))
     }
+
+    /// Generates the protobuf encoding of this transaction
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.0.to_bytes()
+    }
 }
 
 /// Transaction to unjail a PoS validator
@@ -191,6 +206,11 @@ impl UnjailValidator {
         Self(transaction::attach_raw_signatures(
             self.0, signer, signature,
         ))
+    }
+
+    /// Generates the protobuf encoding of this transaction
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.0.to_bytes()
     }
 }
 
@@ -222,6 +242,11 @@ impl DeactivateValidator {
             self.0, signer, signature,
         ))
     }
+
+    /// Generates the protobuf encoding of this transaction
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.0.to_bytes()
+    }
 }
 
 /// Transaction to reactivate a previously deactivated validator
@@ -251,6 +276,11 @@ impl ReactivateValidator {
         Self(transaction::attach_raw_signatures(
             self.0, signer, signature,
         ))
+    }
+
+    /// Generates the protobuf encoding of this transaction
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.0.to_bytes()
     }
 }
 
@@ -290,6 +320,11 @@ impl ClaimRewards {
         Self(transaction::attach_raw_signatures(
             self.0, signer, signature,
         ))
+    }
+
+    /// Generates the protobuf encoding of this transaction
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.0.to_bytes()
     }
 }
 
@@ -339,6 +374,11 @@ impl ChangeMetaData {
             self.0, signer, signature,
         ))
     }
+
+    /// Generates the protobuf encoding of this transaction
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.0.to_bytes()
+    }
 }
 
 /// Transaction to modify the validator's consensus key
@@ -379,6 +419,11 @@ impl ChangeConsensusKey {
             self.0, signer, signature,
         ))
     }
+
+    /// Generates the protobuf encoding of this transaction
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.0.to_bytes()
+    }
 }
 
 /// Transaction to modify the validator's commission rate
@@ -414,6 +459,11 @@ impl ChangeCommission {
         Self(transaction::attach_raw_signatures(
             self.0, signer, signature,
         ))
+    }
+
+    /// Generates the protobuf encoding of this transaction
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.0.to_bytes()
     }
 }
 
@@ -453,6 +503,11 @@ impl Withdraw {
         Self(transaction::attach_raw_signatures(
             self.0, signer, signature,
         ))
+    }
+
+    /// Generates the protobuf encoding of this transaction
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.0.to_bytes()
     }
 }
 
@@ -496,5 +551,10 @@ impl Redelegate {
         Self(transaction::attach_raw_signatures(
             self.0, signer, signature,
         ))
+    }
+
+    /// Generates the protobuf encoding of this transaction
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.0.to_bytes()
     }
 }

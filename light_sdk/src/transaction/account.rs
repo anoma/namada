@@ -50,6 +50,11 @@ impl InitAccount {
             self.0, signer, signature,
         ))
     }
+
+    /// Generates the protobuf encoding of this transaction
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.0.to_bytes()
+    }
 }
 
 /// Transaction to reveal a public key to the ledger to validate signatures of
@@ -80,6 +85,11 @@ impl RevealPk {
         Self(transaction::attach_raw_signatures(
             self.0, signer, signature,
         ))
+    }
+
+    /// Generates the protobuf encoding of this transaction
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.0.to_bytes()
     }
 }
 
@@ -124,5 +134,10 @@ impl UpdateAccount {
         Self(transaction::attach_raw_signatures(
             self.0, signer, signature,
         ))
+    }
+
+    /// Generates the protobuf encoding of this transaction
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.0.to_bytes()
     }
 }

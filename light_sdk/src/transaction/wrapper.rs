@@ -56,4 +56,9 @@ impl Wrapper {
     pub fn validate_tx(&self) -> Result<Option<&Signature>, TxError> {
         self.0.validate_tx()
     }
+
+    /// Generates the protobuf encoding of this transaction
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.0.to_bytes()
+    }
 }

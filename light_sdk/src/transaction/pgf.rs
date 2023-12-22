@@ -40,6 +40,11 @@ impl ResignSteward {
             self.0, signer, signature,
         ))
     }
+
+    /// Generates the protobuf encoding of this transaction
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.0.to_bytes()
+    }
 }
 
 /// Transaction to update a pgf steward's commission rate
@@ -80,5 +85,10 @@ impl UpdateStewardCommission {
         Self(transaction::attach_raw_signatures(
             self.0, signer, signature,
         ))
+    }
+
+    /// Generates the protobuf encoding of this transaction
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.0.to_bytes()
     }
 }
