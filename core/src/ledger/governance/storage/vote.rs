@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use super::super::cli::onchain::ProposalVote;
 use super::proposal::ProposalType;
 
-/// The type of a governance vote with the optional associated Memo
+/// The type of a governance vote
 #[derive(
     Debug,
     Clone,
@@ -18,7 +18,7 @@ use super::proposal::ProposalType;
     Deserialize,
 )]
 pub enum VoteType {
-    /// A default vote without Memo
+    /// A default vote
     Default,
     /// A vote for the PGF stewards
     PGFSteward,
