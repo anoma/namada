@@ -176,6 +176,7 @@ test-integration-slow:
 	$(cargo) +$(nightly) test integration::$(TEST_FILTER)  --features integration \
 	-Z unstable-options \
 	-- \
+	--test-threads=1 \
 	-Z unstable-options --report-time
 
 test-unit:
