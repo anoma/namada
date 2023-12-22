@@ -1873,6 +1873,12 @@ pub async fn build_vote_proposal(
     .cloned()
     .collect::<Vec<Address>>();
 
+    if delegations.is_empty() {
+        return Err(Error::Other(
+            "Voter address must have delegations".to_string(),
+        ));
+    }
+
     let data = VoteProposalData {
         id: proposal_id,
         vote: storage_vote,
