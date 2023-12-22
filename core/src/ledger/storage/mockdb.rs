@@ -632,10 +632,10 @@ impl<'iter> DBIter<'iter> for MockDB {
     type PrefixIter = MockPrefixIterator;
 
     fn iter_prefix(&'iter self, prefix: Option<&Key>) -> MockPrefixIterator {
-        let db_prefix = "subspace/".to_owned();
+        let stripped_prefix = "subspace/".to_owned();
         let prefix = format!(
             "{}{}",
-            db_prefix,
+            stripped_prefix,
             match prefix {
                 Some(prefix) => {
                     if prefix == &Key::default() {
@@ -648,14 +648,14 @@ impl<'iter> DBIter<'iter> for MockDB {
             }
         );
         let iter = self.0.borrow().clone().into_iter();
-        MockPrefixIterator::new(MockIterator { prefix, iter }, db_prefix)
+        MockPrefixIterator::new(MockIterator { prefix, iter }, stripped_prefix)
     }
 
     fn iter_results(&'iter self) -> MockPrefixIterator {
-        let db_prefix = "results/".to_owned();
+        let stripped_prefix = "results/".to_owned();
         let prefix = "results".to_owned();
         let iter = self.0.borrow().clone().into_iter();
-        MockPrefixIterator::new(MockIterator { prefix, iter }, db_prefix)
+        MockPrefixIterator::new(MockIterator { prefix, iter }, stripped_prefix)
     }
 
     fn iter_old_diffs(
@@ -665,18 +665,18 @@ impl<'iter> DBIter<'iter> for MockDB {
     ) -> MockPrefixIterator {
         // Returns an empty iterator since Mock DB can read only the latest
         // value for now
-        let db_prefix = format!("{}/old/", height.0.raw());
+        let stripped_prefix = format!("{}/old/", height.0.raw());
         let prefix = prefix
             .map(|k| {
                 if k == &Key::default() {
-                    db_prefix.clone()
+                    stripped_prefix.clone()
                 } else {
-                    format!("{db_prefix}{k}/")
+                    format!("{stripped_prefix}{k}/")
                 }
             })
             .unwrap_or("".to_string());
         let iter = self.0.borrow().clone().into_iter();
-        MockPrefixIterator::new(MockIterator { prefix, iter }, db_prefix)
+        MockPrefixIterator::new(MockIterator { prefix, iter }, stripped_prefix)
     }
 
     fn iter_new_diffs(
@@ -686,30 +686,26 @@ impl<'iter> DBIter<'iter> for MockDB {
     ) -> MockPrefixIterator {
         // Returns an empty iterator since Mock DB can read only the latest
         // value for now
-        let db_prefix = format!("{}/new/", height.0.raw());
+        let stripped_prefix = format!("{}/new/", height.0.raw());
         let prefix = prefix
             .map(|k| {
                 if k == &Key::default() {
-                    db_prefix.clone()
+                    stripped_prefix.clone()
                 } else {
-                    format!("{db_prefix}{k}/")
+                    format!("{stripped_prefix}{k}/")
                 }
             })
             .unwrap_or("".to_string());
         let iter = self.0.borrow().clone().into_iter();
-        MockPrefixIterator::new(MockIterator { prefix, iter }, db_prefix)
+        MockPrefixIterator::new(MockIterator { prefix, iter }, stripped_prefix)
     }
 
     fn iter_replay_protection(&'iter self) -> Self::PrefixIter {
-        let db_prefix = "replay_protection/".to_owned();
+        let stripped_prefix =
+            format!("replay_protection/{}/", replay_protection::last_prefix());
+        let prefix = stripped_prefix.clone();
         let iter = self.0.borrow().clone().into_iter();
-        MockPrefixIterator::new(
-            MockIterator {
-                prefix: replay_protection::last_prefix().to_string(),
-                iter,
-            },
-            db_prefix,
-        )
+        MockPrefixIterator::new(MockIterator { prefix, iter }, stripped_prefix)
     }
 }
 
@@ -751,7 +747,7 @@ impl Iterator for PrefixIterator<MockIterator> {
                     result.expect("Prefix iterator shouldn't fail");
                 let key = String::from_utf8(key.to_vec())
                     .expect("Cannot convert from bytes to key string");
-                match key.strip_prefix(&self.db_prefix) {
+                match key.strip_prefix(&self.stripped_prefix) {
                     Some(k) => {
                         let gas = k.len() + val.len();
                         Some((k.to_owned(), val.to_vec(), gas as _))

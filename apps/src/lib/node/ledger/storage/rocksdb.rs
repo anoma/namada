@@ -1547,13 +1547,8 @@ impl<'iter> DBIter<'iter> for RocksDB {
             .get_column_family(REPLAY_PROTECTION_CF)
             .expect("{REPLAY_PROTECTION_CF} column family should exist");
 
-        let db_prefix = "".to_owned();
-        iter_prefix(
-            self,
-            replay_protection_cf,
-            db_prefix,
-            Some(replay_protection::last_prefix().to_string()),
-        )
+        let stripped_prefix = Some(replay_protection::last_prefix());
+        iter_prefix(self, replay_protection_cf, stripped_prefix.as_ref(), None)
     }
 }
 
@@ -1564,59 +1559,56 @@ fn iter_subspace_prefix<'iter>(
     let subspace_cf = db
         .get_column_family(SUBSPACE_CF)
         .expect("{SUBSPACE_CF} column family should exist");
-    let db_prefix = "".to_owned();
-    iter_prefix(
-        db,
-        subspace_cf,
-        db_prefix,
-        prefix.map(|k| {
-            if k == &Key::default() {
-                k.to_string()
-            } else {
-                format!("{k}/")
-            }
-        }),
-    )
+    let stripped_prefix = None;
+    iter_prefix(db, subspace_cf, stripped_prefix, prefix)
 }
 
 fn iter_diffs_prefix<'a>(
     db: &'a RocksDB,
     height: BlockHeight,
-    prefix: Option<&'a Key>,
+    prefix: Option<&Key>,
     is_old: bool,
 ) -> PersistentPrefixIterator<'a> {
     let diffs_cf = db
         .get_column_family(DIFFS_CF)
         .expect("{DIFFS_CF} column family should exist");
     let kind = if is_old { "old" } else { "new" };
-    let db_prefix = format!("{}/{}/", height.0.raw(), kind);
-    let prefix = prefix.map(|k| {
-        if k == &Key::default() {
-            db_prefix.clone()
-        } else {
-            format!("{db_prefix}{k}/")
-        }
-    });
-    // get keys without a prefix
-    iter_prefix(db, diffs_cf, db_prefix, prefix)
+    let stripped_prefix = Some(
+        Key::from(height.to_db_key())
+            .push(&kind.to_string())
+            .unwrap(),
+    );
+    // get keys without the `stripped_prefix`
+    iter_prefix(db, diffs_cf, stripped_prefix.as_ref(), prefix)
 }
 
+/// Create an iterator over key-vals in the given CF matching the given
+/// prefix(es). If any, the `stripped_prefix` is matched first and will be
+/// removed from the matched keys. If any, the second `prefix` is matched
+/// against the stripped keys and remains in the matched keys.
 fn iter_prefix<'a>(
     db: &'a RocksDB,
     cf: &'a ColumnFamily,
-    db_prefix: String,
-    prefix: Option<String>,
+    stripped_prefix: Option<&Key>,
+    prefix: Option<&Key>,
 ) -> PersistentPrefixIterator<'a> {
-    let read_opts = make_iter_read_opts(prefix.clone());
+    let stripped_prefix = match stripped_prefix {
+        Some(p) if !p.is_empty() => format!("{p}/"),
+        _ => "".to_owned(),
+    };
+    let prefix = match prefix {
+        Some(p) if !p.is_empty() => {
+            format!("{stripped_prefix}{p}/")
+        }
+        _ => stripped_prefix.clone(),
+    };
+    let read_opts = make_iter_read_opts(Some(prefix.clone()));
     let iter = db.0.iterator_cf_opt(
         cf,
         read_opts,
-        IteratorMode::From(
-            prefix.unwrap_or_default().as_bytes(),
-            Direction::Forward,
-        ),
+        IteratorMode::From(prefix.as_bytes(), Direction::Forward),
     );
-    PersistentPrefixIterator(PrefixIterator::new(iter, db_prefix))
+    PersistentPrefixIterator(PrefixIterator::new(iter, stripped_prefix))
 }
 
 #[derive(Debug)]
@@ -1636,14 +1628,14 @@ impl<'a> Iterator for PersistentPrefixIterator<'a> {
                         result.expect("Prefix iterator shouldn't fail");
                     let key = String::from_utf8(key.to_vec())
                         .expect("Cannot convert from bytes to key string");
-                    if let Some(k) = key.strip_prefix(&self.0.db_prefix) {
+                    if let Some(k) = key.strip_prefix(&self.0.stripped_prefix) {
                         let gas = k.len() + val.len();
                         return Some((k.to_owned(), val.to_vec(), gas as _));
                     } else {
                         tracing::warn!(
                             "Unmatched prefix \"{}\" in iterator's key \
                              \"{key}\"",
-                            self.0.db_prefix
+                            self.0.stripped_prefix
                         );
                     }
                 }
@@ -1661,8 +1653,8 @@ fn make_iter_read_opts(prefix: Option<String>) -> ReadOptions {
 
     if let Some(prefix) = prefix {
         let mut upper_prefix = prefix.into_bytes();
-        if let Some(last) = upper_prefix.pop() {
-            upper_prefix.push(last + 1);
+        if let Some(last) = upper_prefix.last_mut() {
+            *last += 1;
             read_opts.set_iterate_upper_bound(upper_prefix);
         }
     }
