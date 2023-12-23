@@ -1,3 +1,4 @@
+//! A helper module for dealing with bytes
 use std::fmt::{self, Display, Formatter, UpperHex, LowerHex, Debug};
 
 pub struct ByteBuf<'a>(pub &'a [u8]);
