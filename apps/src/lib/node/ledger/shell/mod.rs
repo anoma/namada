@@ -2713,8 +2713,7 @@ mod shell_tests {
         let mut batch =
             namada::core::ledger::storage::testing::TestStorage::batch();
         let wrapper_hash = wrapper.header_hash();
-        let wrapper_hash_key =
-            replay_protection::get_replay_protection_last_subkey(&wrapper_hash);
+        let wrapper_hash_key = replay_protection::last_key(&wrapper_hash);
         shell
             .wl_storage
             .storage
@@ -2752,10 +2751,7 @@ mod shell_tests {
 
         let inner_tx_hash = wrapper.raw_header_hash();
         // Write inner hash in storage
-        let inner_hash_key =
-            replay_protection::get_replay_protection_last_subkey(
-                &inner_tx_hash,
-            );
+        let inner_hash_key = replay_protection::last_key(&inner_tx_hash);
         shell
             .wl_storage
             .storage

@@ -10,9 +10,7 @@ use crate::ledger;
 use crate::ledger::gas::{
     MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE,
 };
-use crate::ledger::replay_protection::{
-    get_replay_protection_all_subkey, get_replay_protection_last_subkey,
-};
+use crate::ledger::replay_protection::{all_key, last_key};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::Storage;
 use crate::types::address::{Address, EstablishedAddressGen, InternalAddress};
@@ -538,7 +536,7 @@ impl WriteLog {
                         batch,
                         // Can only write tx hashes to the previous block, no
                         // further
-                        &get_replay_protection_last_subkey(hash),
+                        &last_key(hash),
                     )
                     .map_err(Error::StorageError)?,
                 ReProtStorageModification::Delete => storage
@@ -546,21 +544,15 @@ impl WriteLog {
                         batch,
                         // Can only delete tx hashes from the previous block,
                         // no further
-                        &get_replay_protection_last_subkey(hash),
+                        &last_key(hash),
                     )
                     .map_err(Error::StorageError)?,
                 ReProtStorageModification::Finalize => {
                     storage
-                        .write_replay_protection_entry(
-                            batch,
-                            &get_replay_protection_all_subkey(hash),
-                        )
+                        .write_replay_protection_entry(batch, &all_key(hash))
                         .map_err(Error::StorageError)?;
                     storage
-                        .delete_replay_protection_entry(
-                            batch,
-                            &get_replay_protection_last_subkey(hash),
-                        )
+                        .delete_replay_protection_entry(batch, &last_key(hash))
                         .map_err(Error::StorageError)?
                 }
             }

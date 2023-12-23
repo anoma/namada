@@ -2829,9 +2829,7 @@ mod test_finalize_block {
             mk_wrapper_tx(&shell, &crate::wallet::defaults::albert_keypair());
 
         let wrapper_hash_key =
-            replay_protection::get_replay_protection_last_key(
-                &wrapper_tx.header_hash(),
-            );
+            replay_protection::last_key(&wrapper_tx.header_hash());
 
         // merkle tree root before finalize_block
         let root_pre = shell.shell.wl_storage.storage.block.tree.root();
@@ -2938,10 +2936,7 @@ mod test_finalize_block {
 
         // Write wrapper hashes in storage
         for tx in [&wrapper, &new_wrapper] {
-            let hash_subkey =
-                replay_protection::get_replay_protection_last_subkey(
-                    &tx.header_hash(),
-                );
+            let hash_subkey = replay_protection::last_key(&tx.header_hash());
             shell
                 .wl_storage
                 .storage
@@ -3082,9 +3077,7 @@ mod test_finalize_block {
             &failing_wrapper,
         ] {
             let hash_subkey =
-                replay_protection::get_replay_protection_last_subkey(
-                    &wrapper.header_hash(),
-                );
+                replay_protection::last_key(&wrapper.header_hash());
             shell
                 .wl_storage
                 .storage
