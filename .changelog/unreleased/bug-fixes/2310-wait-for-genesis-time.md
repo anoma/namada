@@ -1,0 +1,1 @@
+ - Make the ledger wait for genesis before starting up any processes ([\#2310](https://github.com/anoma/namada/pull/2310))

@@ -66,7 +66,7 @@ pub fn install_shutdown_signal() -> ShutdownSignal {
 }
 
 #[cfg(unix)]
-async fn shutdown_send(tx: oneshot::Sender<()>) {
+pub async fn shutdown_send(tx: oneshot::Sender<()>) {
     use tokio::signal::unix::{signal, SignalKind};
     let mut sigterm = signal(SignalKind::terminate()).unwrap();
     let mut sighup = signal(SignalKind::hangup()).unwrap();
@@ -107,7 +107,7 @@ async fn shutdown_send(tx: oneshot::Sender<()>) {
 }
 
 #[cfg(windows)]
-async fn shutdown_send(tx: oneshot::Sender<()>) {
+pub async fn shutdown_send(tx: oneshot::Sender<()>) {
     let mut sigbreak = tokio::signal::windows::ctrl_break().unwrap();
     tokio::select! {
         signal = tokio::signal::ctrl_c() => {
