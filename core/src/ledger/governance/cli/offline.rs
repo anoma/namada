@@ -6,8 +6,8 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use serde::{Deserialize, Serialize};
 
-use super::onchain::ProposalVote;
 use super::validation::{is_valid_tally_epoch, ProposalValidation};
+use crate::ledger::governance::storage::vote::ProposalVote;
 use crate::proto::SignatureIndex;
 use crate::types::account::AccountPublicKeysMap;
 use crate::types::address::Address;

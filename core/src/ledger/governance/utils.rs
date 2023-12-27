@@ -5,7 +5,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 use super::cli::offline::OfflineVote;
 use super::storage::proposal::ProposalType;
-use super::storage::vote::StorageProposalVote;
+use super::storage::vote::ProposalVote;
 use crate::types::address::Address;
 use crate::types::storage::Epoch;
 use crate::types::token;
@@ -41,7 +41,7 @@ pub struct Vote {
     /// Field holding the address of the delegator
     pub delegator: Address,
     /// Field holding vote data
-    pub data: StorageProposalVote,
+    pub data: ProposalVote,
 }
 
 impl Display for Vote {
@@ -206,13 +206,13 @@ impl Display for ProposalResult {
 #[derive(Debug)]
 pub enum TallyVote {
     /// Rappresent a vote for a proposal onchain
-    OnChain(StorageProposalVote),
+    OnChain(ProposalVote),
     /// Rappresent a vote for a proposal offline
     Offline(OfflineVote),
 }
 
-impl From<StorageProposalVote> for TallyVote {
-    fn from(vote: StorageProposalVote) -> Self {
+impl From<ProposalVote> for TallyVote {
+    fn from(vote: ProposalVote) -> Self {
         Self::OnChain(vote)
     }
 }

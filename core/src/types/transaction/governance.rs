@@ -10,7 +10,7 @@ use crate::ledger::governance::cli::onchain::{
 use crate::ledger::governance::storage::proposal::{
     AddRemove, PGFAction, PGFTarget, ProposalType,
 };
-use crate::ledger::governance::storage::vote::StorageProposalVote;
+use crate::ledger::governance::storage::vote::ProposalVote;
 use crate::types::address::Address;
 use crate::types::hash::Hash;
 use crate::types::storage::Epoch;
@@ -73,7 +73,7 @@ pub struct VoteProposalData {
     /// The proposal id
     pub id: u64,
     /// The proposal vote
-    pub vote: StorageProposalVote,
+    pub vote: ProposalVote,
     /// The proposal author address
     pub voter: Address,
     /// Delegator addresses
