@@ -2952,7 +2952,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
         let mut cmd = run!(
             test,
             Bin::Wallet,
-            &["key", "gen", "--alias", &key_alias, "--unsafe-dont-encrypt"],
+            &["gen", "--alias", &key_alias, "--unsafe-dont-encrypt"],
             Some(20),
         )?;
         cmd.assert_success();

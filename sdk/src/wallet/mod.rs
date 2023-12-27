@@ -417,6 +417,14 @@ impl<U> Wallet<U> {
         self.store.find_payment_addr(alias.as_ref())
     }
 
+    /// Find an alias by the payment address if it's in the wallet.
+    pub fn find_alias_by_payment_addr(
+        &self,
+        payment_address: &PaymentAddress,
+    ) -> Option<&Alias> {
+        self.store.find_alias_by_payment_addr(payment_address)
+    }
+
     /// Get all known keys by their alias, paired with PKH, if known.
     pub fn get_secret_keys(
         &self,
@@ -476,6 +484,26 @@ impl<U> Wallet<U> {
             .iter()
             .map(|(alias, value)| (alias.into(), value))
             .collect()
+    }
+
+    /// Check if alias is an encrypted secret key
+    pub fn is_encrypted_secret_key(
+        &self,
+        alias: impl AsRef<str>,
+    ) -> Option<bool> {
+        self.store
+            .find_secret_key(alias)
+            .map(|stored_keypair| stored_keypair.is_encrypted())
+    }
+
+    /// Check if alias is an encrypted spending key
+    pub fn is_encrypted_spending_key(
+        &self,
+        alias: impl AsRef<str>,
+    ) -> Option<bool> {
+        self.store
+            .find_spending_key(alias)
+            .map(|stored_spend_key| stored_spend_key.is_encrypted())
     }
 }
 
@@ -559,9 +587,8 @@ impl<U: WalletIo> Wallet<U> {
     /// the keypair for the alias.
     /// If no encryption password is provided, the keypair will be stored raw
     /// without encryption.
-    /// Stores the key in decrypted key cache and
-    /// returns the alias of the key and a reference-counting pointer to the
-    /// key.
+    /// Stores the key in decrypted key cache and returns the alias of the key
+    /// and a reference-counting pointer to the key.
     pub fn gen_store_secret_key(
         &mut self,
         scheme: SchemeType,
@@ -961,5 +988,10 @@ impl<U: WalletIo> Wallet<U> {
     /// Note that this method ignores `store.validator_data` if any.
     pub fn extend(&mut self, wallet: Self) {
         self.store.extend(wallet.store)
+    }
+
+    /// Remove keys and addresses associated with the given alias
+    pub fn remove_all_by_alias(&mut self, alias: String) {
+        self.store.remove_alias(&alias.into())
     }
 }
