@@ -387,6 +387,14 @@ where
         let transfer_amount = transfer
             .amount
             .to_amount(&transfer.token, &self.ctx.pre())?;
+
+        if u64::from(self.ctx.get_block_height()?)
+            > u64::from(shielded_tx.expiry_height())
+        {
+            tracing::debug!("MASP transaction is expired");
+            return Ok(false);
+        }
+
         let mut transparent_tx_pool = I128Sum::zero();
         // The Sapling value balance adds to the transparent tx pool
         transparent_tx_pool += shielded_tx.sapling_value_balance();
