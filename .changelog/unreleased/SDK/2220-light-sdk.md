@@ -1,0 +1,1 @@
+- Added light sdk ([\#2220](https://github.com/anoma/namada/pull/2220))

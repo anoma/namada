@@ -1,0 +1,26 @@
+[package]
+name = "namada_light_sdk"
+description = "A more simple version of the Namada SDK"
+resolver = "2"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+borsh.workspace = true
+borsh-ext.workspace = true
+ibc = "0.47.0"
+namada_core = {path = "../core"}
+namada_sdk = {path = "../sdk"}
+prost.workspace = true
+tendermint-config.workspace = true
+tendermint-rpc = { worskpace = true, features = ["http-client"] }
+tokio = {workspace = true, features = ["rt"]}
