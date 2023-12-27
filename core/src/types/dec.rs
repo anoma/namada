@@ -54,15 +54,18 @@ pub struct Dec(pub I256);
 impl Dec {
     /// Performs division with truncation.
     ///
-    /// This method divides `self` by `rhs` (right-hand side) and truncates the result to [`POS_DECIMAL_PRECISION`]
-    /// decimal places. Truncation here means that any fractional part of the result that exceeds
+    /// This method divides `self` by `rhs` (right-hand side) and truncates the
+    /// result to [`POS_DECIMAL_PRECISION`] decimal places. Truncation here
+    /// means that any fractional part of the result that exceeds
     /// [`POS_DECIMAL_PRECISION`] is discarded.
     ///
     /// The division is performed in the following way:
-    /// 1. The absolute values of the numerator and denominator are used for the division.
-    /// 2. The result is calculated to a fixed precision defined by [`POS_DECIMAL_PRECISION`].
-    /// 3. If either the numerator or denominator (but not both) is negative, the result is negated.
-    /// 4. If the division is impossible (e.g., division by zero or overflow), `None` is returned.
+    /// 1. The absolute values of the numerator and denominator are used for the
+    /// division. 2. The result is calculated to a fixed precision defined
+    /// by [`POS_DECIMAL_PRECISION`]. 3. If either the numerator or
+    /// denominator (but not both) is negative, the result is negated. 4. If
+    /// the division is impossible (e.g., division by zero or overflow), `None`
+    /// is returned.
     ///
     /// Example:
     /// ```
@@ -77,8 +80,8 @@ impl Dec {
     /// * `rhs`: The right-hand side `Dec` value for the division.
     ///
     /// # Returns
-    /// An `Option<Dec>` which is `Some` with the result if the division is successful, or `None` if the division
-    /// cannot be performed.
+    /// An `Option<Dec>` which is `Some` with the result if the division is
+    /// successful, or `None` if the division cannot be performed.
     pub fn trunc_div(&self, rhs: &Self) -> Option<Self> {
         let is_neg = self.0.is_negative() ^ rhs.0.is_negative();
         let inner_uint = self.0.abs();
