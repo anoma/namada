@@ -212,31 +212,18 @@ where
     };
     use rayon::prelude::ParallelSlice;
 
-    use crate::types::address;
     use crate::types::storage::{Key, KeySeg};
     use crate::types::token::MASP_CONVERT_ANCHOR_KEY;
 
     // The derived conversions will be placed in MASP address space
     let masp_addr = MASP;
 
-    let tokens = address::tokens();
-    let mut masp_reward_keys: Vec<_> = tokens
-        .into_keys()
-        .map(|k| {
-            wl_storage
-                .storage
-                .conversion_state
-                .tokens
-                .get(k)
-                .unwrap_or_else(|| {
-                    panic!(
-                        "Could not find token alias {} in MASP conversion \
-                         state.",
-                        k
-                    )
-                })
-                .clone()
-        })
+    let mut masp_reward_keys: Vec<_> = wl_storage
+        .storage
+        .conversion_state
+        .tokens
+        .values()
+        .cloned()
         .collect();
     // Put the native rewards first because other inflation computations depend
     // on it
