@@ -1214,12 +1214,14 @@ pub async fn format_denominated_amount(
 /// Look up the IBC denomination from a IbcToken.
 pub async fn query_ibc_denom<N: Namada>(
     context: &N,
-    token: &Address,
+    token: impl AsRef<str>,
     owner: Option<&Address>,
 ) -> String {
-    let hash = match token {
-        Address::Internal(InternalAddress::IbcToken(hash)) => hash.to_string(),
-        _ => return token.to_string(),
+    let hash = match Address::decode(token.as_ref()) {
+        Ok(Address::Internal(InternalAddress::IbcToken(hash))) => {
+            hash.to_string()
+        }
+        _ => return token.as_ref().to_string(),
     };
 
     if let Some(owner) = owner {
@@ -1246,5 +1248,5 @@ pub async fn query_ibc_denom<N: Namada>(
         }
     }
 
-    token.to_string()
+    token.as_ref().to_string()
 }
