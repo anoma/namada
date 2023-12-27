@@ -55,6 +55,7 @@ use namada_core::types::masp::{
     TransferTarget,
 };
 use namada_core::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
+use namada_core::types::time::{DateTimeUtc, DurationSecs};
 use namada_core::types::token;
 use namada_core::types::token::{
     Change, MaspDenom, Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX,
@@ -1590,8 +1591,50 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         };
 
         // Now we build up the transaction within this object
-        let mut builder =
-            Builder::<TestNetwork, _>::new_with_rng(NETWORK, 1.into(), rng);
+        let expiration_height: u32 = match context.tx_builder().expiration {
+            Some(expiration) => {
+                // Try to match a DateTime expiration with a plausible
+                // corresponding block height
+                let last_block_height: u64 =
+                    crate::rpc::query_block(context.client())
+                        .await?
+                        .map_or_else(|| 1, |block| u64::from(block.height));
+                let current_time = DateTimeUtc::now();
+                let delta_time =
+                    expiration.0.signed_duration_since(current_time.0);
+
+                let max_expected_time_per_block_key =
+                    namada_core::ledger::parameters::storage::get_max_expected_time_per_block_key();
+                let max_block_time =
+                    crate::rpc::query_storage_value::<_, DurationSecs>(
+                        context.client(),
+                        &max_expected_time_per_block_key,
+                    )
+                    .await?;
+
+                let delta_blocks = u32::try_from(
+                    delta_time.num_seconds() / max_block_time.0 as i64,
+                )
+                .map_err(|e| Error::Other(e.to_string()))?;
+                u32::try_from(last_block_height)
+                    .map_err(|e| Error::Other(e.to_string()))?
+                    + delta_blocks
+            }
+            None => {
+                // NOTE: The masp library doesn't support optional expiration so
+                // we set the max to mimic a never-expiring tx. We also need to
+                // remove 20 which is going to be added back by the builder
+                u32::MAX - 20
+            }
+        };
+        let mut builder = Builder::<TestNetwork, _>::new_with_rng(
+            NETWORK,
+            // NOTE: this is going to add 20 more blocks to the actual
+            // expiration but there's no other exposed function that we could
+            // use from the masp crate to specify the expiration better
+            expiration_height.into(),
+            rng,
+        );
 
         // Convert transaction amount into MASP types
         let (asset_types, masp_amount) =
