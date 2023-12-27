@@ -256,10 +256,10 @@ impl TallyVote {
     ) -> Result<bool, &'static str> {
         match (self, other) {
             (TallyVote::OnChain(vote), TallyVote::OnChain(other_vote)) => {
-                Ok(vote.is_same_side(other_vote))
+                Ok(vote == other_vote)
             }
             (TallyVote::Offline(vote), TallyVote::Offline(other_vote)) => {
-                Ok(vote.is_same_side(other_vote))
+                Ok(vote.vote == other_vote.vote)
             }
             _ => Err("Cannot compare different variants of governance votes"),
         }

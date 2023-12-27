@@ -1843,13 +1843,7 @@ pub async fn build_vote_proposal(
         return Err(Error::from(TxError::ProposalDoesNotExist(proposal_id)));
     };
 
-    let storage_vote =
-        StorageProposalVote::build(&proposal_vote, &proposal.r#type)
-            .ok_or_else(|| {
-                Error::from(TxError::Other(
-                    "Should be able to build the proposal vote".to_string(),
-                ))
-            })?;
+    let storage_vote = StorageProposalVote::from(&proposal_vote);
 
     let is_validator = rpc::is_validator(context.client(), voter).await?;
 

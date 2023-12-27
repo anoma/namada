@@ -817,9 +817,7 @@ mod test_finalize_block {
     use namada::core::ledger::eth_bridge::storage::wrapped_erc20s;
     use namada::core::ledger::governance::storage::keys::get_proposal_execution_key;
     use namada::core::ledger::governance::storage::proposal::ProposalType;
-    use namada::core::ledger::governance::storage::vote::{
-        StorageProposalVote, VoteType,
-    };
+    use namada::core::ledger::governance::storage::vote::StorageProposalVote;
     use namada::core::ledger::replay_protection;
     use namada::core::types::storage::KeySeg;
     use namada::eth_bridge::storage::bridge_pool::{
@@ -1644,7 +1642,7 @@ mod test_finalize_block {
         };
 
         // Add a proposal to be accepted and one to be rejected.
-        add_proposal(0, StorageProposalVote::Yay(VoteType::Default));
+        add_proposal(0, StorageProposalVote::Yay);
         add_proposal(1, StorageProposalVote::Nay);
 
         // Commit the genesis state
