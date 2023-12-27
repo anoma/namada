@@ -551,7 +551,7 @@ where
                                     if block_time > tx_expiration =>
                                 {
                                     TxResult {
-                                        code: ErrorCodes::ExpiredDecryptedTx
+                                        code: ResultCode::ExpiredDecryptedTx
                                             .into(),
                                         info: format!(
                                             "Tx expired at {:#?}, block time: \
@@ -561,7 +561,7 @@ where
                                     }
                                 }
                                 _ => TxResult {
-                                    code: ErrorCodes::Ok.into(),
+                                    code: ResultCode::Ok.into(),
                                     info: "Process Proposal accepted this \
                                            tranasction"
                                         .into(),
@@ -1776,7 +1776,7 @@ mod test_process_proposal {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: 1.into(),
+                    amount_per_gas_unit: DenominatedAmount::native(1.into()),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 keypair.ref_to(),
@@ -1808,7 +1808,7 @@ mod test_process_proposal {
                 assert_eq!(txs.len(), 1);
                 assert_eq!(
                     txs[0].result.code,
-                    u32::from(ErrorCodes::ExpiredDecryptedTx)
+                    u32::from(ResultCode::ExpiredDecryptedTx)
                 );
             }
             Err(_) => panic!("Test failed"),
