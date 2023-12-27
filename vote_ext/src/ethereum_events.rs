@@ -2,21 +2,30 @@
 //! in vote extensions.
 
 use std::collections::{BTreeSet, HashMap};
+use std::ops::Deref;
 
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-
-use crate::proto::Signed;
-use crate::types::address::Address;
-use crate::types::ethereum_events::EthereumEvent;
-use crate::types::key::common::{self, Signature};
-use crate::types::storage::BlockHeight;
+use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_core::types::address::Address;
+use namada_core::types::ethereum_events::EthereumEvent;
+use namada_core::types::key::common::{self, Signature};
+use namada_core::types::storage::BlockHeight;
+use namada_tx::Signed;
 
 /// Type alias for an [`EthereumEventsVext`].
 pub type Vext = EthereumEventsVext;
 
 /// Represents a [`Vext`] signed by some validator, with
 /// a Namada protocol key.
-pub type SignedVext = Signed<Vext>;
+#[derive(Clone, Debug, BorshSerialize, BorshSchema, BorshDeserialize)]
+pub struct SignedVext(pub Signed<Vext>);
+
+impl Deref for SignedVext {
+    type Target = Signed<Vext>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 /// Represents a set of [`EthereumEvent`] instances seen by some validator.
 ///
@@ -138,13 +147,13 @@ impl VextDigest {
 
 #[cfg(test)]
 mod tests {
+    use namada_core::types::address::{self, Address};
+    use namada_core::types::ethereum_events::{EthereumEvent, Uint};
+    use namada_core::types::hash::Hash;
+    use namada_core::types::key;
+    use namada_tx::proto::Signed;
+
     use super::*;
-    use crate::proto::Signed;
-    use crate::types::address::{self, Address};
-    use crate::types::ethereum_events::{EthereumEvent, Uint};
-    use crate::types::hash::Hash;
-    use crate::types::key;
-    use crate::types::key::RefTo;
 
     /// Test the hashing of an Ethereum event
     #[test]
@@ -262,9 +271,9 @@ mod tests {
         for vext in decompressed.into_iter() {
             assert!(ext.contains(&vext));
             if vext.data.validator_addr == validator_1 {
-                assert!(vext.verify(&sk_1.ref_to()).is_ok())
+                assert!(vext.verify(&sk_1.to_public()).is_ok())
             } else {
-                assert!(vext.verify(&sk_2.ref_to()).is_ok())
+                assert!(vext.verify(&sk_2.to_public()).is_ok())
             }
         }
     }

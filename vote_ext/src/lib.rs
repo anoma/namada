@@ -4,9 +4,14 @@ pub mod bridge_pool_roots;
 pub mod ethereum_events;
 pub mod validator_set_update;
 
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-
-use crate::proto::Signed;
+use namada_core::borsh::{
+    BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
+};
+use namada_core::types::chain::ChainId;
+use namada_core::types::key::common;
+use namada_tx::data::protocol::{ProtocolTx, ProtocolTxType};
+use namada_tx::data::TxType;
+use namada_tx::{Signature, Signed, Tx, TxError};
 
 /// This type represents the data we pass to the extension of
 /// a vote at the PreCommit phase of Tendermint.
@@ -131,12 +136,12 @@ impl EthereumTxData {
         let (tx_data, tx_type) = self.serialize();
         let mut outer_tx =
             Tx::from_type(TxType::Protocol(Box::new(ProtocolTx {
-                pk: signing_key.ref_to(),
+                pk: signing_key.to_public(),
                 tx: tx_type,
             })));
         outer_tx.header.chain_id = chain_id;
-        outer_tx.set_data(Data::new(tx_data));
-        outer_tx.add_section(Section::Signature(Signature::new(
+        outer_tx.set_data(namada_tx::Data::new(tx_data));
+        outer_tx.add_section(namada_tx::Section::Signature(Signature::new(
             outer_tx.sechashes(),
             [(0, signing_key.clone())].into_iter().collect(),
             None,

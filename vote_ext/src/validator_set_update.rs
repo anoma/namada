@@ -2,18 +2,20 @@
 //! in vote extensions.
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::ops::Deref;
 
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-
-use crate::proto::Signed;
-use crate::types::address::Address;
-use crate::types::eth_abi::{AbiEncode, Encode, Token};
-use crate::types::ethereum_events::EthAddress;
-use crate::types::keccak::KeccakHash;
-use crate::types::key::common::{self, Signature};
-use crate::types::storage::Epoch;
-use crate::types::token;
-use crate::types::voting_power::{EthBridgeVotingPower, FractionalVotingPower};
+use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_core::types::address::Address;
+use namada_core::types::eth_abi::{AbiEncode, Encode, Token};
+use namada_core::types::ethereum_events::EthAddress;
+use namada_core::types::keccak::KeccakHash;
+use namada_core::types::key::common::{self, Signature};
+use namada_core::types::storage::Epoch;
+use namada_core::types::voting_power::{
+    EthBridgeVotingPower, FractionalVotingPower,
+};
+use namada_core::types::{ethereum_structs, token};
+use namada_tx::Signed;
 
 // the contract versions and namespaces plugged into validator set hashes
 // TODO: ideally, these values should not be hardcoded
@@ -41,7 +43,7 @@ pub struct ValidatorSetUpdateVextDigest {
 impl VextDigest {
     /// Build a singleton [`VextDigest`], from the provided [`Vext`].
     #[inline]
-    pub fn singleton(ext: SignedVext) -> VextDigest {
+    pub fn singleton(SignedVext(ext): SignedVext) -> VextDigest {
         VextDigest {
             signatures: HashMap::from([(
                 ext.data.validator_addr.clone(),
@@ -67,7 +69,7 @@ impl VextDigest {
                 voting_powers,
                 signing_epoch,
             };
-            extensions.push(SignedVext::new_from(data, signature));
+            extensions.push(SignedVext(Signed::new_from(data, signature)));
         }
         extensions
     }
@@ -75,7 +77,18 @@ impl VextDigest {
 
 /// Represents a [`Vext`] signed by some validator, with
 /// an Ethereum key.
-pub type SignedVext = Signed<Vext, SerializeWithAbiEncode>;
+#[derive(
+    Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, PartialEq, Eq,
+)]
+pub struct SignedVext(pub Signed<Vext, SerializeWithAbiEncode>);
+
+impl Deref for SignedVext {
+    type Target = Signed<Vext, SerializeWithAbiEncode>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 /// Type alias for a [`ValidatorSetUpdateVext`].
 pub type Vext = ValidatorSetUpdateVext;
@@ -120,7 +133,7 @@ impl Vext {
     /// For more information, read the docs of [`SignedVext::new`].
     #[inline]
     pub fn sign(&self, sk: &common::SecretKey) -> SignedVext {
-        SignedVext::new(sk, self.clone())
+        SignedVext(Signed::new(sk, self.clone()))
     }
 }
 
@@ -334,14 +347,14 @@ pub struct ValidatorSetArgs {
     pub epoch: Epoch,
 }
 
-impl From<ValidatorSetArgs> for ethbridge_structs::ValidatorSetArgs {
+impl From<ValidatorSetArgs> for ethereum_structs::ValidatorSetArgs {
     fn from(valset: ValidatorSetArgs) -> Self {
         let ValidatorSetArgs {
             validators,
             voting_powers,
             epoch,
         } = valset;
-        ethbridge_structs::ValidatorSetArgs {
+        ethereum_structs::ValidatorSetArgs {
             validator_set: validators
                 .into_iter()
                 .zip(voting_powers.into_iter())
@@ -371,15 +384,15 @@ impl Encode<1> for ValidatorSetArgs {
 // this is only here so we don't pollute the
 // outer namespace with serde traits
 mod tag {
+    use namada_core::types::eth_abi::{AbiEncode, Encode, Token};
+    use namada_core::types::hash::KeccakHasher;
+    use namada_core::types::keccak::KeccakHash;
+    use namada_core::types::key::Signable;
     use serde::{Deserialize, Serialize};
 
     use super::{
         epoch_to_token, Vext, VotingPowersMapExt, GOVERNANCE_CONTRACT_VERSION,
     };
-    use crate::ledger::storage::KeccakHasher;
-    use crate::proto::Signable;
-    use crate::types::eth_abi::{AbiEncode, Encode, Token};
-    use crate::types::keccak::KeccakHash;
 
     /// Tag type that indicates we should use [`AbiEncode`]
     /// to sign data in a [`crate::proto::Signed`] wrapper.

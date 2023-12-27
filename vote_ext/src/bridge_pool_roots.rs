@@ -5,13 +5,12 @@
 use std::collections::HashSet;
 use std::ops::{Deref, DerefMut};
 
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-
-use crate::proto::Signed;
-use crate::types::address::Address;
-use crate::types::key::common;
-use crate::types::key::common::Signature;
-use crate::types::storage::BlockHeight;
+use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_core::types::address::Address;
+use namada_core::types::key::common;
+use namada_core::types::key::common::Signature;
+use namada_core::types::storage::BlockHeight;
+use namada_tx::Signed;
 
 /// A vote extension containing a validator's signature
 /// of the current root and nonce of the
@@ -53,13 +52,33 @@ pub type Vext = BridgePoolRootVext;
 ///
 /// Note that this is serialized with Ethereum's
 /// ABI encoding schema.
-pub type SignedVext = Signed<BridgePoolRootVext>;
+#[derive(
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshSchema,
+    BorshDeserialize,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+)]
+pub struct SignedVext(pub Signed<BridgePoolRootVext>);
+
+impl Deref for SignedVext {
+    type Target = Signed<BridgePoolRootVext>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 impl Vext {
     /// Creates a new signed [`Vext`].
     #[inline]
     pub fn sign(&self, sk: &common::SecretKey) -> SignedVext {
-        SignedVext::new(sk, self.clone())
+        SignedVext(Signed::new(sk, self.clone()))
     }
 }
 

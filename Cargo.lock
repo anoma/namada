@@ -4778,8 +4778,11 @@ dependencies = [
 name = "namada_vote_ext"
 version = "0.28.1"
 dependencies = [
+ "borsh",
+ "data-encoding",
  "namada_core",
  "namada_tx",
+ "serde 1.0.193",
 ]
 
 [[package]]
