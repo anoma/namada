@@ -236,7 +236,7 @@ where
         for description in shielded_spends {
             let anchor_key =
                 namada_core::types::token::masp_commitment_anchor_key(
-                    &description.anchor,
+                    description.anchor,
                 );
 
             // Check if the provided anchor was published before

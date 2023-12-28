@@ -3,7 +3,6 @@
 use data_encoding::HEXUPPER;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
-use masp_proofs::bls12_381;
 use namada::core::ledger::masp_conversions::update_allowed_conversions;
 use namada::core::ledger::pgf::inflation as pgf_inflation;
 use namada::core::types::storage::KeySeg;
@@ -571,7 +570,7 @@ where
                 .into_storage_result()?;
             let anchor_key =
                 namada::core::types::token::masp_commitment_anchor_key(
-                    &bls12_381::Scalar::from(updated_tree.root()),
+                    updated_tree.root(),
                 );
             self.wl_storage.write(&anchor_key, ())?;
         }

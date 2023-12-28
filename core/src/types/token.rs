@@ -1301,11 +1301,11 @@ pub fn masp_commitment_tree_key() -> Key {
 }
 
 /// Get a key for a masp commitment tree anchor
-pub fn masp_commitment_anchor_key(anchor: &Scalar) -> Key {
+pub fn masp_commitment_anchor_key(anchor: impl Into<Scalar>) -> Key {
     Key::from(MASP.to_db_key())
         .push(&MASP_NOTE_COMMITMENT_ANCHOR_PREFIX.to_owned())
         .expect("Cannot obtain a storage key")
-        .push(&Hash(anchor.to_bytes()))
+        .push(&Hash(anchor.into().to_bytes()))
         .expect("Cannot obtain a storage key")
 }
 

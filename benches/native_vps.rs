@@ -4,7 +4,6 @@ use std::rc::Rc;
 use std::str::FromStr;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use masp_primitives::bls12_381;
 use masp_primitives::sapling::Node;
 use namada::core::ledger::governance::storage::proposal::ProposalType;
 use namada::core::ledger::governance::storage::vote::{
@@ -516,7 +515,7 @@ fn setup_storage_for_masp_verification(
         .unwrap()
         .unwrap();
     let anchor_key = namada::core::types::token::masp_commitment_anchor_key(
-        &bls12_381::Scalar::from(updated_tree.root()),
+        updated_tree.root(),
     );
     shielded_ctx
         .shell

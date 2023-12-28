@@ -147,9 +147,7 @@ where
             .write(&note_commitment_tree_key, empty_commitment_tree)
             .unwrap();
         let commitment_tree_anchor_key =
-            namada::core::types::token::masp_commitment_anchor_key(
-                &bls12_381::Scalar::from(anchor),
-            );
+            namada::core::types::token::masp_commitment_anchor_key(anchor);
         self.wl_storage
             .write(&commitment_tree_anchor_key, ())
             .unwrap();
