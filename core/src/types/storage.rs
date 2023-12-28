@@ -467,10 +467,49 @@ impl BorshDeserialize for StringKey {
     }
 }
 
+impl arse_merkle_tree::Key<IBC_KEY_LIMIT> for StringKey {
+    type Error = TreeKeyError;
+
+    fn as_slice(&self) -> &[u8] {
+        &self.original.as_slice()[..self.length]
+    }
+
+    fn try_from_bytes(bytes: &[u8]) -> std::result::Result<Self, Self::Error> {
+        let mut tree_key = [0u8; IBC_KEY_LIMIT];
+        let mut original = [0u8; IBC_KEY_LIMIT];
+        let mut length = 0;
+        for (i, byte) in bytes.iter().enumerate() {
+            if i >= IBC_KEY_LIMIT {
+                return Err(TreeKeyError::InvalidMerkleKey(
+                    "Input IBC key is too large".into(),
+                ));
+            }
+            original[i] = *byte;
+            tree_key[i] = byte.wrapping_add(1);
+            length += 1;
+        }
+        Ok(Self {
+            original,
+            tree_key: tree_key.into(),
+            length,
+        })
+    }
+}
+
 /// A wrapper around raw bytes to be stored as values
 /// in a merkle tree
 #[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub struct TreeBytes(pub Vec<u8>);
+
+impl arse_merkle_tree::traits::Value for TreeBytes {
+    fn as_slice(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+
+    fn zero() -> Self {
+        TreeBytes::zero()
+    }
+}
 
 impl TreeBytes {
     /// The value indicating that a leaf should be deleted

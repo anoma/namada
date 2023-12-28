@@ -6,9 +6,12 @@ use std::borrow::Cow;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use ethabi::token::Token;
+use namada_macros::StorageKeys;
 use serde::{Deserialize, Serialize};
 
 use super::address::InternalAddress;
+use super::storage;
+use crate as namada_core; // This is needed for `StorageKeys` macro
 use crate::types::address::Address;
 use crate::types::eth_abi::Encode;
 use crate::types::ethereum_events::{
@@ -17,6 +20,30 @@ use crate::types::ethereum_events::{
 use crate::types::hash::Hash as HashDigest;
 use crate::types::storage::{DbKeySeg, Key};
 use crate::types::token::Amount;
+
+/// The main address of the Ethereum bridge pool
+pub const BRIDGE_POOL_ADDRESS: Address =
+    Address::Internal(InternalAddress::EthBridgePool);
+
+/// Bridge pool key segments.
+#[derive(StorageKeys)]
+pub struct Segments {
+    signed_root: &'static str,
+    bridge_pool_nonce: &'static str,
+}
+
+/// Check if a key is for a pending transfer
+pub fn is_pending_transfer_key(key: &storage::Key) -> bool {
+    let segment = match &key.segments[..] {
+        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(segment)]
+            if addr == &BRIDGE_POOL_ADDRESS =>
+        {
+            segment.as_str()
+        }
+        _ => return false,
+    };
+    !Segments::ALL.iter().any(|s| s == &segment)
+}
 
 /// A version used in our Ethereuem smart contracts
 const VERSION: u8 = 1;

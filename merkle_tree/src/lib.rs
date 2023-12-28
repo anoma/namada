@@ -1,5 +1,6 @@
 //! The merkle tree in the storage
 
+pub mod eth_bridge_pool;
 pub mod ics23_specs;
 
 use std::fmt;
@@ -10,21 +11,23 @@ use arse_merkle_tree::error::Error as MtError;
 use arse_merkle_tree::{
     Hash as SmtHash, Key as TreeKey, SparseMerkleTree as ArseMerkleTree, H256,
 };
+use eth_bridge_pool::{BridgePoolProof, BridgePoolTree};
 use ics23::commitment_proof::Proof as Ics23Proof;
 use ics23::{CommitmentProof, ExistenceProof, NonExistenceProof};
 use ics23_specs::ibc_leaf_spec;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
 use namada_core::bytes::ByteBuf;
 use namada_core::types::address::{Address, InternalAddress};
+use namada_core::types::eth_bridge_pool::{
+    is_pending_transfer_key, PendingTransfer,
+};
 use namada_core::types::hash::{Hash, StorageHasher};
 use namada_core::types::keccak::KeccakHash;
 use namada_core::types::storage::{
     self, BlockHeight, DbKeySeg, Epoch, Error as StorageError, Key, KeySeg,
     StringKey, TreeBytes, TreeKeyError, IBC_KEY_LIMIT,
 };
-use namada_ethereum_bridge::storage::bridge_pool::{
-    is_pending_transfer_key, BridgePoolProof, BridgePoolTree,
-};
+use namada_core::types::{self, DecodeError};
 use thiserror::Error;
 
 /// Trait for reading from a merkle tree that is a sub-tree
@@ -298,24 +301,13 @@ impl StoreType {
     pub fn decode_store<T: AsRef<[u8]>>(
         &self,
         bytes: T,
-    ) -> std::result::Result<Store, super::Error> {
-        use super::Error;
+    ) -> std::result::Result<Store, DecodeError> {
         match self {
-            Self::Base => Ok(Store::Base(
-                types::decode(bytes).map_err(Error::CodingError)?,
-            )),
-            Self::Account => Ok(Store::Account(
-                types::decode(bytes).map_err(Error::CodingError)?,
-            )),
-            Self::Ibc => Ok(Store::Ibc(
-                types::decode(bytes).map_err(Error::CodingError)?,
-            )),
-            Self::PoS => Ok(Store::PoS(
-                types::decode(bytes).map_err(Error::CodingError)?,
-            )),
-            Self::BridgePool => Ok(Store::BridgePool(
-                types::decode(bytes).map_err(Error::CodingError)?,
-            )),
+            Self::Base => Ok(Store::Base(types::decode(bytes)?)),
+            Self::Account => Ok(Store::Account(types::decode(bytes)?)),
+            Self::Ibc => Ok(Store::Ibc(types::decode(bytes)?)),
+            Self::PoS => Ok(Store::PoS(types::decode(bytes)?)),
+            Self::BridgePool => Ok(Store::BridgePool(types::decode(bytes)?)),
         }
     }
 }
@@ -819,6 +811,193 @@ impl From<Proof> for namada_core::tendermint::merkle::proof::ProofOps {
         Self {
             ops: vec![sub_proof_op, base_proof_op],
         }
+    }
+}
+
+impl<'a, H: StorageHasher + Default> SubTreeRead for &'a Smt<H> {
+    fn root(&self) -> MerkleRoot {
+        Smt::<H>::root(self).into()
+    }
+
+    fn subtree_has_key(&self, key: &Key) -> Result<bool> {
+        match self.get(&H::hash(key.to_string()).into()) {
+            Ok(hash) => Ok(!hash.is_zero()),
+            Err(e) => Err(Error::MerkleTree(e.to_string())),
+        }
+    }
+
+    fn subtree_get(&self, key: &Key) -> Result<Vec<u8>> {
+        match self.get(&H::hash(key.to_string()).into()) {
+            Ok(hash) => Ok(hash.0.to_vec()),
+            Err(err) => Err(Error::MerkleTree(err.to_string())),
+        }
+    }
+
+    fn subtree_membership_proof(
+        &self,
+        keys: &[Key],
+        mut values: Vec<StorageBytes>,
+    ) -> Result<MembershipProof> {
+        if keys.len() != 1 || values.len() != 1 {
+            return Err(Error::Ics23MultiLeaf);
+        }
+        let key: &Key = &keys[0];
+        let value = values.remove(0);
+        let cp = self.membership_proof(&H::hash(key.to_string()).into())?;
+        // Replace the values and the leaf op for the verification
+        match cp.proof.expect("The proof should exist") {
+            Ics23Proof::Exist(ep) => Ok(CommitmentProof {
+                proof: Some(Ics23Proof::Exist(ExistenceProof {
+                    key: key.to_string().as_bytes().to_vec(),
+                    value: value.to_vec(),
+                    leaf: Some(ics23_specs::leaf_spec::<H>()),
+                    ..ep
+                })),
+            }
+            .into()),
+            // the proof should have an ExistenceProof
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Smt<H> {
+    fn subtree_update(
+        &mut self,
+        key: &Key,
+        value: StorageBytes,
+    ) -> Result<Hash> {
+        let value = H::hash(value);
+        self.update(H::hash(key.to_string()).into(), value.into())
+            .map(Hash::from)
+            .map_err(|err| Error::MerkleTree(err.to_string()))
+    }
+
+    fn subtree_delete(&mut self, key: &Key) -> Result<Hash> {
+        let value = Hash::zero();
+        self.update(H::hash(key.to_string()).into(), value)
+            .map(Hash::from)
+            .map_err(|err| Error::MerkleTree(err.to_string()))
+    }
+}
+
+impl<'a, H: StorageHasher + Default> SubTreeRead for &'a Amt<H> {
+    fn root(&self) -> MerkleRoot {
+        Amt::<H>::root(self).into()
+    }
+
+    fn subtree_has_key(&self, key: &Key) -> Result<bool> {
+        let key = StringKey::try_from_bytes(key.to_string().as_bytes())?;
+        match self.get(&key) {
+            Ok(hash) => Ok(!hash.is_zero()),
+            Err(e) => Err(Error::MerkleTree(e.to_string())),
+        }
+    }
+
+    fn subtree_get(&self, key: &Key) -> Result<Vec<u8>> {
+        let key = StringKey::try_from_bytes(key.to_string().as_bytes())?;
+        match self.get(&key) {
+            Ok(tree_bytes) => Ok(tree_bytes.into()),
+            Err(err) => Err(Error::MerkleTree(err.to_string())),
+        }
+    }
+
+    fn subtree_membership_proof(
+        &self,
+        keys: &[Key],
+        _: Vec<StorageBytes>,
+    ) -> Result<MembershipProof> {
+        if keys.len() != 1 {
+            return Err(Error::Ics23MultiLeaf);
+        }
+
+        let key = StringKey::try_from_bytes(keys[0].to_string().as_bytes())?;
+        let cp = self.membership_proof(&key)?;
+        // Replace the values and the leaf op for the verification
+        match cp.proof.expect("The proof should exist") {
+            Ics23Proof::Exist(ep) => Ok(CommitmentProof {
+                proof: Some(Ics23Proof::Exist(ExistenceProof {
+                    leaf: Some(ics23_specs::ibc_leaf_spec::<H>()),
+                    ..ep
+                })),
+            }
+            .into()),
+            // the proof should have an ExistenceProof
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Amt<H> {
+    fn subtree_update(
+        &mut self,
+        key: &Key,
+        value: StorageBytes,
+    ) -> Result<Hash> {
+        let key = StringKey::try_from_bytes(key.to_string().as_bytes())?;
+        let value = TreeBytes::from(value.to_vec());
+        self.update(key, value)
+            .map(Into::into)
+            .map_err(|err| Error::MerkleTree(err.to_string()))
+    }
+
+    fn subtree_delete(&mut self, key: &Key) -> Result<Hash> {
+        let key = StringKey::try_from_bytes(key.to_string().as_bytes())?;
+        let value = TreeBytes::zero();
+        self.update(key, value)
+            .map(Hash::from)
+            .map_err(|err| Error::MerkleTree(format!("{:?}", err)))
+    }
+}
+
+impl<'a> SubTreeRead for &'a BridgePoolTree {
+    fn root(&self) -> MerkleRoot {
+        BridgePoolTree::root(self).into()
+    }
+
+    fn subtree_has_key(&self, key: &Key) -> Result<bool> {
+        self.contains_key(key)
+            .map_err(|err| Error::MerkleTree(err.to_string()))
+    }
+
+    fn subtree_get(&self, key: &Key) -> Result<Vec<u8>> {
+        match self.get(key) {
+            Ok(height) => Ok(height.serialize_to_vec()),
+            Err(err) => Err(Error::MerkleTree(err.to_string())),
+        }
+    }
+
+    fn subtree_membership_proof(
+        &self,
+        _: &[Key],
+        values: Vec<StorageBytes>,
+    ) -> Result<MembershipProof> {
+        let values = values
+            .iter()
+            .filter_map(|val| PendingTransfer::try_from_slice(val).ok())
+            .collect();
+        self.get_membership_proof(values)
+            .map(Into::into)
+            .map_err(|err| Error::MerkleTree(err.to_string()))
+    }
+}
+
+impl<'a> SubTreeWrite for &'a mut BridgePoolTree {
+    fn subtree_update(
+        &mut self,
+        key: &Key,
+        value: StorageBytes,
+    ) -> Result<Hash> {
+        let height = BlockHeight::try_from_slice(value)
+            .map_err(|err| Error::MerkleTree(err.to_string()))?;
+        self.insert_key(key, height)
+            .map_err(|err| Error::MerkleTree(err.to_string()))
+    }
+
+    fn subtree_delete(&mut self, key: &Key) -> Result<Hash> {
+        self.delete_key(key)
+            .map_err(|err| Error::MerkleTree(err.to_string()))?;
+        Ok(self.root().into())
     }
 }
 

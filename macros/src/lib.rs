@@ -269,7 +269,7 @@ fn derive_storage_keys_inner(struct_def: TokenStream2) -> TokenStream2 {
                 let id = syn::Ident::new(&id, ident.span());
                 quote! {
                     #[allow(missing_docs)]
-                    pub(crate) fn #id(key: &namada_core::types::storage::Key, address: &Address) -> bool {
+                    pub fn #id(key: &namada_core::types::storage::Key, address: &Address) -> bool {
                         matches!(&key.segments[..], [
                             namada_core::types::storage::DbKeySeg::AddressSeg(a),
                             namada_core::types::storage::DbKeySeg::StringSeg(#ident),
@@ -282,7 +282,7 @@ fn derive_storage_keys_inner(struct_def: TokenStream2) -> TokenStream2 {
                 let id = syn::Ident::new(&id, ident.span());
                 quote! {
                     #[allow(missing_docs)]
-                    pub(crate) fn #id(address: Address) -> namada_core::types::storage::Key {
+                    pub fn #id(address: Address) -> namada_core::types::storage::Key {
                         namada_core::types::storage::Key {
                             segments: vec![
                                 namada_core::types::storage::DbKeySeg::AddressSeg(address),

@@ -50,6 +50,16 @@ pub type HashResult<T> = std::result::Result<T, Error>;
 /// A hash, typically a sha-2 hash of a tx
 pub struct Hash(pub [u8; HASH_LENGTH]);
 
+impl arse_merkle_tree::traits::Value for Hash {
+    fn as_slice(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+
+    fn zero() -> Self {
+        Hash([0u8; 32])
+    }
+}
+
 impl Display for Hash {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", HEXUPPER.encode(&self.0))
@@ -145,6 +155,25 @@ impl Hash {
 impl From<Hash> for crate::tendermint::Hash {
     fn from(hash: Hash) -> Self {
         Self::Sha256(hash.0)
+    }
+}
+
+impl From<Hash> for H256 {
+    fn from(hash: Hash) -> Self {
+        hash.0.into()
+    }
+}
+
+impl From<H256> for Hash {
+    fn from(hash: H256) -> Self {
+        Self(hash.into())
+    }
+}
+
+impl From<&H256> for Hash {
+    fn from(hash: &H256) -> Self {
+        let hash = hash.to_owned();
+        Self(hash.into())
     }
 }
 

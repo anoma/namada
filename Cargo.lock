@@ -4532,9 +4532,9 @@ name = "namada_merkle_tree"
 version = "0.28.1"
 dependencies = [
  "borsh",
+ "eyre",
  "ics23",
  "namada_core",
- "namada_ethereum_bridge",
  "prost 0.12.3",
  "sparse-merkle-tree",
  "thiserror",
