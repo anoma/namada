@@ -9,6 +9,8 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::BASE32HEX_NOPAD;
 use ethabi::ethereum_types::U256;
+use masp_primitives::bls12_381::Scalar;
+use masp_primitives::sapling::Nullifier;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -1280,6 +1282,59 @@ pub fn masp_last_inflation_key(token_address: &Address) -> Key {
         MASP_LAST_INFLATION_KEY,
         "cannot obtain storage key for the last inflation rate",
     )
+}
+
+/// Get a key for a masp nullifier
+pub fn masp_nullifier_key(nullifier: &Nullifier) -> Key {
+    Key::from(MASP.to_db_key())
+        .push(&MASP_NULLIFIERS_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+        .push(&Hash(nullifier.0))
+        .expect("Cannot obtain a storage key")
+}
+
+/// Get the key for the masp commitment tree
+pub fn masp_commitment_tree_key() -> Key {
+    Key::from(MASP.to_db_key())
+        .push(&MASP_NOTE_COMMITMENT_TREE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Get a key for a masp commitment tree anchor
+pub fn masp_commitment_anchor_key(anchor: &Scalar) -> Key {
+    Key::from(MASP.to_db_key())
+        .push(&MASP_NOTE_COMMITMENT_ANCHOR_PREFIX.to_owned())
+        .expect("Cannot obtain a storage key")
+        .push(&Hash(anchor.to_bytes()))
+        .expect("Cannot obtain a storage key")
+}
+
+/// Get the key for the masp convert tree anchor
+pub fn masp_convert_anchor_key() -> Key {
+    Key::from(MASP.to_db_key())
+        .push(&MASP_CONVERT_ANCHOR_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Get the masp head-tx key
+pub fn masp_head_tx_key() -> Key {
+    Key::from(MASP.to_db_key())
+        .push(&HEAD_TX_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Get the masp tx key for the provided tx id
+pub fn masp_tx_key(tx_id: u64) -> Key {
+    Key::from(MASP.to_db_key())
+        .push(&(TX_KEY_PREFIX.to_owned() + &tx_id.to_string()))
+        .expect("Cannot obtain a storage key")
+}
+
+/// Get the masp pin tx key for the provided pin key
+pub fn masp_pin_tx_key(pin_key: &str) -> Key {
+    Key::from(MASP.to_db_key())
+        .push(&(PIN_KEY_PREFIX.to_owned() + pin_key))
+        .expect("Cannot obtain a storage key")
 }
 
 /// Check if the given storage key is for a minter of a unspecified token.

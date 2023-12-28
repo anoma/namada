@@ -46,13 +46,10 @@ use namada::namada_sdk::masp_primitives::transaction::Transaction;
 use namada::proof_of_stake;
 use namada::proof_of_stake::KeySeg;
 use namada::proto::{Code, Section, Tx};
-use namada::types::address::{InternalAddress, MASP};
+use namada::types::address::InternalAddress;
 use namada::types::eth_bridge_pool::{GasFee, PendingTransfer};
 use namada::types::masp::{TransferSource, TransferTarget};
 use namada::types::storage::{Epoch, TxIndex};
-use namada::types::token::{
-    MASP_NOTE_COMMITMENT_ANCHOR_PREFIX, MASP_NOTE_COMMITMENT_TREE_KEY,
-};
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
@@ -511,22 +508,16 @@ fn setup_storage_for_masp_verification(
     shielded_ctx.shell.wl_storage.commit_tx();
 
     // Update the anchor in storage
-    let tree_key = namada::core::types::storage::Key::from(MASP.to_db_key())
-        .push(&MASP_NOTE_COMMITMENT_TREE_KEY.to_owned())
-        .expect("Cannot obtain a storage key");
+    let tree_key = namada::core::types::token::masp_commitment_tree_key();
     let updated_tree: CommitmentTree<Node> = shielded_ctx
         .shell
         .wl_storage
         .read(&tree_key)
         .unwrap()
         .unwrap();
-    let anchor_key = namada::core::types::storage::Key::from(MASP.to_db_key())
-        .push(&MASP_NOTE_COMMITMENT_ANCHOR_PREFIX.to_owned())
-        .expect("Cannot obtain a storage key")
-        .push(&namada::core::types::hash::Hash(
-            bls12_381::Scalar::from(updated_tree.root()).to_bytes(),
-        ))
-        .expect("Cannot obtain a storage key");
+    let anchor_key = namada::core::types::token::masp_commitment_anchor_key(
+        &bls12_381::Scalar::from(updated_tree.root()),
+    );
     shielded_ctx
         .shell
         .wl_storage

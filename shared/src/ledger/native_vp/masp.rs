@@ -14,15 +14,12 @@ use namada_core::ledger::storage;
 use namada_core::ledger::storage_api::OptionExt;
 use namada_core::ledger::vp_env::VpEnv;
 use namada_core::proto::Tx;
+use namada_core::types::address::Address;
 use namada_core::types::address::InternalAddress::Masp;
-use namada_core::types::address::{Address, MASP};
-use namada_core::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
+use namada_core::types::storage::{BlockHeight, Epoch, Key, TxIndex};
 use namada_core::types::token::{
     self, is_masp_allowed_key, is_masp_key, is_masp_nullifier_key,
-    is_masp_tx_pin_key, is_masp_tx_prefix_key, Transfer, HEAD_TX_KEY,
-    MASP_CONVERT_ANCHOR_KEY, MASP_NOTE_COMMITMENT_ANCHOR_PREFIX,
-    MASP_NOTE_COMMITMENT_TREE_KEY, MASP_NULLIFIERS_KEY, PIN_KEY_PREFIX,
-    TX_KEY_PREFIX,
+    is_masp_tx_pin_key, is_masp_tx_prefix_key, Transfer,
 };
 use namada_sdk::masp::verify_shielded_tx;
 use ripemd::Digest as RipemdDigest;
@@ -134,11 +131,9 @@ where
         };
 
         for description in shielded_spends {
-            let nullifier_key = Key::from(MASP.to_db_key())
-                .push(&MASP_NULLIFIERS_KEY.to_owned())
-                .expect("Cannot obtain a storage key")
-                .push(&namada_core::types::hash::Hash(description.nullifier.0))
-                .expect("Cannot obtain a storage key");
+            let nullifier_key = namada_core::types::token::masp_nullifier_key(
+                &description.nullifier,
+            );
             if self.ctx.has_key_pre(&nullifier_key)?
                 || revealed_nullifiers.contains(&nullifier_key)
             {
@@ -185,9 +180,7 @@ where
     ) -> Result<bool> {
         // Check that the merkle tree in storage has been correctly updated with
         // the output descriptions cmu
-        let tree_key = Key::from(MASP.to_db_key())
-            .push(&MASP_NOTE_COMMITMENT_TREE_KEY.to_owned())
-            .expect("Cannot obtain a storage key");
+        let tree_key = namada_core::types::token::masp_commitment_tree_key();
         let mut previous_tree: CommitmentTree<Node> =
             self.ctx.read_pre(&tree_key)?.ok_or(Error::NativeVpError(
                 native_vp::Error::SimpleMessage("Cannot read storage"),
@@ -241,13 +234,10 @@ where
         };
 
         for description in shielded_spends {
-            let anchor_key = Key::from(MASP.to_db_key())
-                .push(&MASP_NOTE_COMMITMENT_ANCHOR_PREFIX.to_owned())
-                .expect("Cannot obtain a storage key")
-                .push(&namada_core::types::hash::Hash(
-                    description.anchor.to_bytes(),
-                ))
-                .expect("Cannot obtain a storage key");
+            let anchor_key =
+                namada_core::types::token::masp_commitment_anchor_key(
+                    &description.anchor,
+                );
 
             // Check if the provided anchor was published before
             if !self.ctx.has_key_pre(&anchor_key)? {
@@ -268,9 +258,8 @@ where
     ) -> Result<bool> {
         if let Some(bundle) = transaction.sapling_bundle() {
             if !bundle.shielded_converts.is_empty() {
-                let anchor_key = Key::from(MASP.to_db_key())
-                    .push(&MASP_CONVERT_ANCHOR_KEY.to_owned())
-                    .expect("Cannot obtain a storage key");
+                let anchor_key =
+                    namada_core::types::token::masp_convert_anchor_key();
                 let expected_anchor = self
                     .ctx
                     .read_pre::<namada_core::types::hash::Hash>(&anchor_key)?
@@ -328,9 +317,7 @@ where
         }
 
         // Validate head tx
-        let head_tx_key = Key::from(MASP.to_db_key())
-            .push(&HEAD_TX_KEY.to_owned())
-            .expect("Cannot obtain a storage key");
+        let head_tx_key = namada_core::types::token::masp_head_tx_key();
         let pre_head: u64 = self.ctx.read_pre(&head_tx_key)?.unwrap_or(0);
         let post_head: u64 = self.ctx.read_post(&head_tx_key)?.unwrap_or(0);
 
@@ -339,9 +326,7 @@ where
         }
 
         // Validate tx key
-        let current_tx_key = Key::from(MASP.to_db_key())
-            .push(&(TX_KEY_PREFIX.to_owned() + &pre_head.to_string()))
-            .expect("Cannot obtain a storage key");
+        let current_tx_key = namada_core::types::token::masp_tx_key(pre_head);
         match self
             .ctx
             .read_post::<(Epoch, BlockHeight, TxIndex, Transfer, Transaction)>(
@@ -363,9 +348,7 @@ where
 
         // Validate pin key
         if let Some(key) = &transfer.key {
-            let pin_key = Key::from(MASP.to_db_key())
-                .push(&(PIN_KEY_PREFIX.to_owned() + key))
-                .expect("Cannot obtain a storage key");
+            let pin_key = namada_core::types::token::masp_pin_tx_key(key);
             match self.ctx.read_post::<u64>(&pin_key)? {
                 Some(tx_idx) if tx_idx == pre_head => (),
                 _ => return Ok(false),
