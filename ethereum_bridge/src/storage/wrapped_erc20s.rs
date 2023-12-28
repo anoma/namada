@@ -1,11 +1,11 @@
 //! Functionality for accessing the multitoken subspace
 
 use eyre::eyre;
-
-use crate::types::address::{Address, InternalAddress};
-use crate::types::ethereum_events::EthAddress;
-use crate::types::storage::{self, DbKeySeg};
-use crate::types::token::{
+use namada_core::types::address::{Address, InternalAddress};
+use namada_core::types::eth_bridge_pool::erc20_token_address;
+use namada_core::types::ethereum_events::EthAddress;
+use namada_core::types::storage::{self, DbKeySeg};
+use namada_trans_token::storage_key::{
     balance_key, minted_balance_key, MINTED_STORAGE_KEY,
 };
 
@@ -32,7 +32,7 @@ pub struct Key {
 
 impl From<&Key> for storage::Key {
     fn from(mt_key: &Key) -> Self {
-        let token = token(&mt_key.asset);
+        let token = erc20_token_address(&mt_key.asset);
         match &mt_key.suffix {
             KeyType::Balance { owner } => balance_key(&token, owner),
             KeyType::Supply => minted_balance_key(&token),
