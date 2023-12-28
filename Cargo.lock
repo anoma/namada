@@ -4637,11 +4637,21 @@ version = "0.1.0"
 name = "namada_state"
 version = "0.28.1"
 dependencies = [
+ "borsh",
  "ics23",
+ "itertools 0.10.5",
  "namada_core",
  "namada_gas",
+ "namada_merkle_tree",
+ "namada_parameters",
+ "namada_storage",
+ "namada_trans_token",
  "namada_tx",
+ "sha2 0.9.9",
  "sparse-merkle-tree",
+ "thiserror",
+ "tiny-keccak",
+ "tracing",
 ]
 
 [[package]]

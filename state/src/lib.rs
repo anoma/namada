@@ -2,7 +2,6 @@
 
 #[cfg(any(test, feature = "testing"))]
 pub mod mockdb;
-pub mod traits;
 pub mod tx_queue;
 pub mod types;
 pub mod wl_storage;
@@ -12,40 +11,39 @@ use core::fmt::Debug;
 use std::cmp::Ordering;
 use std::format;
 
-use borsh::{BorshDeserialize, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
-pub use merkle_tree::{
+use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
+use namada_core::tendermint::merkle::proof::ProofOps;
+use namada_core::types::address::{
+    Address, EstablishedAddressGen, InternalAddress,
+};
+use namada_core::types::chain::{ChainId, CHAIN_ID_LENGTH};
+use namada_core::types::eth_bridge_pool::is_pending_transfer_key;
+use namada_core::types::ethereum_events::Uint;
+use namada_core::types::hash::{Error as HashError, Hash, StorageHasher};
+use namada_core::types::storage::{
+    BlockHash, BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue,
+    Header, Key, KeySeg, TxIndex, BLOCK_HASH_LENGTH, BLOCK_HEIGHT_LENGTH,
+    EPOCH_TYPE_LENGTH,
+};
+use namada_core::types::time::DateTimeUtc;
+pub use namada_core::types::token::ConversionState;
+use namada_core::types::{encode, ethereum_structs};
+use namada_gas::{
+    MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_ACCESS_GAS_PER_BYTE,
+    STORAGE_WRITE_GAS_PER_BYTE,
+};
+use namada_merkle_tree::{
+    Error as MerkleTreeError, MembershipProof, MerkleRoot,
+};
+pub use namada_merkle_tree::{
     MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite, StoreType,
 };
+use namada_parameters::{self, EpochDuration, Parameters};
 use thiserror::Error;
-pub use traits::{DummyHasher, KeccakHasher, Sha256Hasher, StorageHasher};
+use tx_queue::{ExpiredTxsQueue, TxQueue};
 pub use wl_storage::{
     iter_prefix_post, iter_prefix_pre, PrefixIter, TempWlStorage, WlStorage,
 };
-
-use super::gas::MEMORY_ACCESS_GAS_PER_BYTE;
-use crate::ledger::eth_bridge::storage::bridge_pool::is_pending_transfer_key;
-use crate::ledger::gas::{
-    STORAGE_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE,
-};
-use crate::ledger::parameters::{self, EpochDuration, Parameters};
-use crate::ledger::storage::merkle_tree::{
-    Error as MerkleTreeError, MerkleRoot,
-};
-use crate::tendermint::merkle::proof::ProofOps;
-use crate::types::address::{Address, EstablishedAddressGen, InternalAddress};
-use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
-use crate::types::ethereum_events::Uint;
-use crate::types::ethereum_structs;
-use crate::types::hash::{Error as HashError, Hash};
-use crate::types::internal::{ExpiredTxsQueue, TxQueue};
-use crate::types::storage::{
-    BlockHash, BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue,
-    Header, Key, KeySeg, MembershipProof, TxIndex, BLOCK_HASH_LENGTH,
-    BLOCK_HEIGHT_LENGTH, EPOCH_TYPE_LENGTH,
-};
-use crate::types::time::DateTimeUtc;
-pub use crate::types::token::ConversionState;
 
 /// A result of a function that may fail
 pub type Result<T> = std::result::Result<T, Error>;
@@ -156,9 +154,9 @@ pub enum Error {
     #[error("Found an unknown key: {key}")]
     UnknownKey { key: String },
     #[error("Storage key error {0}")]
-    KeyError(crate::types::storage::Error),
+    KeyError(namada_core::types::storage::Error),
     #[error("Coding error: {0}")]
-    CodingError(types::Error),
+    CodingError(namada_core::types::DecodeError),
     #[error("Merkle tree error: {0}")]
     MerkleTreeError(MerkleTreeError),
     #[error("DB error: {0}")]
@@ -726,7 +724,7 @@ where
         addr: &Address,
     ) -> Result<(Option<Hash>, u64)> {
         let key = if let Address::Implicit(_) = addr {
-            parameters::storage::get_implicit_vp_key()
+            namada_parameters::storage::get_implicit_vp_key()
         } else {
             Key::validity_predicate(addr)
         };
@@ -916,7 +914,7 @@ where
     pub fn get_existence_proof(
         &self,
         key: &Key,
-        value: merkle_tree::StorageBytes,
+        value: namada_merkle_tree::StorageBytes,
         height: BlockHeight,
     ) -> Result<ProofOps> {
         use std::array;
@@ -1077,21 +1075,19 @@ where
             .map_err(Error::KeyError)?;
         self.block
             .tree
-            .update(&key, types::encode(&self.next_epoch_min_start_height))?;
+            .update(&key, encode(&self.next_epoch_min_start_height))?;
 
         let key = key_prefix
             .push(&"epoch_start_time".to_string())
             .map_err(Error::KeyError)?;
         self.block
             .tree
-            .update(&key, types::encode(&self.next_epoch_min_start_time))?;
+            .update(&key, encode(&self.next_epoch_min_start_time))?;
 
         let key = key_prefix
             .push(&"current_epoch".to_string())
             .map_err(Error::KeyError)?;
-        self.block
-            .tree
-            .update(&key, types::encode(&self.block.epoch))?;
+        self.block.tree.update(&key, encode(&self.block.epoch))?;
 
         Ok(())
     }
@@ -1296,10 +1292,11 @@ impl From<MerkleTreeError> for Error {
 /// Helpers for testing components that depend on storage
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
+    use namada_core::types::address;
+
     use super::mockdb::MockDB;
     use super::*;
     use crate::ledger::storage::traits::Sha256Hasher;
-    use crate::types::address;
 
     /// `WlStorage` with a mock DB for testing
     pub type TestWlStorage = WlStorage<MockDB, Sha256Hasher>;
@@ -1364,15 +1361,15 @@ mod tests {
     use std::collections::BTreeMap;
 
     use chrono::{TimeZone, Utc};
+    use namada_core::types::dec::Dec;
+    use namada_core::types::time::{self, Duration};
+    use namada_core::types::token;
     use proptest::prelude::*;
     use proptest::test_runner::Config;
 
     use super::testing::*;
     use super::*;
     use crate::ledger::parameters::{self, Parameters};
-    use crate::types::dec::Dec;
-    use crate::types::time::{self, Duration};
-    use crate::types::token;
 
     prop_compose! {
         /// Setup test input data with arbitrary epoch duration, epoch start

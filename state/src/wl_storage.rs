@@ -2,16 +2,16 @@
 
 use std::iter::Peekable;
 
+use namada_core::types::address::Address;
+use namada_core::types::hash::{Hash, StorageHasher};
+use namada_core::types::storage::{self, BlockHeight, Epochs};
+use namada_core::types::time::DateTimeUtc;
+use namada_parameters::EpochDuration;
+use namada_storage::{ResultExt, StorageRead, StorageWrite};
+
 use super::EPOCH_SWITCH_BLOCKS_DELAY;
-use crate::ledger::parameters::EpochDuration;
-use crate::ledger::storage::write_log::{self, WriteLog};
-use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
-use crate::ledger::storage_api::{ResultExt, StorageRead, StorageWrite};
-use crate::ledger::{gas, parameters, storage_api};
-use crate::types::address::Address;
-use crate::types::hash::Hash;
-use crate::types::storage::{self, BlockHeight};
-use crate::types::time::DateTimeUtc;
+use crate::write_log::{self, WriteLog};
+use crate::{DBIter, Storage, DB};
 
 /// Storage with write log that allows to implement prefix iterator that works
 /// with changes not yet committed to the DB.
@@ -80,7 +80,7 @@ where
 }
 
 /// Common trait for [`WlStorage`] and [`TempWlStorage`], used to implement
-/// storage_api traits.
+/// namada_storage traits.
 pub trait WriteLogAndStorage {
     /// DB type
     type D: DB + for<'iter> DBIter<'iter>;
@@ -102,10 +102,7 @@ pub trait WriteLogAndStorage {
     fn split_borrow(&mut self) -> (&mut WriteLog, &Storage<Self::D, Self::H>);
 
     /// Write the provided tx hash to storage.
-    fn write_tx_hash(
-        &mut self,
-        hash: Hash,
-    ) -> crate::ledger::storage::write_log::Result<()>;
+    fn write_tx_hash(&mut self, hash: Hash) -> write_log::Result<()>;
 }
 
 impl<D, H> WriteLogAndStorage for WlStorage<D, H>
@@ -132,10 +129,7 @@ where
         (&mut self.write_log, &self.storage)
     }
 
-    fn write_tx_hash(
-        &mut self,
-        hash: Hash,
-    ) -> crate::ledger::storage::write_log::Result<()> {
+    fn write_tx_hash(&mut self, hash: Hash) -> write_log::Result<()> {
         self.write_log.write_tx_hash(hash)
     }
 }
@@ -164,10 +158,7 @@ where
         (&mut self.write_log, (self.storage))
     }
 
-    fn write_tx_hash(
-        &mut self,
-        hash: Hash,
-    ) -> crate::ledger::storage::write_log::Result<()> {
+    fn write_tx_hash(&mut self, hash: Hash) -> write_log::Result<()> {
         self.write_log.write_tx_hash(hash)
     }
 }
@@ -197,7 +188,7 @@ where
 
     /// Commit the current block's write log to the storage and commit the block
     /// to DB. Starts a new block write log.
-    pub fn commit_block(&mut self) -> storage_api::Result<()> {
+    pub fn commit_block(&mut self) -> namada_storage::Result<()> {
         if self.storage.last_epoch != self.storage.block.epoch {
             self.storage
                 .update_epoch_in_merkle_tree()
@@ -217,9 +208,9 @@ where
         &mut self,
         height: BlockHeight,
         time: DateTimeUtc,
-    ) -> crate::ledger::storage::Result<bool> {
-        let parameters =
-            parameters::read(self).expect("Couldn't read protocol parameters");
+    ) -> storage::Result<bool> {
+        let parameters = namada_parameters::read(self)
+            .expect("Couldn't read protocol parameters");
 
         match self.storage.update_epoch_blocks_delay.as_mut() {
             None => {
@@ -265,10 +256,7 @@ where
     }
 
     /// Delete the provided transaction's hash from storage.
-    pub fn delete_tx_hash(
-        &mut self,
-        hash: Hash,
-    ) -> crate::ledger::storage::write_log::Result<()> {
+    pub fn delete_tx_hash(&mut self, hash: Hash) -> write_log::Result<()> {
         self.write_log.delete_tx_hash(hash)
     }
 }
@@ -306,7 +294,7 @@ where
             storage_iter,
             write_log_iter,
         },
-        prefix.len() as u64 * gas::STORAGE_ACCESS_GAS_PER_BYTE,
+        prefix.len() as u64 * namada_gas::STORAGE_ACCESS_GAS_PER_BYTE,
     )
 }
 
@@ -331,7 +319,7 @@ where
             storage_iter,
             write_log_iter,
         },
-        prefix.len() as u64 * gas::STORAGE_ACCESS_GAS_PER_BYTE,
+        prefix.len() as u64 * namada_gas::STORAGE_ACCESS_GAS_PER_BYTE,
     )
 }
 
@@ -409,146 +397,157 @@ where
     }
 }
 
-impl<T, D, H> StorageRead for T
-where
-    T: WriteLogAndStorage<D = D, H = H>,
-    D: 'static + DB + for<'iter> DBIter<'iter>,
-    H: 'static + StorageHasher,
-{
-    type PrefixIter<'iter> = PrefixIter<'iter, D> where Self: 'iter;
+macro_rules! impl_storage_traits {
+    ($($type:ty)*) => {
+        impl<D, H> StorageRead for $($type)*
+        where
+            D: 'static + DB + for<'iter> DBIter<'iter>,
+            H: 'static + StorageHasher,
+        {
+            type PrefixIter<'iter> = PrefixIter<'iter, D> where Self: 'iter;
 
-    fn read_bytes(
-        &self,
-        key: &storage::Key,
-    ) -> storage_api::Result<Option<Vec<u8>>> {
-        // try to read from the write log first
-        let (log_val, _gas) = self.write_log().read(key);
-        match log_val {
-            Some(write_log::StorageModification::Write { ref value }) => {
-                Ok(Some(value.clone()))
+            fn read_bytes(
+                &self,
+                key: &storage::Key,
+            ) -> namada_storage::Result<Option<Vec<u8>>> {
+                // try to read from the write log first
+                let (log_val, _gas) = self.write_log().read(key);
+                match log_val {
+                    Some(write_log::StorageModification::Write { ref value }) => {
+                        Ok(Some(value.clone()))
+                    }
+                    Some(write_log::StorageModification::Delete) => Ok(None),
+                    Some(write_log::StorageModification::InitAccount {
+                        ref vp_code_hash,
+                    }) => Ok(Some(vp_code_hash.to_vec())),
+                    Some(write_log::StorageModification::Temp { ref value }) => {
+                        Ok(Some(value.clone()))
+                    }
+                    None => {
+                        // when not found in write log, try to read from the storage
+                        self.storage()
+                            .db
+                            .read_subspace_val(key)
+                            .into_storage_result()
+                    }
+                }
             }
-            Some(write_log::StorageModification::Delete) => Ok(None),
-            Some(write_log::StorageModification::InitAccount {
-                ref vp_code_hash,
-            }) => Ok(Some(vp_code_hash.to_vec())),
-            Some(write_log::StorageModification::Temp { ref value }) => {
-                Ok(Some(value.clone()))
+
+            fn has_key(&self, key: &storage::Key) -> namada_storage::Result<bool> {
+                // try to read from the write log first
+                let (log_val, _gas) = self.write_log().read(key);
+                match log_val {
+                    Some(&write_log::StorageModification::Write { .. })
+                    | Some(&write_log::StorageModification::InitAccount { .. })
+                    | Some(&write_log::StorageModification::Temp { .. }) => Ok(true),
+                    Some(&write_log::StorageModification::Delete) => {
+                        // the given key has been deleted
+                        Ok(false)
+                    }
+                    None => {
+                        // when not found in write log, try to check the storage
+                        Ok(self.storage().has_key(key).into_storage_result()?.0)
+                    }
+                }
             }
-            None => {
-                // when not found in write log, try to read from the storage
+
+            fn iter_prefix<'iter>(
+                &'iter self,
+                prefix: &storage::Key,
+            ) -> namada_storage::Result<Self::PrefixIter<'iter>> {
+                let (iter, _gas) =
+                    iter_prefix_post(self.write_log(), self.storage(), prefix);
+                Ok(iter)
+            }
+
+            fn iter_next<'iter>(
+                &'iter self,
+                iter: &mut Self::PrefixIter<'iter>,
+            ) -> namada_storage::Result<Option<(String, Vec<u8>)>> {
+                Ok(iter.next().map(|(key, val, _gas)| (key, val)))
+            }
+
+            fn get_chain_id(
+                &self,
+            ) -> std::result::Result<String, namada_storage::Error> {
+                Ok(self.storage().chain_id.to_string())
+            }
+
+            fn get_block_height(
+                &self,
+            ) -> std::result::Result<storage::BlockHeight, namada_storage::Error> {
+                Ok(self.storage().block.height)
+            }
+
+            fn get_block_header(
+                &self,
+                height: storage::BlockHeight,
+            ) -> std::result::Result<Option<storage::Header>, namada_storage::Error>
+            {
                 self.storage()
                     .db
-                    .read_subspace_val(key)
+                    .read_block_header(height)
                     .into_storage_result()
             }
-        }
-    }
 
-    fn has_key(&self, key: &storage::Key) -> storage_api::Result<bool> {
-        // try to read from the write log first
-        let (log_val, _gas) = self.write_log().read(key);
-        match log_val {
-            Some(&write_log::StorageModification::Write { .. })
-            | Some(&write_log::StorageModification::InitAccount { .. })
-            | Some(&write_log::StorageModification::Temp { .. }) => Ok(true),
-            Some(&write_log::StorageModification::Delete) => {
-                // the given key has been deleted
-                Ok(false)
+            fn get_block_hash(
+                &self,
+            ) -> std::result::Result<storage::BlockHash, namada_storage::Error> {
+                Ok(self.storage().block.hash.clone())
             }
-            None => {
-                // when not found in write log, try to check the storage
-                Ok(self.storage().has_key(key).into_storage_result()?.0)
+
+            fn get_block_epoch(
+                &self,
+            ) -> std::result::Result<storage::Epoch, namada_storage::Error> {
+                Ok(self.storage().block.epoch)
+            }
+
+            fn get_pred_epochs(&self) -> namada_storage::Result<Epochs> {
+                Ok(self.storage().block.pred_epochs.clone())
+            }
+
+            fn get_tx_index(
+                &self,
+            ) -> std::result::Result<storage::TxIndex, namada_storage::Error> {
+                Ok(self.storage().tx_index)
+            }
+
+            fn get_native_token(&self) -> namada_storage::Result<Address> {
+                Ok(self.storage().native_token.clone())
             }
         }
-    }
 
-    fn iter_prefix<'iter>(
-        &'iter self,
-        prefix: &storage::Key,
-    ) -> storage_api::Result<Self::PrefixIter<'iter>> {
-        let (iter, _gas) =
-            iter_prefix_post(self.write_log(), self.storage(), prefix);
-        Ok(iter)
-    }
+        impl<D, H> StorageWrite for $($type)*
+        where
+            D: DB + for<'iter> DBIter<'iter>,
+            H: StorageHasher,
+        {
+            // N.B. Calling this when testing pre- and post- reads in
+            // regards to testing native vps is incorrect.
+            fn write_bytes(
+                &mut self,
+                key: &storage::Key,
+                val: impl AsRef<[u8]>,
+            ) -> namada_storage::Result<()> {
+                let _ = self
+                    .write_log_mut()
+                    .protocol_write(key, val.as_ref().to_vec())
+                    .into_storage_result();
+                Ok(())
+            }
 
-    fn iter_next<'iter>(
-        &'iter self,
-        iter: &mut Self::PrefixIter<'iter>,
-    ) -> storage_api::Result<Option<(String, Vec<u8>)>> {
-        Ok(iter.next().map(|(key, val, _gas)| (key, val)))
-    }
-
-    fn get_chain_id(&self) -> std::result::Result<String, storage_api::Error> {
-        Ok(self.storage().chain_id.to_string())
-    }
-
-    fn get_block_height(
-        &self,
-    ) -> std::result::Result<storage::BlockHeight, storage_api::Error> {
-        Ok(self.storage().block.height)
-    }
-
-    fn get_block_header(
-        &self,
-        height: storage::BlockHeight,
-    ) -> std::result::Result<Option<storage::Header>, storage_api::Error> {
-        self.storage()
-            .db
-            .read_block_header(height)
-            .into_storage_result()
-    }
-
-    fn get_block_hash(
-        &self,
-    ) -> std::result::Result<storage::BlockHash, storage_api::Error> {
-        Ok(self.storage().block.hash.clone())
-    }
-
-    fn get_block_epoch(
-        &self,
-    ) -> std::result::Result<storage::Epoch, storage_api::Error> {
-        Ok(self.storage().block.epoch)
-    }
-
-    fn get_tx_index(
-        &self,
-    ) -> std::result::Result<storage::TxIndex, storage_api::Error> {
-        Ok(self.storage().tx_index)
-    }
-
-    fn get_native_token(&self) -> storage_api::Result<Address> {
-        Ok(self.storage().native_token.clone())
-    }
+            fn delete(&mut self, key: &storage::Key) -> namada_storage::Result<()> {
+                let _ = self
+                    .write_log_mut()
+                    .protocol_delete(key)
+                    .into_storage_result();
+                Ok(())
+            }
+        }
+    };
 }
-
-impl<T, D, H> StorageWrite for T
-where
-    T: WriteLogAndStorage<D = D, H = H>,
-    D: DB + for<'iter> DBIter<'iter>,
-    H: StorageHasher,
-{
-    // N.B. Calling this when testing pre- and post- reads in
-    // regards to testing native vps is incorrect.
-    fn write_bytes(
-        &mut self,
-        key: &storage::Key,
-        val: impl AsRef<[u8]>,
-    ) -> storage_api::Result<()> {
-        let _ = self
-            .write_log_mut()
-            .protocol_write(key, val.as_ref().to_vec())
-            .into_storage_result();
-        Ok(())
-    }
-
-    fn delete(&mut self, key: &storage::Key) -> storage_api::Result<()> {
-        let _ = self
-            .write_log_mut()
-            .protocol_delete(key)
-            .into_storage_result();
-        Ok(())
-    }
-}
+impl_storage_traits!(WlStorage<D, H>);
+impl_storage_traits!(TempWlStorage<'_, D, H>);
 
 #[cfg(test)]
 mod tests {
@@ -556,6 +555,8 @@ mod tests {
 
     use borsh::BorshDeserialize;
     use borsh_ext::BorshSerializeExt;
+    use namada_core::types::address::InternalAddress;
+    use namada_core::types::storage::DbKeySeg;
     use proptest::prelude::*;
     use proptest::test_runner::Config;
     // Use `RUST_LOG=info` (or another tracing level) and `--nocapture` to
@@ -564,8 +565,6 @@ mod tests {
 
     use super::*;
     use crate::ledger::storage::testing::TestWlStorage;
-    use crate::types::address::InternalAddress;
-    use crate::types::storage::DbKeySeg;
 
     proptest! {
         // Generate arb valid input for `test_prefix_iters_aux`
@@ -713,7 +712,7 @@ mod tests {
                 }
                 Level::TxWriteLog(WlMod::DeletePrefix) => {
                     // Find keys matching the prefix
-                    let keys = storage_api::iter_prefix_bytes(s, key)
+                    let keys = namada_storage::iter_prefix_bytes(s, key)
                         .unwrap()
                         .map(|res| {
                             let (key, _val) = res.unwrap();

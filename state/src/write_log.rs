@@ -4,28 +4,26 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use itertools::Itertools;
-use thiserror::Error;
-
-use crate::ledger;
-use crate::ledger::gas::{
-    MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE,
+use namada_core::ledger::replay_protection;
+use namada_core::types::address::{
+    Address, EstablishedAddressGen, InternalAddress,
 };
-use crate::ledger::replay_protection::{all_key, last_key};
-use crate::ledger::storage::traits::StorageHasher;
-use crate::ledger::storage::Storage;
-use crate::types::address::{Address, EstablishedAddressGen, InternalAddress};
-use crate::types::hash::Hash;
-use crate::types::ibc::IbcEvent;
-use crate::types::storage;
-use crate::types::token::{
+use namada_core::types::hash::{Hash, StorageHasher};
+use namada_core::types::ibc::IbcEvent;
+use namada_core::types::storage;
+use namada_gas::{MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE};
+use namada_trans_token::storage_key::{
     is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
 };
+use thiserror::Error;
+
+use crate::{DBIter, Storage, DB};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Storage error applying a write log: {0}")]
-    StorageError(ledger::storage::Error),
+    StorageError(crate::Error),
     #[error("Trying to update a temporary value")]
     UpdateTemporaryValue,
     #[error(
@@ -496,15 +494,13 @@ impl WriteLog {
 
     /// Commit the current block's write log to the storage. Starts a new block
     /// write log.
-    pub fn commit_block<DB, H>(
+    pub fn commit_block<D, H>(
         &mut self,
-        storage: &mut Storage<DB, H>,
-        batch: &mut DB::WriteBatch,
+        storage: &mut Storage<D, H>,
+        batch: &mut D::WriteBatch,
     ) -> Result<()>
     where
-        DB: 'static
-            + ledger::storage::DB
-            + for<'iter> ledger::storage::DBIter<'iter>,
+        D: 'static + DB + for<'iter> DBIter<'iter>,
         H: StorageHasher,
     {
         for (key, entry) in self.block_write_log.iter() {
@@ -536,7 +532,7 @@ impl WriteLog {
                         batch,
                         // Can only write tx hashes to the previous block, no
                         // further
-                        &last_key(hash),
+                        &replay_protection::last_key(hash),
                     )
                     .map_err(Error::StorageError)?,
                 ReProtStorageModification::Delete => storage
@@ -544,15 +540,21 @@ impl WriteLog {
                         batch,
                         // Can only delete tx hashes from the previous block,
                         // no further
-                        &last_key(hash),
+                        &replay_protection::last_key(hash),
                     )
                     .map_err(Error::StorageError)?,
                 ReProtStorageModification::Finalize => {
                     storage
-                        .write_replay_protection_entry(batch, &all_key(hash))
+                        .write_replay_protection_entry(
+                            batch,
+                            &replay_protection::all_key(hash),
+                        )
                         .map_err(Error::StorageError)?;
                     storage
-                        .delete_replay_protection_entry(batch, &last_key(hash))
+                        .delete_replay_protection_entry(
+                            batch,
+                            &replay_protection::last_key(hash),
+                        )
                         .map_err(Error::StorageError)?
                 }
             }
@@ -725,12 +727,12 @@ impl WriteLog {
 
 #[cfg(test)]
 mod tests {
+    use namada_core::types::hash::Hash;
+    use namada_core::types::{address, storage};
     use pretty_assertions::assert_eq;
     use proptest::prelude::*;
 
     use super::*;
-    use crate::types::hash::Hash;
-    use crate::types::{address, storage};
 
     #[test]
     fn test_crud_value() {
@@ -1104,13 +1106,13 @@ mod tests {
 /// Helpers for testing with write log.
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
+    use namada_core::types::address::testing::arb_address;
+    use namada_core::types::hash::HASH_LENGTH;
+    use namada_core::types::storage::testing::arb_key;
     use proptest::collection;
     use proptest::prelude::{any, prop_oneof, Just, Strategy};
 
     use super::*;
-    use crate::types::address::testing::arb_address;
-    use crate::types::hash::HASH_LENGTH;
-    use crate::types::storage::testing::arb_key;
 
     /// Generate an arbitrary tx write log of [`HashMap<storage::Key,
     /// StorageModification>`].

@@ -1,7 +1,7 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-
+use namada_core::types::ethereum_events::EthereumEvent;
 use namada_gas::Gas;
-use namada_tx::proto::Tx;
+use namada_tx::Tx;
 
 /// A wrapper for `crate::types::transaction::WrapperTx` to conditionally
 /// add `has_valid_pow` flag for only used in testnets.
@@ -47,32 +47,30 @@ impl TxQueue {
         self.0.get(index)
     }
 }
-}
-
-pub use tx_queue::{TxInQueue, TxQueue};
 
 /// Expired transaction kinds.
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub enum ExpiredTx {
-/// Broadcast the given Ethereum event.
-EthereumEvent(EthereumEvent),
+    /// Broadcast the given Ethereum event.
+    EthereumEvent(EthereumEvent),
 }
 
 /// Queue of expired transactions that need to be retransmitted.
 #[derive(Default, Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub struct ExpiredTxsQueue {
-inner: Vec<ExpiredTx>,
+    inner: Vec<ExpiredTx>,
 }
 
 impl ExpiredTxsQueue {
-/// Push a new transaction to the back of the queue.
-#[inline]
-pub fn push(&mut self, tx: ExpiredTx) {
-    self.inner.push(tx);
-}
+    /// Push a new transaction to the back of the queue.
+    #[inline]
+    pub fn push(&mut self, tx: ExpiredTx) {
+        self.inner.push(tx);
+    }
 
-/// Consume all the transactions in the queue.
-#[inline]
-pub fn drain(&mut self) -> impl Iterator<Item = ExpiredTx> + '_ {
-    self.inner.drain(..)
+    /// Consume all the transactions in the queue.
+    #[inline]
+    pub fn drain(&mut self) -> impl Iterator<Item = ExpiredTx> + '_ {
+        self.inner.drain(..)
+    }
 }

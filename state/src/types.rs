@@ -1,37 +1,5 @@
 //! The key and values that may be persisted in a DB.
 
-use borsh::{BorshDeserialize, BorshSerialize};
-use thiserror::Error;
-
-#[allow(missing_docs)]
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("Deserialization error: {0}")]
-    DeserializationError(std::io::Error),
-}
-
-/// Result for functions that may fail
-type Result<T> = std::result::Result<T, Error>;
-
-/// Encode a value with borsh
-pub fn encode<T>(value: &T) -> Vec<u8>
-where
-    T: BorshSerialize,
-{
-    let size = std::mem::size_of::<T>();
-    let mut result = Vec::with_capacity(size);
-    value.serialize(&mut result).expect("serialization failed");
-    result
-}
-
-/// Decode a value with borsh
-pub fn decode<T>(bytes: impl AsRef<[u8]>) -> Result<T>
-where
-    T: BorshDeserialize,
-{
-    T::try_from_slice(bytes.as_ref()).map_err(Error::DeserializationError)
-}
-
 /// A key-value pair as raw bytes
 pub type KVBytes = (Box<[u8]>, Box<[u8]>);
 

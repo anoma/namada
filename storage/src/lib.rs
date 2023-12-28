@@ -87,9 +87,6 @@ pub trait StorageRead {
     /// current transaction is being applied.
     fn get_block_epoch(&self) -> Result<Epoch>;
 
-    /// Get the height of the first block of the current epoch.
-    fn get_current_epoch_start_height(&self) -> Result<BlockHeight>;
-
     /// Given the information about predecessor block epochs
     fn get_pred_epochs(&self) -> Result<Epochs>;
 
@@ -98,6 +95,16 @@ pub trait StorageRead {
 
     /// Get the native token address
     fn get_native_token(&self) -> Result<Address>;
+
+    /// Get the height of the first block of the current epoch.
+    fn get_current_epoch_start_height(&self) -> Result<BlockHeight> {
+        Ok(self
+            .get_pred_epochs()?
+            .first_block_heights()
+            .last()
+            .copied()
+            .expect("The block height of the current epoch should be known"))
+    }
 
     /// Get the height of the first block of the given epoch.
     fn get_epoch_start_height(
