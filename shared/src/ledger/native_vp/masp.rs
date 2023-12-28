@@ -60,11 +60,15 @@ fn asset_type_from_epoched_address(
     epoch: Epoch,
     token: &Address,
     denom: token::MaspDenom,
-) -> AssetType {
+) -> Result<AssetType> {
     // Timestamp the chosen token with the current epoch
     let token_bytes = (token, denom, epoch.0).serialize_to_vec();
     // Generate the unique asset identifier from the unique token address
-    AssetType::new(token_bytes.as_ref()).expect("unable to create asset type")
+    AssetType::new(token_bytes.as_ref()).map_err(|()| {
+        Error::NativeVpError(native_vp::Error::SimpleMessage(
+            "Unable to create asset type",
+        ))
+    })
 }
 
 /// Checks if the reported transparent amount and the unshielded
@@ -91,12 +95,16 @@ fn convert_amount(
     token: &Address,
     val: token::Amount,
     denom: token::MaspDenom,
-) -> I128Sum {
-    let asset_type = asset_type_from_epoched_address(epoch, token, denom);
+) -> Result<I128Sum> {
+    let asset_type = asset_type_from_epoched_address(epoch, token, denom)?;
     // Combine the value and unit into one amount
 
     I128Sum::from_nonnegative(asset_type, denom.denominate(&val) as i128)
-        .expect("invalid value or asset type for amount")
+            .map_err(|()| {
+            Error::NativeVpError(native_vp::Error::SimpleMessage(
+                "Invalid value for amount",
+            ))
+        })
 }
 
 impl<'a, DB, H, CA> MaspVp<'a, DB, H, CA>
@@ -406,7 +414,7 @@ where
                     &transfer.token,
                     transfer_amount,
                     denom,
-                );
+                )?;
 
                 // Non-masp sources add to transparent tx pool
                 transparent_tx_pool += transp_amt;
@@ -518,7 +526,7 @@ where
                     &transfer.token,
                     transfer_amount,
                     denom,
-                );
+                )?;
 
                 // Non-masp destinations subtract from transparent tx pool
                 transparent_tx_pool -= transp_amt;
