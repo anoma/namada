@@ -968,7 +968,7 @@ where
         &args.source.effective_address(),
     )
     .await?;
-    let (mut tx, signing_data) = args.build(namada).await?;
+    let (mut tx, signing_data, _) = args.build(namada).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
@@ -977,6 +977,8 @@ where
 
         namada.submit(tx, &args.tx).await?;
     }
+    // NOTE that the tx could fail when its submission epoch doesn't match
+    // construction epoch
 
     Ok(())
 }

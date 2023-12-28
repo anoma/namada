@@ -397,7 +397,8 @@ impl TxIbcTransfer {
     pub async fn build(
         &self,
         context: &impl Namada,
-    ) -> crate::error::Result<(crate::proto::Tx, SigningTxData)> {
+    ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
+    {
         tx::build_ibc_transfer(context, self).await
     }
 }
