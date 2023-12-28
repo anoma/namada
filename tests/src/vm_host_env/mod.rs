@@ -895,7 +895,7 @@ mod tests {
             .add_serialized_data(tx_data.clone())
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
-        // open the channle with the message
+        // open the channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
             .expect("opening the channel failed");

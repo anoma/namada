@@ -1,4 +1,4 @@
-//! Test utilies for the Ethereum bridge crate.
+//! Test utilities for the Ethereum bridge crate.
 
 use std::collections::HashMap;
 use std::num::NonZeroU64;

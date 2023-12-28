@@ -1287,7 +1287,7 @@ pub struct EthEventsQueue {
 /// __INVARIANT:__ At any given moment, the queue holds the nonce `N`
 /// of the next confirmed event to be processed by the ledger, and any
 /// number of events that have been confirmed with a nonce greater than
-/// or equal to `N`. Events in the queue must be returned in asceding
+/// or equal to `N`. Events in the queue must be returned in ascending
 /// order of their nonce.
 #[derive(Debug, BorshSerialize, BorshDeserialize)]
 pub struct InnerEthEventsQueue<E> {
@@ -1446,7 +1446,7 @@ mod tests {
         /// because they are reserved for `Address` or a validity predicate.
         #[test]
         fn test_key_parse(s in "[^#?/][^/]*/[^#?/][^/]*/[^#?/][^/]*") {
-            let key = Key::parse(s.clone()).expect("cannnot parse the string");
+            let key = Key::parse(s.clone()).expect("cannot parse the string");
             assert_eq!(key.to_string(), s);
         }
 
@@ -1457,7 +1457,7 @@ mod tests {
         #[test]
         fn test_key_push(s in "[^#?/][^/]*") {
             let addr = address::testing::established_address_1();
-            let key = Key::from(addr.to_db_key()).push(&s).expect("cannnot push the segment");
+            let key = Key::from(addr.to_db_key()).push(&s).expect("cannot push the segment");
             assert_eq!(key.segments[1].raw(), s);
         }
 
@@ -1618,19 +1618,19 @@ mod tests {
         let target = KeySeg::raw(&other);
         let key = Key::from(addr.to_db_key())
             .push(&target)
-            .expect("cannnot push the segment");
+            .expect("cannot push the segment");
         assert_eq!(key.segments[1].raw(), target);
 
         let target = "?test".to_owned();
         let key = Key::from(addr.to_db_key())
             .push(&target)
-            .expect("cannnot push the segment");
+            .expect("cannot push the segment");
         assert_eq!(key.segments[1].raw(), target);
 
         let target = "?".to_owned();
         let key = Key::from(addr.to_db_key())
             .push(&target)
-            .expect("cannnot push the segment");
+            .expect("cannot push the segment");
         assert_eq!(key.segments[1].raw(), target);
     }
 

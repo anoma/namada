@@ -34,7 +34,7 @@ impl ProposalEvent {
         }
     }
 
-    /// Create a new proposal event for pgf continous funding
+    /// Create a new proposal event for pgf continuous funding
     pub fn pgf_funding_payment(
         target: Address,
         amount: token::Amount,

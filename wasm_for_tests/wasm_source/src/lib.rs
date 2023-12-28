@@ -9,7 +9,7 @@ pub mod main {
     }
 }
 
-/// A tx that fails everytime.
+/// A tx that fails every time.
 #[cfg(feature = "tx_fail")]
 pub mod main {
     use namada_tx_prelude::*;

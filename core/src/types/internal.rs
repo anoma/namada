@@ -91,7 +91,7 @@ mod tx_queue {
         }
 
         /// Get reference to the element at the given index.
-        /// Returns [`None`] if index exceeds the queue lenght.
+        /// Returns [`None`] if index exceeds the queue length.
         pub fn get(&self, index: usize) -> Option<&TxInQueue> {
             self.0.get(index)
         }

@@ -242,7 +242,7 @@ impl<C: RpcClient> Oracle<C> {
         true
     }
 
-    /// Check if a new config has been sent from teh Shell.
+    /// Check if a new config has been sent from the Shell.
     fn update_config(&mut self) -> Option<Config> {
         match self.control.try_recv() {
             Ok(Command::UpdateConfig(config)) => Some(config),
@@ -1169,7 +1169,7 @@ mod test_oracle {
         controller
             .apply_cmd(TestCmd::NewHeight(Uint256::from(synced_block_height)));
 
-        // check that the oracle still checks the blocks inbetween
+        // check that the oracle still checks the blocks in between
         for height in (confirmed_block_height + 1)
             ..(confirmed_block_height + difference + 1)
         {

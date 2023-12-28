@@ -14,7 +14,7 @@ struct Keys {
     /// Sub-key for storing the initial Ethereum block height when
     /// events will first be extracted from.
     eth_start_height: &'static str,
-    /// Sub-key for storing the acitve / inactive status of the Ethereum
+    /// Sub-key for storing the active / inactive status of the Ethereum
     /// bridge.
     active_status: &'static str,
     /// Sub-key for storing the minimum confirmations parameter

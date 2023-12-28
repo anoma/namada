@@ -227,23 +227,23 @@ where
 {
     let key = governance_keys::get_max_proposal_code_size_key();
     let max_proposal_code_size: u64 =
-        storage.read(&key)?.expect("Parameter should be definied.");
+        storage.read(&key)?.expect("Parameter should be defined.");
 
     let key = governance_keys::get_max_proposal_content_key();
     let max_proposal_content_size: u64 =
-        storage.read(&key)?.expect("Parameter should be definied.");
+        storage.read(&key)?.expect("Parameter should be defined.");
 
     let key = governance_keys::get_min_proposal_fund_key();
     let min_proposal_fund: token::Amount =
-        storage.read(&key)?.expect("Parameter should be definied.");
+        storage.read(&key)?.expect("Parameter should be defined.");
 
     let key = governance_keys::get_min_proposal_grace_epoch_key();
     let min_proposal_grace_epochs: u64 =
-        storage.read(&key)?.expect("Parameter should be definied.");
+        storage.read(&key)?.expect("Parameter should be defined.");
 
     let key = governance_keys::get_min_proposal_voting_period_key();
     let min_proposal_voting_period: u64 =
-        storage.read(&key)?.expect("Parameter should be definied.");
+        storage.read(&key)?.expect("Parameter should be defined.");
 
     let max_proposal_period: u64 = get_max_proposal_period(storage)?;
 

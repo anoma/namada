@@ -1229,7 +1229,7 @@ where
                     {
                         response.code = ErrorCodes::InvalidVoteExtension.into();
                         response.log = format!(
-                            "{INVALID_MSG}: Invalid Brige pool roots vote \
+                            "{INVALID_MSG}: Invalid Bridge pool roots vote \
                              extension: {err}",
                         );
                     } else {
@@ -1564,7 +1564,7 @@ where
                     ValidatorSetUpdate::Deactivated(consensus_key) => {
                         // Any validators that have been dropped from the
                         // consensus set must have voting power set to 0 to
-                        // remove them from the conensus set
+                        // remove them from the consensus set
                         let power = 0_i64;
                         (consensus_key, power)
                     }
@@ -1926,7 +1926,7 @@ mod test_utils {
 
     /// Config parameters to set up a test shell.
     pub struct SetupCfg<H> {
-        /// The last comitted block height.
+        /// The last committed block height.
         pub last_height: H,
         /// The number of validators to configure
         // in `InitChain`.

@@ -484,7 +484,7 @@ impl DB for MockDB {
         key: &Key,
         value: impl AsRef<[u8]>,
     ) -> Result<i64> {
-        // batch_write are directry committed
+        // batch_write are directly committed
         self.batch_write_subspace_val(&mut MockDBWriteBatch, height, key, value)
     }
 
@@ -493,7 +493,7 @@ impl DB for MockDB {
         height: BlockHeight,
         key: &Key,
     ) -> Result<i64> {
-        // batch_delete are directry committed
+        // batch_delete are directly committed
         self.batch_delete_subspace_val(&mut MockDBWriteBatch, height, key)
     }
 

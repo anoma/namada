@@ -15,7 +15,7 @@ router! {PGF,
     ( "parameters" ) -> PgfParameters = parameters,
 }
 
-/// Query the currect pgf steward set
+/// Query the current pgf steward set
 fn stewards<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
 ) -> storage_api::Result<Vec<StewardDetail>>
@@ -38,7 +38,7 @@ where
     storage_api::pgf::is_steward(ctx.wl_storage, &address)
 }
 
-/// Query the continous pgf fundings
+/// Query the continuous pgf fundings
 fn funding<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
 ) -> storage_api::Result<Vec<StoragePgfFunding>>

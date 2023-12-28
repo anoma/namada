@@ -38,7 +38,7 @@ pub enum ProposalValidation {
          epoch must be at most {1}, but found {0}"
     )]
     InvalidProposalPeriod(u64, u64),
-    /// The proposal author does not have enought balance to pay for proposal
+    /// The proposal author does not have enough balance to pay for proposal
     /// fees
     #[error(
         "Invalid proposal minimum funds: the author address has {0} but \
@@ -244,7 +244,7 @@ pub fn is_valid_pgf_stewards_data(
 pub fn is_valid_pgf_funding_data(
     data: &PgfFunding,
 ) -> Result<(), ProposalValidation> {
-    if !data.continous.is_empty() || !data.retro.is_empty() {
+    if !data.continuous.is_empty() || !data.retro.is_empty() {
         Ok(())
     } else {
         Err(ProposalValidation::InvalidPgfFundingExtraData)

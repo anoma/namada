@@ -107,7 +107,7 @@ impl WalletIo for CliWalletUtils {
 
     // The given alias has been selected but conflicts with another alias in
     // the store. Offer the user to either replace existing mapping, alter the
-    // chosen alias to a name of their chosing, or cancel the aliasing.
+    // chosen alias to a name of their choosing, or cancel the aliasing.
     fn show_overwrite_confirmation(
         alias: &Alias,
         alias_for: &str,
@@ -187,7 +187,7 @@ pub fn read_and_confirm_passphrase_tty(
 /// Generate keypair
 /// for signing protocol txs and for the DKG (which will also be stored)
 /// A protocol keypair may be optionally provided, indicating that
-/// we should re-use a keypair already in the wallet
+/// we should reuse a keypair already in the wallet
 pub fn gen_validator_keys<U: WalletIo>(
     wallet: &mut Wallet<U>,
     eth_bridge_pk: Option<common::PublicKey>,

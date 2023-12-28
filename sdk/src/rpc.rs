@@ -452,7 +452,7 @@ impl<'a> From<TxEventQuery<'a>> for Query {
 }
 
 /// Call the corresponding `tx_event_query` RPC method, to fetch
-/// the current status of a transation.
+/// the current status of a transaction.
 pub async fn query_tx_events<C: crate::queries::Client + Sync>(
     client: &C,
     tx_event_query: TxEventQuery<'_>,
@@ -1115,7 +1115,7 @@ pub async fn wait_until_node_is_synched(
     .map_err(|_| {
         edisplay_line!(
             io,
-            "Node is still catching up, wait for it to finish synching."
+            "Node is still catching up, wait for it to finish syncing."
         );
         Error::Query(QueryError::CatchingUp)
     })?

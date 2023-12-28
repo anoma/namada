@@ -1059,7 +1059,7 @@ pub enum DynEpochOffset {
     /// Offset at slash processing delay (unbonding +
     /// cubic_slashing_window + 1).
     SlashProcessingLen,
-    /// Offset at slash processing delay plus the defaul num past epochs
+    /// Offset at slash processing delay plus the default num past epochs
     SlashProcessingLenPlus,
     /// Offset at the max proposal period
     MaxProposalPeriod,

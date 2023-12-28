@@ -502,7 +502,7 @@ pub async fn save_initialized_accounts<N: Namada>(
     }
 }
 
-/// Submit validator comission rate change
+/// Submit validator commission rate change
 pub async fn build_validator_commission_change(
     context: &impl Namada,
     args::CommissionRateChange {
@@ -2812,7 +2812,7 @@ async fn check_balance_too_low_err<N: Namada>(
             }
         }
         // We're either facing a no response or a conversion error
-        // either way propigate it up
+        // either way propagate it up
         Err(err) => Err(err),
     }
 }

@@ -105,7 +105,7 @@ pub async fn with_hardware_wallet<'a, U: WalletIo + Clone>(
             })?;
     if response_pubkey != pubkey {
         return Err(error::Error::Other(format!(
-            "Unrecognized public key fetched fom Ledger: {}. Expected {}.",
+            "Unrecognized public key fetched from Ledger: {}. Expected {}.",
             response_pubkey, pubkey,
         )));
     }

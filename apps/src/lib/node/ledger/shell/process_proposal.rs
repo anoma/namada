@@ -549,7 +549,7 @@ where
                             TxResult {
                                 code: ErrorCodes::Ok.into(),
                                 info: "Process Proposal accepted this \
-                                       tranasction"
+                                       transaction"
                                     .into(),
                             }
                         }

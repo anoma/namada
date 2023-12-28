@@ -1473,7 +1473,7 @@ fn check_balances_after_non_ibc(
     client.exp_string(&expected)?;
     client.assert_success();
 
-    // Check the traget
+    // Check the target
     let query_args =
         vec!["balance", "--owner", ALBERT, "--token", NAM, "--node", &rpc];
     let expected = format!("{}/nam: 50000", trace_path);

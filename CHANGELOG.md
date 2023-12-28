@@ -130,7 +130,7 @@ Namada 0.27.0 is a minor release that incorporates the remaining essential proof
   can execute transactions that manipulate its own validator data
   ([\#2169](https://github.com/anoma/namada/pull/2169))
 - Various improvements to the PoS code, including adding a panic on a slashing
-  failure, some more checked arithmetics, aesthetic code cleanup, and fixing a
+  failure, some more checked arithmetic, aesthetic code cleanup, and fixing a
   bug in is_delegator. ([\#2178](https://github.com/anoma/namada/pull/2178))
 - Added type tags to transactions to enable hardware wallets
   to fully decode transactions even after minor Namada updates.
@@ -279,7 +279,7 @@ Namada 0.24.0 is a minor release that introduces an SDK crate, PoS redelegation,
   data in storage. ([\#1944](https://github.com/anoma/namada/pull/1944))
 - Query also IBC token balances
   ([\#1946](https://github.com/anoma/namada/issues/1946))
-- Increased resoultion of gas accounting for signature verification.
+- Increased resolution of gas accounting for signature verification.
   ([\#1954](https://github.com/anoma/namada/pull/1954))
 - Refactor benchmarks to avoid enabling `"testing`" and `"dev"`` features by 
   default in the workspace.
@@ -582,7 +582,7 @@ stability.
   show more info. ([\#1656](https://github.com/anoma/namada/pull/1656))
 - Removed associated type on `masp::ShieldedUtils`. This type was an
   attempt to reduce the number of generic parameters needed when interacting
-  with MASP but resulted in making code re-use extremely difficult.
+  with MASP but resulted in making code reuse extremely difficult.
   ([\#1670](https://github.com/anoma/namada/pull/1670))
 - Removed `impl From<u64> for EthBridgeVotingPower` and replaced it with a
   `TryFrom`. ([\#1692](https://github.com/anoma/namada/pull/1692))
@@ -597,7 +597,7 @@ stability.
   ETH bridge. ([\#1693](https://github.com/anoma/namada/pull/1693))
 - PoS: Keep the data for last two epochs by default.
   ([\#1733](https://github.com/anoma/namada/pull/1733))
-- Refactored CLI into libraries for future re-use in integration tests and
+- Refactored CLI into libraries for future reuse in integration tests and
   to enable generic IO. ([\#1738](https://github.com/anoma/namada/pull/1738))
 
 ### TESTING
@@ -757,7 +757,7 @@ Namada 0.17.2 is a minor release featuring improvements to the client stability.
   ([\#1512](https://github.com/anoma/namada/pull/1512))
 - Improve help message for address add command
   ([\#1514](https://github.com/anoma/namada/issues/1514))
-- PoS: make a re-usable bonds and unbonds details query.
+- PoS: make a reusable bonds and unbonds details query.
   ([\#1518](https://github.com/anoma/namada/pull/1518))
 
 ## v0.17.1
@@ -809,7 +809,7 @@ wallet address derivation, transaction structure and the ledger stability.
   ([\#1425](https://github.com/anoma/namada/issues/1425))
 - Added some missing cli option for cli wallet
   ([#1432](https://github.com/anoma/namada/pull/1432))
-- Improve logging error when submiting an invalid validator commission change tx
+- Improve logging error when submitting an invalid validator commission change tx
   ([#1434](https://github.com/anoma/namada/pull/1434))
 - Correct a typo in the error change commission error handling
   ([#1435](https://github.com/anoma/namada/pull/1435))
@@ -854,7 +854,7 @@ proposal.
 
 ### IMPROVEMENTS
 
-- Make Tendermint consensus paramenters configurable via Namada configuration.
+- Make Tendermint consensus parameters configurable via Namada configuration.
   ([#1399](https://github.com/anoma/namada/pull/1399))
 - Improved error logs in `process_proposal` and added more info to
   `InternalStats` ([#1407](https://github.com/anoma/namada/pull/1407))
@@ -1379,7 +1379,7 @@ integrations.
 
 ### BUG FIXES
 
-- Fix compatiblity of IBC Acknowledgement message and FungibleTokenData with
+- Fix compatibility of IBC Acknowledgement message and FungibleTokenData with
   ibc-go ([#261](https://github.com/anoma/namada/pull/261))
 - Fix the block header merkle root hash for response to finalizing block.
   ([#298](https://github.com/anoma/namada/pull/298))
@@ -1478,7 +1478,7 @@ Namada 0.8.0 is a regular minor release.
   ([#324](https://github.com/anoma/namada/pull/324))
 - Added a StorageWrite trait for a common interface for transactions and direct
   storage access for protocol ([#331](https://github.com/anoma/namada/pull/331))
-- Re-use encoding/decoding storage write/read and handle any errors
+- Reuse encoding/decoding storage write/read and handle any errors
   ([#334](https://github.com/anoma/namada/pull/334))
 - Added a simpler prefix iterator API that returns `std::iter::Iterator` with
   the storage keys parsed and a variant that also decodes stored values with
@@ -1486,12 +1486,12 @@ Namada 0.8.0 is a regular minor release.
 - Handles the case where a custom `$CARGO_TARGET_DIR` is set during WASM build
   ([#337](https://github.com/anoma/anoma/pull/337))
 - Added `pre/post` methods into `trait VpEnv` that return objects implementing
-  `trait StorageRead` for re-use of library code written on top of `StorageRead`
+  `trait StorageRead` for reuse of library code written on top of `StorageRead`
   inside validity predicates. ([#380](https://github.com/anoma/namada/pull/380))
 - Fix order of prefix iterator to be sorted by storage
   keys and add support for a reverse order prefix iterator.
   ([#409](https://github.com/anoma/namada/issues/409))
-- Re-use `storage_api::Error` type that supports wrapping custom error in `VpEnv` and `TxEnv` traits.
+- Reuse `storage_api::Error` type that supports wrapping custom error in `VpEnv` and `TxEnv` traits.
   ([#465](https://github.com/anoma/namada/pull/465))
 - Fixed governance parameters, tally, tx whitelist and renamed treasury
   ([#467](https://github.com/anoma/namada/issues/467))
@@ -1503,7 +1503,7 @@ Namada 0.8.0 is a regular minor release.
 - Added WASM transaction and validity predicate `Ctx` with methods for host
   environment functions to unify the interface of native VPs and WASM VPs under
   `trait VpEnv` ([#1093](https://github.com/anoma/anoma/pull/1093))
-- Allows simple retrival of aliases from addresses in the wallet without
+- Allows simple retrieval of aliases from addresses in the wallet without
   the need for multiple hashmaps. This is the first step to improving the
   UI if one wants to show aliases when fetching addresses from anoma wallet
   ([#1138](https://github.com/anoma/anoma/pull/1138))
@@ -1760,7 +1760,7 @@ Anoma 0.5.0 is a scheduled minor release.
 - Dependency: Backport libp2p-noise patch that fixes a compilation
   issue from <https://github.com/libp2p/rust-libp2p/pull/2264>
   ([#908](https://github.com/anoma/anoma/issues/908))
-- Wasm: Re-add accidentaly removed `tx_ibc` WASM and `vm_env::ibc` module
+- Wasm: Re-add accidentally removed `tx_ibc` WASM and `vm_env::ibc` module
   ([#916](https://github.com/anoma/anoma/pull/916))
 - Ledger & Matchmaker: In "dev" chain with "dev" build, load WASM directly from
   the root `wasm` directory. ([#933](https://github.com/anoma/anoma/issues/933))
@@ -1900,7 +1900,7 @@ Anoma 0.4.0 is a scheduled minor release, released 31 January 2022.
   command. The command now doesn't unpack the network config archive into its
   default directories, if any of them are specified with non-default values.
   ([#813](https://github.com/anoma/anoma/issues/813))
-- Install the default token exchange matchmaker implemenetation into
+- Install the default token exchange matchmaker implementation into
   `~/.cargo/lib` directory when building from source. When not absolute, the
   matchmaker will attempt to load the matchmaker from the same path as where the
   binary is being ran from, from `~/.cargo/lib` or the current working 

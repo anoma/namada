@@ -266,7 +266,7 @@ impl From<&PendingTransfer> for Key {
     }
 }
 
-/// The amount of fees to be payed, in Namada, to the relayer
+/// The amount of fees to be paid, in Namada, to the relayer
 /// of a transfer across the Ethereum Bridge, compensating
 /// for Ethereum gas costs.
 #[derive(

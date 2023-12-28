@@ -2,7 +2,7 @@
 
 set -Eo pipefail
 
-# an examplary download-url
+# an example download-url
 # https://github.com/tendermint/tendermint/releases/download/v0.34.13/tendermint_0.34.13_linux_amd64.tar.gz
 # https://github.com/heliaxdev/tendermint/releases/download/v0.1.1-abcipp/tendermint_0.1.0-abcipp_darwin_amd64.tar.gz
 TM_MAJORMINOR="0.1"

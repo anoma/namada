@@ -416,7 +416,7 @@ mod tests {
             proptest_reject_tx_on_bin_cap_reached(max)
         }
 
-        /// Check if the initial bin capcity of the [`BlockAllocator`]
+        /// Check if the initial bin capacity of the [`BlockAllocator`]
         /// is correct.
         #[test]
         fn test_initial_bin_capacity(max in prop::num::u64::ANY) {

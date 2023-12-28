@@ -140,7 +140,7 @@ fn rolling_freq() -> RollingFreq {
             "daily" => RollingFreq::Daily,
             _ => {
                 panic!(
-                    "Unrecognized option set for {ROLLING_ENV_KEY}. Expecing \
+                    "Unrecognized option set for {ROLLING_ENV_KEY}. Expecting \
                      one of: never, minutely, hourly, daily. Default is never."
                 );
             }

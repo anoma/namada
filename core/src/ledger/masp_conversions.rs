@@ -464,7 +464,7 @@ where
     // overwritten before the creation of the next commitment tree
     for addr in masp_reward_keys {
         for denom in token::MaspDenom::iter() {
-            // Add the decoding entry for the new asset type. An uncommited
+            // Add the decoding entry for the new asset type. An uncommitted
             // node position is used since this is not a conversion.
             let new_asset = encode_asset_type(
                 addr.clone(),

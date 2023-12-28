@@ -176,7 +176,7 @@ pub mod wrapper_tx {
         Deserialize,
     )]
     pub struct WrapperTx {
-        /// The fee to be payed for including the tx
+        /// The fee to be paid for including the tx
         pub fee: Fee,
         /// Used for signature verification and to determine an implicit
         /// account of the fee payer

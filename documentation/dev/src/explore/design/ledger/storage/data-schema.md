@@ -27,7 +27,7 @@ schema may be almost free.
 
 A single address in the ledger is define with all schema. A specific schema can
 be looked up with a key in its subspace. The schema variable is not yet
-implemented and the definition might change to something more appropiate.
+implemented and the definition might change to something more appropriate.
 
 ## Schema derived library code
 

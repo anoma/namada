@@ -138,7 +138,7 @@ pub struct Enriched<T> {
     pub unbonds_total: token::Amount,
     /// Sum of the unbond slashed amounts
     pub unbonds_total_slashed: token::Amount,
-    /// Sum ofthe withdrawable amounts
+    /// Sum of the withdrawable amounts
     pub total_withdrawable: token::Amount,
 }
 

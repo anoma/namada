@@ -1567,7 +1567,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         // Determine epoch in which to submit potential shielded transaction
         let epoch = rpc::query_epoch(context.client()).await?;
         // Context required for storing which notes are in the source's
-        // possesion
+        // possession
         let memo = MemoBytes::empty();
 
         // Try to get a seed from env var, if any.

@@ -170,7 +170,7 @@ test-integration-save-proofs:
 	TEST_FILTER=masp \
 	make test-integration-slow
 
-# Run integration tests without specifiying any pre-built MASP proofs option
+# Run integration tests without specifying any pre-built MASP proofs option
 test-integration-slow:
 	RUST_BACKTRACE=$(RUST_BACKTRACE) \
 	$(cargo) +$(nightly) test integration::$(TEST_FILTER)  --features integration \
@@ -230,7 +230,7 @@ test-benches:
 	$(cargo) +$(nightly) test --package namada_benchmarks --benches
 
 # Run PoS state machine tests with shrinking disabled by default (can be 
-# overriden with `PROPTEST_MAX_SHRINK_ITERS`)
+# overridden with `PROPTEST_MAX_SHRINK_ITERS`)
 test-pos-sm:
 	cd proof_of_stake && \
 		RUST_BACKTRACE=1 \

@@ -1430,7 +1430,7 @@ impl Tx {
         let mut filtered = Vec::new();
         for i in (0..self.sections.len()).rev() {
             if let Section::MaspBuilder(_) = self.sections[i] {
-                // MASP Builders containin extended full viewing keys amongst
+                // MASP Builders containing extended full viewing keys amongst
                 // other private information and must be removed prior to
                 // submission to protocol
                 filtered.push(self.sections.remove(i));

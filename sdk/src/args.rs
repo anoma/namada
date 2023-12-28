@@ -1862,7 +1862,7 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// Whether to force overwrite the above alias, if it is provided, in the
     /// wallet.
     pub wallet_alias_force: bool,
-    /// The amount being payed (for gas unit) to include the transaction
+    /// The amount being paid (for gas unit) to include the transaction
     pub fee_amount: Option<InputAmount>,
     /// The fee payer signing key
     pub wrapper_fee_payer: Option<C::PublicKey>,
@@ -1956,7 +1956,7 @@ pub trait TxBuilder<C: NamadaTypes>: Sized {
             ..x
         })
     }
-    /// The amount being payed (for gas unit) to include the transaction
+    /// The amount being paid (for gas unit) to include the transaction
     fn fee_amount(self, fee_amount: InputAmount) -> Self {
         self.tx(|x| Tx {
             fee_amount: Some(fee_amount),

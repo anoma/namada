@@ -134,7 +134,7 @@ mod dev {
             .into_owned()
     }
 
-    /// Get an unecrypted keypair from the pre-genesis wallet.
+    /// Get an unencrypted keypair from the pre-genesis wallet.
     pub fn get_unencrypted_keypair(name: &str) -> common::SecretKey {
         let sk = match PREGENESIS_WALLET.get_secret_keys().get(name).unwrap().0
         {

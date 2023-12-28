@@ -24,7 +24,7 @@ pub enum Error {
     /// Errors that are caused by trying to retrieve a pinned transaction
     #[error("Error in retrieving pinned balance: {0}")]
     Pinned(#[from] PinnedBalanceError),
-    /// Key Retrival Errors
+    /// Key Retrieval Errors
     #[error("Key Error: {0}")]
     KeyRetrival(#[from] storage::Error),
     /// Transaction Errors
@@ -139,7 +139,7 @@ pub enum TxError {
     /// Error during broadcasting a transaction
     #[error("Encountered error while broadcasting transaction: {0}")]
     TxBroadcast(RpcError),
-    /// Invalid comission rate set
+    /// Invalid commission rate set
     #[error("Invalid new commission rate, received {0}")]
     InvalidCommissionRate(Dec),
     /// Invalid validator address

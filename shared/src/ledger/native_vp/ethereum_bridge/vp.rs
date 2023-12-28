@@ -69,7 +69,7 @@ where
         // The amount escrowed should increase.
         if escrow_pre < escrow_post {
             // NB: normally, we only escrow NAM under the Ethereum bridge
-            // addresss in the context of a Bridge pool transfer
+            // address in the context of a Bridge pool transfer
             Ok(verifiers.contains(&storage::bridge_pool::BRIDGE_POOL_ADDRESS))
         } else {
             tracing::info!(
@@ -122,7 +122,7 @@ where
 
 /// Checks if `keys_changed` represents a valid set of changed keys.
 ///
-/// This implies cheking if two distinct keys were changed:
+/// This implies checking if two distinct keys were changed:
 ///
 /// 1. The Ethereum bridge escrow account's NAM balance key.
 /// 2. Another account's NAM balance key.

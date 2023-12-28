@@ -1,4 +1,4 @@
 /// Pgf storage keys
 pub mod keys;
-/// Pgf steward strutures
+/// Pgf steward structures
 pub mod steward;

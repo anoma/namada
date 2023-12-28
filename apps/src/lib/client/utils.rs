@@ -1166,5 +1166,5 @@ fn safe_exit(code: i32) -> ! {
 
 #[cfg(test)]
 fn safe_exit(code: i32) -> ! {
-    panic!("Process exited unsuccesfully with error code: {}", code);
+    panic!("Process exited unsuccessfully with error code: {}", code);
 }

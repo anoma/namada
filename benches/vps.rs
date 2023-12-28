@@ -273,7 +273,7 @@ fn vp_implicit(c: &mut Criterion) {
             .unwrap();
 
         if bench_name != "reveal_pk" {
-            // Reveal publick key
+            // Reveal public key
             shell.execute_tx(&reveal_pk);
             shell.wl_storage.commit_tx();
             shell.commit();
