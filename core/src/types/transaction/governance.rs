@@ -119,9 +119,9 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
     type Error = ProposalError;
 
     fn try_from(value: PgfFundingProposal) -> Result<Self, Self::Error> {
-        let continous_fundings = value
+        let continuous_fundings = value
             .data
-            .continous
+            .continuous
             .iter()
             .cloned()
             .map(|funding| {
@@ -151,7 +151,7 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
             })
             .collect::<Vec<PGFAction>>();
 
-        let extra_data = [continous_fundings, retro_fundings].concat();
+        let extra_data = [continuous_fundings, retro_fundings].concat();
 
         Ok(InitProposalData {
             id: value.proposal.id,

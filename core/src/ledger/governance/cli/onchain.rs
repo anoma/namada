@@ -276,8 +276,8 @@ impl PgfAction {
     Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
 pub struct PgfFunding {
-    /// Pgf continous funding
-    pub continous: Vec<PgfFundingTarget>,
+    /// Pgf continuous funding
+    pub continuous: Vec<PgfFundingTarget>,
     /// pgf retro fundings
     pub retro: Vec<PgfFundingTarget>,
 }

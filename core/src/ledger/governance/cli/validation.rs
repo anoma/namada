@@ -244,7 +244,7 @@ pub fn is_valid_pgf_stewards_data(
 pub fn is_valid_pgf_funding_data(
     data: &PgfFunding,
 ) -> Result<(), ProposalValidation> {
-    if !data.continous.is_empty() || !data.retro.is_empty() {
+    if !data.continuous.is_empty() || !data.retro.is_empty() {
         Ok(())
     } else {
         Err(ProposalValidation::InvalidPgfFundingExtraData)

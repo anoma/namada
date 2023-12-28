@@ -2337,7 +2337,7 @@ fn pgf_governance_proposal() -> Result<()> {
     let christel = find_address(&test, CHRISTEL)?;
 
     let pgf_funding = PgfFunding {
-        continous: vec![PgfFundingTarget {
+        continuous: vec![PgfFundingTarget {
             amount: token::Amount::from_u64(10),
             address: bertha.clone(),
         }],
