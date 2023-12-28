@@ -705,6 +705,14 @@ async fn query_tokens(
     tokens
 }
 
+/// Query and return all tokens (both base and IBC tokens)
+async fn query_all_tokens(
+    context: &impl Namada,
+) -> BTreeMap<String, Address> {
+    // Since we want all tokens, we pass None for both base_token and owner
+    query_tokens(context, None, None).await
+}
+
 async fn get_ibc_denom_alias(
     context: &impl Namada,
     ibc_denom: impl AsRef<str>,
