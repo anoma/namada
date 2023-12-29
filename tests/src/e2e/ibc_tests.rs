@@ -1518,7 +1518,7 @@ fn check_shielded_balances(
     test_b: &Test,
 ) -> Result<()> {
     // Check the balance on Chain B
-    let rpc_b = get_actor_rpc(test_b, &Who::Validator(0));
+    let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
     // PA(B) on Chain B has received BTC on chain A
     let token_addr = find_address(test_a, BTC)?.to_string();
     let query_args = vec![
