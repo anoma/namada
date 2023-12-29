@@ -65,13 +65,6 @@ pub use crate::wallet::store::AddressVpType;
 use crate::wallet::{Wallet, WalletIo};
 use crate::{args, display_line, rpc, MaybeSend, Namada};
 
-#[cfg(feature = "std")]
-/// Env. var specifying where to store signing test vectors
-const ENV_VAR_LEDGER_LOG_PATH: &str = "NAMADA_LEDGER_LOG_PATH";
-#[cfg(feature = "std")]
-/// Env. var specifying where to store transaction debug outputs
-const ENV_VAR_TX_LOG_PATH: &str = "NAMADA_TX_LOG_PATH";
-
 /// A structure holding the signing data to craft a transaction
 #[derive(Clone)]
 pub struct SigningTxData {
@@ -886,57 +879,6 @@ pub async fn make_ledger_masp_endpoints(
             "",
         );
     }
-}
-
-/// Internal method used to generate transaction test vectors
-#[cfg(feature = "std")]
-pub async fn generate_test_vector(
-    context: &impl Namada,
-    tx: &Tx,
-) -> Result<(), Error> {
-    use std::env;
-    use std::fs::File;
-    use std::io::Write;
-
-    if let Ok(path) = env::var(ENV_VAR_LEDGER_LOG_PATH) {
-        let mut tx = tx.clone();
-        // Contract the large data blobs in the transaction
-        tx.wallet_filter();
-        // Convert the transaction to Ledger format
-        let decoding = to_ledger_vector(&*context.wallet().await, &tx).await?;
-        let output = serde_json::to_string(&decoding)
-            .map_err(|e| Error::from(EncodingError::Serde(e.to_string())))?;
-        // Record the transaction at the identified path
-        let mut f = File::options()
-            .append(true)
-            .create(true)
-            .open(path)
-            .map_err(|e| {
-                Error::Other(format!("failed to open test vector file: {}", e))
-            })?;
-        writeln!(f, "{},", output).map_err(|_| {
-            Error::Other("unable to write test vector to file".to_string())
-        })?;
-    }
-
-    // Attempt to decode the construction
-    if let Ok(path) = env::var(ENV_VAR_TX_LOG_PATH) {
-        let mut tx = tx.clone();
-        // Contract the large data blobs in the transaction
-        tx.wallet_filter();
-        // Record the transaction at the identified path
-        let mut f = File::options()
-            .append(true)
-            .create(true)
-            .open(path)
-            .map_err(|_| {
-                Error::Other("unable to write test vector to file".to_string())
-            })?;
-        writeln!(f, "{:x?},", tx).map_err(|_| {
-            Error::Other("unable to write test vector to file".to_string())
-        })?;
-    }
-    Ok(())
 }
 
 /// Convert decimal numbers into the format used by Ledger. Specifically remove

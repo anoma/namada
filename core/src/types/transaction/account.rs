@@ -50,3 +50,51 @@ pub struct UpdateAccount {
     /// The account signature threshold
     pub threshold: Option<u8>,
 }
+
+#[cfg(any(test, feature = "testing"))]
+/// Tests and strategies for accounts
+pub mod tests {
+    use proptest::prelude::Just;
+    use proptest::{collection, option, prop_compose};
+
+    use super::*;
+    use crate::types::address::testing::arb_non_internal_address;
+    use crate::types::hash::testing::arb_hash;
+    use crate::types::key::testing::arb_common_pk;
+
+    prop_compose! {
+        /// Generate an account initialization
+        pub fn arb_init_account()(
+            public_keys in collection::vec(arb_common_pk(), 0..10),
+        )(
+            threshold in 0..=public_keys.len() as u8,
+            public_keys in Just(public_keys),
+            vp_code_hash in arb_hash(),
+        ) -> InitAccount {
+            InitAccount {
+                public_keys,
+                vp_code_hash,
+                threshold,
+            }
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary account update
+        pub fn arb_update_account()(
+            public_keys in collection::vec(arb_common_pk(), 0..10),
+        )(
+            addr in arb_non_internal_address(),
+            vp_code_hash in option::of(arb_hash()),
+            threshold in option::of(0..=public_keys.len() as u8),
+            public_keys in Just(public_keys),
+        ) -> UpdateAccount {
+            UpdateAccount {
+                addr,
+                vp_code_hash,
+                public_keys,
+                threshold,
+            }
+        }
+    }
+}

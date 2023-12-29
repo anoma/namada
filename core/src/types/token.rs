@@ -1322,6 +1322,73 @@ pub enum TransferError {
     NoToken,
 }
 
+#[cfg(any(test, feature = "testing"))]
+/// Testing helpers and strategies for tokens
+pub mod testing {
+    use proptest::option;
+    use proptest::prelude::*;
+
+    use super::*;
+    use crate::types::address::testing::{
+        arb_established_address, arb_non_internal_address,
+    };
+
+    prop_compose! {
+        /// Generate an arbitrary denomination
+        pub fn arb_denomination()(denom in 0u8..) -> Denomination {
+            Denomination(denom)
+        }
+    }
+
+    prop_compose! {
+        /// Generate a denominated amount
+        pub fn arb_denominated_amount()(
+            amount in arb_amount(),
+            denom in arb_denomination(),
+        ) -> DenominatedAmount {
+            DenominatedAmount::new(amount, denom)
+        }
+    }
+
+    prop_compose! {
+        /// Generate a transfer
+        pub fn arb_transfer()(
+            source in arb_non_internal_address(),
+            target in arb_non_internal_address(),
+            token in arb_established_address().prop_map(Address::Established),
+            amount in arb_denominated_amount(),
+            key in option::of("[a-zA-Z0-9_]*"),
+        ) -> Transfer {
+            Transfer {
+                source,
+                target,
+                token,
+                amount,
+                key,
+                shielded: None,
+            }
+        }
+    }
+
+    /// Generate an arbitrary token amount
+    pub fn arb_amount() -> impl Strategy<Value = Amount> {
+        any::<u64>().prop_map(|val| Amount::from_uint(val, 0).unwrap())
+    }
+
+    /// Generate an arbitrary token amount up to and including given `max` value
+    pub fn arb_amount_ceiled(max: u64) -> impl Strategy<Value = Amount> {
+        (0..=max).prop_map(|val| Amount::from_uint(val, 0).unwrap())
+    }
+
+    /// Generate an arbitrary non-zero token amount up to and including given
+    /// `max` value
+    pub fn arb_amount_non_zero_ceiled(
+        max: u64,
+    ) -> impl Strategy<Value = Amount> {
+        (1..=max).prop_map(|val| Amount::from_uint(val, 0).unwrap())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1581,31 +1648,5 @@ mod tests {
             denom_2.partial_cmp(&denom_1).expect("Test failed"),
             Ordering::Less
         );
-    }
-}
-
-/// Helpers for testing with addresses.
-#[cfg(any(test, feature = "testing"))]
-pub mod testing {
-    use proptest::prelude::*;
-
-    use super::*;
-
-    /// Generate an arbitrary token amount
-    pub fn arb_amount() -> impl Strategy<Value = Amount> {
-        any::<u64>().prop_map(|val| Amount::from_uint(val, 0).unwrap())
-    }
-
-    /// Generate an arbitrary token amount up to and including given `max` value
-    pub fn arb_amount_ceiled(max: u64) -> impl Strategy<Value = Amount> {
-        (0..=max).prop_map(|val| Amount::from_uint(val, 0).unwrap())
-    }
-
-    /// Generate an arbitrary non-zero token amount up to and including given
-    /// `max` value
-    pub fn arb_amount_non_zero_ceiled(
-        max: u64,
-    ) -> impl Strategy<Value = Amount> {
-        (1..=max).prop_map(|val| Amount::from_uint(val, 0).unwrap())
     }
 }

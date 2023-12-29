@@ -532,6 +532,23 @@ pub mod testing {
     use super::SigScheme;
     use crate::types::key::*;
 
+    /// Generate an arbitrary public key
+    pub fn arb_pk<S: SigScheme>()
+    -> impl Strategy<Value = <S::SecretKey as SecretKey>::PublicKey> {
+        arb_keypair::<S>().prop_map(|x| x.ref_to())
+    }
+
+    /// Generate an arbitrary common key
+    pub fn arb_common_pk() -> impl Strategy<Value = common::PublicKey> {
+        let ed25519 = arb_pk::<ed25519::SigScheme>()
+            .prop_map(common::PublicKey::Ed25519)
+            .sboxed();
+        let secp256k1 = arb_pk::<secp256k1::SigScheme>()
+            .prop_map(common::PublicKey::Secp256k1)
+            .sboxed();
+        ed25519.prop_union(secp256k1)
+    }
+
     /// A keypair for tests
     pub fn keypair_1() -> <common::SigScheme as SigScheme>::SecretKey {
         // generated from `cargo test gen_keypair -- --nocapture`
