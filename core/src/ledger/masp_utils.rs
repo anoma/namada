@@ -10,8 +10,8 @@ use crate::types::address::MASP;
 use crate::types::hash::Hash;
 use crate::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
 use crate::types::token::{
-    Transfer, HEAD_TX_KEY, MASP_NOTE_COMMITMENT_TREE_KEY,
-    MASP_NULLIFIERS_KEY_PREFIX, PIN_KEY_PREFIX, TX_KEY_PREFIX,
+    Transfer, HEAD_TX_KEY, MASP_NOTE_COMMITMENT_TREE_KEY, MASP_NULLIFIERS_KEY,
+    PIN_KEY_PREFIX, TX_KEY_PREFIX,
 };
 
 // Writes the nullifiers of the provided masp transaction to storage
@@ -24,7 +24,7 @@ fn reveal_nullifiers(
         .map_or(&vec![], |description| &description.shielded_spends)
     {
         let nullifier_key = Key::from(MASP.to_db_key())
-            .push(&MASP_NULLIFIERS_KEY_PREFIX.to_owned())
+            .push(&MASP_NULLIFIERS_KEY.to_owned())
             .expect("Cannot obtain a storage key")
             .push(&Hash(description.nullifier.0))
             .expect("Cannot obtain a storage key");
