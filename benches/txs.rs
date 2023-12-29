@@ -686,21 +686,21 @@ fn change_validator_commission(c: &mut Criterion) {
 
 fn change_consensus_key(c: &mut Criterion) {
     let mut csprng = rand::rngs::OsRng {};
-    let consensus_key = ed25519::SigScheme::generate(&mut csprng)
+    let consensus_sk = ed25519::SigScheme::generate(&mut csprng)
         .try_to_sk::<common::SecretKey>()
-        .unwrap()
-        .to_public();
+        .unwrap();
+    let consensus_pk = consensus_sk.to_public();
 
     let shell = BenchShell::default();
     let signed_tx = shell.generate_tx(
         TX_CHANGE_CONSENSUS_KEY_WASM,
         ConsensusKeyChange {
             validator: defaults::validator_address(),
-            consensus_key,
+            consensus_key: consensus_pk,
         },
         None,
         None,
-        vec![&defaults::validator_keypair()],
+        vec![&defaults::validator_keypair(), &consensus_sk],
     );
 
     c.bench_function("change_consensus_key", |b| {

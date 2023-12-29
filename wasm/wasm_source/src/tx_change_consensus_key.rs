@@ -12,5 +12,15 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         consensus_key,
     } = transaction::pos::ConsensusKeyChange::try_from_slice(&data[..])
         .wrap_err("failed to decode Dec value")?;
+
+    // Check that the tx has been signed with the new consensus key
+    if !matches!(
+        verify_signatures_of_pks(ctx, &signed, vec![consensus_key.clone()]),
+        Ok(true)
+    ) {
+        debug_log!("Consensus key ownership signature verification failed");
+        panic!()
+    }
+
     ctx.change_validator_consensus_key(&validator, &consensus_key)
 }

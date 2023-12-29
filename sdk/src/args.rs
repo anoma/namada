@@ -1400,6 +1400,8 @@ pub struct ConsensusKeyChange<C: NamadaTypes = SdkTypes> {
     pub validator: C::Address,
     /// New consensus key
     pub consensus_key: Option<C::PublicKey>,
+    /// Don't encrypt the keypair
+    pub unsafe_dont_encrypt: bool,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
