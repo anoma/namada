@@ -768,10 +768,10 @@ pub async fn submit_become_validator(
                     &wallet.find_key_by_pk(&consensus_key, None).expect(
                         "unable to find consensus key pair in the wallet",
                     ),
-                );
+                ).unwrap();
                 // To avoid wallet deadlocks in following operations
                 drop(wallet);
-                tendermint_node::write_validator_state(tendermint_home);
+                tendermint_node::write_validator_state(tendermint_home).unwrap();
 
                 // Write Namada config stuff or figure out how to do the above
                 // tendermint_node things two epochs in the future!!!

@@ -11,9 +11,11 @@ use namada::types::time::DateTimeUtc;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
-use tokio::fs::{self, File, OpenOptions};
+use tokio::fs::{File, OpenOptions};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::process::Command;
+use tokio::process::{Child, Command};
+use tokio::sync::oneshot::error::RecvError;
+use tokio::sync::oneshot::{Receiver, Sender};
 
 use crate::cli::namada_version;
 use crate::config;
@@ -46,6 +48,12 @@ pub enum Error {
     RollBack(String),
     #[error("Failed to convert to String: {0:?}")]
     TendermintPath(std::ffi::OsString),
+    #[error("Couldn't write {0}")]
+    CantWrite(String),
+    #[error("Couldn't create {0}")]
+    CantCreate(String),
+    #[error("Couldn't encode {0}")]
+    CantEncode(&'static str),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -74,10 +82,26 @@ pub async fn run(
     genesis_time: DateTimeUtc,
     proxy_app_address: String,
     config: config::Ledger,
-    abort_recv: tokio::sync::oneshot::Receiver<
-        tokio::sync::oneshot::Sender<()>,
-    >,
+    abort_recv: Receiver<Sender<()>>,
 ) -> Result<()> {
+    let (home_dir_string, tendermint_path) =
+        initalize_config(home_dir, chain_id, genesis_time, config).await?;
+    let tendermint_node =
+        start_node(proxy_app_address, home_dir_string, tendermint_path)?;
+
+    tracing::info!("CometBFT node started");
+
+    handle_node_response(tendermint_node, abort_recv).await
+}
+
+/// Setup the tendermint configuration. We return the tendermint path and home
+/// directory
+async fn initalize_config(
+    home_dir: PathBuf,
+    chain_id: ChainId,
+    genesis_time: DateTimeUtc,
+    config: config::Ledger,
+) -> Result<(String, String)> {
     let home_dir_string = home_dir.to_string_lossy().to_string();
     let tendermint_path = from_env_or_default()?;
     let mode = config.shell.tendermint_mode.to_str().to_owned();
@@ -92,11 +116,19 @@ pub async fn run(
         panic!("Tendermint failed to initialize with {:#?}", output);
     }
 
-    write_tm_genesis(&home_dir, chain_id, genesis_time).await;
+    write_tm_genesis(&home_dir, chain_id, genesis_time).await?;
 
     update_tendermint_config(&home_dir, config.cometbft).await?;
+    Ok((home_dir_string, tendermint_path))
+}
 
-    let mut tendermint_node = Command::new(&tendermint_path);
+/// Startup the node
+fn start_node(
+    proxy_app_address: String,
+    home_dir_string: String,
+    tendermint_path: String,
+) -> Result<Child> {
+    let mut tendermint_node = Command::new(tendermint_path);
     tendermint_node.args([
         "start",
         "--proxy_app",
@@ -113,12 +145,17 @@ pub async fn run(
         tendermint_node.stdout(Stdio::null());
     }
 
-    let mut tendermint_node = tendermint_node
+    tendermint_node
         .kill_on_drop(true)
         .spawn()
-        .map_err(Error::StartUp)?;
-    tracing::info!("CometBFT node started");
+        .map_err(Error::StartUp)
+}
 
+/// Handle the node response
+async fn handle_node_response(
+    mut tendermint_node: Child,
+    abort_recv: Receiver<Sender<()>>,
+) -> Result<()> {
     tokio::select! {
         status = tendermint_node.wait() => {
             match status {
@@ -135,19 +172,27 @@ pub async fn run(
             }
         },
         resp_sender = abort_recv => {
-            match resp_sender {
-                Ok(resp_sender) => {
-                    tracing::info!("Shutting down Tendermint node...");
-                    tendermint_node.kill().await.unwrap();
-                    resp_sender.send(()).unwrap();
-                },
-                Err(err) => {
-                    tracing::error!("The Tendermint abort sender has unexpectedly dropped: {}", err);
-                    tracing::info!("Shutting down Tendermint node...");
-                    tendermint_node.kill().await.unwrap();
-                }
-            }
+            handle_abort(resp_sender, &mut tendermint_node).await;
             Ok(())
+        }
+    }
+}
+// Handle tendermint aborting
+async fn handle_abort(
+    resp_sender: std::result::Result<Sender<()>, RecvError>,
+    node: &mut Child,
+) {
+    match resp_sender {
+        Ok(resp_sender) => {
+            tracing_kill(node).await;
+            resp_sender.send(()).unwrap();
+        }
+        Err(err) => {
+            tracing::error!(
+                "The Tendermint abort sender has unexpectedly dropped: {}",
+                err
+            );
+            tracing_kill(node).await;
         }
     }
 }
@@ -252,75 +297,54 @@ fn validator_key_to_json(
 }
 
 /// Initialize validator private key for Tendermint
-pub async fn write_validator_key_async(
-    home_dir: impl AsRef<Path>,
-    consensus_key: &common::SecretKey,
-) {
-    let home_dir = home_dir.as_ref();
-    let path = home_dir.join("config").join("priv_validator_key.json");
-    // Make sure the dir exists
-    let wallet_dir = path.parent().unwrap();
-    fs::create_dir_all(wallet_dir)
-        .await
-        .expect("Couldn't create private validator key directory");
-    let mut file = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(&path)
-        .await
-        .expect("Couldn't create private validator key file");
-    let key = validator_key_to_json(consensus_key).unwrap();
-    let data = serde_json::to_vec_pretty(&key)
-        .expect("Couldn't encode private validator key file");
-    file.write_all(&data[..])
-        .await
-        .expect("Couldn't write private validator key file");
-}
-
-/// Initialize validator private key for Tendermint
 pub fn write_validator_key(
     home_dir: impl AsRef<Path>,
     consensus_key: &common::SecretKey,
-) {
-    let home_dir = home_dir.as_ref();
-    let path = home_dir.join("config").join("priv_validator_key.json");
-    // Make sure the dir exists
-    let wallet_dir = path.parent().unwrap();
-    std::fs::create_dir_all(wallet_dir)
-        .expect("Couldn't create private validator key directory");
-    let file = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(&path)
-        .expect("Couldn't create private validator key file");
+) -> Result<()> {
     let key = validator_key_to_json(consensus_key).unwrap();
-    serde_json::to_writer_pretty(file, &key)
-        .expect("Couldn't write private validator key file");
+    write_validator(validator_key(home_dir), KEY_DIR, KEY_FILE, key)
 }
 
 /// Initialize validator private state for Tendermint
-pub fn write_validator_state(home_dir: impl AsRef<Path>) {
-    let home_dir = home_dir.as_ref();
-    let path = home_dir.join("data").join("priv_validator_state.json");
-    // Make sure the dir exists
-    let wallet_dir = path.parent().unwrap();
-    std::fs::create_dir_all(wallet_dir)
-        .expect("Couldn't create private validator state directory");
-    let file = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(&path)
-        .expect("Couldn't create private validator state file");
+pub fn write_validator_state(home_dir: impl AsRef<Path>) -> Result<()> {
     let state = json!({
        "height": "0",
        "round": 0,
        "step": 0
     });
-    serde_json::to_writer_pretty(file, &state)
-        .expect("Couldn't write private validator state file");
+    write_validator(validator_state(home_dir), STATE_DIR, STATE_FILE, state)
+}
+
+/// Abstract over the initialization of validator data for Tendermint
+fn write_validator(
+    path: PathBuf,
+    err_dir: &'static str,
+    err_file: &'static str,
+    data: serde_json::Value,
+) -> Result<()> {
+    let parent_dir = path.parent().unwrap();
+    // Make sure the dir exists
+    std::fs::create_dir_all(parent_dir).map_err(|err| {
+        Error::CantCreate(format!(
+            "{} at {}. Caused by {err}",
+            err_dir,
+            parent_dir.to_string_lossy()
+        ))
+    })?;
+    let file = ensure_empty(&path).map_err(|err| {
+        Error::CantCreate(format!(
+            "{} at {}. Caused by {err}",
+            err_dir,
+            path.to_string_lossy()
+        ))
+    })?;
+    serde_json::to_writer_pretty(file, &data).map_err(|err| {
+        Error::CantWrite(format!(
+            "{} to {}. Caused by {err}",
+            err_file,
+            path.to_string_lossy()
+        ))
+    })
 }
 
 /// Length of a Tendermint Node ID in bytes
@@ -349,8 +373,7 @@ async fn update_tendermint_config(
     home_dir: impl AsRef<Path>,
     mut config: TendermintConfig,
 ) -> Result<()> {
-    let home_dir = home_dir.as_ref();
-    let path = home_dir.join("config").join("config.toml");
+    let path = configuration(home_dir);
 
     config.moniker =
         Moniker::from_str(&format!("{}-{}", config.moniker, namada_version()))
@@ -408,9 +431,8 @@ async fn write_tm_genesis(
     home_dir: impl AsRef<Path>,
     chain_id: ChainId,
     genesis_time: DateTimeUtc,
-) {
-    let home_dir = home_dir.as_ref();
-    let path = home_dir.join("config").join("genesis.json");
+) -> Result<()> {
+    let path = genesis(home_dir);
     let mut file = File::open(&path).await.unwrap_or_else(|err| {
         panic!(
             "Couldn't open the genesis file at {:?}, error: {}",
@@ -456,8 +478,55 @@ async fn write_tm_genesis(
             )
         });
     let data = serde_json::to_vec_pretty(&genesis)
-        .expect("Couldn't encode the CometBFT genesis file");
-    file.write_all(&data[..])
-        .await
-        .expect("Couldn't write the CometBFT genesis file");
+        .map_err(|_| Error::CantEncode(GENESIS_FILE))?;
+    file.write_all(&data[..]).await.map_err(|err| {
+        Error::CantWrite(format!(
+            "{} to {}. Caused by {err}",
+            GENESIS_FILE,
+            path.to_string_lossy()
+        ))
+    })
 }
+
+async fn tracing_kill(node: &mut Child) {
+    tracing::info!("Shutting down Tendermint node...");
+    node.kill().await.unwrap();
+}
+
+fn ensure_empty(path: &PathBuf) -> std::io::Result<std::fs::File> {
+    std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(path)
+}
+fn validator_key(home_dir: impl AsRef<Path>) -> PathBuf {
+    home_dir
+        .as_ref()
+        .join("config")
+        .join("priv_validator_key.json")
+}
+
+fn validator_state(home_dir: impl AsRef<Path>) -> PathBuf {
+    home_dir
+        .as_ref()
+        .join("data")
+        .join("priv_validator_state.json")
+}
+
+fn configuration(home_dir: impl AsRef<Path>) -> PathBuf {
+    home_dir.as_ref().join("config").join("config.toml")
+}
+fn genesis(home_dir: impl AsRef<Path>) -> PathBuf {
+    home_dir.as_ref().join("config").join("genesis.json")
+}
+
+// Constant strings to avoid repeating our magic words
+
+const KEY_FILE: &str = "private validator key file";
+const KEY_DIR: &str = "private validator key directory";
+
+const STATE_FILE: &str = "private validator state file";
+const STATE_DIR: &str = "private validator state directory";
+
+const GENESIS_FILE: &str = "CometBFT genesis file";
