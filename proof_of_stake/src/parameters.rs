@@ -1,5 +1,7 @@
 //! Proof-of-Stake system parameters
 
+use std::str::FromStr;
+
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::ledger::governance::parameters::GovernanceParameters;
 use namada_core::types::dec::Dec;
@@ -64,6 +66,10 @@ pub struct OwnedPosParams {
     /// The minimum required activity of consesus validators, in percentage,
     /// over the `liveness_window_check`
     pub liveness_threshold: Dec,
+    /// PoS gain p (read only)
+    pub rewards_gain_p: Dec,
+    /// PoS gain d (read only)
+    pub rewards_gain_d: Dec,
 }
 
 impl Default for PosParams {
@@ -101,6 +107,8 @@ impl Default for OwnedPosParams {
             validator_stake_threshold: token::Amount::native_whole(1_u64),
             liveness_window_check: 10_000,
             liveness_threshold: Dec::new(9, 1).expect("Test failed"),
+            rewards_gain_p: Dec::from_str("0.25").expect("Test failed"),
+            rewards_gain_d: Dec::from_str("0.25").expect("Test failed"),
         }
     }
 }
