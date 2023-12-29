@@ -326,7 +326,7 @@ fn vp_validator(c: &mut Criterion) {
     let mut group = c.benchmark_group("vp_validator");
 
     let foreign_key_write =
-        generate_foreign_key_tx(&defaults::validator_keypair());
+        generate_foreign_key_tx(&defaults::validator_account_keypair());
 
     let transfer = shell.generate_tx(
         TX_TRANSFER_WASM,
