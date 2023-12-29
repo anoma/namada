@@ -206,7 +206,7 @@ fn run_ledger_ibc() -> Result<()> {
         &port_id_b,
         &channel_id_b,
     )?;
-    check_shielded_balances(&port_id_b, &channel_id_b, &test_b)?;
+    check_shielded_balances(&port_id_b, &channel_id_b, &test_a, &test_b)?;
 
     // Skip tests for closing a channel and timeout_on_close since the transfer
     // channel cannot be closed
@@ -1021,6 +1021,8 @@ fn shielded_transfer(
     // It will send 10 BTC from Chain A to PA(B) on Chain B
     let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
     let output_folder = test_b.test_dir.path().to_string_lossy();
+    // PA(B) on Chain B will receive BTC on chain A
+    let token_addr = find_address(test_a, BTC)?;
     let amount = Amount::native_whole(10).to_string_native();
     let args = [
         "ibc-gen-shielded",
@@ -1029,7 +1031,7 @@ fn shielded_transfer(
         "--target",
         AB_PAYMENT_ADDRESS,
         "--token",
-        BTC,
+        &token_addr.to_string(),
         "--amount",
         &amount,
         "--port-id",
@@ -1512,16 +1514,19 @@ fn check_balances_after_back(
 fn check_shielded_balances(
     dest_port_id: &PortId,
     dest_channel_id: &ChannelId,
+    test_a: &Test,
     test_b: &Test,
 ) -> Result<()> {
     // Check the balance on Chain B
-    let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
+    let rpc_b = get_actor_rpc(test_b, &Who::Validator(0));
+    // PA(B) on Chain B has received BTC on chain A
+    let token_addr = find_address(test_a, BTC)?.to_string();
     let query_args = vec![
         "balance",
         "--owner",
         AB_VIEWING_KEY,
         "--token",
-        BTC,
+        &token_addr,
         "--no-conversions",
         "--node",
         &rpc_b,
