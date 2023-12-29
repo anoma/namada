@@ -39,16 +39,21 @@ const DEFAULT_WASM_SERVER: &str = "https://artifacts.heliax.click/namada-wasm";
 
 impl Checksums {
     /// Read WASM checksums from the given path
-    pub fn read_checksums_file(checksums_path: impl AsRef<Path>) -> Self {
+    pub fn read_checksums_file(
+        checksums_path: impl AsRef<Path>,
+    ) -> Result<Self, eyre::Error> {
         match fs::File::open(&checksums_path) {
             Ok(file) => match serde_json::from_reader(file) {
-                Ok(result) => result,
+                Ok(result) => Ok(result),
                 Err(_) => {
                     eprintln!(
                         "Can't read checksums from {}",
                         checksums_path.as_ref().to_string_lossy()
                     );
-                    safe_exit(1);
+                    Err(eyre!(
+                        "Can't read checksums from {}",
+                        checksums_path.as_ref().to_string_lossy()
+                    ))
                 }
             },
             Err(_) => {
@@ -56,13 +61,18 @@ impl Checksums {
                     "Can't find checksums at {}",
                     checksums_path.as_ref().to_string_lossy()
                 );
-                safe_exit(1);
+                Err(eyre!(
+                    "Can't find checksums at {}",
+                    checksums_path.as_ref().to_string_lossy()
+                ))
             }
         }
     }
 
     /// Read WASM checksums from "checksums.json" in the given directory
-    pub fn read_checksums(wasm_directory: impl AsRef<Path>) -> Self {
+    pub fn read_checksums(
+        wasm_directory: impl AsRef<Path>,
+    ) -> Result<Self, eyre::Error> {
         let checksums_path =
             wasm_directory.as_ref().join(DEFAULT_WASM_CHECKSUMS_FILE);
         Self::read_checksums_file(checksums_path)
@@ -203,7 +213,7 @@ pub fn read_wasm(
     file_path: impl AsRef<Path>,
 ) -> eyre::Result<Vec<u8>> {
     // load json with wasm hashes
-    let checksums = Checksums::read_checksums(&wasm_directory);
+    let checksums = Checksums::read_checksums(&wasm_directory)?;
 
     if let Some(os_name) = file_path.as_ref().file_name() {
         if let Some(name) = os_name.to_str() {
