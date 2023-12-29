@@ -16,10 +16,9 @@ use namada_core::ledger::vp_env::VpEnv;
 use namada_core::proto::Tx;
 use namada_core::types::address::Address;
 use namada_core::types::address::InternalAddress::Masp;
-use namada_core::types::storage::{BlockHeight, Epoch, Key, TxIndex};
+use namada_core::types::storage::{Epoch, Key};
 use namada_core::types::token::{
     self, is_masp_allowed_key, is_masp_key, is_masp_nullifier_key,
-    is_masp_tx_pin_key, is_masp_tx_prefix_key, Transfer,
 };
 use namada_sdk::masp::verify_shielded_tx;
 use ripemd::Digest as RipemdDigest;
@@ -113,7 +112,7 @@ where
     // Check that the transaction correctly revealed the nullifiers
     fn valid_nullifiers_reveal(
         &self,
-        keys_changed: &BTreeSet<Key>,
+        keys_changed: &[&Key],
         transaction: &Transaction,
     ) -> Result<bool> {
         let mut revealed_nullifiers = HashSet::new();
@@ -285,78 +284,6 @@ where
 
         Ok(true)
     }
-
-    /// Check the correctness of the general storage changes that pertain to all
-    /// types of masp transfers
-    fn valid_state(
-        &self,
-        keys_changed: &BTreeSet<Key>,
-        transfer: &Transfer,
-        transaction: &Transaction,
-    ) -> Result<bool> {
-        // Check that the transaction didn't write unallowed masp keys, nor
-        // multiple variations of the same key prefixes
-        let mut found_tx_key = false;
-        let mut found_pin_key = false;
-        for key in keys_changed.iter().filter(|key| is_masp_key(key)) {
-            if !is_masp_allowed_key(key) {
-                return Ok(false);
-            } else if is_masp_tx_prefix_key(key) {
-                if found_tx_key {
-                    return Ok(false);
-                } else {
-                    found_tx_key = true;
-                }
-            } else if is_masp_tx_pin_key(key) {
-                if found_pin_key {
-                    return Ok(false);
-                } else {
-                    found_pin_key = true;
-                }
-            }
-        }
-
-        // Validate head tx
-        let head_tx_key = namada_core::types::token::masp_head_tx_key();
-        let pre_head: u64 = self.ctx.read_pre(&head_tx_key)?.unwrap_or(0);
-        let post_head: u64 = self.ctx.read_post(&head_tx_key)?.unwrap_or(0);
-
-        if post_head != pre_head + 1 {
-            return Ok(false);
-        }
-
-        // Validate tx key
-        let current_tx_key = namada_core::types::token::masp_tx_key(pre_head);
-        match self
-            .ctx
-            .read_post::<(Epoch, BlockHeight, TxIndex, Transfer, Transaction)>(
-                &current_tx_key,
-            )? {
-            Some((
-                epoch,
-                height,
-                tx_index,
-                storage_transfer,
-                storage_transaction,
-            )) if (epoch == self.ctx.get_block_epoch()?
-                && height == self.ctx.get_block_height()?
-                && tx_index == self.ctx.get_tx_index()?
-                && &storage_transfer == transfer
-                && &storage_transaction == transaction) => {}
-            _ => return Ok(false),
-        }
-
-        // Validate pin key
-        if let Some(key) = &transfer.key {
-            let pin_key = namada_core::types::token::masp_pin_tx_key(key);
-            match self.ctx.read_post::<u64>(&pin_key)? {
-                Some(tx_idx) if tx_idx == pre_head => (),
-                _ => return Ok(false),
-            }
-        }
-
-        Ok(true)
-    }
 }
 
 impl<'a, DB, H, CA> NativeVp for MaspVp<'a, DB, H, CA>
@@ -382,7 +309,15 @@ where
         // The Sapling value balance adds to the transparent tx pool
         transparent_tx_pool += shielded_tx.sapling_value_balance();
 
-        if !self.valid_state(keys_changed, &transfer, &shielded_tx)? {
+        // Check that the transaction didn't write unallowed masp keys
+        let masp_keys_changed: Vec<&Key> =
+            keys_changed.iter().filter(|key| is_masp_key(key)).collect();
+        if masp_keys_changed
+            .iter()
+            .filter(|key| !is_masp_allowed_key(key))
+            .count()
+            != 0
+        {
             return Ok(false);
         }
 
@@ -435,7 +370,10 @@ where
 
             if !(self.valid_spend_descriptions_anchor(&shielded_tx)?
                 && self.valid_convert_descriptions_anchor(&shielded_tx)?
-                && self.valid_nullifiers_reveal(keys_changed, &shielded_tx)?)
+                && self.valid_nullifiers_reveal(
+                    &masp_keys_changed,
+                    &shielded_tx,
+                )?)
             {
                 return Ok(false);
             }
