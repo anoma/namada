@@ -2,12 +2,12 @@
 //! hash function in a way that is compatible with smart contracts
 //! on Ethereum.
 use std::convert::{TryFrom, TryInto};
-use std::fmt::Display;
+use std::fmt;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::HEXUPPER;
 use ethabi::Token;
-use serde::{Serialize, Serializer};
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 pub use tiny_keccak::{Hasher, Keccak};
 
@@ -51,8 +51,8 @@ impl KeccakHash {
     }
 }
 
-impl Display for KeccakHash {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for KeccakHash {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for byte in &self.0 {
             write!(f, "{:02X}", byte)?;
         }
@@ -118,6 +118,34 @@ impl Serialize for KeccakHash {
     }
 }
 
+impl<'de> Deserialize<'de> for KeccakHash {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct KeccakVisitor;
+
+        impl<'de> de::Visitor<'de> for KeccakVisitor {
+            type Value = KeccakHash;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                write!(f, "a string containing a keccak hash")
+            }
+
+            fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                KeccakHash::try_from(s).map_err(|_| {
+                    de::Error::invalid_value(de::Unexpected::Str(s), &self)
+                })
+            }
+        }
+
+        deserializer.deserialize_str(KeccakVisitor)
+    }
+}
+
 /// Hash bytes using Keccak
 pub fn keccak_hash<T: AsRef<[u8]>>(bytes: T) -> KeccakHash {
     let mut output = [0; 32];
@@ -132,5 +160,25 @@ pub fn keccak_hash<T: AsRef<[u8]>>(bytes: T) -> KeccakHash {
 impl Encode<1> for KeccakHash {
     fn tokenize(&self) -> [Token; 1] {
         [Token::FixedBytes(self.0.to_vec())]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_keccak_serde_roundtrip() {
+        let mut hash = KeccakHash([0; 32]);
+
+        for i in 0..32 {
+            hash.0[i] = i as u8;
+        }
+
+        let serialized = serde_json::to_string(&hash).unwrap();
+        let deserialized: KeccakHash =
+            serde_json::from_str(&serialized).unwrap();
+
+        assert_eq!(deserialized, hash);
     }
 }

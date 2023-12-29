@@ -9,6 +9,71 @@ pub use ethbridge_structs::*;
 use num256::Uint256;
 use serde::{Deserialize, Serialize};
 
+use crate::types::keccak::KeccakHash;
+
+/// Status of some Bridge pool transfer.
+#[derive(
+    Hash,
+    Clone,
+    Debug,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+)]
+pub enum BpTransferStatus {
+    /// The transfer has been relayed.
+    Relayed,
+    /// The transfer has expired.
+    Expired,
+}
+
+/// Ethereum bridge events on Namada's event log.
+#[derive(
+    Hash,
+    Clone,
+    Debug,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+)]
+pub enum EthBridgeEvent {
+    /// Bridge pool transfer status update event.
+    BridgePool {
+        /// Hash of the Bridge pool transfer.
+        tx_hash: KeccakHash,
+        /// Status of the Bridge pool transfer.
+        status: BpTransferStatus,
+    },
+}
+
+impl EthBridgeEvent {
+    /// Return a new Bridge pool expired transfer event.
+    pub const fn new_bridge_pool_expired(tx_hash: KeccakHash) -> Self {
+        Self::BridgePool {
+            tx_hash,
+            status: BpTransferStatus::Expired,
+        }
+    }
+
+    /// Return a new Bridge pool relayed transfer event.
+    pub const fn new_bridge_pool_relayed(tx_hash: KeccakHash) -> Self {
+        Self::BridgePool {
+            tx_hash,
+            status: BpTransferStatus::Relayed,
+        }
+    }
+}
+
 /// This type must be able to represent any valid Ethereum block height. It must
 /// also be Borsh serializeable, so that it can be stored in blockchain storage.
 ///
