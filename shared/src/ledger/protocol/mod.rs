@@ -1123,8 +1123,8 @@ mod tests {
     };
     use namada_ethereum_bridge::storage::eth_bridge_queries::EthBridgeQueries;
     use namada_ethereum_bridge::storage::proof::EthereumProof;
-    use namada_ethereum_bridge::storage::vote_tallies;
-    use namada_ethereum_bridge::{bridge_pool_vp, test_utils};
+    use namada_ethereum_bridge::storage::{vote_tallies, vp};
+    use namada_ethereum_bridge::test_utils;
 
     use super::*;
 
@@ -1213,7 +1213,7 @@ mod tests {
                 (validator_b, validator_b_stake),
             ]),
         );
-        bridge_pool_vp::init_storage(&mut wl_storage);
+        vp::bridge_pool::init_storage(&mut wl_storage);
 
         let root = wl_storage.ethbridge_queries().get_bridge_pool_root();
         let nonce = wl_storage.ethbridge_queries().get_bridge_pool_nonce();

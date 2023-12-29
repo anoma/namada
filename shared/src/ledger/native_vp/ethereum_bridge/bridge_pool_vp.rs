@@ -23,7 +23,7 @@ use namada_core::ledger::eth_bridge::storage::bridge_pool::{
 };
 use namada_core::ledger::eth_bridge::storage::whitelist;
 use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
-use namada_ethereum_bridge::parameters::read_native_erc20_address;
+use namada_ethereum_bridge::storage::parameters::read_native_erc20_address;
 use namada_ethereum_bridge::storage::wrapped_erc20s;
 
 use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
@@ -646,7 +646,7 @@ mod test_bridge_pool_vp {
     use namada_core::ledger::eth_bridge::storage::bridge_pool::get_signed_root_key;
     use namada_core::ledger::gas::TxGasMeter;
     use namada_core::types::address;
-    use namada_ethereum_bridge::parameters::{
+    use namada_ethereum_bridge::storage::parameters::{
         Contracts, EthereumBridgeParams, UpgradeableContract,
     };
 
