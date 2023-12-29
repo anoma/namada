@@ -12,7 +12,7 @@ use crate::ledger::storage::write_log::StorageModification;
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
 use crate::types::address::{Address, InternalAddress};
-use crate::types::ibc::{IbcEvent, IbcShieldedTransfer};
+use crate::types::ibc::IbcEvent;
 use crate::types::storage::{
     BlockHash, BlockHeight, Epoch, Header, Key, TxIndex,
 };
@@ -213,13 +213,12 @@ where
         self.write(&dest_key, dest_bal.serialize_to_vec())
     }
 
-    fn handle_masp_tx(&mut self, shielded: &IbcShieldedTransfer) -> Result<()> {
-        masp_utils::handle_masp_tx(
-            self,
-            &shielded.transfer,
-            &shielded.masp_tx,
-        )?;
-        masp_utils::update_note_commitment_tree(self, &shielded.masp_tx)
+    fn handle_masp_tx(
+        &mut self,
+        shielded: &masp_primitives::transaction::Transaction,
+    ) -> Result<()> {
+        masp_utils::handle_masp_tx(self, shielded)?;
+        masp_utils::update_note_commitment_tree(self, shielded)
     }
 
     fn mint_token(
@@ -418,7 +417,7 @@ where
 
     fn handle_masp_tx(
         &mut self,
-        _shielded: &IbcShieldedTransfer,
+        _shielded: &masp_primitives::transaction::Transaction,
     ) -> Result<()> {
         unimplemented!("Validation doesn't handle a masp tx")
     }

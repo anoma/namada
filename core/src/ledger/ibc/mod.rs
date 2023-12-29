@@ -282,7 +282,7 @@ where
             self.ctx
                 .inner
                 .borrow_mut()
-                .handle_masp_tx(&shielded_transfer)
+                .handle_masp_tx(&shielded_transfer.masp_tx)
                 .map_err(|_| {
                     Error::MaspTx("Writing MASP components failed".to_string())
                 })?;
