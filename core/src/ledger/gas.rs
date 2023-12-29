@@ -5,6 +5,7 @@ use std::fmt::Display;
 use std::ops::Div;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::parameters;
@@ -89,6 +90,8 @@ pub fn get_max_block_gas(
     BorshDeserialize,
     BorshSerialize,
     BorshSchema,
+    Serialize,
+    Deserialize,
 )]
 pub struct Gas {
     sub: u64,
@@ -223,7 +226,14 @@ pub struct VpGasMeter {
 
 /// Gas meter for VPs parallel runs
 #[derive(
-    Clone, Debug, Default, BorshSerialize, BorshDeserialize, BorshSchema,
+    Clone,
+    Debug,
+    Default,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Serialize,
+    Deserialize,
 )]
 pub struct VpsGas {
     max: Gas,

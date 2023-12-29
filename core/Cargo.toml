@@ -52,6 +52,7 @@ itertools.workspace = true
 k256.workspace = true
 masp_primitives.workspace = true
 num256.workspace = true
+num-derive.workspace = true
 num_enum = "0.7.0"
 num-integer = "0.1.45"
 num-rational.workspace = true

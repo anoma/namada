@@ -10,6 +10,7 @@ use data_encoding::HEXUPPER;
 use itertools::Either;
 use lazy_static::lazy_static;
 use namada::core::types::ethereum_structs;
+use namada::core::types::transaction::ResultCode;
 use namada::eth_bridge::oracle::config::Config as OracleConfig;
 use namada::ledger::dry_run_tx;
 use namada::ledger::events::log::dumb_queries;
@@ -35,7 +36,6 @@ use namada::types::key::tm_consensus_key_raw_hash;
 use namada::types::storage::{BlockHash, BlockHeight, Epoch, Header};
 use namada::types::time::DateTimeUtc;
 use namada_sdk::queries::Client;
-use num_traits::cast::FromPrimitive;
 use regex::Regex;
 use tokio::sync::mpsc;
 
@@ -51,7 +51,7 @@ use crate::node::ledger::ethereum_oracle::{
     control, last_processed_block, try_process_eth_events,
 };
 use crate::node::ledger::shell::testing::utils::TestDir;
-use crate::node::ledger::shell::{ErrorCodes, EthereumOracleChannels, Shell};
+use crate::node::ledger::shell::{EthereumOracleChannels, Shell};
 use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
     FinalizeBlock, ProcessedTx,
 };
@@ -239,7 +239,7 @@ pub enum NodeResults {
     /// Rejected by Process Proposal
     Rejected(TxResult),
     /// Failure in application in Finalize Block
-    Failed(ErrorCodes),
+    Failed(ResultCode),
 }
 
 pub struct MockNode {
@@ -509,14 +509,14 @@ impl MockNode {
             .events
             .into_iter()
             .map(|e| {
-                let code = ErrorCodes::from_u32(
+                let code = ResultCode::from_u32(
                     e.attributes
                         .get("code")
                         .map(|e| u32::from_str(e).unwrap())
                         .unwrap_or_default(),
                 )
                 .unwrap();
-                if code == ErrorCodes::Ok {
+                if code == ResultCode::Ok {
                     NodeResults::Ok
                 } else {
                     NodeResults::Failed(code)

@@ -46,6 +46,9 @@ use crate::e2e::setup::constants::{
     ALBERT, ALBERT_KEY, BERTHA, BERTHA_KEY, NAM,
 };
 use crate::e2e::setup::{Bin, Who};
+use crate::strings::{
+    LEDGER_STARTED, TX_ACCEPTED, TX_APPLIED_SUCCESS, VALIDATOR_NODE,
+};
 use crate::{run, run_as};
 
 /// # Examples
@@ -81,7 +84,7 @@ fn run_ledger_with_ethereum_events_endpoint() -> Result<()> {
     ledger.exp_string(
         "Starting to listen for Borsh-serialized Ethereum events",
     )?;
-    ledger.exp_string("Namada ledger node started")?;
+    ledger.exp_string(LEDGER_STARTED)?;
 
     ledger.send_control(ControlCode::EndOfText)?;
     ledger.exp_string(
@@ -172,9 +175,8 @@ async fn test_roundtrip_eth_transfer() -> Result<()> {
         tx_args,
         Some(CLIENT_COMMAND_TIMEOUT_SECONDS)
     )?;
-    namadac_tx.exp_string("Transaction accepted")?;
-    namadac_tx.exp_string("Transaction applied")?;
-    namadac_tx.exp_string("Transaction is valid")?;
+    namadac_tx.exp_string(TX_ACCEPTED)?;
+    namadac_tx.exp_string(TX_APPLIED_SUCCESS)?;
     drop(namadac_tx);
 
     let mut namadar = run!(
@@ -364,9 +366,8 @@ async fn test_bridge_pool_e2e() {
         Some(CLIENT_COMMAND_TIMEOUT_SECONDS)
     )
     .unwrap();
-    namadac_tx.exp_string("Transaction accepted").unwrap();
-    namadac_tx.exp_string("Transaction applied").unwrap();
-    namadac_tx.exp_string("Transaction is valid").unwrap();
+    namadac_tx.exp_string(TX_ACCEPTED).unwrap();
+    namadac_tx.exp_string(TX_APPLIED_SUCCESS).unwrap();
     drop(namadac_tx);
 
     let mut namadar = run!(
@@ -537,8 +538,8 @@ async fn test_wnam_transfer() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, vec!["ledger"], Some(40))?;
 
-    ledger.exp_string("Namada ledger node started")?;
-    ledger.exp_string("This node is a validator")?;
+    ledger.exp_string(LEDGER_STARTED)?;
+    ledger.exp_string(VALIDATOR_NODE)?;
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
 
     let bg_ledger = ledger.background();
@@ -633,8 +634,8 @@ fn test_configure_oracle_from_storage() -> Result<()> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, vec!["ledger"], Some(40))?;
 
-    ledger.exp_string("Namada ledger node started")?;
-    ledger.exp_string("This node is a validator")?;
+    ledger.exp_string(LEDGER_STARTED)?;
+    ledger.exp_string(VALIDATOR_NODE)?;
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
     // check that the oracle has been configured with the values from storage
     let initial_config = oracle::config::Config {
@@ -761,8 +762,7 @@ async fn test_wdai_transfer_implicit_unauthorized() -> Result<()> {
         &bertha_addr.to_string(),
         &token::DenominatedAmount::new(token::Amount::from(10_000), 0u8.into()),
     )?;
-    cmd.exp_string("Transaction is valid.")?;
-    cmd.exp_string("Transaction is invalid.")?;
+    cmd.exp_string(TX_REJECTED)?;
     cmd.assert_success();
 
     // check balances are unchanged after an unsuccessful transfer
@@ -828,8 +828,8 @@ async fn test_wdai_transfer_established_unauthorized() -> Result<()> {
         &bertha_addr.to_string(),
         &token::DenominatedAmount::new(token::Amount::from(10_000), 0u8.into()),
     )?;
-    cmd.exp_string("Transaction is valid.")?;
-    cmd.exp_string("Transaction is invalid.")?;
+    cmd.exp_string(TX_ACCEPTED)?;
+    cmd.exp_string(TX_REJECTED)?;
     cmd.assert_success();
 
     // check balances are unchanged after an unsuccessful transfer
@@ -884,8 +884,8 @@ async fn test_wdai_transfer_implicit_to_implicit() -> Result<()> {
         &albert_addr.to_string(),
         second_transfer_amount,
     )?;
-    cmd.exp_string("Transaction is valid.")?;
-    cmd.exp_string("Transaction is valid.")?;
+    cmd.exp_string(TX_ACCEPTED)?;
+    cmd.exp_string(TX_APPLIED_SUCCESS)?;
     cmd.assert_success();
 
     let albert_wdai_balance = find_wrapped_erc20_balance(
@@ -960,8 +960,8 @@ async fn test_wdai_transfer_implicit_to_established() -> Result<()> {
         &albert_addr.to_string(),
         second_transfer_amount,
     )?;
-    cmd.exp_string("Transaction is valid.")?;
-    cmd.exp_string("Transaction is valid.")?;
+    cmd.exp_string(TX_ACCEPTED)?;
+    cmd.exp_string(TX_APPLIED_SUCCESS)?;
     cmd.assert_success();
 
     let albert_wdai_balance = find_wrapped_erc20_balance(
@@ -1039,8 +1039,8 @@ async fn test_wdai_transfer_established_to_implicit() -> Result<()> {
         &albert_established_addr.to_string(),
         second_transfer_amount,
     )?;
-    cmd.exp_string("Transaction is valid.")?;
-    cmd.exp_string("Transaction is valid.")?;
+    cmd.exp_string(TX_ACCEPTED)?;
+    cmd.exp_string(TX_APPLIED_SUCCESS)?;
     cmd.assert_success();
 
     let albert_established_wdai_balance = find_wrapped_erc20_balance(
@@ -1127,8 +1127,8 @@ async fn test_wdai_transfer_established_to_established() -> Result<()> {
         &albert_established_addr.to_string(),
         second_transfer_amount,
     )?;
-    cmd.exp_string("Transaction is valid.")?;
-    cmd.exp_string("Transaction is valid.")?;
+    cmd.exp_string(TX_ACCEPTED)?;
+    cmd.exp_string(TX_APPLIED_SUCCESS)?;
     cmd.assert_success();
 
     let albert_established_wdai_balance = find_wrapped_erc20_balance(
