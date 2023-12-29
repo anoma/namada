@@ -63,7 +63,7 @@ where
                     .into(),
                 )
             })?;
-        let amount = token::DenominatedAmount { amount, denom };
+        let amount = token::DenominatedAmount::new(amount, denom);
 
         Ok((token, amount))
     }

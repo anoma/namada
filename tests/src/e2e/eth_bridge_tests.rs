@@ -137,11 +137,8 @@ async fn test_roundtrip_eth_transfer() -> Result<()> {
     assert_eq!(dai_supply, Some(transfer_amount));
 
     // let's transfer them back to Ethereum
-    let amount = token::DenominatedAmount {
-        amount: transfer_amount,
-        denom: 0u8.into(),
-    }
-    .to_string();
+    let amount =
+        token::DenominatedAmount::new(transfer_amount, 0u8.into()).to_string();
     let dai_addr = DAI_ERC20_ETH_ADDRESS.to_string();
     let tx_args = vec![
         "add-erc20-transfer",
@@ -762,10 +759,7 @@ async fn test_wdai_transfer_implicit_unauthorized() -> Result<()> {
         &albert_addr.to_string(),
         &bertha_addr.to_string(),
         &bertha_addr.to_string(),
-        &token::DenominatedAmount {
-            amount: token::Amount::from(10_000),
-            denom: 0u8.into(),
-        },
+        &token::DenominatedAmount::new(token::Amount::from(10_000), 0u8.into()),
     )?;
     cmd.exp_string("Transaction is valid.")?;
     cmd.exp_string("Transaction is invalid.")?;
@@ -832,10 +826,7 @@ async fn test_wdai_transfer_established_unauthorized() -> Result<()> {
         &albert_established_addr.to_string(),
         &bertha_addr.to_string(),
         &bertha_addr.to_string(),
-        &token::DenominatedAmount {
-            amount: token::Amount::from(10_000),
-            denom: 0u8.into(),
-        },
+        &token::DenominatedAmount::new(token::Amount::from(10_000), 0u8.into()),
     )?;
     cmd.exp_string("Transaction is valid.")?;
     cmd.exp_string("Transaction is invalid.")?;
@@ -882,10 +873,8 @@ async fn test_wdai_transfer_implicit_to_implicit() -> Result<()> {
     // attempt a transfer from Albert to Bertha that should succeed, as it's
     // signed with Albert's key
     let bertha_addr = find_address(&test, BERTHA)?;
-    let second_transfer_amount = &token::DenominatedAmount {
-        amount: token::Amount::from(10_000),
-        denom: 0u8.into(),
-    };
+    let second_transfer_amount =
+        &token::DenominatedAmount::new(token::Amount::from(10_000), 0u8.into());
     let mut cmd = attempt_wrapped_erc20_transfer(
         &test,
         &Who::Validator(0),
@@ -960,10 +949,8 @@ async fn test_wdai_transfer_implicit_to_established() -> Result<()> {
 
     // attempt a transfer from Albert to Bertha that should succeed, as it's
     // signed with Albert's key
-    let second_transfer_amount = &token::DenominatedAmount {
-        amount: token::Amount::from(10_000),
-        denom: 0u8.into(),
-    };
+    let second_transfer_amount =
+        &token::DenominatedAmount::new(token::Amount::from(10_000), 0u8.into());
     let mut cmd = attempt_wrapped_erc20_transfer(
         &test,
         &Who::Validator(0),
@@ -1041,10 +1028,8 @@ async fn test_wdai_transfer_established_to_implicit() -> Result<()> {
 
     // attempt a transfer from Albert to Bertha that should succeed, as it's
     // signed with Albert's key
-    let second_transfer_amount = &token::DenominatedAmount {
-        amount: token::Amount::from(10_000),
-        denom: 0u8.into(),
-    };
+    let second_transfer_amount =
+        &token::DenominatedAmount::new(token::Amount::from(10_000), 0u8.into());
     let mut cmd = attempt_wrapped_erc20_transfer(
         &test,
         &Who::Validator(0),
@@ -1131,10 +1116,8 @@ async fn test_wdai_transfer_established_to_established() -> Result<()> {
 
     // attempt a transfer from Albert to Bertha that should succeed, as it's
     // signed with Albert's key
-    let second_transfer_amount = &token::DenominatedAmount {
-        amount: token::Amount::from(10_000),
-        denom: 0u8.into(),
-    };
+    let second_transfer_amount =
+        &token::DenominatedAmount::new(token::Amount::from(10_000), 0u8.into());
     let mut cmd = attempt_wrapped_erc20_transfer(
         &test,
         &Who::Validator(0),

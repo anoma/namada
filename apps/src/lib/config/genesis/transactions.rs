@@ -117,7 +117,7 @@ fn get_tx_to_sign(tag: impl AsRef<str>, data: impl BorshSerialize) -> Tx {
     let pk = get_sentinel_pubkey();
     tx.add_wrapper(
         Fee {
-            amount_per_gas_unit: Default::default(),
+            amount_per_gas_unit: DenominatedAmount::native(0.into()),
             token: Address::from(&pk),
         },
         pk,
@@ -308,7 +308,7 @@ pub fn init_validator(
         unsigned_validator_account_tx.address.raw.clone();
     let validator_account = Some(vec![unsigned_validator_account_tx]);
 
-    let bond = if self_bond_amount.amount.is_zero() {
+    let bond = if self_bond_amount.amount().is_zero() {
         None
     } else {
         let unsigned_bond_tx = BondTx {
@@ -524,7 +524,7 @@ impl Transactions<Validated> {
                     BTreeMap::new();
                 for tx in txs {
                     let entry = stakes.entry(&tx.validator).or_default();
-                    *entry += tx.amount.amount;
+                    *entry += tx.amount.amount();
                 }
 
                 stakes.into_values().any(|stake| {
@@ -878,7 +878,7 @@ where
                 validator: self.validator.clone(),
                 amount: denominate_amount::<T>(self.amount.clone())
                     .unwrap()
-                    .amount,
+                    .amount(),
                 source: Some(self.source.address()),
             },
         )
@@ -1188,8 +1188,19 @@ fn validate_bond(
                         // Deduct the amount from source
                         if amount == balance {
                             balances.amounts.remove(source);
+                        } else if let Some(new_balance) =
+                            balance.checked_sub(*amount)
+                        {
+                            *balance = new_balance;
                         } else {
-                            balance.amount -= amount.amount;
+                            eprintln!(
+                                "Invalid bond tx. Amount {} should have the \
+                                 denomination {:?}. Got {:?}.",
+                                amount,
+                                balance.denom(),
+                                amount.denom(),
+                            );
+                            is_valid = false;
                         }
                     }
                 }

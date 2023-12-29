@@ -2996,9 +2996,11 @@ pub mod args {
     pub const BRIDGE_POOL_GAS_AMOUNT: ArgDefault<token::DenominatedAmount> =
         arg_default(
             "pool-gas-amount",
-            DefaultFn(|| token::DenominatedAmount {
-                amount: token::Amount::zero(),
-                denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+            DefaultFn(|| {
+                token::DenominatedAmount::new(
+                    token::Amount::zero(),
+                    NATIVE_MAX_DECIMAL_PLACES.into(),
+                )
             }),
         );
     pub const BRIDGE_POOL_GAS_PAYER: ArgOpt<WalletAddress> =
@@ -3068,9 +3070,11 @@ pub mod args {
     pub const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
     pub const FEE_AMOUNT: ArgDefault<token::DenominatedAmount> = arg_default(
         "fee-amount",
-        DefaultFn(|| token::DenominatedAmount {
-            amount: token::Amount::default(),
-            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+        DefaultFn(|| {
+            token::DenominatedAmount::new(
+                token::Amount::default(),
+                NATIVE_MAX_DECIMAL_PLACES.into(),
+            )
         }),
     );
     pub const GENESIS_BOND_SOURCE: ArgOpt<GenesisAddress> = arg_opt("source");
@@ -4500,7 +4504,7 @@ pub mod args {
                     println!("Could not parse bond amount: {:?}", e);
                     safe_exit(1);
                 })
-                .amount;
+                .amount();
             let source = SOURCE_OPT.parse(matches);
             let tx_code_path = PathBuf::from(TX_BOND_WASM);
             Self {
@@ -4550,7 +4554,7 @@ pub mod args {
                     println!("Could not parse bond amount: {:?}", e);
                     safe_exit(1);
                 })
-                .amount;
+                .amount();
             let source = SOURCE_OPT.parse(matches);
             let tx_code_path = PathBuf::from(TX_UNBOND_WASM);
             Self {
@@ -4676,7 +4680,7 @@ pub mod args {
                     println!("Could not parse bond amount: {:?}", e);
                     safe_exit(1);
                 })
-                .amount;
+                .amount();
             let tx_code_path = PathBuf::from(TX_REDELEGATE_WASM);
             Self {
                 tx,
