@@ -2,6 +2,10 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
+use masp_primitives::merkle_tree::CommitmentTree;
+use masp_primitives::sapling::Node;
+use masp_proofs::bls12_381;
+use namada::core::types::storage::KeySeg;
 use namada::ledger::parameters::Parameters;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
@@ -9,10 +13,13 @@ use namada::ledger::storage_api::token::{credit_tokens, write_denom};
 use namada::ledger::storage_api::StorageWrite;
 use namada::ledger::{ibc, pos};
 use namada::proof_of_stake::BecomeValidator;
-use namada::types::address::Address;
+use namada::types::address::{Address, MASP};
 use namada::types::hash::Hash as CodeHash;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
+use namada::types::token::{
+    MASP_NOTE_COMMITMENT_ANCHOR_PREFIX, MASP_NOTE_COMMITMENT_TREE_KEY,
+};
 use namada::vm::validate_untrusted_wasm;
 use namada_sdk::eth_bridge::EthBridgeStatus;
 use namada_sdk::proof_of_stake::PosParams;
@@ -169,6 +176,27 @@ where
         .expect("Must be able to copy PoS genesis validator sets");
 
         ibc::init_genesis_storage(&mut self.wl_storage);
+
+        // Init masp commitment tree and anchor
+        let empty_commitment_tree: CommitmentTree<Node> =
+            CommitmentTree::empty();
+        let anchor = empty_commitment_tree.root();
+        let note_commitment_tree_key = Key::from(MASP.to_db_key())
+            .push(&MASP_NOTE_COMMITMENT_TREE_KEY.to_owned())
+            .expect("Cannot obtain a storage key");
+        self.wl_storage
+            .write(&note_commitment_tree_key, empty_commitment_tree)
+            .unwrap();
+        let commitment_tree_anchor_key = Key::from(MASP.to_db_key())
+            .push(&MASP_NOTE_COMMITMENT_ANCHOR_PREFIX.to_owned())
+            .expect("Cannot obtain a storage key")
+            .push(&namada::core::types::hash::Hash(
+                bls12_381::Scalar::from(anchor).to_bytes(),
+            ))
+            .expect("Cannot obtain a storage key");
+        self.wl_storage
+            .write(&commitment_tree_anchor_key, ())
+            .unwrap();
 
         // Set the initial validator set
         response.validators = self

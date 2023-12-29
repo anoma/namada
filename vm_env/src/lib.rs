@@ -133,6 +133,11 @@ pub mod tx {
             max_signatures_len: u64,
         ) -> i64;
 
+        /// Update the masp note commitment tree with the new notes
+        pub fn namada_tx_update_masp_note_commitment_tree(
+            transaction_ptr: u64,
+            transaction_len: u64,
+        ) -> i64;
     }
 }
 
