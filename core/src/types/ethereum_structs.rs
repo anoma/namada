@@ -22,6 +22,8 @@ use crate::types::keccak::KeccakHash;
     PartialOrd,
     BorshSerialize,
     BorshDeserialize,
+    Serialize,
+    Deserialize,
 )]
 pub enum BpTransferStatus {
     /// The transfer has been relayed.
@@ -41,6 +43,8 @@ pub enum BpTransferStatus {
     PartialOrd,
     BorshSerialize,
     BorshDeserialize,
+    Serialize,
+    Deserialize,
 )]
 pub enum EthBridgeEvent {
     /// Bridge pool transfer status update event.
