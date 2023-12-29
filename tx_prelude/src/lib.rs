@@ -19,6 +19,7 @@ use std::marker::PhantomData;
 pub use borsh::{BorshDeserialize, BorshSerialize};
 pub use borsh_ext;
 use borsh_ext::BorshSerializeExt;
+use masp_primitives::transaction::Transaction;
 pub use namada_core::ledger::governance::storage as gov_storage;
 pub use namada_core::ledger::parameters::storage as parameters_storage;
 pub use namada_core::ledger::storage::types::encode;
@@ -399,6 +400,23 @@ pub fn verify_signatures_of_pks(
             threshold,
             max_signatures.as_ptr() as _,
             max_signatures.len() as _,
+        )
+    };
+
+    Ok(HostEnvResult::is_success(valid))
+}
+
+/// Update the masp note commitment tree in storage with the new notes
+pub fn update_masp_note_commitment_tree(
+    transaction: &Transaction,
+) -> EnvResult<bool> {
+    // Serialize transaction
+    let transaction = transaction.serialize_to_vec();
+
+    let valid = unsafe {
+        namada_tx_update_masp_note_commitment_tree(
+            transaction.as_ptr() as _,
+            transaction.len() as _,
         )
     };
 
