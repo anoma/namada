@@ -84,6 +84,10 @@ router! {SHELL,
     // Conversion state access - read conversion
     ( "conversions" ) -> BTreeMap<AssetType, ConversionWithoutPath> = read_conversions,
 
+
+    // Conversion state access - read conversion
+    ( "masp_reward_tokens" ) -> BTreeMap<String, Address> = masp_reward_tokens,
+
     // Block results access - read bit-vec
     ( "results" ) -> Vec<BlockResults> = read_results,
 
@@ -208,6 +212,17 @@ where
             format!("No conversion found for asset type: {}", asset_type),
         )))
     }
+}
+
+/// Query to read the tokens that earn masp rewards.
+fn masp_reward_tokens<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+) -> storage_api::Result<BTreeMap<String, Address>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    Ok(ctx.wl_storage.storage.conversion_state.tokens.clone())
 }
 
 fn epoch<D, H, V, T>(
