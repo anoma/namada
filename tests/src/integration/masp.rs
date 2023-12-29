@@ -1217,33 +1217,36 @@ fn wrapper_fee_unshielding() -> Result<()> {
     node.assert_success();
 
     // 3. Invalid unshielding
-    // TODO: this test shall panic because of the panic in the sdk. Once the
-    // panics are removed from there, this test can be updated
-    let tx_run = run(
-        &node,
-        Bin::Client,
-        vec![
-            "transfer",
-            "--source",
-            ALBERT,
-            "--target",
-            BERTHA,
-            "--token",
-            NAM,
-            "--amount",
-            "1",
-            "--gas-price",
-            "1000",
-            "--gas-spending-key",
-            B_SPENDING_KEY,
-            "--ledger-address",
-            validator_one_rpc,
-            "--force",
-        ],
-    )
-    .is_err();
+    let tx_args = vec![
+        "transfer",
+        "--source",
+        ALBERT,
+        "--target",
+        BERTHA,
+        "--token",
+        NAM,
+        "--amount",
+        "1",
+        "--gas-price",
+        "1000",
+        "--gas-spending-key",
+        B_SPENDING_KEY,
+        "--ledger-address",
+        validator_one_rpc,
+        // NOTE: Forcing the transaction will make the client produce a
+        // transfer without a masp object attached to it, so don't expect a
+        // failure from the masp vp here but from the check_fees function
+        "--force",
+    ];
 
-    assert!(tx_run);
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, tx_args.clone()));
+    assert!(
+        captured.result.is_err(),
+        "{:?} unexpectedly succeeded",
+        tx_args
+    );
+
     Ok(())
 }
 
