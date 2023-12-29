@@ -194,6 +194,7 @@ where
                 vps_result: VpsResult::default(),
                 initialized_accounts: vec![],
                 ibc_events: BTreeSet::default(),
+                eth_bridge_events: BTreeSet::default(),
             })
         }
         TxType::Decrypted(DecryptedTx::Undecryptable) => {
@@ -610,6 +611,7 @@ where
         vps_result,
         initialized_accounts,
         ibc_events,
+        eth_bridge_events: BTreeSet::default(),
     })
 }
 
