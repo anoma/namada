@@ -978,12 +978,6 @@ pub const DENOM_STORAGE_KEY: &str = "denomination";
 pub const MINTER_STORAGE_KEY: &str = "minter";
 /// Key segment for minted balance
 pub const MINTED_STORAGE_KEY: &str = "minted";
-/// Key segment for head shielded transaction pointer keys
-pub const HEAD_TX_KEY: &str = "head-tx";
-/// Key segment prefix for shielded transaction key
-pub const TX_KEY_PREFIX: &str = "tx-";
-/// Key segment prefix for pinned shielded transactions
-pub const PIN_KEY_PREFIX: &str = "pin-";
 /// Key segment prefix for the nullifiers
 pub const MASP_NULLIFIERS_KEY: &str = "nullifiers";
 /// Key segment prefix for the note commitment merkle tree
@@ -1223,11 +1217,7 @@ pub fn is_masp_key(key: &Key) -> bool {
 pub fn is_masp_allowed_key(key: &Key) -> bool {
     match &key.segments[..] {
         [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
-            if *addr == MASP
-                && (key == HEAD_TX_KEY
-                    || key.starts_with(TX_KEY_PREFIX)
-                    || key.starts_with(PIN_KEY_PREFIX)
-                    || key == MASP_NOTE_COMMITMENT_TREE_KEY) =>
+            if *addr == MASP && key == MASP_NOTE_COMMITMENT_TREE_KEY =>
         {
             true
         }
@@ -1239,22 +1229,6 @@ pub fn is_masp_allowed_key(key: &Key) -> bool {
         ] if *addr == MASP && key == MASP_NULLIFIERS_KEY => true,
         _ => false,
     }
-}
-
-/// Check if the given storage key is a masp tx prefix key
-pub fn is_masp_tx_prefix_key(key: &Key) -> bool {
-    matches!(&key.segments[..],
-        [DbKeySeg::AddressSeg(addr),
-             DbKeySeg::StringSeg(prefix),
-        ] if *addr == MASP && prefix.starts_with(TX_KEY_PREFIX))
-}
-
-/// Check if the given storage key is a masp tx pin key
-pub fn is_masp_tx_pin_key(key: &Key) -> bool {
-    matches!(&key.segments[..],
-        [DbKeySeg::AddressSeg(addr),
-             DbKeySeg::StringSeg(prefix),
-        ] if *addr == MASP && prefix.starts_with(PIN_KEY_PREFIX))
 }
 
 /// Check if the given storage key is a masp nullifier key
@@ -1313,27 +1287,6 @@ pub fn masp_commitment_anchor_key(anchor: impl Into<Scalar>) -> Key {
 pub fn masp_convert_anchor_key() -> Key {
     Key::from(MASP.to_db_key())
         .push(&MASP_CONVERT_ANCHOR_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Get the masp head-tx key
-pub fn masp_head_tx_key() -> Key {
-    Key::from(MASP.to_db_key())
-        .push(&HEAD_TX_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Get the masp tx key for the provided tx id
-pub fn masp_tx_key(tx_id: u64) -> Key {
-    Key::from(MASP.to_db_key())
-        .push(&(TX_KEY_PREFIX.to_owned() + &tx_id.to_string()))
-        .expect("Cannot obtain a storage key")
-}
-
-/// Get the masp pin tx key for the provided pin key
-pub fn masp_pin_tx_key(pin_key: &str) -> Key {
-    Key::from(MASP.to_db_key())
-        .push(&(PIN_KEY_PREFIX.to_owned() + pin_key))
         .expect("Cannot obtain a storage key")
 }
 
