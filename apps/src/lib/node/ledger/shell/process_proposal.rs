@@ -546,11 +546,26 @@ where
                                     .into(),
                             }
                         } else {
-                            TxResult {
-                                code: ResultCode::Ok.into(),
-                                info: "Process Proposal accepted this \
-                                       transaction"
-                                    .into(),
+                            match tx.header().expiration {
+                                Some(tx_expiration)
+                                    if block_time > tx_expiration =>
+                                {
+                                    TxResult {
+                                        code: ResultCode::ExpiredDecryptedTx
+                                            .into(),
+                                        info: format!(
+                                            "Tx expired at {:#?}, block time: \
+                                             {:#?}",
+                                            tx_expiration, block_time
+                                        ),
+                                    }
+                                }
+                                _ => TxResult {
+                                    code: ResultCode::Ok.into(),
+                                    info: "Process Proposal accepted this \
+                                           transaction"
+                                        .into(),
+                                },
                             }
                         }
                     }
@@ -1748,6 +1763,55 @@ mod test_process_proposal {
                     u32::from(ResultCode::ExpiredTx)
                 );
             }
+        }
+    }
+
+    /// Test that an expired decrypted transaction is marked as rejected but
+    /// still allows the block to be accepted
+    #[test]
+    fn test_expired_decrypted() {
+        let (mut shell, _recv, _, _) = test_utils::setup();
+        let keypair = crate::wallet::defaults::daewon_keypair();
+
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount_per_gas_unit: DenominatedAmount::native(1.into()),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                GAS_LIMIT_MULTIPLIER.into(),
+                None,
+            ))));
+        wrapper.header.chain_id = shell.chain_id.clone();
+        wrapper.header.expiration = Some(DateTimeUtc::default());
+        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
+        wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper.add_section(Section::Signature(Signature::new(
+            wrapper.sechashes(),
+            [(0, keypair)].into_iter().collect(),
+            None,
+        )));
+
+        shell.enqueue_tx(wrapper.clone(), GAS_LIMIT_MULTIPLIER.into());
+
+        let decrypted =
+            wrapper.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
+
+        // Run validation
+        let request = ProcessProposal {
+            txs: vec![decrypted.to_bytes()],
+        };
+        match shell.process_proposal(request) {
+            Ok(txs) => {
+                assert_eq!(txs.len(), 1);
+                assert_eq!(
+                    txs[0].result.code,
+                    u32::from(ResultCode::ExpiredDecryptedTx)
+                );
+            }
+            Err(_) => panic!("Test failed"),
         }
     }
 
