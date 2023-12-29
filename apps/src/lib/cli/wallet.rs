@@ -12,15 +12,15 @@ use ledger_namada_rs::{BIP44Path, NamadaApp};
 use ledger_transport_hid::hidapi::HidApi;
 use ledger_transport_hid::TransportNativeHID;
 use masp_primitives::zip32::ExtendedFullViewingKey;
-use namada::types::address::Address;
+use namada::types::address::{Address, DecodeError};
 use namada::types::io::Io;
 use namada::types::key::*;
-use namada::types::masp::{MaspValue, PaymentAddress};
+use namada::types::masp::{ExtendedSpendingKey, MaspValue, PaymentAddress};
 use namada_sdk::masp::find_valid_diversifier;
 use namada_sdk::wallet::{
     DecryptionError, DerivationPath, DerivationPathError, FindKeyError, Wallet,
 };
-use namada_sdk::{display, display_line, edisplay_line};
+use namada_sdk::{display_line, edisplay_line};
 use rand_core::OsRng;
 
 use crate::cli;
@@ -39,143 +39,75 @@ impl CliApi {
         io: &impl Io,
     ) -> Result<()> {
         match cmd {
-            cmds::NamadaWallet::Key(sub) => match sub {
-                cmds::WalletKey::Derive(cmds::KeyDerive(args)) => {
-                    key_and_address_derive(ctx, io, args).await
-                }
-                cmds::WalletKey::Gen(cmds::KeyGen(args)) => {
-                    key_and_address_gen(ctx, io, args)
-                }
-                cmds::WalletKey::Find(cmds::KeyFind(args)) => {
-                    key_find(ctx, io, args)
-                }
-                cmds::WalletKey::List(cmds::KeyList(args)) => {
-                    key_list(ctx, io, args)
-                }
-                cmds::WalletKey::Export(cmds::Export(args)) => {
-                    key_export(ctx, io, args)
-                }
-            },
-            cmds::NamadaWallet::Address(sub) => match sub {
-                cmds::WalletAddress::Gen(cmds::AddressGen(args)) => {
-                    key_and_address_gen(ctx, io, args)
-                }
-                cmds::WalletAddress::Derive(cmds::AddressDerive(args)) => {
-                    key_and_address_derive(ctx, io, args).await
-                }
-                cmds::WalletAddress::Find(cmds::AddressOrAliasFind(args)) => {
-                    address_or_alias_find(ctx, io, args)
-                }
-                cmds::WalletAddress::List => address_list(ctx, io),
-                cmds::WalletAddress::Add(cmds::AddressAdd(args)) => {
-                    address_add(ctx, io, args)
-                }
-            },
-            cmds::NamadaWallet::Masp(sub) => match sub {
-                cmds::WalletMasp::GenSpendKey(cmds::MaspGenSpendKey(args)) => {
-                    spending_key_gen(ctx, io, args)
-                }
-                cmds::WalletMasp::GenPayAddr(cmds::MaspGenPayAddr(args)) => {
-                    let args = args.to_sdk(&mut ctx);
-                    payment_address_gen(ctx, io, args)
-                }
-                cmds::WalletMasp::AddAddrKey(cmds::MaspAddAddrKey(args)) => {
-                    address_key_add(ctx, io, args)
-                }
-                cmds::WalletMasp::ListPayAddrs => {
-                    payment_addresses_list(ctx, io)
-                }
-                cmds::WalletMasp::ListKeys(cmds::MaspListKeys(args)) => {
-                    spending_keys_list(ctx, io, args)
-                }
-                cmds::WalletMasp::FindAddrKey(cmds::MaspFindAddrKey(args)) => {
-                    address_key_find(ctx, io, args)
-                }
-            },
+            cmds::NamadaWallet::KeyGen(cmds::WalletGen(args)) => {
+                key_gen(ctx, io, args)
+            }
+            cmds::NamadaWallet::KeyDerive(cmds::WalletDerive(args)) => {
+                key_derive(ctx, io, args).await
+            }
+            cmds::NamadaWallet::KeyAddrList(cmds::WalletListKeysAddresses(
+                args,
+            )) => key_address_list(ctx, io, args),
+            cmds::NamadaWallet::KeyAddrFind(cmds::WalletFindKeysAddresses(
+                args,
+            )) => key_address_find(ctx, io, args),
+            cmds::NamadaWallet::KeyExport(cmds::WalletExportKey(args)) => {
+                key_export(ctx, io, args)
+            }
+            cmds::NamadaWallet::KeyImport(cmds::WalletImportKey(args)) => {
+                key_import(ctx, io, args)
+            }
+            cmds::NamadaWallet::KeyAddrAdd(cmds::WalletAddKeyAddress(args)) => {
+                key_address_add(ctx, io, args)
+            }
+            cmds::NamadaWallet::KeyAddrRemove(
+                cmds::WalletRemoveKeyAddress(args),
+            ) => key_address_remove(ctx, io, args),
+            cmds::NamadaWallet::PayAddrGen(cmds::WalletGenPaymentAddress(
+                args,
+            )) => {
+                let args = args.to_sdk(&mut ctx);
+                payment_address_gen(ctx, io, args)
+            }
         }
         Ok(())
     }
 }
 
-/// Find shielded address or key
-fn address_key_find(
-    ctx: Context,
+/// List shielded keys.
+fn shielded_keys_list(
+    wallet: &Wallet<CliWalletUtils>,
     io: &impl Io,
-    args::AddrKeyFind {
-        alias,
-        unsafe_show_secret,
-    }: args::AddrKeyFind,
+    decrypt: bool,
+    unsafe_show_secret: bool,
+    show_hint: bool,
 ) {
-    let mut wallet = load_wallet(ctx);
-    let alias = alias.to_lowercase();
-    if let Ok(viewing_key) = wallet.find_viewing_key(&alias) {
-        // Check if alias is a viewing key
-        display_line!(io, "Viewing key: {}", viewing_key);
-        if unsafe_show_secret {
-            // Check if alias is also a spending key
-            match wallet.find_spending_key(&alias, None) {
-                Ok(spending_key) => {
-                    display_line!(io, "Spending key: {}", spending_key)
-                }
-                Err(FindKeyError::KeyNotFound(_)) => {}
-                Err(err) => edisplay_line!(io, "{}", err),
-            }
-        }
-    } else if let Some(payment_addr) = wallet.find_payment_addr(&alias) {
-        // Failing that, check if alias is a payment address
-        display_line!(io, "Payment address: {}", payment_addr);
-    } else {
-        // Otherwise alias cannot be referring to any shielded value
-        display_line!(
-            io,
-            "No shielded address or key with alias {} found. Use the commands \
-             `masp list-addrs` and `masp list-keys` to see all the known \
-             addresses and keys.",
-            alias.to_lowercase()
-        );
-    }
-}
-
-/// List spending keys.
-fn spending_keys_list(
-    ctx: Context,
-    io: &impl Io,
-    args::MaspKeysList {
-        decrypt,
-        unsafe_show_secret,
-    }: args::MaspKeysList,
-) {
-    let wallet = load_wallet(ctx);
     let known_view_keys = wallet.get_viewing_keys();
     let known_spend_keys = wallet.get_spending_keys();
     if known_view_keys.is_empty() {
-        display_line!(
-            io,
-            "No known keys. Try `masp add --alias my-addr --value ...` to add \
-             a new key to the wallet.",
-        );
+        if show_hint {
+            display_line!(
+                io,
+                "No known keys. Try `add --alias my-addr --value ...` to add \
+                 a new key to the wallet, or `gen --shielded --alias my-key` \
+                 to generate a new key.",
+            );
+        }
     } else {
-        let stdout = io::stdout();
-        let mut w = stdout.lock();
-        display_line!(io, &mut w; "Known keys:").unwrap();
+        let mut w_lock = io::stdout().lock();
+        display_line!(io, &mut w_lock; "Known shielded keys:").unwrap();
         for (alias, key) in known_view_keys {
-            display!(io, &mut w; "  Alias \"{}\"", alias).unwrap();
             let spending_key_opt = known_spend_keys.get(&alias);
             // If this alias is associated with a spending key, indicate whether
             // or not the spending key is encrypted
-            // TODO: consider turning if let into match
-            if let Some(spending_key) = spending_key_opt {
-                if spending_key.is_encrypted() {
-                    display_line!(io, &mut w; " (encrypted):")
-                } else {
-                    display_line!(io, &mut w; " (not encrypted):")
-                }
-                .unwrap();
-            } else {
-                display_line!(io, &mut w; ":").unwrap();
-            }
+            let encrypted_status = match spending_key_opt {
+                None => "external",
+                Some(spend_key) if spend_key.is_encrypted() => "encrypted",
+                _ => "not encrypted",
+            };
+            display_line!(io, &mut w_lock; "  Alias \"{}\" ({}):", alias, encrypted_status).unwrap();
             // Always print the corresponding viewing key
-            display_line!(io, &mut w; "    Viewing Key: {}", key).unwrap();
+            display_line!(io, &mut w_lock; "    Viewing Key: {}", key).unwrap();
             // A subset of viewing keys will have corresponding spending keys.
             // Print those too if they are available and requested.
             if unsafe_show_secret {
@@ -185,7 +117,7 @@ fn spending_keys_list(
                         // decrypted
                         Ok(spending_key) => {
                             display_line!(io,
-                                &mut w;
+                                &mut w_lock;
                                 "    Spending key: {}", spending_key,
                             )
                             .unwrap();
@@ -199,7 +131,7 @@ fn spending_keys_list(
                         // been provided
                         Err(err) => {
                             display_line!(io,
-                                &mut w;
+                                &mut w_lock;
                                     "    Couldn't decrypt the spending key: {}",
                                     err,
                             )
@@ -213,21 +145,26 @@ fn spending_keys_list(
 }
 
 /// List payment addresses.
-fn payment_addresses_list(ctx: Context, io: &impl Io) {
-    let wallet = load_wallet(ctx);
+fn payment_addresses_list(
+    wallet: &Wallet<CliWalletUtils>,
+    io: &impl Io,
+    show_hint: bool,
+) {
     let known_addresses = wallet.get_payment_addrs();
     if known_addresses.is_empty() {
-        display_line!(
-            io,
-            "No known payment addresses. Try `masp gen-addr --alias my-addr` \
-             to generate a new payment address.",
-        );
+        if show_hint {
+            display_line!(
+                io,
+                "No known payment addresses. Try `gen-payment-addr --alias \
+                 my-payment-addr` to generate a new payment address.",
+            );
+        }
     } else {
-        let stdout = io::stdout();
-        let mut w = stdout.lock();
-        display_line!(io, &mut w; "Known payment addresses:").unwrap();
+        let mut w_lock = io::stdout().lock();
+        display_line!(io, &mut w_lock; "Known payment addresses:").unwrap();
         for (alias, address) in sorted(known_addresses) {
-            display_line!(io, &mut w; "  \"{}\": {}", alias, address).unwrap();
+            display_line!(io, &mut w_lock; "  \"{}\": {}", alias, address)
+                .unwrap();
         }
     }
 }
@@ -236,18 +173,21 @@ fn payment_addresses_list(ctx: Context, io: &impl Io) {
 fn spending_key_gen(
     ctx: Context,
     io: &impl Io,
-    args::MaspSpendKeyGen {
+    args::KeyGen {
         alias,
         alias_force,
         unsafe_dont_encrypt,
-    }: args::MaspSpendKeyGen,
+        ..
+    }: args::KeyGen,
 ) {
     let mut wallet = load_wallet(ctx);
     let alias = alias.to_lowercase();
     let password = read_and_confirm_encryption_password(unsafe_dont_encrypt);
     let (alias, _key) =
         wallet.gen_store_spending_key(alias, password, alias_force, &mut OsRng);
-    wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
+    wallet
+        .save()
+        .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
     display_line!(
         io,
         "Successfully added a spending key with alias: \"{}\"",
@@ -259,13 +199,13 @@ fn spending_key_gen(
 fn payment_address_gen(
     ctx: Context,
     io: &impl Io,
-    args::MaspPayAddrGen {
+    args::PayAddressGen {
         alias,
         alias_force,
         viewing_key,
         pin,
         ..
-    }: args::MaspPayAddrGen,
+    }: args::PayAddressGen,
 ) {
     let mut wallet = load_wallet(ctx);
     let alias = alias.to_lowercase();
@@ -293,19 +233,17 @@ fn payment_address_gen(
 }
 
 /// Add a viewing key, spending key, or payment address to wallet.
-fn address_key_add(
+fn shielded_key_address_add(
     ctx: Context,
     io: &impl Io,
-    args::MaspAddrKeyAdd {
-        alias,
-        alias_force,
-        value,
-        unsafe_dont_encrypt,
-    }: args::MaspAddrKeyAdd,
+    alias: String,
+    alias_force: bool,
+    masp_value: MaspValue,
+    unsafe_dont_encrypt: bool,
 ) {
     let alias = alias.to_lowercase();
     let mut wallet = load_wallet(ctx);
-    let (alias, typ) = match value {
+    let (alias, typ) = match masp_value {
         MaspValue::FullViewingKey(viewing_key) => {
             let alias = wallet
                 .insert_viewing_key(alias, viewing_key, alias_force)
@@ -369,17 +307,18 @@ pub fn decode_derivation_path(
 
 /// Derives a keypair and an implicit address from the mnemonic code in the
 /// wallet.
-async fn key_and_address_derive(
+async fn transparent_key_and_address_derive(
     ctx: Context,
     io: &impl Io,
-    args::KeyAndAddressDerive {
+    args::KeyDerive {
         scheme,
         alias,
         alias_force,
         unsafe_dont_encrypt,
         derivation_path,
         use_device,
-    }: args::KeyAndAddressDerive,
+        ..
+    }: args::KeyDerive,
 ) {
     let mut wallet = load_wallet(ctx);
     let derivation_path = decode_derivation_path(scheme, derivation_path)
@@ -387,13 +326,14 @@ async fn key_and_address_derive(
             edisplay_line!(io, "{}", err);
             cli::safe_exit(1)
         });
+    let alias = alias.to_lowercase();
     let alias = if !use_device {
         let encryption_password =
             read_and_confirm_encryption_password(unsafe_dont_encrypt);
         wallet
             .derive_key_from_mnemonic_code(
                 scheme,
-                alias,
+                Some(alias),
                 alias_force,
                 derivation_path,
                 None,
@@ -407,7 +347,7 @@ async fn key_and_address_derive(
             .0
     } else {
         let hidapi = HidApi::new().unwrap_or_else(|err| {
-            edisplay_line!(io, "Failed to create Hidapi: {}", err);
+            edisplay_line!(io, "Failed to create HidApi: {}", err);
             cli::safe_exit(1)
         });
         let app = NamadaApp::new(
@@ -436,13 +376,12 @@ async fn key_and_address_derive(
 
         let pubkey = common::PublicKey::try_from_slice(&response.public_key)
             .expect("unable to decode public key from hardware wallet");
-        let pkh = PublicKeyHash::from(&pubkey);
         let address = Address::from_str(&response.address_str)
             .expect("unable to decode address from hardware wallet");
 
         wallet
             .insert_public_key(
-                alias.unwrap_or_else(|| pkh.to_string()),
+                alias,
                 pubkey,
                 Some(address),
                 Some(derivation_path),
@@ -465,50 +404,61 @@ async fn key_and_address_derive(
 
 /// Generate a new keypair and derive implicit address from it and store them in
 /// the wallet.
-fn key_and_address_gen(
+fn transparent_key_and_address_gen(
     ctx: Context,
     io: &impl Io,
-    args::KeyAndAddressGen {
+    args::KeyGen {
         scheme,
+        raw,
         alias,
         alias_force,
         unsafe_dont_encrypt,
         derivation_path,
-    }: args::KeyAndAddressGen,
+        ..
+    }: args::KeyGen,
 ) {
+    let alias = alias.to_lowercase();
     let mut wallet = load_wallet(ctx);
     let encryption_password =
         read_and_confirm_encryption_password(unsafe_dont_encrypt);
-    let derivation_path = decode_derivation_path(scheme, derivation_path)
+    let alias = if raw {
+        wallet.gen_store_secret_key(
+            scheme,
+            Some(alias),
+            alias_force,
+            encryption_password,
+            &mut OsRng,
+        )
+    } else {
+        let derivation_path = decode_derivation_path(scheme, derivation_path)
+            .unwrap_or_else(|err| {
+                edisplay_line!(io, "{}", err);
+                cli::safe_exit(1)
+            });
+        let (_mnemonic, seed) = Wallet::<CliWalletUtils>::gen_hd_seed(
+            None,
+            &mut OsRng,
+            unsafe_dont_encrypt,
+        )
         .unwrap_or_else(|err| {
             edisplay_line!(io, "{}", err);
             cli::safe_exit(1)
         });
-    let mut rng = OsRng;
-    let (_mnemonic, seed) = Wallet::<CliWalletUtils>::gen_hd_seed(
-        None,
-        &mut rng,
-        unsafe_dont_encrypt,
-    )
-    .unwrap_or_else(|err| {
-        edisplay_line!(io, "{}", err);
-        cli::safe_exit(1)
-    });
-    let alias = wallet
-        .derive_store_hd_secret_key(
+        wallet.derive_store_hd_secret_key(
             scheme,
-            alias,
+            Some(alias),
             alias_force,
             seed,
             derivation_path,
             encryption_password,
         )
-        .map(|x| x.0)
-        .unwrap_or_else(|err| {
-            eprintln!("{}", err);
-            println!("No changes are persisted. Exiting.");
-            cli::safe_exit(0);
-        });
+    }
+    .map(|x| x.0)
+    .unwrap_or_else(|err| {
+        eprintln!("{}", err);
+        println!("No changes are persisted. Exiting.");
+        cli::safe_exit(0);
+    });
     wallet
         .save()
         .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
@@ -519,22 +469,268 @@ fn key_and_address_gen(
     );
 }
 
-/// Find a keypair in the wallet store.
-fn key_find(
+/// Key generation
+fn key_gen(ctx: Context, io: &impl Io, args_key_gen: args::KeyGen) {
+    if !args_key_gen.shielded {
+        transparent_key_and_address_gen(ctx, io, args_key_gen)
+    } else {
+        spending_key_gen(ctx, io, args_key_gen)
+    }
+}
+
+/// HD key derivation from mnemonic code
+async fn key_derive(
     ctx: Context,
     io: &impl Io,
-    args::KeyFind {
-        public_key,
-        alias,
-        value,
+    args_key_derive: args::KeyDerive,
+) {
+    if !args_key_derive.shielded {
+        transparent_key_and_address_derive(ctx, io, args_key_derive).await
+    } else {
+        todo!()
+    }
+}
+
+/// List keys and addresses
+fn key_address_list(
+    ctx: Context,
+    io: &impl Io,
+    args::KeyAddressList {
+        decrypt,
+        transparent_only,
+        shielded_only,
+        keys_only,
+        addresses_only,
         unsafe_show_secret,
-    }: args::KeyFind,
+    }: args::KeyAddressList,
+) {
+    let wallet = load_wallet(ctx);
+    if !shielded_only {
+        if !addresses_only {
+            transparent_keys_list(
+                &wallet,
+                io,
+                decrypt,
+                unsafe_show_secret,
+                transparent_only && keys_only,
+            )
+        }
+        if !keys_only {
+            transparent_addresses_list(
+                &wallet,
+                io,
+                transparent_only && addresses_only,
+            )
+        }
+    }
+
+    if !transparent_only {
+        if !addresses_only {
+            shielded_keys_list(
+                &wallet,
+                io,
+                decrypt,
+                unsafe_show_secret,
+                shielded_only && keys_only,
+            )
+        }
+        if !keys_only {
+            payment_addresses_list(&wallet, io, shielded_only && addresses_only)
+        }
+    }
+}
+
+/// Find keys and addresses
+fn key_address_find(
+    ctx: Context,
+    io: &impl Io,
+    args::KeyAddressFind {
+        alias,
+        address,
+        public_key,
+        public_key_hash,
+        payment_address,
+        keys_only,
+        addresses_only,
+        decrypt,
+        unsafe_show_secret,
+    }: args::KeyAddressFind,
+) {
+    if let Some(alias) = alias {
+        // Search keys and addresses by alias
+        let mut wallet = load_wallet(ctx);
+        let found_transparent = transparent_key_address_find_by_alias(
+            &mut wallet,
+            io,
+            alias.clone(),
+            keys_only,
+            addresses_only,
+            decrypt,
+            unsafe_show_secret,
+        );
+        let found_shielded = shielded_key_address_find_by_alias(
+            &mut wallet,
+            io,
+            alias.clone(),
+            keys_only,
+            addresses_only,
+            decrypt,
+            unsafe_show_secret,
+        );
+        if !found_transparent && !found_shielded {
+            display_line!(io, "Alias \"{}\" not found.", alias);
+        }
+    } else if address.is_some() {
+        // Search alias by address
+        transparent_address_or_alias_find(ctx, io, None, address)
+    } else if public_key.is_some() || public_key_hash.is_some() {
+        // Search transparent keypair by public key or public key hash
+        transparent_key_find(
+            ctx,
+            io,
+            None,
+            public_key,
+            public_key_hash,
+            unsafe_show_secret,
+        )
+    } else if payment_address.is_some() {
+        // Search alias by MASP payment address
+        payment_address_or_alias_find(ctx, io, None, payment_address)
+    }
+}
+
+#[derive(Debug)]
+pub enum TransparentValue {
+    /// Transparent secret key
+    TranspSecretKey(common::SecretKey),
+    /// Transparent public key
+    TranspPublicKey(common::PublicKey),
+    /// Transparent address
+    TranspAddress(Address),
+}
+
+impl FromStr for TransparentValue {
+    type Err = DecodeError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // Try to decode this value first as a secret key, then as a public key,
+        // then as an address
+        common::SecretKey::from_str(s)
+            .map(Self::TranspSecretKey)
+            .or_else(|_| {
+                common::PublicKey::from_str(s).map(Self::TranspPublicKey)
+            })
+            .or_else(|_| Address::from_str(s).map(Self::TranspAddress))
+    }
+}
+
+/// Value for wallet `add` command
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug)]
+pub enum KeyAddrAddValue {
+    /// Transparent value
+    TranspValue(TransparentValue),
+    /// Masp value
+    MASPValue(MaspValue),
+}
+
+impl FromStr for KeyAddrAddValue {
+    type Err = DecodeError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // Try to decode this value first as a transparent value, then as a MASP
+        // value
+        TransparentValue::from_str(s)
+            .map(Self::TranspValue)
+            .or_else(|_| MaspValue::from_str(s).map(Self::MASPValue))
+    }
+}
+
+fn add_key_or_address(
+    ctx: Context,
+    io: &impl Io,
+    alias: String,
+    alias_force: bool,
+    value: KeyAddrAddValue,
+    unsafe_dont_encrypt: bool,
+) {
+    match value {
+        KeyAddrAddValue::TranspValue(TransparentValue::TranspSecretKey(sk)) => {
+            transparent_secret_key_add(
+                ctx,
+                io,
+                alias,
+                alias_force,
+                sk,
+                unsafe_dont_encrypt,
+            )
+        }
+        KeyAddrAddValue::TranspValue(TransparentValue::TranspPublicKey(
+            pubkey,
+        )) => transparent_public_key_add(ctx, io, alias, alias_force, pubkey),
+        KeyAddrAddValue::TranspValue(TransparentValue::TranspAddress(
+            address,
+        )) => transparent_address_add(ctx, io, alias, alias_force, address),
+        KeyAddrAddValue::MASPValue(masp_value) => shielded_key_address_add(
+            ctx,
+            io,
+            alias,
+            alias_force,
+            masp_value,
+            unsafe_dont_encrypt,
+        ),
+    }
+}
+
+/// Add key or address
+fn key_address_add(
+    ctx: Context,
+    io: &impl Io,
+    args::KeyAddressAdd {
+        alias,
+        alias_force,
+        value,
+        unsafe_dont_encrypt,
+        ..
+    }: args::KeyAddressAdd,
+) {
+    let value = KeyAddrAddValue::from_str(&value).unwrap_or_else(|err| {
+        edisplay_line!(io, "{}", err);
+        display_line!(io, "No changes are persisted. Exiting.");
+        cli::safe_exit(1)
+    });
+    add_key_or_address(ctx, io, alias, alias_force, value, unsafe_dont_encrypt)
+}
+
+/// Remove keys and addresses
+fn key_address_remove(
+    ctx: Context,
+    io: &impl Io,
+    args::KeyAddressRemove { alias, .. }: args::KeyAddressRemove,
+) {
+    let alias = alias.to_lowercase();
+    let mut wallet = load_wallet(ctx);
+    wallet.remove_all_by_alias(alias.clone());
+    wallet
+        .save()
+        .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
+    display_line!(io, "Successfully removed alias: \"{}\"", alias);
+}
+
+/// Find a keypair in the wallet store.
+fn transparent_key_find(
+    ctx: Context,
+    io: &impl Io,
+    alias: Option<String>,
+    public_key: Option<common::PublicKey>,
+    public_key_hash: Option<String>,
+    unsafe_show_secret: bool,
 ) {
     let mut wallet = load_wallet(ctx);
     let found_keypair = match public_key {
         Some(pk) => wallet.find_key_by_pk(&pk, None),
         None => {
-            let alias = alias.or(value);
+            let alias = alias.map(|a| a.to_lowercase()).or(public_key_hash);
             match alias {
                 None => {
                     edisplay_line!(
@@ -544,9 +740,7 @@ fn key_find(
                     );
                     cli::safe_exit(1)
                 }
-                Some(alias) => {
-                    wallet.find_secret_key(alias.to_lowercase(), None)
-                }
+                Some(alias) => wallet.find_secret_key(alias, None),
             }
         }
     };
@@ -565,27 +759,247 @@ fn key_find(
     }
 }
 
-/// List all known keys.
-fn key_list(
+/// Find address (alias) by its alias (address).
+fn transparent_address_or_alias_find(
     ctx: Context,
     io: &impl Io,
-    args::KeyList {
-        decrypt,
-        unsafe_show_secret,
-    }: args::KeyList,
+    alias: Option<String>,
+    address: Option<Address>,
 ) {
     let wallet = load_wallet(ctx);
+    if address.is_some() && alias.is_some() {
+        panic!(
+            "This should not be happening: clap should emit its own error \
+             message."
+        );
+    } else if alias.is_some() {
+        let alias = alias.unwrap().to_lowercase();
+        if let Some(address) = wallet.find_address(&alias) {
+            display_line!(io, "Found address {}", address.to_pretty_string());
+        } else {
+            display_line!(
+                io,
+                "No address with alias {} found. Use the command `list \
+                 --addr` to see all the known transparent addresses.",
+                alias
+            );
+        }
+    } else if address.is_some() {
+        if let Some(alias) = wallet.find_alias(address.as_ref().unwrap()) {
+            display_line!(io, "Found alias {}", alias);
+        } else {
+            display_line!(
+                io,
+                "No address with alias {} found. Use the command `list \
+                 --addr` to see all the known transparent addresses.",
+                address.unwrap()
+            );
+        }
+    }
+}
+
+/// Find payment address (alias) by its alias (payment address).
+fn payment_address_or_alias_find(
+    ctx: Context,
+    io: &impl Io,
+    alias: Option<String>,
+    payment_address: Option<PaymentAddress>,
+) {
+    let wallet = load_wallet(ctx);
+    if payment_address.is_some() && alias.is_some() {
+        panic!(
+            "This should not be happening: clap should emit its own error \
+             message."
+        );
+    } else if alias.is_some() {
+        let alias = alias.unwrap().to_lowercase();
+        if let Some(payment_addr) = wallet.find_payment_addr(&alias) {
+            display_line!(io, "Found payment address {}", payment_addr);
+        } else {
+            display_line!(
+                io,
+                "No payment address with alias {} found. Use the command \
+                 `list --shielded --addr` to see all the known payment \
+                 addresses.",
+                alias
+            );
+        }
+    } else if payment_address.is_some() {
+        if let Some(alias) =
+            wallet.find_alias_by_payment_addr(payment_address.as_ref().unwrap())
+        {
+            display_line!(io, "Found alias {}", alias);
+        } else {
+            display_line!(
+                io,
+                "No address with alias {} found. Use the command `list \
+                 --shielded --addr` to see all the known payment addresses.",
+                payment_address.unwrap()
+            );
+        }
+    }
+}
+
+/// Find transparent addresses and keys by alias
+fn transparent_key_address_find_by_alias(
+    wallet: &mut Wallet<CliWalletUtils>,
+    io: &impl Io,
+    alias: String,
+    keys_only: bool,
+    addresses_only: bool,
+    decrypt: bool,
+    unsafe_show_secret: bool,
+) -> bool {
+    let alias = alias.to_lowercase();
+    let mut w_lock = io::stdout().lock();
+    let mut found = false;
+
+    // Find transparent keys
+    if !addresses_only {
+        // Check if alias is a public key
+        if let Ok(public_key) = wallet.find_public_key(&alias) {
+            found = true;
+            display_line!(io, &mut w_lock; "Found transparent keys:").unwrap();
+            let encrypted = match wallet.is_encrypted_secret_key(&alias) {
+                None => "external",
+                Some(res) if res => "encrypted",
+                _ => "not encrypted",
+            };
+            display_line!(io,
+                &mut w_lock;
+                "  Alias \"{}\" ({}):", alias, encrypted,
+            )
+            .unwrap();
+            let pkh = PublicKeyHash::from(&public_key);
+            // Always print the public key and hash
+            display_line!(io, &mut w_lock; "    Public key hash: {}", pkh)
+                .unwrap();
+            display_line!(
+                io,
+                &mut w_lock;
+                "    Public key: {}",
+                public_key
+            )
+            .unwrap();
+            if decrypt {
+                // Check if alias is also a secret key. Decrypt and print it if
+                // requested.
+                match wallet.find_secret_key(&alias, None) {
+                    Ok(keypair) => {
+                        if unsafe_show_secret {
+                            display_line!(io, &mut w_lock; "    Secret key: {}", keypair)
+                        .unwrap();
+                        }
+                    }
+                    Err(FindKeyError::KeyNotFound(_)) => {}
+                    Err(err) => edisplay_line!(io, "{}", err),
+                }
+            }
+        }
+    }
+
+    // Find transparent address
+    if !keys_only {
+        if let Some(address) = wallet.find_address(&alias) {
+            found = true;
+            display_line!(io, &mut w_lock; "Found transparent address:")
+                .unwrap();
+            display_line!(io,
+                &mut w_lock;
+                "  \"{}\": {}", alias, address.to_pretty_string(),
+            )
+            .unwrap();
+        }
+    }
+
+    found
+}
+
+/// Find shielded payment address and keys by alias
+fn shielded_key_address_find_by_alias(
+    wallet: &mut Wallet<CliWalletUtils>,
+    io: &impl Io,
+    alias: String,
+    keys_only: bool,
+    addresses_only: bool,
+    decrypt: bool,
+    unsafe_show_secret: bool,
+) -> bool {
+    let alias = alias.to_lowercase();
+    let mut w_lock = io::stdout().lock();
+    let mut found = false;
+
+    // Find shielded keys
+    if !addresses_only {
+        let encrypted = match wallet.is_encrypted_spending_key(&alias) {
+            None => "external",
+            Some(res) if res => "encrypted",
+            _ => "not encrypted",
+        };
+        // Check if alias is a viewing key
+        if let Ok(viewing_key) = wallet.find_viewing_key(&alias) {
+            found = true;
+            display_line!(io, &mut w_lock; "Found shielded keys:").unwrap();
+            display_line!(io,
+                &mut w_lock;
+                "  Alias \"{}\" ({}):", alias, encrypted,
+            )
+            .unwrap();
+            // Always print the viewing key
+            display_line!(io, &mut w_lock; "    Viewing key: {}", viewing_key)
+                .unwrap();
+            if decrypt {
+                // Check if alias is also a spending key. Decrypt and print it
+                // if requested.
+                match wallet.find_spending_key(&alias, None) {
+                    Ok(spending_key) => {
+                        if unsafe_show_secret {
+                            display_line!(io, &mut w_lock; "    Spending key: {}", spending_key).unwrap();
+                        }
+                    }
+                    Err(FindKeyError::KeyNotFound(_)) => {}
+                    Err(err) => edisplay_line!(io, "{}", err),
+                }
+            }
+        }
+    }
+
+    // Find payment addresses
+    if !keys_only {
+        if let Some(payment_addr) = wallet.find_payment_addr(&alias) {
+            found = true;
+            display_line!(io, &mut w_lock; "Found payment address:").unwrap();
+            display_line!(io,
+                &mut w_lock;
+                "  \"{}\": {}", alias, payment_addr.to_string(),
+            )
+            .unwrap();
+        }
+    }
+
+    found
+}
+
+/// List all known keys.
+fn transparent_keys_list(
+    wallet: &Wallet<CliWalletUtils>,
+    io: &impl Io,
+    decrypt: bool,
+    unsafe_show_secret: bool,
+    show_hint: bool,
+) {
     let known_public_keys = wallet.get_public_keys();
     if known_public_keys.is_empty() {
-        display_line!(
-            io,
-            "No known keys. Try `key gen --alias my-key` to generate a new \
-             key.",
-        );
+        if show_hint {
+            display_line!(
+                io,
+                "No known keys. Try `gen --alias my-key` to generate a new \
+                 key.",
+            );
+        }
     } else {
-        let stdout = io::stdout();
-        let mut w = stdout.lock();
-        display_line!(io, &mut w; "Known keys:").unwrap();
+        let mut w_lock = io::stdout().lock();
+        display_line!(io, &mut w_lock; "Known transparent keys:").unwrap();
         let known_secret_keys = wallet.get_secret_keys();
         for (alias, public_key) in known_public_keys {
             let stored_keypair = known_secret_keys.get(&alias);
@@ -599,19 +1013,22 @@ fn key_list(
                 Some(_) => "not encrypted",
             };
             display_line!(io,
-                &mut w;
+                &mut w_lock;
                 "  Alias \"{}\" ({}):", alias, encrypted,
             )
             .unwrap();
-            display_line!(io, &mut w; "    Public key hash: {}", PublicKeyHash::from(&public_key))
+            // Always print the corresponding public key and hash
+            display_line!(io, &mut w_lock; "    Public key hash: {}", PublicKeyHash::from(&public_key))
                 .unwrap();
-            display_line!(io, &mut w; "    Public key: {}", public_key)
+            display_line!(io, &mut w_lock; "    Public key: {}", public_key)
                 .unwrap();
+            // A subset of public keys will have corresponding secret keys.
+            // Print those too if they are available and requested.
             if let Some((stored_keypair, _pkh)) = stored_keypair {
                 match stored_keypair.get::<CliWalletUtils>(decrypt, None) {
                     Ok(keypair) if unsafe_show_secret => {
                         display_line!(io,
-                                      &mut w;
+                                      &mut w_lock;
                                       "    Secret key: {}", keypair,
                         )
                         .unwrap();
@@ -622,7 +1039,7 @@ fn key_list(
                     }
                     Err(err) => {
                         display_line!(io,
-                                      &mut w;
+                                      &mut w_lock;
                                       "    Couldn't decrypt the keypair: {}", err,
                         )
                             .unwrap();
@@ -633,20 +1050,25 @@ fn key_list(
     }
 }
 
-/// Export a keypair to a file.
+/// Export a transparent keypair / MASP spending key to a file.
 fn key_export(
     ctx: Context,
     io: &impl Io,
     args::KeyExport { alias }: args::KeyExport,
 ) {
+    let alias = alias.to_lowercase();
     let mut wallet = load_wallet(ctx);
-    wallet
-        .find_secret_key(alias.to_lowercase(), None)
-        .map(|keypair| {
-            let file_data = keypair.serialize_to_vec();
-            let file_name = format!("key_{}", alias.to_lowercase());
+    let key_to_export = wallet
+        .find_secret_key(&alias, None)
+        .map(|sk| Box::new(sk) as Box<dyn BorshSerializeExt>)
+        .or(wallet
+            .find_spending_key(&alias, None)
+            .map(|spk| Box::new(spk) as Box<dyn BorshSerializeExt>));
+    key_to_export
+        .map(|key| {
+            let file_data = key.serialize_to_vec();
+            let file_name = format!("key_{}", alias);
             let mut file = File::create(&file_name).unwrap();
-
             file.write_all(file_data.as_ref()).unwrap();
             display_line!(io, "Exported to file {}", file_name);
         })
@@ -656,23 +1078,71 @@ fn key_export(
         })
 }
 
-/// List all known addresses.
-fn address_list(ctx: Context, io: &impl Io) {
-    let wallet = load_wallet(ctx);
-    let known_addresses = wallet.get_addresses();
-    if known_addresses.is_empty() {
-        display_line!(
+/// Import a transparent keypair / MASP spending key from a file.
+fn key_import(
+    ctx: Context,
+    io: &impl Io,
+    args::KeyImport {
+        file_path,
+        alias,
+        alias_force,
+        unsafe_dont_encrypt,
+    }: args::KeyImport,
+) {
+    let file_data = std::fs::read(file_path).unwrap_or_else(|err| {
+        edisplay_line!(io, "{}", err);
+        display_line!(io, "No changes are persisted. Exiting.");
+        cli::safe_exit(1)
+    });
+    if let Ok(sk) = common::SecretKey::try_from_slice(&file_data) {
+        transparent_secret_key_add(
+            ctx,
             io,
-            "No known addresses. Try `address gen --alias my-addr` to \
-             generate a new implicit address.",
+            alias,
+            alias_force,
+            sk,
+            unsafe_dont_encrypt,
+        );
+    } else if let Ok(spend_key) =
+        ExtendedSpendingKey::try_from_slice(&file_data)
+    {
+        let masp_value = MaspValue::ExtendedSpendingKey(spend_key);
+        shielded_key_address_add(
+            ctx,
+            io,
+            alias,
+            alias_force,
+            masp_value,
+            unsafe_dont_encrypt,
         );
     } else {
-        let stdout = io::stdout();
-        let mut w = stdout.lock();
-        display_line!(io, &mut w; "Known addresses:").unwrap();
+        display_line!(io, "Could not parse the data.");
+        display_line!(io, "No changes are persisted. Exiting.");
+        cli::safe_exit(1)
+    }
+}
+
+/// List all known transparent addresses.
+fn transparent_addresses_list(
+    wallet: &Wallet<CliWalletUtils>,
+    io: &impl Io,
+    show_hint: bool,
+) {
+    let known_addresses = wallet.get_addresses();
+    if known_addresses.is_empty() {
+        if show_hint {
+            display_line!(
+                io,
+                "No known addresses. Try `gen --alias my-addr` to generate a \
+                 new implicit address.",
+            );
+        }
+    } else {
+        let mut w_lock = io::stdout().lock();
+        display_line!(io, &mut w_lock; "Known transparent addresses:").unwrap();
         for (alias, address) in sorted(known_addresses) {
             display_line!(io,
-                &mut w;
+                &mut w_lock;
                 "  \"{}\": {}", alias, address.to_pretty_string(),
             )
             .unwrap();
@@ -680,56 +1150,74 @@ fn address_list(ctx: Context, io: &impl Io) {
     }
 }
 
-/// Find address (alias) by its alias (address).
-fn address_or_alias_find(
+/// Add a transparent secret key to the wallet.
+fn transparent_secret_key_add(
     ctx: Context,
     io: &impl Io,
-    args::AddressOrAliasFind { alias, address }: args::AddressOrAliasFind,
-) {
-    let wallet = load_wallet(ctx);
-    if address.is_some() && alias.is_some() {
-        panic!(
-            "This should not be happening: clap should emit its own error \
-             message."
-        );
-    } else if alias.is_some() {
-        if let Some(address) = wallet.find_address(alias.as_ref().unwrap()) {
-            display_line!(io, "Found address {}", address.to_pretty_string());
-        } else {
-            display_line!(
-                io,
-                "No address with alias {} found. Use the command `address \
-                 list` to see all the known addresses.",
-                alias.unwrap().to_lowercase()
-            );
-        }
-    } else if address.is_some() {
-        if let Some(alias) = wallet.find_alias(address.as_ref().unwrap()) {
-            display_line!(io, "Found alias {}", alias);
-        } else {
-            display_line!(
-                io,
-                "No alias with address {} found. Use the command `address \
-                 list` to see all the known addresses.",
-                address.unwrap()
-            );
-        }
-    }
-}
-
-/// Add an address to the wallet.
-fn address_add(
-    ctx: Context,
-    io: &impl Io,
-    args::AddressAdd {
-        alias,
-        alias_force,
-        address,
-    }: args::AddressAdd,
+    alias: String,
+    alias_force: bool,
+    sk: common::SecretKey,
+    unsafe_dont_encrypt: bool,
 ) {
     let mut wallet = load_wallet(ctx);
+    let encryption_password =
+        read_and_confirm_encryption_password(unsafe_dont_encrypt);
+    let alias = wallet
+        .insert_keypair(alias, alias_force, sk, encryption_password, None, None)
+        .unwrap_or_else(|err| {
+            edisplay_line!(io, "{}", err);
+            display_line!(io, "No changes are persisted. Exiting.");
+            cli::safe_exit(1);
+        });
+    wallet
+        .save()
+        .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
+    display_line!(
+        io,
+        "Successfully added a key and an address with alias: \"{}\"",
+        alias
+    );
+}
+
+/// Add a public key to the wallet.
+fn transparent_public_key_add(
+    ctx: Context,
+    io: &impl Io,
+    alias: String,
+    alias_force: bool,
+    pubkey: common::PublicKey,
+) {
+    let alias = alias.to_lowercase();
+    let mut wallet = load_wallet(ctx);
     if wallet
-        .insert_address(alias.to_lowercase(), address, alias_force)
+        .insert_public_key(alias.clone(), pubkey, None, None, alias_force)
+        .is_none()
+    {
+        edisplay_line!(io, "Public key not added");
+        cli::safe_exit(1);
+    }
+    wallet
+        .save()
+        .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
+    display_line!(
+        io,
+        "Successfully added a public key with alias: \"{}\"",
+        alias
+    );
+}
+
+/// Add a transparent address to the wallet.
+fn transparent_address_add(
+    ctx: Context,
+    io: &impl Io,
+    alias: String,
+    alias_force: bool,
+    address: Address,
+) {
+    let alias = alias.to_lowercase();
+    let mut wallet = load_wallet(ctx);
+    if wallet
+        .insert_address(&alias, address, alias_force)
         .is_none()
     {
         edisplay_line!(io, "Address not added");
@@ -740,8 +1228,8 @@ fn address_add(
         .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
     display_line!(
         io,
-        "Successfully added a key and an address with alias: \"{}\"",
-        alias.to_lowercase()
+        "Successfully added an address with alias: \"{}\"",
+        alias
     );
 }
 

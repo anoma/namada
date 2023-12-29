@@ -13,7 +13,7 @@ use namada_core::types::dec::Dec;
 use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::keccak::KeccakHash;
 use namada_core::types::key::{common, SchemeType};
-use namada_core::types::masp::MaspValue;
+use namada_core::types::masp::PaymentAddress;
 use namada_core::types::storage::Epoch;
 use namada_core::types::time::DateTimeUtc;
 use namada_core::types::transaction::GasLimit;
@@ -2024,66 +2024,35 @@ impl<C: NamadaTypes> TxBuilder<C> for Tx<C> {
     }
 }
 
-/// MASP add key or address arguments
-#[derive(Clone, Debug)]
-pub struct MaspAddrKeyAdd {
-    /// Key alias
-    pub alias: String,
-    /// Whether to force overwrite the alias
-    pub alias_force: bool,
-    /// Any MASP value
-    pub value: MaspValue,
-    /// Don't encrypt the keypair
-    pub unsafe_dont_encrypt: bool,
-}
-
-/// MASP generate spending key arguments
-#[derive(Clone, Debug)]
-pub struct MaspSpendKeyGen {
-    /// Key alias
-    pub alias: String,
-    /// Whether to force overwrite the alias
-    pub alias_force: bool,
-    /// Don't encrypt the keypair
-    pub unsafe_dont_encrypt: bool,
-}
-
-/// MASP generate payment address arguments
-#[derive(Clone, Debug)]
-pub struct MaspPayAddrGen<C: NamadaTypes = SdkTypes> {
-    /// Key alias
-    pub alias: String,
-    /// Whether to force overwrite the alias
-    pub alias_force: bool,
-    /// Viewing key
-    pub viewing_key: C::ViewingKey,
-    /// Pin
-    pub pin: bool,
-}
-
 /// Wallet generate key and implicit address arguments
 #[derive(Clone, Debug)]
-pub struct KeyAndAddressGen {
+pub struct KeyGen {
     /// Scheme type
     pub scheme: SchemeType,
+    /// Whether to generate a spending key for the shielded pool
+    pub shielded: bool,
+    /// Whether to generate a raw non-hd key
+    pub raw: bool,
     /// Key alias
-    pub alias: Option<String>,
-    /// Whether to force overwrite the alias, if provided
+    pub alias: String,
+    /// Whether to force overwrite the alias
     pub alias_force: bool,
     /// Don't encrypt the keypair
     pub unsafe_dont_encrypt: bool,
-    /// BIP44 derivation path
+    /// BIP44 / ZIP32 derivation path
     pub derivation_path: String,
 }
 
 /// Wallet restore key and implicit address arguments
 #[derive(Clone, Debug)]
-pub struct KeyAndAddressDerive {
+pub struct KeyDerive {
     /// Scheme type
     pub scheme: SchemeType,
+    /// Whether to generate a MASP spending key
+    pub shielded: bool,
     /// Key alias
-    pub alias: Option<String>,
-    /// Whether to force overwrite the alias, if provided
+    pub alias: String,
+    /// Whether to force overwrite the alias
     pub alias_force: bool,
     /// Don't encrypt the keypair
     pub unsafe_dont_encrypt: bool,
@@ -2093,46 +2062,45 @@ pub struct KeyAndAddressDerive {
     pub use_device: bool,
 }
 
-/// Wallet key lookup arguments
+/// Wallet list arguments
+#[derive(Clone, Copy, Debug)]
+pub struct KeyAddressList {
+    /// Whether to list transparent secret keys only
+    pub transparent_only: bool,
+    /// Whether to list MASP spending keys only
+    pub shielded_only: bool,
+    /// List keys only
+    pub keys_only: bool,
+    /// List addresses only
+    pub addresses_only: bool,
+    /// Whether to decrypt secret / spending keys
+    pub decrypt: bool,
+    /// Show secret keys to user
+    pub unsafe_show_secret: bool,
+}
+
+/// Wallet key / address lookup arguments
 #[derive(Clone, Debug)]
-pub struct KeyFind {
+pub struct KeyAddressFind {
+    /// Alias to find
+    pub alias: Option<String>,
+    /// Address to find
+    pub address: Option<Address>,
     /// Public key to lookup keypair with
     pub public_key: Option<common::PublicKey>,
-    /// Key alias to lookup keypair with
-    pub alias: Option<String>,
     /// Public key hash to lookup keypair with
-    pub value: Option<String>,
-    /// Show secret keys to user
-    pub unsafe_show_secret: bool,
-}
-
-/// Wallet find shielded address or key arguments
-#[derive(Clone, Debug)]
-pub struct AddrKeyFind {
-    /// Address/key alias
-    pub alias: String,
-    /// Show secret keys to user
-    pub unsafe_show_secret: bool,
-}
-
-/// Wallet list shielded keys arguments
-#[derive(Clone, Debug)]
-pub struct MaspKeysList {
-    /// Don't decrypt spending keys
+    pub public_key_hash: Option<String>,
+    /// Payment address to find
+    pub payment_address: Option<PaymentAddress>,
+    /// Find keys only
+    pub keys_only: bool,
+    /// Find addresses only
+    pub addresses_only: bool,
+    /// Whether to decrypt secret / spending keys
     pub decrypt: bool,
     /// Show secret keys to user
     pub unsafe_show_secret: bool,
 }
-
-/// Wallet list keys arguments
-#[derive(Clone, Debug)]
-pub struct KeyList {
-    /// Don't decrypt keypairs
-    pub decrypt: bool,
-    /// Show secret keys to user
-    pub unsafe_show_secret: bool,
-}
-
 /// Wallet key export arguments
 #[derive(Clone, Debug)]
 pub struct KeyExport {
@@ -2140,24 +2108,52 @@ pub struct KeyExport {
     pub alias: String,
 }
 
-/// Wallet address lookup arguments
+/// Wallet key import arguments
 #[derive(Clone, Debug)]
-pub struct AddressOrAliasFind {
-    /// Alias to find
-    pub alias: Option<String>,
-    /// Address to find
-    pub address: Option<Address>,
+pub struct KeyImport {
+    /// File name
+    pub file_path: String,
+    /// Key alias
+    pub alias: String,
+    /// Whether to force overwrite the alias
+    pub alias_force: bool,
+    /// Don't encrypt the key
+    pub unsafe_dont_encrypt: bool,
 }
 
-/// Wallet address add arguments
+/// Wallet key / address add arguments
 #[derive(Clone, Debug)]
-pub struct AddressAdd {
+pub struct KeyAddressAdd {
     /// Address alias
     pub alias: String,
     /// Whether to force overwrite the alias
     pub alias_force: bool,
-    /// Address to add
-    pub address: Address,
+    /// Any supported value
+    pub value: String,
+    /// Don't encrypt the key
+    pub unsafe_dont_encrypt: bool,
+}
+
+/// Wallet key / address remove arguments
+#[derive(Clone, Debug)]
+pub struct KeyAddressRemove {
+    /// Address alias
+    pub alias: String,
+    /// Confirmation to remove the alias
+    pub do_it: bool,
+}
+
+/// Generate payment address arguments
+#[derive(Clone, Debug)]
+pub struct PayAddressGen<C: NamadaTypes = SdkTypes> {
+    /// Key alias
+    pub alias: String,
+    /// Whether to force overwrite the alias
+    pub alias_force: bool,
+    /// Viewing key
+    pub viewing_key: C::ViewingKey,
+    /// Pin
+    pub pin: bool,
 }
 
 /// Bridge pool batch recommendation.
