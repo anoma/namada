@@ -590,6 +590,17 @@ pub struct VoteInfo {
     pub validator_vp: u64,
 }
 
+/// Temp: In quint this is from `ResultUnbondTx` field `resultSlashing: {sum:
+/// int, epochMap: Epoch -> int}`
+#[derive(Debug, Default)]
+pub struct ResultSlashing {
+    /// The token amount unbonded from the validator stake after accounting for
+    /// slashes
+    pub sum: token::Amount,
+    /// Map from bond start epoch to token amount after slashing
+    pub epoch_map: BTreeMap<Epoch, token::Amount>,
+}
+
 /// Bonds and unbonds with all details (slashes and rewards, if any)
 /// grouped by their bond IDs.
 pub type BondsAndUnbondsDetails = HashMap<BondId, BondsAndUnbondsDetail>;

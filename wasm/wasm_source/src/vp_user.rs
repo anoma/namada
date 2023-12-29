@@ -15,6 +15,12 @@ use core::ops::Deref;
 
 use namada_vp_prelude::*;
 use once_cell::unsync::Lazy;
+use proof_of_stake::storage::{read_pos_params, validator_state_handle};
+use proof_of_stake::storage_key::{
+    is_bond_key, is_pos_key, is_unbond_key, is_validator_commission_rate_key,
+    is_validator_metadata_key, is_validator_state_key,
+};
+use proof_of_stake::types::ValidatorState;
 
 enum KeyType<'a> {
     TokenBalance { owner: &'a Address },
@@ -37,7 +43,7 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
             Self::TokenMinted
         } else if let Some(minter) = token::is_any_minter_key(key) {
             Self::TokenMinter(minter)
-        } else if proof_of_stake::storage::is_pos_key(key) {
+        } else if is_pos_key(key) {
             Self::PoS
         } else if gov_storage::keys::is_vote_key(key) {
             let voter_address = gov_storage::keys::get_voter_address(key);

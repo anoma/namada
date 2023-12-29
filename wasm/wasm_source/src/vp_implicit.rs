@@ -42,7 +42,7 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
             Self::TokenMinted
         } else if let Some(minter) = token::is_any_minter_key(key) {
             Self::TokenMinter(minter)
-        } else if proof_of_stake::storage::is_pos_key(key) {
+        } else if proof_of_stake::storage_key::is_pos_key(key) {
             Self::PoS
         } else if let Some(address) = pgf_storage::keys::is_stewards_key(key) {
             Self::PgfSteward(address)

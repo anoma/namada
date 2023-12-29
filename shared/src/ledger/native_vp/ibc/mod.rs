@@ -19,7 +19,7 @@ use namada_core::ledger::storage::{self as ledger_storage, StorageHasher};
 use namada_core::proto::Tx;
 use namada_core::types::address::Address;
 use namada_core::types::storage::Key;
-use namada_proof_of_stake::read_pos_params;
+use namada_proof_of_stake::storage::read_pos_params;
 use thiserror::Error;
 
 use crate::ibc::core::host::types::identifiers::ChainId as IbcChainId;
