@@ -114,7 +114,7 @@ pub fn setup_single_validator_test() -> Result<(Test, NamadaBgCmd)> {
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
-        &Who::Validator(0),
+        Who::Validator(0),
         ethereum_bridge::ledger::Mode::SelfHostedEndpoint,
         Some(DEFAULT_ETHEREUM_EVENTS_LISTEN_ADDR),
     );
@@ -163,7 +163,7 @@ pub async fn send_transfer_to_namada_event(
 /// This will fail if the keys for `signer` are not in the local wallet.
 pub fn attempt_wrapped_erc20_transfer(
     test: &Test,
-    node: &Who,
+    node: Who,
     asset: &EthAddress,
     from: &str,
     to: &str,
@@ -198,7 +198,7 @@ pub fn attempt_wrapped_erc20_transfer(
 /// been involved in a wrapped ERC20 transfer of any kind).
 pub fn find_wrapped_erc20_balance(
     test: &Test,
-    node: &Who,
+    node: Who,
     asset: &EthAddress,
     owner: &Address,
 ) -> Result<token::Amount> {
