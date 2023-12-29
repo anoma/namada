@@ -5,8 +5,6 @@ use std::collections::BTreeMap;
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
-#[cfg(feature = "wasm-runtime")]
-use masp_primitives::bls12_381;
 use masp_primitives::convert::AllowedConversion;
 use masp_primitives::merkle_tree::FrozenCommitmentTree;
 use masp_primitives::sapling::Node;
@@ -19,8 +17,6 @@ use crate::ledger::storage_api::{StorageRead, StorageWrite};
 use crate::types::address::{Address, MASP};
 use crate::types::dec::Dec;
 use crate::types::storage::Epoch;
-#[cfg(feature = "wasm-runtime")]
-use crate::types::storage::{Key, KeySeg};
 use crate::types::token::{self, DenominatedAmount, MaspDenom};
 use crate::types::uint::Uint;
 
@@ -208,6 +204,7 @@ where
 {
     use std::cmp::Ordering;
 
+    use masp_primitives::bls12_381;
     use masp_primitives::ff::PrimeField;
     use masp_primitives::transaction::components::I128Sum as MaspAmount;
     use rayon::iter::{
@@ -216,6 +213,7 @@ where
     use rayon::prelude::ParallelSlice;
 
     use crate::types::address;
+    use crate::types::storage::{Key, KeySeg};
     use crate::types::token::MASP_CONVERT_ANCHOR_KEY;
 
     // The derived conversions will be placed in MASP address space
