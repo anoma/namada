@@ -178,8 +178,7 @@ impl TxCustom {
     pub async fn build(
         &self,
         context: &impl Namada,
-    ) -> crate::error::Result<(crate::proto::Tx, SigningTxData)>
-    {
+    ) -> crate::error::Result<(crate::proto::Tx, SigningTxData)> {
         tx::build_custom(context, self).await
     }
 }
