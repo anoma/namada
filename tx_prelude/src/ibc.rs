@@ -6,12 +6,13 @@ use std::rc::Rc;
 pub use namada_core::ledger::ibc::{
     IbcActions, IbcCommonContext, IbcStorageContext, ProofSpec, TransferModule,
 };
+use namada_core::ledger::masp_utils;
 use namada_core::ledger::tx_env::TxEnv;
 use namada_core::types::address::{Address, InternalAddress};
 pub use namada_core::types::ibc::{IbcEvent, IbcShieldedTransfer};
 use namada_core::types::token::DenominatedAmount;
 
-use crate::token::{burn, handle_masp_tx, mint, transfer};
+use crate::token::{burn, mint, transfer};
 use crate::{Ctx, Error};
 
 /// IBC actions to handle an IBC message
@@ -52,7 +53,7 @@ impl IbcStorageContext for Ctx {
         &mut self,
         shielded: &IbcShieldedTransfer,
     ) -> Result<(), Error> {
-        handle_masp_tx(self, &shielded.transfer, &shielded.masp_tx)
+        masp_utils::handle_masp_tx(self, &shielded.transfer, &shielded.masp_tx)
     }
 
     fn mint_token(

@@ -906,6 +906,8 @@ pub const HEAD_TX_KEY: &str = "head-tx";
 pub const TX_KEY_PREFIX: &str = "tx-";
 /// Key segment prefix for pinned shielded transactions
 pub const PIN_KEY_PREFIX: &str = "pin-";
+/// Key segment prefix for the nullifiers
+pub const MASP_NULLIFIERS_KEY_PREFIX: &str = "nullifiers";
 /// Last calculated inflation value handed out
 pub const MASP_LAST_INFLATION_KEY: &str = "last_inflation";
 /// The last locked ratio
@@ -1133,7 +1135,17 @@ pub fn is_masp_key(key: &Key) -> bool {
             if *addr == MASP
                 && (key == HEAD_TX_KEY
                     || key.starts_with(TX_KEY_PREFIX)
-                    || key.starts_with(PIN_KEY_PREFIX)))
+                    || key.starts_with(PIN_KEY_PREFIX)
+                    || key.starts_with(MASP_NULLIFIERS_KEY_PREFIX)))
+}
+
+/// Check if the given storage key is a masp nullifier key
+pub fn is_masp_nullifier_key(key: &Key) -> bool {
+    matches!(&key.segments[..],
+    [DbKeySeg::AddressSeg(addr),
+             DbKeySeg::StringSeg(prefix),
+             ..
+        ] if *addr == MASP && prefix == MASP_NULLIFIERS_KEY_PREFIX)
 }
 
 /// Obtain the storage key for the last locked ratio of a token
