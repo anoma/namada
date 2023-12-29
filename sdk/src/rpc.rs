@@ -3,6 +3,7 @@
 use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ops::ControlFlow;
+use std::str::FromStr;
 
 use borsh::BorshDeserialize;
 use masp_primitives::asset_type::AssetType;
@@ -25,6 +26,7 @@ use namada_core::types::storage::{
 use namada_core::types::token::{
     Amount, DenominatedAmount, Denomination, MaspDenom,
 };
+use namada_core::types::transaction::{ResultCode, TxResult};
 use namada_core::types::{storage, token};
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{
@@ -483,7 +485,20 @@ pub async fn dry_run_tx<N: Namada>(
             .await,
     )?
     .data;
-    display_line!(context.io(), "Dry-run result: {}", result);
+    let result_str = if result.is_accepted() {
+        format!(
+            "Transaction was successfully applied. Used {} gas.",
+            result.gas_used
+        )
+    } else {
+        format!(
+            "Transaction was rejected by VPs: {}.\nChanged key: {}",
+            serde_json::to_string_pretty(&result.vps_result.rejected_vps)
+                .unwrap(),
+            serde_json::to_string_pretty(&result.changed_keys).unwrap(),
+        )
+    };
+    display_line!(context.io(), "Dry-run result: {result_str}");
     Ok(result)
 }
 
@@ -511,20 +526,30 @@ pub enum TxBroadcastData {
 /// A parsed event from tendermint relating to a transaction
 #[derive(Debug, Serialize)]
 pub struct TxResponse {
-    /// Response information
+    /// Result of inner tx (wasm), if any
+    pub inner_tx: Option<TxResult>,
+    /// Response additional information
     pub info: String,
     /// Response log
     pub log: String,
     /// Block height
-    pub height: String,
+    pub height: BlockHeight,
     /// Transaction height
     pub hash: String,
     /// Response code
-    pub code: String,
-    /// Gas used
+    pub code: ResultCode,
+    /// Gas used. If there's an `inner_tx`, its gas is equal to this value.
     pub gas_used: String,
-    /// Initialized accounts
-    pub initialized_accounts: Vec<Address>,
+}
+
+/// Determines a result of an inner tx from [`TxResponse::inner_tx_result`].
+pub enum InnerTxResult<'a> {
+    /// Tx is applied and accepted by all VPs
+    Success(&'a TxResult),
+    /// Some VPs rejected the tx
+    VpsRejected(&'a TxResult),
+    /// Transaction failed in some other way
+    OtherFailure,
 }
 
 impl TryFrom<Event> for TxResponse {
@@ -535,6 +560,9 @@ impl TryFrom<Event> for TxResponse {
             format!("Field \"{field}\" not present in event")
         }
 
+        let inner_tx = event
+            .get("inner_tx")
+            .map(|s| TxResult::from_str(s).unwrap());
         let hash = event
             .get("hash")
             .ok_or_else(|| missing_field_err("hash"))?
@@ -547,36 +575,29 @@ impl TryFrom<Event> for TxResponse {
             .get("log")
             .ok_or_else(|| missing_field_err("log"))?
             .clone();
-        let height = event
-            .get("height")
-            .ok_or_else(|| missing_field_err("height"))?
-            .clone();
-        let code = event
-            .get("code")
-            .ok_or_else(|| missing_field_err("code"))?
-            .clone();
+        let height = BlockHeight::from_str(
+            event
+                .get("height")
+                .ok_or_else(|| missing_field_err("height"))?,
+        )
+        .map_err(|e| e.to_string())?;
+        let code = ResultCode::from_str(
+            event.get("code").ok_or_else(|| missing_field_err("code"))?,
+        )
+        .map_err(|e| e.to_string())?;
         let gas_used = event
             .get("gas_used")
             .ok_or_else(|| missing_field_err("gas_used"))?
             .clone();
-        let initialized_accounts = event
-            .get("initialized_accounts")
-            .map(String::as_str)
-            // TODO: fix finalize block, to return initialized accounts,
-            // even when we reject a tx?
-            .map_or(Ok(vec![]), |initialized_accounts| {
-                serde_json::from_str(initialized_accounts)
-                    .map_err(|err| format!("JSON decode error: {err}"))
-            })?;
 
         Ok(TxResponse {
-            hash,
+            inner_tx,
             info,
+            hash,
             log,
             height,
             code,
             gas_used,
-            initialized_accounts,
         })
     }
 }
@@ -587,6 +608,20 @@ impl TxResponse {
         event.try_into().unwrap_or_else(|err| {
             panic!("Error fetching TxResponse: {err}");
         })
+    }
+
+    /// Check the result of the inner tx. This should not be used with wrapper
+    /// txs.
+    pub fn inner_tx_result(&self) -> InnerTxResult<'_> {
+        if let Some(tx) = self.inner_tx.as_ref() {
+            if tx.is_accepted() {
+                InnerTxResult::Success(tx)
+            } else {
+                InnerTxResult::VpsRejected(tx)
+            }
+        } else {
+            InnerTxResult::OtherFailure
+        }
     }
 }
 
@@ -646,17 +681,26 @@ pub async fn query_tx_response<C: crate::queries::Client + Sync>(
         .map(|tag| (tag.key.as_ref(), tag.value.as_ref()))
         .collect();
     // Summarize the transaction results that we were searching for
+    let inner_tx = event_map
+        .get("inner_tx")
+        .map(|s| {
+            TxResult::from_str(s).map_err(|_| {
+                TError::parse("Error parsing TxResult".to_string())
+            })
+        })
+        .transpose()?;
+    let code = ResultCode::from_str(event_map["code"])
+        .map_err(|_| TError::parse("Error parsing ResultCode".to_string()))?;
+    let height = BlockHeight::from_str(event_map["height"])
+        .map_err(|_| TError::parse("Error parsing BlockHeight".to_string()))?;
     let result = TxResponse {
+        inner_tx,
         info: event_map["info"].to_string(),
         log: event_map["log"].to_string(),
-        height: event_map["height"].to_string(),
+        height,
         hash: event_map["hash"].to_string(),
-        code: event_map["code"].to_string(),
+        code,
         gas_used: event_map["gas_used"].to_string(),
-        initialized_accounts: serde_json::from_str(
-            event_map["initialized_accounts"],
-        )
-        .unwrap_or_default(),
     };
     Ok(result)
 }

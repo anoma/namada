@@ -17,11 +17,14 @@ pub mod protocol;
 pub mod wrapper;
 
 use std::collections::BTreeSet;
-use std::fmt;
+use std::fmt::{self, Display};
+use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 pub use decrypted::*;
+use num_derive::{FromPrimitive, ToPrimitive};
+use num_traits::{FromPrimitive, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 pub use wrapper::*;
@@ -33,6 +36,124 @@ use crate::types::ibc::IbcEvent;
 use crate::types::storage;
 use crate::types::transaction::protocol::ProtocolTx;
 
+/// The different result codes that the ledger may send back to a client
+/// indicating the status of their submitted tx.
+/// The codes must not change with versions, only need ones may be added.
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    FromPrimitive,
+    ToPrimitive,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+)]
+pub enum ResultCode {
+    // WARN: These codes shouldn't be changed between version!
+    // =========================================================================
+    /// Success
+    Ok = 0,
+    /// Error in WASM tx execution
+    WasmRuntimeError = 1,
+    /// Invalid tx
+    InvalidTx = 2,
+    /// Invalid signature
+    InvalidSig = 3,
+    /// Tx is in invalid order
+    InvalidOrder = 4,
+    /// Tx wasn't expected
+    ExtraTxs = 5,
+    /// Undecryptable
+    Undecryptable = 6,
+    /// The block is full
+    AllocationError = 7,
+    /// Replayed tx
+    ReplayTx = 8,
+    /// Invalid chain ID
+    InvalidChainId = 9,
+    /// Expired tx
+    ExpiredTx = 10,
+    /// Exceeded gas limit
+    TxGasLimit = 11,
+    /// Error in paying tx fee
+    FeeError = 12,
+    /// Invalid vote extension
+    InvalidVoteExtension = 13,
+    /// Tx is too large
+    TooLarge = 14,
+    // =========================================================================
+    // WARN: These codes shouldn't be changed between version!
+}
+
+impl ResultCode {
+    /// Checks if the given [`ResultCode`] value is a protocol level error,
+    /// that can be recovered from at the finalize block stage.
+    pub const fn is_recoverable(&self) -> bool {
+        use ResultCode::*;
+        // NOTE: pattern match on all `ResultCode` variants, in order
+        // to catch potential bugs when adding new codes
+        match self {
+            Ok | WasmRuntimeError => true,
+            InvalidTx | InvalidSig | InvalidOrder | ExtraTxs
+            | Undecryptable | AllocationError | ReplayTx | InvalidChainId
+            | ExpiredTx | TxGasLimit | FeeError | InvalidVoteExtension
+            | TooLarge => false,
+        }
+    }
+
+    /// Convert to `u32`.
+    pub fn to_u32(&self) -> u32 {
+        ToPrimitive::to_u32(self).unwrap()
+    }
+
+    /// Convert from `u32`.
+    pub fn from_u32(raw: u32) -> Option<Self> {
+        FromPrimitive::from_u32(raw)
+    }
+}
+
+impl From<ResultCode> for String {
+    fn from(code: ResultCode) -> String {
+        code.to_string()
+    }
+}
+
+impl From<ResultCode> for u32 {
+    fn from(code: ResultCode) -> u32 {
+        code.to_u32()
+    }
+}
+
+impl Display for ResultCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.to_u32())
+    }
+}
+
+impl FromStr for ResultCode {
+    type Err = std::io::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let raw = u32::from_str(s).map_err(|e| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, e)
+        })?;
+        Self::from_u32(raw).ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Unexpected error code",
+            )
+        })
+    }
+}
+
+impl From<ResultCode> for crate::tendermint::abci::Code {
+    fn from(value: ResultCode) -> Self {
+        Self::from(value.to_u32())
+    }
+}
+
 /// Get the hash of a transaction
 pub fn hash_tx(tx_bytes: &[u8]) -> Hash {
     let digest = Sha256::digest(tx_bytes);
@@ -41,7 +162,15 @@ pub fn hash_tx(tx_bytes: &[u8]) -> Hash {
 
 /// Transaction application result
 // TODO derive BorshSchema after <https://github.com/near/borsh-rs/issues/82>
-#[derive(Clone, Debug, Default, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+)]
 pub struct TxResult {
     /// Total gas used by the transaction (includes the gas used by VPs)
     pub gas_used: Gas,
@@ -64,7 +193,15 @@ impl TxResult {
 
 /// Result of checking a transaction with validity predicates
 // TODO derive BorshSchema after <https://github.com/near/borsh-rs/issues/82>
-#[derive(Clone, Debug, Default, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+)]
 pub struct VpsResult {
     /// The addresses whose VPs accepted the transaction
     pub accepted_vps: BTreeSet<Address>,
@@ -80,18 +217,30 @@ pub struct VpsResult {
 
 impl fmt::Display for TxResult {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Transaction is {}. Gas used: {};{} VPs result: {}",
-            if self.is_accepted() {
-                "valid"
-            } else {
-                "invalid"
-            },
-            self.gas_used,
-            iterable_to_string("Changed keys", self.changed_keys.iter()),
-            self.vps_result,
-        )
+        if f.alternate() {
+            write!(
+                f,
+                "Transaction is {}. Gas used: {};{} VPs result: {}",
+                if self.is_accepted() {
+                    "valid"
+                } else {
+                    "invalid"
+                },
+                self.gas_used,
+                iterable_to_string("Changed keys", self.changed_keys.iter()),
+                self.vps_result,
+            )
+        } else {
+            write!(f, "{}", serde_json::to_string(self).unwrap())
+        }
+    }
+}
+
+impl FromStr for TxResult {
+    type Err = serde_json::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str(s)
     }
 }
 

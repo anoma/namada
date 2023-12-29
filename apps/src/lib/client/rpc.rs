@@ -53,6 +53,7 @@ use namada_sdk::proof_of_stake::types::ValidatorMetaData;
 use namada_sdk::rpc::{
     self, enriched_bonds_and_unbonds, query_epoch, TxResponse,
 };
+use namada_sdk::tx::{display_inner_resp, display_wrapper_resp_and_get_result};
 use namada_sdk::wallet::AddressVpType;
 use namada_sdk::{display, display_line, edisplay_line, error, prompt, Namada};
 use tokio::time::Instant;
@@ -2276,22 +2277,6 @@ pub async fn query_find_validator<N: Namada>(
     }
 }
 
-/// Dry run a transaction
-pub async fn dry_run_tx<N: Namada>(
-    context: &N,
-    tx_bytes: Vec<u8>,
-) -> Result<(), error::Error>
-where
-    <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
-{
-    display_line!(
-        context.io(),
-        "Dry-run result: {}",
-        rpc::dry_run_tx(context, tx_bytes).await?
-    );
-    Ok(())
-}
-
 /// Get account's public key stored in its storage sub-space
 pub async fn get_public_key<C: namada::ledger::queries::Client + Sync>(
     client: &C,
@@ -2511,32 +2496,26 @@ pub async fn query_tx_response<C: namada::ledger::queries::Client + Sync>(
 /// blockchain.
 pub async fn query_result(context: &impl Namada, args: args::QueryResult) {
     // First try looking up application event pertaining to given hash.
-    let tx_response = query_tx_response(
+    let inner_resp = query_tx_response(
         context.client(),
         namada_sdk::rpc::TxEventQuery::Applied(&args.tx_hash),
     )
     .await;
-    match tx_response {
-        Ok(result) => {
-            display_line!(
-                context.io(),
-                "Transaction was applied with result: {}",
-                serde_json::to_string_pretty(&result).unwrap()
-            )
+    match inner_resp {
+        Ok(resp) => {
+            display_inner_resp(context, &resp);
         }
         Err(err1) => {
             // If this fails then instead look for an acceptance event.
-            let tx_response = query_tx_response(
+            let wrapper_resp = query_tx_response(
                 context.client(),
                 namada_sdk::rpc::TxEventQuery::Accepted(&args.tx_hash),
             )
             .await;
-            match tx_response {
-                Ok(result) => display_line!(
-                    context.io(),
-                    "Transaction was accepted with result: {}",
-                    serde_json::to_string_pretty(&result).unwrap()
-                ),
+            match wrapper_resp {
+                Ok(resp) => {
+                    display_wrapper_resp_and_get_result(context, &resp);
+                }
                 Err(err2) => {
                     // Print the errors that caused the lookups to fail
                     edisplay_line!(context.io(), "{}\n{}", err1, err2);

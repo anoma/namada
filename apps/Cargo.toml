@@ -102,7 +102,6 @@ masp_primitives = { workspace = true, features = ["transparent-inputs"] }
 masp_proofs = { workspace = true, features = ["bundled-prover", "download-params"] }
 num_cpus.workspace = true
 num256.workspace = true
-num-derive.workspace = true
 num-rational.workspace = true
 num-traits.workspace = true
 once_cell.workspace = true
