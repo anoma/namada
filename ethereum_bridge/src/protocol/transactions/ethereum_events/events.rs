@@ -29,9 +29,9 @@ use namada_core::types::storage::{BlockHeight, Key, KeySeg};
 use namada_core::types::token;
 use namada_core::types::token::{balance_key, minted_balance_key};
 
-use crate::parameters::read_native_erc20_address;
 use crate::protocol::transactions::update;
 use crate::storage::eth_bridge_queries::{EthAssetMint, EthBridgeQueries};
+use crate::storage::parameters::read_native_erc20_address;
 
 /// Updates storage based on the given confirmed `event`. For example, for a
 /// confirmed [`EthereumEvent::TransfersToNamada`], mint the corresponding

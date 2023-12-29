@@ -14,10 +14,11 @@ use namada_core::types::storage::Key;
 use namada_core::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
 use serde::{Deserialize, Serialize};
 
+use crate::storage as bridge_storage;
 use crate::storage::eth_bridge_queries::{
     EthBridgeEnabled, EthBridgeQueries, EthBridgeStatus,
 };
-use crate::{bridge_pool_vp, storage as bridge_storage, vp};
+use crate::storage::vp;
 
 /// An ERC20 token whitelist entry.
 #[derive(
@@ -243,9 +244,9 @@ impl EthereumBridgeParams {
             wl_storage.write_bytes(&key, encode(&denom)).unwrap();
         }
         // Initialize the storage for the Ethereum Bridge VP.
-        vp::init_storage(wl_storage);
+        vp::ethereum_bridge::init_storage(wl_storage);
         // Initialize the storage for the Bridge Pool VP.
-        bridge_pool_vp::init_storage(wl_storage);
+        vp::bridge_pool::init_storage(wl_storage);
     }
 }
 
@@ -374,10 +375,6 @@ mod tests {
     use namada_core::types::ethereum_events::EthAddress;
 
     use super::*;
-    use crate::parameters::{
-        ContractVersion, Contracts, EthereumBridgeParams, MinimumConfirmations,
-        UpgradeableContract,
-    };
 
     /// Ensure we can serialize and deserialize a [`Config`] struct to and from
     /// TOML. This can fail if complex fields are ordered before simple fields
