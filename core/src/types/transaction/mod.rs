@@ -84,6 +84,8 @@ pub enum ResultCode {
     InvalidVoteExtension = 13,
     /// Tx is too large
     TooLarge = 14,
+    /// Decrypted tx is expired
+    ExpiredDecryptedTx = 15,
     // =========================================================================
     // WARN: These codes shouldn't be changed between version!
 }
@@ -96,7 +98,7 @@ impl ResultCode {
         // NOTE: pattern match on all `ResultCode` variants, in order
         // to catch potential bugs when adding new codes
         match self {
-            Ok | WasmRuntimeError => true,
+            Ok | WasmRuntimeError | ExpiredDecryptedTx => true,
             InvalidTx | InvalidSig | InvalidOrder | ExtraTxs
             | Undecryptable | AllocationError | ReplayTx | InvalidChainId
             | ExpiredTx | TxGasLimit | FeeError | InvalidVoteExtension
