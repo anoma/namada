@@ -983,11 +983,13 @@ pub const TX_KEY_PREFIX: &str = "tx-";
 /// Key segment prefix for pinned shielded transactions
 pub const PIN_KEY_PREFIX: &str = "pin-";
 /// Key segment prefix for the nullifiers
-pub const MASP_NULLIFIERS_KEY_PREFIX: &str = "nullifiers";
+pub const MASP_NULLIFIERS_KEY: &str = "nullifiers";
 /// Key segment prefix for the note commitment merkle tree
 pub const MASP_NOTE_COMMITMENT_TREE_KEY: &str = "commitment_tree";
 /// Key segment prefix for the note commitment anchor
 pub const MASP_NOTE_COMMITMENT_ANCHOR_PREFIX: &str = "note_commitment_anchor";
+/// Key segment prefix for the convert anchor
+pub const MASP_CONVERT_ANCHOR_KEY: &str = "convert_anchor";
 /// Last calculated inflation value handed out
 pub const MASP_LAST_INFLATION_KEY: &str = "last_inflation";
 /// The last locked ratio
@@ -1210,37 +1212,56 @@ pub fn is_denom_key(token_addr: &Address, key: &Key) -> bool {
 
 /// Check if the given storage key is a masp key
 pub fn is_masp_key(key: &Key) -> bool {
-    if key.segments.len() >= 2 {
-        matches!(&key.segments[..2],
+    matches!(&key.segments[..],
+        [DbKeySeg::AddressSeg(addr), ..] if *addr == MASP
+    )
+}
+
+/// Check if the given storage key is allowed to be touched by a masp transfer
+pub fn is_masp_allowed_key(key: &Key) -> bool {
+    match &key.segments[..] {
         [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
             if *addr == MASP
                 && (key == HEAD_TX_KEY
                     || key.starts_with(TX_KEY_PREFIX)
                     || key.starts_with(PIN_KEY_PREFIX)
-                    || key.starts_with(MASP_NULLIFIERS_KEY_PREFIX)
-                    || key == MASP_NOTE_COMMITMENT_TREE_KEY
-                    || key.starts_with(MASP_NOTE_COMMITMENT_ANCHOR_PREFIX)))
-    } else {
-        false
+                    || key == MASP_NOTE_COMMITMENT_TREE_KEY) =>
+        {
+            true
+        }
+
+        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key), DbKeySeg::StringSeg(_nullifier)]
+            if *addr == MASP && key == MASP_NULLIFIERS_KEY =>
+        {
+            true
+        }
+        _ => false,
     }
+}
+
+/// Check if the given storage key is a masp tx prefix key
+pub fn is_masp_tx_prefix_key(key: &Key) -> bool {
+    matches!(&key.segments[..],
+        [DbKeySeg::AddressSeg(addr),
+             DbKeySeg::StringSeg(prefix),
+        ] if *addr == MASP && prefix.starts_with(TX_KEY_PREFIX))
+}
+
+/// Check if the given storage key is a masp tx pin key
+pub fn is_masp_tx_pin_key(key: &Key) -> bool {
+    matches!(&key.segments[..],
+        [DbKeySeg::AddressSeg(addr),
+             DbKeySeg::StringSeg(prefix),
+        ] if *addr == MASP && prefix.starts_with(PIN_KEY_PREFIX))
 }
 
 /// Check if the given storage key is a masp nullifier key
 pub fn is_masp_nullifier_key(key: &Key) -> bool {
     matches!(&key.segments[..],
-    [DbKeySeg::AddressSeg(addr),
+        [DbKeySeg::AddressSeg(addr),
              DbKeySeg::StringSeg(prefix),
-             ..
-        ] if *addr == MASP && prefix == MASP_NULLIFIERS_KEY_PREFIX)
-}
-
-/// Check if the given storage key is a masp anchor key
-pub fn is_masp_anchor_key(key: &Key) -> bool {
-    matches!(&key.segments[..],
-    [DbKeySeg::AddressSeg(addr),
-             DbKeySeg::StringSeg(prefix),
-             ..
-        ] if *addr == MASP && prefix == MASP_NOTE_COMMITMENT_ANCHOR_PREFIX)
+             DbKeySeg::StringSeg(_nullifier)
+        ] if *addr == MASP && prefix == MASP_NULLIFIERS_KEY)
 }
 
 /// Obtain the storage key for the last locked ratio of a token
