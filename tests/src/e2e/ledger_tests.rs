@@ -3598,7 +3598,8 @@ fn change_consensus_key() -> Result<()> {
     namada_apps::node::ledger::tendermint_node::write_validator_key(
         cometbft_dir,
         &new_sk,
-    );
+    )
+    .unwrap();
     println!(
         "{}",
         "Done setting up the new validator consensus key in CometBFT.".blue()
