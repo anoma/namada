@@ -1130,13 +1130,17 @@ pub fn is_denom_key(token_addr: &Address, key: &Key) -> bool {
 
 /// Check if the given storage key is a masp key
 pub fn is_masp_key(key: &Key) -> bool {
-    matches!(&key.segments[..],
+    if key.segments.len() >= 2 {
+        matches!(&key.segments[..2],
         [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
             if *addr == MASP
                 && (key == HEAD_TX_KEY
                     || key.starts_with(TX_KEY_PREFIX)
                     || key.starts_with(PIN_KEY_PREFIX)
                     || key.starts_with(MASP_NULLIFIERS_KEY_PREFIX)))
+    } else {
+        false
+    }
 }
 
 /// Check if the given storage key is a masp nullifier key
