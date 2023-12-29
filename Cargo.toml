@@ -16,6 +16,7 @@ members = [
   "vp_prelude",
   "encoding_spec",
   "sdk",
+  "examples",
 ]
 
 # wasm packages have to be built separately

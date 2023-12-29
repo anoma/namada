@@ -4392,6 +4392,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "namada_examples"
+version = "0.28.0"
+dependencies = [
+ "masp_proofs",
+ "namada_sdk",
+ "proptest",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "namada_macros"
 version = "0.28.2"
 dependencies = [
@@ -4452,6 +4463,7 @@ dependencies = [
  "owo-colors",
  "parse_duration",
  "paste",
+ "proptest",
  "prost 0.12.3",
  "rand 0.8.5",
  "rand_core 0.6.4",

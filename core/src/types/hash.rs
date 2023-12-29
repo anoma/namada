@@ -146,8 +146,24 @@ impl From<Hash> for crate::tendermint::Hash {
     }
 }
 
+#[cfg(any(test, feature = "testing"))]
+/// Tests and strategies for hashes
+pub mod testing {
+    use proptest::prop_compose;
+
+    use super::*;
+
+    prop_compose! {
+        /// Generate an arbitrary hash
+        pub fn arb_hash()(bytes: [u8; 32]) -> Hash {
+            Hash(bytes)
+        }
+    }
+}
+
 #[cfg(test)]
-mod tests {
+/// Tests and strategies for hashes
+pub mod tests {
     use proptest::prelude::*;
     use proptest::string::{string_regex, RegexGeneratorStrategy};
 

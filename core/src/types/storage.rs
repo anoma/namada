@@ -1434,7 +1434,8 @@ impl<E> GetEventNonce for InnerEthEventsQueue<E> {
 }
 
 #[cfg(test)]
-mod tests {
+/// Tests and strategies for storage
+pub mod tests {
     use proptest::prelude::*;
 
     use super::*;
@@ -1828,6 +1829,7 @@ mod tests {
         }
     }
 
+    #[cfg(test)]
     fn test_address_in_storage_key_order_aux(addr1: Address, addr2: Address) {
         println!("addr1 {addr1}");
         println!("addr2 {addr2}");
@@ -1869,6 +1871,13 @@ pub mod testing {
     use crate::types::address::testing::{
         arb_address, arb_non_internal_address,
     };
+
+    prop_compose! {
+        /// Generate an arbitrary epoch
+        pub fn arb_epoch()(epoch: u64) -> Epoch {
+            Epoch(epoch)
+        }
+    }
 
     /// Generate an arbitrary [`Key`].
     pub fn arb_key() -> impl Strategy<Value = Key> {
