@@ -193,7 +193,7 @@ mod test_process_tx {
     use crate::types::address::nam;
     use crate::types::key::*;
     use crate::types::storage::Epoch;
-    use crate::types::token::Amount;
+    use crate::types::token::{Amount, DenominatedAmount};
 
     fn gen_keypair() -> common::SecretKey {
         use rand::prelude::ThreadRng;
@@ -278,8 +278,9 @@ mod test_process_tx {
         // the signed tx
         let mut tx = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount_per_gas_unit: Amount::from_uint(10, 0)
-                    .expect("Test failed"),
+                amount_per_gas_unit: DenominatedAmount::native(
+                    Amount::from_uint(10, 0).expect("Test failed"),
+                ),
                 token: nam(),
             },
             keypair.ref_to(),
@@ -306,8 +307,9 @@ mod test_process_tx {
         // the signed tx
         let mut tx = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount_per_gas_unit: Amount::from_uint(10, 0)
-                    .expect("Test failed"),
+                amount_per_gas_unit: DenominatedAmount::native(
+                    Amount::from_uint(10, 0).expect("Test failed"),
+                ),
                 token: nam(),
             },
             keypair.ref_to(),

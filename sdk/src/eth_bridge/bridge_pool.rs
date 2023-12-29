@@ -19,7 +19,7 @@ use namada_core::types::eth_bridge_pool::{
 use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::keccak::KeccakHash;
 use namada_core::types::storage::Epoch;
-use namada_core::types::token::{balance_key, Amount, DenominatedAmount};
+use namada_core::types::token::{balance_key, Amount};
 use namada_core::types::voting_power::FractionalVotingPower;
 use owo_colors::OwoColorize;
 use serde::Serialize;
@@ -145,12 +145,8 @@ async fn validate_bridge_pool_tx(
         });
 
     // validate amounts
-    let (
-        tok_denominated @ DenominatedAmount { amount, .. },
-        fee_denominated @ DenominatedAmount {
-            amount: fee_amount, ..
-        },
-    ) = futures::try_join!(validate_token_amount, validate_fee_amount)?;
+    let (tok_denominated, fee_denominated) =
+        futures::try_join!(validate_token_amount, validate_fee_amount)?;
 
     // build pending Bridge pool transfer
     let fee_payer = fee_payer.unwrap_or_else(|| sender.clone());
@@ -159,7 +155,7 @@ async fn validate_bridge_pool_tx(
             asset,
             recipient,
             sender,
-            amount,
+            amount: tok_denominated.amount(),
             kind: if nut {
                 TransferToEthereumKind::Nut
             } else {
@@ -168,7 +164,7 @@ async fn validate_bridge_pool_tx(
         },
         gas_fee: GasFee {
             token: fee_token,
-            amount: fee_amount,
+            amount: fee_denominated.amount(),
             payer: fee_payer,
         },
     };

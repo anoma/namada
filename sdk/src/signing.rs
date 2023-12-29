@@ -27,6 +27,7 @@ use namada_core::types::transaction::account::{InitAccount, UpdateAccount};
 use namada_core::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
+use namada_core::types::transaction::pgf::UpdateStewardCommission;
 use namada_core::types::transaction::pos::BecomeValidator;
 use namada_core::types::transaction::{pos, Fee};
 use prost::Message;
@@ -41,6 +42,7 @@ use crate::core::ledger::governance::storage::proposal::ProposalType;
 use crate::core::ledger::governance::storage::vote::{
     StorageProposalVote, VoteType,
 };
+use crate::core::types::eth_bridge_pool::PendingTransfer;
 use crate::error::{EncodingError, Error, TxError};
 use crate::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
 use crate::ibc::primitives::proto::Any;
@@ -49,12 +51,15 @@ use crate::masp::make_asset_type;
 use crate::proto::{MaspBuilder, Section, Tx};
 use crate::rpc::validate_amount;
 use crate::tx::{
-    TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_CHANGE_COMMISSION_WASM,
-    TX_CHANGE_CONSENSUS_KEY_WASM, TX_CHANGE_METADATA_WASM,
-    TX_CLAIM_REWARDS_WASM, TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM,
-    TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL, TX_REACTIVATE_VALIDATOR_WASM,
-    TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
-    TX_UPDATE_ACCOUNT_WASM, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM, VP_USER_WASM,
+    TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
+    TX_CHANGE_COMMISSION_WASM, TX_CHANGE_CONSENSUS_KEY_WASM,
+    TX_CHANGE_METADATA_WASM, TX_CLAIM_REWARDS_WASM,
+    TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
+    TX_INIT_PROPOSAL, TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM,
+    TX_RESIGN_STEWARD, TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM,
+    TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
+    TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
+    VP_USER_WASM,
 };
 pub use crate::wallet::store::AddressVpType;
 use crate::wallet::{Wallet, WalletIo};
@@ -475,6 +480,9 @@ pub async fn wrap_tx<N: Namada>(
             }
         }
     };
+    let validated_minimum_fee = context
+        .denominate_amount(&args.fee_token, minimum_fee)
+        .await;
     let fee_amount = match args.fee_amount {
         Some(amount) => {
             let validated_fee_amount =
@@ -482,26 +490,23 @@ pub async fn wrap_tx<N: Namada>(
                     .await
                     .expect("Expected to be able to validate fee");
 
-            let amount =
-                Amount::from_uint(validated_fee_amount.amount, 0).unwrap();
-
-            if amount >= minimum_fee {
-                amount
+            if validated_fee_amount >= validated_minimum_fee {
+                validated_fee_amount
             } else if !args.force {
                 // Update the fee amount if it's not enough
                 display_line!(
                     context.io(),
                     "The provided gas price {} is less than the minimum \
                      amount required {}, changing it to match the minimum",
-                    amount.to_string_native(),
-                    minimum_fee.to_string_native()
+                    validated_fee_amount.to_string(),
+                    validated_minimum_fee.to_string()
                 );
-                minimum_fee
+                validated_minimum_fee
             } else {
-                amount
+                validated_fee_amount
             }
         }
-        None => minimum_fee,
+        None => validated_minimum_fee,
     };
 
     let mut updated_balance = match tx_source_balance {
@@ -523,7 +528,7 @@ pub async fn wrap_tx<N: Namada>(
         }
     };
 
-    let total_fee = fee_amount * u64::from(args.gas_limit);
+    let total_fee = fee_amount.amount() * u64::from(args.gas_limit);
 
     let (unshield, unshielding_epoch) = match total_fee
         .checked_sub(updated_balance)
@@ -534,15 +539,15 @@ pub async fn wrap_tx<N: Namada>(
                 let target = namada_core::types::masp::TransferTarget::Address(
                     fee_payer_address.clone(),
                 );
-                let fee_amount = DenominatedAmount {
+                let fee_amount = DenominatedAmount::new(
                     // NOTE: must unshield the total fee amount, not the
                     // diff, because the ledger evaluates the transaction in
                     // reverse (wrapper first, inner second) and cannot know
                     // ahead of time if the inner will modify the balance of
                     // the gas payer
-                    amount: total_fee,
-                    denom: 0.into(),
-                };
+                    total_fee,
+                    0.into(),
+                );
 
                 match ShieldedContext::<N::ShieldedUtils>::gen_shielded_transfer(
                         context,
@@ -685,14 +690,14 @@ fn other_err<T>(string: String) -> Result<T, Error> {
 }
 
 /// Represents the transaction data that is displayed on a Ledger device
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize, Debug, Clone)]
 pub struct LedgerVector {
-    blob: String,
-    index: u64,
-    name: String,
-    output: Vec<String>,
-    output_expert: Vec<String>,
-    valid: bool,
+    pub blob: String,
+    pub index: u64,
+    pub name: String,
+    pub output: Vec<String>,
+    pub output_expert: Vec<String>,
+    pub valid: bool,
 }
 
 /// Adds a Ledger output line describing a given transaction amount and address
@@ -725,7 +730,6 @@ fn make_ledger_amount_addr(
 /// Adds a Ledger output line describing a given transaction amount and asset
 /// type
 async fn make_ledger_amount_asset(
-    context: &impl Namada,
     tokens: &HashMap<Address, String>,
     output: &mut Vec<String>,
     amount: u64,
@@ -735,22 +739,17 @@ async fn make_ledger_amount_asset(
 ) {
     if let Some((token, _, _epoch)) = assets.get(token) {
         // If the AssetType can be decoded, then at least display Addressees
-        let formatted_amt = context.format_amount(token, amount.into()).await;
         if let Some(token) = tokens.get(token) {
             output.push(format!(
                 "{}Amount : {} {}",
                 prefix,
                 token.to_uppercase(),
-                to_ledger_decimal(&formatted_amt),
+                amount,
             ));
         } else {
             output.extend(vec![
                 format!("{}Token : {}", prefix, token),
-                format!(
-                    "{}Amount : {}",
-                    prefix,
-                    to_ledger_decimal(&formatted_amt)
-                ),
+                format!("{}Amount : {}", prefix, amount,),
             ]);
         }
     } else {
@@ -820,7 +819,6 @@ fn format_outputs(output: &mut Vec<String>) {
 /// Adds a Ledger output for the sender and destination for transparent and MASP
 /// transactions
 pub async fn make_ledger_masp_endpoints(
-    context: &impl Namada,
     tokens: &HashMap<Address, String>,
     output: &mut Vec<String>,
     transfer: &Transfer,
@@ -843,7 +841,6 @@ pub async fn make_ledger_masp_endpoints(
             let vk = ExtendedViewingKey::from(*sapling_input.key());
             output.push(format!("Sender : {}", vk));
             make_ledger_amount_asset(
-                context,
                 tokens,
                 output,
                 sapling_input.value(),
@@ -870,7 +867,6 @@ pub async fn make_ledger_masp_endpoints(
             let pa = PaymentAddress::from(sapling_output.address());
             output.push(format!("Destination : {}", pa));
             make_ledger_amount_asset(
-                context,
                 tokens,
                 output,
                 sapling_output.value(),
@@ -907,7 +903,7 @@ pub async fn generate_test_vector(
         // Contract the large data blobs in the transaction
         tx.wallet_filter();
         // Convert the transaction to Ledger format
-        let decoding = to_ledger_vector(context, &tx).await?;
+        let decoding = to_ledger_vector(&*context.wallet().await, &tx).await?;
         let output = serde_json::to_string(&decoding)
             .map_err(|e| Error::from(EncodingError::Serde(e.to_string())))?;
         // Record the transaction at the identified path
@@ -1005,13 +1001,11 @@ impl<'a> Display for LedgerProposalType<'a> {
 /// Converts the given transaction to the form that is displayed on the Ledger
 /// device
 pub async fn to_ledger_vector(
-    context: &impl Namada,
+    wallet: &Wallet<impl WalletIo>,
     tx: &Tx,
 ) -> Result<LedgerVector, Error> {
     // To facilitate lookups of human-readable token names
-    let tokens: HashMap<Address, String> = context
-        .wallet()
-        .await
+    let tokens: HashMap<Address, String> = wallet
         .get_addresses()
         .into_iter()
         .map(|(alias, addr)| (addr, alias))
@@ -1259,9 +1253,25 @@ pub async fn to_ledger_vector(
             Error::from(EncodingError::Conversion(err.to_string()))
         })?;
 
-        tv.name = "Update_VP_0".to_string();
+        tv.name = "Update_Account_0".to_string();
+        tv.output.extend(vec![
+            format!("Type : Update Account"),
+            format!("Address : {}", update_account.addr),
+        ]);
+        tv.output.extend(
+            update_account
+                .public_keys
+                .iter()
+                .map(|k| format!("Public key : {}", k)),
+        );
+        if update_account.threshold.is_some() {
+            tv.output.extend(vec![format!(
+                "Threshold : {}",
+                update_account.threshold.unwrap()
+            )])
+        }
 
-        match &update_account.vp_code_hash {
+        let vp_code_data = match &update_account.vp_code_hash {
             Some(hash) => {
                 let extra = tx
                     .get_section(hash)
@@ -1274,45 +1284,31 @@ pub async fn to_ledger_vector(
                 } else {
                     HEXLOWER.encode(&extra.code.hash().0)
                 };
-                tv.output.extend(vec![
-                    format!("Type : Update VP"),
-                    format!("Address : {}", update_account.addr),
-                ]);
-                tv.output.extend(
-                    update_account
-                        .public_keys
-                        .iter()
-                        .map(|k| format!("Public key : {}", k)),
-                );
-                if update_account.threshold.is_some() {
-                    tv.output.extend(vec![format!(
-                        "Threshold : {}",
-                        update_account.threshold.unwrap()
-                    )])
-                }
-                tv.output.extend(vec![format!("VP type : {}", vp_code)]);
-
-                tv.output_expert
-                    .extend(vec![format!("Address : {}", update_account.addr)]);
-                tv.output_expert.extend(
-                    update_account
-                        .public_keys
-                        .iter()
-                        .map(|k| format!("Public key : {}", k)),
-                );
-                if update_account.threshold.is_some() {
-                    tv.output_expert.extend(vec![format!(
-                        "Threshold : {}",
-                        update_account.threshold.unwrap()
-                    )])
-                }
-                tv.output_expert.extend(vec![format!(
-                    "VP type : {}",
-                    HEXLOWER.encode(&extra.code.hash().0)
-                )]);
+                Some((vp_code, extra.code.hash()))
             }
-            None => (),
+            None => None,
         };
+        if let Some((vp_code, _)) = &vp_code_data {
+            tv.output.extend(vec![format!("VP type : {}", vp_code)]);
+        }
+        tv.output_expert
+            .extend(vec![format!("Address : {}", update_account.addr)]);
+        tv.output_expert.extend(
+            update_account
+                .public_keys
+                .iter()
+                .map(|k| format!("Public key : {}", k)),
+        );
+        if let Some(threshold) = update_account.threshold {
+            tv.output_expert
+                .extend(vec![format!("Threshold : {}", threshold,)])
+        }
+        if let Some((_, extra_code_hash)) = vp_code_data {
+            tv.output_expert.extend(vec![format!(
+                "VP type : {}",
+                HEXLOWER.encode(&extra_code_hash.0)
+            )]);
+        }
     } else if code_sec.tag == Some(TX_TRANSFER_WASM.to_string()) {
         let transfer = Transfer::try_from_slice(
             &tx.data()
@@ -1352,7 +1348,6 @@ pub async fn to_ledger_vector(
 
         tv.output.push("Type : Transfer".to_string());
         make_ledger_masp_endpoints(
-            context,
             &tokens,
             &mut tv.output,
             &transfer,
@@ -1361,7 +1356,6 @@ pub async fn to_ledger_vector(
         )
         .await;
         make_ledger_masp_endpoints(
-            context,
             &tokens,
             &mut tv.output_expert,
             &transfer,
@@ -1686,34 +1680,134 @@ pub async fn to_ledger_vector(
         ]);
 
         tv.output_expert.push(format!("Validator : {}", address));
+    } else if code_sec.tag == Some(TX_REDELEGATE_WASM.to_string()) {
+        let redelegation = pos::Redelegation::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
+
+        tv.name = "Redelegate_0".to_string();
+
+        tv.output.extend(vec![
+            format!("Type : Redelegate"),
+            format!("Source Validator : {}", redelegation.src_validator),
+            format!("Destination Validator : {}", redelegation.dest_validator),
+            format!("Owner : {}", redelegation.owner),
+            format!(
+                "Amount : {}",
+                to_ledger_decimal(&redelegation.amount.to_string_native())
+            ),
+        ]);
+
+        tv.output_expert.extend(vec![
+            format!("Source Validator : {}", redelegation.src_validator),
+            format!("Destination Validator : {}", redelegation.dest_validator),
+            format!("Owner : {}", redelegation.owner),
+            format!(
+                "Amount : {}",
+                to_ledger_decimal(&redelegation.amount.to_string_native())
+            ),
+        ]);
+    } else if code_sec.tag == Some(TX_UPDATE_STEWARD_COMMISSION.to_string()) {
+        let update = UpdateStewardCommission::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
+
+        tv.name = "Update_Steward_Commission_0".to_string();
+        tv.output.extend(vec![
+            format!("Type : Update Steward Commission"),
+            format!("Steward : {}", update.steward),
+        ]);
+        for (address, dec) in &update.commission {
+            tv.output.push(format!("Commission : {} {}", address, dec));
+        }
+
+        tv.output_expert
+            .push(format!("Steward : {}", update.steward));
+        for (address, dec) in &update.commission {
+            tv.output_expert
+                .push(format!("Commission : {} {}", address, dec));
+        }
+    } else if code_sec.tag == Some(TX_RESIGN_STEWARD.to_string()) {
+        let address = Address::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
+
+        tv.name = "Resign_Steward_0".to_string();
+
+        tv.output.extend(vec![
+            format!("Type : Resign Steward"),
+            format!("Steward : {}", address),
+        ]);
+
+        tv.output_expert.push(format!("Steward : {}", address));
+    } else if code_sec.tag == Some(TX_BRIDGE_POOL_WASM.to_string()) {
+        let transfer = PendingTransfer::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
+
+        tv.name = "Bridge_Pool_Transfer_0".to_string();
+
+        tv.output.extend(vec![
+            format!("Type : Bridge Pool Transfer"),
+            format!("Transfer Kind : {}", transfer.transfer.kind),
+            format!("Transfer Sender : {}", transfer.transfer.sender),
+            format!("Transfer Recipient : {}", transfer.transfer.recipient),
+            format!("Transfer Asset : {}", transfer.transfer.asset),
+            format!("Transfer Amount : {}", transfer.transfer.amount),
+            format!("Gas Payer : {}", transfer.gas_fee.payer),
+            format!("Gas Token : {}", transfer.gas_fee.token),
+            format!("Gas Amount : {}", transfer.gas_fee.amount),
+        ]);
+
+        tv.output_expert.extend(vec![
+            format!("Transfer Kind : {}", transfer.transfer.kind),
+            format!("Transfer Sender : {}", transfer.transfer.sender),
+            format!("Transfer Recipient : {}", transfer.transfer.recipient),
+            format!("Transfer Asset : {}", transfer.transfer.asset),
+            format!("Transfer Amount : {}", transfer.transfer.amount),
+            format!("Gas Payer : {}", transfer.gas_fee.payer),
+            format!("Gas Token : {}", transfer.gas_fee.token),
+            format!("Gas Amount : {}", transfer.gas_fee.amount),
+        ]);
     } else {
         tv.name = "Custom_0".to_string();
         tv.output.push("Type : Custom".to_string());
     }
 
     if let Some(wrapper) = tx.header.wrapper() {
-        let gas_token = wrapper.fee.token.clone();
-        let gas_limit = context
-            .format_amount(&gas_token, Amount::from(wrapper.gas_limit))
-            .await;
-        let fee_amount_per_gas_unit = context
-            .format_amount(&gas_token, wrapper.fee.amount_per_gas_unit)
-            .await;
+        let fee_amount_per_gas_unit =
+            to_ledger_decimal(&wrapper.fee.amount_per_gas_unit.to_string());
         tv.output_expert.extend(vec![
             format!("Timestamp : {}", tx.header.timestamp.0),
             format!("Pubkey : {}", wrapper.pk),
             format!("Epoch : {}", wrapper.epoch),
-            format!("Gas limit : {}", gas_limit),
+            format!("Gas limit : {}", u64::from(wrapper.gas_limit)),
         ]);
         if let Some(token) = tokens.get(&wrapper.fee.token) {
             tv.output_expert.push(format!(
                 "Fees/gas unit : {} {}",
                 token.to_uppercase(),
-                to_ledger_decimal(&fee_amount_per_gas_unit),
+                fee_amount_per_gas_unit,
             ));
         } else {
             tv.output_expert.extend(vec![
-                format!("Fee token : {}", gas_token),
+                format!("Fee token : {}", wrapper.fee.token),
                 format!("Fees/gas unit : {}", fee_amount_per_gas_unit),
             ]);
         }

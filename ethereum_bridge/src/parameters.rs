@@ -208,11 +208,12 @@ impl EthereumBridgeParams {
             .unwrap();
         for Erc20WhitelistEntry {
             token_address: addr,
-            token_cap: DenominatedAmount { amount: cap, denom },
+            token_cap,
         } in erc20_whitelist
         {
-            if addr == native_erc20
-                && denom != &NATIVE_MAX_DECIMAL_PLACES.into()
+            let cap = token_cap.amount();
+            let denom = token_cap.denom();
+            if addr == native_erc20 && denom != NATIVE_MAX_DECIMAL_PLACES.into()
             {
                 panic!(
                     "Error writing Ethereum bridge config: The native token \
@@ -232,14 +233,14 @@ impl EthereumBridgeParams {
                 suffix: whitelist::KeyType::Cap,
             }
             .into();
-            wl_storage.write_bytes(&key, encode(cap)).unwrap();
+            wl_storage.write_bytes(&key, encode(&cap)).unwrap();
 
             let key = whitelist::Key {
                 asset: *addr,
                 suffix: whitelist::KeyType::Denomination,
             }
             .into();
-            wl_storage.write_bytes(&key, encode(denom)).unwrap();
+            wl_storage.write_bytes(&key, encode(&denom)).unwrap();
         }
         // Initialize the storage for the Ethereum Bridge VP.
         vp::init_storage(wl_storage);

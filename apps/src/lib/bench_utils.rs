@@ -821,10 +821,7 @@ impl BenchShieldedCtx {
         source: TransferSource,
         target: TransferTarget,
     ) -> (Self, Tx) {
-        let denominated_amount = DenominatedAmount {
-            amount,
-            denom: 0.into(),
-        };
+        let denominated_amount = DenominatedAmount::native(amount);
         let async_runtime = tokio::runtime::Runtime::new().unwrap();
         let spending_key = self
             .wallet

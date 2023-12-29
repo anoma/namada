@@ -1943,7 +1943,7 @@ pub async fn build_ibc_transfer(
         validate_amount(context, args.amount, &args.token, args.tx.force)
             .await
             .expect("expected to validate amount");
-    if validated_amount.canonical().denom.0 != 0 {
+    if validated_amount.canonical().denom().0 != 0 {
         return Err(Error::Other(format!(
             "The amount for the IBC transfer should be an integer: {}",
             validated_amount
@@ -1956,7 +1956,7 @@ pub async fn build_ibc_transfer(
     let post_balance = check_balance_too_low_err(
         &args.token,
         &source,
-        validated_amount.amount,
+        validated_amount.amount(),
         balance_key,
         args.tx.force,
         context,
@@ -2204,7 +2204,7 @@ pub async fn build_transfer<N: Namada>(
     let post_balance = check_balance_too_low_err(
         &args.token,
         &source,
-        validated_amount.amount,
+        validated_amount.amount(),
         balance_key,
         args.tx.force,
         context,
@@ -2222,12 +2222,13 @@ pub async fn build_transfer<N: Namada>(
     // signer. Also, if the transaction is shielded, redact the amount and token
     // types by setting the transparent value to 0 and token type to a constant.
     // This has no side-effect because transaction is to self.
-    let (_amount, token) = if source == masp_addr && target == masp_addr {
-        // TODO Refactor me, we shouldn't rely on any specific token here.
-        (token::Amount::zero(), args.native_token.clone())
-    } else {
-        (validated_amount.amount, args.token.clone())
-    };
+    let (transparent_amount, transparent_token) =
+        if source == masp_addr && target == masp_addr {
+            // TODO Refactor me, we shouldn't rely on any specific token here.
+            (token::Amount::zero().into(), args.native_token.clone())
+        } else {
+            (validated_amount, args.token.clone())
+        };
     // Determine whether to pin this transaction to a storage key
     let key = match &args.target {
         TransferTarget::PaymentAddress(pa) if pa.is_pinned() => Some(pa.hash()),
@@ -2250,8 +2251,8 @@ pub async fn build_transfer<N: Namada>(
         Err(Build(builder::Error::InsufficientFunds(_))) => {
             Err(TxError::NegativeBalanceAfterTransfer(
                 Box::new(source.clone()),
-                validated_amount.amount.to_string_native(),
-                Box::new(token.clone()),
+                validated_amount.amount().to_string_native(),
+                Box::new(args.token.clone()),
             ))
         }
         Err(err) => Err(TxError::MaspError(err.to_string())),
@@ -2275,8 +2276,8 @@ pub async fn build_transfer<N: Namada>(
     let transfer = token::Transfer {
         source: source.clone(),
         target: target.clone(),
-        token: token.clone(),
-        amount: validated_amount,
+        token: transparent_token.clone(),
+        amount: transparent_amount,
         key: key.clone(),
         // Link the Transfer to the MASP Transaction by hash code
         shielded: None,

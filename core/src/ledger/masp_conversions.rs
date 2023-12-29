@@ -154,10 +154,7 @@ where
         0,
     )
     .unwrap();
-    let denom_amount = DenominatedAmount {
-        amount: inflation_amount,
-        denom: denomination,
-    };
+    let denom_amount = DenominatedAmount::new(inflation_amount, denomination);
     tracing::info!("MASP inflation for {addr} is {denom_amount}");
 
     tracing::debug!(

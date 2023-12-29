@@ -325,10 +325,10 @@ where
                     &mut self.wl_storage,
                     token_address,
                     &owner.address(),
-                    balance.amount,
+                    balance.amount(),
                 )
                 .expect("Couldn't credit initial balance");
-                total_token_balance += balance.amount;
+                total_token_balance += balance.amount();
             }
             // Write the total amount of tokens for the ratio
             self.wl_storage
@@ -476,7 +476,7 @@ where
                     &mut self.wl_storage,
                     Some(&source.address()),
                     validator,
-                    amount.amount,
+                    amount.amount(),
                     current_epoch,
                     Some(0),
                 ) {
