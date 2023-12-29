@@ -170,7 +170,8 @@ fn run_ledger_ibc() -> Result<()> {
     try_invalid_transfers(&test_a, &test_b, &port_id_a, &channel_id_a)?;
 
     // Transfer 50000 received over IBC on Chain B
-    transfer_received_token(&port_id_b, &channel_id_b, &test_b)?;
+    let token = format!("{port_id_b}/{channel_id_b}/nam");
+    transfer_on_chain(&test_b, BERTHA, ALBERT, token, 50000, BERTHA_KEY)?;
     check_balances_after_non_ibc(&port_id_b, &channel_id_b, &test_b)?;
 
     // Transfer 50000 back from the origin-specific account on Chain B to Chain
@@ -862,26 +863,27 @@ fn try_invalid_transfers(
     Ok(())
 }
 
-fn transfer_received_token(
-    port_id: &PortId,
-    channel_id: &ChannelId,
+fn transfer_on_chain(
     test: &Test,
+    sender: impl AsRef<str>,
+    receiver: impl AsRef<str>,
+    token: impl AsRef<str>,
+    amount: u64,
+    signer: impl AsRef<str>,
 ) -> Result<()> {
     let rpc = get_actor_rpc(test, Who::Validator(0));
-    let ibc_denom = format!("{port_id}/{channel_id}/nam");
-    let amount = Amount::native_whole(50000).to_string_native();
     let tx_args = [
         "transfer",
         "--source",
-        BERTHA,
+        sender.as_ref(),
         "--target",
-        ALBERT,
+        receiver.as_ref(),
         "--token",
-        &ibc_denom,
+        token.as_ref(),
         "--amount",
-        &amount,
-        "--gas-token",
-        NAM,
+        &amount.to_string(),
+        "--signing-keys",
+        signer.as_ref(),
         "--node",
         &rpc,
     ];
@@ -1045,11 +1047,14 @@ fn shielded_transfer(
     let file_path = get_shielded_transfer_path(&mut client)?;
     client.assert_success();
 
-    // Send a token from Chain A to PA(B) on Chain B
+    // Send a token to the shielded address on Chain A
+    transfer_on_chain(test_a, ALBERT, AA_PAYMENT_ADDRESS, BTC, 10, ALBERT_KEY)?;
+
+    // Send a token from SP(A) on Chain A to PA(B) on Chain B
     let amount = Amount::native_whole(10).to_string_native();
     let height = transfer(
         test_a,
-        ALBERT,
+        A_SPENDING_KEY,
         AB_PAYMENT_ADDRESS,
         BTC,
         amount,

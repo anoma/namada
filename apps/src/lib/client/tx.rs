@@ -961,8 +961,13 @@ pub async fn submit_ibc_transfer<N: Namada>(
 where
     <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
 {
-    submit_reveal_aux(namada, args.tx.clone(), &args.source).await?;
-    let (mut tx, signing_data) = args.build(namada).await?;
+    submit_reveal_aux(
+        namada,
+        args.tx.clone(),
+        &args.source.effective_address(),
+    )
+    .await?;
+    let (mut tx, signing_data, _) = args.build(namada).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
@@ -971,6 +976,8 @@ where
 
         namada.submit(tx, &args.tx).await?;
     }
+    // NOTE that the tx could fail when its submission epoch doesn't match
+    // construction epoch
 
     Ok(())
 }

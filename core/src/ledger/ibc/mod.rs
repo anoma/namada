@@ -8,6 +8,7 @@ use std::fmt::Debug;
 use std::rc::Rc;
 use std::str::FromStr;
 
+use borsh::BorshDeserialize;
 pub use context::common::IbcCommonContext;
 use context::router::IbcRouter;
 pub use context::storage::{IbcStorageContext, ProofSpec};
@@ -37,16 +38,16 @@ use crate::ibc::core::router::types::module::ModuleId;
 use crate::ibc::primitives::proto::Any;
 use crate::types::address::{Address, MASP};
 use crate::types::ibc::{
-    get_shielded_transfer, is_ibc_denom, EVENT_TYPE_DENOM_TRACE,
-    EVENT_TYPE_PACKET,
+    get_shielded_transfer, is_ibc_denom, MsgShieldedTransfer,
+    EVENT_TYPE_DENOM_TRACE, EVENT_TYPE_PACKET,
 };
 use crate::types::masp::PaymentAddress;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Decoding IBC data error: {0}")]
-    DecodingData(prost::DecodeError),
+    #[error("Decoding IBC data error")]
+    DecodingData,
     #[error("Decoding message error: {0}")]
     DecodingMessage(RouterError),
     #[error("IBC context error: {0}")]
@@ -99,28 +100,37 @@ where
 
     /// Execute according to the message in an IBC transaction or VP
     pub fn execute(&mut self, tx_data: &[u8]) -> Result<(), Error> {
-        let any_msg = Any::decode(tx_data).map_err(Error::DecodingData)?;
-        match MsgTransfer::try_from(any_msg.clone()) {
-            Ok(msg) => {
+        let message = decode_message(tx_data)?;
+        match &message {
+            IbcMessage::Transfer(msg) => {
                 let mut token_transfer_ctx =
                     TokenTransferContext::new(self.ctx.inner.clone());
                 send_transfer_execute(
                     &mut self.ctx,
                     &mut token_transfer_ctx,
-                    msg,
+                    msg.clone(),
                 )
                 .map_err(Error::TokenTransfer)
             }
-            Err(_) => {
-                let envelope = MsgEnvelope::try_from(any_msg)
-                    .map_err(Error::DecodingMessage)?;
+            IbcMessage::ShieldedTransfer(msg) => {
+                let mut token_transfer_ctx =
+                    TokenTransferContext::new(self.ctx.inner.clone());
+                send_transfer_execute(
+                    &mut self.ctx,
+                    &mut token_transfer_ctx,
+                    msg.message.clone(),
+                )
+                .map_err(Error::TokenTransfer)?;
+                self.handle_masp_tx(message)
+            }
+            IbcMessage::Envelope(envelope) => {
                 execute(&mut self.ctx, &mut self.router, envelope.clone())
                     .map_err(|e| Error::Context(Box::new(e)))?;
-                // For receiving the token to a shielded address
-                self.handle_masp_tx(&envelope)?;
                 // the current ibc-rs execution doesn't store the denom for the
                 // token hash when transfer with MsgRecvPacket
-                self.store_denom(&envelope)
+                self.store_denom(envelope)?;
+                // For receiving the token to a shielded address
+                self.handle_masp_tx(message)
             }
         }
     }
@@ -218,17 +228,25 @@ where
 
     /// Validate according to the message in IBC VP
     pub fn validate(&self, tx_data: &[u8]) -> Result<(), Error> {
-        let any_msg = Any::decode(tx_data).map_err(Error::DecodingData)?;
-        match MsgTransfer::try_from(any_msg.clone()) {
-            Ok(msg) => {
+        let message = decode_message(tx_data)?;
+        match message {
+            IbcMessage::Transfer(msg) => {
                 let token_transfer_ctx =
                     TokenTransferContext::new(self.ctx.inner.clone());
                 send_transfer_validate(&self.ctx, &token_transfer_ctx, msg)
                     .map_err(Error::TokenTransfer)
             }
-            Err(_) => {
-                let envelope = MsgEnvelope::try_from(any_msg)
-                    .map_err(Error::DecodingMessage)?;
+            IbcMessage::ShieldedTransfer(msg) => {
+                let token_transfer_ctx =
+                    TokenTransferContext::new(self.ctx.inner.clone());
+                send_transfer_validate(
+                    &self.ctx,
+                    &token_transfer_ctx,
+                    msg.message,
+                )
+                .map_err(Error::TokenTransfer)
+            }
+            IbcMessage::Envelope(envelope) => {
                 validate(&self.ctx, &self.router, envelope)
                     .map_err(|e| Error::Context(Box::new(e)))
             }
@@ -236,9 +254,9 @@ where
     }
 
     /// Handle the MASP transaction if needed
-    fn handle_masp_tx(&mut self, envelope: &MsgEnvelope) -> Result<(), Error> {
-        let shielded_transfer = match envelope {
-            MsgEnvelope::Packet(PacketMsg::Recv(_)) => {
+    fn handle_masp_tx(&mut self, message: IbcMessage) -> Result<(), Error> {
+        let shielded_transfer = match message {
+            IbcMessage::Envelope(MsgEnvelope::Packet(PacketMsg::Recv(_))) => {
                 let event = self
                     .ctx
                     .inner
@@ -257,6 +275,7 @@ where
                     None => return Ok(()),
                 }
             }
+            IbcMessage::ShieldedTransfer(msg) => Some(msg.shielded_transfer),
             _ => return Ok(()),
         };
         if let Some(shielded_transfer) = shielded_transfer {
@@ -270,6 +289,31 @@ where
         }
         Ok(())
     }
+}
+
+enum IbcMessage {
+    Envelope(MsgEnvelope),
+    Transfer(MsgTransfer),
+    ShieldedTransfer(MsgShieldedTransfer),
+}
+
+fn decode_message(tx_data: &[u8]) -> Result<IbcMessage, Error> {
+    // ibc-rs message
+    if let Ok(any_msg) = Any::decode(tx_data) {
+        if let Ok(transfer_msg) = MsgTransfer::try_from(any_msg.clone()) {
+            return Ok(IbcMessage::Transfer(transfer_msg));
+        }
+        if let Ok(envelope) = MsgEnvelope::try_from(any_msg) {
+            return Ok(IbcMessage::Envelope(envelope));
+        }
+    }
+
+    // Message with Transfer for the shielded transfer
+    if let Ok(msg) = MsgShieldedTransfer::try_from_slice(tx_data) {
+        return Ok(IbcMessage::ShieldedTransfer(msg));
+    }
+
+    Err(Error::DecodingData)
 }
 
 /// Get the IbcToken from the source/destination ports and channels

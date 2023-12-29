@@ -244,7 +244,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     /// Make a TxIbcTransfer builder from the given minimum set of arguments
     fn new_ibc_transfer(
         &self,
-        source: Address,
+        source: TransferSource,
         receiver: String,
         token: Address,
         amount: InputAmount,

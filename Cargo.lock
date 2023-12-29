@@ -4461,7 +4461,7 @@ dependencies = [
 
 [[package]]
 name = "namada_light_sdk"
-version = "0.28.1"
+version = "0.28.2"
 dependencies = [
  "borsh",
  "borsh-ext",
