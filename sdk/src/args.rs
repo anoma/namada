@@ -295,7 +295,7 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
     /// Transfer source address
-    pub source: C::Address,
+    pub source: C::TransferSource,
     /// Transfer target address
     pub receiver: String,
     /// Transferred token address
@@ -330,7 +330,7 @@ impl<C: NamadaTypes> TxBuilder<C> for TxIbcTransfer<C> {
 
 impl<C: NamadaTypes> TxIbcTransfer<C> {
     /// Transfer source address
-    pub fn source(self, source: C::Address) -> Self {
+    pub fn source(self, source: C::TransferSource) -> Self {
         Self { source, ..self }
     }
 
