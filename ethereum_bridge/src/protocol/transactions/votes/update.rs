@@ -220,7 +220,7 @@ mod tests {
     use crate::test_utils;
 
     mod helpers {
-        use namada_proof_of_stake::total_consensus_stake_key_handle;
+        use namada_proof_of_stake::storage::total_consensus_stake_handle;
 
         use super::*;
 
@@ -279,7 +279,7 @@ mod tests {
                         > FractionalVotingPower::TWO_THIRDS * total_stake,
                 };
                 votes::storage::write(wl_storage, &keys, event, &tally, false)?;
-                total_consensus_stake_key_handle().set(
+                total_consensus_stake_handle().set(
                     wl_storage,
                     total_stake,
                     0u64.into(),

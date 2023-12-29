@@ -29,10 +29,20 @@ use proptest_state_machine::{
 use test_log::test;
 use yansi::Paint;
 
+use super::helpers::advance_epoch;
 use super::utils::DbgPrintDiff;
 use crate::parameters::testing::arb_rate;
 use crate::parameters::PosParams;
-use crate::tests::arb_params_and_genesis_validators;
+use crate::queries::find_delegations;
+use crate::slashing::find_slashes_in_range;
+use crate::storage::{
+    enqueued_slashes_handle, read_all_validator_addresses,
+    read_below_capacity_validator_set_addresses,
+    read_below_capacity_validator_set_addresses_with_stake,
+    read_below_threshold_validator_set_addresses,
+    read_consensus_validator_set_addresses_with_stake,
+};
+use crate::tests::helpers::arb_params_and_genesis_validators;
 use crate::tests::utils::pause_for_enter;
 use crate::types::{
     BondId, GenesisValidator, ReverseOrdTokenAmount, Slash, SlashType,
@@ -41,10 +51,8 @@ use crate::types::{
 use crate::{
     below_capacity_validator_set_handle, bond_handle,
     consensus_validator_set_handle, delegator_redelegated_bonds_handle,
-    enqueued_slashes_handle, find_slashes_in_range,
-    read_below_threshold_validator_set_addresses, read_pos_params,
-    redelegate_tokens, validator_deltas_handle, validator_slashes_handle,
-    validator_state_handle, RedelegationError,
+    read_pos_params, redelegate_tokens, validator_deltas_handle,
+    validator_slashes_handle, validator_state_handle, RedelegationError,
 };
 
 prop_state_machine! {
@@ -1971,11 +1979,12 @@ impl StateMachineTest for ConcretePosState {
         match transition {
             Transition::NextEpoch => {
                 tracing::debug!("\nCONCRETE Next epoch");
-                super::advance_epoch(&mut state.s, &params);
+                advance_epoch(&mut state.s, &params);
 
                 // Need to apply some slashing
                 let current_epoch = state.s.storage.block.epoch;
-                super::process_slashes(&mut state.s, current_epoch).unwrap();
+                crate::slashing::process_slashes(&mut state.s, current_epoch)
+                    .unwrap();
 
                 let params = read_pos_params(&state.s).unwrap();
                 state.check_next_epoch_post_conditions(&params);
@@ -1992,9 +2001,9 @@ impl StateMachineTest for ConcretePosState {
                 tracing::debug!("\nCONCRETE Init validator");
                 let current_epoch = state.current_epoch();
 
-                super::become_validator(
+                crate::become_validator(
                     &mut state.s,
-                    super::BecomeValidator {
+                    crate::BecomeValidator {
                         params: &params,
                         address: &address,
                         consensus_key: &consensus_key,
@@ -2064,7 +2073,7 @@ impl StateMachineTest for ConcretePosState {
                 );
 
                 // Apply the bond
-                super::bond_tokens(
+                crate::bond_tokens(
                     &mut state.s,
                     Some(&id.source),
                     &id.validator,
@@ -2129,7 +2138,7 @@ impl StateMachineTest for ConcretePosState {
                     .unwrap();
 
                 // Apply the unbond
-                super::unbond_tokens(
+                crate::unbond_tokens(
                     &mut state.s,
                     Some(&id.source),
                     &id.validator,
@@ -2205,7 +2214,7 @@ impl StateMachineTest for ConcretePosState {
                 //         .unwrap();
 
                 // Apply the withdrawal
-                let withdrawn = super::withdraw_tokens(
+                let withdrawn = crate::withdraw_tokens(
                     &mut state.s,
                     Some(&source),
                     &validator,
@@ -2454,8 +2463,7 @@ impl StateMachineTest for ConcretePosState {
 
                 // Find delegations
                 let delegations_pre =
-                    crate::find_delegations(&state.s, &id.source, &pipeline)
-                        .unwrap();
+                    find_delegations(&state.s, &id.source, &pipeline).unwrap();
 
                 // Apply redelegation
                 let result = redelegate_tokens(
@@ -2607,10 +2615,9 @@ impl StateMachineTest for ConcretePosState {
                     // updated with redelegation. For the source reduced by the
                     // redelegation amount and for the destination increased by
                     // the redelegation amount, less any slashes.
-                    let delegations_post = crate::find_delegations(
-                        &state.s, &id.source, &pipeline,
-                    )
-                    .unwrap();
+                    let delegations_post =
+                        find_delegations(&state.s, &id.source, &pipeline)
+                            .unwrap();
                     let src_delegation_pre = delegations_pre
                         .get(&id.validator)
                         .cloned()
@@ -2663,7 +2670,7 @@ impl StateMachineTest for ConcretePosState {
                 tracing::debug!("\nCONCRETE Misbehavior");
                 let current_epoch = state.current_epoch();
                 // Record the slash evidence
-                super::slash(
+                crate::slashing::slash(
                     &mut state.s,
                     &params,
                     current_epoch,
@@ -2692,7 +2699,7 @@ impl StateMachineTest for ConcretePosState {
                 let current_epoch = state.current_epoch();
 
                 // Unjail the validator
-                super::unjail_validator(&mut state.s, &address, current_epoch)
+                crate::unjail_validator(&mut state.s, &address, current_epoch)
                     .unwrap();
 
                 // Post-conditions
@@ -2725,13 +2732,13 @@ impl ConcretePosState {
         // Post-condition: Consensus validator sets at pipeline offset
         // must be the same as at the epoch before it.
         let consensus_set_before_pipeline =
-            crate::read_consensus_validator_set_addresses_with_stake(
+            read_consensus_validator_set_addresses_with_stake(
                 &self.s,
                 before_pipeline,
             )
             .unwrap();
         let consensus_set_at_pipeline =
-            crate::read_consensus_validator_set_addresses_with_stake(
+            read_consensus_validator_set_addresses_with_stake(
                 &self.s, pipeline,
             )
             .unwrap();
@@ -2743,13 +2750,13 @@ impl ConcretePosState {
         // Post-condition: Below-capacity validator sets at pipeline
         // offset must be the same as at the epoch before it.
         let below_cap_before_pipeline =
-            crate::read_below_capacity_validator_set_addresses_with_stake(
+            read_below_capacity_validator_set_addresses_with_stake(
                 &self.s,
                 before_pipeline,
             )
             .unwrap();
         let below_cap_at_pipeline =
-            crate::read_below_capacity_validator_set_addresses_with_stake(
+            read_below_capacity_validator_set_addresses_with_stake(
                 &self.s, pipeline,
             )
             .unwrap();
@@ -2802,7 +2809,7 @@ impl ConcretePosState {
     ) {
         let pipeline = submit_epoch + params.pipeline_len;
 
-        let cur_stake = super::read_validator_stake(
+        let cur_stake = crate::read_validator_stake(
             &self.s,
             params,
             &id.validator,
@@ -2814,7 +2821,7 @@ impl ConcretePosState {
         // change
         assert_eq!(cur_stake, validator_stake_before_bond_cur);
 
-        let stake_at_pipeline = super::read_validator_stake(
+        let stake_at_pipeline = crate::read_validator_stake(
             &self.s,
             params,
             &id.validator,
@@ -2848,7 +2855,7 @@ impl ConcretePosState {
     ) {
         let pipeline = submit_epoch + params.pipeline_len;
 
-        let cur_stake = super::read_validator_stake(
+        let cur_stake = crate::read_validator_stake(
             &self.s,
             params,
             &id.validator,
@@ -2860,7 +2867,7 @@ impl ConcretePosState {
         // change
         assert_eq!(cur_stake, validator_stake_before_unbond_cur);
 
-        let stake_at_pipeline = super::read_validator_stake(
+        let stake_at_pipeline = crate::read_validator_stake(
             &self.s,
             params,
             &id.validator,
@@ -2938,21 +2945,18 @@ impl ConcretePosState {
                 || (num_occurrences == 0 && validator_is_jailed)
         );
 
-        let consensus_set =
-            crate::read_consensus_validator_set_addresses_with_stake(
-                &self.s, pipeline,
-            )
-            .unwrap();
+        let consensus_set = read_consensus_validator_set_addresses_with_stake(
+            &self.s, pipeline,
+        )
+        .unwrap();
         let below_cap_set =
-            crate::read_below_capacity_validator_set_addresses_with_stake(
+            read_below_capacity_validator_set_addresses_with_stake(
                 &self.s, pipeline,
             )
             .unwrap();
         let below_thresh_set =
-            crate::read_below_threshold_validator_set_addresses(
-                &self.s, pipeline,
-            )
-            .unwrap();
+            read_below_threshold_validator_set_addresses(&self.s, pipeline)
+                .unwrap();
         let weighted = WeightedValidator {
             bonded_stake: stake_at_pipeline,
             address: id.validator,
@@ -3015,21 +3019,17 @@ impl ConcretePosState {
                     .contains(address)
             );
             assert!(
-                !crate::read_below_capacity_validator_set_addresses(
-                    &self.s, epoch
-                )
-                .unwrap()
-                .contains(address)
+                !read_below_capacity_validator_set_addresses(&self.s, epoch)
+                    .unwrap()
+                    .contains(address)
             );
             assert!(
-                !crate::read_below_threshold_validator_set_addresses(
-                    &self.s, epoch
-                )
-                .unwrap()
-                .contains(address)
+                !read_below_threshold_validator_set_addresses(&self.s, epoch)
+                    .unwrap()
+                    .contains(address)
             );
             assert!(
-                !crate::read_all_validator_addresses(&self.s, epoch)
+                !read_all_validator_addresses(&self.s, epoch)
                     .unwrap()
                     .contains(address)
             );
@@ -3038,17 +3038,14 @@ impl ConcretePosState {
             crate::read_consensus_validator_set_addresses(&self.s, pipeline)
                 .unwrap()
                 .contains(address);
-        let in_bc = crate::read_below_capacity_validator_set_addresses(
-            &self.s, pipeline,
-        )
-        .unwrap()
-        .contains(address);
+        let in_bc =
+            read_below_capacity_validator_set_addresses(&self.s, pipeline)
+                .unwrap()
+                .contains(address);
         let in_below_thresh =
-            crate::read_below_threshold_validator_set_addresses(
-                &self.s, pipeline,
-            )
-            .unwrap()
-            .contains(address);
+            read_below_threshold_validator_set_addresses(&self.s, pipeline)
+                .unwrap()
+                .contains(address);
 
         assert!(in_below_thresh && !in_consensus && !in_bc);
     }
@@ -3204,7 +3201,7 @@ impl ConcretePosState {
             for WeightedValidator {
                 bonded_stake,
                 address: validator,
-            } in crate::read_consensus_validator_set_addresses_with_stake(
+            } in read_consensus_validator_set_addresses_with_stake(
                 &self.s, epoch,
             )
             .unwrap()
@@ -3274,11 +3271,10 @@ impl ConcretePosState {
             for WeightedValidator {
                 bonded_stake,
                 address: validator,
-            } in
-                crate::read_below_capacity_validator_set_addresses_with_stake(
-                    &self.s, epoch,
-                )
-                .unwrap()
+            } in read_below_capacity_validator_set_addresses_with_stake(
+                &self.s, epoch,
+            )
+            .unwrap()
             {
                 let deltas_stake = validator_deltas_handle(&validator)
                     .get_sum(&self.s, epoch, params)
@@ -3359,10 +3355,8 @@ impl ConcretePosState {
             }
 
             for validator in
-                crate::read_below_threshold_validator_set_addresses(
-                    &self.s, epoch,
-                )
-                .unwrap()
+                read_below_threshold_validator_set_addresses(&self.s, epoch)
+                    .unwrap()
             {
                 let conc_stake = validator_deltas_handle(&validator)
                     .get_sum(&self.s, epoch, params)
@@ -3425,7 +3419,7 @@ impl ConcretePosState {
 
             // Jailed validators not in a set
             let all_validators =
-                crate::read_all_validator_addresses(&self.s, epoch).unwrap();
+                read_all_validator_addresses(&self.s, epoch).unwrap();
 
             for val in all_validators {
                 let state = validator_state_handle(&val)

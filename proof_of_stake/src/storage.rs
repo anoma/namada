@@ -1,1037 +1,848 @@
-//! Proof-of-Stake storage keys and storage integration.
+//! PoS functions for reading and writing to storage and lazy collection handles
+//! associated with given `storage_key`s.
 
-use namada_core::ledger::storage_api::collections::{lazy_map, lazy_vec};
+use std::collections::{BTreeSet, HashSet};
+
+use namada_core::ledger::storage_api::collections::lazy_map::NestedSubKey;
+use namada_core::ledger::storage_api::collections::{LazyCollection, LazySet};
+use namada_core::ledger::storage_api::governance::get_max_proposal_period;
+use namada_core::ledger::storage_api::{
+    self, Result, StorageRead, StorageWrite,
+};
 use namada_core::types::address::Address;
-use namada_core::types::storage::{DbKeySeg, Epoch, Key, KeySeg};
+use namada_core::types::dec::Dec;
+use namada_core::types::key::{
+    common, protocol_pk_key, tm_consensus_key_raw_hash,
+};
+use namada_core::types::storage::Epoch;
+use namada_core::types::token;
 
-use super::ADDRESS;
-use crate::epoched;
-use crate::types::BondId;
+use crate::storage_key::consensus_keys_key;
+use crate::types::{
+    BelowCapacityValidatorSets, BondId, Bonds, CommissionRates,
+    ConsensusValidatorSets, DelegatorRedelegatedBonded,
+    DelegatorRedelegatedUnbonded, EpochedSlashes, IncomingRedelegations,
+    LivenessMissedVotes, LivenessSumMissedVotes, OutgoingRedelegations,
+    ReverseOrdTokenAmount, RewardsAccumulator, RewardsProducts, Slashes,
+    TotalConsensusStakes, TotalDeltas, TotalRedelegatedBonded,
+    TotalRedelegatedUnbonded, Unbonds, ValidatorAddresses,
+    ValidatorConsensusKeys, ValidatorDeltas, ValidatorEthColdKeys,
+    ValidatorEthHotKeys, ValidatorMetaData, ValidatorProtocolKeys,
+    ValidatorSetPositions, ValidatorState, ValidatorStates,
+    ValidatorTotalUnbonded, WeightedValidator,
+};
+use crate::{storage_key, MetadataError, OwnedPosParams, PosParams};
 
-const PARAMS_STORAGE_KEY: &str = "params";
-const VALIDATOR_ADDRESSES_KEY: &str = "validator_addresses";
-#[allow(missing_docs)]
-pub const VALIDATOR_STORAGE_PREFIX: &str = "validator";
-const VALIDATOR_ADDRESS_RAW_HASH: &str = "address_raw_hash";
-const VALIDATOR_CONSENSUS_KEY_STORAGE_KEY: &str = "consensus_key";
-const VALIDATOR_ETH_COLD_KEY_STORAGE_KEY: &str = "eth_cold_key";
-const VALIDATOR_ETH_HOT_KEY_STORAGE_KEY: &str = "eth_hot_key";
-const VALIDATOR_STATE_STORAGE_KEY: &str = "state";
-const VALIDATOR_DELTAS_STORAGE_KEY: &str = "deltas";
-const VALIDATOR_COMMISSION_RATE_STORAGE_KEY: &str = "commission_rate";
-const VALIDATOR_MAX_COMMISSION_CHANGE_STORAGE_KEY: &str =
-    "max_commission_rate_change";
-const VALIDATOR_REWARDS_PRODUCT_KEY: &str = "validator_rewards_product";
-const VALIDATOR_LAST_KNOWN_PRODUCT_EPOCH_KEY: &str =
-    "last_known_rewards_product_epoch";
-const SLASHES_PREFIX: &str = "slash";
-const ENQUEUED_SLASHES_KEY: &str = "enqueued_slashes";
-const VALIDATOR_LAST_SLASH_EPOCH: &str = "last_slash_epoch";
-const BOND_STORAGE_KEY: &str = "bond";
-const UNBOND_STORAGE_KEY: &str = "unbond";
-const VALIDATOR_TOTAL_BONDED_STORAGE_KEY: &str = "total_bonded";
-const VALIDATOR_TOTAL_UNBONDED_STORAGE_KEY: &str = "total_unbonded";
-const VALIDATOR_SETS_STORAGE_PREFIX: &str = "validator_sets";
-const CONSENSUS_VALIDATOR_SET_STORAGE_KEY: &str = "consensus";
-const BELOW_CAPACITY_VALIDATOR_SET_STORAGE_KEY: &str = "below_capacity";
-const TOTAL_CONSENSUS_STAKE_STORAGE_KEY: &str = "total_consensus_stake";
-const TOTAL_DELTAS_STORAGE_KEY: &str = "total_deltas";
-const VALIDATOR_SET_POSITIONS_KEY: &str = "validator_set_positions";
-const CONSENSUS_KEYS: &str = "consensus_keys";
-const LAST_BLOCK_PROPOSER_STORAGE_KEY: &str = "last_block_proposer";
-const CONSENSUS_VALIDATOR_SET_ACCUMULATOR_STORAGE_KEY: &str =
-    "validator_rewards_accumulator";
-const LAST_REWARD_CLAIM_EPOCH: &str = "last_reward_claim_epoch";
-const REWARDS_COUNTER_KEY: &str = "validator_rewards_commissions";
-const VALIDATOR_INCOMING_REDELEGATIONS_KEY: &str = "incoming_redelegations";
-const VALIDATOR_OUTGOING_REDELEGATIONS_KEY: &str = "outgoing_redelegations";
-const VALIDATOR_TOTAL_REDELEGATED_BONDED_KEY: &str = "total_redelegated_bonded";
-const VALIDATOR_TOTAL_REDELEGATED_UNBONDED_KEY: &str =
-    "total_redelegated_unbonded";
-const DELEGATOR_REDELEGATED_BONDS_KEY: &str = "delegator_redelegated_bonds";
-const DELEGATOR_REDELEGATED_UNBONDS_KEY: &str = "delegator_redelegated_unbonds";
-const VALIDATOR_EMAIL_KEY: &str = "email";
-const VALIDATOR_DESCRIPTION_KEY: &str = "description";
-const VALIDATOR_WEBSITE_KEY: &str = "website";
-const VALIDATOR_DISCORD_KEY: &str = "discord_handle";
-const LIVENESS_PREFIX: &str = "liveness";
-const LIVENESS_MISSED_VOTES: &str = "missed_votes";
-const LIVENESS_MISSED_VOTES_SUM: &str = "sum_missed_votes";
+// ---- Storage handles ----
 
-/// Is the given key a PoS storage key?
-pub fn is_pos_key(key: &Key) -> bool {
-    match &key.segments.get(0) {
-        Some(DbKeySeg::AddressSeg(addr)) => addr == &ADDRESS,
-        _ => false,
-    }
+/// Get the storage handle to the epoched consensus validator set
+pub fn consensus_validator_set_handle() -> ConsensusValidatorSets {
+    let key = storage_key::consensus_validator_set_key();
+    ConsensusValidatorSets::open(key)
 }
 
-/// Storage key for PoS parameters.
-pub fn params_key() -> Key {
-    Key::from(ADDRESS.to_db_key())
-        .push(&PARAMS_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+/// Get the storage handle to the epoched below-capacity validator set
+pub fn below_capacity_validator_set_handle() -> BelowCapacityValidatorSets {
+    let key = storage_key::below_capacity_validator_set_key();
+    BelowCapacityValidatorSets::open(key)
 }
 
-/// Is storage key for PoS parameters?
-pub fn is_params_key(key: &Key) -> bool {
-    matches!(&key.segments[..], [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)] if addr == &ADDRESS && key == PARAMS_STORAGE_KEY)
+/// Get the storage handle to a PoS validator's consensus key (used for
+/// signing block votes).
+pub fn validator_consensus_key_handle(
+    validator: &Address,
+) -> ValidatorConsensusKeys {
+    let key = storage_key::validator_consensus_key_key(validator);
+    ValidatorConsensusKeys::open(key)
 }
 
-/// Storage key prefix for validator data.
-fn validator_prefix(validator: &Address) -> Key {
-    Key::from(ADDRESS.to_db_key())
-        .push(&VALIDATOR_STORAGE_PREFIX.to_owned())
-        .expect("Cannot obtain a storage key")
-        .push(&validator.to_db_key())
-        .expect("Cannot obtain a storage key")
+/// Get the storage handle to a PoS validator's protocol key key.
+pub fn validator_protocol_key_handle(
+    validator: &Address,
+) -> ValidatorProtocolKeys {
+    let key = protocol_pk_key(validator);
+    ValidatorProtocolKeys::open(key)
 }
 
-/// Storage key for validator's address raw hash for look-up from raw hash of an
-/// address to address.
-pub fn validator_address_raw_hash_key(raw_hash: impl AsRef<str>) -> Key {
-    let raw_hash = raw_hash.as_ref().to_owned();
-    Key::from(ADDRESS.to_db_key())
-        .push(&VALIDATOR_ADDRESS_RAW_HASH.to_owned())
-        .expect("Cannot obtain a storage key")
-        .push(&raw_hash)
-        .expect("Cannot obtain a storage key")
+/// Get the storage handle to a PoS validator's eth hot key.
+pub fn validator_eth_hot_key_handle(
+    validator: &Address,
+) -> ValidatorEthHotKeys {
+    let key = storage_key::validator_eth_hot_key_key(validator);
+    ValidatorEthHotKeys::open(key)
 }
 
-/// Is storage key for validator's address raw hash?
-pub fn is_validator_address_raw_hash_key(key: &Key) -> Option<&str> {
-    match &key.segments[..] {
-        [
-            DbKeySeg::AddressSeg(addr),
-            DbKeySeg::StringSeg(prefix),
-            DbKeySeg::StringSeg(raw_hash),
-        ] if addr == &ADDRESS && prefix == VALIDATOR_ADDRESS_RAW_HASH => {
-            Some(raw_hash)
-        }
-        _ => None,
-    }
+/// Get the storage handle to a PoS validator's eth cold key.
+pub fn validator_eth_cold_key_handle(
+    validator: &Address,
+) -> ValidatorEthColdKeys {
+    let key = storage_key::validator_eth_cold_key_key(validator);
+    ValidatorEthColdKeys::open(key)
 }
 
-/// Storage key for validator's consensus key.
-pub fn validator_consensus_key_key(validator: &Address) -> Key {
-    validator_prefix(validator)
-        .push(&VALIDATOR_CONSENSUS_KEY_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+/// Get the storage handle to the total consensus validator stake
+pub fn total_consensus_stake_handle() -> TotalConsensusStakes {
+    let key = storage_key::total_consensus_stake_key();
+    TotalConsensusStakes::open(key)
 }
 
-/// Is storage key for validator's consensus key?
-pub fn is_validator_consensus_key_key(key: &Key) -> Option<&Address> {
-    if key.segments.len() >= 4 {
-        match &key.segments[..4] {
-            [
-                DbKeySeg::AddressSeg(addr),
-                DbKeySeg::StringSeg(prefix),
-                DbKeySeg::AddressSeg(validator),
-                DbKeySeg::StringSeg(key),
-            ] if addr == &ADDRESS
-                && prefix == VALIDATOR_STORAGE_PREFIX
-                && key == VALIDATOR_CONSENSUS_KEY_STORAGE_KEY =>
-            {
-                Some(validator)
-            }
-            _ => None,
-        }
-    } else {
-        None
-    }
+/// Get the storage handle to a PoS validator's state
+pub fn validator_state_handle(validator: &Address) -> ValidatorStates {
+    let key = storage_key::validator_state_key(validator);
+    ValidatorStates::open(key)
 }
 
-/// Storage key for validator's eth cold key.
-pub fn validator_eth_cold_key_key(validator: &Address) -> Key {
-    validator_prefix(validator)
-        .push(&VALIDATOR_ETH_COLD_KEY_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+/// Get the storage handle to a PoS validator's deltas
+pub fn validator_deltas_handle(validator: &Address) -> ValidatorDeltas {
+    let key = storage_key::validator_deltas_key(validator);
+    ValidatorDeltas::open(key)
 }
 
-/// Is storage key for validator's eth cold key?
-pub fn is_validator_eth_cold_key_key(key: &Key) -> Option<&Address> {
-    if key.segments.len() >= 4 {
-        match &key.segments[..4] {
-            [
-                DbKeySeg::AddressSeg(addr),
-                DbKeySeg::StringSeg(prefix),
-                DbKeySeg::AddressSeg(validator),
-                DbKeySeg::StringSeg(key),
-            ] if addr == &ADDRESS
-                && prefix == VALIDATOR_STORAGE_PREFIX
-                && key == VALIDATOR_ETH_COLD_KEY_STORAGE_KEY =>
-            {
-                Some(validator)
-            }
-            _ => None,
-        }
-    } else {
-        None
-    }
+/// Get the storage handle to the total deltas
+pub fn total_deltas_handle() -> TotalDeltas {
+    let key = storage_key::total_deltas_key();
+    TotalDeltas::open(key)
 }
 
-/// Storage key for validator's eth hot key.
-pub fn validator_eth_hot_key_key(validator: &Address) -> Key {
-    validator_prefix(validator)
-        .push(&VALIDATOR_ETH_HOT_KEY_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+/// Get the storage handle to the set of all validators
+pub fn validator_addresses_handle() -> ValidatorAddresses {
+    let key = storage_key::validator_addresses_key();
+    ValidatorAddresses::open(key)
 }
 
-/// Is storage key for validator's eth hot key?
-pub fn is_validator_eth_hot_key_key(key: &Key) -> Option<&Address> {
-    if key.segments.len() >= 4 {
-        match &key.segments[..4] {
-            [
-                DbKeySeg::AddressSeg(addr),
-                DbKeySeg::StringSeg(prefix),
-                DbKeySeg::AddressSeg(validator),
-                DbKeySeg::StringSeg(key),
-            ] if addr == &ADDRESS
-                && prefix == VALIDATOR_STORAGE_PREFIX
-                && key == VALIDATOR_ETH_HOT_KEY_STORAGE_KEY =>
-            {
-                Some(validator)
-            }
-            _ => None,
-        }
-    } else {
-        None
-    }
+/// Get the storage handle to a PoS validator's commission rate
+pub fn validator_commission_rate_handle(
+    validator: &Address,
+) -> CommissionRates {
+    let key = storage_key::validator_commission_rate_key(validator);
+    CommissionRates::open(key)
 }
 
-/// Storage key for validator's commission rate.
-pub fn validator_commission_rate_key(validator: &Address) -> Key {
-    validator_prefix(validator)
-        .push(&VALIDATOR_COMMISSION_RATE_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+/// Get the storage handle to a bond, which is dynamically updated with when
+/// unbonding
+pub fn bond_handle(source: &Address, validator: &Address) -> Bonds {
+    let bond_id = BondId {
+        source: source.clone(),
+        validator: validator.clone(),
+    };
+    let key = storage_key::bond_key(&bond_id);
+    Bonds::open(key)
 }
 
-/// Is storage key for validator's commission rate?
-pub fn is_validator_commission_rate_key(key: &Key) -> Option<&Address> {
-    if key.segments.len() >= 4 {
-        match &key.segments[..4] {
-            [
-                DbKeySeg::AddressSeg(addr),
-                DbKeySeg::StringSeg(prefix),
-                DbKeySeg::AddressSeg(validator),
-                DbKeySeg::StringSeg(key),
-            ] if addr == &ADDRESS
-                && prefix == VALIDATOR_STORAGE_PREFIX
-                && key == VALIDATOR_COMMISSION_RATE_STORAGE_KEY =>
-            {
-                Some(validator)
-            }
-            _ => None,
-        }
-    } else {
-        None
-    }
+/// Get the storage handle to a validator's total bonds, which are not updated
+/// due to unbonding
+pub fn total_bonded_handle(validator: &Address) -> Bonds {
+    let key = storage_key::validator_total_bonded_key(validator);
+    Bonds::open(key)
 }
 
-/// Storage key for validator's maximum commission rate change per epoch.
-pub fn validator_max_commission_rate_change_key(validator: &Address) -> Key {
-    validator_prefix(validator)
-        .push(&VALIDATOR_MAX_COMMISSION_CHANGE_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+/// Get the storage handle to an unbond
+pub fn unbond_handle(source: &Address, validator: &Address) -> Unbonds {
+    let bond_id = BondId {
+        source: source.clone(),
+        validator: validator.clone(),
+    };
+    let key = storage_key::unbond_key(&bond_id);
+    Unbonds::open(key)
 }
 
-/// Is storage key for validator's maximum commission rate change per epoch?
-pub fn is_validator_max_commission_rate_change_key(
-    key: &Key,
-) -> Option<&Address> {
-    match &key.segments[..] {
-        [
-            DbKeySeg::AddressSeg(addr),
-            DbKeySeg::StringSeg(prefix),
-            DbKeySeg::AddressSeg(validator),
-            DbKeySeg::StringSeg(key),
-        ] if addr == &ADDRESS
-            && prefix == VALIDATOR_STORAGE_PREFIX
-            && key == VALIDATOR_MAX_COMMISSION_CHANGE_STORAGE_KEY =>
-        {
-            Some(validator)
-        }
-        _ => None,
-    }
+/// Get the storage handle to a validator's total-unbonded map
+pub fn total_unbonded_handle(validator: &Address) -> ValidatorTotalUnbonded {
+    let key = storage_key::validator_total_unbonded_key(validator);
+    ValidatorTotalUnbonded::open(key)
 }
 
-/// Is storage key for some piece of validator metadata?
-pub fn is_validator_metadata_key(key: &Key) -> Option<&Address> {
-    match &key.segments[..] {
-        [
-            DbKeySeg::AddressSeg(addr),
-            DbKeySeg::StringSeg(prefix),
-            DbKeySeg::AddressSeg(validator),
-            DbKeySeg::StringSeg(metadata),
-        ] if addr == &ADDRESS
-            && prefix == VALIDATOR_STORAGE_PREFIX
-            && matches!(
-                metadata.as_str(),
-                VALIDATOR_EMAIL_KEY
-                    | VALIDATOR_DESCRIPTION_KEY
-                    | VALIDATOR_WEBSITE_KEY
-                    | VALIDATOR_DISCORD_KEY
-            ) =>
-        {
-            Some(validator)
-        }
-        _ => None,
-    }
+/// Get the storage handle to a PoS validator's deltas
+pub fn validator_set_positions_handle() -> ValidatorSetPositions {
+    let key = storage_key::validator_set_positions_key();
+    ValidatorSetPositions::open(key)
 }
 
-/// Storage key for validator's rewards products.
-pub fn validator_rewards_product_key(validator: &Address) -> Key {
-    validator_prefix(validator)
-        .push(&VALIDATOR_REWARDS_PRODUCT_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+/// Get the storage handle to a PoS validator's slashes
+pub fn validator_slashes_handle(validator: &Address) -> Slashes {
+    let key = storage_key::validator_slashes_key(validator);
+    Slashes::open(key)
 }
 
-/// Is storage key for validator's rewards products?
-pub fn is_validator_rewards_product_key(key: &Key) -> Option<&Address> {
-    match &key.segments[..] {
-        [
-            DbKeySeg::AddressSeg(addr),
-            DbKeySeg::StringSeg(prefix),
-            DbKeySeg::AddressSeg(validator),
-            DbKeySeg::StringSeg(key),
-        ] if addr == &ADDRESS
-            && prefix == VALIDATOR_STORAGE_PREFIX
-            && key == VALIDATOR_REWARDS_PRODUCT_KEY =>
-        {
-            Some(validator)
-        }
-        _ => None,
-    }
+/// Get the storage handle to list of all slashes to be processed and ultimately
+/// placed in the `validator_slashes_handle`
+pub fn enqueued_slashes_handle() -> EpochedSlashes {
+    let key = storage_key::enqueued_slashes_key();
+    EpochedSlashes::open(key)
 }
 
-/// Storage prefix for rewards counter.
-pub fn rewards_counter_prefix() -> Key {
-    Key::from(ADDRESS.to_db_key())
-        .push(&REWARDS_COUNTER_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+/// Get the storage handle to the rewards accumulator for the consensus
+/// validators in a given epoch
+pub fn rewards_accumulator_handle() -> RewardsAccumulator {
+    let key = storage_key::consensus_validator_rewards_accumulator_key();
+    RewardsAccumulator::open(key)
 }
 
-/// Storage key for rewards counter.
-pub fn rewards_counter_key(source: &Address, validator: &Address) -> Key {
-    rewards_counter_prefix()
-        .push(&source.to_db_key())
-        .expect("Cannot obtain a storage key")
-        .push(&validator.to_db_key())
-        .expect("Cannot obtain a storage key")
+/// Get the storage handle to a validator's rewards products
+pub fn validator_rewards_products_handle(
+    validator: &Address,
+) -> RewardsProducts {
+    let key = storage_key::validator_rewards_product_key(validator);
+    RewardsProducts::open(key)
 }
 
-/// Is the storage key for rewards counter?
-pub fn is_rewards_counter_key(key: &Key) -> Option<BondId> {
-    match &key.segments[..] {
-        [
-            DbKeySeg::AddressSeg(addr),
-            DbKeySeg::StringSeg(key),
-            DbKeySeg::AddressSeg(source),
-            DbKeySeg::AddressSeg(validator),
-        ] if addr == &ADDRESS && key == REWARDS_COUNTER_KEY => Some(BondId {
-            source: source.clone(),
-            validator: validator.clone(),
-        }),
-        _ => None,
-    }
+/// Get the storage handle to a validator's incoming redelegations
+pub fn validator_incoming_redelegations_handle(
+    validator: &Address,
+) -> IncomingRedelegations {
+    let key = storage_key::validator_incoming_redelegations_key(validator);
+    IncomingRedelegations::open(key)
 }
 
-/// Storage key for a validator's incoming redelegations, where the prefixed
-/// validator is the destination validator.
-pub fn validator_incoming_redelegations_key(validator: &Address) -> Key {
-    validator_prefix(validator)
-        .push(&VALIDATOR_INCOMING_REDELEGATIONS_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+/// Get the storage handle to a validator's outgoing redelegations
+pub fn validator_outgoing_redelegations_handle(
+    validator: &Address,
+) -> OutgoingRedelegations {
+    let key = storage_key::validator_outgoing_redelegations_key(validator);
+    OutgoingRedelegations::open(key)
 }
 
-/// Storage key for a validator's outgoing redelegations, where the prefixed
-/// validator is the source validator.
-pub fn validator_outgoing_redelegations_key(validator: &Address) -> Key {
-    validator_prefix(validator)
-        .push(&VALIDATOR_OUTGOING_REDELEGATIONS_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+/// Get the storage handle to a validator's total redelegated bonds
+pub fn validator_total_redelegated_bonded_handle(
+    validator: &Address,
+) -> TotalRedelegatedBonded {
+    let key = storage_key::validator_total_redelegated_bonded_key(validator);
+    TotalRedelegatedBonded::open(key)
 }
 
-/// Storage key for validator's total-redelegated-bonded amount to track for
-/// slashing
-pub fn validator_total_redelegated_bonded_key(validator: &Address) -> Key {
-    validator_prefix(validator)
-        .push(&VALIDATOR_TOTAL_REDELEGATED_BONDED_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+/// Get the storage handle to a validator's outgoing redelegations
+pub fn validator_total_redelegated_unbonded_handle(
+    validator: &Address,
+) -> TotalRedelegatedUnbonded {
+    let key = storage_key::validator_total_redelegated_unbonded_key(validator);
+    TotalRedelegatedUnbonded::open(key)
 }
 
-/// Storage key for validator's total-redelegated-unbonded amount to track for
-/// slashing
-pub fn validator_total_redelegated_unbonded_key(validator: &Address) -> Key {
-    validator_prefix(validator)
-        .push(&VALIDATOR_TOTAL_REDELEGATED_UNBONDED_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+/// Get the storage handle to a delegator's redelegated bonds information
+pub fn delegator_redelegated_bonds_handle(
+    delegator: &Address,
+) -> DelegatorRedelegatedBonded {
+    let key = storage_key::delegator_redelegated_bonds_key(delegator);
+    DelegatorRedelegatedBonded::open(key)
 }
 
-/// Is the storage key's prefix matching one of validator's:
-///
-/// - incoming or outgoing redelegations
-/// - total redelegated bonded or unbond amounts
-pub fn is_validator_redelegations_key(key: &Key) -> bool {
-    if key.segments.len() >= 4 {
-        match &key.segments[..4] {
-            [
-                DbKeySeg::AddressSeg(addr),
-                DbKeySeg::StringSeg(val_prefix),
-                DbKeySeg::AddressSeg(_validator),
-                DbKeySeg::StringSeg(prefix),
-            ] => {
-                addr == &ADDRESS
-                    && val_prefix == VALIDATOR_STORAGE_PREFIX
-                    && (prefix == VALIDATOR_INCOMING_REDELEGATIONS_KEY
-                        || prefix == VALIDATOR_OUTGOING_REDELEGATIONS_KEY
-                        || prefix == VALIDATOR_TOTAL_REDELEGATED_BONDED_KEY
-                        || prefix == VALIDATOR_TOTAL_REDELEGATED_UNBONDED_KEY)
-            }
-            _ => false,
-        }
-    } else {
-        false
-    }
+/// Get the storage handle to a delegator's redelegated unbonds information
+pub fn delegator_redelegated_unbonds_handle(
+    delegator: &Address,
+) -> DelegatorRedelegatedUnbonded {
+    let key = storage_key::delegator_redelegated_unbonds_key(delegator);
+    DelegatorRedelegatedUnbonded::open(key)
 }
 
-/// Storage key prefix for all delegators' redelegated bonds.
-pub fn delegator_redelegated_bonds_prefix() -> Key {
-    Key::from(ADDRESS.to_db_key())
-        .push(&DELEGATOR_REDELEGATED_BONDS_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+/// Get the storage handle to the missed votes for liveness tracking
+pub fn liveness_missed_votes_handle() -> LivenessMissedVotes {
+    let key = storage_key::liveness_missed_votes_key();
+    LivenessMissedVotes::open(key)
 }
 
-/// Storage key for a particular delegator's redelegated bond information.
-pub fn delegator_redelegated_bonds_key(delegator: &Address) -> Key {
-    delegator_redelegated_bonds_prefix()
-        .push(&delegator.to_db_key())
-        .expect("Cannot obtain a storage key")
+/// Get the storage handle to the sum of missed votes for liveness tracking
+pub fn liveness_sum_missed_votes_handle() -> LivenessSumMissedVotes {
+    let key = storage_key::liveness_sum_missed_votes_key();
+    LivenessSumMissedVotes::open(key)
 }
 
-/// Storage key prefix for all delegators' redelegated unbonds.
-pub fn delegator_redelegated_unbonds_prefix() -> Key {
-    Key::from(ADDRESS.to_db_key())
-        .push(&DELEGATOR_REDELEGATED_UNBONDS_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+// ---- Storage read + write ----
+
+/// Read PoS parameters
+pub fn read_pos_params<S>(storage: &S) -> storage_api::Result<PosParams>
+where
+    S: StorageRead,
+{
+    let params = storage
+        .read(&storage_key::params_key())
+        .transpose()
+        .expect("PosParams should always exist in storage after genesis")?;
+    read_non_pos_owned_params(storage, params)
 }
 
-/// Storage key for a particular delegator's redelegated unbond information.
-pub fn delegator_redelegated_unbonds_key(delegator: &Address) -> Key {
-    delegator_redelegated_unbonds_prefix()
-        .push(&delegator.to_db_key())
-        .expect("Cannot obtain a storage key")
+/// Read non-PoS-owned parameters to add them to `OwnedPosParams` to construct
+/// `PosParams`.
+pub fn read_non_pos_owned_params<S>(
+    storage: &S,
+    owned: OwnedPosParams,
+) -> storage_api::Result<PosParams>
+where
+    S: StorageRead,
+{
+    let max_proposal_period = get_max_proposal_period(storage)?;
+    Ok(PosParams {
+        owned,
+        max_proposal_period,
+    })
 }
 
-/// Is the storage key's prefix matching delegator's total redelegated bonded or
-/// unbond amounts? If so, returns the delegator's address.
-pub fn is_delegator_redelegations_key(key: &Key) -> Option<&Address> {
-    if key.segments.len() >= 3 {
-        match &key.segments[..3] {
-            [
-                DbKeySeg::AddressSeg(addr),
-                DbKeySeg::StringSeg(prefix),
-                DbKeySeg::AddressSeg(delegator),
-            ] if addr == &ADDRESS
-                && (prefix == DELEGATOR_REDELEGATED_BONDS_KEY
-                    || prefix == DELEGATOR_REDELEGATED_UNBONDS_KEY) =>
-            {
-                Some(delegator)
-            }
-
-            _ => None,
-        }
-    } else {
-        None
-    }
+/// Write PoS parameters
+pub fn write_pos_params<S>(
+    storage: &mut S,
+    params: &OwnedPosParams,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = storage_key::params_key();
+    storage.write(&key, params)
 }
 
-/// Storage key for validator's last known rewards product epoch.
-pub fn validator_last_known_product_epoch_key(validator: &Address) -> Key {
-    validator_prefix(validator)
-        .push(&VALIDATOR_LAST_KNOWN_PRODUCT_EPOCH_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+/// Get the validator address given the raw hash of the Tendermint consensus key
+pub fn find_validator_by_raw_hash<S>(
+    storage: &S,
+    raw_hash: impl AsRef<str>,
+) -> storage_api::Result<Option<Address>>
+where
+    S: StorageRead,
+{
+    let key = storage_key::validator_address_raw_hash_key(raw_hash);
+    storage.read(&key)
 }
 
-/// Is storage key for validator's last known rewards product epoch?
-pub fn is_validator_last_known_product_epoch_key(
-    key: &Key,
-) -> Option<&Address> {
-    match &key.segments[..] {
-        [
-            DbKeySeg::AddressSeg(addr),
-            DbKeySeg::StringSeg(prefix),
-            DbKeySeg::AddressSeg(validator),
-            DbKeySeg::StringSeg(key),
-        ] if addr == &ADDRESS
-            && prefix == VALIDATOR_STORAGE_PREFIX
-            && key == VALIDATOR_LAST_KNOWN_PRODUCT_EPOCH_KEY =>
-        {
-            Some(validator)
-        }
-        _ => None,
-    }
+/// Write PoS validator's address raw hash.
+pub fn write_validator_address_raw_hash<S>(
+    storage: &mut S,
+    validator: &Address,
+    consensus_key: &common::PublicKey,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let raw_hash = tm_consensus_key_raw_hash(consensus_key);
+    storage.write(
+        &storage_key::validator_address_raw_hash_key(raw_hash),
+        validator,
+    )
 }
 
-/// Storage key for validator's consensus key.
-pub fn validator_state_key(validator: &Address) -> Key {
-    validator_prefix(validator)
-        .push(&VALIDATOR_STATE_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+/// Read PoS validator's max commission rate change.
+pub fn read_validator_max_commission_rate_change<S>(
+    storage: &S,
+    validator: &Address,
+) -> storage_api::Result<Option<Dec>>
+where
+    S: StorageRead,
+{
+    let key = storage_key::validator_max_commission_rate_change_key(validator);
+    storage.read(&key)
 }
 
-/// Is storage key for validator's state?
-pub fn is_validator_state_key(key: &Key) -> Option<(&Address, Epoch)> {
-    match &key.segments[..] {
-        [
-            DbKeySeg::AddressSeg(addr),
-            DbKeySeg::StringSeg(prefix),
-            DbKeySeg::AddressSeg(validator),
-            DbKeySeg::StringSeg(key),
-            DbKeySeg::StringSeg(lazy_map),
-            DbKeySeg::StringSeg(data),
-            DbKeySeg::StringSeg(epoch),
-        ] if addr == &ADDRESS
-            && prefix == VALIDATOR_STORAGE_PREFIX
-            && key == VALIDATOR_STATE_STORAGE_KEY
-            && lazy_map == epoched::LAZY_MAP_SUB_KEY
-            && data == lazy_map::DATA_SUBKEY =>
-        {
-            let epoch = Epoch::parse(epoch.clone())
-                .expect("Should be able to parse the epoch");
-            Some((validator, epoch))
-        }
-        _ => None,
-    }
+/// Write PoS validator's max commission rate change.
+pub fn write_validator_max_commission_rate_change<S>(
+    storage: &mut S,
+    validator: &Address,
+    change: Dec,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = storage_key::validator_max_commission_rate_change_key(validator);
+    storage.write(&key, change)
 }
 
-/// Is storage key for a validator state's last update or oldest epoch?
-pub fn is_validator_state_epoched_meta_key(key: &Key) -> bool {
-    if key.segments.len() >= 5 {
-        match &key.segments[..5] {
-            [
-                DbKeySeg::AddressSeg(addr),
-                DbKeySeg::StringSeg(prefix),
-                DbKeySeg::AddressSeg(_validator),
-                DbKeySeg::StringSeg(key),
-                DbKeySeg::StringSeg(data),
-            ] => {
-                addr == &ADDRESS
-                    && prefix == VALIDATOR_STORAGE_PREFIX
-                    && key == VALIDATOR_STATE_STORAGE_KEY
-                    && (data == epoched::LAST_UPDATE_SUB_KEY
-                        || data == epoched::OLDEST_EPOCH_SUB_KEY)
-            }
-            _ => false,
-        }
-    } else {
-        false
-    }
+/// Read the most recent slash epoch for the given epoch
+pub fn read_validator_last_slash_epoch<S>(
+    storage: &S,
+    validator: &Address,
+) -> storage_api::Result<Option<Epoch>>
+where
+    S: StorageRead,
+{
+    let key = storage_key::validator_last_slash_key(validator);
+    storage.read(&key)
 }
 
-/// Storage key for validator's deltas.
-pub fn validator_deltas_key(validator: &Address) -> Key {
-    validator_prefix(validator)
-        .push(&VALIDATOR_DELTAS_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+/// Write the most recent slash epoch for the given epoch
+pub fn write_validator_last_slash_epoch<S>(
+    storage: &mut S,
+    validator: &Address,
+    epoch: Epoch,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = storage_key::validator_last_slash_key(validator);
+    storage.write(&key, epoch)
 }
 
-/// Is storage key for validator's total deltas?
-pub fn is_validator_deltas_key(key: &Key) -> bool {
-    if key.segments.len() >= 4 {
-        match &key.segments[..4] {
-            [
-                DbKeySeg::AddressSeg(addr),
-                DbKeySeg::StringSeg(prefix),
-                DbKeySeg::AddressSeg(_validator),
-                DbKeySeg::StringSeg(key),
-            ] => {
-                addr == &ADDRESS
-                    && prefix == VALIDATOR_STORAGE_PREFIX
-                    && key == VALIDATOR_DELTAS_STORAGE_KEY
-            }
-            _ => false,
-        }
-    } else {
-        false
-    }
+/// Read last block proposer address.
+pub fn read_last_block_proposer_address<S>(
+    storage: &S,
+) -> storage_api::Result<Option<Address>>
+where
+    S: StorageRead,
+{
+    let key = storage_key::last_block_proposer_key();
+    storage.read(&key)
 }
 
-/// Storage prefix for all active validators (consensus, below-capacity,
-/// below-threshold, inactive, jailed)
-pub fn validator_addresses_key() -> Key {
-    Key::from(ADDRESS.to_db_key())
-        .push(&VALIDATOR_ADDRESSES_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+/// Write last block proposer address.
+pub fn write_last_block_proposer_address<S>(
+    storage: &mut S,
+    address: Address,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = storage_key::last_block_proposer_key();
+    storage.write(&key, address)
 }
 
-/// Is the storage key a prefix for all active validators?
-pub fn is_validator_addresses_key(key: &Key) -> bool {
-    if key.segments.len() >= 2 {
-        match &key.segments[..2] {
-            [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix)] => {
-                addr == &ADDRESS && prefix == VALIDATOR_ADDRESSES_KEY
-            }
-            _ => false,
-        }
-    } else {
-        false
-    }
+/// Read PoS validator's delta value.
+pub fn read_validator_deltas_value<S>(
+    storage: &S,
+    validator: &Address,
+    epoch: &namada_core::types::storage::Epoch,
+) -> storage_api::Result<Option<token::Change>>
+where
+    S: StorageRead,
+{
+    let handle = validator_deltas_handle(validator);
+    handle.get_delta_val(storage, *epoch)
 }
 
-/// Storage prefix for slashes.
-pub fn slashes_prefix() -> Key {
-    Key::from(ADDRESS.to_db_key())
-        .push(&SLASHES_PREFIX.to_owned())
-        .expect("Cannot obtain a storage key")
+/// Read PoS validator's stake (sum of deltas).
+/// For non-validators and validators with `0` stake, this returns the default -
+/// `token::Amount::zero()`.
+pub fn read_validator_stake<S>(
+    storage: &S,
+    params: &PosParams,
+    validator: &Address,
+    epoch: namada_core::types::storage::Epoch,
+) -> storage_api::Result<token::Amount>
+where
+    S: StorageRead,
+{
+    let handle = validator_deltas_handle(validator);
+    let amount = handle
+        .get_sum(storage, epoch, params)?
+        .map(|change| {
+            debug_assert!(change.non_negative());
+            token::Amount::from_change(change)
+        })
+        .unwrap_or_default();
+    Ok(amount)
 }
 
-/// Storage key for all slashes.
-pub fn enqueued_slashes_key() -> Key {
-    // slashes_prefix()
-    Key::from(ADDRESS.to_db_key())
-        .push(&ENQUEUED_SLASHES_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+/// Add or remove PoS validator's stake delta value
+pub fn update_validator_deltas<S>(
+    storage: &mut S,
+    params: &OwnedPosParams,
+    validator: &Address,
+    delta: token::Change,
+    current_epoch: namada_core::types::storage::Epoch,
+    offset_opt: Option<u64>,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let handle = validator_deltas_handle(validator);
+    let offset = offset_opt.unwrap_or(params.pipeline_len);
+    let val = handle
+        .get_delta_val(storage, current_epoch + offset)?
+        .unwrap_or_default();
+    handle.set(
+        storage,
+        val.checked_add(&delta)
+            .expect("Validator deltas updated amount should not overflow"),
+        current_epoch,
+        offset,
+    )
 }
 
-/// Storage key for validator's slashes.
-pub fn validator_slashes_key(validator: &Address) -> Key {
-    slashes_prefix()
-        .push(&validator.to_db_key())
-        .expect("Cannot obtain a storage key")
+/// Read PoS total stake (sum of deltas).
+pub fn read_total_stake<S>(
+    storage: &S,
+    params: &PosParams,
+    epoch: namada_core::types::storage::Epoch,
+) -> storage_api::Result<token::Amount>
+where
+    S: StorageRead,
+{
+    let handle = total_deltas_handle();
+    let amnt = handle
+        .get_sum(storage, epoch, params)?
+        .map(|change| {
+            debug_assert!(change.non_negative());
+            token::Amount::from_change(change)
+        })
+        .unwrap_or_default();
+    Ok(amnt)
 }
 
-/// Is storage key for a validator's slashes
-pub fn is_validator_slashes_key(key: &Key) -> Option<Address> {
-    if key.segments.len() >= 5 {
-        match &key.segments[..5] {
-            [
-                DbKeySeg::AddressSeg(addr),
-                DbKeySeg::StringSeg(prefix),
-                DbKeySeg::AddressSeg(validator),
-                DbKeySeg::StringSeg(data),
-                DbKeySeg::StringSeg(_index),
-            ] if addr == &ADDRESS
-                && prefix == SLASHES_PREFIX
-                && data == lazy_vec::DATA_SUBKEY =>
-            {
-                Some(validator.clone())
-            }
-            _ => None,
-        }
-    } else {
-        None
-    }
+/// Read all addresses from consensus validator set.
+pub fn read_consensus_validator_set_addresses<S>(
+    storage: &S,
+    epoch: namada_core::types::storage::Epoch,
+) -> storage_api::Result<HashSet<Address>>
+where
+    S: StorageRead,
+{
+    consensus_validator_set_handle()
+        .at(&epoch)
+        .iter(storage)?
+        .map(|res| res.map(|(_sub_key, address)| address))
+        .collect()
 }
 
-/// Storage key for the last (most recent) epoch in which a slashable offense
-/// was detected for a given validator
-pub fn validator_last_slash_key(validator: &Address) -> Key {
-    validator_prefix(validator)
-        .push(&VALIDATOR_LAST_SLASH_EPOCH.to_owned())
-        .expect("Cannot obtain a storage key")
+/// Read all addresses from below-capacity validator set.
+pub fn read_below_capacity_validator_set_addresses<S>(
+    storage: &S,
+    epoch: namada_core::types::storage::Epoch,
+) -> storage_api::Result<HashSet<Address>>
+where
+    S: StorageRead,
+{
+    below_capacity_validator_set_handle()
+        .at(&epoch)
+        .iter(storage)?
+        .map(|res| res.map(|(_sub_key, address)| address))
+        .collect()
 }
 
-/// Storage key prefix for all bonds.
-pub fn bonds_prefix() -> Key {
-    Key::from(ADDRESS.to_db_key())
-        .push(&BOND_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+/// Read all addresses from the below-threshold set
+pub fn read_below_threshold_validator_set_addresses<S>(
+    storage: &S,
+    epoch: namada_core::types::storage::Epoch,
+) -> storage_api::Result<HashSet<Address>>
+where
+    S: StorageRead,
+{
+    let params = read_pos_params(storage)?;
+    Ok(validator_addresses_handle()
+        .at(&epoch)
+        .iter(storage)?
+        .map(Result::unwrap)
+        .filter(|address| {
+            matches!(
+                validator_state_handle(address).get(storage, epoch, &params),
+                Ok(Some(ValidatorState::BelowThreshold))
+            )
+        })
+        .collect())
 }
 
-/// Storage key prefix for all bonds of the given source address.
-pub fn bonds_for_source_prefix(source: &Address) -> Key {
-    bonds_prefix()
-        .push(&source.to_db_key())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Storage key for a bond with the given ID (source and validator).
-pub fn bond_key(bond_id: &BondId) -> Key {
-    bonds_for_source_prefix(&bond_id.source)
-        .push(&bond_id.validator.to_db_key())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Is storage key for a bond? Returns the bond ID and bond start epoch if so.
-pub fn is_bond_key(key: &Key) -> Option<(BondId, Epoch)> {
-    if key.segments.len() >= 7 {
-        match &key.segments[..7] {
-            [
-                DbKeySeg::AddressSeg(addr),
-                DbKeySeg::StringSeg(prefix),
-                DbKeySeg::AddressSeg(source),
-                DbKeySeg::AddressSeg(validator),
-                DbKeySeg::StringSeg(lazy_map),
-                DbKeySeg::StringSeg(data),
-                DbKeySeg::StringSeg(epoch_str),
-            ] if addr == &ADDRESS
-                && prefix == BOND_STORAGE_KEY
-                && lazy_map == epoched::LAZY_MAP_SUB_KEY
-                && data == lazy_map::DATA_SUBKEY =>
-            {
-                let start = Epoch::parse(epoch_str.clone()).ok()?;
-                Some((
-                    BondId {
-                        source: source.clone(),
-                        validator: validator.clone(),
+/// Read all addresses from consensus validator set with their stake.
+pub fn read_consensus_validator_set_addresses_with_stake<S>(
+    storage: &S,
+    epoch: namada_core::types::storage::Epoch,
+) -> storage_api::Result<BTreeSet<WeightedValidator>>
+where
+    S: StorageRead,
+{
+    consensus_validator_set_handle()
+        .at(&epoch)
+        .iter(storage)?
+        .map(|res| {
+            res.map(
+                |(
+                    NestedSubKey::Data {
+                        key: bonded_stake,
+                        nested_sub_key: _,
                     },
-                    start,
-                ))
-            }
-            _ => None,
-        }
-    } else {
-        None
-    }
+                    address,
+                )| {
+                    WeightedValidator {
+                        address,
+                        bonded_stake,
+                    }
+                },
+            )
+        })
+        .collect()
 }
 
-/// Is storage key for a bond last update or oldest epoch? Returns the bond ID
-/// if so.
-pub fn is_bond_epoched_meta_key(key: &Key) -> Option<BondId> {
-    if key.segments.len() >= 5 {
-        match &key.segments[..5] {
-            [
-                DbKeySeg::AddressSeg(addr),
-                DbKeySeg::StringSeg(prefix),
-                DbKeySeg::AddressSeg(source),
-                DbKeySeg::AddressSeg(validator),
-                DbKeySeg::StringSeg(data),
-            ] if addr == &ADDRESS
-                && prefix == BOND_STORAGE_KEY
-                && (data == epoched::LAST_UPDATE_SUB_KEY
-                    || data == epoched::OLDEST_EPOCH_SUB_KEY) =>
-            {
-                Some(BondId {
-                    source: source.clone(),
-                    validator: validator.clone(),
-                })
-            }
-            _ => None,
-        }
-    } else {
-        None
-    }
+/// Count the number of consensus validators
+pub fn get_num_consensus_validators<S>(
+    storage: &S,
+    epoch: namada_core::types::storage::Epoch,
+) -> storage_api::Result<u64>
+where
+    S: StorageRead,
+{
+    Ok(consensus_validator_set_handle()
+        .at(&epoch)
+        .iter(storage)?
+        .count() as u64)
 }
 
-/// Storage key for the total bonds for a given validator.
-pub fn validator_total_bonded_key(validator: &Address) -> Key {
-    validator_prefix(validator)
-        .push(&VALIDATOR_TOTAL_BONDED_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Is the storage key for the total bonds or unbonds for a validator?
-pub fn is_validator_total_bond_or_unbond_key(key: &Key) -> bool {
-    if key.segments.len() >= 4 {
-        match &key.segments[..4] {
-            [
-                DbKeySeg::AddressSeg(addr),
-                DbKeySeg::StringSeg(val_prefix),
-                DbKeySeg::AddressSeg(_validator),
-                DbKeySeg::StringSeg(prefix),
-            ] => {
-                addr == &ADDRESS
-                    && val_prefix == VALIDATOR_STORAGE_PREFIX
-                    && (prefix == VALIDATOR_TOTAL_BONDED_STORAGE_KEY
-                        || prefix == VALIDATOR_TOTAL_UNBONDED_STORAGE_KEY)
-            }
-            _ => false,
-        }
-    } else {
-        false
-    }
-}
-
-/// Storage key prefix for all unbonds.
-pub fn unbonds_prefix() -> Key {
-    Key::from(ADDRESS.to_db_key())
-        .push(&UNBOND_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Storage key prefix for all unbonds of the given source address.
-pub fn unbonds_for_source_prefix(source: &Address) -> Key {
-    unbonds_prefix()
-        .push(&source.to_db_key())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Storage key for an unbond with the given ID (source and validator).
-pub fn unbond_key(bond_id: &BondId) -> Key {
-    unbonds_for_source_prefix(&bond_id.source)
-        .push(&bond_id.validator.to_db_key())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Is storage key for an unbond? Returns the bond ID and unbond start and
-/// withdraw epoch if it is.
-pub fn is_unbond_key(key: &Key) -> Option<(BondId, Epoch, Epoch)> {
-    if key.segments.len() >= 8 {
-        match &key.segments[..8] {
-            [
-                DbKeySeg::AddressSeg(addr),
-                DbKeySeg::StringSeg(prefix),
-                DbKeySeg::AddressSeg(source),
-                DbKeySeg::AddressSeg(validator),
-                DbKeySeg::StringSeg(data_1),
-                DbKeySeg::StringSeg(start_epoch_str),
-                DbKeySeg::StringSeg(data_2),
-                DbKeySeg::StringSeg(withdraw_epoch_str),
-            ] if addr == &ADDRESS
-                && prefix == UNBOND_STORAGE_KEY
-                && data_1 == lazy_map::DATA_SUBKEY
-                && data_2 == lazy_map::DATA_SUBKEY =>
-            {
-                let withdraw = Epoch::parse(withdraw_epoch_str.clone()).ok()?;
-                let start = Epoch::parse(start_epoch_str.clone()).ok()?;
-                Some((
-                    BondId {
-                        source: source.clone(),
-                        validator: validator.clone(),
+/// Read all addresses from below-capacity validator set with their stake.
+pub fn read_below_capacity_validator_set_addresses_with_stake<S>(
+    storage: &S,
+    epoch: namada_core::types::storage::Epoch,
+) -> storage_api::Result<BTreeSet<WeightedValidator>>
+where
+    S: StorageRead,
+{
+    below_capacity_validator_set_handle()
+        .at(&epoch)
+        .iter(storage)?
+        .map(|res| {
+            res.map(
+                |(
+                    NestedSubKey::Data {
+                        key: ReverseOrdTokenAmount(bonded_stake),
+                        nested_sub_key: _,
                     },
-                    start,
-                    withdraw,
-                ))
-            }
-            _ => None,
-        }
+                    address,
+                )| {
+                    WeightedValidator {
+                        address,
+                        bonded_stake,
+                    }
+                },
+            )
+        })
+        .collect()
+}
+
+/// Read all validator addresses.
+pub fn read_all_validator_addresses<S>(
+    storage: &S,
+    epoch: namada_core::types::storage::Epoch,
+) -> storage_api::Result<HashSet<Address>>
+where
+    S: StorageRead,
+{
+    validator_addresses_handle()
+        .at(&epoch)
+        .iter(storage)?
+        .collect()
+}
+
+/// Update PoS total deltas.
+/// Note: for EpochedDelta, write the value to change storage by
+pub fn update_total_deltas<S>(
+    storage: &mut S,
+    params: &OwnedPosParams,
+    delta: token::Change,
+    current_epoch: namada_core::types::storage::Epoch,
+    offset_opt: Option<u64>,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let handle = total_deltas_handle();
+    let offset = offset_opt.unwrap_or(params.pipeline_len);
+    let val = handle
+        .get_delta_val(storage, current_epoch + offset)?
+        .unwrap_or_default();
+    handle.set(
+        storage,
+        val.checked_add(&delta)
+            .expect("Total deltas updated amount should not overflow"),
+        current_epoch,
+        offset,
+    )
+}
+
+/// Read PoS validator's email.
+pub fn read_validator_email<S>(
+    storage: &S,
+    validator: &Address,
+) -> storage_api::Result<Option<String>>
+where
+    S: StorageRead,
+{
+    storage.read(&storage_key::validator_email_key(validator))
+}
+
+/// Write PoS validator's email. The email cannot be removed, so an empty string
+/// will result in an error.
+pub fn write_validator_email<S>(
+    storage: &mut S,
+    validator: &Address,
+    email: &String,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = storage_key::validator_email_key(validator);
+    if email.is_empty() {
+        Err(MetadataError::CannotRemoveEmail.into())
     } else {
-        None
+        storage.write(&key, email)
     }
 }
 
-/// Storage key for validator's total-unbonded amount to track for slashing
-pub fn validator_total_unbonded_key(validator: &Address) -> Key {
-    validator_prefix(validator)
-        .push(&VALIDATOR_TOTAL_UNBONDED_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+/// Read PoS validator's description.
+pub fn read_validator_description<S>(
+    storage: &S,
+    validator: &Address,
+) -> storage_api::Result<Option<String>>
+where
+    S: StorageRead,
+{
+    storage.read(&storage_key::validator_description_key(validator))
 }
 
-/// Storage prefix for validator sets.
-pub fn validator_sets_prefix() -> Key {
-    Key::from(ADDRESS.to_db_key())
-        .push(&VALIDATOR_SETS_STORAGE_PREFIX.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Storage key for consensus validator set
-pub fn consensus_validator_set_key() -> Key {
-    validator_sets_prefix()
-        .push(&CONSENSUS_VALIDATOR_SET_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Storage key for below-capacity validator set
-pub fn below_capacity_validator_set_key() -> Key {
-    validator_sets_prefix()
-        .push(&BELOW_CAPACITY_VALIDATOR_SET_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Is storage key for the consensus validator set?
-pub fn is_consensus_validator_set_key(key: &Key) -> bool {
-    matches!(&key.segments[..], [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key), DbKeySeg::StringSeg(set_type), DbKeySeg::StringSeg(lazy_map), DbKeySeg::StringSeg(data), DbKeySeg::StringSeg(_epoch), DbKeySeg::StringSeg(_), DbKeySeg::StringSeg(_amount), DbKeySeg::StringSeg(_), DbKeySeg::StringSeg(_position)] if addr == &ADDRESS && key == VALIDATOR_SETS_STORAGE_PREFIX && set_type == CONSENSUS_VALIDATOR_SET_STORAGE_KEY && lazy_map == epoched::LAZY_MAP_SUB_KEY && data == lazy_map::DATA_SUBKEY)
-}
-
-/// Is storage key for the below-capacity validator set?
-pub fn is_below_capacity_validator_set_key(key: &Key) -> bool {
-    matches!(&key.segments[..], [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key), DbKeySeg::StringSeg(set_type), DbKeySeg::StringSeg(lazy_map), DbKeySeg::StringSeg(data), DbKeySeg::StringSeg(_epoch), DbKeySeg::StringSeg(_), DbKeySeg::StringSeg(_amount), DbKeySeg::StringSeg(_), DbKeySeg::StringSeg(_position)] if addr == &ADDRESS && key == VALIDATOR_SETS_STORAGE_PREFIX && set_type == BELOW_CAPACITY_VALIDATOR_SET_STORAGE_KEY && lazy_map == epoched::LAZY_MAP_SUB_KEY && data == lazy_map::DATA_SUBKEY)
-}
-
-/// Storage key for total consensus stake
-pub fn total_consensus_stake_key() -> Key {
-    Key::from(ADDRESS.to_db_key())
-        .push(&TOTAL_CONSENSUS_STAKE_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a total consensus stake key")
-}
-
-/// Is storage key for the total consensus stake?
-pub fn is_total_consensus_stake_key(key: &Key) -> bool {
-    matches!(&key.segments[..], [
-                DbKeySeg::AddressSeg(addr),
-                DbKeySeg::StringSeg(key)
-            ] if addr == &ADDRESS && key == TOTAL_CONSENSUS_STAKE_STORAGE_KEY)
-}
-
-/// Storage key for total deltas of all validators.
-pub fn total_deltas_key() -> Key {
-    Key::from(ADDRESS.to_db_key())
-        .push(&TOTAL_DELTAS_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Is storage key for total deltas of all validators?
-pub fn is_total_deltas_key(key: &Key) -> bool {
-    if key.segments.len() >= 2 {
-        match &key.segments[..2] {
-            [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix)] => {
-                addr == &ADDRESS && prefix == TOTAL_DELTAS_STORAGE_KEY
-            }
-            _ => false,
-        }
+/// Write PoS validator's description. If the provided arg is an empty string,
+/// remove the data.
+pub fn write_validator_description<S>(
+    storage: &mut S,
+    validator: &Address,
+    description: &String,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = storage_key::validator_description_key(validator);
+    if description.is_empty() {
+        storage.delete(&key)
     } else {
-        false
+        storage.write(&key, description)
     }
 }
 
-/// Storage key for block proposer address of the previous block.
-pub fn last_block_proposer_key() -> Key {
-    Key::from(ADDRESS.to_db_key())
-        .push(&LAST_BLOCK_PROPOSER_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+/// Read PoS validator's website.
+pub fn read_validator_website<S>(
+    storage: &S,
+    validator: &Address,
+) -> storage_api::Result<Option<String>>
+where
+    S: StorageRead,
+{
+    storage.read(&storage_key::validator_website_key(validator))
 }
 
-/// Is storage key for block proposer address of the previous block?
-pub fn is_last_block_proposer_key(key: &Key) -> bool {
-    matches!(&key.segments[..], [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)] if addr == &ADDRESS && key == LAST_BLOCK_PROPOSER_STORAGE_KEY)
+/// Write PoS validator's website. If the provided arg is an empty string,
+/// remove the data.
+pub fn write_validator_website<S>(
+    storage: &mut S,
+    validator: &Address,
+    website: &String,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = storage_key::validator_website_key(validator);
+    if website.is_empty() {
+        storage.delete(&key)
+    } else {
+        storage.write(&key, website)
+    }
 }
 
-/// Storage key for the consensus validator set rewards accumulator.
-pub fn consensus_validator_rewards_accumulator_key() -> Key {
-    Key::from(ADDRESS.to_db_key())
-        .push(&CONSENSUS_VALIDATOR_SET_ACCUMULATOR_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+/// Read PoS validator's discord handle.
+pub fn read_validator_discord_handle<S>(
+    storage: &S,
+    validator: &Address,
+) -> storage_api::Result<Option<String>>
+where
+    S: StorageRead,
+{
+    storage.read(&storage_key::validator_discord_key(validator))
 }
 
-/// Is storage key for the consensus validator set?
-pub fn is_consensus_validator_set_accumulator_key(key: &Key) -> bool {
-    matches!(&key.segments[..], [
-            DbKeySeg::AddressSeg(addr),
-            DbKeySeg::StringSeg(key),
-        ] if addr == &ADDRESS
-            && key == CONSENSUS_VALIDATOR_SET_ACCUMULATOR_STORAGE_KEY)
+/// Write PoS validator's discord handle. If the provided arg is an empty
+/// string, remove the data.
+pub fn write_validator_discord_handle<S>(
+    storage: &mut S,
+    validator: &Address,
+    discord_handle: &String,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = storage_key::validator_discord_key(validator);
+    if discord_handle.is_empty() {
+        storage.delete(&key)
+    } else {
+        storage.write(&key, discord_handle)
+    }
 }
 
-/// Storage prefix for epoch at which an account last claimed PoS inflationary
-/// rewards.
-pub fn last_pos_reward_claim_epoch_prefix() -> Key {
-    Key::from(ADDRESS.to_db_key())
-        .push(&LAST_REWARD_CLAIM_EPOCH.to_owned())
-        .expect("Cannot obtain a storage key")
+/// Write validator's metadata.
+pub fn write_validator_metadata<S>(
+    storage: &mut S,
+    validator: &Address,
+    metadata: &ValidatorMetaData,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    // Email is the only required field in the metadata
+    write_validator_email(storage, validator, &metadata.email)?;
+
+    if let Some(description) = metadata.description.as_ref() {
+        write_validator_description(storage, validator, description)?;
+    }
+    if let Some(website) = metadata.website.as_ref() {
+        write_validator_website(storage, validator, website)?;
+    }
+    if let Some(discord) = metadata.discord_handle.as_ref() {
+        write_validator_discord_handle(storage, validator, discord)?;
+    }
+    Ok(())
 }
 
-/// Storage key for epoch at which an account last claimed PoS inflationary
-/// rewards.
-pub fn last_pos_reward_claim_epoch_key(
+/// Get the last epoch in which rewards were claimed from storage, if any
+pub fn get_last_reward_claim_epoch<S>(
+    storage: &S,
     delegator: &Address,
     validator: &Address,
-) -> Key {
-    last_pos_reward_claim_epoch_prefix()
-        .push(&delegator.to_db_key())
-        .expect("Cannot obtain a storage key")
-        .push(&validator.to_db_key())
-        .expect("Cannot obtain a storage key")
+) -> storage_api::Result<Option<Epoch>>
+where
+    S: StorageRead,
+{
+    let key =
+        storage_key::last_pos_reward_claim_epoch_key(delegator, validator);
+    storage.read(&key)
 }
 
-/// Is the storage key for epoch at which an account last claimed PoS
-/// inflationary rewards? Return the bond ID if so.
-pub fn is_last_pos_reward_claim_epoch_key(key: &Key) -> Option<BondId> {
-    match &key.segments[..] {
-        [
-            DbKeySeg::AddressSeg(addr),
-            DbKeySeg::StringSeg(key),
-            DbKeySeg::AddressSeg(source),
-            DbKeySeg::AddressSeg(validator),
-        ] if addr == &ADDRESS && key == LAST_REWARD_CLAIM_EPOCH => {
-            Some(BondId {
-                source: source.clone(),
-                validator: validator.clone(),
-            })
-        }
-        _ => None,
-    }
+/// Write the last epoch in which rewards were claimed for the
+/// delegator-validator pair
+pub fn write_last_reward_claim_epoch<S>(
+    storage: &mut S,
+    delegator: &Address,
+    validator: &Address,
+    epoch: Epoch,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key =
+        storage_key::last_pos_reward_claim_epoch_key(delegator, validator);
+    storage.write(&key, epoch)
 }
 
-/// Get validator address from bond key
-pub fn get_validator_address_from_bond(key: &Key) -> Option<Address> {
-    match key.get_at(3) {
-        Some(segment) => match segment {
-            DbKeySeg::AddressSeg(addr) => Some(addr.clone()),
-            DbKeySeg::StringSeg(_) => None,
-        },
-        None => None,
-    }
+/// Check if the given consensus key is already being used to ensure uniqueness.
+///
+/// If it's not being used, it will be inserted into the set that's being used
+/// for this. If it's already used, this will return an Error.
+pub fn try_insert_consensus_key<S>(
+    storage: &mut S,
+    consensus_key: &common::PublicKey,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = consensus_keys_key();
+    LazySet::open(key).try_insert(storage, consensus_key.clone())
 }
 
-/// Storage key for validator set positions
-pub fn validator_set_positions_key() -> Key {
-    Key::from(ADDRESS.to_db_key())
-        .push(&VALIDATOR_SET_POSITIONS_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+/// Get the unique set of consensus keys in storage
+pub fn get_consensus_key_set<S>(
+    storage: &S,
+) -> storage_api::Result<BTreeSet<common::PublicKey>>
+where
+    S: StorageRead,
+{
+    let key = consensus_keys_key();
+    let lazy_set = LazySet::<common::PublicKey>::open(key);
+    Ok(lazy_set.iter(storage)?.map(Result::unwrap).collect())
 }
 
-/// Is the storage key for validator set positions?
-pub fn is_validator_set_positions_key(key: &Key) -> bool {
-    if key.segments.len() >= 2 {
-        match &key.segments[..2] {
-            [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix)] => {
-                addr == &ADDRESS && prefix == VALIDATOR_SET_POSITIONS_KEY
-            }
-            _ => false,
-        }
-    } else {
-        false
-    }
-}
-
-/// Storage key for consensus keys set.
-pub fn consensus_keys_key() -> Key {
-    Key::from(ADDRESS.to_db_key())
-        .push(&CONSENSUS_KEYS.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Is storage key for consensus keys set?
-pub fn is_consensus_keys_key(key: &Key) -> bool {
-    matches!(&key.segments[..], [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)] if addr == &ADDRESS && key == CONSENSUS_KEYS)
-}
-
-/// Storage key for a validator's email
-pub fn validator_email_key(validator: &Address) -> Key {
-    validator_prefix(validator)
-        .push(&VALIDATOR_EMAIL_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Storage key for a validator's description
-pub fn validator_description_key(validator: &Address) -> Key {
-    validator_prefix(validator)
-        .push(&VALIDATOR_DESCRIPTION_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Storage key for a validator's website
-pub fn validator_website_key(validator: &Address) -> Key {
-    validator_prefix(validator)
-        .push(&VALIDATOR_WEBSITE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Storage key for a validator's discord handle
-pub fn validator_discord_key(validator: &Address) -> Key {
-    validator_prefix(validator)
-        .push(&VALIDATOR_DISCORD_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Storage prefix for the liveness data of the cosnensus validator set.
-pub fn liveness_data_prefix() -> Key {
-    Key::from(ADDRESS.to_db_key())
-        .push(&LIVENESS_PREFIX.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Storage key for the liveness records.
-pub fn liveness_missed_votes_key() -> Key {
-    liveness_data_prefix()
-        .push(&LIVENESS_MISSED_VOTES.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Storage key for the liveness data.
-pub fn liveness_sum_missed_votes_key() -> Key {
-    liveness_data_prefix()
-        .push(&LIVENESS_MISSED_VOTES_SUM.to_owned())
-        .expect("Cannot obtain a storage key")
+/// Check if the given consensus key is already being used to ensure uniqueness.
+pub fn is_consensus_key_used<S>(
+    storage: &S,
+    consensus_key: &common::PublicKey,
+) -> storage_api::Result<bool>
+where
+    S: StorageRead,
+{
+    let key = consensus_keys_key();
+    let handle = LazySet::open(key);
+    handle.contains(storage, consensus_key)
 }

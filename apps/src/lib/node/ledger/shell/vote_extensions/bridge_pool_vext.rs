@@ -203,14 +203,14 @@ mod test_bp_vote_extensions {
     use namada::core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
     use namada::ledger::pos::PosQueries;
     use namada::ledger::storage_api::StorageWrite;
+    use namada::proof_of_stake::storage::{
+        consensus_validator_set_handle,
+        read_consensus_validator_set_addresses_with_stake,
+    };
     use namada::proof_of_stake::types::{
         Position as ValidatorPosition, WeightedValidator,
     };
-    use namada::proof_of_stake::{
-        become_validator, consensus_validator_set_handle,
-        read_consensus_validator_set_addresses_with_stake, BecomeValidator,
-        Epoch,
-    };
+    use namada::proof_of_stake::{become_validator, BecomeValidator, Epoch};
     use namada::proto::{SignableEthMessage, Signed};
     use namada::tendermint::abci::types::VoteInfo;
     use namada::types::ethereum_events::Uint;

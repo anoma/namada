@@ -235,7 +235,7 @@ mod test_apply_bp_roots_to_storage {
     use namada_core::types::vote_extensions::bridge_pool_roots;
     use namada_core::types::voting_power::FractionalVotingPower;
     use namada_proof_of_stake::parameters::OwnedPosParams;
-    use namada_proof_of_stake::write_pos_params;
+    use namada_proof_of_stake::storage::write_pos_params;
 
     use super::*;
     use crate::protocol::transactions::votes::{

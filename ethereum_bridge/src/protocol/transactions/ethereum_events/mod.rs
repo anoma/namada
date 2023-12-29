@@ -708,10 +708,11 @@ mod tests {
 
         // commit then update the epoch
         wl_storage.storage.commit_block(MockDBWriteBatch).unwrap();
-        let unbonding_len = namada_proof_of_stake::read_pos_params(&wl_storage)
-            .expect("Test failed")
-            .unbonding_len
-            + 1;
+        let unbonding_len =
+            namada_proof_of_stake::storage::read_pos_params(&wl_storage)
+                .expect("Test failed")
+                .unbonding_len
+                + 1;
         wl_storage.storage.last_epoch =
             wl_storage.storage.last_epoch + unbonding_len;
         wl_storage.storage.block.epoch = wl_storage.storage.last_epoch + 1_u64;
@@ -844,10 +845,11 @@ mod tests {
 
         // commit then update the epoch
         wl_storage.storage.commit_block(MockDBWriteBatch).unwrap();
-        let unbonding_len = namada_proof_of_stake::read_pos_params(&wl_storage)
-            .expect("Test failed")
-            .unbonding_len
-            + 1;
+        let unbonding_len =
+            namada_proof_of_stake::storage::read_pos_params(&wl_storage)
+                .expect("Test failed")
+                .unbonding_len
+                + 1;
         wl_storage.storage.last_epoch =
             wl_storage.storage.last_epoch + unbonding_len;
         wl_storage.storage.block.epoch = wl_storage.storage.last_epoch + 1_u64;

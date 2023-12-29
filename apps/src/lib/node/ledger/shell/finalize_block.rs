@@ -18,7 +18,7 @@ use namada::ledger::storage::write_log::StorageModification;
 use namada::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::ledger::storage_api::token::credit_tokens;
 use namada::ledger::storage_api::{pgf, ResultExt, StorageRead, StorageWrite};
-use namada::proof_of_stake::{
+use namada::proof_of_stake::storage::{
     find_validator_by_raw_hash, read_last_block_proposer_address,
     read_pos_params, read_total_stake, write_last_block_proposer_address,
 };
@@ -99,7 +99,7 @@ where
         }
 
         let pos_params =
-            namada_proof_of_stake::read_pos_params(&self.wl_storage)?;
+            namada_proof_of_stake::storage::read_pos_params(&self.wl_storage)?;
 
         if new_epoch {
             update_allowed_conversions(&mut self.wl_storage)?;
@@ -108,7 +108,7 @@ where
 
             // Copy the new_epoch + pipeline_len - 1 validator set into
             // new_epoch + pipeline_len
-            namada_proof_of_stake::copy_validator_sets_and_positions(
+            namada_proof_of_stake::validator_set_update::copy_validator_sets_and_positions(
                 &mut self.wl_storage,
                 &pos_params,
                 current_epoch,
@@ -729,7 +729,7 @@ where
 
         let inflation = token::Amount::from_uint(inflation, 0)
             .expect("Should not fail Uint -> Amount conversion");
-        namada_proof_of_stake::update_rewards_products_and_mint_inflation(
+        namada_proof_of_stake::rewards::update_rewards_products_and_mint_inflation(
             &mut self.wl_storage,
             &params,
             last_epoch,
@@ -854,7 +854,7 @@ where
                 tracing::debug!(
                     "Found last block proposer: {proposer_address}"
                 );
-                namada_proof_of_stake::log_block_rewards(
+                namada_proof_of_stake::rewards::log_block_rewards(
                     &mut self.wl_storage,
                     if new_epoch {
                         current_epoch.prev()
@@ -987,19 +987,19 @@ mod test_finalize_block {
     use namada::ledger::storage_api;
     use namada::ledger::storage_api::StorageWrite;
     use namada::proof_of_stake::storage::{
+        enqueued_slashes_handle, get_num_consensus_validators,
+        read_consensus_validator_set_addresses_with_stake,
+        read_validator_stake, rewards_accumulator_handle,
+        validator_consensus_key_handle, validator_rewards_products_handle,
+        validator_slashes_handle, validator_state_handle, write_pos_params,
+    };
+    use namada::proof_of_stake::storage_key::{
         is_validator_slashes_key, slashes_prefix,
     };
     use namada::proof_of_stake::types::{
         BondId, SlashType, ValidatorState, WeightedValidator,
     };
-    use namada::proof_of_stake::{
-        enqueued_slashes_handle, get_num_consensus_validators,
-        read_consensus_validator_set_addresses_with_stake,
-        read_validator_stake, rewards_accumulator_handle, unjail_validator,
-        validator_consensus_key_handle, validator_rewards_products_handle,
-        validator_slashes_handle, validator_state_handle, write_pos_params,
-        ADDRESS as pos_address,
-    };
+    use namada::proof_of_stake::{unjail_validator, ADDRESS as pos_address};
     use namada::proto::{Code, Data, Section, Signature};
     use namada::types::dec::POS_DECIMAL_PRECISION;
     use namada::types::ethereum_events::{EthAddress, Uint as ethUint};
@@ -1020,7 +1020,7 @@ mod test_finalize_block {
     use namada::types::uint::Uint;
     use namada::types::vote_extensions::ethereum_events;
     use namada_sdk::eth_bridge::MinimumConfirmations;
-    use namada_sdk::proof_of_stake::{
+    use namada_sdk::proof_of_stake::storage::{
         liveness_missed_votes_handle, liveness_sum_missed_votes_handle,
         read_consensus_validator_set_addresses,
     };
@@ -1824,12 +1824,15 @@ mod test_finalize_block {
         // Keep applying finalize block
         let validator = shell.mode.get_validator_address().unwrap();
         let pos_params =
-            namada_proof_of_stake::read_pos_params(&shell.wl_storage).unwrap();
-        let consensus_key =
-            namada_proof_of_stake::validator_consensus_key_handle(validator)
-                .get(&shell.wl_storage, Epoch::default(), &pos_params)
-                .unwrap()
+            namada_proof_of_stake::storage::read_pos_params(&shell.wl_storage)
                 .unwrap();
+        let consensus_key =
+            namada_proof_of_stake::storage::validator_consensus_key_handle(
+                validator,
+            )
+            .get(&shell.wl_storage, Epoch::default(), &pos_params)
+            .unwrap()
+            .unwrap();
         let proposer_address = HEXUPPER
             .decode(consensus_key.tm_raw_hash().as_bytes())
             .unwrap();
@@ -2370,7 +2373,7 @@ mod test_finalize_block {
         // Check the bond amounts for rewards up thru the withdrawable epoch
         let withdraw_epoch = current_epoch + params.withdrawable_epoch_offset();
         let last_claim_epoch =
-            namada_proof_of_stake::get_last_reward_claim_epoch(
+            namada_proof_of_stake::storage::get_last_reward_claim_epoch(
                 &shell.wl_storage,
                 &validator.address,
                 &validator.address,
@@ -2488,7 +2491,7 @@ mod test_finalize_block {
 
         let validator = validator_set.pop_first().unwrap();
         let commission_rate =
-            namada_proof_of_stake::validator_commission_rate_handle(
+            namada_proof_of_stake::storage::validator_commission_rate_handle(
                 &validator.address,
             )
             .get(&shell.wl_storage, Epoch(0), &params)
@@ -2702,8 +2705,10 @@ mod test_finalize_block {
 
         // Check that there's 3 unique consensus keys
         let consensus_keys =
-            namada_proof_of_stake::get_consensus_key_set(&shell.wl_storage)
-                .unwrap();
+            namada_proof_of_stake::storage::get_consensus_key_set(
+                &shell.wl_storage,
+            )
+            .unwrap();
         assert_eq!(consensus_keys.len(), 3);
         // let ck1 = validator_consensus_key_handle(&validator)
         //     .get(&storage, current_epoch, &params)
@@ -2757,8 +2762,10 @@ mod test_finalize_block {
 
         // Check that there's 5 unique consensus keys
         let consensus_keys =
-            namada_proof_of_stake::get_consensus_key_set(&shell.wl_storage)
-                .unwrap();
+            namada_proof_of_stake::storage::get_consensus_key_set(
+                &shell.wl_storage,
+            )
+            .unwrap();
         assert_eq!(consensus_keys.len(), 5);
 
         // Advance to pipeline epoch
@@ -2837,8 +2844,10 @@ mod test_finalize_block {
 
         // Check that there's 7 unique consensus keys
         let consensus_keys =
-            namada_proof_of_stake::get_consensus_key_set(&shell.wl_storage)
-                .unwrap();
+            namada_proof_of_stake::storage::get_consensus_key_set(
+                &shell.wl_storage,
+            )
+            .unwrap();
         assert_eq!(consensus_keys.len(), 7);
 
         // Advance to pipeline epoch
@@ -2900,8 +2909,10 @@ mod test_finalize_block {
 
         // Check that there's 8 unique consensus keys
         let consensus_keys =
-            namada_proof_of_stake::get_consensus_key_set(&shell.wl_storage)
-                .unwrap();
+            namada_proof_of_stake::storage::get_consensus_key_set(
+                &shell.wl_storage,
+            )
+            .unwrap();
         assert_eq!(consensus_keys.len(), 8);
 
         // Advance to pipeline epoch
@@ -3473,12 +3484,15 @@ mod test_finalize_block {
 
         let validator = shell.mode.get_validator_address().unwrap().to_owned();
         let pos_params =
-            namada_proof_of_stake::read_pos_params(&shell.wl_storage).unwrap();
-        let consensus_key =
-            namada_proof_of_stake::validator_consensus_key_handle(&validator)
-                .get(&shell.wl_storage, Epoch::default(), &pos_params)
-                .unwrap()
+            namada_proof_of_stake::storage::read_pos_params(&shell.wl_storage)
                 .unwrap();
+        let consensus_key =
+            namada_proof_of_stake::storage::validator_consensus_key_handle(
+                &validator,
+            )
+            .get(&shell.wl_storage, Epoch::default(), &pos_params)
+            .unwrap()
+            .unwrap();
         let proposer_address = HEXUPPER
             .decode(consensus_key.tm_raw_hash().as_bytes())
             .unwrap();
@@ -4060,7 +4074,7 @@ mod test_finalize_block {
         )
         .unwrap();
 
-        let val_stake = namada_proof_of_stake::read_validator_stake(
+        let val_stake = namada_proof_of_stake::storage::read_validator_stake(
             &shell.wl_storage,
             &params,
             &val1.address,
@@ -4068,7 +4082,7 @@ mod test_finalize_block {
         )
         .unwrap();
 
-        let total_stake = namada_proof_of_stake::read_total_stake(
+        let total_stake = namada_proof_of_stake::storage::read_total_stake(
             &shell.wl_storage,
             &params,
             current_epoch + params.pipeline_len,
@@ -4103,14 +4117,14 @@ mod test_finalize_block {
         )
         .unwrap();
 
-        let val_stake = namada_proof_of_stake::read_validator_stake(
+        let val_stake = namada_proof_of_stake::storage::read_validator_stake(
             &shell.wl_storage,
             &params,
             &val1.address,
             current_epoch + params.pipeline_len,
         )
         .unwrap();
-        let total_stake = namada_proof_of_stake::read_total_stake(
+        let total_stake = namada_proof_of_stake::storage::read_total_stake(
             &shell.wl_storage,
             &params,
             current_epoch + params.pipeline_len,
@@ -4248,16 +4262,18 @@ mod test_finalize_block {
         assert_eq!(enqueued_slash.r#type, SlashType::DuplicateVote);
         assert_eq!(enqueued_slash.rate, Dec::zero());
         let last_slash =
-            namada_proof_of_stake::read_validator_last_slash_epoch(
+            namada_proof_of_stake::storage::read_validator_last_slash_epoch(
                 &shell.wl_storage,
                 &val1.address,
             )
             .unwrap();
         assert_eq!(last_slash, Some(misbehavior_epoch));
         assert!(
-            namada_proof_of_stake::validator_slashes_handle(&val1.address)
-                .is_empty(&shell.wl_storage)
-                .unwrap()
+            namada_proof_of_stake::storage::validator_slashes_handle(
+                &val1.address
+            )
+            .is_empty(&shell.wl_storage)
+            .unwrap()
         );
 
         tracing::debug!("Advancing to epoch 7");
@@ -4316,7 +4332,7 @@ mod test_finalize_block {
         assert_eq!(enqueued_slashes_8.len(&shell.wl_storage).unwrap(), 2_u64);
         assert_eq!(enqueued_slashes_9.len(&shell.wl_storage).unwrap(), 1_u64);
         let last_slash =
-            namada_proof_of_stake::read_validator_last_slash_epoch(
+            namada_proof_of_stake::storage::read_validator_last_slash_epoch(
                 &shell.wl_storage,
                 &val1.address,
             )
@@ -4332,18 +4348,21 @@ mod test_finalize_block {
             .unwrap()
         );
         assert!(
-            namada_proof_of_stake::validator_slashes_handle(&val1.address)
-                .is_empty(&shell.wl_storage)
-                .unwrap()
+            namada_proof_of_stake::storage::validator_slashes_handle(
+                &val1.address
+            )
+            .is_empty(&shell.wl_storage)
+            .unwrap()
         );
 
-        let pre_stake_10 = namada_proof_of_stake::read_validator_stake(
-            &shell.wl_storage,
-            &params,
-            &val1.address,
-            Epoch(10),
-        )
-        .unwrap();
+        let pre_stake_10 =
+            namada_proof_of_stake::storage::read_validator_stake(
+                &shell.wl_storage,
+                &params,
+                &val1.address,
+                Epoch(10),
+            )
+            .unwrap();
         assert_eq!(
             pre_stake_10,
             initial_stake + del_1_amount
@@ -4370,14 +4389,14 @@ mod test_finalize_block {
         let (current_epoch, _) = advance_epoch(&mut shell, &pkh1, &votes, None);
         assert_eq!(current_epoch.0, 9_u64);
 
-        let val_stake_3 = namada_proof_of_stake::read_validator_stake(
+        let val_stake_3 = namada_proof_of_stake::storage::read_validator_stake(
             &shell.wl_storage,
             &params,
             &val1.address,
             Epoch(3),
         )
         .unwrap();
-        let val_stake_4 = namada_proof_of_stake::read_validator_stake(
+        let val_stake_4 = namada_proof_of_stake::storage::read_validator_stake(
             &shell.wl_storage,
             &params,
             &val1.address,
@@ -4385,13 +4404,13 @@ mod test_finalize_block {
         )
         .unwrap();
 
-        let tot_stake_3 = namada_proof_of_stake::read_total_stake(
+        let tot_stake_3 = namada_proof_of_stake::storage::read_total_stake(
             &shell.wl_storage,
             &params,
             Epoch(3),
         )
         .unwrap();
-        let tot_stake_4 = namada_proof_of_stake::read_total_stake(
+        let tot_stake_4 = namada_proof_of_stake::storage::read_total_stake(
             &shell.wl_storage,
             &params,
             Epoch(4),
@@ -4415,7 +4434,9 @@ mod test_finalize_block {
         // There should be 2 slashes processed for the validator, each with rate
         // equal to the cubic slashing rate
         let val_slashes =
-            namada_proof_of_stake::validator_slashes_handle(&val1.address);
+            namada_proof_of_stake::storage::validator_slashes_handle(
+                &val1.address,
+            );
         assert_eq!(val_slashes.len(&shell.wl_storage).unwrap(), 2u64);
         let is_rate_good = val_slashes
             .iter(&shell.wl_storage)
@@ -4592,7 +4613,7 @@ mod test_finalize_block {
         assert_eq!(current_epoch.0, 12_u64);
 
         tracing::debug!("\nCHECK BOND AND UNBOND DETAILS");
-        let details = namada_proof_of_stake::bonds_and_unbonds(
+        let details = namada_proof_of_stake::queries::bonds_and_unbonds(
             &shell.wl_storage,
             None,
             None,
@@ -4811,13 +4832,14 @@ mod test_finalize_block {
             Epoch::default(),
         );
 
-        let validator_stake = namada_proof_of_stake::read_validator_stake(
-            &shell.wl_storage,
-            &params,
-            &val2,
-            Epoch::default(),
-        )
-        .unwrap();
+        let validator_stake =
+            namada_proof_of_stake::storage::read_validator_stake(
+                &shell.wl_storage,
+                &params,
+                &val2,
+                Epoch::default(),
+            )
+            .unwrap();
 
         let val3 = initial_consensus_set[2].clone();
         let val4 = initial_consensus_set[3].clone();

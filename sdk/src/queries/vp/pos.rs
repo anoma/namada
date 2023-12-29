@@ -12,14 +12,14 @@ use namada_core::types::key::common;
 use namada_core::types::storage::Epoch;
 use namada_core::types::token;
 use namada_proof_of_stake::parameters::PosParams;
-use namada_proof_of_stake::types::{
-    BondId, BondsAndUnbondsDetail, BondsAndUnbondsDetails, CommissionPair,
-    Slash, ValidatorMetaData, ValidatorState, WeightedValidator,
+use namada_proof_of_stake::queries::{
+    find_delegation_validators, find_delegations,
 };
-use namada_proof_of_stake::{
-    self, bond_amount, bond_handle, find_all_enqueued_slashes,
-    find_all_slashes, find_delegation_validators, find_delegations,
-    query_reward_tokens, read_all_validator_addresses,
+use namada_proof_of_stake::slashing::{
+    find_all_enqueued_slashes, find_all_slashes,
+};
+use namada_proof_of_stake::storage::{
+    bond_handle, read_all_validator_addresses,
     read_below_capacity_validator_set_addresses_with_stake,
     read_consensus_validator_set_addresses_with_stake, read_pos_params,
     read_total_stake, read_validator_description,
@@ -29,6 +29,11 @@ use namada_proof_of_stake::{
     validator_commission_rate_handle, validator_incoming_redelegations_handle,
     validator_slashes_handle, validator_state_handle,
 };
+use namada_proof_of_stake::types::{
+    BondId, BondsAndUnbondsDetail, BondsAndUnbondsDetails, CommissionPair,
+    Slash, ValidatorMetaData, ValidatorState, WeightedValidator,
+};
+use namada_proof_of_stake::{self, bond_amount, query_reward_tokens};
 
 use crate::queries::types::RequestCtx;
 
@@ -546,7 +551,11 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    namada_proof_of_stake::bonds_and_unbonds(ctx.wl_storage, source, validator)
+    namada_proof_of_stake::queries::bonds_and_unbonds(
+        ctx.wl_storage,
+        source,
+        validator,
+    )
 }
 
 /// Find all the validator addresses to whom the given `owner` address has
@@ -622,7 +631,10 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    namada_proof_of_stake::find_validator_by_raw_hash(ctx.wl_storage, tm_addr)
+    namada_proof_of_stake::storage::find_validator_by_raw_hash(
+        ctx.wl_storage,
+        tm_addr,
+    )
 }
 
 /// Native validator address by looking up the Tendermint address
@@ -633,7 +645,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    namada_proof_of_stake::get_consensus_key_set(ctx.wl_storage)
+    namada_proof_of_stake::storage::get_consensus_key_set(ctx.wl_storage)
 }
 
 /// Find if the given source address has any bonds.
@@ -645,7 +657,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    namada_proof_of_stake::has_bonds(ctx.wl_storage, &source)
+    namada_proof_of_stake::queries::has_bonds(ctx.wl_storage, &source)
 }
 
 /// Client-only methods for the router type are composed from router functions.

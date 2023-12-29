@@ -190,7 +190,7 @@ mod tests {
     use namada_core::types::storage::BlockHeight;
     use namada_core::types::{address, token};
     use namada_proof_of_stake::parameters::OwnedPosParams;
-    use namada_proof_of_stake::write_pos_params;
+    use namada_proof_of_stake::storage::write_pos_params;
 
     use super::*;
     use crate::test_utils;

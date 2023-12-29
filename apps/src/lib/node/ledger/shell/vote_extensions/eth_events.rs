@@ -299,11 +299,11 @@ mod test_vote_extensions {
     use namada::eth_bridge::storage::bridge_pool;
     use namada::ledger::eth_bridge::EthBridgeQueries;
     use namada::ledger::pos::PosQueries;
-    use namada::proof_of_stake::types::WeightedValidator;
-    use namada::proof_of_stake::{
+    use namada::proof_of_stake::storage::{
         consensus_validator_set_handle,
         read_consensus_validator_set_addresses_with_stake,
     };
+    use namada::proof_of_stake::types::WeightedValidator;
     use namada::tendermint::abci::types::VoteInfo;
     use namada::types::address::testing::gen_established_address;
     use namada::types::ethereum_events::{
