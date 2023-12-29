@@ -182,8 +182,7 @@ fn vp_implicit(c: &mut Criterion) {
             .try_to_sk()
             .unwrap();
 
-    let foreign_key_write =
-        generate_foreign_key_tx(&defaults::albert_keypair());
+    let foreign_key_write = generate_foreign_key_tx(&implicit_account);
 
     let shell = BenchShell::default();
     let transfer = shell.generate_tx(
@@ -327,7 +326,7 @@ fn vp_validator(c: &mut Criterion) {
     let mut group = c.benchmark_group("vp_validator");
 
     let foreign_key_write =
-        generate_foreign_key_tx(&defaults::albert_keypair());
+        generate_foreign_key_tx(&defaults::validator_keypair());
 
     let transfer = shell.generate_tx(
         TX_TRANSFER_WASM,

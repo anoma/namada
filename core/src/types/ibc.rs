@@ -15,6 +15,7 @@ use crate::ibc::apps::transfer::types::{Memo, PrefixedDenom, TracePath};
 use crate::ibc::core::handler::types::events::{
     Error as IbcEventError, IbcEvent as RawIbcEvent,
 };
+pub use crate::ledger::ibc::storage::is_ibc_key;
 use crate::tendermint::abci::Event as AbciEvent;
 use crate::types::masp::PaymentAddress;
 
