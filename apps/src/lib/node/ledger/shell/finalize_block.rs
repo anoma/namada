@@ -673,12 +673,6 @@ where
         let epochs_per_year: u64 = self
             .read_storage_key(&params_storage::get_epochs_per_year_key())
             .expect("Epochs per year should exist in storage");
-        let pos_p_gain_nom: Dec = self
-            .read_storage_key(&params_storage::get_pos_gain_p_key())
-            .expect("PoS P-gain factor should exist in storage");
-        let pos_d_gain_nom: Dec = self
-            .read_storage_key(&params_storage::get_pos_gain_d_key())
-            .expect("PoS D-gain factor should exist in storage");
 
         let pos_last_staked_ratio: Dec = self
             .read_storage_key(&params_storage::get_staked_ratio_key())
@@ -686,6 +680,7 @@ where
         let pos_last_inflation_amount: token::Amount = self
             .read_storage_key(&params_storage::get_pos_inflation_amount_key())
             .expect("PoS inflation amount should exist in storage");
+
         // Read from PoS storage
         let total_tokens: token::Amount = self
             .read_storage_key(&token::minted_balance_key(
@@ -696,6 +691,8 @@ where
             read_total_stake(&self.wl_storage, &params, last_epoch)?;
         let pos_locked_ratio_target = params.target_staked_ratio;
         let pos_max_inflation_rate = params.max_inflation_rate;
+        let pos_p_gain_nom = params.rewards_gain_p;
+        let pos_d_gain_nom = params.rewards_gain_d;
 
         // Run rewards PD controller
         let pos_controller = inflation::RewardsController {

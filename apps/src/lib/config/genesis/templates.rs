@@ -276,10 +276,6 @@ pub struct ChainParams<T: TemplateValidation> {
     pub implicit_vp: String,
     /// Expected number of epochs per year
     pub epochs_per_year: u64,
-    /// PoS gain p
-    pub pos_gain_p: Dec,
-    /// PoS gain d
-    pub pos_gain_d: Dec,
     /// Maximum number of signature per transaction
     pub max_signatures_per_transaction: u8,
     /// Max gas for block
@@ -307,8 +303,6 @@ impl ChainParams<Unvalidated> {
             tx_whitelist,
             implicit_vp,
             epochs_per_year,
-            pos_gain_p,
-            pos_gain_d,
             max_signatures_per_transaction,
             max_block_gas,
             fee_unshielding_gas_limit,
@@ -354,8 +348,6 @@ impl ChainParams<Unvalidated> {
             tx_whitelist,
             implicit_vp,
             epochs_per_year,
-            pos_gain_p,
-            pos_gain_d,
             max_signatures_per_transaction,
             max_block_gas,
             fee_unshielding_gas_limit,
@@ -410,6 +402,10 @@ pub struct PosParams {
     /// The minimum required activity of consensus validators, in percentage,
     /// over the `liveness_window_check`
     pub liveness_threshold: Dec,
+    /// PoS gain p (read only)
+    pub rewards_gain_p: Dec,
+    /// PoS gain d (read only)
+    pub rewards_gain_d: Dec,
 }
 
 #[derive(
