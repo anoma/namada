@@ -172,15 +172,15 @@ fn validate_pos_changes(
     key: &storage::Key,
     valid_sig: &impl Deref<Target = bool>,
 ) -> VpResult {
-    use proof_of_stake::storage;
+    use proof_of_stake::{storage, storage_key};
 
     // Bond or unbond
     let is_valid_bond_or_unbond_change = || {
-        let bond_id = storage::is_bond_key(key)
+        let bond_id = storage_key::is_bond_key(key)
             .map(|(bond_id, _)| bond_id)
-            .or_else(|| storage::is_bond_epoched_meta_key(key))
+            .or_else(|| storage_key::is_bond_epoched_meta_key(key))
             .or_else(|| {
-                storage::is_unbond_key(key).map(|(bond_id, _, _)| bond_id)
+                storage_key::is_unbond_key(key).map(|(bond_id, _, _)| bond_id)
             });
         if let Some(bond_id) = bond_id {
             // Bonds and unbonds changes for this address must be signed
@@ -192,73 +192,80 @@ fn validate_pos_changes(
 
     // Changes in validator state
     let is_valid_state_change = || {
-        let state_change = storage::is_validator_state_key(key);
-        let is_valid_state = match state_change {
-            Some((address, epoch)) => {
-                let params_pre = proof_of_stake::read_pos_params(&ctx.pre())?;
-                let state_pre = proof_of_stake::validator_state_handle(address)
-                    .get(&ctx.pre(), epoch, &params_pre)?;
+        let state_change = storage_key::is_validator_state_key(key);
+        let is_valid_state =
+            match state_change {
+                Some((address, epoch)) => {
+                    let params_pre = storage::read_pos_params(&ctx.pre())?;
+                    let state_pre = storage::validator_state_handle(address)
+                        .get(&ctx.pre(), epoch, &params_pre)?;
 
-                let params_post = proof_of_stake::read_pos_params(&ctx.post())?;
-                let state_post = proof_of_stake::validator_state_handle(
-                    address,
-                )
-                .get(&ctx.post(), epoch, &params_post)?;
+                    let params_post = storage::read_pos_params(&ctx.post())?;
+                    let state_post = storage::validator_state_handle(address)
+                        .get(&ctx.post(), epoch, &params_post)?;
 
-                match (state_pre, state_post) {
-                    (Some(pre), Some(post)) => {
-                        use proof_of_stake::types::ValidatorState::*;
+                    match (state_pre, state_post) {
+                        (Some(pre), Some(post)) => {
+                            use proof_of_stake::types::ValidatorState::*;
 
-                        // Bonding and unbonding may affect validator sets
-                        if matches!(
-                            pre,
-                            Consensus | BelowCapacity | BelowThreshold
-                        ) && matches!(
-                            post,
-                            Consensus | BelowCapacity | BelowThreshold
-                        ) {
-                            true
-                        } else {
-                            // Unknown state changes are not allowed
-                            false
+                            // Bonding and unbonding may affect validator sets
+                            if matches!(
+                                pre,
+                                Consensus | BelowCapacity | BelowThreshold
+                            ) && matches!(
+                                post,
+                                Consensus | BelowCapacity | BelowThreshold
+                            ) {
+                                true
+                            } else {
+                                // Unknown state changes are not allowed
+                                false
+                            }
                         }
+                        (Some(_pre), None) => {
+                            // Clearing of old epoched data
+                            true
+                        }
+                        _ => false,
                     }
-                    (Some(_pre), None) => {
-                        // Clearing of old epoched data
-                        true
-                    }
-                    _ => false,
                 }
-            }
-            None => false,
-        };
+                None => false,
+            };
 
         VpResult::Ok(
             is_valid_state
-                || storage::is_validator_state_epoched_meta_key(key)
-                || storage::is_consensus_validator_set_key(key)
-                || storage::is_below_capacity_validator_set_key(key),
+                || storage_key::is_validator_state_epoched_meta_key(key)
+                || storage_key::is_consensus_validator_set_key(key)
+                || storage_key::is_below_capacity_validator_set_key(key),
         )
     };
 
     let is_valid_reward_claim = || {
-        if let Some(bond_id) = storage::is_last_pos_reward_claim_epoch_key(key)
+        if let Some(bond_id) =
+            storage_key::is_last_pos_reward_claim_epoch_key(key)
         {
             // Claims for this address must be signed
             return &bond_id.source != owner || **valid_sig;
         }
+        if let Some(bond_id) = storage_key::is_rewards_counter_key(key) {
+            // Redelegations auto-claim rewards
+            return &bond_id.source != owner || **valid_sig;
+        }
+
         false
     };
 
     let is_valid_redelegation = || {
-        if storage::is_validator_redelegations_key(key) {
+        if storage_key::is_validator_redelegations_key(key) {
             return true;
         }
-        if let Some(delegator) = storage::is_delegator_redelegations_key(key) {
+        if let Some(delegator) =
+            storage_key::is_delegator_redelegations_key(key)
+        {
             // Redelegations for this address must be signed
             return delegator != owner || **valid_sig;
         }
-        if let Some(bond_id) = storage::is_rewards_counter_key(key) {
+        if let Some(bond_id) = storage_key::is_rewards_counter_key(key) {
             // Redelegations auto-claim rewards
             return &bond_id.source != owner || **valid_sig;
         }
@@ -266,11 +273,11 @@ fn validate_pos_changes(
     };
 
     Ok(is_valid_bond_or_unbond_change()
-        || storage::is_total_deltas_key(key)
-        || storage::is_validator_deltas_key(key)
-        || storage::is_validator_total_bond_or_unbond_key(key)
-        || storage::is_validator_set_positions_key(key)
-        || storage::is_total_consensus_stake_key(key)
+        || storage_key::is_total_deltas_key(key)
+        || storage_key::is_validator_deltas_key(key)
+        || storage_key::is_validator_total_bond_or_unbond_key(key)
+        || storage_key::is_validator_set_positions_key(key)
+        || storage_key::is_total_consensus_stake_key(key)
         || is_valid_state_change()?
         || is_valid_reward_claim()
         || is_valid_redelegation()
