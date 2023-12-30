@@ -25,7 +25,7 @@ impl Broadcaster {
         }
     }
 
-    /// Loop forever, braodcasting messages that have been received
+    /// Loop forever, broadcasting messages that have been received
     /// by the receiver
     async fn run_loop(&mut self) {
         let result = time::Sleep {
