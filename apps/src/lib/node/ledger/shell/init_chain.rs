@@ -5,7 +5,6 @@ use std::ops::ControlFlow;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use masp_proofs::bls12_381;
-use namada::core::types::storage::KeySeg;
 use namada::ledger::parameters::Parameters;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};

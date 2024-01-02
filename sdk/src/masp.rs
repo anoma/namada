@@ -1770,27 +1770,28 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
         // To speed up integration tests, we can save and load proofs
         #[cfg(feature = "testing")]
-        let load_or_save =
-            if let Ok(masp_proofs) = env::var(ENV_VAR_MASP_TEST_PROOFS) {
-                let parsed = match masp_proofs.to_ascii_lowercase().as_str() {
-                    "load" => LoadOrSaveProofs::Load,
-                    "save" => LoadOrSaveProofs::Save,
-                    env_var => Err(Error::Other(format!(
+        let load_or_save = if let Ok(masp_proofs) =
+            env::var(ENV_VAR_MASP_TEST_PROOFS)
+        {
+            let parsed = match masp_proofs.to_ascii_lowercase().as_str() {
+                "load" => LoadOrSaveProofs::Load,
+                "save" => LoadOrSaveProofs::Save,
+                env_var => Err(Error::Other(format!(
                     "Unexpected value for {ENV_VAR_MASP_TEST_PROOFS} env var. \
                      Expecting \"save\" or \"load\", but got \"{env_var}\"."
                 )))?,
-                };
-                if env::var(ENV_VAR_MASP_TEST_SEED).is_err() {
-                    Err(Error::Other(format!(
+            };
+            if env::var(ENV_VAR_MASP_TEST_SEED).is_err() {
+                Err(Error::Other(format!(
                     "Ensure to set a seed with {ENV_VAR_MASP_TEST_SEED} env \
                      var when using {ENV_VAR_MASP_TEST_PROOFS} for \
                      deterministic proofs."
                 )))?;
-                }
-                parsed
-            } else {
-                LoadOrSaveProofs::Neither
-            };
+            }
+            parsed
+        } else {
+            LoadOrSaveProofs::Neither
+        };
 
         let builder_clone = builder.clone().map_builder(WalletMap);
         #[cfg(feature = "testing")]

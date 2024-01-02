@@ -97,7 +97,7 @@ fn convert_amount(
     // Combine the value and unit into one amount
 
     I128Sum::from_nonnegative(asset_type, denom.denominate(&val) as i128)
-            .map_err(|()| {
+        .map_err(|()| {
             Error::NativeVpError(native_vp::Error::SimpleMessage(
                 "Invalid value for amount",
             ))

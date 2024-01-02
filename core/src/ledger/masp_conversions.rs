@@ -212,9 +212,6 @@ where
     };
     use rayon::prelude::ParallelSlice;
 
-    use crate::types::address;
-    use crate::types::storage::{Key, KeySeg};
-
     // The derived conversions will be placed in MASP address space
     let masp_addr = MASP;
 
