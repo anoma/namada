@@ -1,20 +1,19 @@
 //! Functionality for accessing the storage subspace
+
+pub mod bridge_pool;
 pub mod eth_bridge_queries;
 pub mod parameters;
 pub mod proof;
 pub mod vote_tallies;
-pub mod bridge_pool;
 pub mod vp;
 pub mod whitelist;
-pub mod wrapped_erc20;
-
-//! Functionality for accessing the storage subspace
+pub mod wrapped_erc20s;
 
 use namada_core::ledger::eth_bridge::ADDRESS;
-use namada_core::ledger::parameters::storage::*;
-use namada_core::ledger::parameters::ADDRESS as PARAM_ADDRESS;
 use namada_core::types::address::Address;
 use namada_core::types::storage::{DbKeySeg, Key, KeySeg};
+use namada_parameters::storage::*;
+use namada_parameters::ADDRESS as PARAM_ADDRESS;
 use namada_trans_token::storage_key::balance_key;
 
 /// Key prefix for the storage subspace

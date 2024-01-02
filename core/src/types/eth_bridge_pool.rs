@@ -28,8 +28,10 @@ pub const BRIDGE_POOL_ADDRESS: Address =
 /// Bridge pool key segments.
 #[derive(StorageKeys)]
 pub struct Segments {
-    signed_root: &'static str,
-    bridge_pool_nonce: &'static str,
+    /// Signed root storage key
+    pub signed_root: &'static str,
+    /// Bridge pool nonce storage key
+    pub bridge_pool_nonce: &'static str,
 }
 
 /// Check if a key is for a pending transfer

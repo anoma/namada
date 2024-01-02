@@ -8,17 +8,16 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use borsh::BorshDeserialize;
 use eth_msgs::EthMsgUpdate;
 use eyre::Result;
-use namada_core::ledger::storage::traits::StorageHasher;
-use namada_core::ledger::storage::{DBIter, WlStorage, DB};
 use namada_core::types::address::Address;
 use namada_core::types::ethereum_events::EthereumEvent;
 use namada_core::types::ethereum_structs::EthBridgeEvent;
-use namada_core::types::internal::ExpiredTx;
 use namada_core::types::storage::{BlockHeight, Epoch, Key};
 use namada_core::types::token::Amount;
-use namada_core::types::transaction::TxResult;
-use namada_core::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 use namada_proof_of_stake::pos_queries::PosQueries;
+use namada_state::tx_queue::ExpiredTx;
+use namada_state::{DBIter, StorageHasher, WlStorage, DB};
+use namada_tx::data::TxResult;
+use namada_vote_ext::ethereum_events::MultiSignedEthEvent;
 
 use super::ChangedKeys;
 use crate::protocol::transactions::utils;
@@ -301,10 +300,8 @@ mod tests {
     use std::collections::{BTreeSet, HashMap, HashSet};
 
     use borsh::BorshDeserialize;
-    use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
     use namada_core::ledger::storage::mockdb::MockDBWriteBatch;
     use namada_core::ledger::storage::testing::TestWlStorage;
-    use namada_core::ledger::storage_api::StorageRead;
     use namada_core::types::address;
     use namada_core::types::ethereum_events::testing::{
         arbitrary_amount, arbitrary_eth_address, arbitrary_nonce,
@@ -315,12 +312,14 @@ mod tests {
     };
     use namada_core::types::token::{balance_key, minted_balance_key};
     use namada_core::types::voting_power::FractionalVotingPower;
+    use namada_storage::StorageRead;
 
     use super::*;
     use crate::protocol::transactions::utils::GetVoters;
     use crate::protocol::transactions::votes::{
         EpochedVotingPower, EpochedVotingPowerExt, Votes,
     };
+    use crate::storage::wrapped_erc20s;
     use crate::test_utils;
 
     /// All kinds of [`Keys`].

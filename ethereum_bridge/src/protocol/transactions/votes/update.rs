@@ -2,11 +2,11 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use borsh::BorshDeserialize;
 use eyre::{eyre, Result};
-use namada_core::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
 use namada_core::types::address::Address;
 use namada_core::types::storage::BlockHeight;
 use namada_core::types::token;
 use namada_proof_of_stake::pos_queries::PosQueries;
+use namada_state::{DBIter, StorageHasher, WlStorage, DB};
 
 use super::{ChangedKeys, EpochedVotingPowerExt, Tally, Votes};
 use crate::storage::vote_tallies;

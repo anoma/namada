@@ -20,11 +20,17 @@ testing = [
 
 [dependencies]
 namada_core = {path = "../core", default-features = false, features = ["ethers-derive"]}
-namada_trans_token = {path = "../trans_token"}
 namada_macros = {path = "../macros"}
+namada_parameters = {path = "../parameters"}
 namada_proof_of_stake = {path = "../proof_of_stake", default-features = false}
+namada_state = {path = "../state"}
+namada_storage = {path = "../storage"}
+namada_trans_token = {path = "../trans_token"}
+namada_tx = {path = "../tx"}
+namada_vote_ext = {path = "../vote_ext"}
+
 borsh.workspace = true
-borsh-ext.workspace = true
+ethabi.workspace = true
 ethers.workspace = true
 eyre.workspace = true
 itertools.workspace = true
@@ -32,8 +38,9 @@ serde.workspace = true
 serde_json.workspace = true
 rand.workspace = true
 tendermint = {workspace = true}
-tendermint-rpc = {workspace = true}
 tendermint-proto = {workspace = true}
+tendermint-rpc = {workspace = true}
+thiserror.workspace = true
 tracing = "0.1.30"
 
 [dev-dependencies]

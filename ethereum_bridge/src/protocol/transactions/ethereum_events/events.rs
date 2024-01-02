@@ -6,21 +6,12 @@ use std::str::FromStr;
 use borsh::BorshDeserialize;
 use eyre::{Result, WrapErr};
 use namada_core::hints;
-use namada_core::ledger::eth_bridge::storage::bridge_pool::{
-    get_nonce_key, is_pending_transfer_key, BRIDGE_POOL_ADDRESS,
-};
-use namada_core::ledger::eth_bridge::storage::{
-    self as bridge_storage, wrapped_erc20s,
-};
 use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
-use namada_core::ledger::parameters::read_epoch_duration_parameter;
-use namada_core::ledger::storage::traits::StorageHasher;
-use namada_core::ledger::storage::{DBIter, WlStorage, DB};
-use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::address::Address;
 use namada_core::types::eth_abi::Encode;
 use namada_core::types::eth_bridge_pool::{
-    PendingTransfer, TransferToEthereumKind,
+    erc20_nut_address, erc20_token_address, PendingTransfer,
+    TransferToEthereumKind,
 };
 use namada_core::types::ethereum_events::{
     EthAddress, EthereumEvent, TransferToEthereum, TransferToNamada,
@@ -29,11 +20,18 @@ use namada_core::types::ethereum_events::{
 use namada_core::types::ethereum_structs::EthBridgeEvent;
 use namada_core::types::storage::{BlockHeight, Key, KeySeg};
 use namada_core::types::token;
-use namada_core::types::token::{balance_key, minted_balance_key};
+use namada_parameters::read_epoch_duration_parameter;
+use namada_state::{DBIter, StorageHasher, WlStorage, DB};
+use namada_storage::{StorageRead, StorageWrite};
+use namada_trans_token::storage_key::{balance_key, minted_balance_key};
 
 use crate::protocol::transactions::update;
+use crate::storage::bridge_pool::{
+    get_nonce_key, is_pending_transfer_key, BRIDGE_POOL_ADDRESS,
+};
 use crate::storage::eth_bridge_queries::{EthAssetMint, EthBridgeQueries};
 use crate::storage::parameters::read_native_erc20_address;
+use crate::storage::{self as bridge_storage};
 
 /// Updates storage based on the given confirmed `event`. For example, for a
 /// confirmed [`EthereumEvent::TransfersToNamada`], mint the corresponding
@@ -163,11 +161,11 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let eth_bridge_native_token_balance_key =
-        token::balance_key(&wl_storage.storage.native_token, &BRIDGE_ADDRESS);
+        balance_key(&wl_storage.storage.native_token, &BRIDGE_ADDRESS);
     let receiver_native_token_balance_key =
-        token::balance_key(&wl_storage.storage.native_token, receiver);
+        balance_key(&wl_storage.storage.native_token, receiver);
     let native_werc20_supply_key =
-        minted_balance_key(&wrapped_erc20s::token(native_erc20));
+        minted_balance_key(&erc20_token_address(native_erc20));
 
     update::amount(
         wl_storage,
@@ -255,11 +253,11 @@ where
         // check if we should mint nuts
         asset_count
             .should_mint_nuts()
-            .then(|| (wrapped_erc20s::nut(asset), asset_count.nut_amount)),
+            .then(|| (erc20_nut_address(asset), asset_count.nut_amount)),
         // check if we should mint erc20s
         asset_count
             .should_mint_erc20s()
-            .then(|| (wrapped_erc20s::token(asset), asset_count.erc20_amount)),
+            .then(|| (erc20_token_address(asset), asset_count.erc20_amount)),
     ]
     .into_iter()
     // remove assets that do not need to be
@@ -584,10 +582,6 @@ mod tests {
     use assert_matches::assert_matches;
     use borsh_ext::BorshSerializeExt;
     use eyre::Result;
-    use namada_core::ledger::eth_bridge::storage::bridge_pool::get_pending_key;
-    use namada_core::ledger::parameters::{
-        update_epoch_parameter, EpochDuration,
-    };
     use namada_core::ledger::storage::mockdb::MockDBWriteBatch;
     use namada_core::ledger::storage::testing::TestWlStorage;
     use namada_core::ledger::storage::types::encode;
@@ -600,8 +594,10 @@ mod tests {
     use namada_core::types::time::DurationSecs;
     use namada_core::types::token::Amount;
     use namada_core::types::{address, eth_bridge_pool};
+    use namada_parameters::{update_epoch_parameter, EpochDuration};
 
     use super::*;
+    use crate::storage::bridge_pool::get_pending_key;
     use crate::test_utils::{self, stored_keys_count};
 
     fn init_storage(wl_storage: &mut TestWlStorage) {

@@ -4,13 +4,13 @@ use namada_core::types::address::{self, Address, InternalAddress};
 use namada_core::types::storage::{self, DbKeySeg, KeySeg};
 
 /// Key segment for a balance key
-const BALANCE_STORAGE_KEY: &str = "balance";
+pub const BALANCE_STORAGE_KEY: &str = "balance";
 /// Key segment for a denomination key
-const DENOM_STORAGE_KEY: &str = "denomination";
+pub const DENOM_STORAGE_KEY: &str = "denomination";
 /// Key segment for multitoken minter
-const MINTER_STORAGE_KEY: &str = "minter";
+pub const MINTER_STORAGE_KEY: &str = "minter";
 /// Key segment for minted balance
-const MINTED_STORAGE_KEY: &str = "minted";
+pub const MINTED_STORAGE_KEY: &str = "minted";
 
 // TODO: move to shielded
 /// Key segment for head shielded transaction pointer keys

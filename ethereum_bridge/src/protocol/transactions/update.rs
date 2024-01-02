@@ -1,10 +1,11 @@
 //! Helpers for writing to storage
 use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::Result;
-use namada_core::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
-use namada_core::ledger::storage_api::StorageWrite;
+use namada_core::types::hash::StorageHasher;
 use namada_core::types::storage;
 use namada_core::types::token::Amount;
+use namada_state::{DBIter, WlStorage, DB};
+use namada_storage::StorageWrite;
 
 /// Reads the `Amount` from key, applies update then writes it back
 pub fn amount<D, H>(
@@ -45,8 +46,8 @@ mod tests {
     use borsh_ext::BorshSerializeExt;
     use eyre::{eyre, Result};
     use namada_core::ledger::storage::testing::TestWlStorage;
-    use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
     use namada_core::types::storage;
+    use namada_storage::{StorageRead, StorageWrite};
 
     #[test]
     /// Test updating a value

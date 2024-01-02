@@ -299,8 +299,8 @@ fn derive_storage_keys_inner(struct_def: TokenStream2) -> TokenStream2 {
 
     quote! {
         impl #struct_def_ident {
-            #[allow(dead_code)]
-            const ALL: &[&'static str] = {
+            /// A list of all storage keys
+            pub const ALL: &[&'static str] = {
                 let #struct_def_ident {
                     #ident_list
                 } = Self::VALUES;
@@ -308,7 +308,8 @@ fn derive_storage_keys_inner(struct_def: TokenStream2) -> TokenStream2 {
                 &[ #ident_list ]
             };
 
-            const VALUES: #struct_def_ident = Self {
+            /// Storage keys values
+            pub const VALUES: #struct_def_ident = Self {
                 #values_list
             };
         }

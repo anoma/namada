@@ -10,8 +10,8 @@ use namada_core::types::ethereum_events::{EthereumEvent, Uint};
 use namada_core::types::hash::Hash;
 use namada_core::types::keccak::{keccak_hash, KeccakHash};
 use namada_core::types::storage::{BlockHeight, DbKeySeg, Epoch, Key};
-use namada_core::types::vote_extensions::validator_set_update::VotingPowersMap;
 use namada_macros::StorageKeys;
+use namada_vote_ext::validator_set_update::VotingPowersMap;
 
 use crate::storage::proof::{BridgePoolRootProof, EthereumProof};
 

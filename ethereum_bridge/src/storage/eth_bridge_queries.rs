@@ -1,11 +1,5 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::hints;
-use namada_core::ledger::eth_bridge::storage::{
-    active_key, bridge_pool, whitelist,
-};
-use namada_core::ledger::storage;
-use namada_core::ledger::storage::{StoreType, WlStorage};
-use namada_core::ledger::storage_api::StorageRead;
 use namada_core::types::address::Address;
 use namada_core::types::eth_abi::Encode;
 use namada_core::types::eth_bridge_pool::PendingTransfer;
@@ -15,9 +9,6 @@ use namada_core::types::ethereum_events::{
 use namada_core::types::keccak::KeccakHash;
 use namada_core::types::storage::{BlockHeight, Epoch, Key as StorageKey};
 use namada_core::types::token;
-use namada_core::types::vote_extensions::validator_set_update::{
-    EthAddrBook, ValidatorSetArgs, VotingPowersMap, VotingPowersMapExt,
-};
 use namada_core::types::voting_power::{
     EthBridgeVotingPower, FractionalVotingPower,
 };
@@ -25,9 +16,14 @@ use namada_proof_of_stake::pos_queries::{ConsensusValidators, PosQueries};
 use namada_proof_of_stake::storage::{
     validator_eth_cold_key_handle, validator_eth_hot_key_handle,
 };
+use namada_state::{DBIter, StorageHasher, StoreType, WlStorage, DB};
+use namada_storage::StorageRead;
+use namada_vote_ext::validator_set_update::{
+    EthAddrBook, ValidatorSetArgs, VotingPowersMap, VotingPowersMapExt,
+};
 
 use crate::storage::proof::BridgePoolRootProof;
-use crate::storage::vote_tallies;
+use crate::storage::{active_key, bridge_pool, vote_tallies, whitelist};
 
 /// This enum is used as a parameter to
 /// [`EthBridgeQueriesHook::must_send_valset_upd`].
@@ -91,8 +87,8 @@ pub trait EthBridgeQueries {
 
 impl<D, H> EthBridgeQueries for WlStorage<D, H>
 where
-    D: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: 'static + storage::StorageHasher,
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
 {
     type Storage = Self;
 
@@ -124,8 +120,8 @@ impl<'db, DB> Copy for EthBridgeQueriesHook<'db, DB> {}
 
 impl<'db, D, H> EthBridgeQueriesHook<'db, WlStorage<D, H>>
 where
-    D: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: 'static + storage::StorageHasher,
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
 {
     /// Return a handle to the inner [`WlStorage`].
     #[inline]
@@ -617,18 +613,18 @@ impl EthAssetMint {
 /// validators in Namada, at some given epoch.
 pub struct ConsensusEthAddresses<'db, D, H>
 where
-    D: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: 'static + storage::StorageHasher,
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
 {
     epoch: Epoch,
     wl_storage: &'db WlStorage<D, H>,
-    consensus_validators: ConsensusValidators<'db, D, H>,
+    consensus_validators: ConsensusValidators<'db, WlStorage<D, H>>,
 }
 
 impl<'db, D, H> ConsensusEthAddresses<'db, D, H>
 where
-    D: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: 'static + storage::StorageHasher,
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
 {
     /// Iterate over the Ethereum addresses of the set of consensus validators
     /// in Namada, at some given epoch.

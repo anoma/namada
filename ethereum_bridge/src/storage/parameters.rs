@@ -3,17 +3,15 @@ use std::num::NonZeroU64;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::{eyre, Result};
-use namada_core::ledger::eth_bridge::storage::whitelist;
-use namada_core::ledger::storage;
-use namada_core::ledger::storage::types::encode;
-use namada_core::ledger::storage::WlStorage;
-use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::ethereum_events::EthAddress;
-use namada_core::types::ethereum_structs;
 use namada_core::types::storage::Key;
 use namada_core::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
+use namada_core::types::{encode, ethereum_structs};
+use namada_state::{DBIter, StorageHasher, WlStorage, DB};
+use namada_storage::{StorageRead, StorageWrite};
 use serde::{Deserialize, Serialize};
 
+use super::whitelist;
 use crate::storage as bridge_storage;
 use crate::storage::eth_bridge_queries::{
     EthBridgeEnabled, EthBridgeQueries, EthBridgeStatus,
@@ -169,10 +167,10 @@ impl EthereumBridgeParams {
     ///
     /// If these parameters are initialized, the storage subspaces
     /// for the Ethereum bridge VPs are also initialized.
-    pub fn init_storage<DB, H>(&self, wl_storage: &mut WlStorage<DB, H>)
+    pub fn init_storage<D, H>(&self, wl_storage: &mut WlStorage<D, H>)
     where
-        DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-        H: 'static + storage::traits::StorageHasher,
+        D: 'static + DB + for<'iter> DBIter<'iter>,
+        H: 'static + StorageHasher,
     {
         let Self {
             erc20_whitelist,
@@ -285,10 +283,10 @@ impl EthereumOracleConfig {
     /// present, `None` will be returned - this could be the case if the bridge
     /// has not been bootstrapped yet. Panics if the storage appears to be
     /// corrupt.
-    pub fn read<DB, H>(wl_storage: &WlStorage<DB, H>) -> Option<Self>
+    pub fn read<D, H>(wl_storage: &WlStorage<D, H>) -> Option<Self>
     where
-        DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-        H: 'static + storage::traits::StorageHasher,
+        D: 'static + DB + for<'iter> DBIter<'iter>,
+        H: 'static + StorageHasher,
     {
         // TODO(namada#1720): remove present key check; `is_bridge_active`
         // should not panic, when the active status key has not been
@@ -346,13 +344,13 @@ where
 
 /// Reads the value of `key` from `storage` and deserializes it, or panics
 /// otherwise.
-fn must_read_key<DB, H, T: BorshDeserialize>(
-    wl_storage: &WlStorage<DB, H>,
+fn must_read_key<D, H, T: BorshDeserialize>(
+    wl_storage: &WlStorage<D, H>,
     key: &Key,
 ) -> T
 where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: 'static + storage::traits::StorageHasher,
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
 {
     StorageRead::read::<T>(wl_storage, key).map_or_else(
         |err| panic!("Could not read {key}: {err:?}"),

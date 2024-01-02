@@ -19,7 +19,8 @@ use namada_core::types::address::{
 use namada_core::types::chain::{ChainId, CHAIN_ID_LENGTH};
 use namada_core::types::eth_bridge_pool::is_pending_transfer_key;
 use namada_core::types::ethereum_events::Uint;
-use namada_core::types::hash::{Error as HashError, Hash, StorageHasher};
+pub use namada_core::types::hash::StorageHasher;
+use namada_core::types::hash::{Error as HashError, Hash};
 use namada_core::types::storage::{
     BlockHash, BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue,
     Header, Key, KeySeg, TxIndex, BLOCK_HASH_LENGTH, BLOCK_HEIGHT_LENGTH,

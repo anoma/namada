@@ -9,10 +9,10 @@ use namada_core::types::ethereum_events::Uint;
 use namada_core::types::keccak::KeccakHash;
 use namada_core::types::key::{common, secp256k1};
 use namada_core::types::storage::Epoch;
-use namada_core::types::vote_extensions::validator_set_update::{
+use namada_core::types::{eth_abi, ethereum_structs};
+use namada_vote_ext::validator_set_update::{
     valset_upd_toks_to_hashes, EthAddrBook, VotingPowersMap, VotingPowersMapExt,
 };
-use namada_core::types::{eth_abi, ethereum_structs};
 
 /// Ethereum proofs contain the [`secp256k1`] signatures of validators
 /// over some data to be signed.
