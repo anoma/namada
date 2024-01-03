@@ -21,6 +21,18 @@ use crate::types::storage::{
     self, BlockHash, BlockHeight, Epoch, Header, TxIndex,
 };
 
+/// Write actions to help commit_block determine what parts of the storage to
+/// update
+#[derive(Clone, Debug)]
+pub enum WriteActions {
+    /// All
+    All,
+    /// Don't add to merkle tree
+    NoMerkl,
+    /// Don't add to diffs or merkle tree
+    NoDiffsOrMerkl,
+}
+
 /// Common storage read interface
 ///
 /// If you're using this trait and having compiler complaining about needing an
@@ -107,13 +119,37 @@ pub trait StorageRead {
 /// Common storage write interface
 pub trait StorageWrite {
     /// Write a value to be encoded with Borsh at the given key to storage.
+    /// Additionally, write the data to the diffs and add it to the merkle tree.
     fn write<T: BorshSerialize>(
         &mut self,
         key: &storage::Key,
         val: T,
     ) -> Result<()> {
         let bytes = val.serialize_to_vec();
-        self.write_bytes(key, bytes)
+        self.write_bytes(key, bytes, WriteActions::All)
+    }
+
+    /// Write a value to be encoded with Borsh at the given key to storage.
+    /// Additionally, write the data to the diffs. Do not add to the merkle
+    /// tree.
+    fn write_without_merkl<T: BorshSerialize>(
+        &mut self,
+        key: &storage::Key,
+        val: T,
+    ) -> Result<()> {
+        let bytes = val.serialize_to_vec();
+        self.write_bytes(key, bytes, WriteActions::NoMerkl)
+    }
+
+    /// Write a value to be encoded with Borsh at the given key to storage.
+    /// Do not update the diffs or merkle tree.
+    fn write_without_merkldiffs<T: BorshSerialize>(
+        &mut self,
+        key: &storage::Key,
+        val: T,
+    ) -> Result<()> {
+        let bytes = val.serialize_to_vec();
+        self.write_bytes(key, bytes, WriteActions::NoDiffsOrMerkl)
     }
 
     /// Write a value as bytes at the given key to storage.
@@ -121,6 +157,7 @@ pub trait StorageWrite {
         &mut self,
         key: &storage::Key,
         val: impl AsRef<[u8]>,
+        action: WriteActions,
     ) -> Result<()>;
 
     /// Delete a value at the given key from storage.

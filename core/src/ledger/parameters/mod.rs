@@ -190,9 +190,11 @@ impl Parameters {
         let implicit_vp_key = storage::get_implicit_vp_key();
         // Using `fn write_bytes` here, because implicit_vp code hash doesn't
         // need to be encoded, it's bytes already.
+        // TODO: what write actions are actually desired here?
         storage.write_bytes(
             &implicit_vp_key,
             implicit_vp_code_hash.unwrap_or_default(),
+            storage_api::WriteActions::All,
         )?;
 
         let epochs_per_year_key = storage::get_epochs_per_year_key();
@@ -343,7 +345,8 @@ where
     let key = storage::get_implicit_vp_key();
     // Using `fn write_bytes` here, because implicit_vp doesn't need to be
     // encoded, it's bytes already.
-    storage.write_bytes(&key, implicit_vp)
+    // TODO: what write actions are actually desired here?
+    storage.write_bytes(&key, implicit_vp, storage_api::WriteActions::All)
 }
 
 /// Update the max signatures per transaction storage parameter

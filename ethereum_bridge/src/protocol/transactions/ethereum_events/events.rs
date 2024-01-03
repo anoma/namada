@@ -591,6 +591,7 @@ mod tests {
     use namada_core::ledger::storage::mockdb::MockDBWriteBatch;
     use namada_core::ledger::storage::testing::TestWlStorage;
     use namada_core::ledger::storage::types::encode;
+    use namada_core::ledger::storage_api::WriteActions;
     use namada_core::types::address::testing::gen_implicit_address;
     use namada_core::types::address::{gen_established_address, nam, wnam};
     use namada_core::types::eth_bridge_pool::GasFee;
@@ -615,7 +616,11 @@ mod tests {
             .expect("Test failed");
         // set native ERC20 token
         wl_storage
-            .write_bytes(&bridge_storage::native_erc20_key(), encode(&wnam()))
+            .write_bytes(
+                &bridge_storage::native_erc20_key(),
+                encode(&wnam()),
+                WriteActions::All,
+            )
             .expect("Test failed");
     }
 
@@ -760,8 +765,13 @@ mod tests {
             let payer = address::testing::established_address_2();
             let payer_key = balance_key(&transfer.gas_fee.token, &payer);
             let payer_balance = Amount::from(0);
+            // TODO: decide what write actions are needed
             wl_storage
-                .write_bytes(&payer_key, payer_balance.serialize_to_vec())
+                .write_bytes(
+                    &payer_key,
+                    payer_balance.serialize_to_vec(),
+                    WriteActions::All,
+                )
                 .expect("Test failed");
             let escrow_key =
                 balance_key(&transfer.gas_fee.token, &BRIDGE_POOL_ADDRESS);
@@ -775,25 +785,45 @@ mod tests {
                 // native ERC20
                 let sender_key = balance_key(&nam(), &transfer.transfer.sender);
                 let sender_balance = Amount::from(0);
+                // TODO: decide what write actions are needed
                 wl_storage
-                    .write_bytes(&sender_key, sender_balance.serialize_to_vec())
+                    .write_bytes(
+                        &sender_key,
+                        sender_balance.serialize_to_vec(),
+                        WriteActions::All,
+                    )
                     .expect("Test failed");
                 let escrow_key = balance_key(&nam(), &BRIDGE_ADDRESS);
                 let escrow_balance = Amount::from(10);
+                // TODO: decide what write actions are needed
                 wl_storage
-                    .write_bytes(&escrow_key, escrow_balance.serialize_to_vec())
+                    .write_bytes(
+                        &escrow_key,
+                        escrow_balance.serialize_to_vec(),
+                        WriteActions::All,
+                    )
                     .expect("Test failed");
             } else {
                 let token = transfer.token_address();
                 let sender_key = balance_key(&token, &transfer.transfer.sender);
                 let sender_balance = Amount::from(0);
+                // TODO: decide what write actions are needed
                 wl_storage
-                    .write_bytes(&sender_key, sender_balance.serialize_to_vec())
+                    .write_bytes(
+                        &sender_key,
+                        sender_balance.serialize_to_vec(),
+                        WriteActions::All,
+                    )
                     .expect("Test failed");
                 let escrow_key = balance_key(&token, &BRIDGE_POOL_ADDRESS);
                 let escrow_balance = Amount::from(10);
+                // TODO: decide what write actions are needed
                 wl_storage
-                    .write_bytes(&escrow_key, escrow_balance.serialize_to_vec())
+                    .write_bytes(
+                        &escrow_key,
+                        escrow_balance.serialize_to_vec(),
+                        WriteActions::All,
+                    )
                     .expect("Test failed");
                 update::amount(
                     wl_storage,

@@ -227,8 +227,10 @@ impl StorageWrite for Ctx {
         &mut self,
         key: &storage::Key,
         val: impl AsRef<[u8]>,
+        action: _,
     ) -> storage_api::Result<()> {
         let key = key.to_string();
+        // TODO: do certain write actions need to be considered here??
         unsafe {
             namada_tx_write(
                 key.as_ptr() as _,

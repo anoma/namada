@@ -6,7 +6,9 @@ use super::EPOCH_SWITCH_BLOCKS_DELAY;
 use crate::ledger::parameters::EpochDuration;
 use crate::ledger::storage::write_log::{self, WriteLog};
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
-use crate::ledger::storage_api::{ResultExt, StorageRead, StorageWrite};
+use crate::ledger::storage_api::{
+    ResultExt, StorageRead, StorageWrite, WriteActions,
+};
 use crate::ledger::{gas, parameters, storage_api};
 use crate::types::address::Address;
 use crate::types::hash::Hash;
@@ -382,7 +384,10 @@ where
                         self.write_log_iter.next()
                     {
                         match modification {
-                            write_log::StorageModification::Write { value }
+                            write_log::StorageModification::Write {
+                                value,
+                                action: _,
+                            }
                             | write_log::StorageModification::Temp { value } => {
                                 let gas = value.len() as u64;
                                 return Some((key, value, gas));
@@ -424,9 +429,10 @@ where
         // try to read from the write log first
         let (log_val, _gas) = self.write_log().read(key);
         match log_val {
-            Some(write_log::StorageModification::Write { ref value }) => {
-                Ok(Some(value.clone()))
-            }
+            Some(write_log::StorageModification::Write {
+                ref value,
+                action: _,
+            }) => Ok(Some(value.clone())),
             Some(write_log::StorageModification::Delete) => Ok(None),
             Some(write_log::StorageModification::InitAccount {
                 ref vp_code_hash,
@@ -533,10 +539,11 @@ where
         &mut self,
         key: &storage::Key,
         val: impl AsRef<[u8]>,
+        action: WriteActions,
     ) -> storage_api::Result<()> {
         let _ = self
             .write_log_mut()
-            .protocol_write(key, val.as_ref().to_vec())
+            .protocol_write(key, val.as_ref().to_vec(), action)
             .into_storage_result();
         Ok(())
     }
@@ -689,12 +696,24 @@ mod tests {
                 | Level::BlockWriteLog(WlMod::Delete | WlMod::DeletePrefix) => {
                 }
                 Level::TxWriteLog(WlMod::Write(val)) => {
+                    // NOTE: dummy WriteActions used here because this is
+                    // only for testing
+                    // TODO: may want to use test these new features though
+                    // in here.
                     s.write_log.write(key, val.serialize_to_vec()).unwrap();
                 }
                 Level::BlockWriteLog(WlMod::Write(val)) => {
                     s.write_log
                         // protocol only writes at block level
-                        .protocol_write(key, val.serialize_to_vec())
+                        // NOTE: dummy WriteActions used here because this is
+                        // only for testing
+                        // TODO: may want to use test these new features though
+                        // in here.
+                        .protocol_write(
+                            key,
+                            val.serialize_to_vec(),
+                            WriteActions::All,
+                        )
                         .unwrap();
                 }
                 Level::Storage(val) => {

@@ -5,7 +5,9 @@ use namada_core::hints;
 use namada_core::ledger::storage::{
     DBIter, PrefixIter, StorageHasher, WlStorage, DB,
 };
-use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
+use namada_core::ledger::storage_api::{
+    StorageRead, StorageWrite, WriteActions,
+};
 use namada_core::types::storage::Key;
 use namada_core::types::voting_power::FractionalVotingPower;
 
@@ -24,19 +26,34 @@ where
     H: 'static + StorageHasher + Sync,
     T: BorshSerialize,
 {
-    wl_storage.write_bytes(&keys.body(), &body.serialize_to_vec())?;
-    wl_storage.write_bytes(&keys.seen(), &tally.seen.serialize_to_vec())?;
-    wl_storage
-        .write_bytes(&keys.seen_by(), &tally.seen_by.serialize_to_vec())?;
+    // TODO: figure out what specific write actions are desired for each piece
+    // of data here!
+    wl_storage.write_bytes(
+        &keys.body(),
+        &body.serialize_to_vec(),
+        WriteActions::All,
+    )?;
+    wl_storage.write_bytes(
+        &keys.seen(),
+        &tally.seen.serialize_to_vec(),
+        WriteActions::All,
+    )?;
+    wl_storage.write_bytes(
+        &keys.seen_by(),
+        &tally.seen_by.serialize_to_vec(),
+        WriteActions::All,
+    )?;
     wl_storage.write_bytes(
         &keys.voting_power(),
         &tally.voting_power.serialize_to_vec(),
+        WriteActions::All,
     )?;
     if !already_present {
         // add the current epoch for the inserted event
         wl_storage.write_bytes(
             &keys.voting_started_epoch(),
             &wl_storage.storage.get_current_epoch().0.serialize_to_vec(),
+            WriteActions::All,
         )?;
     }
     Ok(())
@@ -243,24 +260,38 @@ mod tests {
             seen: false,
         };
         wl_storage
-            .write_bytes(&keys.body(), &event.serialize_to_vec())
+            .write_bytes(
+                &keys.body(),
+                &event.serialize_to_vec(),
+                WriteActions::All,
+            )
             .unwrap();
         wl_storage
-            .write_bytes(&keys.seen(), &tally.seen.serialize_to_vec())
+            .write_bytes(
+                &keys.seen(),
+                &tally.seen.serialize_to_vec(),
+                WriteActions::All,
+            )
             .unwrap();
         wl_storage
-            .write_bytes(&keys.seen_by(), &tally.seen_by.serialize_to_vec())
+            .write_bytes(
+                &keys.seen_by(),
+                &tally.seen_by.serialize_to_vec(),
+                WriteActions::All,
+            )
             .unwrap();
         wl_storage
             .write_bytes(
                 &keys.voting_power(),
                 &tally.voting_power.serialize_to_vec(),
+                WriteActions::All,
             )
             .unwrap();
         wl_storage
             .write_bytes(
                 &keys.voting_started_epoch(),
                 &wl_storage.storage.get_block_height().0.serialize_to_vec(),
+                WriteActions::All,
             )
             .unwrap();
 

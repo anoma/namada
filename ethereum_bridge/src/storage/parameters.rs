@@ -7,7 +7,9 @@ use namada_core::ledger::eth_bridge::storage::whitelist;
 use namada_core::ledger::storage;
 use namada_core::ledger::storage::types::encode;
 use namada_core::ledger::storage::WlStorage;
-use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
+use namada_core::ledger::storage_api::{
+    StorageRead, StorageWrite, WriteActions,
+};
 use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::ethereum_structs;
 use namada_core::types::storage::Key;
@@ -189,23 +191,43 @@ impl EthereumBridgeParams {
         let native_erc20_key = bridge_storage::native_erc20_key();
         let bridge_contract_key = bridge_storage::bridge_contract_key();
         let eth_start_height_key = bridge_storage::eth_start_height_key();
+
+        // TODO: figure out what kind of write actions are desired here for each
+        // piece of data!
         wl_storage
             .write_bytes(
                 &active_key,
                 encode(&EthBridgeStatus::Enabled(EthBridgeEnabled::AtGenesis)),
+                WriteActions::All,
             )
             .unwrap();
         wl_storage
-            .write_bytes(&min_confirmations_key, encode(min_confirmations))
+            .write_bytes(
+                &min_confirmations_key,
+                encode(min_confirmations),
+                WriteActions::All,
+            )
             .unwrap();
         wl_storage
-            .write_bytes(&native_erc20_key, encode(native_erc20))
+            .write_bytes(
+                &native_erc20_key,
+                encode(native_erc20),
+                WriteActions::All,
+            )
             .unwrap();
         wl_storage
-            .write_bytes(&bridge_contract_key, encode(bridge))
+            .write_bytes(
+                &bridge_contract_key,
+                encode(bridge),
+                WriteActions::All,
+            )
             .unwrap();
         wl_storage
-            .write_bytes(&eth_start_height_key, encode(eth_start_height))
+            .write_bytes(
+                &eth_start_height_key,
+                encode(eth_start_height),
+                WriteActions::All,
+            )
             .unwrap();
         for Erc20WhitelistEntry {
             token_address: addr,
@@ -227,21 +249,27 @@ impl EthereumBridgeParams {
                 suffix: whitelist::KeyType::Whitelisted,
             }
             .into();
-            wl_storage.write_bytes(&key, encode(&true)).unwrap();
+            wl_storage
+                .write_bytes(&key, encode(&true), WriteActions::All)
+                .unwrap();
 
             let key = whitelist::Key {
                 asset: *addr,
                 suffix: whitelist::KeyType::Cap,
             }
             .into();
-            wl_storage.write_bytes(&key, encode(&cap)).unwrap();
+            wl_storage
+                .write_bytes(&key, encode(&cap), WriteActions::All)
+                .unwrap();
 
             let key = whitelist::Key {
                 asset: *addr,
                 suffix: whitelist::KeyType::Denomination,
             }
             .into();
-            wl_storage.write_bytes(&key, encode(&denom)).unwrap();
+            wl_storage
+                .write_bytes(&key, encode(&denom), WriteActions::All)
+                .unwrap();
         }
         // Initialize the storage for the Ethereum Bridge VP.
         vp::ethereum_bridge::init_storage(wl_storage);
@@ -450,7 +478,11 @@ mod tests {
         config.init_storage(&mut wl_storage);
         let min_confirmations_key = bridge_storage::min_confirmations_key();
         wl_storage
-            .write_bytes(&min_confirmations_key, vec![42, 1, 2, 3, 4])
+            .write_bytes(
+                &min_confirmations_key,
+                vec![42, 1, 2, 3, 4],
+                WriteActions::All,
+            )
             .unwrap();
 
         // This should panic because the min_confirmations value is not valid
@@ -467,6 +499,7 @@ mod tests {
             .write_bytes(
                 &bridge_storage::active_key(),
                 encode(&EthBridgeStatus::Enabled(EthBridgeEnabled::AtGenesis)),
+                WriteActions::All,
             )
             .unwrap();
         // Write a valid min_confirmations value
@@ -474,6 +507,7 @@ mod tests {
             .write_bytes(
                 &bridge_storage::min_confirmations_key(),
                 MinimumConfirmations::default().serialize_to_vec(),
+                WriteActions::All,
             )
             .unwrap();
 
