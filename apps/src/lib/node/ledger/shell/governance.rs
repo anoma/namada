@@ -139,7 +139,14 @@ where
                         for ibc_event in
                             shell.wl_storage.write_log_mut().take_ibc_events()
                         {
-                            let event = Event::from(ibc_event.clone());
+                            let mut event = Event::from(ibc_event.clone());
+                            // Add the height for IBC event query
+                            let height = shell
+                                .wl_storage
+                                .storage
+                                .get_last_block_height()
+                                + 1;
+                            event["height"] = height.to_string();
                             response.events.push(event);
                         }
 

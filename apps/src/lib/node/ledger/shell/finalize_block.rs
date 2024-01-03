@@ -687,7 +687,10 @@ where
         // Pgf inflation
         pgf_inflation::apply_inflation(&mut self.wl_storage)?;
         for ibc_event in self.wl_storage.write_log_mut().take_ibc_events() {
-            let event = Event::from(ibc_event.clone());
+            let mut event = Event::from(ibc_event.clone());
+            // Add the height for IBC event query
+            let height = self.wl_storage.storage.get_last_block_height() + 1;
+            event["height"] = height.to_string();
             response.events.push(event);
         }
 
