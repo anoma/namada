@@ -24,6 +24,7 @@ pub use wl_storage::{
 };
 
 use super::gas::MEMORY_ACCESS_GAS_PER_BYTE;
+use super::storage_api::WriteActions;
 use crate::ledger::eth_bridge::storage::bridge_pool::is_pending_transfer_key;
 use crate::ledger::gas::{
     STORAGE_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE,
@@ -337,6 +338,7 @@ pub trait DB: std::fmt::Debug {
         height: BlockHeight,
         key: &Key,
         value: impl AsRef<[u8]>,
+        action: WriteActions,
     ) -> Result<i64>;
 
     /// Batch delete the value with the given height and account subspace key
@@ -1116,6 +1118,7 @@ where
         batch: &mut D::WriteBatch,
         key: &Key,
         value: impl AsRef<[u8]>,
+        action: WriteActions,
     ) -> Result<i64> {
         let value = value.as_ref();
         if is_pending_transfer_key(key) {
@@ -1125,10 +1128,17 @@ where
             self.block.tree.update(key, height)?;
         } else {
             // Update the merkle tree
-            self.block.tree.update(key, value)?;
+            if action == WriteActions::All {
+                self.block.tree.update(key, value)?;
+            }
         }
-        self.db
-            .batch_write_subspace_val(batch, self.block.height, key, value)
+        self.db.batch_write_subspace_val(
+            batch,
+            self.block.height,
+            key,
+            value,
+            action,
+        )
     }
 
     /// Batch delete the value with the given height and account subspace key

@@ -77,6 +77,7 @@ pub mod main {
 pub mod main {
     use borsh::BorshDeserialize;
     use namada_test_utils::tx_data::TxWriteData;
+    use namada_tx_prelude::storage_api::WriteActions;
     use namada_tx_prelude::{
         log_string, transaction, Ctx, StorageRead, StorageWrite, Tx, TxEnv,
         TxResult,
@@ -134,7 +135,7 @@ pub mod main {
         log(&format!("attempting to write new value to key {}", key));
         // using `ctx.write_bytes` instead of `ctx.write` here, as we want to
         // write the actual bytes, not a Borsh-serialization of a `Vec<u8>`
-        ctx.write_bytes(&key, &value[..])?;
+        ctx.write_bytes(&key, &value[..], WriteActions::All)?;
         Ok(())
     }
 }

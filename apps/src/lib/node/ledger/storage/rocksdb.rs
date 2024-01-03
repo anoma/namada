@@ -61,6 +61,7 @@ use namada::ledger::storage::{
     types, BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error,
     MerkleTreeStoresRead, Result, StoreType, DB,
 };
+use namada::ledger::storage_api::WriteActions;
 use namada::types::ethereum_events::Uint;
 use namada::types::internal::TxQueue;
 use namada::types::storage::{
@@ -1362,35 +1363,42 @@ impl DB for RocksDB {
         height: BlockHeight,
         key: &Key,
         value: impl AsRef<[u8]>,
+        action: WriteActions,
     ) -> Result<i64> {
         let value = value.as_ref();
         let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
-        let size_diff = match self
-            .0
-            .get_cf(subspace_cf, key.to_string())
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(old_value) => {
-                let size_diff = value.len() as i64 - old_value.len() as i64;
-                // Persist the previous value
-                self.batch_write_subspace_diff(
-                    batch,
-                    height,
-                    key,
-                    Some(&old_value),
-                    Some(value),
-                )?;
-                size_diff
-            }
-            None => {
-                self.batch_write_subspace_diff(
-                    batch,
-                    height,
-                    key,
-                    None,
-                    Some(value),
-                )?;
-                value.len() as i64
+
+        // Diffs
+        let size_diff = if action == WriteActions::NoDiffsOrMerkl {
+            0
+        } else {
+            match self
+                .0
+                .get_cf(subspace_cf, key.to_string())
+                .map_err(|e| Error::DBError(e.into_string()))?
+            {
+                Some(old_value) => {
+                    let size_diff = value.len() as i64 - old_value.len() as i64;
+                    // Persist the previous value
+                    self.batch_write_subspace_diff(
+                        batch,
+                        height,
+                        key,
+                        Some(&old_value),
+                        Some(value),
+                    )?;
+                    size_diff
+                }
+                None => {
+                    self.batch_write_subspace_diff(
+                        batch,
+                        height,
+                        key,
+                        None,
+                        Some(value),
+                    )?;
+                    value.len() as i64
+                }
             }
         };
 
@@ -1754,6 +1762,7 @@ mod test {
             last_height,
             &Key::parse("test").unwrap(),
             vec![1_u8, 1, 1, 1],
+            WriteActions::All,
         )
         .unwrap();
 
@@ -1789,6 +1798,7 @@ mod test {
             last_height,
             &batch_key,
             vec![1_u8, 1, 1, 1],
+            WriteActions::All,
         )
         .unwrap();
         db.exec_batch(batch.0).unwrap();
@@ -1803,6 +1813,7 @@ mod test {
             last_height,
             &batch_key,
             vec![2_u8, 2, 2, 2],
+            WriteActions::All,
         )
         .unwrap();
         db.exec_batch(batch.0).unwrap();
@@ -1899,8 +1910,14 @@ mod test {
         let mut batch = RocksDB::batch();
         let height = BlockHeight(1);
         for key in &all_keys {
-            db.batch_write_subspace_val(&mut batch, height, key, [0_u8])
-                .unwrap();
+            db.batch_write_subspace_val(
+                &mut batch,
+                height,
+                key,
+                [0_u8],
+                WriteActions::All,
+            )
+            .unwrap();
         }
         db.exec_batch(batch.0).unwrap();
 
@@ -1952,6 +1969,7 @@ mod test {
             height_0,
             &delete_key,
             &to_delete_val,
+            WriteActions::All,
         )
         .unwrap();
         db.batch_write_subspace_val(
@@ -1959,6 +1977,7 @@ mod test {
             height_0,
             &overwrite_key,
             &to_overwrite_val,
+            WriteActions::All,
         )
         .unwrap();
 
@@ -1983,13 +2002,20 @@ mod test {
             .insert("dummy2".to_string(), gen_established_address("test"));
         let add_val = vec![1_u8, 0, 0, 0];
         let overwrite_val = vec![1_u8, 1, 1, 1];
-        db.batch_write_subspace_val(&mut batch, height_1, &add_key, &add_val)
-            .unwrap();
+        db.batch_write_subspace_val(
+            &mut batch,
+            height_1,
+            &add_key,
+            &add_val,
+            WriteActions::All,
+        )
+        .unwrap();
         db.batch_write_subspace_val(
             &mut batch,
             height_1,
             &overwrite_key,
             &overwrite_val,
+            WriteActions::All,
         )
         .unwrap();
         db.batch_delete_subspace_val(&mut batch, height_1, &delete_key)

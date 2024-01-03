@@ -533,10 +533,12 @@ mod tests {
                 }
                 _ => {
                     let value_bytes = types::encode(&storage.block.height);
+                    // TODO: is it fine to have a dummy write action here?
                     storage.batch_write_subspace_val(
                         &mut batch,
                         &key,
                         value_bytes,
+                        storage_api::WriteActions::All,
                     )?;
                 }
             }

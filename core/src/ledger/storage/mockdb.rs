@@ -19,6 +19,7 @@ use super::{
 use crate::ledger::masp_conversions::ConversionState;
 use crate::ledger::replay_protection;
 use crate::ledger::storage::types::{self, KVBytes, PrefixIterator};
+use crate::ledger::storage_api::WriteActions;
 use crate::types::ethereum_events::Uint;
 use crate::types::ethereum_structs;
 use crate::types::hash::Hash;
@@ -485,7 +486,16 @@ impl DB for MockDB {
         value: impl AsRef<[u8]>,
     ) -> Result<i64> {
         // batch_write are directly committed
-        self.batch_write_subspace_val(&mut MockDBWriteBatch, height, key, value)
+
+        // TODO: this dummy value for action should be changed and perhaps
+        // action should be an input
+        self.batch_write_subspace_val(
+            &mut MockDBWriteBatch,
+            height,
+            key,
+            value,
+            WriteActions::All,
+        )
     }
 
     fn delete_subspace_val(
@@ -513,6 +523,7 @@ impl DB for MockDB {
         height: BlockHeight,
         key: &Key,
         value: impl AsRef<[u8]>,
+        action: WriteActions,
     ) -> Result<i64> {
         let value = value.as_ref();
         let subspace_key =
@@ -520,31 +531,36 @@ impl DB for MockDB {
         let current_len = value.len() as i64;
         let diff_prefix = Key::from(height.to_db_key());
         let mut db = self.0.borrow_mut();
-        Ok(
-            match db.insert(subspace_key.to_string(), value.to_owned()) {
-                Some(prev_value) => {
-                    let old_key = diff_prefix
-                        .push(&"old".to_string().to_db_key())
-                        .unwrap()
-                        .join(key);
-                    db.insert(old_key.to_string(), prev_value.clone());
-                    let new_key = diff_prefix
-                        .push(&"new".to_string().to_db_key())
-                        .unwrap()
-                        .join(key);
-                    db.insert(new_key.to_string(), value.to_owned());
-                    current_len - prev_value.len() as i64
-                }
-                None => {
-                    let new_key = diff_prefix
-                        .push(&"new".to_string().to_db_key())
-                        .unwrap()
-                        .join(key);
-                    db.insert(new_key.to_string(), value.to_owned());
-                    current_len
-                }
-            },
-        )
+        if action == WriteActions::NoDiffsOrMerkl {
+            db.insert(subspace_key.to_string(), value.to_owned());
+            Ok(0)
+        } else {
+            Ok(
+                match db.insert(subspace_key.to_string(), value.to_owned()) {
+                    Some(prev_value) => {
+                        let old_key = diff_prefix
+                            .push(&"old".to_string().to_db_key())
+                            .unwrap()
+                            .join(key);
+                        db.insert(old_key.to_string(), prev_value.clone());
+                        let new_key = diff_prefix
+                            .push(&"new".to_string().to_db_key())
+                            .unwrap()
+                            .join(key);
+                        db.insert(new_key.to_string(), value.to_owned());
+                        current_len - prev_value.len() as i64
+                    }
+                    None => {
+                        let new_key = diff_prefix
+                            .push(&"new".to_string().to_db_key())
+                            .unwrap()
+                            .join(key);
+                        db.insert(new_key.to_string(), value.to_owned());
+                        current_len
+                    }
+                },
+            )
+        }
     }
 
     fn batch_delete_subspace_val(

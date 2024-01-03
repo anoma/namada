@@ -23,7 +23,7 @@ use crate::types::storage::{
 
 /// Write actions to help commit_block determine what parts of the storage to
 /// update
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WriteActions {
     /// All
     All,
