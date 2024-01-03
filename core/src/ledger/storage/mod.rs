@@ -312,6 +312,7 @@ pub trait DB: std::fmt::Debug {
         height: BlockHeight,
         key: &Key,
         value: impl AsRef<[u8]>,
+        action: WriteActions,
     ) -> Result<i64>;
 
     /// Delete the value with the given height and account subspace key from the
@@ -661,10 +662,11 @@ where
 
     /// Write a value to the specified subspace and returns the gas cost and the
     /// size difference
-    pub fn write(
+    pub fn write_with_actions(
         &mut self,
         key: &Key,
         value: impl AsRef<[u8]>,
+        action: WriteActions,
     ) -> Result<(u64, i64)> {
         // Note that this method is the same as `StorageWrite::write_bytes`,
         // but with gas and storage bytes len diff accounting
@@ -677,14 +679,47 @@ where
             self.block.tree.update(key, height)?;
         } else {
             // Update the merkle tree
-            self.block.tree.update(key, value)?;
+            if action == WriteActions::All {
+                self.block.tree.update(key, value)?;
+            }
         }
 
         let len = value.len();
         let gas = (key.len() + len) as u64 * STORAGE_WRITE_GAS_PER_BYTE;
-        let size_diff =
-            self.db.write_subspace_val(self.block.height, key, value)?;
+        let size_diff = self.db.write_subspace_val(
+            self.block.height,
+            key,
+            value,
+            action,
+        )?;
         Ok((gas, size_diff))
+    }
+
+    /// Write with merklization and diffs
+    pub fn write(
+        &mut self,
+        key: &Key,
+        value: impl AsRef<[u8]>,
+    ) -> Result<(u64, i64)> {
+        self.write_with_actions(key, value, WriteActions::All)
+    }
+
+    /// Write with diffs but no merklization
+    pub fn write_without_merkl(
+        &mut self,
+        key: &Key,
+        value: impl AsRef<[u8]>,
+    ) -> Result<(u64, i64)> {
+        self.write_with_actions(key, value, WriteActions::NoMerkl)
+    }
+
+    /// Write without diffs or merklization
+    pub fn write_without_merkldiffs(
+        &mut self,
+        key: &Key,
+        value: impl AsRef<[u8]>,
+    ) -> Result<(u64, i64)> {
+        self.write_with_actions(key, value, WriteActions::NoDiffsOrMerkl)
     }
 
     /// Delete the specified subspace and returns the gas cost and the size

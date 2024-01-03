@@ -484,6 +484,7 @@ impl DB for MockDB {
         height: BlockHeight,
         key: &Key,
         value: impl AsRef<[u8]>,
+        action: WriteActions,
     ) -> Result<i64> {
         // batch_write are directly committed
 
@@ -494,7 +495,7 @@ impl DB for MockDB {
             height,
             key,
             value,
-            WriteActions::All,
+            action,
         )
     }
 

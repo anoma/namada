@@ -1288,27 +1288,33 @@ impl DB for RocksDB {
         height: BlockHeight,
         key: &Key,
         value: impl AsRef<[u8]>,
+        action: WriteActions,
     ) -> Result<i64> {
         let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
         let value = value.as_ref();
-        let size_diff = match self
-            .0
-            .get_cf(subspace_cf, key.to_string())
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(prev_value) => {
-                let size_diff = value.len() as i64 - prev_value.len() as i64;
-                self.write_subspace_diff(
-                    height,
-                    key,
-                    Some(&prev_value),
-                    Some(value),
-                )?;
-                size_diff
-            }
-            None => {
-                self.write_subspace_diff(height, key, None, Some(value))?;
-                value.len() as i64
+        let size_diff = if action == WriteActions::NoDiffsOrMerkl {
+            0
+        } else {
+            match self
+                .0
+                .get_cf(subspace_cf, key.to_string())
+                .map_err(|e| Error::DBError(e.into_string()))?
+            {
+                Some(prev_value) => {
+                    let size_diff =
+                        value.len() as i64 - prev_value.len() as i64;
+                    self.write_subspace_diff(
+                        height,
+                        key,
+                        Some(&prev_value),
+                        Some(value),
+                    )?;
+                    size_diff
+                }
+                None => {
+                    self.write_subspace_diff(height, key, None, Some(value))?;
+                    value.len() as i64
+                }
             }
         };
 
@@ -1803,8 +1809,13 @@ mod test {
         .unwrap();
         db.exec_batch(batch.0).unwrap();
 
-        db.write_subspace_val(last_height, &key, vec![1_u8, 1, 1, 0])
-            .unwrap();
+        db.write_subspace_val(
+            last_height,
+            &key,
+            vec![1_u8, 1, 1, 0],
+            WriteActions::All,
+        )
+        .unwrap();
 
         let mut batch = RocksDB::batch();
         let last_height = BlockHeight(111);
@@ -1818,8 +1829,13 @@ mod test {
         .unwrap();
         db.exec_batch(batch.0).unwrap();
 
-        db.write_subspace_val(last_height, &key, vec![2_u8, 2, 2, 0])
-            .unwrap();
+        db.write_subspace_val(
+            last_height,
+            &key,
+            vec![2_u8, 2, 2, 0],
+            WriteActions::All,
+        )
+        .unwrap();
 
         let prev_value = db
             .read_subspace_val_with_height(
