@@ -1,6 +1,8 @@
 //! Namada shielded token.
 
 pub mod conversion;
-pub mod storage;
+mod storage;
 pub mod storage_key;
 pub mod utils;
+
+pub use storage::*;
