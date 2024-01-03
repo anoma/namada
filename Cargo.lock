@@ -4848,11 +4848,17 @@ name = "namada_vp_prelude"
 version = "0.29.0"
 dependencies = [
  "borsh",
- "borsh-ext",
+ "namada_account",
  "namada_core",
+ "namada_governance",
  "namada_macros",
+ "namada_parameters",
  "namada_proof_of_stake",
+ "namada_storage",
+ "namada_token",
+ "namada_tx",
  "namada_vm_env",
+ "namada_vp_env",
  "sha2 0.9.9",
  "thiserror",
 ]
