@@ -7,7 +7,7 @@ use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
 use namada_core::ibc::apps::transfer::types::packet::PacketData;
 use namada_core::ibc::apps::transfer::types::PrefixedCoin;
 use namada_core::ibc::core::channel::types::timeout::TimeoutHeight;
-use namada_core::ibc::primitives::Msg;
+use namada_core::ibc::primitives::ToProto;
 use namada_core::tendermint::Time as TmTime;
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::hash::Hash;

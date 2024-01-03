@@ -25,7 +25,7 @@ mod tests {
     use itertools::Itertools;
     use namada::account::pks_handle;
     use namada::ibc::context::transfer_mod::testing::DummyTransferModule;
-    use namada::ibc::primitives::Msg;
+    use namada::ibc::primitives::ToProto;
     use namada::ibc::Error as IbcActionError;
     use namada::ledger::ibc::storage as ibc_storage;
     use namada::ledger::native_vp::ibc::{

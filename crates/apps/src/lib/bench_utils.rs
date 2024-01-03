@@ -47,7 +47,7 @@ use namada::ibc::core::host::types::path::{
     ClientConsensusStatePath, ClientStatePath, Path as IbcPath,
 };
 use namada::ibc::primitives::proto::{Any, Protobuf};
-use namada::ibc::primitives::{Msg, Timestamp as IbcTimestamp};
+use namada::ibc::primitives::{Timestamp as IbcTimestamp, ToProto};
 use namada::ibc::storage::port_key;
 use namada::ledger::dry_run_tx;
 use namada::ledger::gas::TxGasMeter;
@@ -325,7 +325,7 @@ impl BenchShell {
         tx
     }
 
-    pub fn generate_ibc_tx(&self, wasm_code_path: &str, msg: impl Msg) -> Tx {
+    pub fn generate_ibc_tx(&self, wasm_code_path: &str, msg: Any) -> Tx {
         // This function avoid serializaing the tx data with Borsh
         let mut tx = Tx::from_type(namada::tx::data::TxType::Decrypted(
             namada::tx::data::DecryptedTx::Decrypted,
@@ -339,7 +339,7 @@ impl BenchShell {
         ));
 
         let mut data = vec![];
-        prost::Message::encode(&msg.to_any(), &mut data).unwrap();
+        prost::Message::encode(&msg, &mut data).unwrap();
         tx.set_data(Data::new(data));
 
         // NOTE: the Ibc VP doesn't actually check the signature
@@ -380,7 +380,7 @@ impl BenchShell {
             timeout_timestamp_on_b: timeout_timestamp,
         };
 
-        self.generate_ibc_tx(TX_IBC_WASM, msg)
+        self.generate_ibc_tx(TX_IBC_WASM, msg.to_any())
     }
 
     pub fn execute_tx(&mut self, tx: &Tx) {

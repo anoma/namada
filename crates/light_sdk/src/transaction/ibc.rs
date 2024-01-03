@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 pub use namada_sdk::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
-use namada_sdk::ibc::primitives::Msg;
+use namada_sdk::ibc::primitives::ToProto;
 use namada_sdk::tx::Tx;
 use namada_sdk::types::hash::Hash;
 use namada_sdk::types::key::common;

@@ -7,7 +7,9 @@ use namada_core::ibc::apps::transfer::context::{
     TokenTransferExecutionContext, TokenTransferValidationContext,
 };
 use namada_core::ibc::apps::transfer::types::error::TokenTransferError;
-use namada_core::ibc::apps::transfer::types::{PrefixedCoin, PrefixedDenom};
+use namada_core::ibc::apps::transfer::types::{
+    Memo, PrefixedCoin, PrefixedDenom,
+};
 use namada_core::ibc::core::channel::types::error::ChannelError;
 use namada_core::ibc::core::handler::types::error::ContextError;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
@@ -80,14 +82,6 @@ where
         Ok(PortId::transfer())
     }
 
-    fn get_escrow_account(
-        &self,
-        _port_id: &PortId,
-        _channel_id: &ChannelId,
-    ) -> Result<Self::AccountId, TokenTransferError> {
-        Ok(Address::Internal(InternalAddress::Ibc))
-    }
-
     fn can_send_coins(&self) -> Result<(), TokenTransferError> {
         Ok(())
     }
@@ -96,13 +90,26 @@ where
         Ok(())
     }
 
-    fn send_coins_validate(
+    fn escrow_coins_validate(
         &self,
-        _from: &Self::AccountId,
-        _to: &Self::AccountId,
+        _from_account: &Self::AccountId,
+        _port_id: &PortId,
+        _channel_id: &ChannelId,
+        _coin: &PrefixedCoin,
+        _memo: &Memo,
+    ) -> Result<(), TokenTransferError> {
+        // validated by Multitoken VP
+        Ok(())
+    }
+
+    fn unescrow_coins_validate(
+        &self,
+        _to_account: &Self::AccountId,
+        _port_id: &PortId,
+        _channel_id: &ChannelId,
         _coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
-        // validated by IBC token VP
+        // validated by Multitoken VP
         Ok(())
     }
 
@@ -111,7 +118,7 @@ where
         _account: &Self::AccountId,
         _coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
-        // validated by IBC token VP
+        // validated by Multitoken VP
         Ok(())
     }
 
@@ -119,8 +126,9 @@ where
         &self,
         _account: &Self::AccountId,
         _coin: &PrefixedCoin,
+        _memo: &Memo,
     ) -> Result<(), TokenTransferError> {
-        // validated by IBC token VP
+        // validated by Multitoken VP
         Ok(())
     }
 
@@ -133,19 +141,40 @@ impl<C> TokenTransferExecutionContext for TokenTransferContext<C>
 where
     C: IbcCommonContext,
 {
-    fn send_coins_execute(
+    fn escrow_coins_execute(
         &mut self,
-        from: &Self::AccountId,
-        to: &Self::AccountId,
+        from_account: &Self::AccountId,
+        _port_id: &PortId,
+        _channel_id: &ChannelId,
+        coin: &PrefixedCoin,
+        _memo: &Memo,
+    ) -> Result<(), TokenTransferError> {
+        // Assumes that the coin denom is prefixed with "port-id/channel-id" or
+        // has no prefix
+        let (ibc_token, amount) = self.get_token_amount(coin)?;
+
+        let escrow = Address::Internal(InternalAddress::Ibc);
+        self.inner
+            .borrow_mut()
+            .transfer_token(from_account, &escrow, &ibc_token, amount)
+            .map_err(|e| ContextError::from(e).into())
+    }
+
+    fn unescrow_coins_execute(
+        &mut self,
+        to_account: &Self::AccountId,
+        _port_id: &PortId,
+        _channel_id: &ChannelId,
         coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
         // Assumes that the coin denom is prefixed with "port-id/channel-id" or
         // has no prefix
         let (ibc_token, amount) = self.get_token_amount(coin)?;
 
+        let escrow = Address::Internal(InternalAddress::Ibc);
         self.inner
             .borrow_mut()
-            .transfer_token(from, to, &ibc_token, amount)
+            .transfer_token(&escrow, to_account, &ibc_token, amount)
             .map_err(|e| ContextError::from(e).into())
     }
 
@@ -167,6 +196,7 @@ where
         &mut self,
         account: &Self::AccountId,
         coin: &PrefixedCoin,
+        _memo: &Memo,
     ) -> Result<(), TokenTransferError> {
         let (ibc_token, amount) = self.get_token_amount(coin)?;
 

@@ -389,7 +389,7 @@ mod tests {
     };
     use crate::ibc::core::router::types::event::ModuleEvent;
     use crate::ibc::primitives::proto::{Any, Protobuf};
-    use crate::ibc::primitives::{Msg, Timestamp};
+    use crate::ibc::primitives::{Timestamp, ToProto};
     use crate::ibc::storage::{
         ack_key, calc_hash, channel_counter_key, channel_key,
         client_connections_key, client_counter_key, client_state_key,

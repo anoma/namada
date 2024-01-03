@@ -356,6 +356,7 @@ pub fn received_ibc_token(
 pub mod testing {
     use std::str::FromStr;
 
+    use ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
     use ibc::apps::transfer::types::packet::PacketData;
     use ibc::apps::transfer::types::{
         Amount, BaseDenom, Memo, PrefixedCoin, PrefixedDenom, TracePath,
@@ -366,8 +367,7 @@ pub mod testing {
     use ibc::core::host::types::identifiers::{ChannelId, PortId};
     use ibc::core::primitives::Signer;
     use ibc::primitives::proto::Any;
-    use ibc::primitives::{Msg, Timestamp};
-    use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
+    use ibc::primitives::{Timestamp, ToProto};
     use proptest::prelude::{Just, Strategy};
     use proptest::{collection, prop_compose};
 
