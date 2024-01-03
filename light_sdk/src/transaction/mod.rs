@@ -1,11 +1,16 @@
+use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use borsh::BorshSerialize;
 use namada_core::proto::{Section, Signature, Signer, Tx};
+use namada_core::types::address::Address;
 use namada_core::types::chain::ChainId;
 use namada_core::types::hash::Hash;
 use namada_core::types::key::common;
+use namada_core::types::storage::Epoch;
 use namada_core::types::time::DateTimeUtc;
+use namada_core::types::token::DenominatedAmount;
+use namada_core::types::transaction::{Fee, GasLimit};
 
 pub mod account;
 pub mod bridge;
@@ -14,7 +19,6 @@ pub mod ibc;
 pub mod pgf;
 pub mod pos;
 pub mod transfer;
-pub mod wrapper;
 
 /// Generic arguments required to construct a transaction
 pub struct GlobalArgs {
@@ -46,6 +50,17 @@ pub(in crate::transaction) fn get_sign_bytes(tx: &Tx) -> Vec<Hash> {
     vec![tx.raw_header_hash()]
 }
 
+pub(in crate::transaction) fn get_wrapper_sign_bytes(tx: &Tx) -> Hash {
+    let targets = tx.sechashes();
+    // Commit to the given targets
+    let partial = Signature {
+        targets,
+        signer: Signer::PubKeys(vec![]),
+        signatures: BTreeMap::new(),
+    };
+    partial.get_raw_hash()
+}
+
 pub(in crate::transaction) fn attach_raw_signatures(
     mut tx: Tx,
     signer: common::PublicKey,
@@ -54,6 +69,41 @@ pub(in crate::transaction) fn attach_raw_signatures(
     tx.protocol_filter();
     tx.add_section(Section::Signature(Signature {
         targets: vec![tx.raw_header_hash()],
+        signer: Signer::PubKeys(vec![signer]),
+        signatures: [(0, signature)].into_iter().collect(),
+    }));
+    tx
+}
+
+pub(in crate::transaction) fn attach_fee(
+    mut tx: Tx,
+    fee: DenominatedAmount,
+    token: Address,
+    fee_payer: common::PublicKey,
+    epoch: Epoch,
+    gas_limit: GasLimit,
+) -> Tx {
+    tx.add_wrapper(
+        Fee {
+            amount_per_gas_unit: fee,
+            token,
+        },
+        fee_payer,
+        epoch,
+        gas_limit,
+        None,
+    );
+    tx
+}
+
+pub(in crate::transaction) fn attach_fee_signature(
+    mut tx: Tx,
+    signer: common::PublicKey,
+    signature: common::Signature,
+) -> Tx {
+    tx.protocol_filter();
+    tx.add_section(Section::Signature(Signature {
+        targets: tx.sechashes(),
         signer: Signer::PubKeys(vec![signer]),
         signatures: [(0, signature)].into_iter().collect(),
     }));
