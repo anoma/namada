@@ -951,6 +951,7 @@ pub mod testing {
             timestamp in arb_date_time_utc(),
             code_hash in arb_hash(),
             data_hash in arb_hash(),
+            memo_hash in arb_hash(),
             tx_type in arb_tx_type(),
         ) -> Header {
             Header {
@@ -959,6 +960,7 @@ pub mod testing {
                 timestamp,
                 data_hash,
                 code_hash,
+                memo_hash,
                 tx_type,
             }
         }
