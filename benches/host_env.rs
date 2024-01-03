@@ -5,6 +5,7 @@ use namada::core::types::account::AccountPublicKeysMap;
 use namada::core::types::address;
 use namada::core::types::token::{Amount, Transfer};
 use namada::ledger::storage::DB;
+use namada::ledger::storage_api::WriteActions;
 use namada::proto::Signature;
 use namada::vm::wasm::TxCache;
 use namada_apps::bench_utils::{
@@ -318,7 +319,12 @@ fn storage_write(c: &mut Criterion) {
                             .wl_storage
                             .storage
                             .db
-                            .write_subspace_val(block_height, &key, value)
+                            .write_subspace_val(
+                                block_height,
+                                &key,
+                                value,
+                                WriteActions::All,
+                            )
                             .unwrap();
                     },
                     criterion::BatchSize::SmallInput,
