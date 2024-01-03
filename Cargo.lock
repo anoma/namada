@@ -4753,6 +4753,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "namada_token"
+version = "0.28.1"
+dependencies = [
+ "namada_core",
+ "namada_shielded_token",
+ "namada_storage",
+ "namada_trans_token",
+]
+
+[[package]]
 name = "namada_trans_token"
 version = "0.29.0"
 dependencies = [

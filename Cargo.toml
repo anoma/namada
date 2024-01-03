@@ -25,6 +25,7 @@ members = [
   "storage",
   "test_utils",
   "tests",
+  "token",
   "trans_token",
   "tx",
   "tx_env",

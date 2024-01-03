@@ -53,6 +53,7 @@ crates += namada_state
 crates += namada_storage
 crates += namada_test_utils
 crates += namada_tests
+crates += namada_token
 crates += namada_trans_token
 crates += namada_tx
 crates += namada_tx_env
