@@ -6,6 +6,7 @@ use std::ops::Deref;
 
 use assert_matches::assert_matches;
 use itertools::Itertools;
+use namada_core::ledger::governance::parameters::GovernanceParameters;
 use namada_core::ledger::storage::testing::TestWlStorage;
 use namada_core::ledger::storage_api::collections::lazy_map::{
     Collectable, NestedSubKey, SubKey,
@@ -110,6 +111,8 @@ struct AbstractPosState {
     epoch: Epoch,
     /// Parameters
     params: PosParams,
+    /// Governance parameters used to construct `params`
+    gov_params: GovernanceParameters,
     /// Genesis validators
     genesis_validators: Vec<GenesisValidator>,
     /// Bonds delta values. The outer key for Epoch is pipeline offset from
@@ -223,6 +226,7 @@ impl StateMachineTest for ConcretePosState {
                 .collect::<Vec<_>>()
         );
         let mut s = TestWlStorage::default();
+        initial_state.gov_params.init_storage(&mut s).unwrap();
         crate::test_utils::test_init_genesis(
             &mut s,
             initial_state.params.owned.clone(),
@@ -1982,11 +1986,13 @@ impl ReferenceStateMachine for AbstractPosState {
         tracing::debug!("\nInitializing abstract state machine");
         arb_params_and_genesis_validators(Some(8), 8..10)
             .prop_map(|(params, genesis_validators)| {
-                let params = params.with_default_gov_params();
+                let gov_params = GovernanceParameters::default();
+                let params = params.with_gov_params(&gov_params);
                 let epoch = Epoch::default();
                 let mut state = Self {
                     epoch,
                     params,
+                    gov_params,
                     genesis_validators: genesis_validators
                         .into_iter()
                         // Sorted by stake to fill in the consensus set first

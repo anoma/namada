@@ -253,6 +253,15 @@ impl OwnedPosParams {
             max_proposal_period: gov.max_proposal_period,
         }
     }
+
+    /// A test helper to add the default gov params to PoS params.
+    #[cfg(any(test, feature = "testing"))]
+    pub fn with_gov_params(self, gov: &GovernanceParameters) -> PosParams {
+        PosParams {
+            owned: self,
+            max_proposal_period: gov.max_proposal_period,
+        }
+    }
 }
 
 impl std::ops::Deref for PosParams {
