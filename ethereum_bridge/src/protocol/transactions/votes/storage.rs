@@ -1,13 +1,10 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
 use eyre::{Result, WrapErr};
 use namada_core::hints;
 use namada_core::ledger::storage::{
     DBIter, PrefixIter, StorageHasher, WlStorage, DB,
 };
-use namada_core::ledger::storage_api::{
-    StorageRead, StorageWrite, WriteActions,
-};
+use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::storage::Key;
 use namada_core::types::voting_power::FractionalVotingPower;
 
@@ -28,32 +25,15 @@ where
 {
     // TODO: figure out what specific write actions are desired for each piece
     // of data here!
-    wl_storage.write_bytes(
-        &keys.body(),
-        &body.serialize_to_vec(),
-        WriteActions::All,
-    )?;
-    wl_storage.write_bytes(
-        &keys.seen(),
-        &tally.seen.serialize_to_vec(),
-        WriteActions::All,
-    )?;
-    wl_storage.write_bytes(
-        &keys.seen_by(),
-        &tally.seen_by.serialize_to_vec(),
-        WriteActions::All,
-    )?;
-    wl_storage.write_bytes(
-        &keys.voting_power(),
-        &tally.voting_power.serialize_to_vec(),
-        WriteActions::All,
-    )?;
+    wl_storage.write(&keys.body(), body)?;
+    wl_storage.write(&keys.seen(), tally.seen)?;
+    wl_storage.write(&keys.seen_by(), tally.seen_by.clone())?;
+    wl_storage.write(&keys.voting_power(), tally.voting_power.clone())?;
     if !already_present {
         // add the current epoch for the inserted event
-        wl_storage.write_bytes(
+        wl_storage.write(
             &keys.voting_started_epoch(),
-            &wl_storage.storage.get_current_epoch().0.serialize_to_vec(),
-            WriteActions::All,
+            wl_storage.storage.get_current_epoch().0,
         )?;
     }
     Ok(())
@@ -158,6 +138,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use assert_matches::assert_matches;
+    use borsh_ext::BorshSerializeExt;
     use namada_core::types::ethereum_events::EthereumEvent;
 
     use super::*;
@@ -259,39 +240,16 @@ mod tests {
             seen_by: BTreeMap::from([(validator, 10.into())]),
             seen: false,
         };
+        wl_storage.write(&keys.body(), &event).unwrap();
+        wl_storage.write(&keys.seen(), tally.seen).unwrap();
+        wl_storage.write(&keys.seen_by(), &tally.seen_by).unwrap();
         wl_storage
-            .write_bytes(
-                &keys.body(),
-                &event.serialize_to_vec(),
-                WriteActions::All,
-            )
+            .write(&keys.voting_power(), &tally.voting_power)
             .unwrap();
         wl_storage
-            .write_bytes(
-                &keys.seen(),
-                &tally.seen.serialize_to_vec(),
-                WriteActions::All,
-            )
-            .unwrap();
-        wl_storage
-            .write_bytes(
-                &keys.seen_by(),
-                &tally.seen_by.serialize_to_vec(),
-                WriteActions::All,
-            )
-            .unwrap();
-        wl_storage
-            .write_bytes(
-                &keys.voting_power(),
-                &tally.voting_power.serialize_to_vec(),
-                WriteActions::All,
-            )
-            .unwrap();
-        wl_storage
-            .write_bytes(
+            .write(
                 &keys.voting_started_epoch(),
-                &wl_storage.storage.get_block_height().0.serialize_to_vec(),
-                WriteActions::All,
+                wl_storage.storage.get_block_height().0,
             )
             .unwrap();
 
