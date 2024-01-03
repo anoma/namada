@@ -85,7 +85,7 @@ pub(in crate::transaction) fn attach_fee(
 ) -> Tx {
     tx.add_wrapper(
         Fee {
-            amount_per_gas_unit: fee,
+            amount_per_gas_unit: fee.into(),
             token,
         },
         fee_payer,
