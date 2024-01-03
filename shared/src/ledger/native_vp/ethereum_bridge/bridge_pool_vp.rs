@@ -645,6 +645,7 @@ mod test_bridge_pool_vp {
     use borsh_ext::BorshSerializeExt;
     use namada_core::ledger::eth_bridge::storage::bridge_pool::get_signed_root_key;
     use namada_core::ledger::gas::TxGasMeter;
+    use namada_core::ledger::storage_api::WriteActions;
     use namada_core::types::address;
     use namada_ethereum_bridge::storage::parameters::{
         Contracts, EthereumBridgeParams, UpgradeableContract,
@@ -1622,7 +1623,11 @@ mod test_bridge_pool_vp {
         let eb_account_key =
             balance_key(&nam(), &Address::Internal(InternalAddress::EthBridge));
         wl_storage
-            .write_bytes(&eb_account_key, Amount::default().serialize_to_vec())
+            .write_bytes(
+                &eb_account_key,
+                Amount::default().serialize_to_vec(),
+                WriteActions::All,
+            )
             .expect("Test failed");
         // initialize the gas payers account
         let gas_payer_balance_key =
@@ -1631,6 +1636,7 @@ mod test_bridge_pool_vp {
             .write_bytes(
                 &gas_payer_balance_key,
                 Amount::from(BERTHA_WEALTH).serialize_to_vec(),
+                WriteActions::All,
             )
             .expect("Test failed");
         wl_storage.write_log.commit_tx();

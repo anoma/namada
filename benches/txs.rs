@@ -22,7 +22,7 @@ use namada::ibc::core::host::types::identifiers::{
     ClientId, ClientType, ConnectionId, PortId,
 };
 use namada::ledger::eth_bridge::read_native_erc20_address;
-use namada::ledger::storage_api::{StorageRead, StorageWrite};
+use namada::ledger::storage_api::{StorageRead, StorageWrite, WriteActions};
 use namada::proof_of_stake::storage::read_pos_params;
 use namada::proof_of_stake::types::SlashType;
 use namada::proof_of_stake::{self, KeySeg};
@@ -648,6 +648,7 @@ fn become_validator(c: &mut Criterion) {
             || {
                 let mut shell = BenchShell::default();
                 // Initialize the account to be able to use it
+                // TODO: what write actions are desired here??
                 shell
                     .wl_storage
                     .write_bytes(
@@ -655,6 +656,7 @@ fn become_validator(c: &mut Criterion) {
                             &address,
                         ),
                         vec![],
+                        WriteActions::All,
                     )
                     .unwrap();
                 shell

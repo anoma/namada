@@ -218,7 +218,7 @@ fn match_value(
     expected: Option<&StorageModification>,
 ) -> VpResult<()> {
     match (actual, expected) {
-        (Some(v), Some(StorageModification::Write { value })) => {
+        (Some(v), Some(StorageModification::Write { value, action: _ })) => {
             if v == *value {
                 Ok(())
             } else {
