@@ -1119,7 +1119,7 @@ where
     ) -> Result<i64> {
         let value = value.as_ref();
         if is_pending_transfer_key(key) {
-            // The tree of the bright pool stores the current height for the
+            // The tree of the bridge pool stores the current height for the
             // pending transfer
             let height = self.block.height.serialize_to_vec();
             self.block.tree.update(key, height)?;
