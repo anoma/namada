@@ -13,6 +13,7 @@ use crate::ledger::gas::{
 use crate::ledger::replay_protection::{all_key, last_key};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::Storage;
+use crate::ledger::storage_api::WriteActions;
 use crate::types::address::{Address, EstablishedAddressGen, InternalAddress};
 use crate::types::hash::Hash;
 use crate::types::ibc::IbcEvent;
@@ -51,6 +52,8 @@ pub enum StorageModification {
     Write {
         /// Value bytes
         value: Vec<u8>,
+        /// Action to determine what data to write
+        action: WriteActions,
     },
     /// Delete an existing key-value
     Delete,
@@ -156,9 +159,10 @@ impl WriteLog {
             }) {
             Some(v) => {
                 let gas = match v {
-                    StorageModification::Write { ref value } => {
-                        key.len() + value.len()
-                    }
+                    StorageModification::Write {
+                        ref value,
+                        action: _,
+                    } => key.len() + value.len(),
                     StorageModification::Delete => key.len(),
                     StorageModification::InitAccount { ref vp_code_hash } => {
                         key.len() + vp_code_hash.len()
@@ -183,9 +187,10 @@ impl WriteLog {
         match self.block_write_log.get(key) {
             Some(v) => {
                 let gas = match v {
-                    StorageModification::Write { ref value } => {
-                        key.len() + value.len()
-                    }
+                    StorageModification::Write {
+                        ref value,
+                        action: _,
+                    } => key.len() + value.len(),
                     StorageModification::Delete => key.len(),
                     StorageModification::InitAccount { ref vp_code_hash } => {
                         key.len() + vp_code_hash.len()
@@ -209,17 +214,22 @@ impl WriteLog {
         &mut self,
         key: &storage::Key,
         value: Vec<u8>,
+        // action: WriteActions,
     ) -> Result<(u64, i64)> {
         let len = value.len();
         let gas = key.len() + len;
-        let size_diff = match self
-            .tx_write_log
-            .insert(key.clone(), StorageModification::Write { value })
-        {
+        let size_diff = match self.tx_write_log.insert(
+            key.clone(),
+            StorageModification::Write {
+                value,
+                action: WriteActions::All,
+            },
+        ) {
             Some(prev) => match prev {
-                StorageModification::Write { ref value } => {
-                    len as i64 - value.len() as i64
-                }
+                StorageModification::Write {
+                    ref value,
+                    action: _,
+                } => len as i64 - value.len() as i64,
                 StorageModification::Delete => len as i64,
                 StorageModification::InitAccount { .. } => {
                     return Err(Error::UpdateVpOfNewAccount);
@@ -244,10 +254,11 @@ impl WriteLog {
         &mut self,
         key: &storage::Key,
         value: Vec<u8>,
+        action: WriteActions,
     ) -> Result<()> {
         if let Some(prev) = self
             .block_write_log
-            .insert(key.clone(), StorageModification::Write { value })
+            .insert(key.clone(), StorageModification::Write { value, action })
         {
             match prev {
                 StorageModification::InitAccount { .. } => {
@@ -280,9 +291,10 @@ impl WriteLog {
             .insert(key.clone(), StorageModification::Temp { value })
         {
             Some(prev) => match prev {
-                StorageModification::Write { ref value } => {
-                    len as i64 - value.len() as i64
-                }
+                StorageModification::Write {
+                    ref value,
+                    action: _,
+                } => len as i64 - value.len() as i64,
                 StorageModification::Delete => {
                     return Err(Error::WriteTempAfterDelete);
                 }
@@ -315,7 +327,10 @@ impl WriteLog {
             .insert(key.clone(), StorageModification::Delete)
         {
             Some(prev) => match prev {
-                StorageModification::Write { ref value } => value.len() as i64,
+                StorageModification::Write {
+                    ref value,
+                    action: _,
+                } => value.len() as i64,
                 StorageModification::Delete => 0,
                 StorageModification::InitAccount { .. } => {
                     return Err(Error::DeleteVp);
@@ -509,7 +524,7 @@ impl WriteLog {
     {
         for (key, entry) in self.block_write_log.iter() {
             match entry {
-                StorageModification::Write { value } => {
+                StorageModification::Write { value, action: _ } => {
                     storage
                         .batch_write_subspace_val(batch, key, value.clone())
                         .map_err(Error::StorageError)?;
@@ -750,6 +765,8 @@ mod tests {
 
         // insert a value
         let inserted = "inserted".as_bytes().to_vec();
+        // TODO: may want to not use dummy WriteActions val here, but it is just
+        // testing
         let (gas, diff) = write_log.write(&key, inserted.clone()).unwrap();
         assert_eq!(
             gas,
@@ -760,7 +777,7 @@ mod tests {
         // read the value
         let (value, gas) = write_log.read(&key);
         match value.expect("no read value") {
-            StorageModification::Write { value } => {
+            StorageModification::Write { value, action: _ } => {
                 assert_eq!(*value, inserted)
             }
             _ => panic!("unexpected read result"),
@@ -772,6 +789,8 @@ mod tests {
 
         // update the value
         let updated = "updated".as_bytes().to_vec();
+        // TODO: may want to not use dummy WriteActions val here, but it is just
+        // testing
         let (gas, diff) = write_log.write(&key, updated.clone()).unwrap();
         assert_eq!(
             gas,
@@ -802,6 +821,8 @@ mod tests {
 
         // insert again
         let reinserted = "reinserted".as_bytes().to_vec();
+        // TODO: may want to not use dummy WriteActions val here, but it is just
+        // testing
         let (gas, diff) = write_log.write(&key, reinserted.clone()).unwrap();
         assert_eq!(
             gas,
@@ -857,6 +878,8 @@ mod tests {
         // update should fail
         let updated_vp = "updated".as_bytes().to_vec();
         let updated_vp_hash = Hash::sha256(updated_vp);
+        // TODO: may want to not use dummy WriteActions val here, but it is just
+        // testing
         let result = write_log
             .write(&vp_key, updated_vp_hash.to_vec())
             .unwrap_err();
@@ -1138,14 +1161,31 @@ pub mod testing {
         collection::btree_set(arb_address(), 0..10)
     }
 
+    fn arb_write_actions() -> impl Strategy<Value = WriteActions> {
+        prop_oneof![
+            Just(WriteActions::All),
+            Just(WriteActions::NoMerkl),
+            Just(WriteActions::NoDiffsOrMerkl),
+        ]
+    }
+
+    fn arb_write_data() -> impl Strategy<Value = (Vec<u8>, WriteActions)> {
+        let arb_bytes = any::<Vec<u8>>();
+        arb_bytes.prop_flat_map(move |bytes| {
+            let arb_action = arb_write_actions();
+            (Just(bytes), arb_action)
+        })
+    }
+
     /// Generate an arbitrary [`StorageModification`].
     pub fn arb_storage_modification(
         can_init_account: bool,
     ) -> impl Strategy<Value = StorageModification> {
         if can_init_account {
             prop_oneof![
-                any::<Vec<u8>>()
-                    .prop_map(|value| StorageModification::Write { value }),
+                arb_write_data().prop_map(|(value, action)| {
+                    StorageModification::Write { value, action }
+                }),
                 Just(StorageModification::Delete),
                 any::<[u8; HASH_LENGTH]>().prop_map(|hash| {
                     StorageModification::InitAccount {
@@ -1158,8 +1198,9 @@ pub mod testing {
             .boxed()
         } else {
             prop_oneof![
-                any::<Vec<u8>>()
-                    .prop_map(|value| StorageModification::Write { value }),
+                arb_write_data().prop_map(|(value, action)| {
+                    StorageModification::Write { value, action }
+                }),
                 Just(StorageModification::Delete),
                 any::<Vec<u8>>()
                     .prop_map(|value| StorageModification::Temp { value }),

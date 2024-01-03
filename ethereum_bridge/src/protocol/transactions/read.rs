@@ -57,7 +57,7 @@ mod tests {
     use assert_matches::assert_matches;
     use borsh_ext::BorshSerializeExt;
     use namada_core::ledger::storage::testing::TestWlStorage;
-    use namada_core::ledger::storage_api::StorageWrite;
+    use namada_core::ledger::storage_api::{StorageWrite, WriteActions};
     use namada_core::types::storage;
     use namada_core::types::token::Amount;
 
@@ -81,7 +81,7 @@ mod tests {
         let amount = Amount::from(1_000_000);
         let mut fake_storage = TestWlStorage::default();
         fake_storage
-            .write_bytes(&key, amount.serialize_to_vec())
+            .write_bytes(&key, amount.serialize_to_vec(), WriteActions::All)
             .unwrap();
 
         let amt = read::amount_or_default(&fake_storage, &key).unwrap();
@@ -93,7 +93,9 @@ mod tests {
         let key = storage::Key::parse("some arbitrary key").unwrap();
         let amount = "not an Amount type";
         let mut fake_storage = TestWlStorage::default();
-        fake_storage.write_bytes(&key, amount.as_bytes()).unwrap();
+        fake_storage
+            .write_bytes(&key, amount.as_bytes(), WriteActions::All)
+            .unwrap();
 
         assert_matches!(read::amount_or_default(&fake_storage, &key), Err(_));
     }

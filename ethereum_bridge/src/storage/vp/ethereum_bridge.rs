@@ -1,6 +1,6 @@
 use borsh_ext::BorshSerializeExt;
 use namada_core::ledger::storage::{self as ledger_storage, StorageHasher};
-use namada_core::ledger::storage_api::StorageWrite;
+use namada_core::ledger::storage_api::{StorageWrite, WriteActions};
 use namada_core::types::token::{balance_key, Amount};
 
 /// Initialize the storage owned by the Ethereum Bridge VP.
@@ -16,8 +16,13 @@ where
         &wl_storage.storage.native_token,
         &namada_core::ledger::eth_bridge::ADDRESS,
     );
+    // TODO: what write actions are desired here?
     wl_storage
-        .write_bytes(&escrow_key, Amount::default().serialize_to_vec())
+        .write_bytes(
+            &escrow_key,
+            Amount::default().serialize_to_vec(),
+            WriteActions::All,
+        )
         .expect(
             "Initializing the escrow balance of the Ethereum Bridge VP \
              shouldn't fail.",
