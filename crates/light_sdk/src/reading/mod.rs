@@ -1,12 +1,14 @@
 use std::str::FromStr;
 
-use namada_sdk::error::Error;
+use namada_sdk::error::{EncodingError, Error};
+use namada_sdk::io::StdIo;
 use namada_sdk::queries::RPC;
 use namada_sdk::rpc;
 use namada_sdk::state::LastBlock;
 use namada_sdk::types::address::Address;
 use namada_sdk::types::storage::BlockResults;
 use namada_sdk::types::token;
+use namada_sdk::types::token::DenominatedAmount;
 use tendermint_config::net::Address as TendermintAddress;
 use tendermint_rpc::HttpClient;
 use tokio::runtime::Runtime;
@@ -50,4 +52,26 @@ pub fn query_results(
     .map_err(|e| Error::Other(e.to_string()))?;
     let rt = Runtime::new().unwrap();
     rt.block_on(rpc::query_results(&client))
+}
+
+/// Get a properly denominated amount of a token
+pub fn denominate_amount(
+    tendermint_addr: &str,
+    amount: u64,
+    token: &str,
+) -> Result<DenominatedAmount, Error> {
+    let client = HttpClient::new(
+        TendermintAddress::from_str(tendermint_addr)
+            .map_err(|e| Error::Other(e.to_string()))?,
+    )
+    .map_err(|e| Error::Other(e.to_string()))?;
+    let token = Address::decode(token)
+        .map_err(|e| Error::Encode(EncodingError::Decoding(e.to_string())))?;
+    let rt = Runtime::new().unwrap();
+    Ok(rt.block_on(rpc::denominate_amount(
+        &client,
+        &StdIo {},
+        &token,
+        token::Amount::from(amount),
+    )))
 }

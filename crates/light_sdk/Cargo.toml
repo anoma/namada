@@ -20,4 +20,5 @@ borsh-ext.workspace = true
 prost.workspace = true
 tendermint-config.workspace = true
 tendermint-rpc = { workspace = true, features = ["http-client"] }
-tokio = { workspace = true, features = ["rt"] }
+tokio = {workspace = true, features = ["rt"]}
+serde_json = "1.0.108"
