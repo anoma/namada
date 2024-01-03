@@ -61,12 +61,8 @@ fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
     // add transfer into the pool
     let pending_key = bridge_pool::get_pending_key(&transfer);
     // TODO: what kind of write actions are desired here??
-    ctx.write_bytes(
-        &pending_key,
-        transfer.serialize_to_vec(),
-        WriteActions::All,
-    )
-    .wrap_err("Could not write transfer to bridge pool")?;
+    ctx.write(&pending_key, transfer)
+        .wrap_err("Could not write transfer to bridge pool")?;
     Ok(())
 }
 

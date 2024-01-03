@@ -2,7 +2,7 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::Result;
 use namada_core::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
-use namada_core::ledger::storage_api::{StorageWrite, WriteActions};
+use namada_core::ledger::storage_api::StorageWrite;
 use namada_core::types::storage;
 use namada_core::types::token::Amount;
 
@@ -19,7 +19,7 @@ where
     let mut amount = super::read::amount_or_default(wl_storage, key)?;
     update(&mut amount);
     // TODO: what kind of write actions are desired here?
-    wl_storage.write_bytes(key, borsh::to_vec(&amount)?, WriteActions::All)?;
+    wl_storage.write(key, amount)?;
     Ok(amount)
 }
 
@@ -37,19 +37,16 @@ where
     let mut value = super::read::value(wl_storage, key)?;
     update(&mut value);
     // TODO: what kind of write actions are desired here?
-    wl_storage.write_bytes(key, borsh::to_vec(&value)?, WriteActions::All)?;
+    wl_storage.write(key, &value)?;
     Ok(value)
 }
 
 #[cfg(test)]
 mod tests {
     use borsh::BorshDeserialize;
-    use borsh_ext::BorshSerializeExt;
     use eyre::{eyre, Result};
     use namada_core::ledger::storage::testing::TestWlStorage;
-    use namada_core::ledger::storage_api::{
-        StorageRead, StorageWrite, WriteActions,
-    };
+    use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
     use namada_core::types::storage;
 
     #[test]
@@ -59,9 +56,8 @@ mod tests {
             .expect("could not set up test");
         let value = 21i32;
         let mut wl_storage = TestWlStorage::default();
-        let serialized = value.serialize_to_vec();
         wl_storage
-            .write_bytes(&key, serialized, WriteActions::All)
+            .write(&key, value)
             .expect("could not set up test");
 
         super::value(&mut wl_storage, &key, |v: &mut i32| *v *= 2)?;

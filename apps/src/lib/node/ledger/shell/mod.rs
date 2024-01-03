@@ -1552,7 +1552,7 @@ mod test_utils {
     use namada::ledger::parameters::{EpochDuration, Parameters};
     use namada::ledger::storage::mockdb::MockDB;
     use namada::ledger::storage::{LastBlock, Sha256Hasher};
-    use namada::ledger::storage_api::{StorageWrite, WriteActions};
+    use namada::ledger::storage_api::StorageWrite;
     use namada::proof_of_stake::parameters::PosParams;
     use namada::proof_of_stake::storage::validator_consensus_key_handle;
     use namada::proto::{Code, Data};
@@ -2034,11 +2034,7 @@ mod test_utils {
         use namada::eth_bridge::storage::eth_bridge_queries::EthBridgeStatus;
         shell
             .wl_storage
-            .write_bytes(
-                &active_key(),
-                EthBridgeStatus::Disabled.serialize_to_vec(),
-                WriteActions::All,
-            )
+            .write(&active_key(), EthBridgeStatus::Disabled)
             .expect("Test failed");
     }
 

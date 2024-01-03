@@ -219,10 +219,9 @@ where
         } else {
             // TODO: what write actions are desired here?
             self.wl_storage
-                .write_bytes(
+                .write(
                     &namada::eth_bridge::storage::active_key(),
-                    EthBridgeStatus::Disabled.serialize_to_vec(),
-                    WriteActions::All,
+                    EthBridgeStatus::Disabled,
                 )
                 .unwrap();
         }
