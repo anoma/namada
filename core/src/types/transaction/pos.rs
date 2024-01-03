@@ -44,6 +44,9 @@ pub struct BecomeValidator {
     pub website: Option<String>,
     /// The validator's discord handle
     pub discord_handle: Option<String>,
+    /// URL that points to a picture (e.g. PNG),
+    /// identifying the validator
+    pub avatar: Option<String>,
 }
 
 /// A bond is a validator's self-bond or a delegation from non-validator to a
@@ -183,6 +186,8 @@ pub struct MetaDataChange {
     pub website: Option<String>,
     /// Validator's discord handle
     pub discord_handle: Option<String>,
+    /// Validator's avatar url
+    pub avatar: Option<String>,
     /// Validator's commission rate
     pub commission_rate: Option<Dec>,
 }
@@ -267,6 +272,7 @@ pub mod tests {
             description in option::of("[a-zA-Z0-9_]*"),
             website in option::of("[a-zA-Z0-9_]*"),
             discord_handle in option::of("[a-zA-Z0-9_]*"),
+            avatar in option::of("[a-zA-Z0-9_]*"),
             commission_rate in option::of(arb_dec()),
         ) -> MetaDataChange {
             MetaDataChange {
@@ -275,6 +281,7 @@ pub mod tests {
                 description,
                 website,
                 discord_handle,
+                avatar,
                 commission_rate,
             }
         }
@@ -307,6 +314,7 @@ pub mod tests {
             description in option::of("[a-zA-Z0-9_]*"),
             website in option::of("[a-zA-Z0-9_]*"),
             discord_handle in option::of("[a-zA-Z0-9_]*"),
+            avatar in option::of("[a-zA-Z0-9_]*"),
         ) -> BecomeValidator {
             BecomeValidator {
                 address,
@@ -320,6 +328,7 @@ pub mod tests {
                 description,
                 website,
                 discord_handle,
+                avatar,
             }
         }
     }

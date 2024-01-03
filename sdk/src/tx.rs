@@ -694,6 +694,7 @@ pub async fn build_validator_metadata_change(
         description,
         website,
         discord_handle,
+        avatar,
         commission_rate,
         tx_code_path,
     }: &args::MetaDataChange,
@@ -797,6 +798,7 @@ pub async fn build_validator_metadata_change(
         website: website.clone(),
         description: description.clone(),
         discord_handle: discord_handle.clone(),
+        avatar: avatar.clone(),
         commission_rate: *commission_rate,
     };
 

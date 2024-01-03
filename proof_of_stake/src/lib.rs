@@ -68,7 +68,7 @@ use crate::storage::{
     validator_slashes_handle, validator_state_handle,
     validator_total_redelegated_bonded_handle,
     validator_total_redelegated_unbonded_handle, write_last_reward_claim_epoch,
-    write_pos_params, write_validator_address_raw_hash,
+    write_pos_params, write_validator_address_raw_hash, write_validator_avatar,
     write_validator_description, write_validator_discord_handle,
     write_validator_email, write_validator_max_commission_rate_change,
     write_validator_metadata, write_validator_website,
@@ -2558,6 +2558,7 @@ pub fn change_validator_metadata<S>(
     description: Option<String>,
     website: Option<String>,
     discord_handle: Option<String>,
+    avatar: Option<String>,
     commission_rate: Option<Dec>,
     current_epoch: Epoch,
 ) -> storage_api::Result<()>
@@ -2575,6 +2576,9 @@ where
     }
     if let Some(discord) = discord_handle {
         write_validator_discord_handle(storage, validator, &discord)?;
+    }
+    if let Some(avatar) = avatar {
+        write_validator_avatar(storage, validator, &avatar)?;
     }
     if let Some(commission_rate) = commission_rate {
         change_validator_commission_rate(

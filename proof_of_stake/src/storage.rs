@@ -753,6 +753,35 @@ where
     }
 }
 
+/// Read PoS validator's avatar.
+pub fn read_validator_avatar<S>(
+    storage: &S,
+    validator: &Address,
+) -> storage_api::Result<Option<String>>
+where
+    S: StorageRead,
+{
+    storage.read(&storage_key::validator_avatar_key(validator))
+}
+
+/// Write PoS validator's avatar. If the provided arg is an empty
+/// string, remove the data.
+pub fn write_validator_avatar<S>(
+    storage: &mut S,
+    validator: &Address,
+    avatar: &String,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = storage_key::validator_avatar_key(validator);
+    if avatar.is_empty() {
+        storage.delete(&key)
+    } else {
+        storage.write(&key, avatar)
+    }
+}
+
 /// Write validator's metadata.
 pub fn write_validator_metadata<S>(
     storage: &mut S,
@@ -773,6 +802,9 @@ where
     }
     if let Some(discord) = metadata.discord_handle.as_ref() {
         write_validator_discord_handle(storage, validator, discord)?;
+    }
+    if let Some(avatar) = metadata.avatar.as_ref() {
+        write_validator_avatar(storage, validator, avatar)?;
     }
     Ok(())
 }

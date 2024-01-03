@@ -346,6 +346,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
         description: Option<String>,
         website: Option<String>,
         discord_handle: Option<String>,
+        avatar: Option<String>,
         commission_rate: Option<Dec>,
     ) -> args::MetaDataChange {
         args::MetaDataChange {
@@ -354,6 +355,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             description,
             website,
             discord_handle,
+            avatar,
             commission_rate,
             tx_code_path: PathBuf::from(TX_CHANGE_METADATA_WASM),
             tx: self.tx_builder(),
@@ -384,6 +386,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             description: None,
             website: None,
             discord_handle: None,
+            avatar: None,
         }
     }
 
@@ -415,6 +418,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             description: None,
             website: None,
             discord_handle: None,
+            avatar: None,
         }
     }
 

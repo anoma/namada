@@ -1992,6 +1992,7 @@ pub async fn query_and_print_metadata(
             description,
             website,
             discord_handle,
+            avatar,
         }) => {
             display_line!(
                 context.io(),
@@ -2017,6 +2018,11 @@ pub async fn query_and_print_metadata(
                 );
             } else {
                 display_line!(context.io(), "No discord handle");
+            }
+            if let Some(avatar) = avatar {
+                display_line!(context.io(), "Avatar: {}", avatar);
+            } else {
+                display_line!(context.io(), "No avatar");
             }
         }
         None => display_line!(
