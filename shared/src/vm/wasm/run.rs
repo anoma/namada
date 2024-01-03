@@ -524,11 +524,11 @@ where
                     // Gas accounting even if the compiled module is in cache
                     let key = Key::wasm_code_len(code_hash);
                     let tx_len = match write_log.read(&key).0 {
-                        Some(StorageModification::Write { value }) => {
-                            u64::try_from_slice(value).map_err(|e| {
-                                Error::ConversionError(e.to_string())
-                            })
-                        }
+                        Some(StorageModification::Write {
+                            value,
+                            action: _,
+                        }) => u64::try_from_slice(value)
+                            .map_err(|e| Error::ConversionError(e.to_string())),
                         _ => match storage
                             .read(&key)
                             .map_err(|e| {
@@ -555,9 +555,10 @@ where
                 None => {
                     let key = Key::wasm_code(code_hash);
                     let code = match write_log.read(&key).0 {
-                        Some(StorageModification::Write { value }) => {
-                            value.clone()
-                        }
+                        Some(StorageModification::Write {
+                            value,
+                            action: _,
+                        }) => value.clone(),
                         _ => match storage
                             .read(&key)
                             .map_err(|e| {

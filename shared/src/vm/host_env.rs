@@ -606,7 +606,10 @@ where
     let (log_val, gas) = write_log.read(&key);
     tx_charge_gas(env, gas)?;
     Ok(match log_val {
-        Some(write_log::StorageModification::Write { ref value }) => {
+        Some(write_log::StorageModification::Write {
+            ref value,
+            action: _,
+        }) => {
             let len: i64 = value
                 .len()
                 .try_into()
@@ -751,7 +754,10 @@ where
         );
         tx_charge_gas(env, iter_gas + log_gas)?;
         match log_val {
-            Some(write_log::StorageModification::Write { ref value }) => {
+            Some(write_log::StorageModification::Write {
+                ref value,
+                action: _,
+            }) => {
                 let key_val = borsh::to_vec(&KeyVal {
                     key,
                     val: value.clone(),
@@ -2292,7 +2298,7 @@ where
 }
 
 // Temp. workaround for <https://github.com/anoma/namada/issues/1831>
-use namada_core::ledger::storage_api::StorageRead;
+use namada_core::ledger::storage_api::{StorageRead, WriteActions};
 
 use crate::types::storage::BlockHash;
 impl<'a, DB, H, CA> StorageRead for TxCtx<'a, DB, H, CA>
@@ -2312,9 +2318,10 @@ where
         let (log_val, gas) = write_log.read(key);
         ibc_tx_charge_gas(self, gas)?;
         Ok(match log_val {
-            Some(write_log::StorageModification::Write { ref value }) => {
-                Some(value.clone())
-            }
+            Some(write_log::StorageModification::Write {
+                ref value,
+                action: _,
+            }) => Some(value.clone()),
             Some(&write_log::StorageModification::Delete) => None,
             Some(write_log::StorageModification::InitAccount {
                 ref vp_code_hash,
@@ -2378,7 +2385,10 @@ where
                 write_log.read(&Key::parse(key.clone()).into_storage_result()?);
             ibc_tx_charge_gas(self, iter_gas + log_gas)?;
             match log_val {
-                Some(write_log::StorageModification::Write { ref value }) => {
+                Some(write_log::StorageModification::Write {
+                    ref value,
+                    action: _,
+                }) => {
                     return Ok(Some((key, value.clone())));
                 }
                 Some(&write_log::StorageModification::Delete) => {
@@ -2475,6 +2485,7 @@ where
         &mut self,
         key: &Key,
         data: impl AsRef<[u8]>,
+        _action: WriteActions,
     ) -> Result<(), storage_api::Error> {
         let write_log = unsafe { self.write_log.get() };
         let (gas, _size_diff) = write_log

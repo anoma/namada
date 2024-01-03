@@ -570,7 +570,7 @@ where
         let tree_key = Key::from(MASP.to_db_key())
             .push(&MASP_NOTE_COMMITMENT_TREE_KEY.to_owned())
             .expect("Cannot obtain a storage key");
-        if let Some(StorageModification::Write { value }) =
+        if let Some(StorageModification::Write { value, action: _ }) =
             self.wl_storage.write_log.read(&tree_key).0
         {
             let updated_tree = CommitmentTree::<Node>::try_from_slice(value)

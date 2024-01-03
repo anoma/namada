@@ -5,6 +5,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use borsh_ext::BorshSerializeExt;
 use namada_core::ledger::ibc::{IbcCommonContext, IbcStorageContext};
 use namada_core::ledger::masp_utils;
+use namada_core::ledger::storage_api::WriteActions;
 
 use crate::ledger::ibc::storage::is_ibc_key;
 use crate::ledger::native_vp::CtxPreStorageRead;
@@ -78,9 +79,10 @@ where
 
     fn read_bytes(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         match self.store.get(key) {
-            Some(StorageModification::Write { ref value }) => {
-                Ok(Some(value.clone()))
-            }
+            Some(StorageModification::Write {
+                ref value,
+                action: _,
+            }) => Ok(Some(value.clone())),
             Some(StorageModification::Delete) => Ok(None),
             Some(StorageModification::Temp { .. }) => {
                 unreachable!("Temp shouldn't be inserted")
@@ -152,11 +154,13 @@ where
         &mut self,
         key: &Key,
         value: impl AsRef<[u8]>,
+        action: WriteActions,
     ) -> Result<()> {
         self.store.insert(
             key.clone(),
             StorageModification::Write {
                 value: value.as_ref().to_vec(),
+                action,
             },
         );
         Ok(())
@@ -379,6 +383,7 @@ where
         &mut self,
         _key: &Key,
         _val: impl AsRef<[u8]>,
+        _action: WriteActions,
     ) -> Result<()> {
         unimplemented!("Validation doesn't write any data")
     }

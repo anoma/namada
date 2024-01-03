@@ -10,7 +10,7 @@ use namada::ledger::parameters::Parameters;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
 use namada::ledger::storage_api::token::{credit_tokens, write_denom};
-use namada::ledger::storage_api::StorageWrite;
+use namada::ledger::storage_api::{StorageWrite, WriteActions};
 use namada::ledger::{ibc, pos};
 use namada::proof_of_stake::BecomeValidator;
 use namada::types::address::{Address, MASP};
@@ -229,10 +229,12 @@ where
             config.init_storage(&mut self.wl_storage);
             self.update_eth_oracle(&Default::default());
         } else {
+            // TODO: what write actions are desired here?
             self.wl_storage
                 .write_bytes(
                     &namada::eth_bridge::storage::active_key(),
                     EthBridgeStatus::Disabled.serialize_to_vec(),
+                    WriteActions::All,
                 )
                 .unwrap();
         }
@@ -407,14 +409,20 @@ where
                 let hash_key = Key::wasm_hash(name);
                 let code_name_key = Key::wasm_code_name(name.to_owned());
 
-                self.wl_storage.write_bytes(&code_key, code).unwrap();
+                // TODO: what write actions are desired for the data below??
+
+                self.wl_storage
+                    .write_bytes(&code_key, code, WriteActions::All)
+                    .unwrap();
                 self.wl_storage.write(&code_len_key, code_len).unwrap();
-                self.wl_storage.write_bytes(&hash_key, code_hash).unwrap();
+                self.wl_storage
+                    .write_bytes(&hash_key, code_hash, WriteActions::All)
+                    .unwrap();
                 if &Some(code_hash) == implicit_vp_code_hash {
                     is_implicit_vp_stored = true;
                 }
                 self.wl_storage
-                    .write_bytes(&code_name_key, code_hash)
+                    .write_bytes(&code_name_key, code_hash, WriteActions::All)
                     .unwrap();
             } else {
                 tracing::warn!("The wasm {name} isn't whitelisted.");
@@ -539,8 +547,13 @@ where
                 );
                 let vp_code = self.lookup_vp(vp, genesis, vp_cache)?;
                 let code_hash = CodeHash::sha256(&vp_code);
+                // TODO: what write actions are desired here??
                 self.wl_storage
-                    .write_bytes(&Key::validity_predicate(address), code_hash)
+                    .write_bytes(
+                        &Key::validity_predicate(address),
+                        code_hash,
+                        WriteActions::All,
+                    )
                     .unwrap();
 
                 let public_keys: Vec<_> =
@@ -596,8 +609,13 @@ where
 
                 let vp_code = self.lookup_vp(vp, genesis, vp_cache)?;
                 let code_hash = CodeHash::sha256(&vp_code);
+                // TODO: what write actions are desired here??
                 self.wl_storage
-                    .write_bytes(&Key::validity_predicate(address), code_hash)
+                    .write_bytes(
+                        &Key::validity_predicate(address),
+                        code_hash,
+                        WriteActions::All,
+                    )
                     .expect("Unable to write user VP");
 
                 self.wl_storage

@@ -169,7 +169,7 @@ mod tests {
     use namada_core::ledger::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
     use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
     use namada_core::ledger::gas::TxGasMeter;
-    use namada_core::ledger::storage_api::StorageWrite;
+    use namada_core::ledger::storage_api::{StorageWrite, WriteActions};
     use namada_ethereum_bridge::storage::parameters::{
         Contracts, EthereumBridgeParams, UpgradeableContract,
     };
@@ -221,6 +221,7 @@ mod tests {
                 &balance_key,
                 Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE)
                     .serialize_to_vec(),
+                WriteActions::All,
             )
             .expect("Test failed");
 
