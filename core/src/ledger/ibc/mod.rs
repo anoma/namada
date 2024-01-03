@@ -291,6 +291,7 @@ where
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum IbcMessage {
     Envelope(MsgEnvelope),
     Transfer(MsgTransfer),
