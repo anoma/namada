@@ -3,14 +3,14 @@
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::Transaction;
+use namada_core::types::address::MASP;
+use namada_core::types::hash::Hash;
+use namada_core::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
+use namada_core::types::token::Transfer;
+use namada_storage::{Error, Result, StorageRead, StorageWrite};
 
-use super::storage_api::{StorageRead, StorageWrite};
-use crate::ledger::storage_api::{Error, Result};
-use crate::types::address::MASP;
-use crate::types::hash::Hash;
-use crate::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
-use crate::types::token::{
-    Transfer, HEAD_TX_KEY, MASP_NOTE_COMMITMENT_TREE_KEY, MASP_NULLIFIERS_KEY,
+use crate::storage_key::{
+    HEAD_TX_KEY, MASP_NOTE_COMMITMENT_TREE_KEY, MASP_NULLIFIERS_KEY,
     PIN_KEY_PREFIX, TX_KEY_PREFIX,
 };
 

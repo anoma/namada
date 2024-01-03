@@ -4651,7 +4651,16 @@ dependencies = [
 
 [[package]]
 name = "namada_shielded_token"
-version = "0.1.0"
+version = "0.28.1"
+dependencies = [
+ "masp_primitives",
+ "namada_core",
+ "namada_parameters",
+ "namada_state",
+ "namada_storage",
+ "namada_trans_token",
+ "tracing",
+]
 
 [[package]]
 name = "namada_state"

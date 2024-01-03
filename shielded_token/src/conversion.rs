@@ -1,31 +1,30 @@
 //! MASP rewards conversions
 
-use std::collections::BTreeMap;
-
-use borsh::{BorshDeserialize, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
-use masp_primitives::convert::AllowedConversion;
-use masp_primitives::merkle_tree::FrozenCommitmentTree;
-use masp_primitives::sapling::Node;
+use namada_core::borsh::BorshSerializeExt;
+use namada_core::ledger::inflation::{RewardsController, ValsToUpdate};
+use namada_core::types::address::{Address, MASP};
+use namada_core::types::dec::Dec;
+use namada_core::types::storage::Epoch;
+use namada_core::types::uint::Uint;
+use namada_parameters as parameters;
+use namada_state::{DBIter, StorageHasher, WlStorage, DB};
+use namada_storage::{StorageRead, StorageWrite};
+use namada_trans_token::storage_key::{balance_key, minted_balance_key};
+use namada_trans_token::{read_denom, Amount, DenominatedAmount, MaspDenom};
 
-use crate::ledger::inflation::{RewardsController, ValsToUpdate};
-use crate::ledger::parameters;
-use crate::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
-use crate::ledger::storage_api::token::read_denom;
-use crate::ledger::storage_api::{StorageRead, StorageWrite};
-use crate::types::address::{Address, MASP};
-use crate::types::dec::Dec;
-use crate::types::storage::Epoch;
-use crate::types::token::{self, DenominatedAmount, MaspDenom};
-use crate::types::uint::Uint;
+use crate::storage_key::{
+    masp_kd_gain_key, masp_kp_gain_key, masp_last_inflation_key,
+    masp_last_locked_ratio_key, masp_locked_ratio_target_key,
+    masp_max_reward_rate_key,
+};
 
 /// Compute the MASP rewards by applying the PD-controller to the genesis
 /// parameters and the last inflation and last locked rewards ratio values.
 pub fn calculate_masp_rewards<D, H>(
     wl_storage: &mut WlStorage<D, H>,
     addr: &Address,
-) -> crate::ledger::storage_api::Result<(u128, u128)>
+) -> namada_storage::Result<(u128, u128)>
 where
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
@@ -45,18 +44,18 @@ where
     // Query the storage for information
 
     //// information about the amount of tokens on the chain
-    let total_tokens: token::Amount = wl_storage
-        .read(&token::minted_balance_key(addr))?
+    let total_tokens: Amount = wl_storage
+        .read(&minted_balance_key(addr))?
         .expect("the total supply key should be here");
 
     //// information about the amount of native tokens on the chain
-    let total_native_tokens: token::Amount = wl_storage
-        .read(&token::minted_balance_key(&wl_storage.storage.native_token))?
+    let total_native_tokens: Amount = wl_storage
+        .read(&minted_balance_key(&wl_storage.storage.native_token))?
         .expect("the total supply key should be here");
 
     // total staked amount in the Shielded pool
-    let total_token_in_masp: token::Amount = wl_storage
-        .read(&token::balance_key(addr, &masp_addr))?
+    let total_token_in_masp: Amount = wl_storage
+        .read(&balance_key(addr, &masp_addr))?
         .unwrap_or_default();
 
     let epochs_per_year: u64 = wl_storage
@@ -64,29 +63,29 @@ where
         .expect("epochs per year should properly decode");
 
     //// Values from the last epoch
-    let last_inflation: token::Amount = wl_storage
-        .read(&token::masp_last_inflation_key(addr))?
+    let last_inflation: Amount = wl_storage
+        .read(&masp_last_inflation_key(addr))?
         .expect("failure to read last inflation");
 
     let last_locked_ratio: Dec = wl_storage
-        .read(&token::masp_last_locked_ratio_key(addr))?
+        .read(&masp_last_locked_ratio_key(addr))?
         .expect("failure to read last inflation");
 
     //// Parameters for each token
     let max_reward_rate: Dec = wl_storage
-        .read(&token::masp_max_reward_rate_key(addr))?
+        .read(&masp_max_reward_rate_key(addr))?
         .expect("max reward should properly decode");
 
     let kp_gain_nom: Dec = wl_storage
-        .read(&token::masp_kp_gain_key(addr))?
+        .read(&masp_kp_gain_key(addr))?
         .expect("kp_gain_nom reward should properly decode");
 
     let kd_gain_nom: Dec = wl_storage
-        .read(&token::masp_kd_gain_key(addr))?
+        .read(&masp_kd_gain_key(addr))?
         .expect("kd_gain_nom reward should properly decode");
 
     let locked_target_ratio: Dec = wl_storage
-        .read(&token::masp_locked_ratio_target_key(addr))?
+        .read(&masp_locked_ratio_target_key(addr))?
         .expect("locked ratio target should properly decode");
 
     // Creating the PD controller for handing out tokens
@@ -131,7 +130,7 @@ where
                 0u128
             })
     };
-    let inflation_amount = token::Amount::from_uint(
+    let inflation_amount = Amount::from_uint(
         (total_token_in_masp.raw_amount() / precision)
             * Uint::from(noterized_inflation),
         0,
@@ -167,10 +166,9 @@ where
     // but we should make sure the return value's ratio matches
     // this new inflation rate in 'update_allowed_conversions',
     // otherwise we will have an inaccurate view of inflation
-    wl_storage
-        .write(&token::masp_last_inflation_key(addr), inflation_amount)?;
+    wl_storage.write(&masp_last_inflation_key(addr), inflation_amount)?;
 
-    wl_storage.write(&token::masp_last_locked_ratio_key(addr), locked_ratio)?;
+    wl_storage.write(&masp_last_locked_ratio_key(addr), locked_ratio)?;
 
     Ok((noterized_inflation, precision))
 }
@@ -180,7 +178,7 @@ where
 /// Update the MASP's allowed conversions
 pub fn update_allowed_conversions<D, H>(
     wl_storage: &mut WlStorage<D, H>,
-) -> crate::ledger::storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
@@ -190,13 +188,12 @@ where
     use masp_primitives::bls12_381;
     use masp_primitives::ff::PrimeField;
     use masp_primitives::transaction::components::I128Sum as MaspAmount;
+    use namada_core::types::storage::{Key, KeySeg};
+    use namada_core::types::{address, MASP_CONVERT_ANCHOR_KEY};
     use rayon::iter::{
         IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
     };
     use rayon::prelude::ParallelSlice;
-
-    use crate::types::storage::{Key, KeySeg};
-    use crate::types::token::MASP_CONVERT_ANCHOR_KEY;
 
     // The derived conversions will be placed in MASP address space
     let masp_addr = MASP;
@@ -221,7 +218,7 @@ where
         }
     });
     // The total transparent value of the rewards being distributed
-    let mut total_reward = token::Amount::native_whole(0);
+    let mut total_reward = Amount::native_whole(0);
 
     // Construct MASP asset type for rewards. Always deflate and timestamp
     // reward tokens with the zeroth epoch to minimize the number of convert
@@ -247,10 +244,10 @@ where
             ref_inflation = reward.1;
         }
         // Dispense a transparent reward in parallel to the shielded rewards
-        let addr_bal: token::Amount = wl_storage
-            .read(&token::balance_key(addr, &masp_addr))?
+        let addr_bal: Amount = wl_storage
+            .read(&balance_key(addr, &masp_addr))?
             .unwrap_or_default();
-        for denom in token::MaspDenom::iter() {
+        for denom in MaspDenom::iter() {
             // Provide an allowed conversion from previous timestamp. The
             // negative sign allows each instance of the old asset to be
             // cancelled out/replaced with the new asset
@@ -407,9 +404,8 @@ where
 
     // Update the MASP's transparent reward token balance to ensure that it
     // is sufficiently backed to redeem rewards
-    let reward_key = token::balance_key(&native_token, &masp_addr);
-    let addr_bal: token::Amount =
-        wl_storage.read(&reward_key)?.unwrap_or_default();
+    let reward_key = balance_key(&native_token, &masp_addr);
+    let addr_bal: Amount = wl_storage.read(&reward_key)?.unwrap_or_default();
     let new_bal = addr_bal + total_reward;
     wl_storage.write(&reward_key, new_bal)?;
     // Try to distribute Merkle tree construction as evenly as possible
@@ -435,7 +431,7 @@ where
         .expect("Cannot obtain a storage key");
     wl_storage.write(
         &anchor_key,
-        crate::types::hash::Hash(
+        namada_core::types::hash::Hash(
             bls12_381::Scalar::from(
                 wl_storage.storage.conversion_state.tree.root(),
             )
@@ -446,7 +442,7 @@ where
     // Add purely decoding entries to the assets map. These will be
     // overwritten before the creation of the next commitment tree
     for addr in masp_reward_keys {
-        for denom in token::MaspDenom::iter() {
+        for denom in MaspDenom::iter() {
             // Add the decoding entry for the new asset type. An uncommitted
             // node position is used since this is not a conversion.
             let new_asset = encode_asset_type(
@@ -485,18 +481,18 @@ mod tests {
     use std::collections::HashMap;
     use std::str::FromStr;
 
+    use namada_core::types::address;
+    use namada_core::types::dec::testing::arb_non_negative_dec;
+    use namada_core::types::testing::arb_amount;
+    use namada_core::types::time::DurationSecs;
+    use namada_parameters::{EpochDuration, Parameters};
+    use namada_storage::write_denom;
     use proptest::prelude::*;
     use proptest::test_runner::Config;
     use test_log::test;
 
     use super::*;
-    use crate::ledger::parameters::{EpochDuration, Parameters};
     use crate::ledger::storage::testing::TestWlStorage;
-    use crate::ledger::storage_api::token::write_denom;
-    use crate::types::address;
-    use crate::types::dec::testing::arb_non_negative_dec;
-    use crate::types::time::DurationSecs;
-    use crate::types::token::testing::arb_amount;
 
     proptest! {
         #![proptest_config(Config {
@@ -513,7 +509,7 @@ mod tests {
     }
 
     fn test_updated_allowed_conversions_aux(
-        initial_balance: token::Amount,
+        initial_balance: Amount,
         masp_locked_ratio: Dec,
     ) {
         const ROUNDS: usize = 10;
@@ -546,7 +542,7 @@ mod tests {
             params.init_storage(&mut s).unwrap();
 
             // Tokens
-            let token_params = token::Parameters {
+            let token_params = Parameters {
                 max_reward_rate: Dec::from_str("0.1").unwrap(),
                 kp_gain_nom: Dec::from_str("0.1").unwrap(),
                 kd_gain_nom: Dec::from_str("0.1").unwrap(),
@@ -560,15 +556,12 @@ mod tests {
 
                 // Write a minted token balance
                 let total_token_balance = initial_balance;
-                s.write(
-                    &token::minted_balance_key(&token_addr),
-                    total_token_balance,
-                )
-                .unwrap();
+                s.write(&minted_balance_key(&token_addr), total_token_balance)
+                    .unwrap();
 
                 // Put the locked ratio into MASP
                 s.write(
-                    &token::balance_key(&token_addr, &address::MASP),
+                    &balance_key(&token_addr, &address::MASP),
                     masp_locked_ratio * total_token_balance,
                 )
                 .unwrap();
@@ -589,7 +582,7 @@ mod tests {
         }
     }
 
-    pub fn tokens() -> HashMap<Address, (&'static str, token::Denomination)> {
+    pub fn tokens() -> HashMap<Address, (&'static str, Denomination)> {
         vec![
             (address::nam(), ("nam", 6.into())),
             (address::btc(), ("btc", 8.into())),
