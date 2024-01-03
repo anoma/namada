@@ -19,27 +19,17 @@ default = ["tendermint-rpc", "download-params"]
 
 multicore = ["masp_proofs/multicore"]
 
-namada-sdk = [
-  "tendermint-rpc",
-  "masp_primitives/transparent-inputs"
-]
+namada-sdk = ["tendermint-rpc", "masp_primitives/transparent-inputs"]
 
 std = ["fd-lock"]
 
 # tendermint-rpc support
-tendermint-rpc = [
-  "async-client",
-  "dep:tendermint-rpc",
-]
+tendermint-rpc = ["async-client", "dep:tendermint-rpc"]
 
-wasm-runtime = [
-  "namada_core/wasm-runtime",
-]
+wasm-runtime = ["namada_core/wasm-runtime"]
 
 # Enable queries support for an async client
-async-client = [
-  "async-trait",
-]
+async-client = ["async-trait"]
 
 async-send = []
 
@@ -56,7 +46,20 @@ testing = [
 download-params = ["masp_proofs/download-params"]
 
 [dependencies]
-async-trait = {version = "0.1.51", optional = true}
+namada_account = { path = "../account" }
+namada_core = { path = "../core" }
+namada_ethereum_bridge = { path = "../ethereum_bridge", default-features = false }
+namada_governance = { path = "../governance" }
+namada_ibc = { path = "../ibc" }
+namada_parameters = { path = "../parameters" }
+namada_proof_of_stake = { path = "../proof_of_stake", default-features = false }
+namada_state = { path = "../state" }
+namada_storage = { path = "../storage" }
+namada_token = { path = "../token" }
+namada_tx = { path = "../tx" }
+namada_vote_ext = { path = "../vote_ext" }
+
+async-trait = { version = "0.1.51", optional = true }
 bimap.workspace = true
 borsh.workspace = true
 borsh-ext.workspace = true
@@ -68,18 +71,15 @@ ethers.workspace = true
 fd-lock = { workspace = true, optional = true }
 futures.workspace = true
 itertools.workspace = true
-lazy_static.workspace= true
+lazy_static.workspace = true
 masp_primitives.workspace = true
 masp_proofs.workspace = true
-namada_core = {path = "../core", default-features = false, features = ["rand"]}
-namada_ethereum_bridge = {path = "../ethereum_bridge", default-features = false}
-namada_proof_of_stake = {path = "../proof_of_stake", default-features = false}
 num256.workspace = true
 orion.workspace = true
 owo-colors = "3.5.0"
 parse_duration = "2.1.1"
 paste.workspace = true
-proptest = {workspace = true, optional = true}
+proptest = { workspace = true, optional = true }
 prost.workspace = true
 rand.workspace = true
 rand_core.workspace = true
@@ -88,7 +88,7 @@ serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 slip10_ed25519.workspace = true
-tendermint-rpc = {workspace = true, optional = true}
+tendermint-rpc = { workspace = true, optional = true }
 thiserror.workspace = true
 tiny-bip39.workspace = true
 tiny-hderive.workspace = true
@@ -97,18 +97,25 @@ tracing.workspace = true
 zeroize.workspace = true
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
-tokio = {workspace = true, features = ["full"]}
+tokio = { workspace = true, features = ["full"] }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
-tokio = {workspace = true, default-features = false, features = ["sync"]}
+tokio = { workspace = true, default-features = false, features = ["sync"] }
 wasmtimer = "0.2.0"
 
 [dev-dependencies]
 assert_matches.workspace = true
 base58.workspace = true
-namada_core = {path = "../core", default-features = false, features = ["rand", "testing"]}
-namada_ethereum_bridge = {path = "../ethereum_bridge", default-features = false, features = ["testing"]}
-namada_proof_of_stake = {path = "../proof_of_stake", default-features = false, features = ["testing"]}
-namada_test_utils = {path = "../test_utils"}
+namada_core = { path = "../core", default-features = false, features = [
+  "rand",
+  "testing",
+] }
+namada_ethereum_bridge = { path = "../ethereum_bridge", default-features = false, features = [
+  "testing",
+] }
+namada_proof_of_stake = { path = "../proof_of_stake", default-features = false, features = [
+  "testing",
+] }
+namada_test_utils = { path = "../test_utils" }
 proptest.workspace = true
 tempfile.workspace = true

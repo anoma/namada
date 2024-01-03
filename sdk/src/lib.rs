@@ -1,6 +1,8 @@
 extern crate alloc;
 
-pub use namada_core::{ibc, proto, tendermint, tendermint_proto};
+pub use namada_core::{ibc, tendermint, tendermint_proto};
+pub use namada_tx::proto;
+use namada_tx::Tx;
 #[cfg(feature = "tendermint-rpc")]
 pub use tendermint_rpc;
 pub use {
@@ -42,12 +44,11 @@ use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::key::*;
 use namada_core::types::masp::{TransferSource, TransferTarget};
 use namada_core::types::token;
-use namada_core::types::transaction::GasLimit;
+use namada_tx::data::wrapper::GasLimit;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use crate::io::Io;
 use crate::masp::{ShieldedContext, ShieldedUtils};
-use crate::proto::Tx;
 use crate::rpc::{
     denominate_amount, format_denominated_amount, query_native_token,
 };

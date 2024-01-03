@@ -24,14 +24,6 @@ use namada_core::ibc::core::channel::types::timeout::TimeoutHeight;
 use namada_core::ibc::core::client::types::Height as IbcHeight;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::ibc::primitives::{Msg, Timestamp as IbcTimestamp};
-use namada_core::ledger::governance::cli::onchain::{
-    DefaultProposal, OnChainProposal, PgfFundingProposal, PgfStewardProposal,
-    ProposalVote,
-};
-use namada_core::ledger::governance::storage::proposal::ProposalType;
-use namada_core::ledger::governance::storage::vote::StorageProposalVote;
-use namada_core::ledger::ibc::storage::channel_key;
-use namada_core::ledger::pgf::cli::steward::Commission;
 use namada_core::types::address::{Address, InternalAddress, MASP};
 use namada_core::types::dec::Dec;
 use namada_core::types::hash::Hash;
@@ -41,15 +33,24 @@ use namada_core::types::masp::{TransferSource, TransferTarget};
 use namada_core::types::storage::Epoch;
 use namada_core::types::time::DateTimeUtc;
 use namada_core::types::token::MaspDenom;
-use namada_core::types::transaction::account::{InitAccount, UpdateAccount};
-use namada_core::types::transaction::governance::{
-    InitProposalData, VoteProposalData,
-};
-use namada_core::types::transaction::pgf::UpdateStewardCommission;
-use namada_core::types::transaction::{pos, ResultCode, TxResult};
 use namada_core::types::{storage, token};
+use namada_governance::cli::onchain::{
+    DefaultProposal, OnChainProposal, PgfFundingProposal, PgfStewardProposal,
+    ProposalVote,
+};
+use namada_governance::pgf::cli::steward::Commission;
+use namada_governance::storage::proposal::{
+    InitProposalData, ProposalType, VoteProposalData,
+};
+use namada_governance::storage::vote::StorageProposalVote;
+use namada_ibc::storage::channel_key;
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
+use namada_token::storage_key::balance_key;
+use namada_tx::data::account::{InitAccount, UpdateAccount};
+use namada_tx::data::pgf::UpdateStewardCommission;
+use namada_tx::data::{pos, ResultCode, TxResult};
+use namada_tx::{MaspBuilder, Tx};
 
 use crate::args::{self, InputAmount};
 use crate::control_flow::time;
@@ -57,7 +58,6 @@ use crate::error::{EncodingError, Error, QueryError, Result, TxError};
 use crate::io::Io;
 use crate::masp::TransferErr::Build;
 use crate::masp::{make_asset_type, ShieldedContext, ShieldedTransfer};
-use crate::proto::{MaspBuilder, Tx};
 use crate::queries::Client;
 use crate::rpc::{
     self, query_wasm_code_hash, validate_amount, InnerTxResult,
@@ -1716,7 +1716,7 @@ pub async fn build_bond(
     // Check bond's source (source for delegation or validator for self-bonds)
     // balance
     let bond_source = source.as_ref().unwrap_or(&validator);
-    let balance_key = token::balance_key(native_token, bond_source);
+    let balance_key = balance_key(native_token, bond_source);
 
     // TODO Should we state the same error message for the native token?
     let post_balance = check_balance_too_low_err(
@@ -2015,7 +2015,7 @@ pub async fn build_ibc_transfer(
     }
 
     // Check source balance
-    let balance_key = token::balance_key(&args.token, &source);
+    let balance_key = balance_key(&args.token, &source);
 
     let post_balance = check_balance_too_low_err(
         &args.token,
@@ -2307,7 +2307,7 @@ pub async fn build_transfer<N: Namada>(
     // Check that the target address exists on chain
     target_exists_or_err(target.clone(), args.tx.force, context).await?;
     // Check source balance
-    let balance_key = token::balance_key(&args.token, &source);
+    let balance_key = balance_key(&args.token, &source);
 
     // validate the amount given
     let validated_amount =
@@ -2657,7 +2657,7 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
     let prefixed_denom = ibc_denom
         .parse()
         .map_err(|_| Error::Other(format!("Invalid IBC denom: {ibc_denom}")))?;
-    let token = namada_core::ledger::ibc::received_ibc_token(
+    let token = namada_ibc::received_ibc_token(
         &prefixed_denom,
         &src_port_id,
         &src_channel_id,

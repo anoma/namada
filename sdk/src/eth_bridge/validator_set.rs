@@ -14,10 +14,10 @@ use namada_core::hints;
 use namada_core::types::eth_abi::EncodeCell;
 use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::storage::Epoch;
-use namada_core::types::vote_extensions::validator_set_update::{
+use namada_ethereum_bridge::storage::proof::EthereumProof;
+use namada_vote_ext::validator_set_update::{
     ValidatorSetArgs, VotingPowersMap,
 };
-use namada_ethereum_bridge::storage::proof::EthereumProof;
 
 use super::{block_on_eth_sync, eth_sync_or, eth_sync_or_exit, BlockOnEthSync};
 use crate::control_flow::install_shutdown_signal;

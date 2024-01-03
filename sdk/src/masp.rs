@@ -57,10 +57,10 @@ use namada_core::types::masp::{
 use namada_core::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
 use namada_core::types::time::{DateTimeUtc, DurationSecs};
 use namada_core::types::token;
-use namada_core::types::token::{
-    Change, MaspDenom, Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX,
-};
-use namada_core::types::transaction::WrapperTx;
+use namada_token::storage_key::{HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX};
+use namada_token::{Change, MaspDenom, Transfer};
+use namada_tx::data::WrapperTx;
+use namada_tx::Tx;
 use rand_core::{CryptoRng, OsRng, RngCore};
 use ripemd::Digest as RipemdDigest;
 use sha2::Digest;
@@ -70,7 +70,6 @@ use thiserror::Error;
 use crate::error::EncodingError;
 use crate::error::{Error, PinnedBalanceError, QueryError};
 use crate::io::Io;
-use crate::proto::Tx;
 use crate::queries::Client;
 use crate::rpc::{query_conversion, query_storage_value};
 use crate::tendermint_rpc::query::Query;
@@ -1604,7 +1603,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     expiration.0.signed_duration_since(current_time.0);
 
                 let max_expected_time_per_block_key =
-                    namada_core::ledger::parameters::storage::get_max_expected_time_per_block_key();
+                    namada_parameters::storage::get_max_expected_time_per_block_key();
                 let max_block_time =
                     crate::rpc::query_storage_value::<_, DurationSecs>(
                         context.client(),

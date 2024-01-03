@@ -7,19 +7,18 @@ use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
+use namada_account::{Account, AccountPublicKeysMap};
 use namada_core::hints;
-use namada_core::ledger::storage::traits::StorageHasher;
-use namada_core::ledger::storage::{DBIter, LastBlock, DB};
-use namada_core::ledger::storage_api::{self, ResultExt, StorageRead};
-use namada_core::types::account::{Account, AccountPublicKeysMap};
 use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
 use namada_core::types::storage::{
     self, BlockHeight, BlockResults, Epoch, KeySeg, PrefixValue,
 };
 use namada_core::types::token::MaspDenom;
+use namada_state::{DBIter, LastBlock, StorageHasher, DB};
+use namada_storage::{self, ResultExt, StorageRead};
 #[cfg(any(test, feature = "async-client"))]
-use namada_core::types::transaction::TxResult;
+use namada_tx::data::TxResult;
 
 use self::eth_bridge::{EthBridge, ETH_BRIDGE};
 use crate::events::log::dumb_queries;
@@ -115,7 +114,7 @@ router! {SHELL,
 fn dry_run_tx<D, H, V, T>(
     _ctx: RequestCtx<'_, D, H, V, T>,
     _request: &RequestQuery,
-) -> storage_api::Result<EncodedResponseQuery>
+) -> namada_storage::Result<EncodedResponseQuery>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -126,7 +125,7 @@ where
 /// Query to read block results from storage
 pub fn read_results<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
-) -> storage_api::Result<Vec<BlockResults>>
+) -> namada_storage::Result<Vec<BlockResults>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -138,19 +137,19 @@ where
     ];
     for (key, value, _gas) in iter {
         let key = u64::parse(key.clone()).map_err(|_| {
-            storage_api::Error::new(std::io::Error::new(
+            namada_storage::Error::new(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 format!("expected integer for block height {}", key),
             ))
         })?;
         let value = BlockResults::try_from_slice(&value).map_err(|_| {
-            storage_api::Error::new(std::io::Error::new(
+            namada_storage::Error::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "expected BlockResults bytes",
             ))
         })?;
         let idx: usize = key.try_into().map_err(|_| {
-            storage_api::Error::new(std::io::Error::new(
+            namada_storage::Error::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "expected block height to fit into usize",
             ))
@@ -163,7 +162,7 @@ where
 /// Query to read the conversion state
 fn read_conversions<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
-) -> storage_api::Result<BTreeMap<AssetType, ConversionWithoutPath>>
+) -> namada_storage::Result<BTreeMap<AssetType, ConversionWithoutPath>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -184,7 +183,7 @@ where
 fn read_conversion<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     asset_type: AssetType,
-) -> storage_api::Result<Conversion>
+) -> namada_storage::Result<Conversion>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -207,7 +206,7 @@ where
             ctx.wl_storage.storage.conversion_state.tree.path(*pos),
         ))
     } else {
-        Err(storage_api::Error::new(std::io::Error::new(
+        Err(namada_storage::Error::new(std::io::Error::new(
             std::io::ErrorKind::NotFound,
             format!("No conversion found for asset type: {}", asset_type),
         )))
@@ -217,7 +216,7 @@ where
 /// Query to read the tokens that earn masp rewards.
 fn masp_reward_tokens<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
-) -> storage_api::Result<BTreeMap<String, Address>>
+) -> namada_storage::Result<BTreeMap<String, Address>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -227,7 +226,7 @@ where
 
 fn epoch<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
-) -> storage_api::Result<Epoch>
+) -> namada_storage::Result<Epoch>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -238,7 +237,7 @@ where
 
 fn native_token<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
-) -> storage_api::Result<Address>
+) -> namada_storage::Result<Address>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -250,7 +249,7 @@ where
 fn epoch_at_height<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     height: BlockHeight,
-) -> storage_api::Result<Option<Epoch>>
+) -> namada_storage::Result<Option<Epoch>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -260,7 +259,7 @@ where
 
 fn last_block<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
-) -> storage_api::Result<Option<LastBlock>>
+) -> namada_storage::Result<Option<LastBlock>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -276,7 +275,7 @@ fn storage_value<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     request: &RequestQuery,
     storage_key: storage::Key,
-) -> storage_api::Result<EncodedResponseQuery>
+) -> namada_storage::Result<EncodedResponseQuery>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -295,7 +294,7 @@ where
 
     if let Some(past_height_limit) = ctx.storage_read_past_height_limit {
         if queried_height + past_height_limit < last_committed_height {
-            return Err(storage_api::Error::new(std::io::Error::new(
+            return Err(namada_storage::Error::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 format!(
                     "Cannot query more than {past_height_limit} blocks in the \
@@ -353,15 +352,15 @@ fn storage_prefix<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     request: &RequestQuery,
     storage_key: storage::Key,
-) -> storage_api::Result<EncodedResponseQuery>
+) -> namada_storage::Result<EncodedResponseQuery>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
     require_latest_height(&ctx, request)?;
 
-    let iter = storage_api::iter_prefix_bytes(ctx.wl_storage, &storage_key)?;
-    let data: storage_api::Result<Vec<PrefixValue>> = iter
+    let iter = namada_storage::iter_prefix_bytes(ctx.wl_storage, &storage_key)?;
+    let data: namada_storage::Result<Vec<PrefixValue>> = iter
         .map(|iter_result| {
             let (key, value) = iter_result?;
             Ok(PrefixValue { key, value })
@@ -408,7 +407,7 @@ where
 fn storage_has_key<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     storage_key: storage::Key,
-) -> storage_api::Result<bool>
+) -> namada_storage::Result<bool>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -420,7 +419,7 @@ where
 fn accepted<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     tx_hash: Hash,
-) -> storage_api::Result<Option<Event>>
+) -> namada_storage::Result<Option<Event>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -437,7 +436,7 @@ where
 fn applied<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     tx_hash: Hash,
-) -> storage_api::Result<Option<Event>>
+) -> namada_storage::Result<Option<Event>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -455,7 +454,7 @@ fn ibc_client_update<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     client_id: ClientId,
     consensus_height: BlockHeight,
-) -> storage_api::Result<Option<Event>>
+) -> namada_storage::Result<Option<Event>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -480,7 +479,7 @@ fn ibc_packet<D, H, V, T>(
     destination_port: PortId,
     destination_channel: ChannelId,
     sequence: Sequence,
-) -> storage_api::Result<Option<Event>>
+) -> namada_storage::Result<Option<Event>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -504,18 +503,16 @@ where
 fn account<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     owner: Address,
-) -> storage_api::Result<Option<Account>>
+) -> namada_storage::Result<Option<Account>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let account_exists = storage_api::account::exists(ctx.wl_storage, &owner)?;
+    let account_exists = namada_account::exists(ctx.wl_storage, &owner)?;
 
     if account_exists {
-        let public_keys =
-            storage_api::account::public_keys(ctx.wl_storage, &owner)?;
-        let threshold =
-            storage_api::account::threshold(ctx.wl_storage, &owner)?;
+        let public_keys = namada_account::public_keys(ctx.wl_storage, &owner)?;
+        let threshold = namada_account::threshold(ctx.wl_storage, &owner)?;
 
         Ok(Some(Account {
             public_keys_map: AccountPublicKeysMap::from_iter(public_keys),
@@ -530,13 +527,12 @@ where
 fn revealed<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     owner: Address,
-) -> storage_api::Result<bool>
+) -> namada_storage::Result<bool>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let public_keys =
-        storage_api::account::public_keys(ctx.wl_storage, &owner)?;
+    let public_keys = namada_account::public_keys(ctx.wl_storage, &owner)?;
 
     Ok(!public_keys.is_empty())
 }
@@ -544,6 +540,7 @@ where
 #[cfg(test)]
 mod test {
     use namada_core::types::{address, token};
+    use namada_token::storage_key::balance_key;
 
     use crate::queries::RPC;
 
@@ -554,7 +551,7 @@ mod test {
 
         let token_addr = address::testing::established_address_1();
         let owner = address::testing::established_address_2();
-        let key = token::balance_key(&token_addr, &owner);
+        let key = balance_key(&token_addr, &owner);
         let path = RPC.shell().storage_value_path(&key);
         assert_eq!(format!("/shell/value/{}", key), path);
 

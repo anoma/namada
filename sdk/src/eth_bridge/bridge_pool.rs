@@ -9,17 +9,19 @@ use borsh_ext::BorshSerializeExt;
 use ethbridge_bridge_contract::Bridge;
 use ethers::providers::Middleware;
 use futures::future::FutureExt;
-use namada_core::ledger::eth_bridge::storage::bridge_pool::get_pending_key;
-use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::eth_abi::Encode;
 use namada_core::types::eth_bridge_pool::{
-    GasFee, PendingTransfer, TransferToEthereum, TransferToEthereumKind,
+    erc20_token_address, GasFee, PendingTransfer, TransferToEthereum,
+    TransferToEthereumKind,
 };
 use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::keccak::KeccakHash;
-use namada_core::types::token::{balance_key, Amount};
 use namada_core::types::voting_power::FractionalVotingPower;
+use namada_ethereum_bridge::storage::bridge_pool::get_pending_key;
+use namada_token::storage_key::balance_key;
+use namada_token::Amount;
+use namada_tx::Tx;
 use owo_colors::OwoColorize;
 use serde::Serialize;
 
@@ -32,7 +34,6 @@ use crate::error::{
 use crate::eth_bridge::ethers::abi::AbiDecode;
 use crate::internal_macros::echo_error;
 use crate::io::Io;
-use crate::proto::Tx;
 use crate::queries::{
     Client, GenBridgePoolProofReq, GenBridgePoolProofRsp, TransferToErcArgs,
     TransferToEthereumStatus, RPC,
@@ -124,7 +125,7 @@ async fn validate_bridge_pool_tx(
     fee_payer: Option<Address>,
     fee_token: Address,
 ) -> Result<PendingTransfer, Error> {
-    let token_addr = wrapped_erc20s::token(&asset);
+    let token_addr = erc20_token_address(&asset);
     let validate_token_amount =
         validate_amount(context, amount, &token_addr, force).map(|result| {
             result.map_err(|e| {
@@ -207,7 +208,7 @@ async fn validate_bridge_pool_tx(
                 EthereumBridgeError::InvalidFeeToken(transfer.gas_fee.token),
             ));
         }
-        fee_token if fee_token == &wrapped_erc20s::token(&wnam_addr) => {
+        fee_token if fee_token == &erc20_token_address(&wnam_addr) => {
             return Err(Error::EthereumBridge(
                 EthereumBridgeError::InvalidFeeToken(transfer.gas_fee.token),
             ));
@@ -733,7 +734,7 @@ mod recommendations {
     use namada_core::types::ethereum_events::Uint as EthUint;
     use namada_core::types::storage::BlockHeight;
     use namada_core::types::uint::{self, Uint, I256};
-    use namada_core::types::vote_extensions::validator_set_update::{
+    use namada_vote_ext::validator_set_update::{
         EthAddrBook, VotingPowersMap, VotingPowersMapExt,
     };
 

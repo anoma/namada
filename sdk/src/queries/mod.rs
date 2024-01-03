@@ -2,10 +2,8 @@
 //! defined via `router!` macro.
 
 // Re-export to show in rustdoc!
-use namada_core::ledger::storage::traits::StorageHasher;
-use namada_core::ledger::storage::{DBIter, DB};
-use namada_core::ledger::storage_api;
 use namada_core::types::storage::BlockHeight;
+use namada_state::{DBIter, StorageHasher, DB};
 pub use shell::Shell;
 use shell::SHELL;
 pub use types::{
@@ -18,7 +16,7 @@ pub use self::shell::eth_bridge::{
     Erc20FlowControl, GenBridgePoolProofReq, GenBridgePoolProofRsp,
     TransferToErcArgs, TransferToEthereumStatus,
 };
-use crate::{MaybeSend, MaybeSync};
+use crate::MaybeSend;
 
 #[macro_use]
 mod router;
@@ -40,7 +38,7 @@ router! {RPC,
 pub fn handle_path<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     request: &RequestQuery,
-) -> storage_api::Result<EncodedResponseQuery>
+) -> namada_storage::Result<EncodedResponseQuery>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -55,7 +53,7 @@ where
 pub fn require_latest_height<D, H, V, T>(
     ctx: &RequestCtx<'_, D, H, V, T>,
     request: &RequestQuery,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -64,7 +62,7 @@ where
         && request.height.value()
             != ctx.wl_storage.storage.get_last_block_height().0
     {
-        return Err(storage_api::Error::new_const(
+        return Err(namada_storage::Error::new_const(
             "This query doesn't support arbitrary block heights, only the \
              latest committed block height ('0' can be used as a special \
              value that means the latest block height)",
@@ -75,9 +73,9 @@ where
 
 /// For queries that do not support proofs, check that proof is not requested,
 /// otherwise return an error.
-pub fn require_no_proof(request: &RequestQuery) -> storage_api::Result<()> {
+pub fn require_no_proof(request: &RequestQuery) -> namada_storage::Result<()> {
     if request.prove {
-        return Err(storage_api::Error::new_const(
+        return Err(namada_storage::Error::new_const(
             "This query doesn't support proofs",
         ));
     }
@@ -86,9 +84,9 @@ pub fn require_no_proof(request: &RequestQuery) -> storage_api::Result<()> {
 
 /// For queries that don't use request data, require that there are no data
 /// attached.
-pub fn require_no_data(request: &RequestQuery) -> storage_api::Result<()> {
+pub fn require_no_data(request: &RequestQuery) -> namada_storage::Result<()> {
     if !request.data.is_empty() {
-        return Err(storage_api::Error::new_const(
+        return Err(namada_storage::Error::new_const(
             "This query doesn't accept request data",
         ));
     }
@@ -158,7 +156,7 @@ mod testing {
     #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
     impl<RPC> Client for TestClient<RPC>
     where
-        RPC: Router + MaybeSync,
+        RPC: Router + crate::MaybeSync,
     {
         type Error = std::io::Error;
 

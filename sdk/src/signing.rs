@@ -10,26 +10,29 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::transaction::components::sapling::fees::{
     InputView, OutputView,
 };
-use namada_core::ledger::parameters::storage as parameter_storage;
-use namada_core::proto::SignatureIndex;
-use namada_core::types::account::AccountPublicKeysMap;
+use namada_account::AccountPublicKeysMap;
 use namada_core::types::address::{
     masp_tx_key, Address, ImplicitAddress, InternalAddress, MASP,
 };
 use namada_core::types::key::*;
 use namada_core::types::masp::{ExtendedViewingKey, PaymentAddress};
+use namada_core::types::sign::SignatureIndex;
 use namada_core::types::storage::Epoch;
 use namada_core::types::token;
 use namada_core::types::token::Transfer;
 // use namada_core::types::storage::Key;
 use namada_core::types::token::{Amount, DenominatedAmount, MaspDenom};
-use namada_core::types::transaction::account::{InitAccount, UpdateAccount};
-use namada_core::types::transaction::governance::{
-    InitProposalData, VoteProposalData,
+use namada_governance::storage::proposal::{
+    InitProposalData, ProposalType, VoteProposalData,
 };
-use namada_core::types::transaction::pgf::UpdateStewardCommission;
-use namada_core::types::transaction::pos::BecomeValidator;
-use namada_core::types::transaction::{pos, Fee};
+use namada_governance::storage::vote::{StorageProposalVote, VoteType};
+use namada_parameters::storage as parameter_storage;
+use namada_token::storage_key::balance_key;
+use namada_tx::data::account::{InitAccount, UpdateAccount};
+use namada_tx::data::pgf::UpdateStewardCommission;
+use namada_tx::data::pos::BecomeValidator;
+use namada_tx::data::{pos, Fee};
+use namada_tx::{MaspBuilder, Section, Tx};
 use prost::Message;
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
@@ -38,17 +41,12 @@ use tokio::sync::RwLock;
 
 use super::masp::{ShieldedContext, ShieldedTransfer};
 use crate::args::SdkTypes;
-use crate::core::ledger::governance::storage::proposal::ProposalType;
-use crate::core::ledger::governance::storage::vote::{
-    StorageProposalVote, VoteType,
-};
 use crate::core::types::eth_bridge_pool::PendingTransfer;
 use crate::error::{EncodingError, Error, TxError};
 use crate::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
 use crate::ibc::primitives::proto::Any;
 use crate::io::*;
 use crate::masp::make_asset_type;
-use crate::proto::{MaspBuilder, Section, Tx};
 use crate::rpc::validate_amount;
 use crate::tx::{
     TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
@@ -509,8 +507,7 @@ pub async fn wrap_tx<N: Namada>(
             token,
         }) if token == args.fee_token && source == fee_payer_address => balance,
         _ => {
-            let balance_key =
-                token::balance_key(&args.fee_token, &fee_payer_address);
+            let balance_key = balance_key(&args.fee_token, &fee_payer_address);
 
             rpc::query_storage_value::<_, token::Amount>(
                 context.client(),
