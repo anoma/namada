@@ -1,9 +1,10 @@
-pub use namada_core::ledger::masp_utils;
 use namada_core::types::address::Address;
-use namada_core::types::token;
-pub use namada_core::types::token::*;
+use namada_proof_of_stake::token::storage_key::{
+    balance_key, minted_balance_key, minter_key,
+};
+pub use namada_token::*;
 
-use super::*;
+use crate::{log_string, Ctx, StorageRead, StorageWrite, TxResult};
 
 #[allow(clippy::too_many_arguments)]
 /// A token transfer that can be used in a transaction.
@@ -14,10 +15,10 @@ pub fn transfer(
     token: &Address,
     amount: DenominatedAmount,
 ) -> TxResult {
-    let amount = amount.to_amount(token, ctx)?;
+    let amount = denom_to_amount(amount, token, ctx)?;
     if amount != Amount::default() && src != dest {
-        let src_key = token::balance_key(token, src);
-        let dest_key = token::balance_key(token, dest);
+        let src_key = balance_key(token, src);
+        let dest_key = balance_key(token, dest);
         let src_bal: Option<Amount> = ctx.read(&src_key)?;
         let mut src_bal = src_bal.unwrap_or_else(|| {
             log_string(format!("src {} has no balance", src_key));
@@ -41,8 +42,8 @@ pub fn undenominated_transfer(
     amount: Amount,
 ) -> TxResult {
     if amount != Amount::default() && src != dest {
-        let src_key = token::balance_key(token, src);
-        let dest_key = token::balance_key(token, dest);
+        let src_key = balance_key(token, src);
+        let dest_key = balance_key(token, dest);
         let src_bal: Option<Amount> = ctx.read(&src_key)?;
         let mut src_bal = src_bal.unwrap_or_else(|| {
             log_string(format!("src {} has no balance", src_key));
@@ -65,18 +66,18 @@ pub fn mint(
     token: &Address,
     amount: Amount,
 ) -> TxResult {
-    let target_key = token::balance_key(token, target);
+    let target_key = balance_key(token, target);
     let mut target_bal: Amount = ctx.read(&target_key)?.unwrap_or_default();
     target_bal.receive(&amount);
 
-    let minted_key = token::minted_balance_key(token);
+    let minted_key = minted_balance_key(token);
     let mut minted_bal: Amount = ctx.read(&minted_key)?.unwrap_or_default();
     minted_bal.receive(&amount);
 
     ctx.write(&target_key, target_bal)?;
     ctx.write(&minted_key, minted_bal)?;
 
-    let minter_key = token::minter_key(token);
+    let minter_key = minter_key(token);
     ctx.write(&minter_key, minter)?;
 
     Ok(())
@@ -89,12 +90,12 @@ pub fn burn(
     token: &Address,
     amount: Amount,
 ) -> TxResult {
-    let target_key = token::balance_key(token, target);
+    let target_key = balance_key(token, target);
     let mut target_bal: Amount = ctx.read(&target_key)?.unwrap_or_default();
     target_bal.spend(&amount);
 
     // burn the minted amount
-    let minted_key = token::minted_balance_key(token);
+    let minted_key = minted_balance_key(token);
     let mut minted_bal: Amount = ctx.read(&minted_key)?.unwrap_or_default();
     minted_bal.spend(&amount);
 

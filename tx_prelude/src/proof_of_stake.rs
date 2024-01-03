@@ -2,7 +2,6 @@
 
 use namada_core::types::dec::Dec;
 use namada_core::types::key::common;
-use namada_core::types::transaction::pos::BecomeValidator;
 use namada_core::types::{key, token};
 pub use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::storage::read_pos_params;
@@ -14,6 +13,7 @@ use namada_proof_of_stake::{
     redelegate_tokens, unbond_tokens, unjail_validator, withdraw_tokens,
 };
 pub use namada_proof_of_stake::{parameters, types};
+use namada_tx::data::pos::BecomeValidator;
 
 use super::*;
 

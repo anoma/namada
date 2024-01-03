@@ -1,4 +1,4 @@
-use namada_core::types::transaction::account::InitAccount;
+use namada_tx::data::account::InitAccount;
 
 use super::*;
 
@@ -7,7 +7,7 @@ pub fn init_account(
     owner: &Address,
     data: InitAccount,
 ) -> EnvResult<Address> {
-    storage_api::account::init_account_storage(
+    namada_account::init_account_storage(
         ctx,
         owner,
         &data.public_keys,
