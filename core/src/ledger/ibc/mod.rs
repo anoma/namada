@@ -291,13 +291,13 @@ where
     }
 }
 
-enum IbcMessage {
+pub enum IbcMessage {
     Envelope(MsgEnvelope),
     Transfer(MsgTransfer),
     ShieldedTransfer(MsgShieldedTransfer),
 }
 
-fn decode_message(tx_data: &[u8]) -> Result<IbcMessage, Error> {
+pub fn decode_message(tx_data: &[u8]) -> Result<IbcMessage, Error> {
     // ibc-rs message
     if let Ok(any_msg) = Any::decode(tx_data) {
         if let Ok(transfer_msg) = MsgTransfer::try_from(any_msg.clone()) {
