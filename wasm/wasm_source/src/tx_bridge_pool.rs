@@ -4,6 +4,7 @@ use borsh::BorshDeserialize;
 use eth_bridge::storage::{bridge_pool, native_erc20_key};
 use eth_bridge_pool::{GasFee, PendingTransfer, TransferToEthereum};
 use namada_tx_prelude::borsh_ext::BorshSerializeExt;
+use namada_tx_prelude::storage_api::WriteActions;
 use namada_tx_prelude::*;
 
 #[transaction(gas = 1038546)]
@@ -59,8 +60,13 @@ fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
     log_string("Escrow succeeded");
     // add transfer into the pool
     let pending_key = bridge_pool::get_pending_key(&transfer);
-    ctx.write_bytes(&pending_key, transfer.serialize_to_vec())
-        .wrap_err("Could not write transfer to bridge pool")?;
+    // TODO: what kind of write actions are desired here??
+    ctx.write_bytes(
+        &pending_key,
+        transfer.serialize_to_vec(),
+        WriteActions::All,
+    )
+    .wrap_err("Could not write transfer to bridge pool")?;
     Ok(())
 }
 

@@ -524,9 +524,14 @@ impl WriteLog {
     {
         for (key, entry) in self.block_write_log.iter() {
             match entry {
-                StorageModification::Write { value, action: _ } => {
+                StorageModification::Write { value, action } => {
                     storage
-                        .batch_write_subspace_val(batch, key, value.clone())
+                        .batch_write_subspace_val(
+                            batch,
+                            key,
+                            value.clone(),
+                            action.clone(),
+                        )
                         .map_err(Error::StorageError)?;
                 }
                 StorageModification::Delete => {
@@ -535,8 +540,14 @@ impl WriteLog {
                         .map_err(Error::StorageError)?;
                 }
                 StorageModification::InitAccount { vp_code_hash } => {
+                    // TODO: what write actions are required for this?
                     storage
-                        .batch_write_subspace_val(batch, key, *vp_code_hash)
+                        .batch_write_subspace_val(
+                            batch,
+                            key,
+                            *vp_code_hash,
+                            WriteActions::All,
+                        )
                         .map_err(Error::StorageError)?;
                 }
                 // temporary value isn't persisted
