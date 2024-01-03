@@ -116,3 +116,17 @@ impl<T> OptionExt<T> for Option<T> {
         self.ok_or_else(|| Error::new_const(msg))
     }
 }
+
+/// Convert `namada_storage::Error` into IBC `ContextError`.
+/// It always returns `ClientError::Other` though the storage error could happen
+/// in any storage access.
+impl From<Error>
+    for namada_core::ibc::core::handler::types::error::ContextError
+{
+    fn from(error: Error) -> Self {
+        namada_core::ibc::core::client::types::error::ClientError::Other {
+            description: format!("Storage error: {error}"),
+        }
+        .into()
+    }
+}

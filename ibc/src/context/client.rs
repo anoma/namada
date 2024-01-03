@@ -7,29 +7,28 @@ use ibc_testkit::testapp::ibc::clients::mock::client_state::MockClientContext;
 use ibc_testkit::testapp::ibc::clients::mock::client_state::MockClientState;
 #[cfg(feature = "testing")]
 use ibc_testkit::testapp::ibc::clients::mock::consensus_state::MockConsensusState;
-use prost::Message;
-
-use crate::ibc::clients::tendermint::client_state::ClientState as TmClientState;
-use crate::ibc::clients::tendermint::consensus_state::ConsensusState as TmConsensusState;
-use crate::ibc::clients::tendermint::context::{
+use namada_core::ibc::clients::tendermint::client_state::ClientState as TmClientState;
+use namada_core::ibc::clients::tendermint::consensus_state::ConsensusState as TmConsensusState;
+use namada_core::ibc::clients::tendermint::context::{
     CommonContext, ExecutionContext as TmExecutionContext,
     ValidationContext as TmValidationContext,
 };
-use crate::ibc::core::client::context::client_state::{
+use namada_core::ibc::core::client::context::client_state::{
     ClientStateCommon, ClientStateExecution, ClientStateValidation,
 };
-use crate::ibc::core::client::context::{
+use namada_core::ibc::core::client::context::{
     ClientExecutionContext, ClientValidationContext,
 };
-use crate::ibc::core::client::types::error::ClientError;
-use crate::ibc::core::client::types::{Height, Status, UpdateKind};
-use crate::ibc::core::commitment_types::commitment::{
+use namada_core::ibc::core::client::types::error::ClientError;
+use namada_core::ibc::core::client::types::{Height, Status, UpdateKind};
+use namada_core::ibc::core::commitment_types::commitment::{
     CommitmentPrefix, CommitmentProofBytes, CommitmentRoot,
 };
-use crate::ibc::core::host::types::identifiers::{ClientId, ClientType};
-use crate::ibc::core::host::types::path::Path;
-use crate::ibc::core::host::ExecutionContext;
-use crate::ibc::primitives::proto::Any;
+use namada_core::ibc::core::host::types::identifiers::{ClientId, ClientType};
+use namada_core::ibc::core::host::types::path::Path;
+use namada_core::ibc::core::host::ExecutionContext;
+use namada_core::ibc::primitives::proto::Any;
+use prost::Message;
 
 // TODO: #[derive(ClientState)] doesn't support contexts with contexts generic
 // for now

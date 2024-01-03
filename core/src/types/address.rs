@@ -33,10 +33,10 @@ pub const ADDRESS_LEN: usize =
     string_encoding::hrp_len::<Address>() + 1 + HASH_HEX_LEN;
 
 /// Length of a hash of an address as a hexadecimal string
-pub(crate) const HASH_HEX_LEN: usize = 40;
+pub const HASH_HEX_LEN: usize = 40;
 
 /// Length of a trimmed hash of an address.
-pub(crate) const HASH_LEN: usize = 20;
+pub const HASH_LEN: usize = 20;
 
 /// SHA-256 hash len
 ///

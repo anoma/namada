@@ -2,37 +2,38 @@
 
 use core::time::Duration;
 
+use namada_core::ibc::clients::tendermint::consensus_state::ConsensusState as TmConsensusState;
+use namada_core::ibc::clients::tendermint::types::ConsensusState as TmConsensusStateType;
+use namada_core::ibc::core::channel::types::channel::ChannelEnd;
+use namada_core::ibc::core::channel::types::commitment::{
+    AcknowledgementCommitment, PacketCommitment,
+};
+use namada_core::ibc::core::channel::types::error::{
+    ChannelError, PacketError,
+};
+use namada_core::ibc::core::channel::types::packet::Receipt;
+use namada_core::ibc::core::channel::types::timeout::TimeoutHeight;
+use namada_core::ibc::core::client::context::consensus_state::ConsensusState;
+use namada_core::ibc::core::client::types::error::ClientError;
+use namada_core::ibc::core::client::types::Height;
+use namada_core::ibc::core::connection::types::error::ConnectionError;
+use namada_core::ibc::core::connection::types::ConnectionEnd;
+use namada_core::ibc::core::handler::types::error::ContextError;
+use namada_core::ibc::core::host::types::identifiers::{
+    ChannelId, ClientId, ConnectionId, PortId, Sequence,
+};
+use namada_core::ibc::primitives::proto::{Any, Protobuf};
+use namada_core::ibc::primitives::Timestamp;
+use namada_core::tendermint::Time as TmTime;
+use namada_core::types::storage::{BlockHeight, Key};
+use namada_core::types::time::DurationSecs;
+use namada_parameters::storage::get_max_expected_time_per_block_key;
 use prost::Message;
 use sha2::Digest;
 
 use super::client::{AnyClientState, AnyConsensusState};
 use super::storage::IbcStorageContext;
-use crate::ibc::clients::tendermint::consensus_state::ConsensusState as TmConsensusState;
-use crate::ibc::clients::tendermint::types::ConsensusState as TmConsensusStateType;
-use crate::ibc::core::channel::types::channel::ChannelEnd;
-use crate::ibc::core::channel::types::commitment::{
-    AcknowledgementCommitment, PacketCommitment,
-};
-use crate::ibc::core::channel::types::error::{ChannelError, PacketError};
-use crate::ibc::core::channel::types::packet::Receipt;
-use crate::ibc::core::channel::types::timeout::TimeoutHeight;
-use crate::ibc::core::client::context::consensus_state::ConsensusState;
-use crate::ibc::core::client::types::error::ClientError;
-use crate::ibc::core::client::types::Height;
-use crate::ibc::core::connection::types::error::ConnectionError;
-use crate::ibc::core::connection::types::ConnectionEnd;
-use crate::ibc::core::handler::types::error::ContextError;
-use crate::ibc::core::host::types::identifiers::{
-    ChannelId, ClientId, ConnectionId, PortId, Sequence,
-};
-use crate::ibc::primitives::proto::{Any, Protobuf};
-use crate::ibc::primitives::Timestamp;
-use crate::ledger::ibc::storage;
-use crate::ledger::parameters::storage::get_max_expected_time_per_block_key;
-use crate::ledger::storage_api;
-use crate::tendermint::Time as TmTime;
-use crate::types::storage::{BlockHeight, Key};
-use crate::types::time::DurationSecs;
+use crate::storage;
 
 /// Result of IBC common function call
 pub type Result<T> = std::result::Result<T, ContextError>;
@@ -666,17 +667,5 @@ pub trait IbcCommonContext: IbcStorageContext {
             })?;
         }
         Ok(())
-    }
-}
-
-/// Convert `storage_api::Error` into `ContextError`.
-/// It always returns `ClientError::Other` though the storage error could happen
-/// in any storage access.
-impl From<storage_api::Error> for ContextError {
-    fn from(error: storage_api::Error) -> Self {
-        ClientError::Other {
-            description: format!("Storage error: {error}"),
-        }
-        .into()
     }
 }

@@ -2,21 +2,22 @@
 
 use std::str::FromStr;
 
-use sha2::{Digest, Sha256};
-use thiserror::Error;
-
-use crate::ibc::core::client::types::Height;
-use crate::ibc::core::host::types::identifiers::{
+use namada_core::ibc::core::client::types::Height;
+use namada_core::ibc::core::host::types::identifiers::{
     ChannelId, ClientId, ConnectionId, PortId, Sequence,
 };
-use crate::ibc::core::host::types::path::{
+use namada_core::ibc::core::host::types::path::{
     AckPath, ChannelEndPath, ClientConnectionPath, ClientConsensusStatePath,
     ClientStatePath, CommitmentPath, ConnectionPath, Path, PortPath,
     ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath,
 };
-use crate::types::address::{Address, InternalAddress, HASH_LEN, SHA_HASH_LEN};
-use crate::types::ibc::IbcTokenHash;
-use crate::types::storage::{self, DbKeySeg, Key, KeySeg};
+use namada_core::types::address::{
+    Address, InternalAddress, HASH_LEN, SHA_HASH_LEN,
+};
+use namada_core::types::ibc::IbcTokenHash;
+use namada_core::types::storage::{DbKeySeg, Key, KeySeg};
+use sha2::{Digest, Sha256};
+use thiserror::Error;
 
 const CLIENTS_COUNTER: &str = "clients/counter";
 const CONNECTIONS_COUNTER: &str = "connections/counter";
@@ -27,7 +28,7 @@ const DENOM: &str = "ibc_denom";
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Storage key error: {0}")]
-    StorageKey(storage::Error),
+    StorageKey(namada_core::types::storage::Error),
     #[error("Invalid Key: {0}")]
     InvalidKey(String),
     #[error("Port capability error: {0}")]

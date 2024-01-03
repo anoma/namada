@@ -1,29 +1,30 @@
 //! ExecutionContext implementation for IBC
 
-use super::client::{AnyClientState, AnyConsensusState};
-use super::common::IbcCommonContext;
-use super::IbcContext;
-use crate::ibc::core::channel::types::channel::ChannelEnd;
-use crate::ibc::core::channel::types::commitment::{
+use namada_core::ibc::core::channel::types::channel::ChannelEnd;
+use namada_core::ibc::core::channel::types::commitment::{
     AcknowledgementCommitment, PacketCommitment,
 };
-use crate::ibc::core::channel::types::packet::Receipt;
-use crate::ibc::core::client::context::ClientExecutionContext;
-use crate::ibc::core::client::types::Height;
-use crate::ibc::core::connection::types::ConnectionEnd;
-use crate::ibc::core::handler::types::error::ContextError;
-use crate::ibc::core::handler::types::events::IbcEvent;
-use crate::ibc::core::host::types::identifiers::{
+use namada_core::ibc::core::channel::types::packet::Receipt;
+use namada_core::ibc::core::client::context::ClientExecutionContext;
+use namada_core::ibc::core::client::types::Height;
+use namada_core::ibc::core::connection::types::ConnectionEnd;
+use namada_core::ibc::core::handler::types::error::ContextError;
+use namada_core::ibc::core::handler::types::events::IbcEvent;
+use namada_core::ibc::core::host::types::identifiers::{
     ClientId, ConnectionId, Sequence,
 };
-use crate::ibc::core::host::types::path::{
+use namada_core::ibc::core::host::types::path::{
     AckPath, ChannelEndPath, ClientConnectionPath, ClientConsensusStatePath,
     ClientStatePath, CommitmentPath, ConnectionPath, ReceiptPath, SeqAckPath,
     SeqRecvPath, SeqSendPath,
 };
-use crate::ibc::core::host::ExecutionContext;
-use crate::ibc::primitives::Timestamp;
-use crate::ledger::ibc::storage;
+use namada_core::ibc::core::host::ExecutionContext;
+use namada_core::ibc::primitives::Timestamp;
+
+use super::client::{AnyClientState, AnyConsensusState};
+use super::common::IbcCommonContext;
+use super::IbcContext;
+use crate::storage;
 
 impl<C> ClientExecutionContext for IbcContext<C>
 where

@@ -2,37 +2,37 @@
 
 #[cfg(feature = "testing")]
 use ibc_testkit::testapp::ibc::clients::mock::client_state::MockClientState;
+use namada_core::ibc::clients::tendermint::context::{
+    CommonContext as TmCommonContext, ValidationContext as TmValidationContext,
+};
+use namada_core::ibc::core::channel::types::channel::ChannelEnd;
+use namada_core::ibc::core::channel::types::commitment::{
+    AcknowledgementCommitment, PacketCommitment,
+};
+use namada_core::ibc::core::channel::types::packet::Receipt;
+use namada_core::ibc::core::client::context::ClientValidationContext;
+use namada_core::ibc::core::client::types::error::ClientError;
+use namada_core::ibc::core::client::types::Height;
+use namada_core::ibc::core::commitment_types::commitment::CommitmentPrefix;
+use namada_core::ibc::core::commitment_types::specs::ProofSpecs;
+use namada_core::ibc::core::connection::types::ConnectionEnd;
+use namada_core::ibc::core::handler::types::error::ContextError;
+use namada_core::ibc::core::host::types::identifiers::{
+    ChainId, ClientId, ConnectionId, Sequence,
+};
+use namada_core::ibc::core::host::types::path::{
+    AckPath, ChannelEndPath, ClientConsensusStatePath, CommitmentPath,
+    ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath,
+};
+use namada_core::ibc::core::host::ValidationContext;
+use namada_core::ibc::cosmos_host::ValidateSelfClientContext;
+use namada_core::ibc::primitives::proto::Any;
+use namada_core::ibc::primitives::{Signer, Timestamp};
 
 use super::client::{AnyClientState, AnyConsensusState};
 use super::common::IbcCommonContext;
 use super::IbcContext;
-use crate::ibc::clients::tendermint::context::{
-    CommonContext as TmCommonContext, ValidationContext as TmValidationContext,
-};
-use crate::ibc::core::channel::types::channel::ChannelEnd;
-use crate::ibc::core::channel::types::commitment::{
-    AcknowledgementCommitment, PacketCommitment,
-};
-use crate::ibc::core::channel::types::packet::Receipt;
-use crate::ibc::core::client::context::ClientValidationContext;
-use crate::ibc::core::client::types::error::ClientError;
-use crate::ibc::core::client::types::Height;
-use crate::ibc::core::commitment_types::commitment::CommitmentPrefix;
-use crate::ibc::core::commitment_types::specs::ProofSpecs;
-use crate::ibc::core::connection::types::ConnectionEnd;
-use crate::ibc::core::handler::types::error::ContextError;
-use crate::ibc::core::host::types::identifiers::{
-    ChainId, ClientId, ConnectionId, Sequence,
-};
-use crate::ibc::core::host::types::path::{
-    AckPath, ChannelEndPath, ClientConsensusStatePath, CommitmentPath,
-    ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath,
-};
-use crate::ibc::core::host::ValidationContext;
-use crate::ibc::cosmos_host::ValidateSelfClientContext;
-use crate::ibc::primitives::proto::Any;
-use crate::ibc::primitives::{Signer, Timestamp};
-use crate::ledger::ibc::storage;
+use crate::storage;
 
 const COMMITMENT_PREFIX: &[u8] = b"ibc";
 

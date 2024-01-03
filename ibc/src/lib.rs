@@ -16,32 +16,31 @@ pub use context::token_transfer::TokenTransferContext;
 pub use context::transfer_mod::{ModuleWrapper, TransferModule};
 use context::IbcContext;
 pub use context::ValidationParams;
-use prost::Message;
-use thiserror::Error;
-
-use crate::ibc::apps::transfer::handler::{
+use namada_core::ibc::apps::transfer::handler::{
     send_transfer_execute, send_transfer_validate,
 };
-use crate::ibc::apps::transfer::types::error::TokenTransferError;
-use crate::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
-use crate::ibc::apps::transfer::types::{
+use namada_core::ibc::apps::transfer::types::error::TokenTransferError;
+use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
+use namada_core::ibc::apps::transfer::types::{
     is_receiver_chain_source, PrefixedDenom, TracePrefix,
 };
-use crate::ibc::core::channel::types::msgs::PacketMsg;
-use crate::ibc::core::entrypoint::{execute, validate};
-use crate::ibc::core::handler::types::error::ContextError;
-use crate::ibc::core::handler::types::msgs::MsgEnvelope;
-use crate::ibc::core::host::types::error::IdentifierError;
-use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
-use crate::ibc::core::router::types::error::RouterError;
-use crate::ibc::core::router::types::module::ModuleId;
-use crate::ibc::primitives::proto::Any;
-use crate::types::address::{Address, MASP};
-use crate::types::ibc::{
+use namada_core::ibc::core::channel::types::msgs::PacketMsg;
+use namada_core::ibc::core::entrypoint::{execute, validate};
+use namada_core::ibc::core::handler::types::error::ContextError;
+use namada_core::ibc::core::handler::types::msgs::MsgEnvelope;
+use namada_core::ibc::core::host::types::error::IdentifierError;
+use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
+use namada_core::ibc::core::router::types::error::RouterError;
+use namada_core::ibc::core::router::types::module::ModuleId;
+use namada_core::ibc::primitives::proto::Any;
+use namada_core::types::address::{Address, MASP};
+use namada_core::types::ibc::{
     get_shielded_transfer, is_ibc_denom, MsgShieldedTransfer,
     EVENT_TYPE_DENOM_TRACE, EVENT_TYPE_PACKET,
 };
-use crate::types::masp::PaymentAddress;
+use namada_core::types::masp::PaymentAddress;
+use prost::Message;
+use thiserror::Error;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -357,10 +356,9 @@ pub mod testing {
     use ibc::core::primitives::Signer;
     use ibc::primitives::proto::Any;
     use ibc::primitives::{Msg, Timestamp};
+    use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
     use proptest::prelude::{Just, Strategy};
     use proptest::{collection, prop_compose};
-
-    use crate::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
 
     prop_compose! {
         /// Generate an arbitrary port ID

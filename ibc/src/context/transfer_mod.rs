@@ -4,9 +4,7 @@ use std::cell::RefCell;
 use std::fmt::Debug;
 use std::rc::Rc;
 
-use super::common::IbcCommonContext;
-use super::token_transfer::TokenTransferContext;
-use crate::ibc::apps::transfer::module::{
+use namada_core::ibc::apps::transfer::module::{
     on_acknowledgement_packet_execute, on_acknowledgement_packet_validate,
     on_chan_close_confirm_execute, on_chan_close_confirm_validate,
     on_chan_close_init_execute, on_chan_close_init_validate,
@@ -17,19 +15,24 @@ use crate::ibc::apps::transfer::module::{
     on_recv_packet_execute, on_timeout_packet_execute,
     on_timeout_packet_validate,
 };
-use crate::ibc::apps::transfer::types::error::TokenTransferError;
-use crate::ibc::apps::transfer::types::MODULE_ID_STR;
-use crate::ibc::core::channel::types::acknowledgement::Acknowledgement;
-use crate::ibc::core::channel::types::channel::{Counterparty, Order};
-use crate::ibc::core::channel::types::error::{ChannelError, PacketError};
-use crate::ibc::core::channel::types::packet::Packet;
-use crate::ibc::core::channel::types::Version;
-use crate::ibc::core::host::types::identifiers::{
+use namada_core::ibc::apps::transfer::types::error::TokenTransferError;
+use namada_core::ibc::apps::transfer::types::MODULE_ID_STR;
+use namada_core::ibc::core::channel::types::acknowledgement::Acknowledgement;
+use namada_core::ibc::core::channel::types::channel::{Counterparty, Order};
+use namada_core::ibc::core::channel::types::error::{
+    ChannelError, PacketError,
+};
+use namada_core::ibc::core::channel::types::packet::Packet;
+use namada_core::ibc::core::channel::types::Version;
+use namada_core::ibc::core::host::types::identifiers::{
     ChannelId, ConnectionId, PortId,
 };
-use crate::ibc::core::router::module::Module;
-use crate::ibc::core::router::types::module::{ModuleExtras, ModuleId};
-use crate::ibc::primitives::Signer;
+use namada_core::ibc::core::router::module::Module;
+use namada_core::ibc::core::router::types::module::{ModuleExtras, ModuleId};
+use namada_core::ibc::primitives::Signer;
+
+use super::common::IbcCommonContext;
+use super::token_transfer::TokenTransferContext;
 
 /// IBC module wrapper for getting the reference of the module
 pub trait ModuleWrapper: Module {
@@ -331,9 +334,10 @@ fn into_packet_error(error: TokenTransferError) -> PacketError {
 /// Helpers for testing
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
+    use namada_core::ibc::apps::transfer::types::ack_success_b64;
+    use namada_core::ibc::core::channel::types::acknowledgement::AcknowledgementStatus;
+
     use super::*;
-    use crate::ibc::apps::transfer::types::ack_success_b64;
-    use crate::ibc::core::channel::types::acknowledgement::AcknowledgementStatus;
 
     /// Dummy IBC module for token transfer
     #[derive(Debug)]

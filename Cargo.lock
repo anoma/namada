@@ -4506,7 +4506,22 @@ dependencies = [
 
 [[package]]
 name = "namada_ibc"
-version = "0.1.0"
+version = "0.28.1"
+dependencies = [
+ "borsh",
+ "ibc",
+ "ibc-derive",
+ "ics23",
+ "namada_core",
+ "namada_parameters",
+ "namada_storage",
+ "namada_trans_token",
+ "primitive-types",
+ "prost 0.12.3",
+ "sha2 0.9.9",
+ "thiserror",
+ "tracing",
+]
 
 [[package]]
 name = "namada_light_sdk"

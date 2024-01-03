@@ -1,11 +1,10 @@
 //! IBC storage context
 
 pub use ics23::ProofSpec;
-
-use crate::ledger::storage_api::{Error, StorageRead, StorageWrite};
-use crate::types::address::Address;
-use crate::types::ibc::{IbcEvent, IbcShieldedTransfer};
-use crate::types::token::DenominatedAmount;
+use namada_core::types::address::Address;
+use namada_core::types::ibc::{IbcEvent, IbcShieldedTransfer};
+use namada_core::types::token::DenominatedAmount;
+use namada_storage::{Error, StorageRead, StorageWrite};
 
 /// IBC context trait to be implemented in integration that can read and write
 pub trait IbcStorageContext: StorageRead + StorageWrite {

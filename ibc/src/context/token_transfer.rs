@@ -3,20 +3,21 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use super::common::IbcCommonContext;
-use crate::ibc::apps::transfer::context::{
+use namada_core::ibc::apps::transfer::context::{
     TokenTransferExecutionContext, TokenTransferValidationContext,
 };
-use crate::ibc::apps::transfer::types::error::TokenTransferError;
-use crate::ibc::apps::transfer::types::{PrefixedCoin, PrefixedDenom};
-use crate::ibc::core::channel::types::error::ChannelError;
-use crate::ibc::core::handler::types::error::ContextError;
-use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
-use crate::ledger::ibc::storage;
-use crate::ledger::storage_api::token::read_denom;
-use crate::types::address::{Address, InternalAddress};
-use crate::types::token;
-use crate::types::uint::Uint;
+use namada_core::ibc::apps::transfer::types::error::TokenTransferError;
+use namada_core::ibc::apps::transfer::types::{PrefixedCoin, PrefixedDenom};
+use namada_core::ibc::core::channel::types::error::ChannelError;
+use namada_core::ibc::core::handler::types::error::ContextError;
+use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
+use namada_core::types::address::{Address, InternalAddress};
+use namada_core::types::token;
+use namada_core::types::uint::Uint;
+use namada_trans_token::read_denom;
+
+use super::common::IbcCommonContext;
+use crate::storage;
 
 /// Token transfer context to handle tokens
 #[derive(Debug)]

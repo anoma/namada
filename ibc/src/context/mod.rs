@@ -14,8 +14,8 @@ use std::fmt::Debug;
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::ibc::core::commitment_types::specs::ProofSpecs;
-use crate::ibc::core::host::types::identifiers::ChainId as IbcChainId;
+use namada_core::ibc::core::commitment_types::specs::ProofSpecs;
+use namada_core::ibc::core::host::types::identifiers::ChainId as IbcChainId;
 
 /// IBC context to handle IBC-related data
 #[derive(Debug)]
