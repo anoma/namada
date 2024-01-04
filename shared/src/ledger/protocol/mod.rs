@@ -150,7 +150,10 @@ pub fn dispatch_tx<'a, D, H, CA>(
     wl_storage: &'a mut WlStorage<D, H>,
     vp_wasm_cache: &'a mut VpCache<CA>,
     tx_wasm_cache: &'a mut TxCache<CA>,
+    // FIXME: these two params together because they are only needed for
+    // wrappers
     block_proposer: Option<&'a Address>,
+    is_committed_fee_unshield: &mut bool,
 ) -> Result<TxResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -187,6 +190,7 @@ where
                     tx_wasm_cache,
                 },
                 block_proposer,
+                is_committed_fee_unshield,
             )?;
             Ok(TxResult {
                 gas_used: tx_gas_meter.get_tx_consumed_gas(),
@@ -232,6 +236,7 @@ pub(crate) fn apply_wrapper_tx<'a, D, H, CA, WLS>(
     tx_bytes: &[u8],
     mut shell_params: ShellParams<'a, CA, WLS>,
     block_proposer: Option<&Address>,
+    is_committed_fee_unshield: &mut bool,
 ) -> Result<BTreeSet<Key>>
 where
     CA: 'static + WasmCacheAccess + Sync,
@@ -255,6 +260,7 @@ where
         block_proposer,
         &mut changed_keys,
     )?;
+    *is_committed_fee_unshield = true;
 
     // Account for gas
     shell_params

@@ -395,6 +395,7 @@ where
                     },
                 };
 
+            let mut is_committed_fee_unshield = false;
             match protocol::dispatch_tx(
                 tx,
                 processed_tx.tx.as_ref(),
@@ -408,6 +409,7 @@ where
                 &mut self.vp_wasm_cache,
                 &mut self.tx_wasm_cache,
                 Some(&native_block_proposer_address),
+                &mut is_committed_fee_unshield,
             )
             .map_err(Error::TxApply)
             {
@@ -419,6 +421,9 @@ where
                                 "Wrapper transaction {} was accepted",
                                 tx_event["hash"]
                             );
+                            if is_committed_fee_unshield {
+                                tx_event["is_valid_masp_tx"] = String::new();
+                            }
                             self.wl_storage.storage.tx_queue.push(TxInQueue {
                                 tx: wrapper.expect("Missing expected wrapper"),
                                 gas: tx_gas_meter.get_available_gas(),
@@ -430,6 +435,13 @@ where
                                 tx_event["hash"],
                                 result
                             );
+                            if result.vps_result.accepted_vps.contains(
+                                &Address::Internal(
+                                    address::InternalAddress::Masp,
+                                ),
+                            ) {
+                                tx_event["is_valid_masp_tx"] = String::new();
+                            }
                             changed_keys
                                 .extend(result.changed_keys.iter().cloned());
                             stats.increment_successful_txs();
@@ -500,7 +512,7 @@ where
                         msg
                     );
 
-                    // If transaction type is Decrypted and didn't failed
+                    // If transaction type is Decrypted and didn't fail
                     // because of out of gas nor invalid
                     // section commitment, commit its hash to prevent replays
                     if let Some(wrapper) = embedding_wrapper {
@@ -540,6 +552,11 @@ where
                     if let EventType::Accepted = tx_event.event_type {
                         // If wrapper, invalid tx error code
                         tx_event["code"] = ResultCode::InvalidTx.into();
+                        // The fee unshield operation could still have been
+                        // committed
+                        if is_committed_fee_unshield {
+                            tx_event["is_valid_masp_tx"] = String::new();
+                        }
                     } else {
                         tx_event["code"] = ResultCode::WasmRuntimeError.into();
                     }
