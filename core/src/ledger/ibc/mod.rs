@@ -102,6 +102,7 @@ where
     pub fn execute(&mut self, tx_data: &[u8]) -> Result<(), Error> {
         let message = decode_message(tx_data)?;
         match &message {
+            // FIXME: look here for MASP on IBC
             IbcMessage::Transfer(msg) => {
                 let mut token_transfer_ctx =
                     TokenTransferContext::new(self.ctx.inner.clone());
@@ -282,7 +283,10 @@ where
             self.ctx
                 .inner
                 .borrow_mut()
-                .handle_masp_tx(&shielded_transfer.masp_tx)
+                .handle_masp_tx(
+                    &shielded_transfer.masp_tx,
+                    shielded_transfer.transfer.key.as_deref(),
+                )
                 .map_err(|_| {
                     Error::MaspTx("Writing MASP components failed".to_string())
                 })?;

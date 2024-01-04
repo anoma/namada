@@ -287,6 +287,7 @@ where
             &mut shell.vp_wasm_cache,
             &mut shell.tx_wasm_cache,
             None,
+            &mut false,
         );
         shell
             .wl_storage

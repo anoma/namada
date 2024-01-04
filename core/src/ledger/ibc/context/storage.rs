@@ -28,9 +28,11 @@ pub trait IbcStorageContext: StorageRead + StorageWrite {
     ) -> Result<(), Error>;
 
     /// Handle masp tx
+    // FIXME: try again to remove tx_index from some places
     fn handle_masp_tx(
         &mut self,
         shielded: &masp_primitives::transaction::Transaction,
+        pin_key: Option<&str>,
     ) -> Result<(), Error>;
 
     /// Mint token

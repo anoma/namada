@@ -978,6 +978,8 @@ pub const DENOM_STORAGE_KEY: &str = "denomination";
 pub const MINTER_STORAGE_KEY: &str = "minter";
 /// Key segment for minted balance
 pub const MINTED_STORAGE_KEY: &str = "minted";
+/// Key segment prefix for pinned shielded transactions
+pub const PIN_KEY_PREFIX: &str = "pin-";
 /// Key segment prefix for the nullifiers
 pub const MASP_NULLIFIERS_KEY: &str = "nullifiers";
 /// Key segment prefix for the note commitment merkle tree
@@ -1217,7 +1219,10 @@ pub fn is_masp_key(key: &Key) -> bool {
 pub fn is_masp_allowed_key(key: &Key) -> bool {
     match &key.segments[..] {
         [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
-            if *addr == MASP && key == MASP_NOTE_COMMITMENT_TREE_KEY =>
+            if *addr == MASP
+            //FIXME: place the check back in the masp vp if needed
+                && (key.starts_with(PIN_KEY_PREFIX)
+                    || key == MASP_NOTE_COMMITMENT_TREE_KEY) =>
         {
             true
         }
@@ -1256,6 +1261,13 @@ pub fn masp_last_inflation_key(token_address: &Address) -> Key {
         MASP_LAST_INFLATION_KEY,
         "cannot obtain storage key for the last inflation rate",
     )
+}
+
+/// Get a key for a masp pin
+pub fn masp_pin_tx_key(key: &str) -> Key {
+    Key::from(MASP.to_db_key())
+        .push(&(PIN_KEY_PREFIX.to_owned() + key))
+        .expect("Cannot obtain a storage key")
 }
 
 /// Get a key for a masp nullifier

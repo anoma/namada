@@ -216,8 +216,9 @@ where
     fn handle_masp_tx(
         &mut self,
         shielded: &masp_primitives::transaction::Transaction,
+        pin_key: Option<&str>,
     ) -> Result<()> {
-        masp_utils::handle_masp_tx(self, shielded)?;
+        masp_utils::handle_masp_tx(self, shielded, pin_key)?;
         masp_utils::update_note_commitment_tree(self, shielded)
     }
 
@@ -418,6 +419,7 @@ where
     fn handle_masp_tx(
         &mut self,
         _shielded: &masp_primitives::transaction::Transaction,
+        _pin_key: Option<&str>,
     ) -> Result<()> {
         unimplemented!("Validation doesn't handle a masp tx")
     }

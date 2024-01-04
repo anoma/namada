@@ -5,6 +5,7 @@ use std::env;
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 // use async_std::io::prelude::WriteExt;
 // use async_std::io::{self};
@@ -49,12 +50,14 @@ use masp_proofs::bellman::groth16::PreparedVerifyingKey;
 use masp_proofs::bls12_381::Bls12;
 use masp_proofs::prover::LocalTxProver;
 use masp_proofs::sapling::SaplingVerificationContext;
+use namada_core::ibc::apps::transfer::types::Memo;
 use namada_core::types::address::{Address, MASP};
+use namada_core::types::ibc::IbcShieldedTransfer;
 use namada_core::types::masp::{
     BalanceOwner, ExtendedViewingKey, PaymentAddress, TransferSource,
     TransferTarget,
 };
-use namada_core::types::storage::{BlockHeight, Epoch, TxIndex};
+use namada_core::types::storage::{BlockHeight, Epoch, IndexedTx, TxIndex};
 use namada_core::types::time::{DateTimeUtc, DurationSecs};
 use namada_core::types::token;
 use namada_core::types::token::{Change, MaspDenom, Transfer};
@@ -67,10 +70,11 @@ use thiserror::Error;
 #[cfg(feature = "testing")]
 use crate::error::EncodingError;
 use crate::error::{Error, PinnedBalanceError, QueryError};
+use crate::events::EventType;
 use crate::io::Io;
 use crate::proto::Tx;
 use crate::queries::Client;
-use crate::rpc::{query_conversion, query_storage_value};
+use crate::rpc::{query_block, query_conversion, query_epoch_at_height};
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
 use crate::tx::decode_component;
@@ -597,8 +601,8 @@ pub struct ShieldedContext<U: ShieldedUtils> {
     /// Location where this shielded context is saved
     #[borsh(skip)]
     pub utils: U,
-    /// The last transaction index to be processed in this context
-    pub last_txidx: u64,
+    /// The last indexed transaction to be processed in this context
+    pub last_indexed: IndexedTx,
     /// The commitment tree produced by scanning all transactions up to tx_pos
     pub tree: CommitmentTree<Node>,
     /// Maps viewing keys to applicable note positions
@@ -614,10 +618,8 @@ pub struct ShieldedContext<U: ShieldedUtils> {
     /// Maps note positions to their witness (used to make merkle paths)
     pub witness_map: HashMap<usize, IncrementalWitness<Node>>,
     /// Tracks what each transaction does to various account balances
-    pub delta_map: BTreeMap<
-        (BlockHeight, TxIndex),
-        (Epoch, TransferDelta, TransactionDelta),
-    >,
+    pub delta_map:
+        BTreeMap<IndexedTx, (Epoch, TransferDelta, TransactionDelta)>,
     /// The set of note positions that have been spent
     pub spents: HashSet<usize>,
     /// Maps asset types to their decodings
@@ -632,7 +634,7 @@ impl<U: ShieldedUtils + Default> Default for ShieldedContext<U> {
     fn default() -> ShieldedContext<U> {
         ShieldedContext::<U> {
             utils: U::default(),
-            last_txidx: u64::default(),
+            last_indexed: IndexedTx::default(),
             tree: CommitmentTree::empty(),
             pos_map: HashMap::default(),
             nf_map: HashMap::default(),
@@ -664,7 +666,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     /// context. It must be the case that the two shielded contexts share the
     /// same last transaction ID and share identical commitment trees.
     pub fn merge(&mut self, new_ctx: ShieldedContext<U>) {
-        debug_assert_eq!(self.last_txidx, new_ctx.last_txidx);
+        debug_assert_eq!(self.last_indexed, new_ctx.last_indexed);
         // Merge by simply extending maps. Identical keys should contain
         // identical values, so overwriting should not be problematic.
         self.pos_map.extend(new_ctx.pos_map);
@@ -679,10 +681,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         // The deltas are the exception because different keys can reveal
         // different parts of the same transaction. Hence each delta needs to be
         // merged separately.
-        for ((height, idx), (ep, ntfer_delta, ntx_delta)) in new_ctx.delta_map {
+        for (height, (ep, ntfer_delta, ntx_delta)) in new_ctx.delta_map {
             let (_ep, tfer_delta, tx_delta) = self
                 .delta_map
-                .entry((height, idx))
+                .entry(height)
                 .or_insert((ep, TransferDelta::new(), TransactionDelta::new()));
             tfer_delta.extend(ntfer_delta);
             tx_delta.extend(ntx_delta);
@@ -718,7 +720,14 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let (txs, mut tx_iter);
         if !unknown_keys.is_empty() {
             // Load all transactions accepted until this point
-            txs = Self::fetch_shielded_transfers(client, 0).await?;
+            txs = Self::fetch_shielded_transfers(
+                client,
+                IndexedTx {
+                    height: BlockHeight::first(),
+                    index: TxIndex::default(),
+                },
+            )
+            .await?;
             tx_iter = txs.iter();
             // Do this by constructing a shielding context only for unknown keys
             let mut tx_ctx = Self {
@@ -729,11 +738,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 tx_ctx.pos_map.entry(vk).or_insert_with(BTreeSet::new);
             }
             // Update this unknown shielded context until it is level with self
-            while tx_ctx.last_txidx != self.last_txidx {
-                if let Some(((height, idx), (epoch, tx, stx))) = tx_iter.next()
-                {
+            while tx_ctx.last_indexed != self.last_indexed {
+                if let Some((indexed_tx, (epoch, tx, stx))) = tx_iter.next() {
                     tx_ctx
-                        .scan_tx(client, *height, *idx, *epoch, tx, stx)
+                        .scan_tx(client, *indexed_tx, *epoch, tx, stx)
                         .await?;
                 } else {
                     break;
@@ -744,54 +752,270 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             self.merge(tx_ctx);
         } else {
             // Load only transactions accepted from last_txid until this point
-            txs =
-                Self::fetch_shielded_transfers(client, self.last_txidx).await?;
+            txs = Self::fetch_shielded_transfers(client, self.last_indexed)
+                .await?;
             tx_iter = txs.iter();
         }
         // Now that we possess the unspent notes corresponding to both old and
         // new keys up until tx_pos, proceed to scan the new transactions.
-        for ((height, idx), (epoch, tx, stx)) in &mut tx_iter {
-            self.scan_tx(client, *height, *idx, *epoch, tx, stx).await?;
+        for (indexed_tx, (epoch, tx, stx)) in &mut tx_iter {
+            self.scan_tx(client, *indexed_tx, *epoch, tx, stx).await?;
         }
         Ok(())
     }
 
     /// Obtain a chronologically-ordered list of all accepted shielded
-    /// transactions from the ledger. The ledger conceptually stores
-    /// transactions as a vector. More concretely, the HEAD_TX_KEY location
-    /// stores the index of the last accepted transaction and each transaction
-    /// is stored at a key derived from its index.
+    /// transactions from a node.
     pub async fn fetch_shielded_transfers<C: Client + Sync>(
         client: &C,
-        last_txidx: u64,
-    ) -> Result<
-        BTreeMap<(BlockHeight, TxIndex), (Epoch, Transfer, Transaction)>,
-        Error,
-    > {
-        // Construct the key where last transaction pointer is stored
-        let head_tx_key = namada_core::types::token::masp_head_tx_key();
-        // Query for the index of the last accepted transaction
-        let head_txidx = query_storage_value::<C, u64>(client, &head_tx_key)
-            .await
-            .unwrap_or(0);
+        last_indexed_tx: IndexedTx,
+    ) -> Result<BTreeMap<IndexedTx, (Epoch, Transfer, Transaction)>, Error>
+    {
+        // Query for the last produced block height
+        let last_block_height = query_block(client)
+            .await?
+            .map_or_else(BlockHeight::first, |block| block.height);
+
         let mut shielded_txs = BTreeMap::new();
         // Fetch all the transactions we do not have yet
-        for i in last_txidx..head_txidx {
-            // Construct the key for where the current transaction is stored
-            let current_tx_key = namada_core::types::token::masp_tx_key(i);
-            // Obtain the current transaction
-            let (tx_epoch, tx_height, tx_index, current_tx, current_stx) =
-                query_storage_value::<
-                    C,
-                    (Epoch, BlockHeight, TxIndex, Transfer, Transaction),
-                >(client, &current_tx_key)
-                .await?;
-            // Collect the current transaction
-            shielded_txs.insert(
-                (tx_height, tx_index),
-                (tx_epoch, current_tx, current_stx),
-            );
+        for height in u64::from(last_indexed_tx.height)..=last_block_height.0 {
+            // Get the valid masp transactions at the specified height
+            // FIXME: review if we really need extra key for ibc events
+            let tx_query =
+                Query::eq("height", height).and_exists("is_valid_masp_tx");
+
+            let epoch = query_epoch_at_height(client, height.into())
+                .await?
+                .ok_or_else(|| {
+                    Error::from(QueryError::General(format!(
+                        "Queried height is greater than the last committed \
+                         block height"
+                    )))
+                })?;
+
+            // Paginate the results
+            for page in 1.. {
+                let txs_results = client
+                    .tx_search(
+                        tx_query.clone(),
+                        // TODO: currently we are not verifying the merkle
+                        // proof, we should or at least ask a parameter to the
+                        // user ot decide if we want proofs(and their
+                        // verification) or not
+                        false,
+                        page,
+                        100,
+                        Order::Ascending,
+                    )
+                    .await
+                    .map_err(|e| {
+                        Error::from(QueryError::General(e.to_string()))
+                    })?
+                    .txs;
+
+                for result in &txs_results {
+                    let tx_index = TxIndex(result.index);
+                    if BlockHeight(height) == last_indexed_tx.height
+                        && tx_index <= last_indexed_tx.index
+                    {
+                        continue;
+                    }
+                    let tx = Tx::try_from(result.tx.as_ref())
+                        .map_err(|e| Error::Other(e.to_string()))?;
+                    let tx_header = tx.header();
+                    // NOTE: simply looking for masp sections attached to the tx
+                    // is not safe. We don't validate the sections attached to a
+                    // transaction se we could end up with transactions carrying
+                    // an unnecessary masp section. We must instead look for the
+                    // required masp sections in the signed commitments (hashes)
+                    // of the transactions' headers/data sections
+                    if let Some(wrapper_header) = tx_header.wrapper() {
+                        let hash = wrapper_header
+                            .unshield_section_hash
+                            .ok_or_else(|| {
+                                Error::Other(
+                                    "Missing expected fee unshielding section \
+                                     hash"
+                                        .to_string(),
+                                )
+                            })?;
+
+                        let masp_transaction = tx
+                            .get_section(&hash)
+                            .ok_or_else(|| {
+                                Error::Other(
+                                    "Missing expected masp section".to_string(),
+                                )
+                            })?
+                            .masp_tx()
+                            .ok_or_else(|| {
+                                Error::Other(
+                                    "Missing masp transaction".to_string(),
+                                )
+                            })?;
+                        // FIXME: actually, do I realy need the entire transfer
+                        // object? Probably not mayube we can remove
+                        // FIXME: mroe in general. review everything we are
+                        // storing to see if we actually need it
+
+                        // Transfer objects for fee unshielding are absent from
+                        // the tx because they are completely constructed in
+                        // protocol, need to recreate it here
+                        let transfer = Transfer {
+                            source: MASP,
+                            target: wrapper_header.fee_payer(),
+                            token: wrapper_header.fee.token.clone(),
+                            amount: wrapper_header
+                                .get_tx_fee()
+                                .map_err(|e| Error::Other(e.to_string()))?,
+                            key: None,
+                            shielded: Some(hash),
+                        };
+
+                        // Collect the current transaction
+                        shielded_txs.insert(
+                            IndexedTx {
+                                height: height.into(),
+                                index: tx_index,
+                            },
+                            (epoch, transfer, masp_transaction),
+                        );
+                    } else if tx_header.decrypted().is_some() {
+                        let (transfer, masp_transaction) =
+                            match Transfer::try_from_slice(
+                                &tx.data().ok_or_else(|| {
+                                    Error::Other(
+                                        "Missing data section".to_string(),
+                                    )
+                                })?,
+                            ) {
+                                Ok(transfer) => {
+                                    let masp_transaction = tx
+                                        .get_section(
+                                            &transfer.shielded.ok_or_else(
+                                                || {
+                                                    Error::Other(
+                                                        "Missing masp section \
+                                                         hash"
+                                                            .to_string(),
+                                                    )
+                                                },
+                                            )?,
+                                        )
+                                        .ok_or_else(|| {
+                                            Error::Other(
+                                                "Missing masp section in \
+                                                 transaction"
+                                                    .to_string(),
+                                            )
+                                        })?
+                                        .masp_tx()
+                                        .ok_or_else(|| {
+                                            Error::Other(
+                                                "Missing masp transaction"
+                                                    .to_string(),
+                                            )
+                                        })?;
+
+                                    (transfer, masp_transaction)
+                                }
+                                Err(_) => {
+                                    // This should be a MASP over IBC transfer,
+                                    // continue for now, we'll scan the ibc
+                                    // events later
+                                    continue;
+                                }
+                            };
+
+                        // Collect the current transaction
+                        shielded_txs.insert(
+                            IndexedTx {
+                                height: height.into(),
+                                index: tx_index,
+                            },
+                            (epoch, transfer, masp_transaction),
+                        );
+                    }
+                }
+
+                // FIXME: are we already storing masp transactions when we
+                // submit them? In this case I need to make sure we don't
+                // reqrite them from here An incomplete page
+                // signifies no more transactions
+                if txs_results.len() < 100 {
+                    break;
+                }
+            }
         }
+
+        // Fetch all block events to look for MASP over IBC transactions
+        for height in u64::from(last_indexed_tx.height)..=last_block_height.0 {
+            let epoch = query_epoch_at_height(client, height.into())
+                .await?
+                .ok_or_else(|| {
+                    Error::from(QueryError::General(format!(
+                        "Queried height is greater than the last committed \
+                         block height"
+                    )))
+                })?;
+
+            let events = client
+                .block_results(height)
+                .await
+                .map_err(|e| Error::from(QueryError::General(e.to_string())))?
+                .end_block_events
+                .unwrap_or_default();
+
+            for (ibc_masp_event, tx_index) in
+                events.iter().filter_map(|event| {
+                    if event
+                        .kind
+                        .starts_with(&EventType::Ibc(String::new()).to_string())
+                    {
+                        event
+                            .attributes
+                            .iter()
+                            .find(|attribute| {
+                                &attribute.key == "is_valid_masp_tx"
+                            })
+                            .map(|tx_index| (event, &tx_index.value))
+                    } else {
+                        None
+                    }
+                })
+            {
+                // FIXME: can we parallelize stuff somewhere when constructing
+                // the internal state of the ShieldeContext?
+                // Masp transaction, collect it
+                let shielded_transfer = ibc_masp_event
+                    .attributes
+                    .iter()
+                    .find(|attribute| &attribute.key == "memo")
+                    .map(|memo| {
+                        IbcShieldedTransfer::try_from(Memo::from(
+                            memo.value.clone(),
+                        ))
+                    });
+
+                if let Some(Ok(shielded_transfer)) = shielded_transfer {
+                    shielded_txs.insert(
+                        IndexedTx {
+                            height: height.into(),
+                            index: TxIndex(
+                                u32::from_str(tx_index)
+                                    .map_err(|e| Error::Other(e.to_string()))?,
+                            ),
+                        },
+                        (
+                            epoch,
+                            shielded_transfer.transfer,
+                            shielded_transfer.masp_tx,
+                        ),
+                    );
+                }
+            }
+        }
+
         Ok(shielded_txs)
     }
 
@@ -806,8 +1030,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     pub async fn scan_tx<C: Client + Sync>(
         &mut self,
         client: &C,
-        height: BlockHeight,
-        index: TxIndex,
+        indexed_tx: IndexedTx,
         epoch: Epoch,
         tx: &Transfer,
         shielded: &Transaction,
@@ -933,12 +1156,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 change: -tx.amount.amount().change(),
             },
         );
-        self.last_txidx += 1;
+        self.last_indexed = indexed_tx;
 
-        self.delta_map.insert(
-            (height, index),
-            (epoch, transfer_delta, transaction_delta),
-        );
+        self.delta_map
+            .insert(indexed_tx, (epoch, transfer_delta, transaction_delta));
         Ok(())
     }
 
@@ -946,10 +1167,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     /// Transfer in this context
     pub fn get_tx_deltas(
         &self,
-    ) -> &BTreeMap<
-        (BlockHeight, TxIndex),
-        (Epoch, TransferDelta, TransactionDelta),
-    > {
+    ) -> &BTreeMap<IndexedTx, (Epoch, TransferDelta, TransactionDelta)> {
         &self.delta_map
     }
 
@@ -1363,21 +1581,73 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         // Obtain the transaction pointer at the key
         // If we don't discard the error message then a test fails,
         // however the error underlying this will go undetected
-        let txidx = rpc::query_storage_value::<C, u64>(client, &pin_key)
-            .await
-            .map_err(|_| PinnedBalanceError::NoTransactionPinned)?;
-        // Construct the key for where the pinned transaction is stored
-        let tx_key = namada_core::types::token::masp_tx_key(txidx);
-        // Obtain the pointed to transaction
-        let (tx_epoch, _tx_height, _tx_index, _tx, shielded) =
-            rpc::query_storage_value::<
-                C,
-                (Epoch, BlockHeight, TxIndex, Transfer, Transaction),
-            >(client, &tx_key)
-            .await
-            .map_err(|_| {
-                Error::Other("Ill-formed epoch, transaction pair".to_string())
+        let indexed_tx =
+            rpc::query_storage_value::<C, IndexedTx>(client, &pin_key)
+                .await
+                .map_err(|_| PinnedBalanceError::NoTransactionPinned)?;
+        let tx_epoch = query_epoch_at_height(client, indexed_tx.height)
+            .await?
+            .ok_or_else(|| {
+                Error::from(QueryError::General(format!(
+                    "Queried height is greater than the last committed block \
+                     height"
+                )))
             })?;
+
+        let tx_query = Query::eq("height", indexed_tx.height.to_string())
+            .and_eq("tx.index", indexed_tx.index.to_string());
+        let tx_results = client
+            .tx_search(
+                tx_query.clone(),
+                // TODO: currently we are not verifying the merkle
+                // proof, we should or at least ask a parameter to the
+                // user ot decide if we want proofs(and their
+                // verification) or not
+                false,
+                1,
+                100,
+                Order::Ascending,
+            )
+            .await
+            .map_err(|e| Error::from(QueryError::General(e.to_string())))?
+            .txs;
+
+        let tx = Tx::try_from(
+            tx_results
+                .first()
+                .ok_or_else(|| {
+                    Error::Other("Missing expected pinned masp tx".to_string())
+                })?
+                .tx
+                .as_ref(),
+        )
+        .map_err(|e| Error::Other(e.to_string()))?;
+
+        let shielded =
+            match Transfer::try_from_slice(&tx.data().ok_or_else(|| {
+                Error::Other("Missing data section".to_string())
+            })?) {
+                Ok(transfer) => tx
+                    .get_section(&transfer.shielded.ok_or_else(|| {
+                        Error::Other("Missing masp section hash".to_string())
+                    })?)
+                    .ok_or_else(|| {
+                        Error::Other(
+                            "Missing masp section in transaction".to_string(),
+                        )
+                    })?
+                    .masp_tx()
+                    .ok_or_else(|| {
+                        Error::Other("Missing masp transaction".to_string())
+                    })?,
+                Err(_) => {
+                    // FIXME: add support for pinned ibc masp txs
+                    // FIXME: probably need to review also how we do it in
+                    // fewtch_shielded_transfer
+                    return Err(Error::Other("IBC Masp pinned tx".to_string()));
+                }
+            };
+
         // Accumulate the combined output note value into this Amount
         let mut val_acc = I128Sum::zero();
         for so in shielded
@@ -1515,8 +1785,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     ) -> Result<Option<ShieldedTransfer>, TransferErr> {
         // No shielded components are needed when neither source nor destination
         // are shielded
-
-        use std::str::FromStr;
 
         use rand::rngs::StdRng;
         use rand_core::SeedableRng;
@@ -1891,10 +2159,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         query_token: &Option<Address>,
         viewing_keys: &HashMap<String, ExtendedViewingKey>,
     ) -> Result<
-        BTreeMap<
-            (BlockHeight, TxIndex),
-            (Epoch, TransferDelta, TransactionDelta),
-        >,
+        BTreeMap<IndexedTx, (Epoch, TransferDelta, TransactionDelta)>,
         Error,
     > {
         const TXS_PER_PAGE: u8 = 100;
@@ -1909,6 +2174,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let _ = self.save().await;
         // Required for filtering out rejected transactions from Tendermint
         // responses
+        // FIXME: here we query the reulst of only the last block
         let block_results = rpc::query_results(client).await?;
         let mut transfers = self.get_tx_deltas().clone();
         // Construct the set of addresses relevant to user's query
@@ -1925,6 +2191,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         for addr in relevant_addrs {
             for prop in ["transfer.source", "transfer.target"] {
                 // Query transactions involving the current address
+                // FIXME: bnut it seems like here we query all transactions, not
+                // only those from the last block
                 let mut tx_query = Query::eq(prop, addr.encode());
                 // Elaborate the query if requested by the user
                 if let Some(token) = &query_token {
@@ -1953,7 +2221,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                         // Only process yet unprocessed transactions which have
                         // been accepted by node VPs
                         let should_process = !transfers
-                            .contains_key(&(height, idx))
+                            .contains_key(&IndexedTx { height, index: idx })
                             && block_results[u64::from(height) as usize]
                                 .is_accepted(idx.0 as usize);
                         if !should_process {
@@ -1989,7 +2257,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                             // No shielded accounts are affected by this
                             // Transfer
                             transfers.insert(
-                                (height, idx),
+                                IndexedTx { height, index: idx },
                                 (epoch, delta, TransactionDelta::new()),
                             );
                         }

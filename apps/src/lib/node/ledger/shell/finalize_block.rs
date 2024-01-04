@@ -470,6 +470,16 @@ where
                                     let mut event = Event::from(ibc_event);
                                     // Add the height for IBC event query
                                     event["height"] = height.to_string();
+                                    if tx_event
+                                        .attributes
+                                        .contains_key("is_valid_masp_tx")
+                                    {
+                                        // Add the tx index for masp txs clients
+                                        // queries
+                                        // FIXME: review this
+                                        event["is_valid_masp_tx"] =
+                                            tx_index.to_string();
+                                    }
                                     event
                                 })
                                 // eth bridge events

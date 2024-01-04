@@ -44,7 +44,9 @@ use namada::types::ibc::{is_ibc_denom, IbcTokenHash};
 use namada::types::io::Io;
 use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
-use namada::types::storage::{BlockHeight, BlockResults, Epoch, Key, KeySeg};
+use namada::types::storage::{
+    BlockHeight, BlockResults, Epoch, IndexedTx, Key, KeySeg,
+};
 use namada::types::token::{Change, MaspDenom};
 use namada::types::{storage, token};
 use namada_sdk::error::{is_pinned_error, Error, PinnedBalanceError};
@@ -145,7 +147,9 @@ pub async fn query_transfers(
         .map(|fvk| (ExtendedFullViewingKey::from(*fvk).fvk.vk, fvk))
         .collect();
     // Now display historical shielded and transparent transactions
-    for ((height, idx), (epoch, tfer_delta, tx_delta)) in transfers {
+    for (IndexedTx { height, index: idx }, (epoch, tfer_delta, tx_delta)) in
+        transfers
+    {
         // Check if this transfer pertains to the supplied owner
         let mut relevant = match &query_owner {
             Either::Left(BalanceOwner::FullViewingKey(fvk)) => tx_delta
