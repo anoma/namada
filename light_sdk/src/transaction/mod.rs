@@ -81,7 +81,7 @@ pub(in crate::transaction) fn attach_fee(
     token: Address,
     fee_payer: common::PublicKey,
     epoch: Epoch,
-    gas_limit: GasLimit,
+    gas_limit: GasLimit
 ) -> Tx {
     tx.add_wrapper(
         Fee {
@@ -96,6 +96,7 @@ pub(in crate::transaction) fn attach_fee(
     tx
 }
 
+
 pub(in crate::transaction) fn attach_fee_signature(
     mut tx: Tx,
     signer: common::PublicKey,
@@ -105,7 +106,43 @@ pub(in crate::transaction) fn attach_fee_signature(
     tx.add_section(Section::Signature(Signature {
         targets: tx.sechashes(),
         signer: Signer::PubKeys(vec![signer]),
-        signatures: [(0, signature)].into_iter().collect(),
+        signatures: [(0, signature)].into_iter().collect()
     }));
     tx
+}
+
+
+/// A unit test for the whole flow of constructing a tx and validating it.
+#[test]
+fn construct_tx() {
+    use namada_core::types::key::{RefTo, SigScheme};
+    use namada_core::types::token::{Amount, DenominatedAmount};
+    use crate::transaction::account::RevealPk;
+    use namada_sdk::wallet::StoredKeypair;
+
+    let secret_key: StoredKeypair<common::SecretKey> = serde_json::from_str(r#""unencrypted:000d5e9d7d66f0e4307edacde6e6578e31d331bcf234352647d00d20955102d3ce""#).unwrap();
+    let StoredKeypair::Raw(sk) = secret_key else {
+        unreachable!()
+    };
+
+    let tx = RevealPk::new(sk.ref_to(), GlobalArgs {
+        expiration: None,
+        code_hash: Default::default(),
+        chain_id: Default::default(),
+    });
+    let data = tx.get_sign_bytes();
+    let signature = common::SigScheme::sign(&sk, &data[0]);
+    let tx = tx.attach_signatures(sk.to_public(), signature);
+    let tx = tx.attach_fee(
+        DenominatedAmount::native(Amount::from(100)),
+        Address::from_str("tnam1qxfj3sf6a0meahdu9t6znp05g8zx4dkjtgyn9gfu").expect("Test failed"),
+        sk.ref_to(),
+        0.into(),
+        10000.into(),
+    );
+    let data = tx.get_fee_sig_bytes();
+    let signature = common::SigScheme::sign(&sk, &data);
+    let tx = tx.attach_fee_signature(sk.ref_to(), signature);
+    assert!(tx.validate_tx().expect("Test failed").is_some());
+
 }

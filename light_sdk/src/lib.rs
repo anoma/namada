@@ -11,9 +11,10 @@
 //! This SDK is divided into three modules:
 //!
 //! - transaction: contains functions to construct all the transactions
-//!   currently supported by the protocol
+//!                currently supported by the protocol
 //! - reading: exposes queries to retrieve data from a Namada node
-//! - writing: TO BE DONE
+//! - writing: provides a function for broadcasting a tx and getting
+//!            the result from the ledger
 
 pub mod reading;
 pub mod transaction;
