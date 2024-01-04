@@ -2101,6 +2101,9 @@ pub async fn build_ibc_transfer(
 
     let chain_id = args.tx.chain_id.clone().unwrap();
     let mut tx = Tx::new(chain_id, args.tx.expiration);
+    if let Some(memo) = &args.tx.memo {
+        tx.add_memo(memo);
+    }
 
     let data = match shielded_parts {
         Some((shielded_transfer, asset_types)) => {
@@ -2205,6 +2208,9 @@ where
     let chain_id = tx_args.chain_id.clone().unwrap();
 
     let mut tx_builder = Tx::new(chain_id, tx_args.expiration);
+    if let Some(memo) = &tx_args.memo {
+        tx_builder.add_memo(memo);
+    }
 
     let tx_code_hash = query_wasm_code_hash(context, path.to_string_lossy())
         .await
@@ -2546,6 +2552,9 @@ pub async fn build_update_account(
 
     let chain_id = tx_args.chain_id.clone().unwrap();
     let mut tx = Tx::new(chain_id, tx_args.expiration);
+    if let Some(memo) = &tx_args.memo {
+        tx.add_memo(memo);
+    }
     let extra_section_hash = vp_code_path.as_ref().zip(vp_code_hash).map(
         |(code_path, vp_code_hash)| {
             tx.add_extra_section_from_hash(
@@ -2618,6 +2627,9 @@ pub async fn build_custom(
         let tx_code_hash = query_wasm_code_hash_buf(context, code_path).await?;
         let chain_id = tx_args.chain_id.clone().unwrap();
         let mut tx = Tx::new(chain_id, tx_args.expiration);
+        if let Some(memo) = &tx_args.memo {
+            tx.add_memo(memo);
+        }
         tx.add_code_from_hash(
             tx_code_hash,
             Some(code_path.to_string_lossy().into_owned()),
