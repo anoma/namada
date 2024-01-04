@@ -1,6 +1,5 @@
 //! Ledger's state storage with key-value backed store and a merkle tree
 
-#[cfg(any(test, feature = "testing"))]
 pub mod mockdb;
 pub mod tx_queue;
 pub mod types;
@@ -19,8 +18,8 @@ use namada_core::types::address::{
 use namada_core::types::chain::{ChainId, CHAIN_ID_LENGTH};
 use namada_core::types::eth_bridge_pool::is_pending_transfer_key;
 use namada_core::types::ethereum_events::Uint;
-pub use namada_core::types::hash::StorageHasher;
 use namada_core::types::hash::{Error as HashError, Hash};
+pub use namada_core::types::hash::{Sha256Hasher, StorageHasher};
 use namada_core::types::storage::{
     BlockHash, BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue,
     Header, Key, KeySeg, TxIndex, BLOCK_HASH_LENGTH, BLOCK_HEIGHT_LENGTH,
@@ -34,8 +33,8 @@ use namada_gas::{
     STORAGE_WRITE_GAS_PER_BYTE,
 };
 pub use namada_merkle_tree::{
-    ics23_specs, MembershipProof, MerkleTree, MerkleTreeStoresRead,
-    MerkleTreeStoresWrite, StoreRef, StoreType,
+    self as merkle_tree, ics23_specs, MembershipProof, MerkleTree,
+    MerkleTreeStoresRead, MerkleTreeStoresWrite, StoreRef, StoreType,
 };
 use namada_merkle_tree::{Error as MerkleTreeError, MerkleRoot};
 use namada_parameters::{self, EpochDuration, Parameters};
@@ -156,7 +155,7 @@ pub enum Error {
     #[error("Storage key error {0}")]
     KeyError(namada_core::types::storage::Error),
     #[error("Coding error: {0}")]
-    CodingError(namada_core::types::DecodeError),
+    CodingError(#[from] namada_core::types::DecodeError),
     #[error("Merkle tree error: {0}")]
     MerkleTreeError(MerkleTreeError),
     #[error("DB error: {0}")]
@@ -1293,10 +1292,10 @@ impl From<MerkleTreeError> for Error {
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
     use namada_core::types::address;
+    use namada_core::types::hash::Sha256Hasher;
 
     use super::mockdb::MockDB;
     use super::*;
-    use crate::ledger::storage::traits::Sha256Hasher;
 
     /// `WlStorage` with a mock DB for testing
     pub type TestWlStorage = WlStorage<MockDB, Sha256Hasher>;

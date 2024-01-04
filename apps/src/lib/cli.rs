@@ -2797,6 +2797,7 @@ pub mod args {
     use std::str::FromStr;
 
     use namada::ibc::core::host::types::identifiers::{ChannelId, PortId};
+    use namada::tx::data::GasLimit;
     use namada::types::address::{Address, EstablishedAddress};
     use namada::types::chain::{ChainId, ChainIdPrefix};
     use namada::types::dec::Dec;
@@ -2808,7 +2809,6 @@ pub mod args {
     use namada::types::time::DateTimeUtc;
     use namada::types::token;
     use namada::types::token::NATIVE_MAX_DECIMAL_PLACES;
-    use namada::types::transaction::GasLimit;
     pub use namada_sdk::args::*;
     pub use namada_sdk::tx::{
         TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,

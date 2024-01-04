@@ -13,12 +13,12 @@ use borsh_ext::BorshSerializeExt;
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use masp_proofs::prover::LocalTxProver;
-use namada::core::ledger::governance::storage::proposal::ProposalType;
 use namada::core::ledger::ibc::storage::port_key;
 use namada::core::types::address::{self, Address};
 use namada::core::types::key::common::SecretKey;
 use namada::core::types::storage::Key;
 use namada::core::types::token::{Amount, Transfer};
+use namada::governance::storage::proposal::ProposalType;
 use namada::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
 use namada::ibc::apps::transfer::types::packet::PacketData;
 use namada::ibc::apps::transfer::types::PrefixedCoin;
@@ -59,10 +59,12 @@ use namada::ledger::native_vp::ibc::get_dummy_header;
 use namada::ledger::queries::{
     Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
-use namada::ledger::storage_api::StorageRead;
-use namada::proto::{Code, Data, Section, Signature, Tx};
+use namada::storage::StorageRead;
 use namada::tendermint::Hash;
 use namada::tendermint_rpc::{self};
+use namada::tx::data::governance::InitProposalData;
+use namada::tx::data::pos::Bond;
+use namada::tx::{Code, Data, Section, Signature, Tx};
 use namada::types::address::InternalAddress;
 use namada::types::chain::ChainId;
 use namada::types::io::StdIo;
@@ -72,8 +74,6 @@ use namada::types::masp::{
 use namada::types::storage::{BlockHeight, Epoch, KeySeg, TxIndex};
 use namada::types::time::DateTimeUtc;
 use namada::types::token::DenominatedAmount;
-use namada::types::transaction::governance::InitProposalData;
-use namada::types::transaction::pos::Bond;
 use namada::vm::wasm::run;
 use namada::{proof_of_stake, tendermint};
 use namada_sdk::masp::{
@@ -284,10 +284,9 @@ impl BenchShell {
         extra_sections: Option<Vec<Section>>,
         signers: Vec<&SecretKey>,
     ) -> Tx {
-        let mut tx =
-            Tx::from_type(namada::types::transaction::TxType::Decrypted(
-                namada::types::transaction::DecryptedTx::Decrypted,
-            ));
+        let mut tx = Tx::from_type(namada::tx::data::TxType::Decrypted(
+            namada::tx::data::DecryptedTx::Decrypted,
+        ));
 
         // NOTE: here we use the code hash to avoid including the cost for the
         // wasm validation. The wasm codes (both txs and vps) are always
@@ -327,10 +326,9 @@ impl BenchShell {
 
     pub fn generate_ibc_tx(&self, wasm_code_path: &str, msg: impl Msg) -> Tx {
         // This function avoid serializaing the tx data with Borsh
-        let mut tx =
-            Tx::from_type(namada::types::transaction::TxType::Decrypted(
-                namada::types::transaction::DecryptedTx::Decrypted,
-            ));
+        let mut tx = Tx::from_type(namada::tx::data::TxType::Decrypted(
+            namada::tx::data::DecryptedTx::Decrypted,
+        ));
         let code_hash = self
             .read_storage_key(&Key::wasm_hash(wasm_code_path))
             .unwrap();
@@ -559,8 +557,8 @@ impl BenchShell {
 pub fn generate_foreign_key_tx(signer: &SecretKey) -> Tx {
     let wasm_code = std::fs::read("../wasm_for_tests/tx_write.wasm").unwrap();
 
-    let mut tx = Tx::from_type(namada::types::transaction::TxType::Decrypted(
-        namada::types::transaction::DecryptedTx::Decrypted,
+    let mut tx = Tx::from_type(namada::tx::data::TxType::Decrypted(
+        namada::tx::data::DecryptedTx::Decrypted,
     ));
     tx.set_code(Code::new(wasm_code, None));
     tx.set_data(Data::new(

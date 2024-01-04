@@ -65,6 +65,7 @@ integration = []
 namada = {path = "../shared", features = ["multicore", "http-client", "tendermint-rpc"]}
 namada_sdk = {path = "../sdk", default-features = false, features = ["wasm-runtime", "download-params"]}
 namada_test_utils = {path = "../test_utils", optional = true}
+
 ark-serialize.workspace = true
 ark-std.workspace = true
 arse-merkle-tree = { workspace = true, features = ["blake2b"] }

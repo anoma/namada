@@ -6,28 +6,28 @@ use std::ops::Bound::{Excluded, Included};
 use std::path::Path;
 use std::str::FromStr;
 
-use borsh::BorshDeserialize;
-use borsh_ext::BorshSerializeExt;
 use itertools::Either;
-
-use super::merkle_tree::{
-    base_tree_key_prefix, subtree_key_prefix, MerkleTreeStoresRead, StoreType,
-};
-use super::{
-    BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error, Result, DB,
-};
-use crate::ledger::replay_protection;
-use crate::ledger::storage::types::{self, KVBytes, PrefixIterator};
-use crate::types::ethereum_events::Uint;
-use crate::types::ethereum_structs;
-use crate::types::hash::Hash;
-use crate::types::internal::TxQueue;
-use crate::types::storage::{
+use namada_core::borsh::{BorshDeserialize, BorshSerializeExt};
+use namada_core::ledger::replay_protection;
+use namada_core::types;
+use namada_core::types::ethereum_events::Uint;
+use namada_core::types::ethereum_structs;
+use namada_core::types::hash::Hash;
+use namada_core::types::storage::{
     BlockHeight, BlockResults, Epoch, EthEventsQueue, Header, Key, KeySeg,
     KEY_SEGMENT_SEPARATOR,
 };
-use crate::types::time::DateTimeUtc;
-use crate::types::token::ConversionState;
+use namada_core::types::time::DateTimeUtc;
+use namada_core::types::token::ConversionState;
+use namada_merkle_tree::{
+    base_tree_key_prefix, subtree_key_prefix, MerkleTreeStoresRead, StoreType,
+};
+
+use super::{
+    BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error, Result, DB,
+};
+use crate::tx_queue::TxQueue;
+use crate::types::{KVBytes, PrefixIterator};
 
 /// An in-memory DB for testing.
 #[derive(Debug, Default)]

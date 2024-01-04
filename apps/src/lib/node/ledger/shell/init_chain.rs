@@ -5,22 +5,21 @@ use std::ops::ControlFlow;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use masp_proofs::bls12_381;
+use namada::account::protocol_pk_key;
 use namada::core::types::storage::KeySeg;
 use namada::ledger::parameters::Parameters;
-use namada::ledger::storage::traits::StorageHasher;
-use namada::ledger::storage::{DBIter, DB};
-use namada::ledger::storage_api::token::{credit_tokens, write_denom};
-use namada::ledger::storage_api::StorageWrite;
 use namada::ledger::{ibc, pos};
 use namada::proof_of_stake::BecomeValidator;
-use namada::types::address::{Address, MASP};
-use namada::types::hash::Hash as CodeHash;
-use namada::types::key::*;
-use namada::types::time::{DateTimeUtc, TimeZone, Utc};
-use namada::types::token::{
+use namada::state::{DBIter, StorageHasher, DB};
+use namada::storage::StorageWrite;
+use namada::token::storage_key::{
     MASP_CONVERT_ANCHOR_KEY, MASP_NOTE_COMMITMENT_ANCHOR_PREFIX,
     MASP_NOTE_COMMITMENT_TREE_KEY,
 };
+use namada::token::{credit_tokens, write_denom};
+use namada::types::address::{Address, MASP};
+use namada::types::hash::Hash as CodeHash;
+use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::vm::validate_untrusted_wasm;
 use namada_sdk::eth_bridge::EthBridgeStatus;
 use namada_sdk::proof_of_stake::PosParams;
@@ -447,7 +446,12 @@ where
             } = token;
             // associate a token with its denomination.
             write_denom(&mut self.wl_storage, address, *denom).unwrap();
-            parameters.init_storage(address, &mut self.wl_storage);
+            namada::token::write_params(
+                parameters,
+                &mut self.wl_storage,
+                address,
+            )
+            .unwrap();
             // add token addresses to the masp reward conversions lookup table.
             let alias = alias.to_string();
             if masp_rewards.contains_key(&alias.as_str()) {
@@ -482,7 +486,7 @@ where
             let mut total_token_balance = token::Amount::zero();
             for (owner, balance) in balances {
                 if let genesis::GenesisAddress::PublicKey(pk) = owner {
-                    storage_api::account::init_account_storage(
+                    namada::account::init_account_storage(
                         &mut self.wl_storage,
                         &owner.address(),
                         std::slice::from_ref(&pk.raw),
@@ -508,7 +512,7 @@ where
             // Write the total amount of tokens for the ratio
             self.wl_storage
                 .write(
-                    &token::minted_balance_key(token_address),
+                    &token::storage_key::minted_balance_key(token_address),
                     total_token_balance,
                 )
                 .unwrap();
@@ -545,7 +549,7 @@ where
 
                 let public_keys: Vec<_> =
                     public_keys.iter().map(|pk| pk.raw.clone()).collect();
-                storage_api::account::init_account_storage(
+                namada::account::init_account_storage(
                     &mut self.wl_storage,
                     address,
                     &public_keys,
@@ -949,7 +953,7 @@ mod test {
     use std::str::FromStr;
 
     use namada::core::types::string_encoding::StringEncoded;
-    use namada::ledger::storage::DBIter;
+    use namada::state::DBIter;
     use namada_sdk::wallet::alias::Alias;
 
     use super::*;

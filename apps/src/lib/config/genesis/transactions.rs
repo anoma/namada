@@ -13,12 +13,13 @@ use ledger_transport_hid::TransportNativeHID;
 use namada::core::types::account::AccountPublicKeysMap;
 use namada::core::types::address::{Address, EstablishedAddress};
 use namada::core::types::chain::ChainId;
+use namada::core::types::key::SerializeWithBorsh;
 use namada::core::types::string_encoding::StringEncoded;
 use namada::ledger::pos::common::PublicKey;
 use namada::ledger::pos::types::ValidatorMetaData;
-use namada::proto::{
-    verify_standalone_sig, Code, Commitment, Data, Section, SerializeWithBorsh,
-    SignatureIndex, Tx,
+use namada::tx::data::{pos, Fee, TxType};
+use namada::tx::{
+    verify_standalone_sig, Code, Commitment, Data, Section, SignatureIndex, Tx,
 };
 use namada::types::address::nam;
 use namada::types::dec::Dec;
@@ -26,7 +27,6 @@ use namada::types::key::{common, ed25519, RefTo, SigScheme};
 use namada::types::time::DateTimeUtc;
 use namada::types::token;
 use namada::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
-use namada::types::transaction::{pos, Fee, TxType};
 use namada_sdk::args::Tx as TxArgs;
 use namada_sdk::signing::{sign_tx, SigningTxData};
 use namada_sdk::tx::{TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM};
@@ -347,7 +347,7 @@ pub async fn sign_validator_account_tx(
                 tx_data: &T,
                 keypair: &common::SecretKey,
             ) -> StringEncoded<common::Signature> {
-                StringEncoded::new(namada::proto::standalone_signature::<
+                StringEncoded::new(namada::tx::standalone_signature::<
                     T,
                     SerializeWithBorsh,
                 >(keypair, tx_data))

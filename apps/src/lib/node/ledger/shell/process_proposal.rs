@@ -3,16 +3,14 @@
 
 use data_encoding::HEXUPPER;
 use namada::core::hints;
-use namada::core::ledger::storage::WlStorage;
 use namada::ledger::pos::PosQueries;
 use namada::ledger::protocol::get_fee_unshielding_transaction;
-use namada::ledger::storage::TempWlStorage;
-use namada::ledger::storage_api::tx::validate_tx_bytes;
+use namada::ledger::storage::tx_queue::TxInQueue;
+use namada::parameters::validate_tx_bytes;
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
-use namada::types::internal::TxInQueue;
-use namada::types::transaction::protocol::{
-    ethereum_tx_data_variants, ProtocolTxType,
-};
+use namada::state::{TempWlStorage, WlStorage};
+use namada::tx::data::protocol::ProtocolTxType;
+use namada::vote_ext::ethereum_tx_data_variants;
 use namada_sdk::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 
 use super::block_alloc::{BlockSpace, EncryptedTxsBins};
@@ -49,8 +47,7 @@ where
     fn from(wl_storage: &WlStorage<D, H>) -> Self {
         let max_proposal_bytes =
             wl_storage.pos_queries().get_max_proposal_bytes().get();
-        let max_block_gas =
-            namada::core::ledger::gas::get_max_block_gas(wl_storage).unwrap();
+        let max_block_gas = namada::gas::get_max_block_gas(wl_storage).unwrap();
         let encrypted_txs_bin =
             EncryptedTxsBins::new(max_proposal_bytes, max_block_gas);
         let txs_bin = TxBin::init(max_proposal_bytes);
@@ -374,7 +371,7 @@ where
                             .map_err(|err| err.to_string())
                             .and_then(|ext| {
                                 self.validate_eth_events_vext_and_get_it_back(
-                                    ext,
+                                    ext.0,
                                     self.wl_storage
                                         .storage
                                         .get_last_block_height(),
@@ -401,7 +398,7 @@ where
                             .map_err(|err| err.to_string())
                             .and_then(|ext| {
                                 self.validate_bp_roots_vext_and_get_it_back(
-                                    ext,
+                                    ext.0,
                                     self.wl_storage
                                         .storage
                                         .get_last_block_height(),
@@ -480,7 +477,9 @@ where
                             ethereum_tx_data_variants::BridgePool::try_from(
                                 &tx,
                             )
-                            .unwrap();
+                            .unwrap()
+                            .into_iter()
+                            .map(|vext| vext.0);
                         let valid_extensions = self
                             .validate_bp_roots_vext_list(digest)
                             .map(|maybe_ext| {
@@ -705,9 +704,10 @@ where
 #[cfg(test)]
 mod test_process_proposal {
     use namada::ledger::replay_protection;
-    use namada::ledger::storage_api::token::read_denom;
-    use namada::ledger::storage_api::StorageWrite;
-    use namada::proto::{
+    use namada::storage::token::read_denom;
+    use namada::storage::StorageWrite;
+    use namada::tx::data::{Fee, WrapperTx};
+    use namada::tx::{
         Code, Data, Section, SignableEthMessage, Signature, Signed,
     };
     use namada::types::ethereum_events::EthereumEvent;
@@ -716,9 +716,9 @@ mod test_process_proposal {
     use namada::types::time::DateTimeUtc;
     use namada::types::token;
     use namada::types::token::{Amount, DenominatedAmount};
-    use namada::types::transaction::protocol::EthereumTxData;
-    use namada::types::transaction::{Fee, WrapperTx};
-    use namada::types::vote_extensions::{bridge_pool_roots, ethereum_events};
+    use namada::vote_ext::{
+        bridge_pool_roots, ethereum_events, EthereumTxData,
+    };
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{
@@ -1821,8 +1821,7 @@ mod test_process_proposal {
         let (shell, _recv, _, _) = test_utils::setup();
 
         let block_gas_limit =
-            namada::core::ledger::gas::get_max_block_gas(&shell.wl_storage)
-                .unwrap();
+            namada::gas::get_max_block_gas(&shell.wl_storage).unwrap();
         let keypair = super::test_utils::gen_keypair();
 
         let mut wrapper =

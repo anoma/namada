@@ -4,11 +4,10 @@
 use std::collections::HashMap;
 
 use namada::ledger::pos::PosQueries;
-use namada::ledger::storage::traits::StorageHasher;
-use namada::ledger::storage::{DBIter, DB};
+use namada::state::{DBIter, StorageHasher, DB};
 use namada::types::storage::Epoch;
 use namada::types::token;
-use namada::types::vote_extensions::validator_set_update;
+use namada::vote_ext::validator_set_update;
 
 use super::*;
 use crate::node::ledger::shell::Shell;
@@ -208,8 +207,10 @@ where
         let mut voting_powers = None;
         let mut signatures = HashMap::new();
 
-        for (_validator_voting_power, mut vote_extension) in
-            self.filter_invalid_valset_upd_vexts(vote_extensions)
+        for (
+            _validator_voting_power,
+            validator_set_update::SignedVext(mut vote_extension),
+        ) in self.filter_invalid_valset_upd_vexts(vote_extensions)
         {
             if voting_powers.is_none() {
                 voting_powers = Some(std::mem::take(
@@ -254,7 +255,7 @@ where
 
 #[cfg(test)]
 mod test_vote_extensions {
-    use namada::core::ledger::storage_api::collections::lazy_map::{
+    use namada::core::ledger::namada::storage::collections::lazy_map::{
         NestedSubKey, SubKey,
     };
     use namada::ledger::pos::PosQueries;
@@ -266,7 +267,7 @@ mod test_vote_extensions {
     use namada::proof_of_stake::Epoch;
     use namada::tendermint::abci::types::VoteInfo;
     use namada::types::key::RefTo;
-    use namada::types::vote_extensions::validator_set_update;
+    use namada::vote_ext::validator_set_update;
     use namada_sdk::eth_bridge::EthBridgeQueries;
 
     use crate::node::ledger::shell::test_utils::{self, get_pkh_from_address};

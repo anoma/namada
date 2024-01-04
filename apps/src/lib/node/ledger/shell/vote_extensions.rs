@@ -4,11 +4,11 @@ pub mod bridge_pool_vext;
 pub mod eth_events;
 pub mod val_set_update;
 
-use namada::proto::{SignableEthMessage, Signed};
+use namada::tx::{SignableEthMessage, Signed};
 use namada::types::keccak::keccak_hash;
-use namada::types::transaction::protocol::EthereumTxData;
-use namada::types::vote_extensions::{
-    bridge_pool_roots, ethereum_events, validator_set_update, VoteExtension,
+use namada::vote_ext::{
+    bridge_pool_roots, ethereum_events, validator_set_update, EthereumTxData,
+    VoteExtension,
 };
 use namada_sdk::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 
@@ -75,7 +75,9 @@ where
     pub fn craft_extension(&mut self) -> VoteExtension {
         VoteExtension {
             ethereum_events: self.extend_vote_with_ethereum_events(),
-            bridge_pool_root: self.extend_vote_with_bp_roots(),
+            bridge_pool_root: self
+                .extend_vote_with_bp_roots()
+                .map(namada::vote_ext::bridge_pool_roots::SignedVext),
             validator_set_update: self.extend_vote_with_valset_update(),
         }
     }
@@ -159,7 +161,7 @@ where
         };
         let protocol_key =
             self.mode.get_protocol_key().expect(VALIDATOR_EXPECT_MSG);
-        Some(ext.sign(protocol_key))
+        Some(ext.sign(protocol_key).0)
     }
 
     /// Extend PreCommit votes with [`validator_set_update::Vext`]
@@ -274,7 +276,11 @@ pub fn iter_protocol_txs(
         validator_set_update,
     } = ext;
     [
-        ethereum_events.map(EthereumTxData::EthEventsVext),
+        ethereum_events.map(|e| {
+            EthereumTxData::EthEventsVext(
+                namada::vote_ext::ethereum_events::SignedVext(e),
+            )
+        }),
         bridge_pool_root.map(EthereumTxData::BridgePoolVext),
         validator_set_update.map(EthereumTxData::ValSetUpdateVext),
     ]

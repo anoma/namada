@@ -11,9 +11,9 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
-use namada::core::ledger::governance::parameters::GovernanceParameters;
-use namada::core::ledger::pgf::parameters::PgfParameters;
 use namada::core::types::string_encoding::StringEncoded;
+use namada::governance::parameters::GovernanceParameters;
+use namada::governance::pgf::parameters::PgfParameters;
 use namada::ledger::eth_bridge::EthereumBridgeParams;
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::{Dec, GenesisValidator, OwnedPosParams};
@@ -314,7 +314,7 @@ pub fn make_dev_genesis(
 
     use namada::ledger::eth_bridge::{Contracts, UpgradeableContract};
     use namada::ledger::pos::types::ValidatorMetaData;
-    use namada::proto::{standalone_signature, SerializeWithBorsh};
+    use namada::tx::{standalone_signature, SerializeWithBorsh};
     use namada::types::address::wnam;
     use namada::types::chain::ChainIdPrefix;
     use namada::types::ethereum_events::EthAddress;

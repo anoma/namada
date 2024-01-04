@@ -9,8 +9,7 @@ use arse_merkle_tree::blake2b::Blake2bHasher;
 use arse_merkle_tree::traits::Hasher;
 use arse_merkle_tree::H256;
 use blake2b_rs::{Blake2b, Blake2bBuilder};
-use namada::ledger::storage::traits::StorageHasher;
-use namada::ledger::storage::Storage;
+use namada::state::{Storage, StorageHasher};
 
 #[derive(Default)]
 pub struct PersistentStorageHasher(Blake2bHasher);
@@ -60,9 +59,9 @@ mod tests {
     use namada::ledger::gas::STORAGE_ACCESS_GAS_PER_BYTE;
     use namada::ledger::ibc::storage::ibc_key;
     use namada::ledger::parameters::{EpochDuration, Parameters};
-    use namada::ledger::storage::write_log::WriteLog;
-    use namada::ledger::storage::{types, StoreType, WlStorage};
-    use namada::ledger::storage_api::{self, StorageWrite};
+    use namada::state::write_log::WriteLog;
+    use namada::state::{types, StoreType, WlStorage};
+    use namada::storage::{self, StorageWrite};
     use namada::types::chain::ChainId;
     use namada::types::ethereum_events::Uint;
     use namada::types::hash::Hash;
@@ -366,7 +365,7 @@ mod tests {
     ///    value, if any.
     fn test_read_with_height_aux(
         blocks_write_value: Vec<bool>,
-    ) -> namada::ledger::storage::Result<()> {
+    ) -> namada::state::Result<()> {
         let db_path =
             TempDir::new().expect("Unable to create a temporary DB directory");
         let mut storage = PersistentStorage::open(
@@ -459,7 +458,7 @@ mod tests {
     /// Test the restore of the merkle tree
     fn test_get_merkle_tree_aux(
         blocks_write_type: Vec<u64>,
-    ) -> namada::ledger::storage::Result<()> {
+    ) -> namada::state::Result<()> {
         let db_path =
             TempDir::new().expect("Unable to create a temporary DB directory");
         let mut storage = PersistentStorage::open(
@@ -711,7 +710,7 @@ mod tests {
         }
 
         // Then try to iterate over their prefix
-        let iter = storage_api::iter_prefix(&storage, &prefix)
+        let iter = namada::storage::iter_prefix(&storage, &prefix)
             .unwrap()
             .map(Result::unwrap);
 
@@ -726,7 +725,7 @@ mod tests {
         storage.commit_block().unwrap();
 
         // Again, try to iterate over their prefix
-        let iter = storage_api::iter_prefix(&storage, &prefix)
+        let iter = namada::storage::iter_prefix(&storage, &prefix)
             .unwrap()
             .map(Result::unwrap);
         itertools::assert_equal(iter, expected);
@@ -744,7 +743,7 @@ mod tests {
             storage.write(&key, i / 2).unwrap();
         }
 
-        let iter = storage_api::iter_prefix(&storage, &prefix)
+        let iter = namada::storage::iter_prefix(&storage, &prefix)
             .unwrap()
             .map(Result::unwrap);
 
@@ -764,7 +763,7 @@ mod tests {
         }
 
         // Check that iter_prefix doesn't return deleted keys anymore
-        let iter = storage_api::iter_prefix(&storage, &prefix)
+        let iter = namada::storage::iter_prefix(&storage, &prefix)
             .unwrap()
             .map(Result::unwrap);
         let expected = merged
@@ -777,7 +776,7 @@ mod tests {
         storage.commit_block().unwrap();
 
         // And check again
-        let iter = storage_api::iter_prefix(&storage, &prefix)
+        let iter = namada::storage::iter_prefix(&storage, &prefix)
             .unwrap()
             .map(Result::unwrap);
         itertools::assert_equal(iter, expected);

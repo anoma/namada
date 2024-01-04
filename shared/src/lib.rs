@@ -9,9 +9,14 @@
 pub use namada_core::{ibc, tendermint, tendermint_proto};
 #[cfg(feature = "tendermint-rpc")]
 pub use tendermint_rpc;
-pub use {bip39, namada_core as core, namada_proof_of_stake as proof_of_stake};
+pub use {
+    bip39, namada_account as account, namada_core as core, namada_gas as gas,
+    namada_governance as governance, namada_parameters as parameters,
+    namada_proof_of_stake as proof_of_stake, namada_sdk as sdk,
+    namada_state as state, namada_storage as storage, namada_token as token,
+    namada_tx as tx, namada_vote_ext as vote_ext,
+};
 pub mod ledger;
-pub use namada_sdk;
 pub use namada_tx::proto;
 pub mod types;
 pub mod vm;

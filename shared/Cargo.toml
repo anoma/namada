@@ -64,7 +64,11 @@ namada-sdk = [
   "namada_sdk/namada-sdk",
 ]
 
-multicore = ["masp_proofs/multicore", "namada_sdk/multicore"]
+multicore = [
+  "masp_proofs/multicore",
+  "namada_sdk/multicore",
+  "namada_token/multicore",
+]
 
 [dependencies]
 namada_account = { path = "../account" }

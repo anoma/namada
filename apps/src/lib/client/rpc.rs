@@ -15,20 +15,20 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::{Node, ViewingKey};
 use masp_primitives::zip32::ExtendedFullViewingKey;
-use namada::core::ledger::governance::cli::offline::{
+use namada::governance::cli::offline::{
     find_offline_proposal, find_offline_votes, read_offline_files,
     OfflineSignedProposal, OfflineVote,
 };
-use namada::core::ledger::governance::parameters::GovernanceParameters;
-use namada::core::ledger::governance::storage::keys as governance_storage;
-use namada::core::ledger::governance::storage::proposal::{
+use namada::governance::parameters::GovernanceParameters;
+use namada::governance::pgf::parameters::PgfParameters;
+use namada::governance::pgf::storage::steward::StewardDetail;
+use namada::governance::storage::keys as governance_storage;
+use namada::governance::storage::proposal::{
     StoragePgfFunding, StorageProposal,
 };
-use namada::core::ledger::governance::utils::{
+use namada::governance::utils::{
     compute_proposal_result, ProposalVotes, TallyType, TallyVote, VotePower,
 };
-use namada::core::ledger::pgf::parameters::PgfParameters;
-use namada::core::ledger::pgf::storage::steward::StewardDetail;
 use namada::ledger::events::Event;
 use namada::ledger::ibc::storage::{
     ibc_denom_key, ibc_denom_key_prefix, is_ibc_denom_key,
@@ -38,15 +38,16 @@ use namada::ledger::pos::types::{CommissionPair, Slash};
 use namada::ledger::pos::PosParams;
 use namada::ledger::queries::RPC;
 use namada::proof_of_stake::types::{ValidatorState, WeightedValidator};
+use namada::token;
 use namada::types::address::{Address, InternalAddress, MASP};
 use namada::types::hash::Hash;
 use namada::types::ibc::{is_ibc_denom, IbcTokenHash};
 use namada::types::io::Io;
 use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
+use namada::types::storage;
 use namada::types::storage::{BlockHeight, BlockResults, Epoch, Key, KeySeg};
 use namada::types::token::{Change, MaspDenom};
-use namada::types::{storage, token};
 use namada_sdk::error::{is_pinned_error, Error, PinnedBalanceError};
 use namada_sdk::masp::{Conversions, MaspAmount, MaspChange};
 use namada_sdk::proof_of_stake::types::ValidatorMetaData;
@@ -321,7 +322,8 @@ pub async fn query_transparent_balance(
             let tokens =
                 query_tokens(context, Some(&base_token), Some(&owner)).await;
             for (token_alias, token) in tokens {
-                let balance_key = token::balance_key(&token, &owner);
+                let balance_key =
+                    token::storage_key::balance_key(&token, &owner);
                 match query_storage_value::<_, token::Amount>(
                     context.client(),
                     &balance_key,
@@ -365,7 +367,7 @@ pub async fn query_transparent_balance(
         (Some(base_token), None) => {
             let tokens = query_tokens(context, Some(&base_token), None).await;
             for (_, token) in tokens {
-                let prefix = token::balance_prefix(&token);
+                let prefix = token::storage_key::balance_prefix(&token);
                 let balances =
                     query_storage_prefix::<token::Amount>(context, &prefix)
                         .await;
@@ -562,7 +564,8 @@ async fn print_balances(
     for (key, balance) in balances {
         // Get the token, the owner, and the balance with the token and the
         // owner
-        let (t, o, s) = match token::is_any_token_balance_key(&key) {
+        let (t, o, s) = match token::storage_key::is_any_token_balance_key(&key)
+        {
             Some([tok, owner]) => (
                 tok.clone(),
                 owner.clone(),

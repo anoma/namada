@@ -2,7 +2,7 @@
 
 use namada::ledger::dry_run_tx;
 use namada::ledger::queries::{RequestCtx, ResponseQuery};
-use namada::ledger::storage_api::token;
+use namada::token;
 use namada::types::address::Address;
 
 use super::*;

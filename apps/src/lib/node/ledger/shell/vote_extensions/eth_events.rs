@@ -3,15 +3,12 @@
 use std::collections::{BTreeMap, HashMap};
 
 use namada::ledger::pos::PosQueries;
-use namada::ledger::storage::traits::StorageHasher;
-use namada::ledger::storage::{DBIter, DB};
-use namada::proto::Signed;
+use namada::state::{DBIter, StorageHasher, DB};
+use namada::tx::Signed;
 use namada::types::ethereum_events::EthereumEvent;
 use namada::types::storage::BlockHeight;
 use namada::types::token;
-use namada::types::vote_extensions::ethereum_events::{
-    self, MultiSignedEthEvent,
-};
+use namada::vote_ext::ethereum_events::{self, MultiSignedEthEvent};
 use namada_sdk::eth_bridge::EthBridgeQueries;
 
 use super::*;
@@ -293,7 +290,7 @@ mod test_vote_extensions {
     use std::convert::TryInto;
 
     use borsh_ext::BorshSerializeExt;
-    use namada::core::ledger::storage_api::collections::lazy_map::{
+    use namada::core::ledger::namada::storage::collections::lazy_map::{
         NestedSubKey, SubKey,
     };
     use namada::eth_bridge::storage::bridge_pool;
@@ -312,7 +309,7 @@ mod test_vote_extensions {
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::{Epoch, InnerEthEventsQueue};
-    use namada::types::vote_extensions::ethereum_events;
+    use namada::vote_ext::ethereum_events;
 
     use crate::node::ledger::shell::test_utils::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;

@@ -2,9 +2,8 @@
 //! bridge pool root and nonce seen by a quorum of validators.
 use itertools::Itertools;
 use namada::ledger::pos::PosQueries;
-use namada::ledger::storage::traits::StorageHasher;
-use namada::ledger::storage::{DBIter, DB};
-use namada::proto::Signed;
+use namada::state::{DBIter, StorageHasher, DB};
+use namada::tx::Signed;
 use namada::types::keccak::keccak_hash;
 use namada::types::storage::BlockHeight;
 use namada::types::token;
@@ -202,7 +201,6 @@ where
 mod test_bp_vote_extensions {
     use namada::core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
     use namada::ledger::pos::PosQueries;
-    use namada::ledger::storage_api::StorageWrite;
     use namada::proof_of_stake::storage::{
         consensus_validator_set_handle,
         read_consensus_validator_set_addresses_with_stake,
@@ -211,14 +209,15 @@ mod test_bp_vote_extensions {
         Position as ValidatorPosition, WeightedValidator,
     };
     use namada::proof_of_stake::{become_validator, BecomeValidator, Epoch};
-    use namada::proto::{SignableEthMessage, Signed};
+    use namada::storage::StorageWrite;
     use namada::tendermint::abci::types::VoteInfo;
+    use namada::tx::{SignableEthMessage, Signed};
     use namada::types::ethereum_events::Uint;
     use namada::types::keccak::{keccak_hash, KeccakHash};
     use namada::types::key::*;
     use namada::types::storage::BlockHeight;
     use namada::types::token;
-    use namada::types::vote_extensions::bridge_pool_roots;
+    use namada::vote_ext::bridge_pool_roots;
     use namada_sdk::eth_bridge::EthBridgeQueries;
 
     use crate::node::ledger::shell::test_utils::*;

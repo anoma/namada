@@ -4681,6 +4681,7 @@ dependencies = [
  "namada_state",
  "namada_storage",
  "namada_trans_token",
+ "rayon",
  "tracing",
 ]
 

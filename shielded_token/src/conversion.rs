@@ -174,7 +174,7 @@ where
 }
 
 // This is only enabled when "wasm-runtime" is on, because we're using rayon
-#[cfg(any(feature = "wasm-runtime", test))]
+#[cfg(any(feature = "multicore", test))]
 /// Update the MASP's allowed conversions
 pub fn update_allowed_conversions<D, H>(
     wl_storage: &mut WlStorage<D, H>,
@@ -184,16 +184,21 @@ where
     H: 'static + StorageHasher,
 {
     use std::cmp::Ordering;
+    use std::collections::BTreeMap;
 
     use masp_primitives::bls12_381;
+    use masp_primitives::convert::AllowedConversion;
     use masp_primitives::ff::PrimeField;
+    use masp_primitives::merkle_tree::FrozenCommitmentTree;
+    use masp_primitives::sapling::Node;
     use masp_primitives::transaction::components::I128Sum as MaspAmount;
     use namada_core::types::storage::{Key, KeySeg};
-    use namada_core::types::{address, MASP_CONVERT_ANCHOR_KEY};
     use rayon::iter::{
         IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
     };
     use rayon::prelude::ParallelSlice;
+
+    use crate::storage_key::MASP_CONVERT_ANCHOR_KEY;
 
     // The derived conversions will be placed in MASP address space
     let masp_addr = MASP;

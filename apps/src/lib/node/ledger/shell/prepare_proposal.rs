@@ -1,17 +1,17 @@
 //! Implementation of the [`RequestPrepareProposal`] ABCI++ method for the Shell
 
 use namada::core::hints;
-use namada::core::ledger::gas::TxGasMeter;
+use namada::gas::TxGasMeter;
 use namada::ledger::pos::PosQueries;
 use namada::ledger::protocol::get_fee_unshielding_transaction;
-use namada::ledger::storage::{DBIter, StorageHasher, TempWlStorage, DB};
+use namada::ledger::storage::tx_queue::TxInQueue;
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
-use namada::proto::Tx;
+use namada::state::{DBIter, StorageHasher, TempWlStorage, DB};
+use namada::tx::data::{DecryptedTx, TxType};
+use namada::tx::Tx;
 use namada::types::address::Address;
-use namada::types::internal::TxInQueue;
 use namada::types::key::tm_raw_hash_to_string;
 use namada::types::time::DateTimeUtc;
-use namada::types::transaction::{DecryptedTx, TxType};
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::WasmCacheAccess;
 
@@ -374,10 +374,10 @@ mod test_prepare_proposal {
     use std::collections::BTreeSet;
 
     use borsh_ext::BorshSerializeExt;
-    use namada::core::ledger::storage_api::collections::lazy_map::{
+    use namada::core::ledger::namada::storage::collections::lazy_map::{
         NestedSubKey, SubKey,
     };
-    use namada::core::ledger::storage_api::token::read_denom;
+    use namada::core::ledger::namada::token::read_denom;
     use namada::ledger::gas::Gas;
     use namada::ledger::pos::PosQueries;
     use namada::ledger::replay_protection;
@@ -387,18 +387,18 @@ mod test_prepare_proposal {
     };
     use namada::proof_of_stake::types::WeightedValidator;
     use namada::proof_of_stake::Epoch;
-    use namada::proto::{Code, Data, Header, Section, Signature, Signed};
+    use namada::tx::data::protocol::{
+        ethereum_tx_data_variants, EthereumTxData,
+    };
+    use namada::tx::data::{Fee, TxType, WrapperTx};
+    use namada::tx::{Code, Data, Header, Section, Signature, Signed};
     use namada::types::address::{self, Address};
     use namada::types::ethereum_events::EthereumEvent;
     use namada::types::key::RefTo;
     use namada::types::storage::{BlockHeight, InnerEthEventsQueue};
     use namada::types::token;
     use namada::types::token::{Amount, DenominatedAmount};
-    use namada::types::transaction::protocol::{
-        ethereum_tx_data_variants, EthereumTxData,
-    };
-    use namada::types::transaction::{Fee, TxType, WrapperTx};
-    use namada::types::vote_extensions::ethereum_events;
+    use namada::vote_ext::ethereum_events;
 
     use super::*;
     use crate::config::ValidatorLocalConfig;
@@ -1045,8 +1045,7 @@ mod test_prepare_proposal {
         let (shell, _recv, _, _) = test_utils::setup();
 
         let block_gas_limit =
-            namada::core::ledger::gas::get_max_block_gas(&shell.wl_storage)
-                .unwrap();
+            namada::gas::get_max_block_gas(&shell.wl_storage).unwrap();
         let keypair = gen_keypair();
 
         let wrapper = WrapperTx::new(
