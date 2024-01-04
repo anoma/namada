@@ -7,6 +7,7 @@ use std::time::Duration as StdDuration;
 use namada_core::ledger::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
+use namada_core::proto::Memo;
 use namada_core::types::address::Address;
 use namada_core::types::chain::ChainId;
 use namada_core::types::dec::Dec;
@@ -1872,6 +1873,8 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub tx_reveal_code_path: PathBuf,
     /// Password to decrypt key
     pub password: Option<Zeroizing<String>>,
+    /// Optional memo to be included in the transaction
+    pub memo: Option<Memo>,
     /// Use device to sign the transaction
     pub use_device: bool,
 }

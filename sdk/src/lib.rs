@@ -141,6 +141,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             signatures: vec![],
             tx_reveal_code_path: PathBuf::from(TX_REVEAL_PK),
             password: None,
+            memo: None,
             use_device: false,
         }
     }
@@ -661,6 +662,7 @@ where
                 signatures: vec![],
                 tx_reveal_code_path: PathBuf::from(TX_REVEAL_PK),
                 password: None,
+                memo: None,
                 use_device: false,
             },
         }

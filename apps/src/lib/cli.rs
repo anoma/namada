@@ -5832,6 +5832,7 @@ pub mod args {
                     .chain_id
                     .or_else(|| Some(ctx.config.ledger.chain_id.clone())),
                 wrapper_fee_payer: self.wrapper_fee_payer.map(|x| ctx.get(&x)),
+                memo: self.memo,
                 use_device: self.use_device,
             }
         }
@@ -5970,6 +5971,7 @@ pub mod args {
             let tx_reveal_code_path = PathBuf::from(TX_REVEAL_PK);
             let chain_id = CHAIN_ID_OPT.parse(matches);
             let password = None;
+            let memo = None;
             let wrapper_fee_payer = FEE_PAYER_OPT.parse(matches);
             let output_folder = OUTPUT_FOLDER_PATH.parse(matches);
             let use_device = USE_DEVICE.parse(matches);
@@ -5995,6 +5997,7 @@ pub mod args {
                 chain_id,
                 wrapper_fee_payer,
                 output_folder,
+                memo,
                 use_device,
             }
         }
