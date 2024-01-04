@@ -11,8 +11,8 @@ pub use namada_core::{ibc, tendermint, tendermint_proto};
 pub use tendermint_rpc;
 pub use {bip39, namada_core as core, namada_proof_of_stake as proof_of_stake};
 pub mod ledger;
-pub use namada_core::proto;
 pub use namada_sdk;
+pub use namada_tx::proto;
 pub mod types;
 pub mod vm;
 

@@ -1377,11 +1377,11 @@ where
             }
         };
 
-        match wrapper
-            .fee
-            .amount_per_gas_unit
-            .to_amount(&wrapper.fee.token, &self.wl_storage)
-        {
+        match namada_token::denom_to_amount(
+            wrapper.fee.amount_per_gas_unit,
+            &wrapper.fee.token,
+            &self.wl_storage,
+        ) {
             Ok(amount_per_gas_unit)
                 if amount_per_gas_unit < minimum_gas_price =>
             {

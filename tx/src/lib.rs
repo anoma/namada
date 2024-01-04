@@ -8,7 +8,7 @@ pub use namada_core::types::sign::SignatureIndex;
 pub use types::{
     standalone_signature, verify_standalone_sig, Code, Commitment,
     CompressedSignature, Data, DecodeError, Header, MaspBuilder, Section,
-    Signature, Signed, Signer, Tx, TxError,
+    Signature, Signed, Signer, Tx, TxError, VerifySigError,
 };
 
 #[cfg(test)]

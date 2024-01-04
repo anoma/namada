@@ -70,6 +70,43 @@ pub fn is_masp_key(key: &storage::Key) -> bool {
         false
     }
 }
+/// Check if the given storage key is allowed to be touched by a masp transfer
+pub fn is_masp_allowed_key(key: &storage::Key) -> bool {
+    match &key.segments[..] {
+        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
+            if *addr == address::MASP
+                && (key == HEAD_TX_KEY
+                    || key.starts_with(TX_KEY_PREFIX)
+                    || key.starts_with(PIN_KEY_PREFIX)
+                    || key == MASP_NOTE_COMMITMENT_TREE_KEY) =>
+        {
+            true
+        }
+
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(key),
+            DbKeySeg::StringSeg(_nullifier),
+        ] if *addr == address::MASP && key == MASP_NULLIFIERS_KEY => true,
+        _ => false,
+    }
+}
+
+/// Check if the given storage key is a masp tx prefix key
+pub fn is_masp_tx_prefix_key(key: &storage::Key) -> bool {
+    matches!(&key.segments[..],
+        [DbKeySeg::AddressSeg(addr),
+             DbKeySeg::StringSeg(prefix),
+        ] if *addr == address::MASP && prefix.starts_with(TX_KEY_PREFIX))
+}
+
+/// Check if the given storage key is a masp tx pin key
+pub fn is_masp_tx_pin_key(key: &storage::Key) -> bool {
+    matches!(&key.segments[..],
+        [DbKeySeg::AddressSeg(addr),
+             DbKeySeg::StringSeg(prefix),
+        ] if *addr == address::MASP && prefix.starts_with(PIN_KEY_PREFIX))
+}
 
 /// Check if the given storage key is a masp nullifier key
 pub fn is_masp_nullifier_key(key: &storage::Key) -> bool {

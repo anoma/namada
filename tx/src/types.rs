@@ -14,9 +14,10 @@ use namada_core::borsh::schema::{add_definition, Declaration, Definition};
 use namada_core::borsh::{
     BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
 };
+use namada_core::types::account::AccountPublicKeysMap;
 use namada_core::types::address::Address;
 use namada_core::types::chain::ChainId;
-use namada_core::types::key::{AccountPublicKeysMap, *};
+use namada_core::types::key::*;
 use namada_core::types::sign::SignatureIndex;
 use namada_core::types::storage::Epoch;
 use namada_core::types::time::DateTimeUtc;

@@ -4,10 +4,12 @@ use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
-use namada_core::ledger::gas::{GasMetering, TxGasMeter, WASM_MEMORY_PAGE_GAS};
-use namada_core::ledger::storage::write_log::StorageModification;
-use namada_core::types::transaction::TxSentinel;
 use namada_core::types::validity_predicate::VpSentinel;
+use namada_gas::{GasMetering, TxGasMeter, WASM_MEMORY_PAGE_GAS};
+use namada_state::write_log::StorageModification;
+use namada_state::{Storage, StorageHasher};
+use namada_tx::data::TxSentinel;
+use namada_tx::{Commitment, Section, Tx};
 use parity_wasm::elements;
 use thiserror::Error;
 use wasmer::{BaseTunables, Module, Store};
@@ -16,8 +18,6 @@ use super::memory::{Limit, WasmMemory};
 use super::TxCache;
 use crate::ledger::gas::VpGasMeter;
 use crate::ledger::storage::write_log::WriteLog;
-use crate::ledger::storage::{self, Storage, StorageHasher};
-use crate::proto::{Commitment, Section, Tx};
 use crate::types::address::Address;
 use crate::types::hash::{Error as TxHashError, Hash};
 use crate::types::internal::HostEnvResult;
@@ -101,7 +101,7 @@ pub fn tx<DB, H, CA>(
     tx_wasm_cache: &mut TxCache<CA>,
 ) -> Result<BTreeSet<Address>>
 where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -232,7 +232,7 @@ pub fn vp<DB, H, CA>(
     mut vp_wasm_cache: VpCache<CA>,
 ) -> Result<bool>
 where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -383,7 +383,7 @@ fn run_vp(
 #[derive(Default, Debug)]
 pub struct VpEvalWasm<DB, H, CA>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -397,7 +397,7 @@ where
 
 impl<DB, H, CA> VpEvaluator for VpEvalWasm<DB, H, CA>
 where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -424,7 +424,7 @@ where
 
 impl<DB, H, CA> VpEvalWasm<DB, H, CA>
 where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -512,7 +512,7 @@ fn fetch_or_compile<DB, H, CN, CA>(
     gas_meter: &mut dyn GasMetering,
 ) -> Result<(Module, Store)>
 where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CN: 'static + CacheName,
     CA: 'static + WasmCacheAccess,

@@ -1,7 +1,7 @@
-use namada_core::proto::Tx;
 pub use namada_core::types::eth_bridge_pool::{GasFee, TransferToEthereum};
 use namada_core::types::hash::Hash;
 use namada_core::types::key::common;
+use namada_tx::Tx;
 
 use super::GlobalArgs;
 use crate::transaction;

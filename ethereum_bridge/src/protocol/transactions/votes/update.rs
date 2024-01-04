@@ -209,10 +209,10 @@ fn keys_changed<T>(
 mod tests {
     use std::collections::BTreeMap;
 
-    use namada_core::ledger::storage::testing::TestWlStorage;
     use namada_core::types::address;
     use namada_core::types::ethereum_events::EthereumEvent;
     use namada_core::types::voting_power::FractionalVotingPower;
+    use namada_state::testing::TestWlStorage;
 
     use self::helpers::{default_event, default_total_stake, TallyParams};
     use super::*;

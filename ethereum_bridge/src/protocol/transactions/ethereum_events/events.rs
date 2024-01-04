@@ -583,7 +583,6 @@ mod tests {
     use borsh_ext::BorshSerializeExt;
     use eyre::Result;
     use namada_core::ledger::storage::mockdb::MockDBWriteBatch;
-    use namada_core::ledger::storage::testing::TestWlStorage;
     use namada_core::ledger::storage::types::encode;
     use namada_core::types::address::testing::gen_implicit_address;
     use namada_core::types::address::{gen_established_address, nam, wnam};
@@ -595,6 +594,7 @@ mod tests {
     use namada_core::types::token::Amount;
     use namada_core::types::{address, eth_bridge_pool};
     use namada_parameters::{update_epoch_parameter, EpochDuration};
+    use namada_state::testing::TestWlStorage;
 
     use super::*;
     use crate::storage::bridge_pool::get_pending_key;

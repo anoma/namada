@@ -45,8 +45,8 @@ mod tests {
     use borsh::BorshDeserialize;
     use borsh_ext::BorshSerializeExt;
     use eyre::{eyre, Result};
-    use namada_core::ledger::storage::testing::TestWlStorage;
     use namada_core::types::storage;
+    use namada_state::testing::TestWlStorage;
     use namada_storage::{StorageRead, StorageWrite};
 
     #[test]

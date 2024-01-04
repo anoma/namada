@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use namada_core::ledger::governance::utils::TallyResult;
+use namada_governance::utils::TallyResult;
 use namada_sdk::events::{Event, EventLevel};
 use thiserror::Error;
 

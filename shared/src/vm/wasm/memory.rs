@@ -6,7 +6,8 @@ use std::str::Utf8Error;
 use std::sync::Arc;
 
 use borsh_ext::BorshSerializeExt;
-use namada_core::ledger::gas::MEMORY_ACCESS_GAS_PER_BYTE;
+use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
+use namada_tx::Tx;
 use thiserror::Error;
 use wasmer::{
     vm, BaseTunables, HostEnvInitError, LazyInit, Memory, MemoryError,
@@ -16,7 +17,6 @@ use wasmer_vm::{
     MemoryStyle, TableStyle, VMMemoryDefinition, VMTableDefinition,
 };
 
-use crate::proto::Tx;
 use crate::vm::memory::VmMemory;
 use crate::vm::types::VpInput;
 

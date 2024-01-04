@@ -18,23 +18,23 @@ use std::marker::PhantomData;
 use borsh::BorshDeserialize;
 use eyre::eyre;
 use namada_core::hints;
-use namada_core::ledger::eth_bridge::storage::bridge_pool::{
+use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
+use namada_core::types::eth_bridge_pool::erc20_token_address;
+use namada_ethereum_bridge::storage::bridge_pool::{
     get_pending_key, is_bridge_pool_key, BRIDGE_POOL_ADDRESS,
 };
-use namada_core::ledger::eth_bridge::storage::whitelist;
-use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_ethereum_bridge::storage::parameters::read_native_erc20_address;
-use namada_ethereum_bridge::storage::wrapped_erc20s;
+use namada_ethereum_bridge::storage::whitelist;
+use namada_state::{DBIter, StorageHasher, DB};
+use namada_token::storage_key::balance_key;
+use namada_token::Amount;
+use namada_tx::Tx;
 
 use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
-use crate::ledger::storage::traits::StorageHasher;
-use crate::ledger::storage::{DBIter, DB};
-use crate::proto::Tx;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::eth_bridge_pool::{PendingTransfer, TransferToEthereumKind};
 use crate::types::ethereum_events::EthAddress;
 use crate::types::storage::Key;
-use crate::types::token::{balance_key, Amount};
 use crate::vm::WasmCacheAccess;
 
 #[derive(thiserror::Error, Debug)]
@@ -211,7 +211,7 @@ where
         gas_check: EscrowDelta<'_, GasCheck>,
     ) -> Result<bool, Error> {
         if hints::unlikely(
-            *gas_check.token == wrapped_erc20s::token(wnam_address),
+            *gas_check.token == erc20_token_address(wnam_address),
         ) {
             // NB: this should never be possible: protocol tx state updates
             // never result in wNAM ERC20s being minted
@@ -644,11 +644,12 @@ mod test_bridge_pool_vp {
     use borsh::BorshDeserialize;
     use borsh_ext::BorshSerializeExt;
     use namada_core::ledger::eth_bridge::storage::bridge_pool::get_signed_root_key;
-    use namada_core::ledger::gas::TxGasMeter;
     use namada_core::types::address;
     use namada_ethereum_bridge::storage::parameters::{
         Contracts, EthereumBridgeParams, UpgradeableContract,
     };
+    use namada_gas::TxGasMeter;
+    use namada_storage::StorageWrite;
 
     use super::*;
     use crate::ledger::gas::VpGasMeter;
@@ -656,7 +657,6 @@ mod test_bridge_pool_vp {
     use crate::ledger::storage::traits::Sha256Hasher;
     use crate::ledger::storage::write_log::WriteLog;
     use crate::ledger::storage::{Storage, WlStorage};
-    use crate::ledger::storage_api::StorageWrite;
     use crate::types::address::{nam, wnam, InternalAddress};
     use crate::types::chain::ChainId;
     use crate::types::eth_bridge_pool::{GasFee, TransferToEthereum};

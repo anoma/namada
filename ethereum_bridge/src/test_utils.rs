@@ -3,7 +3,6 @@
 use std::collections::HashMap;
 use std::num::NonZeroU64;
 
-use namada_core::ledger::storage::testing::TestWlStorage;
 use namada_core::types::address::{self, wnam, Address};
 use namada_core::types::dec::Dec;
 use namada_core::types::ethereum_events::EthAddress;
@@ -18,6 +17,7 @@ use namada_proof_of_stake::{
     become_validator, bond_tokens, compute_and_store_total_consensus_stake,
     staking_token_address, BecomeValidator,
 };
+use namada_state::testing::TestWlStorage;
 use namada_storage::token::credit_tokens;
 use namada_storage::{StorageRead, StorageWrite};
 

@@ -2,15 +2,17 @@
 use std::collections::{BTreeSet, HashSet};
 
 use eyre::{eyre, Result};
-use namada_core::ledger::eth_bridge::storage::{self, escrow_key};
-use namada_core::ledger::storage::traits::StorageHasher;
-use namada_core::ledger::{eth_bridge, storage as ledger_storage};
+use namada_core::ledger::eth_bridge;
 use namada_core::types::address::Address;
+use namada_core::types::hash::StorageHasher;
 use namada_core::types::storage::Key;
-use namada_core::types::token::{balance_key, is_balance_key, Amount};
+use namada_ethereum_bridge::storage;
+use namada_ethereum_bridge::storage::escrow_key;
+use namada_token::storage_key::{balance_key, is_balance_key};
+use namada_token::Amount;
+use namada_tx::Tx;
 
 use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
-use crate::proto::Tx;
 use crate::vm::WasmCacheAccess;
 
 /// Generic error that may be returned by the validity predicate
@@ -21,7 +23,7 @@ pub struct Error(#[from] eyre::Error);
 /// Validity predicate for the Ethereum bridge
 pub struct EthBridge<'ctx, DB, H, CA>
 where
-    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -31,7 +33,7 @@ where
 
 impl<'ctx, DB, H, CA> EthBridge<'ctx, DB, H, CA>
 where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -83,7 +85,7 @@ where
 
 impl<'a, DB, H, CA> NativeVp for EthBridge<'a, DB, H, CA>
 where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -168,11 +170,12 @@ mod tests {
     use namada_core::ledger::eth_bridge;
     use namada_core::ledger::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
     use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
-    use namada_core::ledger::gas::TxGasMeter;
-    use namada_core::ledger::storage_api::StorageWrite;
     use namada_ethereum_bridge::storage::parameters::{
         Contracts, EthereumBridgeParams, UpgradeableContract,
     };
+    use namada_gas::TxGasMeter;
+    use namada_storage::StorageWrite;
+    use namada_tx::Tx;
     use rand::Rng;
 
     use super::*;
@@ -181,7 +184,6 @@ mod tests {
     use crate::ledger::storage::traits::Sha256Hasher;
     use crate::ledger::storage::write_log::WriteLog;
     use crate::ledger::storage::{Storage, WlStorage};
-    use crate::proto::Tx;
     use crate::types::address::testing::established_address_1;
     use crate::types::address::{nam, wnam};
     use crate::types::ethereum_events;

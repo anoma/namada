@@ -369,8 +369,8 @@ where
 mod tests {
     use borsh_ext::BorshSerializeExt;
     use eyre::Result;
-    use namada_core::ledger::storage::testing::TestWlStorage;
     use namada_core::types::ethereum_events::EthAddress;
+    use namada_state::testing::TestWlStorage;
 
     use super::*;
 

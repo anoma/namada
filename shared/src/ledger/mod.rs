@@ -14,17 +14,19 @@ pub mod vp_host_fns;
 
 #[cfg(feature = "wasm-runtime")]
 pub use dry_run_tx::dry_run_tx;
-pub use namada_core::ledger::{
-    gas, parameters, replay_protection, storage_api, tx_env, vp_env,
+pub use namada_core::ledger::replay_protection;
+pub use {
+    namada_gas as gas, namada_parameters as parameters,
+    namada_tx_env as tx_env, namada_vp_env as vp_env,
 };
 
 #[cfg(feature = "wasm-runtime")]
 mod dry_run_tx {
-    use namada_core::ledger::storage::{DBIter, StorageHasher, DB};
-    use namada_core::ledger::storage_api::ResultExt;
     use namada_sdk::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
+    use namada_state::{DBIter, StorageHasher, DB};
+    use namada_storage::ResultExt;
 
-    use super::{protocol, storage_api};
+    use super::protocol;
     use crate::vm::wasm::{TxCache, VpCache};
     use crate::vm::WasmCacheAccess;
 
@@ -32,21 +34,20 @@ mod dry_run_tx {
     pub fn dry_run_tx<D, H, CA>(
         mut ctx: RequestCtx<'_, D, H, VpCache<CA>, TxCache<CA>>,
         request: &RequestQuery,
-    ) -> storage_api::Result<EncodedResponseQuery>
+    ) -> namada_storage::Result<EncodedResponseQuery>
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
         CA: 'static + WasmCacheAccess + Sync,
     {
         use borsh_ext::BorshSerializeExt;
-        use namada_core::ledger::gas::{Gas, GasMetering, TxGasMeter};
-        use namada_core::ledger::storage::TempWlStorage;
-        use namada_core::proto::Tx;
-        use namada_core::types::transaction::DecryptedTx;
+        use namada_gas::{Gas, GasMetering, TxGasMeter};
+        use namada_state::TempWlStorage;
+        use namada_tx::data::{DecryptedTx, TxType};
+        use namada_tx::Tx;
 
         use crate::ledger::protocol::ShellParams;
         use crate::types::storage::TxIndex;
-        use crate::types::transaction::TxType;
 
         let mut tx = Tx::try_from(&request.data[..]).into_storage_result()?;
         tx.validate_tx().into_storage_result()?;
@@ -84,9 +85,7 @@ mod dry_run_tx {
                 // If dry run only the inner tx, use the max block gas as the
                 // gas limit
                 TxGasMeter::new(
-                    namada_core::ledger::gas::get_max_block_gas(ctx.wl_storage)
-                        .unwrap()
-                        .into(),
+                    namada_gas::get_max_block_gas(ctx.wl_storage).unwrap(),
                 )
             }
             TxType::Raw => {
@@ -96,9 +95,7 @@ mod dry_run_tx {
                 // If dry run only the inner tx, use the max block gas as the
                 // gas limit
                 TxGasMeter::new(
-                    namada_core::ledger::gas::get_max_block_gas(ctx.wl_storage)
-                        .unwrap()
-                        .into(),
+                    namada_gas::get_max_block_gas(ctx.wl_storage).unwrap(),
                 )
             }
         };
@@ -116,9 +113,7 @@ mod dry_run_tx {
         .into_storage_result()?;
         cumulated_gas = cumulated_gas
             .checked_add(tx_gas_meter.get_tx_consumed_gas())
-            .ok_or(namada_core::ledger::storage_api::Error::SimpleMessage(
-                "Overflow in gas",
-            ))?;
+            .ok_or(namada_storage::Error::SimpleMessage("Overflow in gas"))?;
         // Account gas for both inner and wrapper (if available)
         data.gas_used = cumulated_gas;
         // NOTE: the keys changed by the wrapper transaction (if any) are not
@@ -136,8 +131,6 @@ mod dry_run_tx {
 mod test {
     use borsh::BorshDeserialize;
     use borsh_ext::BorshSerializeExt;
-    use namada_core::ledger::storage::testing::TestWlStorage;
-    use namada_core::ledger::storage_api::{self, StorageWrite};
     use namada_core::types::hash::Hash;
     use namada_core::types::storage::{BlockHeight, Key};
     use namada_core::types::transaction::decrypted::DecryptedTx;
@@ -146,6 +139,8 @@ mod test {
     use namada_sdk::queries::{
         EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
     };
+    use namada_state::testing::TestWlStorage;
+    use namada_storage::StorageWrite;
     use namada_test_utils::TestWasms;
     use tempfile::TempDir;
     use tendermint_rpc::{Error as RpcError, Response};
@@ -189,8 +184,7 @@ mod test {
 
             // Initialize mock gas limit
             let max_block_gas_key =
-                namada_core::ledger::parameters::storage::get_max_block_gas_key(
-                );
+                namada_parameters::storage::get_max_block_gas_key();
             wl_storage
                 .storage
                 .write(
@@ -272,7 +266,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_shell_queries_router_with_client() -> storage_api::Result<()>
+    async fn test_shell_queries_router_with_client() -> namada_storageResult<()>
     {
         // Initialize the `TestClient`
         let mut client = TestClient::new(RPC);

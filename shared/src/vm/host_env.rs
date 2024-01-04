@@ -7,15 +7,23 @@ use std::num::TryFromIntError;
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::transaction::Transaction;
-use namada_core::ledger::gas::{
-    GasMetering, TxGasMeter, MEMORY_ACCESS_GAS_PER_BYTE,
-};
-use namada_core::ledger::masp_utils;
 use namada_core::types::address::ESTABLISHED_ADDRESS_BYTES_LEN;
 use namada_core::types::internal::KeyVal;
-use namada_core::types::storage::TX_INDEX_LENGTH;
-use namada_core::types::transaction::TxSentinel;
+use namada_core::types::storage::{Epochs, TX_INDEX_LENGTH};
 use namada_core::types::validity_predicate::VpSentinel;
+use namada_gas::{
+    self as gas, GasMetering, TxGasMeter, VpGasMeter,
+    MEMORY_ACCESS_GAS_PER_BYTE,
+};
+use namada_state::write_log::{self, WriteLog};
+use namada_state::{Storage, StorageHasher};
+use namada_storage::{self, ResultExt};
+use namada_token::storage_key::{
+    balance_key, is_any_minted_balance_key, is_any_minter_key,
+    is_any_token_balance_key, minted_balance_key, minter_key,
+};
+use namada_tx::data::TxSentinel;
+use namada_tx::Tx;
 use thiserror::Error;
 
 #[cfg(feature = "wasm-runtime")]
@@ -23,20 +31,12 @@ use super::wasm::TxCache;
 #[cfg(feature = "wasm-runtime")]
 use super::wasm::VpCache;
 use super::WasmCacheAccess;
-use crate::ledger::gas::{self, VpGasMeter};
-use crate::ledger::storage::write_log::{self, WriteLog};
-use crate::ledger::storage::{self, Storage, StorageHasher};
-use crate::ledger::storage_api::{self, ResultExt};
 use crate::ledger::vp_host_fns;
-use crate::proto::Tx;
 use crate::types::address::{self, Address};
 use crate::types::hash::Hash;
 use crate::types::ibc::{IbcEvent, IbcShieldedTransfer};
 use crate::types::internal::HostEnvResult;
 use crate::types::storage::{BlockHeight, Epoch, Key, TxIndex};
-use crate::types::token::{
-    is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
-};
 use crate::vm::memory::VmMemory;
 use crate::vm::prefix_iter::{PrefixIteratorId, PrefixIterators};
 use crate::vm::{HostRef, MutHostRef};
@@ -58,7 +58,7 @@ pub enum TxRuntimeError {
     #[error("Storage modification error: {0}")]
     StorageModificationError(write_log::Error),
     #[error("Storage error: {0}")]
-    StorageError(storage::Error),
+    StorageError(namada_state::Error),
     #[error("Storage data error: {0}")]
     StorageDataError(crate::types::storage::Error),
     #[error("Encoding error: {0}")]
@@ -72,7 +72,7 @@ pub enum TxRuntimeError {
     #[error("Missing tx data")]
     MissingTxData,
     #[error("IBC: {0}")]
-    Ibc(#[from] namada_core::ledger::ibc::Error),
+    Ibc(#[from] namada_ibc::Error),
 }
 
 type TxResult<T> = std::result::Result<T, TxRuntimeError>;
@@ -81,7 +81,7 @@ type TxResult<T> = std::result::Result<T, TxRuntimeError>;
 pub struct TxVmEnv<'a, MEM, DB, H, CA>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -95,7 +95,7 @@ where
 #[derive(Debug)]
 pub struct TxCtx<'a, DB, H, CA>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -133,7 +133,7 @@ where
 impl<'a, MEM, DB, H, CA> TxVmEnv<'a, MEM, DB, H, CA>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -197,7 +197,7 @@ where
 impl<MEM, DB, H, CA> Clone for TxVmEnv<'_, MEM, DB, H, CA>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -211,7 +211,7 @@ where
 
 impl<'a, DB, H, CA> Clone for TxCtx<'a, DB, H, CA>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -240,7 +240,7 @@ where
 pub struct VpVmEnv<'a, MEM, DB, H, EVAL, CA>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -254,7 +254,7 @@ where
 /// A validity predicate's host context
 pub struct VpCtx<'a, DB, H, EVAL, CA>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -296,7 +296,7 @@ where
 /// A Validity predicate runner for calls from the [`vp_eval`] function.
 pub trait VpEvaluator {
     /// Storage DB type
-    type Db: storage::DB + for<'iter> storage::DBIter<'iter>;
+    type Db: namada_state::DB + for<'iter> namada_state::DBIter<'iter>;
     /// Storage hasher type
     type H: StorageHasher;
     /// Recursive VP evaluator type
@@ -320,7 +320,7 @@ pub trait VpEvaluator {
 impl<'a, MEM, DB, H, EVAL, CA> VpVmEnv<'a, MEM, DB, H, EVAL, CA>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -373,7 +373,7 @@ where
 impl<MEM, DB, H, EVAL, CA> Clone for VpVmEnv<'_, MEM, DB, H, EVAL, CA>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -388,7 +388,7 @@ where
 
 impl<'a, DB, H, EVAL, CA> VpCtx<'a, DB, H, EVAL, CA>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -453,7 +453,7 @@ where
 
 impl<'a, DB, H, EVAL, CA> Clone for VpCtx<'a, DB, H, EVAL, CA>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -487,7 +487,7 @@ pub fn tx_charge_gas<MEM, DB, H, CA>(
 ) -> TxResult<()>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -512,7 +512,7 @@ pub fn vp_charge_gas<MEM, DB, H, EVAL, CA>(
 ) -> vp_host_fns::EnvResult<()>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -531,7 +531,7 @@ pub fn tx_has_key<MEM, DB, H, CA>(
 ) -> TxResult<i64>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -587,7 +587,7 @@ pub fn tx_read<MEM, DB, H, CA>(
 ) -> TxResult<i64>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -676,7 +676,7 @@ pub fn tx_result_buffer<MEM, DB, H, CA>(
 ) -> TxResult<()>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -699,7 +699,7 @@ pub fn tx_iter_prefix<MEM, DB, H, CA>(
 ) -> TxResult<u64>
 where
     MEM: VmMemory,
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -716,7 +716,8 @@ where
 
     let write_log = unsafe { env.ctx.write_log.get() };
     let storage = unsafe { env.ctx.storage.get() };
-    let (iter, gas) = storage::iter_prefix_post(write_log, storage, &prefix);
+    let (iter, gas) =
+        namada_state::iter_prefix_post(write_log, storage, &prefix);
     tx_charge_gas(env, gas)?;
 
     let iterators = unsafe { env.ctx.iterators.get() };
@@ -735,7 +736,7 @@ pub fn tx_iter_next<MEM, DB, H, CA>(
 ) -> TxResult<i64>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -814,7 +815,7 @@ pub fn tx_write<MEM, DB, H, CA>(
 ) -> TxResult<()>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -857,7 +858,7 @@ pub fn tx_write_temp<MEM, DB, H, CA>(
 ) -> TxResult<()>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -891,7 +892,7 @@ fn check_address_existence<MEM, DB, H, CA>(
 ) -> TxResult<()>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -947,7 +948,7 @@ pub fn tx_delete<MEM, DB, H, CA>(
 ) -> TxResult<()>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -980,7 +981,7 @@ pub fn tx_emit_ibc_event<MEM, DB, H, CA>(
 ) -> TxResult<()>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -1004,7 +1005,7 @@ pub fn tx_get_ibc_events<MEM, DB, H, CA>(
 ) -> TxResult<i64>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -1042,7 +1043,7 @@ pub fn vp_read_pre<MEM, DB, H, EVAL, CA>(
 ) -> vp_host_fns::EnvResult<i64>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -1095,7 +1096,7 @@ pub fn vp_read_post<MEM, DB, H, EVAL, CA>(
 ) -> vp_host_fns::EnvResult<i64>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -1143,7 +1144,7 @@ pub fn vp_read_temp<MEM, DB, H, EVAL, CA>(
 ) -> vp_host_fns::EnvResult<i64>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -1191,7 +1192,7 @@ pub fn vp_result_buffer<MEM, DB, H, EVAL, CA>(
 ) -> vp_host_fns::EnvResult<()>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -1216,7 +1217,7 @@ pub fn vp_has_key_pre<MEM, DB, H, EVAL, CA>(
 ) -> vp_host_fns::EnvResult<i64>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -1251,7 +1252,7 @@ pub fn vp_has_key_post<MEM, DB, H, EVAL, CA>(
 ) -> vp_host_fns::EnvResult<i64>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -1287,7 +1288,7 @@ pub fn vp_iter_prefix_pre<MEM, DB, H, EVAL, CA>(
 ) -> vp_host_fns::EnvResult<u64>
 where
     MEM: VmMemory,
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -1326,7 +1327,7 @@ pub fn vp_iter_prefix_post<MEM, DB, H, EVAL, CA>(
 ) -> vp_host_fns::EnvResult<u64>
 where
     MEM: VmMemory,
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -1365,7 +1366,7 @@ pub fn vp_iter_next<MEM, DB, H, EVAL, CA>(
 ) -> vp_host_fns::EnvResult<i64>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -1402,7 +1403,7 @@ pub fn tx_insert_verifier<MEM, DB, H, CA>(
 ) -> TxResult<()>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -1437,7 +1438,7 @@ pub fn tx_update_validity_predicate<MEM, DB, H, CA>(
 ) -> TxResult<()>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -1485,7 +1486,7 @@ pub fn tx_init_account<MEM, DB, H, CA>(
 ) -> TxResult<()>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -1528,7 +1529,7 @@ pub fn tx_get_chain_id<MEM, DB, H, CA>(
 ) -> TxResult<()>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -1550,7 +1551,7 @@ pub fn tx_get_block_height<MEM, DB, H, CA>(
 ) -> TxResult<u64>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -1568,7 +1569,7 @@ pub fn tx_get_tx_index<MEM, DB, H, CA>(
 ) -> TxResult<u32>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -1585,7 +1586,7 @@ pub fn vp_get_tx_index<MEM, DB, H, EVAL, CA>(
 ) -> vp_host_fns::EnvResult<u32>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -1605,7 +1606,7 @@ pub fn tx_get_block_hash<MEM, DB, H, CA>(
 ) -> TxResult<()>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -1627,7 +1628,7 @@ pub fn tx_get_block_epoch<MEM, DB, H, CA>(
 ) -> TxResult<u64>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -1644,7 +1645,7 @@ pub fn tx_get_native_token<MEM, DB, H, CA>(
 ) -> TxResult<()>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -1670,7 +1671,7 @@ pub fn tx_get_block_header<MEM, DB, H, CA>(
 ) -> TxResult<i64>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -1701,7 +1702,7 @@ pub fn vp_get_chain_id<MEM, DB, H, EVAL, CA>(
 ) -> vp_host_fns::EnvResult<()>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -1725,7 +1726,7 @@ pub fn vp_get_block_height<MEM, DB, H, EVAL, CA>(
 ) -> vp_host_fns::EnvResult<u64>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -1744,7 +1745,7 @@ pub fn vp_get_block_header<MEM, DB, H, EVAL, CA>(
 ) -> vp_host_fns::EnvResult<i64>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -1779,7 +1780,7 @@ pub fn vp_get_block_hash<MEM, DB, H, EVAL, CA>(
 ) -> vp_host_fns::EnvResult<()>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -1802,7 +1803,7 @@ pub fn vp_get_tx_code_hash<MEM, DB, H, EVAL, CA>(
 ) -> vp_host_fns::EnvResult<()>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -1833,7 +1834,7 @@ pub fn vp_get_block_epoch<MEM, DB, H, EVAL, CA>(
 ) -> vp_host_fns::EnvResult<u64>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -1853,7 +1854,7 @@ pub fn vp_get_ibc_events<MEM, DB, H, EVAL, CA>(
 ) -> vp_host_fns::EnvResult<i64>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -1897,7 +1898,7 @@ pub fn vp_verify_tx_section_signature<MEM, DB, H, EVAL, CA>(
 ) -> vp_host_fns::EnvResult<i64>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -1952,11 +1953,11 @@ where
     ) {
         Ok(_) => Ok(HostEnvResult::Success.to_i64()),
         Err(err) => match err {
-            namada_core::proto::Error::OutOfGas(inner) => {
+            namada_tx::VerifySigError::Gas(inner) => {
                 sentinel.set_out_of_gas();
                 Err(vp_host_fns::RuntimeError::OutOfGas(inner))
             }
-            namada_core::proto::Error::InvalidSectionSignature(_) => {
+            namada_tx::VerifySigError::InvalidSectionSignature(_) => {
                 sentinel.set_invalid_signature();
                 Ok(HostEnvResult::Fail.to_i64())
             }
@@ -1975,7 +1976,7 @@ pub fn tx_log_string<MEM, DB, H, CA>(
 ) -> TxResult<()>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -1995,14 +1996,14 @@ pub fn tx_ibc_execute<MEM, DB, H, CA>(
 ) -> TxResult<()>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
     use std::cell::RefCell;
     use std::rc::Rc;
 
-    use namada_core::ledger::ibc::{IbcActions, TransferModule};
+    use namada_ibc::{IbcActions, TransferModule};
 
     let tx_data = unsafe { env.ctx.tx.get().data() }.ok_or_else(|| {
         let sentinel = unsafe { env.ctx.sentinel.get() };
@@ -2026,7 +2027,7 @@ fn tx_validate_vp_code_hash<MEM, DB, H, CA>(
 ) -> TxResult<()>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -2083,7 +2084,7 @@ where
 pub fn tx_set_commitment_sentinel<MEM, DB, H, CA>(env: &TxVmEnv<MEM, DB, H, CA>)
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -2105,7 +2106,7 @@ pub fn tx_verify_tx_section_signature<MEM, DB, H, CA>(
 ) -> TxResult<i64>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -2153,11 +2154,11 @@ where
     ) {
         Ok(_) => Ok(HostEnvResult::Success.to_i64()),
         Err(err) => match err {
-            namada_core::proto::Error::OutOfGas(inner) => {
+            namada_tx::VerifySigError::Gas(inner) => {
                 sentinel.set_out_of_gas();
                 Err(TxRuntimeError::OutOfGas(inner))
             }
-            namada_core::proto::Error::InvalidSectionSignature(_) => {
+            namada_tx::VerifySigError::InvalidSectionSignature(_) => {
                 Ok(HostEnvResult::Fail.to_i64())
             }
             _ => Ok(HostEnvResult::Fail.to_i64()),
@@ -2173,7 +2174,7 @@ pub fn tx_update_masp_note_commitment_tree<MEM, DB, H, CA>(
 ) -> TxResult<i64>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -2189,7 +2190,10 @@ where
         .map_err(TxRuntimeError::EncodingError)?;
 
     let mut ctx = env.ctx.clone();
-    match masp_utils::update_note_commitment_tree(&mut ctx, &transaction) {
+    match namada_token::utils::update_note_commitment_tree(
+        &mut ctx,
+        &transaction,
+    ) {
         Ok(()) => Ok(HostEnvResult::Success.to_i64()),
         Err(_) => {
             // NOTE: sentinel for gas errors is already set by the
@@ -2210,7 +2214,7 @@ pub fn vp_eval<MEM, DB, H, EVAL, CA>(
 ) -> vp_host_fns::EnvResult<i64>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator<Db = DB, H = H, Eval = EVAL, CA = CA>,
     CA: WasmCacheAccess,
@@ -2250,7 +2254,7 @@ pub fn vp_get_native_token<MEM, DB, H, EVAL, CA>(
 ) -> vp_host_fns::EnvResult<()>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -2278,7 +2282,7 @@ pub fn vp_log_string<MEM, DB, H, EVAL, CA>(
 ) -> vp_host_fns::EnvResult<()>
 where
     MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -2292,12 +2296,12 @@ where
 }
 
 // Temp. workaround for <https://github.com/anoma/namada/issues/1831>
-use namada_core::ledger::storage_api::StorageRead;
+use namada_storage::StorageRead;
 
 use crate::types::storage::BlockHash;
 impl<'a, DB, H, CA> StorageRead for TxCtx<'a, DB, H, CA>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -2307,7 +2311,7 @@ where
     fn read_bytes(
         &self,
         key: &Key,
-    ) -> std::result::Result<Option<Vec<u8>>, storage_api::Error> {
+    ) -> std::result::Result<Option<Vec<u8>>, namada_storage::Error> {
         let write_log = unsafe { self.write_log.get() };
         let (log_val, gas) = write_log.read(key);
         ibc_tx_charge_gas(self, gas)?;
@@ -2332,7 +2336,7 @@ where
         })
     }
 
-    fn has_key(&self, key: &Key) -> Result<bool, storage_api::Error> {
+    fn has_key(&self, key: &Key) -> Result<bool, namada_storage::Error> {
         // try to read from the write log first
         let write_log = unsafe { self.write_log.get() };
         let (log_val, gas) = write_log.read(key);
@@ -2356,10 +2360,11 @@ where
     fn iter_prefix<'iter>(
         &'iter self,
         prefix: &Key,
-    ) -> Result<Self::PrefixIter<'iter>, storage_api::Error> {
+    ) -> Result<Self::PrefixIter<'iter>, namada_storage::Error> {
         let write_log = unsafe { self.write_log.get() };
         let storage = unsafe { self.storage.get() };
-        let (iter, gas) = storage::iter_prefix_post(write_log, storage, prefix);
+        let (iter, gas) =
+            namada_state::iter_prefix_post(write_log, storage, prefix);
         ibc_tx_charge_gas(self, gas)?;
 
         let iterators = unsafe { self.iterators.get() };
@@ -2369,7 +2374,7 @@ where
     fn iter_next<'iter>(
         &'iter self,
         iter_id: &mut Self::PrefixIter<'iter>,
-    ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
+    ) -> Result<Option<(String, Vec<u8>)>, namada_storage::Error> {
         let write_log = unsafe { self.write_log.get() };
         let iterators = unsafe { self.iterators.get() };
         let iter_id = PrefixIteratorId::new(*iter_id);
@@ -2402,14 +2407,14 @@ where
         Ok(None)
     }
 
-    fn get_chain_id(&self) -> Result<String, storage_api::Error> {
+    fn get_chain_id(&self) -> Result<String, namada_storage::Error> {
         let storage = unsafe { self.storage.get() };
         let (chain_id, gas) = storage.get_chain_id();
         ibc_tx_charge_gas(self, gas)?;
         Ok(chain_id)
     }
 
-    fn get_block_height(&self) -> Result<BlockHeight, storage_api::Error> {
+    fn get_block_height(&self) -> Result<BlockHeight, namada_storage::Error> {
         let storage = unsafe { self.storage.get() };
         let (height, gas) = storage.get_block_height();
         ibc_tx_charge_gas(self, gas)?;
@@ -2419,8 +2424,10 @@ where
     fn get_block_header(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<namada_core::types::storage::Header>, storage_api::Error>
-    {
+    ) -> Result<
+        Option<namada_core::types::storage::Header>,
+        namada_storage::Error,
+    > {
         let storage = unsafe { self.storage.get() };
         let (header, gas) = storage
             .get_block_header(Some(height))
@@ -2429,21 +2436,21 @@ where
         Ok(header)
     }
 
-    fn get_block_hash(&self) -> Result<BlockHash, storage_api::Error> {
+    fn get_block_hash(&self) -> Result<BlockHash, namada_storage::Error> {
         let storage = unsafe { self.storage.get() };
         let (hash, gas) = storage.get_block_hash();
         ibc_tx_charge_gas(self, gas)?;
         Ok(hash)
     }
 
-    fn get_block_epoch(&self) -> Result<Epoch, storage_api::Error> {
+    fn get_block_epoch(&self) -> Result<Epoch, namada_storage::Error> {
         let storage = unsafe { self.storage.get() };
         let (epoch, gas) = storage.get_current_epoch();
         ibc_tx_charge_gas(self, gas)?;
         Ok(epoch)
     }
 
-    fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error> {
+    fn get_tx_index(&self) -> Result<TxIndex, namada_storage::Error> {
         let tx_index = unsafe { self.tx_index.get() };
         ibc_tx_charge_gas(
             self,
@@ -2452,7 +2459,7 @@ where
         Ok(TxIndex(tx_index.0))
     }
 
-    fn get_native_token(&self) -> Result<Address, storage_api::Error> {
+    fn get_native_token(&self) -> Result<Address, namada_storage::Error> {
         let storage = unsafe { self.storage.get() };
         let native_token = storage.native_token.clone();
         ibc_tx_charge_gas(
@@ -2461,13 +2468,22 @@ where
         )?;
         Ok(native_token)
     }
+
+    fn get_pred_epochs(&self) -> namada_storage::Result<Epochs> {
+        let storage = unsafe { self.storage.get() };
+        ibc_tx_charge_gas(
+            self,
+            crate::vm::host_env::gas::STORAGE_ACCESS_GAS_PER_BYTE,
+        )?;
+        Ok(storage.block.pred_epochs.clone())
+    }
 }
 
 // Temp. workaround for <https://github.com/anoma/namada/issues/1831>
-use namada_core::ledger::storage_api::StorageWrite;
+use namada_storage::StorageWrite;
 impl<'a, DB, H, CA> StorageWrite for TxCtx<'a, DB, H, CA>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -2475,7 +2491,7 @@ where
         &mut self,
         key: &Key,
         data: impl AsRef<[u8]>,
-    ) -> Result<(), storage_api::Error> {
+    ) -> Result<(), namada_storage::Error> {
         let write_log = unsafe { self.write_log.get() };
         let (gas, _size_diff) = write_log
             .write(key, data.as_ref().to_vec())
@@ -2483,7 +2499,7 @@ where
         ibc_tx_charge_gas(self, gas)
     }
 
-    fn delete(&mut self, key: &Key) -> Result<(), storage_api::Error> {
+    fn delete(&mut self, key: &Key) -> Result<(), namada_storage::Error> {
         if key.is_validity_predicate().is_some() {
             return Err(TxRuntimeError::CannotDeleteVp).into_storage_result();
         }
@@ -2495,17 +2511,16 @@ where
 }
 
 // Temp. workaround for <https://github.com/anoma/namada/issues/1831>
-impl<'a, DB, H, CA> namada_core::ledger::ibc::IbcStorageContext
-    for TxCtx<'a, DB, H, CA>
+impl<'a, DB, H, CA> namada_ibc::IbcStorageContext for TxCtx<'a, DB, H, CA>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
     fn emit_ibc_event(
         &mut self,
         event: IbcEvent,
-    ) -> Result<(), storage_api::Error> {
+    ) -> Result<(), namada_storage::Error> {
         let write_log = unsafe { self.write_log.get() };
         let gas = write_log.emit_ibc_event(event);
         ibc_tx_charge_gas(self, gas)
@@ -2514,7 +2529,7 @@ where
     fn get_ibc_events(
         &self,
         event_type: impl AsRef<str>,
-    ) -> Result<Vec<IbcEvent>, storage_api::Error> {
+    ) -> Result<Vec<IbcEvent>, namada_storage::Error> {
         let write_log = unsafe { self.write_log.get() };
         Ok(write_log
             .get_ibc_events()
@@ -2530,13 +2545,13 @@ where
         dest: &Address,
         token: &Address,
         amount: namada_core::types::token::DenominatedAmount,
-    ) -> Result<(), storage_api::Error> {
-        use namada_core::types::token;
+    ) -> Result<(), namada_storage::Error> {
+        use namada_token as token;
 
-        let amount = amount.to_amount(token, self)?;
+        let amount = token::denom_to_amount(amount, token, self)?;
         if amount != token::Amount::default() && src != dest {
-            let src_key = token::balance_key(token, src);
-            let dest_key = token::balance_key(token, dest);
+            let src_key = balance_key(token, src);
+            let dest_key = balance_key(token, dest);
             let src_bal = self.read::<token::Amount>(&src_key)?;
             let mut src_bal = src_bal.unwrap_or_else(|| {
                 self.log_string(format!("src {} has no balance", src_key));
@@ -2555,13 +2570,16 @@ where
     fn handle_masp_tx(
         &mut self,
         shielded: &IbcShieldedTransfer,
-    ) -> Result<(), storage_api::Error> {
-        masp_utils::handle_masp_tx(
+    ) -> Result<(), namada_storage::Error> {
+        namada_token::utils::handle_masp_tx(
             self,
             &shielded.transfer,
             &shielded.masp_tx,
         )?;
-        masp_utils::update_note_commitment_tree(self, &shielded.masp_tx)
+        namada_token::utils::update_note_commitment_tree(
+            self,
+            &shielded.masp_tx,
+        )
     }
 
     fn mint_token(
@@ -2569,16 +2587,16 @@ where
         target: &Address,
         token: &Address,
         amount: namada_core::types::token::DenominatedAmount,
-    ) -> Result<(), storage_api::Error> {
-        use namada_core::types::token;
+    ) -> Result<(), namada_storage::Error> {
+        use namada_token as token;
 
-        let amount = amount.to_amount(token, self)?;
-        let target_key = token::balance_key(token, target);
+        let amount = token::denom_to_amount(amount, token, self)?;
+        let target_key = balance_key(token, target);
         let mut target_bal =
             self.read::<token::Amount>(&target_key)?.unwrap_or_default();
         target_bal.receive(&amount);
 
-        let minted_key = token::minted_balance_key(token);
+        let minted_key = minted_balance_key(token);
         let mut minted_bal =
             self.read::<token::Amount>(&minted_key)?.unwrap_or_default();
         minted_bal.receive(&amount);
@@ -2586,7 +2604,7 @@ where
         self.write(&target_key, target_bal)?;
         self.write(&minted_key, minted_bal)?;
 
-        let minter_key = token::minter_key(token);
+        let minter_key = minter_key(token);
         self.write(
             &minter_key,
             Address::Internal(address::InternalAddress::Ibc),
@@ -2598,17 +2616,17 @@ where
         target: &Address,
         token: &Address,
         amount: namada_core::types::token::DenominatedAmount,
-    ) -> Result<(), storage_api::Error> {
-        use namada_core::types::token;
+    ) -> Result<(), namada_storage::Error> {
+        use namada_token as token;
 
-        let amount = amount.to_amount(token, self)?;
-        let target_key = token::balance_key(token, target);
+        let amount = token::denom_to_amount(amount, token, self)?;
+        let target_key = balance_key(token, target);
         let mut target_bal =
             self.read::<token::Amount>(&target_key)?.unwrap_or_default();
         target_bal.spend(&amount);
 
         // burn the minted amount
-        let minted_key = token::minted_balance_key(token);
+        let minted_key = minted_balance_key(token);
         let mut minted_bal =
             self.read::<token::Amount>(&minted_key)?.unwrap_or_default();
         minted_bal.spend(&amount);
@@ -2627,9 +2645,9 @@ where
 fn ibc_tx_charge_gas<'a, DB, H, CA>(
     ctx: &TxCtx<'a, DB, H, CA>,
     used_gas: u64,
-) -> Result<(), storage_api::Error>
+) -> Result<(), namada_storage::Error>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -2646,10 +2664,9 @@ where
 }
 
 // Temp. workaround for <https://github.com/anoma/namada/issues/1831>
-impl<'a, DB, H, CA> namada_core::ledger::ibc::IbcCommonContext
-    for TxCtx<'a, DB, H, CA>
+impl<'a, DB, H, CA> namada_ibc::IbcCommonContext for TxCtx<'a, DB, H, CA>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -2660,9 +2677,9 @@ where
 pub mod testing {
     use std::collections::BTreeSet;
 
+    use namada_state::StorageHasher;
+
     use super::*;
-    use crate::ledger::storage::traits::StorageHasher;
-    use crate::ledger::storage::{self};
     use crate::vm::memory::testing::NativeMemory;
 
     /// Setup a transaction environment
@@ -2681,7 +2698,7 @@ pub mod testing {
         #[cfg(feature = "wasm-runtime")] tx_wasm_cache: &mut TxCache<CA>,
     ) -> TxVmEnv<'static, NativeMemory, DB, H, CA>
     where
-        DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+        DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
         H: StorageHasher,
         CA: WasmCacheAccess,
     {
@@ -2721,7 +2738,7 @@ pub mod testing {
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
     ) -> VpVmEnv<'static, NativeMemory, DB, H, EVAL, CA>
     where
-        DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+        DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
         H: StorageHasher,
         EVAL: VpEvaluator,
         CA: WasmCacheAccess,

@@ -3380,12 +3380,12 @@ mod test_finalize_block {
         )));
         let fee_amount =
             wrapper.header().wrapper().unwrap().get_tx_fee().unwrap();
-        let fee_amount = fee_amount
-            .to_amount(
-                &wrapper.header().wrapper().unwrap().fee.token,
-                &shell.wl_storage,
-            )
-            .unwrap();
+        let fee_amount = namada_token::denom_to_amount(
+            fee_amount,
+            &wrapper.header().wrapper().unwrap().fee.token,
+            &shell.wl_storage,
+        )
+        .unwrap();
 
         let signer_balance = storage_api::token::read_balance(
             &shell.wl_storage,

@@ -3,20 +3,19 @@
 //! Here, we expose the host functions into wasm's
 //! imports, so they can be called from inside the wasm.
 
+use namada_core::types::hash::StorageHasher;
 use wasmer::{
     Function, HostEnvInitError, ImportObject, Instance, Memory, Store,
     WasmerEnv,
 };
 
-use crate::ledger::storage::traits::StorageHasher;
-use crate::ledger::storage::{self};
 use crate::vm::host_env::{TxVmEnv, VpEvaluator, VpVmEnv};
 use crate::vm::wasm::memory::WasmMemory;
 use crate::vm::{host_env, WasmCacheAccess};
 
 impl<DB, H, CA> WasmerEnv for TxVmEnv<'_, WasmMemory, DB, H, CA>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -30,7 +29,7 @@ where
 
 impl<DB, H, EVAL, CA> WasmerEnv for VpVmEnv<'_, WasmMemory, DB, H, EVAL, CA>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -52,7 +51,7 @@ pub fn tx_imports<DB, H, CA>(
     env: TxVmEnv<'static, WasmMemory, DB, H, CA>,
 ) -> ImportObject
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -101,7 +100,7 @@ pub fn vp_imports<DB, H, EVAL, CA>(
     env: VpVmEnv<'static, WasmMemory, DB, H, EVAL, CA>,
 ) -> ImportObject
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator<Db = DB, H = H, Eval = EVAL, CA = CA>,
     CA: WasmCacheAccess,

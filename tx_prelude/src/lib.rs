@@ -20,11 +20,12 @@ use masp_primitives::transaction::Transaction;
 pub use namada_core::borsh::{
     BorshDeserialize, BorshSerialize, BorshSerializeExt,
 };
+use namada_core::types::account::AccountPublicKeysMap;
 pub use namada_core::types::address::Address;
 use namada_core::types::chain::CHAIN_ID_LENGTH;
 pub use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::internal::HostEnvResult;
-use namada_core::types::key::{common, AccountPublicKeysMap};
+use namada_core::types::key::common;
 use namada_core::types::storage::TxIndex;
 pub use namada_core::types::storage::{
     self, BlockHash, BlockHeight, Epoch, Header, BLOCK_HASH_LENGTH,

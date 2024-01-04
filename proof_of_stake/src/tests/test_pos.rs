@@ -2,7 +2,6 @@
 
 use std::collections::{BTreeMap, HashSet};
 
-use namada_core::ledger::storage::testing::TestWlStorage;
 use namada_core::ledger::storage_api::collections::lazy_map::Collectable;
 use namada_core::ledger::storage_api::token::{credit_tokens, read_balance};
 use namada_core::ledger::storage_api::StorageRead;
@@ -14,6 +13,7 @@ use namada_core::types::key::testing::{
 use namada_core::types::key::RefTo;
 use namada_core::types::storage::{BlockHeight, Epoch};
 use namada_core::types::{address, key, token};
+use namada_state::testing::TestWlStorage;
 use proptest::prelude::*;
 use proptest::test_runner::Config;
 // Use `RUST_LOG=info` (or another tracing level) and `--nocapture` to see

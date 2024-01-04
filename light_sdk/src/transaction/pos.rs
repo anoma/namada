@@ -1,4 +1,3 @@
-use namada_core::proto::Tx;
 use namada_core::types::address::Address;
 use namada_core::types::dec::Dec;
 use namada_core::types::hash::Hash;
@@ -6,6 +5,7 @@ use namada_core::types::key::{common, secp256k1};
 use namada_core::types::token;
 use namada_core::types::token::Amount;
 use namada_core::types::transaction::pos::Redelegation;
+use namada_tx::Tx;
 
 use super::GlobalArgs;
 use crate::transaction;

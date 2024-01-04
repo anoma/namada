@@ -2,18 +2,18 @@
 
 use std::collections::{BTreeSet, HashMap};
 
+use namada_token::storage_key::{
+    is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
+    minter_key,
+};
+use namada_token::{Amount, Change};
+use namada_tx::Tx;
+use namada_vp_env::VpEnv;
 use thiserror::Error;
 
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
-use crate::ledger::storage;
-use crate::ledger::vp_env::VpEnv;
-use crate::proto::Tx;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{Key, KeySeg};
-use crate::types::token::{
-    is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
-    minter_key, Amount, Change,
-};
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]
@@ -29,8 +29,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Multitoken VP
 pub struct MultitokenVp<'a, DB, H, CA>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: storage::StorageHasher,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    H: namada_state::StorageHasher,
     CA: WasmCacheAccess,
 {
     /// Context to interact with the host structures.
@@ -39,8 +39,8 @@ where
 
 impl<'a, DB, H, CA> NativeVp for MultitokenVp<'a, DB, H, CA>
 where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: 'static + storage::StorageHasher,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    H: 'static + namada_state::StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
     type Error = Error;
@@ -102,8 +102,8 @@ where
 
 impl<'a, DB, H, CA> MultitokenVp<'a, DB, H, CA>
 where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: 'static + storage::StorageHasher,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    H: 'static + namada_state::StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
     /// Return the minter if the minter is valid and the minter VP exists
@@ -140,7 +140,7 @@ mod tests {
     use std::collections::BTreeSet;
 
     use borsh_ext::BorshSerializeExt;
-    use namada_core::ledger::gas::TxGasMeter;
+    use namada_gas::TxGasMeter;
 
     use super::*;
     use crate::core::ledger::storage::testing::TestWlStorage;

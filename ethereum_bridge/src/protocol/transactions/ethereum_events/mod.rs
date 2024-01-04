@@ -301,7 +301,7 @@ mod tests {
 
     use borsh::BorshDeserialize;
     use namada_core::ledger::storage::mockdb::MockDBWriteBatch;
-    use namada_core::ledger::storage::testing::TestWlStorage;
+    use namada_state::testing::TestWlStorage;
     use namada_core::types::address;
     use namada_core::types::ethereum_events::testing::{
         arbitrary_amount, arbitrary_eth_address, arbitrary_nonce,

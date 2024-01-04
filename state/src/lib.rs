@@ -33,11 +33,11 @@ use namada_gas::{
     MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_ACCESS_GAS_PER_BYTE,
     STORAGE_WRITE_GAS_PER_BYTE,
 };
-use namada_merkle_tree::{Error as MerkleTreeError, MerkleRoot};
 pub use namada_merkle_tree::{
-    MembershipProof, MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite,
-    StoreRef, StoreType,
+    ics23_specs, MembershipProof, MerkleTree, MerkleTreeStoresRead,
+    MerkleTreeStoresWrite, StoreRef, StoreType,
 };
+use namada_merkle_tree::{Error as MerkleTreeError, MerkleRoot};
 use namada_parameters::{self, EpochDuration, Parameters};
 use thiserror::Error;
 use tx_queue::{ExpiredTxsQueue, TxQueue};

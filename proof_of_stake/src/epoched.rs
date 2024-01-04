@@ -1085,10 +1085,10 @@ pub trait EpochOffset:
 
 #[cfg(test)]
 mod test {
-    use namada_core::ledger::storage::testing::TestWlStorage;
     use namada_core::types::address::testing::established_address_1;
     use namada_core::types::dec::Dec;
     use namada_core::types::{key, token};
+    use namada_state::testing::TestWlStorage;
     use test_log::test;
 
     use super::*;

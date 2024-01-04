@@ -4,12 +4,10 @@ pub mod vp;
 
 use std::convert::TryFrom;
 
-pub use namada_core::ledger::storage_api;
 use namada_core::types::address;
 pub use namada_core::types::dec::Dec;
 pub use namada_core::types::key::common;
 pub use namada_core::types::token;
-pub use namada_proof_of_stake;
 pub use namada_proof_of_stake::parameters::{OwnedPosParams, PosParams};
 pub use namada_proof_of_stake::pos_queries::*;
 pub use namada_proof_of_stake::storage::*;
@@ -17,6 +15,7 @@ pub use namada_proof_of_stake::storage::*;
 pub use namada_proof_of_stake::test_utils;
 pub use namada_proof_of_stake::{staking_token_address, types};
 pub use vp::PosVP;
+pub use {namada_proof_of_stake, namada_storage};
 
 use crate::types::address::{Address, InternalAddress};
 

@@ -8,23 +8,22 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use context::{PseudoExecutionContext, VpValidationContext};
-use namada_core::ledger::gas::{
-    IBC_ACTION_EXECUTE_GAS, IBC_ACTION_VALIDATE_GAS,
-};
-use namada_core::ledger::ibc::{
-    Error as ActionError, IbcActions, TransferModule, ValidationParams,
-};
-use namada_core::ledger::storage::write_log::StorageModification;
-use namada_core::ledger::storage::{self as ledger_storage, StorageHasher};
-use namada_core::proto::Tx;
 use namada_core::types::address::Address;
 use namada_core::types::storage::Key;
+use namada_gas::{IBC_ACTION_EXECUTE_GAS, IBC_ACTION_VALIDATE_GAS};
+use namada_ibc::{
+    Error as ActionError, IbcActions, TransferModule, ValidationParams,
+};
 use namada_proof_of_stake::storage::read_pos_params;
+use namada_state::write_log::StorageModification;
+use namada_state::StorageHasher;
+use namada_tx::Tx;
+use namada_vp_env::VpEnv;
 use thiserror::Error;
 
 use crate::ibc::core::host::types::identifiers::ChainId as IbcChainId;
 use crate::ledger::ibc::storage::{calc_hash, is_ibc_denom_key, is_ibc_key};
-use crate::ledger::native_vp::{self, Ctx, NativeVp, VpEnv};
+use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::ledger::parameters::read_epoch_duration_parameter;
 use crate::vm::WasmCacheAccess;
 
@@ -51,7 +50,7 @@ pub type VpResult<T> = std::result::Result<T, Error>;
 /// IBC VP
 pub struct Ibc<'a, DB, H, CA>
 where
-    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -61,7 +60,7 @@ where
 
 impl<'a, DB, H, CA> NativeVp for Ibc<'a, DB, H, CA>
 where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -91,7 +90,7 @@ where
 
 impl<'a, DB, H, CA> Ibc<'a, DB, H, CA>
 where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -163,7 +162,7 @@ where
     pub fn validation_params(&self) -> VpResult<ValidationParams> {
         use std::str::FromStr;
         let chain_id = self.ctx.get_chain_id().map_err(Error::NativeVpError)?;
-        let proof_specs = ledger_storage::ics23_specs::ibc_proof_specs::<H>();
+        let proof_specs = namada_state::ics23_specs::ibc_proof_specs::<H>();
         let pos_params =
             read_pos_params(&self.ctx.post()).map_err(Error::NativeVpError)?;
         let pipeline_len = pos_params.pipeline_len;
@@ -318,8 +317,9 @@ mod tests {
     };
     use ibc_testkit::testapp::ibc::clients::mock::consensus_state::MockConsensusState;
     use ibc_testkit::testapp::ibc::clients::mock::header::MockHeader;
-    use namada_core::ledger::gas::TxGasMeter;
     use namada_core::ledger::governance::parameters::GovernanceParameters;
+    use namada_gas::TxGasMeter;
+    use namada_storage::StorageRead;
     use prost::Message;
     use sha2::Digest;
 
@@ -401,7 +401,6 @@ mod tests {
         get_epoch_duration_storage_key, get_max_expected_time_per_block_key,
     };
     use crate::ledger::parameters::EpochDuration;
-    use crate::ledger::storage_api::StorageRead;
     use crate::ledger::{ibc, pos};
     use crate::proto::{Code, Data, Section, Signature, Tx};
     use crate::tendermint::time::Time as TmTime;

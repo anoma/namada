@@ -3,30 +3,30 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use borsh_ext::BorshSerializeExt;
-use namada_core::ledger::ibc::{IbcCommonContext, IbcStorageContext};
-use namada_core::ledger::masp_utils;
+use namada_core::types::storage::Epochs;
+use namada_ibc::{IbcCommonContext, IbcStorageContext};
+use namada_storage::{StorageRead, StorageWrite};
+use namada_token::{self as token, Amount, DenominatedAmount};
 
 use crate::ledger::ibc::storage::is_ibc_key;
 use crate::ledger::native_vp::CtxPreStorageRead;
 use crate::ledger::storage::write_log::StorageModification;
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
-use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::ibc::{IbcEvent, IbcShieldedTransfer};
 use crate::types::storage::{
     BlockHash, BlockHeight, Epoch, Header, Key, TxIndex,
 };
-use crate::types::token::{self, Amount, DenominatedAmount};
 use crate::vm::WasmCacheAccess;
 
 /// Result of a storage API call.
-pub type Result<T> = std::result::Result<T, storage_api::Error>;
+pub type Result<T> = std::result::Result<T, namada_storage::Error>;
 
 /// Pseudo execution environment context for ibc native vp
 #[derive(Debug)]
 pub struct PseudoExecutionContext<'view, 'a, DB, H, CA>
 where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -40,7 +40,7 @@ where
 
 impl<'view, 'a, DB, H, CA> PseudoExecutionContext<'view, 'a, DB, H, CA>
 where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -70,7 +70,7 @@ where
 impl<'view, 'a, DB, H, CA> StorageRead
     for PseudoExecutionContext<'view, 'a, DB, H, CA>
 where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -139,12 +139,16 @@ where
     fn get_native_token(&self) -> Result<Address> {
         self.ctx.get_native_token()
     }
+
+    fn get_pred_epochs(&self) -> Result<Epochs> {
+        self.ctx.get_pred_epochs()
+    }
 }
 
 impl<'view, 'a, DB, H, CA> StorageWrite
     for PseudoExecutionContext<'view, 'a, DB, H, CA>
 where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -171,7 +175,7 @@ where
 impl<'view, 'a, DB, H, CA> IbcStorageContext
     for PseudoExecutionContext<'view, 'a, DB, H, CA>
 where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -199,9 +203,9 @@ where
         token: &Address,
         amount: DenominatedAmount,
     ) -> Result<()> {
-        let amount = amount.to_amount(token, self)?;
-        let src_key = token::balance_key(token, src);
-        let dest_key = token::balance_key(token, dest);
+        let amount = namada_token::denom_to_amount(amount, token, self)?;
+        let src_key = token::storage_key::balance_key(token, src);
+        let dest_key = token::storage_key::balance_key(token, dest);
         let src_bal: Option<Amount> = self.ctx.read(&src_key)?;
         let mut src_bal = src_bal.expect("The source has no balance");
         src_bal.spend(&amount);
@@ -214,12 +218,15 @@ where
     }
 
     fn handle_masp_tx(&mut self, shielded: &IbcShieldedTransfer) -> Result<()> {
-        masp_utils::handle_masp_tx(
+        namada_token::utils::handle_masp_tx(
             self,
             &shielded.transfer,
             &shielded.masp_tx,
         )?;
-        masp_utils::update_note_commitment_tree(self, &shielded.masp_tx)
+        namada_token::utils::update_note_commitment_tree(
+            self,
+            &shielded.masp_tx,
+        )
     }
 
     fn mint_token(
@@ -228,13 +235,13 @@ where
         token: &Address,
         amount: DenominatedAmount,
     ) -> Result<()> {
-        let amount = amount.to_amount(token, self)?;
-        let target_key = token::balance_key(token, target);
+        let amount = namada_token::denom_to_amount(amount, token, self)?;
+        let target_key = token::storage_key::balance_key(token, target);
         let mut target_bal: Amount =
             self.ctx.read(&target_key)?.unwrap_or_default();
         target_bal.receive(&amount);
 
-        let minted_key = token::minted_balance_key(token);
+        let minted_key = token::storage_key::minted_balance_key(token);
         let mut minted_bal: Amount =
             self.ctx.read(&minted_key)?.unwrap_or_default();
         minted_bal.receive(&amount);
@@ -242,7 +249,7 @@ where
         self.write(&target_key, target_bal.serialize_to_vec())?;
         self.write(&minted_key, minted_bal.serialize_to_vec())?;
 
-        let minter_key = token::minter_key(token);
+        let minter_key = token::storage_key::minter_key(token);
         self.write(
             &minter_key,
             Address::Internal(InternalAddress::Ibc).serialize_to_vec(),
@@ -255,13 +262,13 @@ where
         token: &Address,
         amount: DenominatedAmount,
     ) -> Result<()> {
-        let amount = amount.to_amount(token, self)?;
-        let target_key = token::balance_key(token, target);
+        let amount = namada_token::denom_to_amount(amount, token, self)?;
+        let target_key = token::storage_key::balance_key(token, target);
         let mut target_bal: Amount =
             self.ctx.read(&target_key)?.unwrap_or_default();
         target_bal.spend(&amount);
 
-        let minted_key = token::minted_balance_key(token);
+        let minted_key = token::storage_key::minted_balance_key(token);
         let mut minted_bal: Amount =
             self.ctx.read(&minted_key)?.unwrap_or_default();
         minted_bal.spend(&amount);
@@ -278,7 +285,7 @@ where
 impl<'view, 'a, DB, H, CA> IbcCommonContext
     for PseudoExecutionContext<'view, 'a, DB, H, CA>
 where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -288,7 +295,7 @@ where
 #[derive(Debug)]
 pub struct VpValidationContext<'view, 'a, DB, H, CA>
 where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -298,7 +305,7 @@ where
 
 impl<'view, 'a, DB, H, CA> VpValidationContext<'view, 'a, DB, H, CA>
 where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -311,7 +318,7 @@ where
 impl<'view, 'a, DB, H, CA> StorageRead
     for VpValidationContext<'view, 'a, DB, H, CA>
 where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -366,12 +373,16 @@ where
     fn get_native_token(&self) -> Result<Address> {
         self.ctx.get_native_token()
     }
+
+    fn get_pred_epochs(&self) -> Result<Epochs> {
+        self.ctx.get_pred_epochs()
+    }
 }
 
 impl<'view, 'a, DB, H, CA> StorageWrite
     for VpValidationContext<'view, 'a, DB, H, CA>
 where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -391,7 +402,7 @@ where
 impl<'view, 'a, DB, H, CA> IbcStorageContext
     for VpValidationContext<'view, 'a, DB, H, CA>
 where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -450,7 +461,7 @@ where
 impl<'view, 'a, DB, H, CA> IbcCommonContext
     for VpValidationContext<'view, 'a, DB, H, CA>
 where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {

@@ -1,6 +1,5 @@
 use std::cmp::min;
 
-use namada_core::ledger::storage::testing::TestWlStorage;
 use namada_core::ledger::storage::WlStorage;
 use namada_core::ledger::storage_api::collections::lazy_map;
 use namada_core::ledger::storage_api::token::credit_tokens;
@@ -13,6 +12,7 @@ use namada_core::types::key::testing::{
 use namada_core::types::key::{self, common, RefTo};
 use namada_core::types::storage::Epoch;
 use namada_core::types::token;
+use namada_state::testing::TestWlStorage;
 use proptest::prelude::*;
 use proptest::test_runner::Config;
 // Use `RUST_LOG=info` (or another tracing level) and `--nocapture` to see

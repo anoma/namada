@@ -97,8 +97,8 @@ pub fn require_no_data(request: &RequestQuery) -> namada_storage::Result<()> {
 #[cfg(any(test, feature = "testing"))]
 mod testing {
 
-    use namada_core::ledger::storage::testing::TestWlStorage;
     use namada_core::types::storage::BlockHeight;
+    use namada_state::testing::TestWlStorage;
     use tendermint_rpc::Response;
 
     use super::*;

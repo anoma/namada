@@ -1,10 +1,10 @@
 use namada_core::ledger::governance::storage::proposal::ProposalType;
 use namada_core::ledger::governance::storage::vote::StorageProposalVote;
-use namada_core::proto::Tx;
 use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
 use namada_core::types::key::common;
 use namada_core::types::storage::Epoch;
+use namada_tx::Tx;
 
 use super::GlobalArgs;
 use crate::transaction;

@@ -5,27 +5,22 @@ pub mod utils;
 use std::collections::BTreeSet;
 
 use borsh::BorshDeserialize;
-use namada_core::ledger::governance::storage::keys as gov_storage;
-use namada_core::ledger::governance::storage::proposal::{
-    AddRemove, ProposalType,
-};
-use namada_core::ledger::governance::storage::vote::StorageProposalVote;
-use namada_core::ledger::governance::utils::is_valid_validator_voting_period;
-use namada_core::ledger::storage;
-use namada_core::ledger::storage_api::account;
-use namada_core::ledger::storage_api::governance::is_proposal_accepted;
-use namada_core::ledger::vp_env::VpEnv;
-use namada_core::proto::Tx;
+use namada_governance::storage::proposal::{AddRemove, ProposalType};
+use namada_governance::storage::vote::StorageProposalVote;
+use namada_governance::storage::{is_proposal_accepted, keys as gov_storage};
+use namada_governance::utils::is_valid_validator_voting_period;
 use namada_proof_of_stake::is_validator;
+use namada_storage::StorageRead;
+use namada_token as token;
+use namada_tx::Tx;
+use namada_vp_env::VpEnv;
 use thiserror::Error;
 
 use self::utils::ReadType;
 use crate::ledger::native_vp::{Ctx, NativeVp};
-use crate::ledger::storage_api::StorageRead;
 use crate::ledger::{native_vp, pos};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{Epoch, Key};
-use crate::types::token;
 use crate::vm::WasmCacheAccess;
 
 /// for handling Governance NativeVP errors
@@ -53,8 +48,8 @@ pub enum Error {
 /// Governance VP
 pub struct GovernanceVp<'a, DB, H, CA>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: storage::StorageHasher,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    H: namada_state::StorageHasher,
     CA: WasmCacheAccess,
 {
     /// Context to interact with the host structures.
@@ -63,8 +58,8 @@ where
 
 impl<'a, DB, H, CA> NativeVp for GovernanceVp<'a, DB, H, CA>
 where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: 'static + storage::StorageHasher,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    H: 'static + namada_state::StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
     type Error = Error;
@@ -139,8 +134,8 @@ where
 
 impl<'a, DB, H, CA> GovernanceVp<'a, DB, H, CA>
 where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: 'static + storage::StorageHasher,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    H: 'static + namada_state::StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
     fn is_valid_key_set(&self, keys: &BTreeSet<Key>) -> Result<(bool, u64)> {
@@ -511,8 +506,10 @@ where
         native_token_address: &Address,
     ) -> Result<bool> {
         let funds_key = gov_storage::get_funds_key(proposal_id);
-        let balance_key =
-            token::balance_key(native_token_address, self.ctx.address);
+        let balance_key = token::storage_key::balance_key(
+            native_token_address,
+            self.ctx.address,
+        );
         let min_funds_parameter_key = gov_storage::get_min_proposal_fund_key();
 
         let min_funds_parameter: token::Amount =
@@ -534,8 +531,10 @@ where
 
     /// Validate a balance key
     fn is_valid_balance(&self, native_token_address: &Address) -> Result<bool> {
-        let balance_key =
-            token::balance_key(native_token_address, self.ctx.address);
+        let balance_key = token::storage_key::balance_key(
+            native_token_address,
+            self.ctx.address,
+        );
         let min_funds_parameter_key = gov_storage::get_min_proposal_fund_key();
 
         let pre_balance: Option<token::Amount> =
@@ -569,7 +568,7 @@ where
 
         let author = self.force_read(&author_key, ReadType::Post)?;
         let author_exists =
-            account::exists(&self.ctx.pre(), &author).unwrap_or(false);
+            namada_account::exists(&self.ctx.pre(), &author).unwrap_or(false);
 
         Ok(author_exists && verifiers.contains(&author))
     }
@@ -615,8 +614,8 @@ where
         delegation_address: &Address,
     ) -> Result<bool>
     where
-        DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-        H: 'static + storage::StorageHasher,
+        DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+        H: 'static + namada_state::StorageHasher,
         CA: 'static + WasmCacheAccess,
     {
         if !address.eq(delegation_address) {
@@ -742,7 +741,9 @@ impl KeyType {
             KeyType::COUNTER
         } else if gov_storage::is_parameter_key(key) {
             KeyType::PARAMETER
-        } else if token::is_balance_key(native_token, key).is_some() {
+        } else if token::storage_key::is_balance_key(native_token, key)
+            .is_some()
+        {
             KeyType::BALANCE
         } else if gov_storage::is_governance_key(key) {
             KeyType::UNKNOWN_GOVERNANCE

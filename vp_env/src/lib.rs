@@ -12,7 +12,7 @@ use namada_core::types::ibc::{
     get_shielded_transfer, IbcEvent, MsgShieldedTransfer, EVENT_TYPE_PACKET,
 };
 use namada_core::types::storage::{
-    BlockHash, BlockHeight, Epoch, Header, Key, TxIndex,
+    BlockHash, BlockHeight, Epoch, Epochs, Header, Key, TxIndex,
 };
 use namada_core::types::token::Transfer;
 use namada_storage::{OptionExt, ResultExt, StorageRead};
@@ -81,6 +81,9 @@ where
 
     /// Get the address of the native token.
     fn get_native_token(&self) -> Result<Address, namada_storage::Error>;
+
+    /// Given the information about predecessor block epochs
+    fn get_pred_epochs(&self) -> namada_storage::Result<Epochs>;
 
     /// Get the IBC events.
     fn get_ibc_events(

@@ -2,13 +2,11 @@
 
 use std::collections::BTreeSet;
 
-use namada_core::ledger::storage;
-use namada_core::proto::Tx;
 use namada_core::types::address::Address;
 use namada_core::types::storage::Key;
+use namada_tx::Tx;
 use thiserror::Error;
 
-use crate::core::ledger::storage_api::governance;
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::vm::WasmCacheAccess;
 
@@ -25,8 +23,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Parameters VP
 pub struct ParametersVp<'a, DB, H, CA>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: storage::StorageHasher,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    H: namada_state::StorageHasher,
     CA: WasmCacheAccess,
 {
     /// Context to interact with the host structures.
@@ -35,8 +33,8 @@ where
 
 impl<'a, DB, H, CA> NativeVp for ParametersVp<'a, DB, H, CA>
 where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: 'static + storage::StorageHasher,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    H: 'static + namada_state::StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
     type Error = Error;
@@ -56,8 +54,11 @@ where
             };
             match key_type {
                 KeyType::PARAMETER => {
-                    governance::is_proposal_accepted(&self.ctx.pre(), &data)
-                        .unwrap_or(false)
+                    namada_governance::storage::is_proposal_accepted(
+                        &self.ctx.pre(),
+                        &data,
+                    )
+                    .unwrap_or(false)
                 }
                 KeyType::UNKNOWN_PARAMETER => false,
                 KeyType::UNKNOWN => true,
@@ -86,13 +87,9 @@ enum KeyType {
 
 impl From<&Key> for KeyType {
     fn from(value: &Key) -> Self {
-        if namada_core::ledger::parameters::storage::is_protocol_parameter_key(
-            value,
-        ) {
+        if namada_parameters::storage::is_protocol_parameter_key(value) {
             KeyType::PARAMETER
-        } else if namada_core::ledger::parameters::storage::is_parameter_key(
-            value,
-        ) {
+        } else if namada_parameters::storage::is_parameter_key(value) {
             KeyType::UNKNOWN_PARAMETER
         } else {
             KeyType::UNKNOWN

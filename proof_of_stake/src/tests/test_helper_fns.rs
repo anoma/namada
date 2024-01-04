@@ -1,6 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use namada_core::ledger::storage::testing::TestWlStorage;
 use namada_core::ledger::storage_api::collections::lazy_map::NestedMap;
 use namada_core::ledger::storage_api::collections::LazyCollection;
 use namada_core::types::address::testing::{
@@ -9,6 +8,7 @@ use namada_core::types::address::testing::{
 use namada_core::types::dec::Dec;
 use namada_core::types::storage::{Epoch, Key};
 use namada_core::types::token;
+use namada_state::testing::TestWlStorage;
 
 use crate::slashing::{
     apply_list_slashes, compute_amount_after_slashing_unbond,

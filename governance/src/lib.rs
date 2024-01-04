@@ -14,7 +14,7 @@ pub mod utils;
 
 pub use storage::proposal::{InitProposalData, ProposalType, VoteProposalData};
 pub use storage::vote::{StorageProposalVote, VoteType};
-pub use storage::{init_proposal, vote_proposal};
+pub use storage::{init_proposal, is_proposal_accepted, vote_proposal};
 
 /// The governance internal address
 pub const ADDRESS: Address = address::GOV;
