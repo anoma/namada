@@ -6,6 +6,11 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
+pub mod ibc {
+    pub use namada_core::types::ibc::IbcEvent;
+    pub use namada_ibc::storage::is_ibc_key;
+}
+
 // used in the VP input
 use core::convert::AsRef;
 use core::slice;

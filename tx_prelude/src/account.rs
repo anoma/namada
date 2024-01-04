@@ -1,4 +1,4 @@
-use namada_tx::data::account::InitAccount;
+pub use namada_account::*;
 
 use super::*;
 

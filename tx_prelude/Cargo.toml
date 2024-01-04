@@ -18,6 +18,7 @@ default = []
 [dependencies]
 namada_account = { path = "../account" }
 namada_core = { path = "../core", default-features = false }
+namada_ethereum_bridge = { path = "../ethereum_bridge" }
 namada_governance = { path = "../governance" }
 namada_ibc = { path = "../ibc" }
 namada_macros = { path = "../macros" }

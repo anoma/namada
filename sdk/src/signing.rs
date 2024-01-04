@@ -10,7 +10,7 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::transaction::components::sapling::fees::{
     InputView, OutputView,
 };
-use namada_account::AccountPublicKeysMap;
+use namada_account::{AccountPublicKeysMap, InitAccount, UpdateAccount};
 use namada_core::types::address::{
     masp_tx_key, Address, ImplicitAddress, InternalAddress, MASP,
 };
@@ -28,7 +28,6 @@ use namada_governance::storage::proposal::{
 use namada_governance::storage::vote::{StorageProposalVote, VoteType};
 use namada_parameters::storage as parameter_storage;
 use namada_token::storage_key::balance_key;
-use namada_tx::data::account::{InitAccount, UpdateAccount};
 use namada_tx::data::pgf::UpdateStewardCommission;
 use namada_tx::data::pos::BecomeValidator;
 use namada_tx::data::{pos, Fee};

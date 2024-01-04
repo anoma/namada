@@ -4,6 +4,7 @@
 
 mod storage;
 mod storage_key;
+mod types;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::types::address::Address;
@@ -12,6 +13,7 @@ pub use namada_core::types::key::AccountPublicKeysMap;
 use serde::{Deserialize, Serialize};
 pub use storage::*;
 pub use storage_key::*;
+pub use types::*;
 
 #[derive(
     Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,

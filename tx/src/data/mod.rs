@@ -1,7 +1,5 @@
 //! Data-Types that are used in transactions.
 
-/// txs to manage accounts
-pub mod account;
 /// txs that contain decrypted payloads or assertions of
 /// non-decryptability
 pub mod decrypted;

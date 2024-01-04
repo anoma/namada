@@ -8,9 +8,8 @@ fn apply_tx(ctx: &mut Ctx, tx: Tx) -> TxResult {
         ctx.set_commitment_sentinel();
         err
     })?;
-    let tx_data =
-        transaction::governance::InitProposalData::try_from_slice(&data[..])
-            .wrap_err("failed to decode InitProposalData")?;
+    let tx_data = governance::InitProposalData::try_from_slice(&data[..])
+        .wrap_err("failed to decode InitProposalData")?;
 
     // Get the content from the referred to section
     let content = tx

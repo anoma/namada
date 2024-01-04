@@ -15,10 +15,11 @@ use namada_core::types::storage::Epoch;
 use namada_storage::{iter_prefix, Error, Result, StorageRead, StorageWrite};
 use namada_trans_token as token;
 
-use self::proposal::{InitProposalData, VoteProposalData};
 use crate::parameters::GovernanceParameters;
 use crate::storage::keys as governance_keys;
-use crate::storage::proposal::{ProposalType, StorageProposal};
+use crate::storage::proposal::{
+    InitProposalData, ProposalType, StorageProposal, VoteProposalData,
+};
 use crate::storage::vote::StorageProposalVote;
 use crate::utils::Vote;
 use crate::ADDRESS as governance_address;

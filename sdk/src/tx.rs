@@ -17,6 +17,7 @@ use masp_primitives::transaction::components::transparent::fees::{
     InputView as TransparentInputView, OutputView as TransparentOutputView,
 };
 use masp_primitives::transaction::components::I128Sum;
+use namada_account::{InitAccount, UpdateAccount};
 use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
 use namada_core::ibc::apps::transfer::types::packet::PacketData;
 use namada_core::ibc::apps::transfer::types::PrefixedCoin;
@@ -47,7 +48,6 @@ use namada_ibc::storage::channel_key;
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
 use namada_token::storage_key::balance_key;
-use namada_tx::data::account::{InitAccount, UpdateAccount};
 use namada_tx::data::pgf::UpdateStewardCommission;
 use namada_tx::data::{pos, ResultCode, TxResult};
 use namada_tx::{MaspBuilder, Tx};

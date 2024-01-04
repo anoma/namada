@@ -34,13 +34,16 @@ enum KeyType<'a> {
 
 impl<'a> From<&'a storage::Key> for KeyType<'a> {
     fn from(key: &'a storage::Key) -> KeyType<'a> {
-        if let Some(address) = key::is_pks_key(key) {
+        if let Some(address) = account::is_pks_key(key) {
             Self::Pk(address)
-        } else if let Some([_, owner]) = token::is_any_token_balance_key(key) {
+        } else if let Some([_, owner]) =
+            token::storage_key::is_any_token_balance_key(key)
+        {
             Self::TokenBalance { owner }
-        } else if token::is_any_minted_balance_key(key).is_some() {
+        } else if token::storage_key::is_any_minted_balance_key(key).is_some() {
             Self::TokenMinted
-        } else if let Some(minter) = token::is_any_minter_key(key) {
+        } else if let Some(minter) = token::storage_key::is_any_minter_key(key)
+        {
             Self::TokenMinter(minter)
         } else if proof_of_stake::storage_key::is_pos_key(key) {
             Self::PoS
@@ -53,7 +56,7 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
             } else {
                 Self::Unknown
             }
-        } else if token::is_masp_key(key) {
+        } else if token::storage_key::is_masp_key(key) {
             Self::Masp
         } else if ibc::is_ibc_key(key) {
             Self::Ibc
