@@ -2964,6 +2964,7 @@ pub mod args {
     pub const MAX_COMMISSION_RATE_CHANGE: Arg<Dec> =
         arg("max-commission-rate-change");
     pub const MAX_ETH_GAS: ArgOpt<u64> = arg_opt("max_eth-gas");
+    pub const MEMO_OPT: ArgOpt<String> = arg_opt("memo");
     pub const MODE: ArgOpt<String> = arg_opt("mode");
     pub const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     pub const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
@@ -5947,6 +5948,11 @@ pub mod args {
                 "Use an attached hardware wallet device to sign the \
                  transaction.",
             ))
+            .arg(
+                MEMO_OPT
+                    .def()
+                    .help("Attach a plaintext memo to the transaction."),
+            )
         }
 
         fn parse(matches: &ArgMatches) -> Self {
@@ -5971,7 +5977,7 @@ pub mod args {
             let tx_reveal_code_path = PathBuf::from(TX_REVEAL_PK);
             let chain_id = CHAIN_ID_OPT.parse(matches);
             let password = None;
-            let memo = None;
+            let memo = MEMO_OPT.parse(matches).map(String::into_bytes);
             let wrapper_fee_payer = FEE_PAYER_OPT.parse(matches);
             let output_folder = OUTPUT_FOLDER_PATH.parse(matches);
             let use_device = USE_DEVICE.parse(matches);
