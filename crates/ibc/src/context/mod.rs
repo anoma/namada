@@ -3,6 +3,7 @@
 pub mod client;
 pub mod common;
 pub mod execution;
+pub mod nft_transfer;
 pub mod router;
 pub mod storage;
 pub mod token_transfer;

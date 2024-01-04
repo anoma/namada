@@ -13,10 +13,11 @@ use namada_core::ibc::apps::transfer::types::{
 use namada_core::ibc::core::channel::types::error::ChannelError;
 use namada_core::ibc::core::handler::types::error::ContextError;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
-use namada_core::types::address::{Address, InternalAddress};
+use namada_core::types::address::Address;
+use namada_core::types::ibc::IBC_ESCROW_ADDRESS;
 use namada_core::types::token;
 use namada_core::types::uint::Uint;
-use namada_trans_token::read_denom;
+use namada_trans_token::{Amount, DenominatedAmount, Denomination};
 
 use super::common::IbcCommonContext;
 use crate::storage;
@@ -44,7 +45,7 @@ where
     fn get_token_amount(
         &self,
         coin: &PrefixedCoin,
-    ) -> Result<(Address, token::DenominatedAmount), TokenTransferError> {
+    ) -> Result<(Address, DenominatedAmount), TokenTransferError> {
         let token = match Address::decode(coin.denom.base_denom.as_str()) {
             Ok(token_addr) if coin.denom.trace_path.is_empty() => token_addr,
             _ => storage::ibc_token(coin.denom.to_string()),
@@ -53,20 +54,19 @@ where
         // Convert IBC amount to Namada amount for the token
         let denom = read_denom(&*self.inner.borrow(), &token)
             .map_err(ContextError::from)?
-            .unwrap_or(token::Denomination(0));
+            .unwrap_or(Denomination(0));
         let uint_amount = Uint(primitive_types::U256::from(coin.amount).0);
-        let amount =
-            token::Amount::from_uint(uint_amount, denom).map_err(|e| {
-                TokenTransferError::ContextError(
-                    ChannelError::Other {
-                        description: format!(
-                            "The IBC amount is invalid: Coin {coin}, Error {e}",
-                        ),
-                    }
-                    .into(),
-                )
-            })?;
-        let amount = token::DenominatedAmount::new(amount, denom);
+        let amount = Amount::from_uint(uint_amount, denom).map_err(|e| {
+            TokenTransferError::ContextError(
+                ChannelError::Other {
+                    description: format!(
+                        "The IBC amount is invalid: Coin {coin}, Error {e}",
+                    ),
+                }
+                .into(),
+            )
+        })?;
+        let amount = DenominatedAmount::new(amount, denom);
 
         Ok((token, amount))
     }
@@ -153,10 +153,14 @@ where
         // has no prefix
         let (ibc_token, amount) = self.get_token_amount(coin)?;
 
-        let escrow = Address::Internal(InternalAddress::Ibc);
         self.inner
             .borrow_mut()
-            .transfer_token(from_account, &escrow, &ibc_token, amount)
+            .transfer_token(
+                from_account,
+                &IBC_ESCROW_ADDRESS,
+                &ibc_token,
+                amount,
+            )
             .map_err(|e| ContextError::from(e).into())
     }
 
@@ -171,10 +175,9 @@ where
         // has no prefix
         let (ibc_token, amount) = self.get_token_amount(coin)?;
 
-        let escrow = Address::Internal(InternalAddress::Ibc);
         self.inner
             .borrow_mut()
-            .transfer_token(&escrow, to_account, &ibc_token, amount)
+            .transfer_token(&IBC_ESCROW_ADDRESS, to_account, &ibc_token, amount)
             .map_err(|e| ContextError::from(e).into())
     }
 

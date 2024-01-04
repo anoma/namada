@@ -2,6 +2,7 @@
 
 use core::time::Duration;
 
+use namada_core::ibc::apps::nft_transfer::types::{PrefixedClassId, TokenId};
 use namada_core::ibc::clients::tendermint::consensus_state::ConsensusState as TmConsensusState;
 use namada_core::ibc::clients::tendermint::types::ConsensusState as TmConsensusStateType;
 use namada_core::ibc::core::channel::types::channel::ChannelEnd;
@@ -28,6 +29,7 @@ use namada_core::tendermint::Time as TmTime;
 use namada_core::types::storage::{BlockHeight, Key};
 use namada_core::types::time::DurationSecs;
 use namada_parameters::storage::get_max_expected_time_per_block_key;
+use namada_trans_token::storage_key::balance_key;
 use prost::Message;
 use sha2::Digest;
 
@@ -673,5 +675,59 @@ pub trait IbcCommonContext: IbcStorageContext {
             })?;
         }
         Ok(())
+    }
+
+    /// Get the NFT class
+    fn nft_class(
+        &self,
+        class_id: &PrefixedClassId,
+    ) -> Result<Option<NftClass>> {
+        let key = storage::nft_class_key(class_id);
+        self.read(&key).map_err(ContextError::from)
+    }
+
+    /// Store the NFT class
+    fn store_nft_class(
+        &self,
+        class_id: &PrefixedClassId,
+        class: NftClass,
+    ) -> Result<()> {
+        let key = storage::nft_class_key(class_id);
+        self.write(&key, class).map_err(ContextError::from)
+    }
+
+    /// Get the NFT metadata
+    fn nft_metadata(
+        &self,
+        class_id: &PrefixedClassId,
+        token_id: &TokenId,
+    ) -> Result<Option<NftMetadata>> {
+        let key = storage::nft_metadata_key(class_id, token_id);
+        self.read(&key).map_err(ContextError::from)
+    }
+
+    /// Store the NFT metadata
+    fn store_nft_metadata(
+        &self,
+        class_id: &PrefixedClassId,
+        token_id: &TokenId,
+        metadata: NftMetadata,
+    ) -> Result<()> {
+        let key = storage::nft_metadata_key(class_id, token_id);
+        self.write(&key, metadata).map_err(ContextError::from)
+    }
+
+    /// Validate the NFT balance. If the balance isn't present or 1, returns an
+    /// error.
+    fn is_valid_nft_balance(
+        &self,
+        class_id: &PrefixedClassId,
+        token_id: &TokenId,
+        owner: &Address,
+    ) -> Result<bool> {
+        let ibc_token = storage::ibc_token_for_nft(class_id, token_id);
+        let balance_key = balance_key(&ibc_token, owner);
+        let amount = self.read::<token::Amount>(&balance_key)?;
+        Ok(amount == Some(token::Amount::from_u64(1)))
     }
 }
