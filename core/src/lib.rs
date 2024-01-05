@@ -17,8 +17,3 @@ pub mod borsh {
     pub use borsh::*;
     pub use borsh_ext::*;
 }
-
-// A handy macro for tests
-#[cfg(test)]
-#[macro_use]
-extern crate assert_matches;

@@ -4381,15 +4381,11 @@ dependencies = [
 name = "namada_core"
 version = "0.29.0"
 dependencies = [
- "ark-bls12-381",
- "ark-serialize",
- "assert_matches",
  "bech32 0.8.1",
  "borsh",
  "borsh-ext",
  "chrono",
  "data-encoding",
- "derivative",
  "ed25519-consensus 1.2.1",
  "ethabi",
  "ethbridge-structs",

@@ -130,7 +130,6 @@ mod tests {
 
     use super::*;
     use crate::types::ethereum_events::EthAddress;
-    use crate::types::vote_extensions::validator_set_update::ValidatorSetArgs;
 
     /// Checks if we get the same result as `abi.encode`, for some given
     /// input data.
@@ -186,29 +185,6 @@ mod tests {
             .decode(&expected.as_bytes()[2..])
             .expect("Test failed");
         let encoded = ethabi::encode(&[Token::Address(address.0.into())]);
-        assert_eq!(expected, encoded);
-    }
-
-    #[test]
-    fn test_abi_encode_valset_args() {
-        let valset_update = ValidatorSetArgs {
-            validators: vec![
-                EthAddress::from_str(
-                    "0x241D37B7Cf5233b3b0b204321420A86e8f7bfdb5",
-                )
-                .expect("Test failed"),
-            ],
-            voting_powers: vec![8828299u64.into()],
-            epoch: 0.into(),
-        };
-        let encoded = valset_update.encode().into_inner();
-        let encoded = HEXLOWER.encode(&encoded);
-        let expected = "000000000000000000000000000000000000000000000000000000000000002\
-                        000000000000000000000000000000000000000000000000000000000000000\
-                        400000000000000000000000000000000000000000000000000000000000000\
-                        000000000000000000000000000000000000000000000000000000000000000\
-                        0001241d37b7cf5233b3b0b204321420a86e8f7bfdb50000000000000000008\
-                        6b58b";
         assert_eq!(expected, encoded);
     }
 }
