@@ -4487,8 +4487,10 @@ dependencies = [
 name = "namada_gas"
 version = "0.29.0"
 dependencies = [
+ "assert_matches",
  "borsh",
  "namada_core",
+ "proptest",
  "serde 1.0.193",
  "thiserror",
 ]

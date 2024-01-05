@@ -384,6 +384,7 @@ impl VpsGas {
 
 #[cfg(test)]
 mod tests {
+    use assert_matches::assert_matches;
     use proptest::prelude::*;
 
     use super::*;
