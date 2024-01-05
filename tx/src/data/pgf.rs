@@ -35,8 +35,9 @@ pub struct UpdateStewardCommission {
 pub mod tests {
     use namada_core::types::address::testing::arb_non_internal_address;
     use namada_core::types::dec::testing::arb_dec;
-    use namada_core::types::transaction::pgf::UpdateStewardCommission;
     use proptest::{collection, prop_compose};
+
+    use super::UpdateStewardCommission;
 
     prop_compose! {
         /// Generate an arbitraary steward commission update

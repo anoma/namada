@@ -15,13 +15,14 @@ pub use types::{
 #[cfg(test)]
 mod tests {
     use data_encoding::HEXLOWER;
-    use generated::types::Tx;
     use prost::Message;
 
     use super::*;
 
     #[test]
     fn encoding_round_trip() {
+        use proto::Tx;
+
         let tx = Tx {
             data: "arbitrary data".as_bytes().to_owned(),
         };

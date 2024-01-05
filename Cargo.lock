@@ -4802,6 +4802,7 @@ name = "namada_tx"
 version = "0.29.0"
 dependencies = [
  "ark-bls12-381",
+ "assert_matches",
  "borsh",
  "data-encoding",
  "masp_primitives",
@@ -4812,6 +4813,7 @@ dependencies = [
  "proptest",
  "prost 0.12.3",
  "prost-types 0.12.3",
+ "rand 0.8.5",
  "serde 1.0.193",
  "serde_json",
  "sha2 0.9.9",

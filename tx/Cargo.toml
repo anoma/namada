@@ -36,7 +36,10 @@ thiserror.workspace = true
 
 [dev-dependencies]
 namada_core = { path = "../core", features = ["testing"] }
+
+assert_matches.workspace = true
 proptest.workspace = true
+rand.workspace = true
 
 [build-dependencies]
 tonic-build.workspace = true

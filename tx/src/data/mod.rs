@@ -340,13 +340,14 @@ impl TxSentinel {
 
 #[cfg(test)]
 mod test_process_tx {
+    use assert_matches::assert_matches;
     use namada_core::types::address::nam;
     use namada_core::types::key::*;
     use namada_core::types::storage::Epoch;
     use namada_core::types::token::{Amount, DenominatedAmount};
 
     use super::*;
-    use crate::proto::{Code, Data, Section, Signature, Tx, TxError};
+    use crate::{Code, Data, Section, Signature, Tx, TxError};
 
     fn gen_keypair() -> common::SecretKey {
         use rand::prelude::ThreadRng;
@@ -481,7 +482,7 @@ mod test_process_tx {
 /// with some unsigned data and returns an identical copy
 #[test]
 fn test_process_tx_decrypted_unsigned() {
-    use crate::proto::{Code, Data, Tx};
+    use crate::{Code, Data, Tx};
     let mut tx = Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
     let code_sec = tx
         .set_code(Code::new("transaction data".as_bytes().to_owned(), None))
@@ -506,7 +507,7 @@ fn test_process_tx_decrypted_unsigned() {
 fn test_process_tx_decrypted_signed() {
     use namada_core::types::key::*;
 
-    use crate::proto::{Code, Data, Section, Signature, Tx};
+    use crate::{Code, Data, Section, Signature, Tx};
 
     fn gen_keypair() -> common::SecretKey {
         use rand::prelude::ThreadRng;
