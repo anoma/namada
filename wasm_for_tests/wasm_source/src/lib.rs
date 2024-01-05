@@ -187,7 +187,7 @@ pub mod main {
         _keys_changed: BTreeSet<storage::Key>,
         _verifiers: BTreeSet<Address>,
     ) -> VpResult {
-        use validity_predicate::EvalVp;
+        use namada_tx_prelude::transaction::eval_vp::EvalVp;
         let EvalVp {
             vp_code_hash,
             input,

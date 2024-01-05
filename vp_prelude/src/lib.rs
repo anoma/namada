@@ -361,6 +361,10 @@ impl<'view> VpEnv<'view> for Ctx {
         unsafe { namada_vp_charge_gas(used_gas) };
         Ok(())
     }
+
+    fn get_pred_epochs(&self) -> namada_storage::Result<storage::Epochs> {
+        todo!()
+    }
 }
 
 impl StorageRead for CtxPreStorageRead<'_> {
