@@ -107,12 +107,13 @@ mod test {
     use std::result::Result;
     use std::str::FromStr;
 
+    use namada_core::types::address::{nam, Address};
+    use namada_core::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
+    use namada_core::types::storage::DbKeySeg;
+    use namada_core::types::token::BALANCE_STORAGE_KEY;
+
     use super::*;
     use crate::ledger::eth_bridge::ADDRESS;
-    use crate::types::address::{nam, Address};
-    use crate::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
-    use crate::types::storage::DbKeySeg;
-    use crate::types::token::BALANCE_STORAGE_KEY;
 
     const MULTITOKEN_ADDRESS: Address =
         Address::Internal(InternalAddress::Multitoken);

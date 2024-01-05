@@ -2455,9 +2455,9 @@ where
 #[cfg(any(test, feature = "testing"))]
 /// PoS related utility functions to help set up tests.
 pub mod test_utils {
-    use namada_namada_trans_token::credit_tokens;
     use namada_storage;
     use namada_storage::{StorageRead, StorageWrite};
+    use namada_trans_token::credit_tokens;
 
     use super::*;
     use crate::parameters::PosParams;

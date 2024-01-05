@@ -1045,7 +1045,7 @@ mod test_prepare_proposal {
         let (shell, _recv, _, _) = test_utils::setup();
 
         let block_gas_limit =
-            namada::gas::get_max_block_gas(&shell.wl_storage).unwrap();
+            namada::parameters::get_max_block_gas(&shell.wl_storage).unwrap();
         let keypair = gen_keypair();
 
         let wrapper = WrapperTx::new(

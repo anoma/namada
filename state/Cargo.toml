@@ -16,9 +16,7 @@ version.workspace = true
 default = []
 
 # for integration tests and test utilities
-testing = [
-  "namada_core/testing",
-]
+testing = ["proptest", "namada_core/testing"]
 
 [dependencies]
 namada_core = { path = "../core", default-features = false }
@@ -35,5 +33,9 @@ ics23.workspace = true
 itertools.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
-tiny-keccak = {version = "2.0.2", features = ["keccak"]}
+tiny-keccak = { version = "2.0.2", features = ["keccak"] }
 tracing.workspace = true
+proptest = { workspace = true, optional = true }
+
+[dev-dependencies]
+proptest.workspace = true

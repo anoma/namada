@@ -151,7 +151,7 @@ where
     fn from(storage: &WlStorage<D, H>) -> Self {
         Self::init(
             storage.pos_queries().get_max_proposal_bytes().get(),
-            namada::gas::get_max_block_gas(storage).unwrap(),
+            namada::parameters::get_max_block_gas(storage).unwrap(),
         )
     }
 }

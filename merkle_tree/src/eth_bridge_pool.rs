@@ -371,6 +371,8 @@ impl Encode<3> for BridgePoolProof {
 #[cfg(test)]
 mod test_bridge_pool_tree {
 
+    use std::assert_matches;
+
     use itertools::Itertools;
     use proptest::prelude::*;
 

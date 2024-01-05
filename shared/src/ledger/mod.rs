@@ -85,7 +85,8 @@ mod dry_run_tx {
                 // If dry run only the inner tx, use the max block gas as the
                 // gas limit
                 TxGasMeter::new(
-                    namada_gas::get_max_block_gas(ctx.wl_storage).unwrap(),
+                    namada_parameters::get_max_block_gas(ctx.wl_storage)
+                        .unwrap(),
                 )
             }
             TxType::Raw => {
@@ -95,7 +96,8 @@ mod dry_run_tx {
                 // If dry run only the inner tx, use the max block gas as the
                 // gas limit
                 TxGasMeter::new(
-                    namada_gas::get_max_block_gas(ctx.wl_storage).unwrap(),
+                    namada_parameters::get_max_block_gas(ctx.wl_storage)
+                        .unwrap(),
                 )
             }
         };

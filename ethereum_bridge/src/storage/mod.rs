@@ -71,10 +71,11 @@ pub fn bridge_contract_key() -> Key {
 
 #[cfg(test)]
 mod test {
+    use namada_core::types::address;
+    use namada_core::types::address::nam;
+    use namada_core::types::ethereum_events::testing::arbitrary_eth_address;
+
     use super::*;
-    use crate::types::address;
-    use crate::types::address::nam;
-    use crate::types::ethereum_events::testing::arbitrary_eth_address;
 
     #[test]
     fn test_is_eth_bridge_key_returns_true_for_eth_bridge_address() {

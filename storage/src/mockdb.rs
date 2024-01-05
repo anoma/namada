@@ -10,7 +10,6 @@ use itertools::Either;
 use namada_core::borsh::{BorshDeserialize, BorshSerializeExt};
 use namada_core::ledger::replay_protection;
 use namada_core::types;
-use namada_core::types::ethereum_events::Uint;
 use namada_core::types::ethereum_structs;
 use namada_core::types::hash::Hash;
 use namada_core::types::storage::{
@@ -19,6 +18,7 @@ use namada_core::types::storage::{
 };
 use namada_core::types::time::DateTimeUtc;
 use namada_core::types::token::ConversionState;
+use namada_core::types::uint::Uint;
 use namada_merkle_tree::{
     base_tree_key_prefix, subtree_key_prefix, MerkleTreeStoresRead, StoreType,
 };

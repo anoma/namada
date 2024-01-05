@@ -284,14 +284,15 @@ where
 
 #[cfg(test)]
 mod test {
+    use namada_core::types::address::{self, Address};
+
     use super::*;
-    use crate::ledger::storage::testing::TestWlStorage;
-    use crate::ledger::storage_api::collections::lazy_map::{self, NestedMap};
-    use crate::types::address::{self, Address};
+    use crate::collections::lazy_map::{self, NestedMap};
+    use crate::testing::TestStorage;
 
     #[test]
     fn test_lazy_vec_basics() -> crate::Result<()> {
-        let mut storage = TestWlStorage::default();
+        let mut storage = TestStorage::default();
 
         let key = storage::Key::parse("test").unwrap();
         let lazy_vec = LazyVec::<u32>::open(key);
@@ -339,7 +340,7 @@ mod test {
 
     #[test]
     fn test_lazy_vec_with_addr() -> crate::Result<()> {
-        let mut storage = TestWlStorage::default();
+        let mut storage = TestStorage::default();
 
         let key = storage::Key::parse("test").unwrap();
         let lazy_vec = LazyVec::<Address>::open(key);
@@ -382,7 +383,7 @@ mod test {
     /// Test iterator on a `LazyVec` nested inside a `LazyMap`
     #[test]
     fn test_nested_lazy_vec_iter() -> crate::Result<()> {
-        let mut storage = TestWlStorage::default();
+        let mut storage = TestStorage::default();
 
         let prefix = storage::Key::parse("test").unwrap();
         let handle = NestedMap::<Address, LazyVec<u32>>::open(prefix);

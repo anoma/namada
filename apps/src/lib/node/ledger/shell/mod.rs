@@ -1237,7 +1237,8 @@ where
 
                 // Max block gas
                 let block_gas_limit: Gas = Gas::from_whole_units(
-                    namada::gas::get_max_block_gas(&self.wl_storage).unwrap(),
+                    namada::parameters::get_max_block_gas(&self.wl_storage)
+                        .unwrap(),
                 );
                 if gas_meter.tx_gas_limit > block_gas_limit {
                     response.code = ResultCode::AllocationError.into();
@@ -2854,7 +2855,7 @@ mod shell_tests {
         let (shell, _recv, _, _) = test_utils::setup();
 
         let block_gas_limit =
-            namada::gas::get_max_block_gas(&shell.wl_storage).unwrap();
+            namada::parameters::get_max_block_gas(&shell.wl_storage).unwrap();
         let keypair = super::test_utils::gen_keypair();
 
         let mut wrapper =

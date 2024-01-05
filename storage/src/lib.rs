@@ -300,3 +300,137 @@ where
     });
     Ok(iter)
 }
+
+/// Helpers for testing components that depend on storage
+#[cfg(any(test, feature = "testing"))]
+pub mod testing {
+
+    use namada_core::types::address;
+    use namada_core::types::chain::ChainId;
+
+    use super::mockdb::MockDB;
+    use super::*;
+
+    /// Storage with a mock DB for testing
+    pub struct TestStorage {
+        db: MockDB,
+        chain_id: ChainId,
+        height: BlockHeight,
+        epoch: Epoch,
+        pred_epochs: Epochs,
+        native_token: Address,
+    }
+
+    #[allow(clippy::derivable_impls)]
+    impl Default for TestStorage {
+        fn default() -> Self {
+            Self {
+                db: Default::default(),
+                chain_id: ChainId::default(),
+                height: BlockHeight::first(),
+                epoch: Epoch::default(),
+                pred_epochs: Epochs::default(),
+                native_token: address::nam(),
+            }
+        }
+    }
+
+    impl StorageRead for TestStorage {
+        type PrefixIter<'iter> = PrefixIter<'iter> where Self: 'iter;
+
+        fn read_bytes(&self, key: &storage::Key) -> Result<Option<Vec<u8>>> {
+            self.db.read_subspace_val(key).into_storage_result()
+        }
+
+        fn has_key(&self, key: &storage::Key) -> Result<bool> {
+            Ok(self.read_bytes(key)?.is_some())
+        }
+
+        fn iter_prefix<'iter>(
+            &'iter self,
+            prefix: &storage::Key,
+        ) -> Result<Self::PrefixIter<'iter>> {
+            let storage_iter = self.db.iter_prefix(Some(prefix));
+            Ok(PrefixIter {
+                db_iter: storage_iter,
+            })
+        }
+
+        fn iter_next<'iter>(
+            &'iter self,
+            iter: &mut Self::PrefixIter<'iter>,
+        ) -> Result<Option<(String, Vec<u8>)>> {
+            Ok(iter.next())
+        }
+
+        fn get_chain_id(&self) -> Result<String> {
+            Ok(self.chain_id.to_string())
+        }
+
+        fn get_block_height(&self) -> Result<BlockHeight> {
+            Ok(self.height)
+        }
+
+        fn get_block_header(
+            &self,
+            _height: BlockHeight,
+        ) -> Result<Option<Header>> {
+            Ok(None)
+        }
+
+        fn get_block_hash(&self) -> Result<BlockHash> {
+            Ok(BlockHash::default())
+        }
+
+        fn get_block_epoch(&self) -> Result<Epoch> {
+            Ok(self.epoch)
+        }
+
+        fn get_pred_epochs(&self) -> Result<Epochs> {
+            Ok(self.pred_epochs.clone())
+        }
+
+        fn get_tx_index(&self) -> Result<TxIndex> {
+            Ok(TxIndex::default())
+        }
+
+        fn get_native_token(&self) -> Result<Address> {
+            Ok(self.native_token.clone())
+        }
+    }
+
+    impl StorageWrite for TestStorage {
+        fn write_bytes(
+            &mut self,
+            key: &storage::Key,
+            val: impl AsRef<[u8]>,
+        ) -> Result<()> {
+            self.db
+                .write_subspace_val(self.height, key, val)
+                .into_storage_result()?;
+            Ok(())
+        }
+
+        fn delete(&mut self, key: &storage::Key) -> Result<()> {
+            self.db
+                .delete_subspace_val(self.height, key)
+                .into_storage_result()?;
+            Ok(())
+        }
+    }
+
+    /// Prefix iterator for [`TestStorage`].
+    #[derive(Debug)]
+    pub struct PrefixIter<'iter> {
+        /// DB iterator
+        pub db_iter: <MockDB as DBIter<'iter>>::PrefixIter,
+    }
+
+    impl<'iter> Iterator for PrefixIter<'iter> {
+        type Item = (String, Vec<u8>);
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.db_iter.next().map(|(key, val, _gas)| (key, val))
+        }
+    }
+}

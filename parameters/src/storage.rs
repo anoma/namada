@@ -3,6 +3,7 @@
 use namada_core::types::address::Address;
 use namada_core::types::storage::{DbKeySeg, Key};
 use namada_macros::StorageKeys;
+use namada_storage::StorageRead;
 
 use super::ADDRESS;
 
@@ -187,4 +188,16 @@ pub fn get_gas_cost_key() -> Key {
 /// Storage key used for the max signatures per transaction key
 pub fn get_max_signatures_per_transaction_key() -> Key {
     get_max_signatures_per_transaction_key_at_addr(ADDRESS)
+}
+
+/// Helper function to retrieve the `max_block_gas` protocol parameter from
+/// storage
+pub fn get_max_block_gas(
+    storage: &impl StorageRead,
+) -> std::result::Result<u64, namada_storage::Error> {
+    storage.read(&get_max_block_gas_key())?.ok_or(
+        namada_storage::Error::SimpleMessage(
+            "Missing max_block_gas parameter from storage",
+        ),
+    )
 }

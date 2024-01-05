@@ -5,7 +5,6 @@ use std::fmt::Display;
 use std::ops::Div;
 
 use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use namada_storage::StorageRead;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -61,18 +60,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// Decimal scale of Gas units
 const SCALE: u64 = 10_000;
-
-/// Helper function to retrieve the `max_block_gas` protocol parameter from
-/// storage
-pub fn get_max_block_gas(
-    storage: &impl StorageRead,
-) -> std::result::Result<u64, namada_storage::Error> {
-    storage
-        .read(&namada_parameters::storage::get_max_block_gas_key())?
-        .ok_or(namada_storage::Error::SimpleMessage(
-            "Missing max_block_gas parameter from storage",
-        ))
-}
 
 /// Representation of gas in sub-units. This effectively decouples gas metering
 /// from fee payment, allowing higher resolution when accounting for gas while,

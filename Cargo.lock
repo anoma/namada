@@ -4396,7 +4396,6 @@ dependencies = [
  "ics23",
  "impl-num-traits",
  "index-set",
- "itertools 0.10.5",
  "k256",
  "masp_primitives",
  "namada_macros",
@@ -4452,6 +4451,7 @@ dependencies = [
  "ethers",
  "eyre",
  "itertools 0.10.5",
+ "namada_account",
  "namada_core",
  "namada_macros",
  "namada_parameters",
@@ -4489,8 +4489,6 @@ version = "0.29.0"
 dependencies = [
  "borsh",
  "namada_core",
- "namada_parameters",
- "namada_storage",
  "serde 1.0.193",
  "thiserror",
 ]
@@ -4694,6 +4692,7 @@ dependencies = [
  "namada_storage",
  "namada_trans_token",
  "namada_tx",
+ "proptest",
  "sha2 0.9.9",
  "sparse-merkle-tree",
  "thiserror",
@@ -4705,9 +4704,14 @@ dependencies = [
 name = "namada_storage"
 version = "0.29.0"
 dependencies = [
+ "borsh",
  "itertools 0.10.5",
  "namada_core",
+ "namada_gas",
+ "namada_merkle_tree",
+ "namada_tx",
  "thiserror",
+ "tracing",
 ]
 
 [[package]]
@@ -4800,6 +4804,7 @@ dependencies = [
  "namada_gas",
  "num-derive",
  "num-traits 0.2.17",
+ "proptest",
  "prost 0.12.3",
  "prost-types 0.12.3",
  "serde 1.0.193",

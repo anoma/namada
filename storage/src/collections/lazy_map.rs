@@ -539,13 +539,14 @@ where
 
 #[cfg(test)]
 mod test {
+    use namada_core::types::address::{self, Address};
+
     use super::*;
-    use crate::ledger::storage::testing::TestWlStorage;
-    use crate::types::address::{self, Address};
+    use crate::testing::TestStorage;
 
     #[test]
     fn test_lazy_map_basics() -> crate::Result<()> {
-        let mut storage = TestWlStorage::default();
+        let mut storage = TestStorage::default();
 
         let key = storage::Key::parse("test").unwrap();
         let lazy_map = LazyMap::<u32, String>::open(key);
@@ -639,7 +640,7 @@ mod test {
 
     #[test]
     fn test_lazy_map_with_addr_key() -> crate::Result<()> {
-        let mut storage = TestWlStorage::default();
+        let mut storage = TestStorage::default();
 
         let key = storage::Key::parse("test").unwrap();
         let lazy_map = LazyMap::<Address, String>::open(key);
@@ -687,7 +688,7 @@ mod test {
 
     #[test]
     fn test_nested_lazy_map_with_addr_key() -> crate::Result<()> {
-        let mut storage = TestWlStorage::default();
+        let mut storage = TestStorage::default();
 
         let key = storage::Key::parse("test").unwrap();
         let lazy_map = NestedMap::<Address, LazyMap<u64, String>>::open(key);
@@ -740,7 +741,7 @@ mod test {
 
     #[test]
     fn test_nested_map_basics() -> crate::Result<()> {
-        let mut storage = TestWlStorage::default();
+        let mut storage = TestStorage::default();
         let key = storage::Key::parse("testing").unwrap();
 
         // A nested map from u32 -> String -> u32
@@ -861,7 +862,7 @@ mod test {
 
     #[test]
     fn test_nested_map_key_prefix_removal() {
-        let mut storage = TestWlStorage::default();
+        let mut storage = TestStorage::default();
         let key = storage::Key::parse("testing").unwrap();
 
         // A nested map from u32 -> String -> u32
@@ -892,7 +893,7 @@ mod test {
 
     #[test]
     fn test_lazy_map_collection() {
-        let mut storage = TestWlStorage::default();
+        let mut storage = TestStorage::default();
         let key_s = storage::Key::parse("testing_simple").unwrap();
         let key_n = storage::Key::parse("testing_nested").unwrap();
 

@@ -426,6 +426,7 @@ pub use tag::SerializeWithAbiEncode;
 #[cfg(test)]
 mod tests {
     use data_encoding::HEXLOWER;
+    use namada_core::types::ethereum_events::EthAddress;
 
     use super::*;
 
@@ -543,5 +544,28 @@ mod tests {
         let x = voting_powers_1.get_abi_encoded();
         let y = voting_powers_2.get_abi_encoded();
         assert_eq!(x, y);
+    }
+
+    #[test]
+    fn test_abi_encode_valset_args() {
+        let valset_update = ValidatorSetArgs {
+            validators: vec![
+                EthAddress::from_str(
+                    "0x241D37B7Cf5233b3b0b204321420A86e8f7bfdb5",
+                )
+                .expect("Test failed"),
+            ],
+            voting_powers: vec![8828299u64.into()],
+            epoch: 0.into(),
+        };
+        let encoded = valset_update.encode().into_inner();
+        let encoded = HEXLOWER.encode(&encoded);
+        let expected = "000000000000000000000000000000000000000000000000000000000000002\
+                        000000000000000000000000000000000000000000000000000000000000000\
+                        400000000000000000000000000000000000000000000000000000000000000\
+                        000000000000000000000000000000000000000000000000000000000000000\
+                        0001241d37b7cf5233b3b0b204321420a86e8f7bfdb50000000000000000008\
+                        6b58b";
+        assert_eq!(expected, encoded);
     }
 }

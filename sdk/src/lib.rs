@@ -763,8 +763,8 @@ where
 #[cfg(any(test, feature = "testing"))]
 /// Tests and strategies for transactions
 pub mod testing {
+    use governance::ProposalType;
     use ibc::primitives::proto::Any;
-    use namada_core::ledger::governance::storage::proposal::ProposalType;
     use namada_core::ledger::ibc::testing::arb_ibc_any;
     use namada_core::types::address::testing::{
         arb_established_address, arb_non_internal_address,
@@ -792,26 +792,20 @@ pub mod testing {
     use prost::Message;
 
     use super::*;
-    use crate::core::types::chain::ChainId;
-    use crate::core::types::eth_bridge_pool::testing::arb_pending_transfer;
-    use crate::core::types::key::testing::arb_common_pk;
-    use crate::core::types::time::{DateTime, DateTimeUtc, Utc};
-    use crate::core::types::transaction::account::tests::{
-        arb_init_account, arb_update_account,
-    };
-    use crate::core::types::transaction::governance::tests::{
-        arb_init_proposal, arb_vote_proposal,
-    };
-    use crate::core::types::transaction::pgf::tests::arb_update_steward_commission;
-    use crate::core::types::transaction::pos::tests::{
+    use crate::account::tests::{arb_init_account, arb_update_account};
+    use crate::governance::tests::{arb_init_proposal, arb_vote_proposal};
+    use crate::tx::data::pgf::tests::arb_update_steward_commission;
+    use crate::tx::data::pos::tests::{
         arb_become_validator, arb_bond, arb_commission_change,
         arb_consensus_key_change, arb_metadata_change, arb_redelegation,
         arb_withdraw,
     };
-    use crate::core::types::transaction::{
-        DecryptedTx, Fee, TxType, WrapperTx,
-    };
-    use crate::proto::{Code, Commitment, Header, Section};
+    use crate::tx::{Code, Commitment, Header, Section};
+    use crate::types::chain::ChainId;
+    use crate::types::eth_bridge_pool::testing::arb_pending_transfer;
+    use crate::types::key::testing::arb_common_pk;
+    use crate::types::time::{DateTime, DateTimeUtc, Utc};
+    use crate::types::transaction::{DecryptedTx, Fee, TxType, WrapperTx};
 
     #[derive(Debug)]
     #[allow(clippy::large_enum_variant)]

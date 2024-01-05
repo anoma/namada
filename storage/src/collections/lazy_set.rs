@@ -213,13 +213,14 @@ where
 
 #[cfg(test)]
 mod test {
+    use namada_core::types::address::{self, Address};
+
     use super::*;
-    use crate::ledger::storage::testing::TestWlStorage;
-    use crate::types::address::{self, Address};
+    use crate::testing::TestStorage;
 
     #[test]
     fn test_lazy_set_basics() -> crate::Result<()> {
-        let mut storage = TestWlStorage::default();
+        let mut storage = TestStorage::default();
 
         let key = storage::Key::parse("test").unwrap();
         let lazy_set = LazySet::<u32>::open(key);
@@ -299,7 +300,7 @@ mod test {
 
     #[test]
     fn test_lazy_set_with_addr_key() -> crate::Result<()> {
-        let mut storage = TestWlStorage::default();
+        let mut storage = TestStorage::default();
 
         let key = storage::Key::parse("test").unwrap();
         let lazy_set = LazySet::<Address>::open(key);

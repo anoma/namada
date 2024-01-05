@@ -3,11 +3,12 @@
 use std::collections::HashMap;
 use std::num::NonZeroU64;
 
+use namada_account::protocol_pk_key;
 use namada_core::types::address::{self, wnam, Address};
 use namada_core::types::dec::Dec;
 use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::keccak::KeccakHash;
-use namada_core::types::key::{self, protocol_pk_key, RefTo};
+use namada_core::types::key::{self, RefTo};
 use namada_core::types::storage::{BlockHeight, Key};
 use namada_core::types::token;
 use namada_proof_of_stake::parameters::OwnedPosParams;
@@ -18,8 +19,8 @@ use namada_proof_of_stake::{
     staking_token_address, BecomeValidator,
 };
 use namada_state::testing::TestWlStorage;
-use namada_storage::token::credit_tokens;
 use namada_storage::{StorageRead, StorageWrite};
+use namada_trans_token::credit_tokens;
 
 use crate::storage::bridge_pool::get_key_from_hash;
 use crate::storage::parameters::{

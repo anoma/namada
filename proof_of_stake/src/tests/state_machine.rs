@@ -12,12 +12,12 @@ use namada_core::types::key;
 use namada_core::types::key::common::PublicKey;
 use namada_core::types::storage::Epoch;
 use namada_core::types::token::Change;
-use namada_namada_trans_token::read_balance;
 use namada_state::testing::TestWlStorage;
 use namada_storage::collections::lazy_map::{
     Collectable, NestedSubKey, SubKey,
 };
 use namada_storage::{token, StorageRead};
+use namada_trans_token::read_balance;
 use proptest::prelude::*;
 use proptest::test_runner::Config;
 use proptest_state_machine::{

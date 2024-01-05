@@ -47,7 +47,8 @@ where
     fn from(wl_storage: &WlStorage<D, H>) -> Self {
         let max_proposal_bytes =
             wl_storage.pos_queries().get_max_proposal_bytes().get();
-        let max_block_gas = namada::gas::get_max_block_gas(wl_storage).unwrap();
+        let max_block_gas =
+            namada::parameters::get_max_block_gas(wl_storage).unwrap();
         let encrypted_txs_bin =
             EncryptedTxsBins::new(max_proposal_bytes, max_block_gas);
         let txs_bin = TxBin::init(max_proposal_bytes);
@@ -1821,7 +1822,7 @@ mod test_process_proposal {
         let (shell, _recv, _, _) = test_utils::setup();
 
         let block_gas_limit =
-            namada::gas::get_max_block_gas(&shell.wl_storage).unwrap();
+            namada::parameters::get_max_block_gas(&shell.wl_storage).unwrap();
         let keypair = super::test_utils::gen_keypair();
 
         let mut wrapper =
