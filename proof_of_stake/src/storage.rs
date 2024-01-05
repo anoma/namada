@@ -846,3 +846,16 @@ where
     let handle = LazySet::open(key);
     handle.contains(storage, consensus_key)
 }
+
+/// Find a consensus key of a validator account.
+pub fn get_consensus_key<S>(
+    storage: &S,
+    addr: &Address,
+    epoch: Epoch,
+) -> storage_api::Result<Option<common::PublicKey>>
+where
+    S: StorageRead,
+{
+    let params = read_pos_params(storage)?;
+    validator_consensus_key_handle(addr).get(storage, epoch, &params)
+}

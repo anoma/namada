@@ -3031,7 +3031,7 @@ pub mod args {
     pub const TEMPLATES_PATH: Arg<PathBuf> = arg("templates-path");
     pub const TIMEOUT_HEIGHT: ArgOpt<u64> = arg_opt("timeout-height");
     pub const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
-    pub const TM_ADDRESS: Arg<String> = arg("tm-address");
+    pub const TM_ADDRESS: ArgOpt<String> = arg_opt("tm-address");
     pub const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
     pub const TOKEN: Arg<WalletAddress> = arg("token");
     pub const TOKEN_STR: Arg<String> = arg("token");
@@ -5733,15 +5733,26 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let tm_addr = TM_ADDRESS.parse(matches);
-            Self { query, tm_addr }
+            let validator_addr = VALIDATOR_OPT.parse(matches);
+            Self {
+                query,
+                tm_addr,
+                validator_addr,
+            }
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query<CliTypes>>().arg(
-                TM_ADDRESS
-                    .def()
-                    .help("The address of the validator in Tendermint."),
-            )
+            app.add_args::<Query<CliTypes>>()
+                .arg(
+                    TM_ADDRESS
+                        .def()
+                        .help("The address of the validator in Tendermint."),
+                )
+                .arg(
+                    VALIDATOR_OPT
+                        .def()
+                        .help("The native address of the validator."),
+                )
         }
     }
 
@@ -5750,6 +5761,9 @@ pub mod args {
             QueryFindValidator::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 tm_addr: self.tm_addr,
+                validator_addr: self
+                    .validator_addr
+                    .map(|x| ctx.borrow_chain_or_exit().get(&x)),
             }
         }
     }
