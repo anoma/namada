@@ -7,7 +7,7 @@ use borsh::BorshDeserialize;
 use namada_core::types::validity_predicate::VpSentinel;
 use namada_gas::{GasMetering, TxGasMeter, WASM_MEMORY_PAGE_GAS};
 use namada_state::write_log::StorageModification;
-use namada_state::{Storage, StorageHasher};
+use namada_state::{State, StorageHasher};
 use namada_tx::data::TxSentinel;
 use namada_tx::{Commitment, Section, Tx};
 use parity_wasm::elements;
@@ -92,7 +92,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// the transaction.
 #[allow(clippy::too_many_arguments)]
 pub fn tx<DB, H, CA>(
-    storage: &Storage<DB, H>,
+    storage: &State<DB, H>,
     write_log: &mut WriteLog,
     gas_meter: &mut TxGasMeter,
     tx_index: &TxIndex,
@@ -224,7 +224,7 @@ pub fn vp<DB, H, CA>(
     tx: &Tx,
     tx_index: &TxIndex,
     address: &Address,
-    storage: &Storage<DB, H>,
+    storage: &State<DB, H>,
     write_log: &WriteLog,
     gas_meter: &mut VpGasMeter,
     keys_changed: &BTreeSet<Key>,
@@ -508,7 +508,7 @@ fn fetch_or_compile<DB, H, CN, CA>(
     wasm_cache: &mut Cache<CN, CA>,
     code_or_hash: &Commitment,
     write_log: &WriteLog,
-    storage: &Storage<DB, H>,
+    storage: &State<DB, H>,
     gas_meter: &mut dyn GasMetering,
 ) -> Result<(Module, Store)>
 where

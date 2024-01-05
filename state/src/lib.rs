@@ -49,9 +49,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// it has 2 blocks delay on validator set update.
 pub const EPOCH_SWITCH_BLOCKS_DELAY: u32 = 2;
 
-/// The storage data
+/// The ledger's state
 #[derive(Debug)]
-pub struct Storage<D, H>
+pub struct State<D, H>
 where
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
@@ -166,7 +166,7 @@ pub enum Error {
     InvalidCodeHash(HashError),
 }
 
-impl<D, H> Storage<D, H>
+impl<D, H> State<D, H>
 where
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
@@ -187,7 +187,7 @@ where
             pred_epochs: Epochs::default(),
             results: BlockResults::default(),
         };
-        Storage::<D, H> {
+        State::<D, H> {
             db: D::open(db_path, cache),
             chain_id,
             block,
@@ -1060,7 +1060,7 @@ pub mod testing {
     /// Prefer to use [`TestWlStorage`], which implements
     /// `storage_api::StorageRead + StorageWrite` with properly working
     /// `prefix_iter`.
-    pub type TestStorage = Storage<MockDB, Sha256Hasher>;
+    pub type TestStorage = State<MockDB, Sha256Hasher>;
 
     impl Default for TestStorage {
         fn default() -> Self {

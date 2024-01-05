@@ -51,7 +51,7 @@ use namada::state::tx_queue::{ExpiredTx, TxInQueue};
 use namada::state::wl_storage::WriteLogAndStorage;
 use namada::state::write_log::WriteLog;
 use namada::state::{
-    DBIter, Sha256Hasher, Storage, StorageHasher, TempWlStorage, WlStorage, DB,
+    DBIter, Sha256Hasher, State, StorageHasher, TempWlStorage, WlStorage, DB,
     EPOCH_SWITCH_BLOCKS_DELAY,
 };
 use namada::storage::StorageRead;
@@ -423,7 +423,7 @@ where
         };
 
         // load last state from storage
-        let mut storage = Storage::open(
+        let mut storage = State::open(
             db_path,
             chain_id.clone(),
             native_token,

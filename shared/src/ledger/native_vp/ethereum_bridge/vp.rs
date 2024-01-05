@@ -183,7 +183,7 @@ mod tests {
     use crate::ledger::storage::mockdb::MockDB;
     use crate::ledger::storage::traits::Sha256Hasher;
     use crate::ledger::storage::write_log::WriteLog;
-    use crate::ledger::storage::{Storage, WlStorage};
+    use crate::ledger::storage::{State, WlStorage};
     use crate::types::address::testing::established_address_1;
     use crate::types::address::{nam, wnam};
     use crate::types::ethereum_events;
@@ -247,7 +247,7 @@ mod tests {
     /// Setup a ctx for running native vps
     fn setup_ctx<'a>(
         tx: &'a Tx,
-        storage: &'a Storage<MockDB, Sha256Hasher>,
+        storage: &'a State<MockDB, Sha256Hasher>,
         write_log: &'a WriteLog,
         keys_changed: &'a BTreeSet<Key>,
         verifiers: &'a BTreeSet<Address>,

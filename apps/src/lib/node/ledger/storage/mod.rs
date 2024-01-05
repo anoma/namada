@@ -9,14 +9,14 @@ use arse_merkle_tree::blake2b::Blake2bHasher;
 use arse_merkle_tree::traits::Hasher;
 use arse_merkle_tree::H256;
 use blake2b_rs::{Blake2b, Blake2bBuilder};
-use namada::state::{Storage, StorageHasher};
+use namada::state::{State, StorageHasher};
 
 #[derive(Default)]
 pub struct PersistentStorageHasher(Blake2bHasher);
 
 pub type PersistentDB = rocksdb::RocksDB;
 
-pub type PersistentStorage = Storage<PersistentDB, PersistentStorageHasher>;
+pub type PersistentStorage = State<PersistentDB, PersistentStorageHasher>;
 
 impl Hasher for PersistentStorageHasher {
     fn write_bytes(&mut self, h: &[u8]) {

@@ -11,7 +11,7 @@ use namada_storage::{ResultExt, StorageRead, StorageWrite};
 
 use super::EPOCH_SWITCH_BLOCKS_DELAY;
 use crate::write_log::{self, WriteLog};
-use crate::{DBIter, Storage, DB};
+use crate::{DBIter, State, DB};
 
 /// Storage with write log that allows to implement prefix iterator that works
 /// with changes not yet committed to the DB.
@@ -24,7 +24,7 @@ where
     /// Write log
     pub write_log: WriteLog,
     /// Storage provides access to DB
-    pub storage: Storage<D, H>,
+    pub storage: State<D, H>,
 }
 
 /// Temporary storage that can be used for changes that will never be committed
@@ -40,7 +40,7 @@ where
     /// Write log
     pub write_log: WriteLog,
     /// Storage provides access to DB
-    pub storage: &'a Storage<D, H>,
+    pub storage: &'a State<D, H>,
 }
 
 impl<'a, D, H> TempWlStorage<'a, D, H>
@@ -50,7 +50,7 @@ where
 {
     /// Create a temp storage that can mutated in memory, but never committed to
     /// DB.
-    pub fn new(storage: &'a Storage<D, H>) -> Self {
+    pub fn new(storage: &'a State<D, H>) -> Self {
         Self {
             write_log: WriteLog::default(),
             storage,
@@ -94,12 +94,12 @@ pub trait WriteLogAndStorage {
     fn write_log_mut(&mut self) -> &mut WriteLog;
 
     /// Borrow `Storage`
-    fn storage(&self) -> &Storage<Self::D, Self::H>;
+    fn storage(&self) -> &State<Self::D, Self::H>;
 
     /// Splitting borrow to get immutable reference to the `Storage` and mutable
     /// reference to `WriteLog` when in need of both (avoids complain from the
     /// borrow checker)
-    fn split_borrow(&mut self) -> (&mut WriteLog, &Storage<Self::D, Self::H>);
+    fn split_borrow(&mut self) -> (&mut WriteLog, &State<Self::D, Self::H>);
 
     /// Write the provided tx hash to storage.
     fn write_tx_hash(&mut self, hash: Hash) -> write_log::Result<()>;
@@ -121,11 +121,11 @@ where
         &mut self.write_log
     }
 
-    fn storage(&self) -> &Storage<D, H> {
+    fn storage(&self) -> &State<D, H> {
         &self.storage
     }
 
-    fn split_borrow(&mut self) -> (&mut WriteLog, &Storage<Self::D, Self::H>) {
+    fn split_borrow(&mut self) -> (&mut WriteLog, &State<Self::D, Self::H>) {
         (&mut self.write_log, &self.storage)
     }
 
@@ -150,11 +150,11 @@ where
         &mut self.write_log
     }
 
-    fn storage(&self) -> &Storage<D, H> {
+    fn storage(&self) -> &State<D, H> {
         self.storage
     }
 
-    fn split_borrow(&mut self) -> (&mut WriteLog, &Storage<Self::D, Self::H>) {
+    fn split_borrow(&mut self) -> (&mut WriteLog, &State<Self::D, Self::H>) {
         (&mut self.write_log, (self.storage))
     }
 
@@ -169,7 +169,7 @@ where
     H: 'static + StorageHasher,
 {
     /// Combine storage with write-log
-    pub fn new(write_log: WriteLog, storage: Storage<D, H>) -> Self {
+    pub fn new(write_log: WriteLog, storage: State<D, H>) -> Self {
         Self { write_log, storage }
     }
 
@@ -280,7 +280,7 @@ pub fn iter_prefix_pre<'iter, D, H>(
     // enough - the lifetime of the `PrefixIter` must depend on the lifetime of
     // references to the `WriteLog` and `Storage`.
     write_log: &'iter WriteLog,
-    storage: &'iter Storage<D, H>,
+    storage: &'iter State<D, H>,
     prefix: &storage::Key,
 ) -> (PrefixIter<'iter, D>, u64)
 where
@@ -305,7 +305,7 @@ pub fn iter_prefix_post<'iter, D, H>(
     // enough - the lifetime of the `PrefixIter` must depend on the lifetime of
     // references to the `WriteLog` and `Storage`.
     write_log: &'iter WriteLog,
-    storage: &'iter Storage<D, H>,
+    storage: &'iter State<D, H>,
     prefix: &storage::Key,
 ) -> (PrefixIter<'iter, D>, u64)
 where

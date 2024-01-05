@@ -31,7 +31,7 @@ use crate::ledger::native_vp::{self, NativeVp};
 use crate::ledger::pgf::PgfVp;
 use crate::ledger::pos::{self, PosVP};
 use crate::ledger::storage::write_log::WriteLog;
-use crate::ledger::storage::{DBIter, Storage, StorageHasher, WlStorage, DB};
+use crate::ledger::storage::{DBIter, State, StorageHasher, WlStorage, DB};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage;
 use crate::types::storage::TxIndex;
@@ -690,7 +690,7 @@ where
 fn execute_tx<D, H, CA>(
     tx: &Tx,
     tx_index: &TxIndex,
-    storage: &Storage<D, H>,
+    storage: &State<D, H>,
     tx_gas_meter: &mut TxGasMeter,
     write_log: &mut WriteLog,
     vp_wasm_cache: &mut VpCache<CA>,
@@ -726,7 +726,7 @@ where
 {
     tx: &'a Tx,
     tx_index: &'a TxIndex,
-    storage: &'a Storage<D, H>,
+    storage: &'a State<D, H>,
     tx_gas_meter: &'a mut TxGasMeter,
     write_log: &'a WriteLog,
     verifiers_from_tx: &'a BTreeSet<Address>,
@@ -779,7 +779,7 @@ fn execute_vps<D, H, CA>(
     keys_changed: BTreeSet<storage::Key>,
     tx: &Tx,
     tx_index: &TxIndex,
-    storage: &Storage<D, H>,
+    storage: &State<D, H>,
     write_log: &WriteLog,
     tx_gas_meter: &TxGasMeter,
     vp_wasm_cache: &mut VpCache<CA>,

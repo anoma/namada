@@ -17,7 +17,7 @@ use namada_trans_token::storage_key::{
 };
 use thiserror::Error;
 
-use crate::{DBIter, Storage, DB};
+use crate::{DBIter, State, DB};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -496,7 +496,7 @@ impl WriteLog {
     /// write log.
     pub fn commit_block<D, H>(
         &mut self,
-        storage: &mut Storage<D, H>,
+        storage: &mut State<D, H>,
         batch: &mut D::WriteBatch,
     ) -> Result<()>
     where

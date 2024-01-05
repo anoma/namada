@@ -16,7 +16,7 @@ use namada_gas::{
     MEMORY_ACCESS_GAS_PER_BYTE,
 };
 use namada_state::write_log::{self, WriteLog};
-use namada_state::{Storage, StorageHasher};
+use namada_state::{State, StorageHasher};
 use namada_storage::{self, ResultExt};
 use namada_token::storage_key::{
     balance_key, is_any_minted_balance_key, is_any_minter_key,
@@ -100,7 +100,7 @@ where
     CA: WasmCacheAccess,
 {
     /// Read-only access to the storage.
-    pub storage: HostRef<'a, &'a Storage<DB, H>>,
+    pub storage: HostRef<'a, &'a State<DB, H>>,
     /// Read/write access to the write log.
     pub write_log: MutHostRef<'a, &'a WriteLog>,
     /// Storage prefix iterators.
@@ -147,7 +147,7 @@ where
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         memory: MEM,
-        storage: &Storage<DB, H>,
+        storage: &State<DB, H>,
         write_log: &mut WriteLog,
         iterators: &mut PrefixIterators<'a, DB>,
         gas_meter: &mut TxGasMeter,
@@ -262,7 +262,7 @@ where
     /// The address of the account that owns the VP
     pub address: HostRef<'a, &'a Address>,
     /// Read-only access to the storage.
-    pub storage: HostRef<'a, &'a Storage<DB, H>>,
+    pub storage: HostRef<'a, &'a State<DB, H>>,
     /// Read-only access to the write log.
     pub write_log: HostRef<'a, &'a WriteLog>,
     /// Storage prefix iterators.
@@ -336,7 +336,7 @@ where
     pub fn new(
         memory: MEM,
         address: &Address,
-        storage: &Storage<DB, H>,
+        storage: &State<DB, H>,
         write_log: &WriteLog,
         gas_meter: &mut VpGasMeter,
         sentinel: &mut VpSentinel,
@@ -403,7 +403,7 @@ where
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         address: &Address,
-        storage: &Storage<DB, H>,
+        storage: &State<DB, H>,
         write_log: &WriteLog,
         gas_meter: &mut VpGasMeter,
         sentinel: &mut VpSentinel,
@@ -2685,7 +2685,7 @@ pub mod testing {
     /// Setup a transaction environment
     #[allow(clippy::too_many_arguments)]
     pub fn tx_env<DB, H, CA>(
-        storage: &Storage<DB, H>,
+        storage: &State<DB, H>,
         write_log: &mut WriteLog,
         iterators: &mut PrefixIterators<'static, DB>,
         verifiers: &mut BTreeSet<Address>,
@@ -2724,7 +2724,7 @@ pub mod testing {
     #[allow(clippy::too_many_arguments)]
     pub fn vp_env<DB, H, EVAL, CA>(
         address: &Address,
-        storage: &Storage<DB, H>,
+        storage: &State<DB, H>,
         write_log: &WriteLog,
         iterators: &mut PrefixIterators<'static, DB>,
         gas_meter: &mut VpGasMeter,

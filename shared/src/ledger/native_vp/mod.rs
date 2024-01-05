@@ -23,7 +23,7 @@ use super::vp_host_fns;
 use crate::ledger::gas::VpGasMeter;
 use crate::ledger::storage;
 use crate::ledger::storage::write_log::WriteLog;
-use crate::ledger::storage::{Storage, StorageHasher};
+use crate::ledger::storage::{State, StorageHasher};
 use crate::types::address::Address;
 use crate::types::hash::Hash;
 use crate::types::ibc::IbcEvent;
@@ -73,7 +73,7 @@ where
     /// Errors sentinel
     pub sentinel: RefCell<VpSentinel>,
     /// Read-only access to the storage.
-    pub storage: &'a Storage<DB, H>,
+    pub storage: &'a State<DB, H>,
     /// Read-only access to the write log.
     pub write_log: &'a WriteLog,
     /// The transaction code is used for signature verification
@@ -128,7 +128,7 @@ where
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         address: &'a Address,
-        storage: &'a Storage<DB, H>,
+        storage: &'a State<DB, H>,
         write_log: &'a WriteLog,
         tx: &'a Tx,
         tx_index: &'a TxIndex,

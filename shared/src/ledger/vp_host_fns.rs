@@ -11,7 +11,7 @@ use namada_core::types::storage::{
 use namada_core::types::validity_predicate::VpSentinel;
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use namada_state::write_log::WriteLog;
-use namada_state::{write_log, Storage, StorageHasher};
+use namada_state::{write_log, State, StorageHasher};
 use namada_tx::{Section, Tx};
 use thiserror::Error;
 
@@ -63,7 +63,7 @@ pub fn add_gas(
 /// storage.
 pub fn read_pre<DB, H>(
     gas_meter: &mut VpGasMeter,
-    storage: &Storage<DB, H>,
+    storage: &State<DB, H>,
     write_log: &WriteLog,
     key: &Key,
     sentinel: &mut VpSentinel,
@@ -105,7 +105,7 @@ where
 /// the write log first and if no entry found then from the storage.
 pub fn read_post<DB, H>(
     gas_meter: &mut VpGasMeter,
-    storage: &Storage<DB, H>,
+    storage: &State<DB, H>,
     write_log: &WriteLog,
     key: &Key,
     sentinel: &mut VpSentinel,
@@ -168,7 +168,7 @@ pub fn read_temp(
 /// from the storage.
 pub fn has_key_pre<DB, H>(
     gas_meter: &mut VpGasMeter,
-    storage: &Storage<DB, H>,
+    storage: &State<DB, H>,
     write_log: &WriteLog,
     key: &Key,
     sentinel: &mut VpSentinel,
@@ -202,7 +202,7 @@ where
 /// check the write log first and if no entry found then the storage.
 pub fn has_key_post<DB, H>(
     gas_meter: &mut VpGasMeter,
-    storage: &Storage<DB, H>,
+    storage: &State<DB, H>,
     write_log: &WriteLog,
     key: &Key,
     sentinel: &mut VpSentinel,
@@ -235,7 +235,7 @@ where
 /// Getting the chain ID.
 pub fn get_chain_id<DB, H>(
     gas_meter: &mut VpGasMeter,
-    storage: &Storage<DB, H>,
+    storage: &State<DB, H>,
     sentinel: &mut VpSentinel,
 ) -> EnvResult<String>
 where
@@ -251,7 +251,7 @@ where
 /// current transaction is being applied.
 pub fn get_block_height<DB, H>(
     gas_meter: &mut VpGasMeter,
-    storage: &Storage<DB, H>,
+    storage: &State<DB, H>,
     sentinel: &mut VpSentinel,
 ) -> EnvResult<BlockHeight>
 where
@@ -266,7 +266,7 @@ where
 /// Getting the block header.
 pub fn get_block_header<DB, H>(
     gas_meter: &mut VpGasMeter,
-    storage: &Storage<DB, H>,
+    storage: &State<DB, H>,
     height: BlockHeight,
     sentinel: &mut VpSentinel,
 ) -> EnvResult<Option<Header>>
@@ -285,7 +285,7 @@ where
 /// current transaction is being applied.
 pub fn get_block_hash<DB, H>(
     gas_meter: &mut VpGasMeter,
-    storage: &Storage<DB, H>,
+    storage: &State<DB, H>,
     sentinel: &mut VpSentinel,
 ) -> EnvResult<BlockHash>
 where
@@ -320,7 +320,7 @@ pub fn get_tx_code_hash(
 /// current transaction is being applied.
 pub fn get_block_epoch<DB, H>(
     gas_meter: &mut VpGasMeter,
-    storage: &Storage<DB, H>,
+    storage: &State<DB, H>,
     sentinel: &mut VpSentinel,
 ) -> EnvResult<Epoch>
 where
@@ -350,7 +350,7 @@ pub fn get_tx_index(
 /// Getting the native token's address.
 pub fn get_native_token<DB, H>(
     gas_meter: &mut VpGasMeter,
-    storage: &Storage<DB, H>,
+    storage: &State<DB, H>,
     sentinel: &mut VpSentinel,
 ) -> EnvResult<Address>
 where
@@ -368,7 +368,7 @@ where
 /// Given the information about predecessor block epochs
 pub fn get_pred_epochs<DB, H>(
     gas_meter: &mut VpGasMeter,
-    storage: &Storage<DB, H>,
+    storage: &State<DB, H>,
     sentinel: &mut VpSentinel,
 ) -> EnvResult<Epochs>
 where
@@ -404,7 +404,7 @@ pub fn get_ibc_events(
 pub fn iter_prefix_pre<'a, DB, H>(
     gas_meter: &mut VpGasMeter,
     write_log: &'a WriteLog,
-    storage: &'a Storage<DB, H>,
+    storage: &'a State<DB, H>,
     prefix: &Key,
     sentinel: &mut VpSentinel,
 ) -> EnvResult<namada_state::PrefixIter<'a, DB>>
@@ -422,7 +422,7 @@ where
 pub fn iter_prefix_post<'a, DB, H>(
     gas_meter: &mut VpGasMeter,
     write_log: &'a WriteLog,
-    storage: &'a Storage<DB, H>,
+    storage: &'a State<DB, H>,
     prefix: &Key,
     sentinel: &mut VpSentinel,
 ) -> EnvResult<namada_state::PrefixIter<'a, DB>>
