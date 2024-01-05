@@ -2,11 +2,17 @@
 //! and VPs (both native and WASM).
 
 pub mod collections;
+mod db;
 mod error;
+pub mod mockdb;
+pub mod tx_queue;
+pub mod types;
 
+pub use db::*;
 pub use error::{CustomError, Error, OptionExt, Result, ResultExt};
 use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
 use namada_core::types::address::Address;
+pub use namada_core::types::hash::StorageHasher;
 use namada_core::types::storage::{
     self, BlockHash, BlockHeight, Epoch, Epochs, Header, TxIndex,
 };
