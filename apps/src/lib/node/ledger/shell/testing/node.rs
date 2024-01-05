@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::future::poll_fn;
 use std::mem::ManuallyDrop;
 use std::path::PathBuf;
@@ -33,8 +34,9 @@ use namada::types::control_flow::time::Duration;
 use namada::types::ethereum_events::EthereumEvent;
 use namada::types::hash::Hash;
 use namada::types::key::tm_consensus_key_raw_hash;
-use namada::types::storage::{BlockHash, BlockHeight, Epoch, Header};
+use namada::types::storage::{BlockHash, BlockHeight, Epoch, Header, TxIndex};
 use namada::types::time::DateTimeUtc;
+use namada_sdk::proto::Tx;
 use namada_sdk::queries::Client;
 use regex::Regex;
 use tokio::sync::mpsc;
@@ -247,6 +249,9 @@ pub struct MockNode {
     pub test_dir: ManuallyDrop<TestDir>,
     pub keep_temp: bool,
     pub results: Arc<Mutex<Vec<NodeResults>>>,
+    #[allow(clippy::type_complexity)]
+    pub valid_masp_txs:
+        Arc<Mutex<HashMap<BlockHeight, HashMap<TxIndex, Vec<u8>>>>>,
     pub services: Arc<MockServices>,
     pub auto_drive_services: bool,
 }
@@ -492,6 +497,7 @@ impl MockNode {
             },
             byzantine_validators: vec![],
             txs: txs
+                .clone()
                 .into_iter()
                 .zip(tx_results.into_iter())
                 .map(|(tx, result)| ProcessedTx {
@@ -505,6 +511,7 @@ impl MockNode {
 
         // process the results
         let resp = locked.finalize_block(req).unwrap();
+        let height = locked.wl_storage.storage.get_block_height().0;
         let mut error_codes = resp
             .events
             .into_iter()
@@ -517,6 +524,47 @@ impl MockNode {
                 )
                 .unwrap();
                 if code == ResultCode::Ok {
+                    if e.attributes.get("is_valid_masp_tx").is_some() {
+                        // Cache if it was a masp transaction for future queries
+                        // It's either:
+                        //    - Wrapper tx with fee unshielding
+                        //    - Decrypted masp tx
+                        // NOTE: ignoring masp over ibc for now
+                        let tx_hash = e.attributes.get("hash").unwrap();
+                        let idx = txs
+                            .iter()
+                            .position(|bytes| {
+                                let mut tx =
+                                    Tx::try_from(bytes.as_ref()).unwrap();
+                                let current_tx_hash =
+                                    if tx.header().decrypted().is_some() {
+                                        tx.update_header(
+                                        namada::types::transaction::TxType::Raw,
+                                    );
+                                        tx.header_hash()
+                                    } else {
+                                        tx.header_hash()
+                                    };
+
+                                &current_tx_hash.to_string() == tx_hash
+                            })
+                            .unwrap();
+                        self.valid_masp_txs
+                            .lock()
+                            .unwrap()
+                            .entry(height)
+                            .and_modify(|list| {
+                                let _ = list.insert(
+                                    TxIndex(idx as u32),
+                                    txs[idx].clone(),
+                                );
+                            })
+                            .or_insert(
+                                vec![(TxIndex(idx as u32), txs[idx].clone())]
+                                    .into_iter()
+                                    .collect(),
+                            );
+                    }
                     NodeResults::Ok
                 } else {
                     NodeResults::Failed(code)
@@ -810,16 +858,67 @@ impl<'a> Client for &'a MockNode {
     /// `/tx_search`: search for transactions with their results.
     async fn tx_search(
         &self,
-        _query: namada::tendermint_rpc::query::Query,
+        query: namada::tendermint_rpc::query::Query,
         _prove: bool,
         _page: u32,
         _per_page: u8,
         _order: namada::tendermint_rpc::Order,
     ) -> Result<tendermint_rpc::endpoint::tx_search::Response, RpcError> {
-        // In the past, some cli commands for masp called this. However, these
-        // commands are not currently supported, so we do not need to fill
-        // in this function for now.
-        unreachable!()
+        // NOTE: atm, this is only needed by the client to query masp txs, so we
+        // pretend all requests are for masp transactions
+        self.drive_mock_services_bg().await;
+        let (block_height, tx_index) = parse_masp_tx_search_query(query);
+        match self.valid_masp_txs.lock().unwrap().get(&block_height) {
+            Some(response) => {
+                if let Some(ref idx) = tx_index {
+                    let tx = response
+                        .get(idx)
+                        .expect("Missing expected indexed transaction")
+                        .to_owned();
+
+                    let txs =
+                        vec![namada::tendermint_rpc::endpoint::tx::Response {
+                            hash: namada::tendermint::Hash::Sha256([0u8; 32]),
+                            height: (block_height.0 as u32).into(),
+                            index: idx.0,
+                            tx_result: Default::default(),
+                            tx,
+                            proof: None,
+                        }];
+
+                    Ok(namada::tendermint_rpc::endpoint::tx_search::Response {
+                        txs,
+                        total_count: 1,
+                    })
+                } else {
+                    let total_count = response.len() as u32;
+                    let txs = response
+                        .iter()
+                        .map(|(idx, bytes)| {
+                            namada::tendermint_rpc::endpoint::tx::Response {
+                                hash: namada::tendermint::Hash::Sha256(
+                                    [0u8; 32],
+                                ),
+                                height: (block_height.0 as u32).into(),
+                                index: idx.0,
+                                tx_result: Default::default(),
+                                tx: bytes.to_owned(),
+                                proof: None,
+                            }
+                        })
+                        .collect::<Vec<_>>();
+
+                    Ok(namada::tendermint_rpc::endpoint::tx_search::Response {
+                        txs,
+                        total_count,
+                    })
+                }
+            }
+            None => Ok(namada::tendermint_rpc::endpoint::tx_search::Response {
+                txs: vec![],
+                total_count: 0,
+            }),
+        }
     }
 
     /// `/health`: get node health.
@@ -856,6 +955,52 @@ fn parse_tm_query(
         ),
         _ => unreachable!("We only query accepted or applied txs"),
     }
+}
+
+// Parse a tx_search query expecting it to require block height (and optionally
+// an index) for unfetched masp txs
+fn parse_masp_tx_search_query(
+    query: namada::tendermint_rpc::query::Query,
+) -> (BlockHeight, Option<TxIndex>) {
+    // height = 0 AND is_valid_masp_tx EXISTS
+    let height = query
+        .conditions
+        .iter()
+        .find(|condition| condition.key == "height")
+        .expect("Block height is required in tx_search");
+    let idx = query
+        .conditions
+        .iter()
+        .find(|condition| condition.key == "tx.index");
+
+    let index = idx.map(|idx| {
+        if let namada::tendermint_rpc::query::Operation::Eq(
+            namada::tendermint_rpc::query::Operand::String(ref index),
+        ) = idx.operation
+        {
+            TxIndex(u32::from_str(index).unwrap())
+        } else {
+            unreachable!("Missing expected tx index");
+        }
+    });
+
+    if let namada::tendermint_rpc::query::Operation::Eq(
+        namada::tendermint_rpc::query::Operand::Unsigned(block_height),
+    ) = height.operation
+    {
+        return (block_height.into(), index);
+    } else if let namada::tendermint_rpc::query::Operation::Eq(
+        namada::tendermint_rpc::query::Operand::String(ref block_height),
+    ) = height.operation
+    {
+        return (BlockHeight(u64::from_str(block_height).unwrap()), index);
+    } else {
+    }
+
+    unreachable!(
+        "We only query txs based on the height of their blocks and possibly \
+         an index"
+    )
 }
 
 /// A Namada event log index and event type encoded as

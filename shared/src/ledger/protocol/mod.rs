@@ -259,8 +259,8 @@ where
         &mut shell_params,
         block_proposer,
         &mut changed_keys,
+        is_committed_fee_unshield,
     )?;
-    *is_committed_fee_unshield = true;
 
     // Account for gas
     shell_params
@@ -301,6 +301,7 @@ fn charge_fee<'a, D, H, CA, WLS>(
     shell_params: &mut ShellParams<'a, CA, WLS>,
     block_proposer: Option<&Address>,
     changed_keys: &mut BTreeSet<Key>,
+    is_committed_fee_unshield: &mut bool,
 ) -> Result<()>
 where
     CA: 'static + WasmCacheAccess + Sync,
@@ -316,7 +317,7 @@ where
     } = shell_params;
 
     // Unshield funds if requested
-    if let Some(transaction) = masp_transaction {
+    let requires_fee_unshield = if let Some(transaction) = masp_transaction {
         // The unshielding tx does not charge gas, instantiate a
         // custom gas meter for this step
         let mut tx_gas_meter =
@@ -377,7 +378,11 @@ where
             }
             Err(e) => tracing::error!("{}", e),
         }
-    }
+
+        true
+    } else {
+        false
+    };
 
     // Charge or check fees
     match block_proposer {
@@ -389,6 +394,8 @@ where
 
     // Commit tx write log even in case of subsequent errors
     wl_storage.write_log_mut().commit_tx();
+    // Update the flag only after the fee payment has been committed
+    *is_committed_fee_unshield = requires_fee_unshield;
 
     Ok(())
 }
