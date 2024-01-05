@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::ledger::governance::cli::onchain::{
-    PgfAction, PgfContinous, PgfRetro, PgfSteward, StewardsUpdate,
+    PgfAction, PgfContinuous, PgfRetro, PgfSteward, StewardsUpdate,
 };
 use crate::ledger::governance::utils::{ProposalStatus, TallyType};
 use crate::ledger::storage_api::token::Amount;
@@ -21,7 +21,7 @@ pub enum ProposalTypeError {
     InvalidProposalType,
 }
 
-/// Storage structure for pgf fundings
+/// Storage structure for pgf funding
 #[derive(
     Debug,
     Clone,
@@ -168,10 +168,10 @@ impl TryFrom<PgfSteward> for AddRemove<Address> {
     }
 }
 
-impl TryFrom<PgfContinous> for PGFAction {
+impl TryFrom<PgfContinuous> for PGFAction {
     type Error = ProposalTypeError;
 
-    fn try_from(value: PgfContinous) -> Result<Self, Self::Error> {
+    fn try_from(value: PgfContinuous) -> Result<Self, Self::Error> {
         match value.action {
             PgfAction::Add => {
                 Ok(PGFAction::Continuous(AddRemove::Add(PGFTarget {
@@ -201,7 +201,7 @@ impl TryFrom<PgfRetro> for PGFAction {
 }
 
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
-/// Proposal rappresentation when fetched from the storage
+/// Proposal representation when fetched from the storage
 pub struct StorageProposal {
     /// The proposal id
     pub id: u64,

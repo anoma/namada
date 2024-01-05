@@ -2000,13 +2000,13 @@ fn test_from_sm_case_1() {
     let (new_entry_epoch, new_bond_amount) = bonds_to_unbond.new_entry.unwrap();
     assert_eq!(outer_epoch_1, new_entry_epoch);
     // The modified bond should be sum of all redelegations less the unbonded
-    // amouunt
+    // amount
     assert_eq!(
         epoch_1_redeleg_1 + epoch_1_redeleg_2 + epoch_2_redeleg_2
             - unbond_amount,
         new_bond_amount
     );
-    // The current bond should be sum of redelegations fom the modified epoch
+    // The current bond should be sum of redelegations from the modified epoch
     let cur_bond_amount = bonds_handle
         .get_delta_val(&storage, new_entry_epoch)
         .unwrap()

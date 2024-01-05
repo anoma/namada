@@ -26,7 +26,7 @@ impl ProposalEvent {
             ("target".to_string(), target.to_string()),
             ("amount".to_string(), amount.to_string_native()),
             ("is_steward".to_string(), is_steward.to_string()),
-            ("successed".to_string(), success.to_string()),
+            ("success".to_string(), success.to_string()),
         ]);
         Self {
             event_type,

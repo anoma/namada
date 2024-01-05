@@ -154,7 +154,7 @@ pub mod testing {
     use super::*;
 
     prop_compose! {
-        /// Geerate an arbitrary vote type
+        /// Generate an arbitrary vote type
         pub fn arb_vote_type()(discriminant in 0..3) -> VoteType {
             match discriminant {
                 0 => VoteType::Default,

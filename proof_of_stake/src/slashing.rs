@@ -249,7 +249,7 @@ where
 /// In the context of a redelegation, the function computes how much a validator
 /// (the destination validator of the redelegation) should be slashed due to the
 /// misbehaving of a second validator (the source validator of the
-/// redelegation). The function computes how much the validator whould be
+/// redelegation). The function computes how much the validator would be
 /// slashed at all epochs between the current epoch (curEpoch) + 1 and the
 /// current epoch + 1 + PIPELINE_OFFSET, accounting for any tokens of the
 /// redelegation already unbonded.
@@ -815,8 +815,8 @@ where
 }
 
 /// Compute a token amount after slashing, given the initial amount and a set of
-/// slashes. It is assumed that the input `slashes` are those commited while the
-/// `amount` was contributing to voting power.
+/// slashes. It is assumed that the input `slashes` are those committed while
+/// the `amount` was contributing to voting power.
 pub fn get_slashed_amount(
     params: &PosParams,
     amount: token::Amount,
@@ -986,7 +986,7 @@ where
 
 /// Process a slash by (i) slashing the misbehaving validator; and (ii) any
 /// validator to which it has redelegated some tokens and the slash misbehaving
-/// epoch is wihtin the redelegation slashing window.
+/// epoch is within the redelegation slashing window.
 ///
 /// `validator` - the misbehaving validator.
 /// `slash_rate` - the slash rate.

@@ -1250,8 +1250,8 @@ fn wrapper_fee_unshielding() -> Result<()> {
     Ok(())
 }
 
-// Test that a masp unshield transaction can be succesfully executed even across
-// an epoch boundary.
+// Test that a masp unshield transaction can be successfully executed even
+// across an epoch boundary.
 #[test]
 fn cross_epoch_tx() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.

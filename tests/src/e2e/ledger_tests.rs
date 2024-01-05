@@ -2362,10 +2362,10 @@ fn pgf_governance_proposal() -> Result<()> {
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
 
-    // 14. Query pgf fundings
+    // 14. Query pgf funding
     let query_pgf = vec!["query-pgf", "--node", &validator_one_rpc];
     let mut client = run!(test, Bin::Client, query_pgf, Some(30))?;
-    client.exp_string("Pgf fundings")?;
+    client.exp_string("Pgf funding")?;
     client.exp_string(&format!(
         "{} for {}",
         bertha,

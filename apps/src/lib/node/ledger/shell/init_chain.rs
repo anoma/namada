@@ -138,7 +138,7 @@ where
             #[cfg(any(test, feature = "testing"))]
             _num_validators,
         );
-        // propogate errors or panic
+        // propagate errors or panic
         validation.error_out()?;
 
         // Init masp commitment tree and anchor
