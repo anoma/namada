@@ -3,7 +3,6 @@ pub mod storage;
 
 use std::collections::BTreeMap;
 
-use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::chain::ProposalBytes;
 use namada_core::types::dec::Dec;
