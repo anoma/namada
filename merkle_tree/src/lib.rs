@@ -1004,13 +1004,11 @@ impl<'a> SubTreeWrite for &'a mut BridgePoolTree {
 #[cfg(test)]
 mod test {
     use ics23::HostFunctionsManager;
-    use namada_core::ledger::storage::ics23_specs::{
-        ibc_proof_specs, proof_specs,
-    };
-    use namada_core::ledger::storage::traits::Sha256Hasher;
+    use namada_core::types::hash::Sha256Hasher;
     use namada_core::types::storage::KeySeg;
 
     use super::*;
+    use crate::ics23_specs::{ibc_proof_specs, proof_specs};
 
     #[test]
     fn test_crud_value() {

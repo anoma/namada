@@ -4556,10 +4556,13 @@ dependencies = [
 name = "namada_merkle_tree"
 version = "0.29.0"
 dependencies = [
+ "assert_matches",
  "borsh",
  "eyre",
  "ics23",
+ "itertools 0.10.5",
  "namada_core",
+ "proptest",
  "prost 0.12.3",
  "sparse-merkle-tree",
  "thiserror",

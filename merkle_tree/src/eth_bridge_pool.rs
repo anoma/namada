@@ -371,17 +371,17 @@ impl Encode<3> for BridgePoolProof {
 #[cfg(test)]
 mod test_bridge_pool_tree {
 
-    use std::assert_matches;
-
+    use assert_matches::assert_matches;
     use itertools::Itertools;
+    use namada_core::types::address::{nam, Address};
+    use namada_core::types::eth_bridge_pool::{
+        GasFee, TransferToEthereum, TransferToEthereumKind,
+    };
+    use namada_core::types::ethereum_events::EthAddress;
+    use namada_core::types::storage::Key;
     use proptest::prelude::*;
 
     use super::*;
-    use crate::types::address::nam;
-    use crate::types::eth_bridge_pool::{
-        GasFee, TransferToEthereum, TransferToEthereumKind,
-    };
-    use crate::types::ethereum_events::EthAddress;
 
     /// An established user address for testing & development
     fn bertha_address() -> Address {

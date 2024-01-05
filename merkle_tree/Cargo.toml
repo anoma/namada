@@ -21,3 +21,8 @@ eyre.workspace = true
 ics23.workspace = true
 prost.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+assert_matches.workspace = true
+proptest.workspace = true
+itertools.workspace = true
