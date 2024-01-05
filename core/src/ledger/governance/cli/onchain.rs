@@ -20,7 +20,7 @@ use crate::types::storage::Epoch;
 /// The proposal structure
 pub struct OnChainProposal {
     /// The proposal id
-    pub id: Option<u64>,
+    pub id: u64,
     /// The proposal content
     pub content: BTreeMap<String, String>,
     /// The proposal author address

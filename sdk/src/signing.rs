@@ -1086,9 +1086,7 @@ pub async fn to_ledger_vector(
             .hash();
 
         tv.output.push("Type : Init proposal".to_string());
-        if let Some(id) = init_proposal_data.id.as_ref() {
-            tv.output.push(format!("ID : {}", id));
-        }
+        tv.output.push(format!("ID : {}", init_proposal_data.id));
         tv.output.extend(vec![
             format!(
                 "Proposal type : {}",
@@ -1107,9 +1105,8 @@ pub async fn to_ledger_vector(
             format!("Content : {}", HEXLOWER.encode(&extra.0)),
         ]);
 
-        if let Some(id) = init_proposal_data.id.as_ref() {
-            tv.output_expert.push(format!("ID : {}", id));
-        }
+        tv.output_expert
+            .push(format!("ID : {}", init_proposal_data.id));
         tv.output_expert.extend(vec![
             format!(
                 "Proposal type : {}",

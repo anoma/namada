@@ -34,7 +34,7 @@ pub enum ProposalError {
 )]
 pub struct InitProposalData {
     /// The proposal id
-    pub id: Option<u64>,
+    pub id: u64,
     /// The proposal content
     pub content: Hash,
     /// The proposal author address
@@ -180,7 +180,7 @@ pub mod tests {
     prop_compose! {
         /// Generate a proposal initialization
         pub fn arb_init_proposal()(
-            id: Option<u64>,
+            id: u64,
             content in arb_hash(),
             author in arb_non_internal_address(),
             r#type in arb_proposal_type(),
