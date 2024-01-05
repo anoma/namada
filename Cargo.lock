@@ -4688,7 +4688,9 @@ dependencies = [
 name = "namada_state"
 version = "0.29.0"
 dependencies = [
+ "assert_matches",
  "borsh",
+ "chrono",
  "ics23",
  "itertools 0.10.5",
  "namada_core",
@@ -4698,9 +4700,11 @@ dependencies = [
  "namada_storage",
  "namada_trans_token",
  "namada_tx",
+ "pretty_assertions",
  "proptest",
  "sha2 0.9.9",
  "sparse-merkle-tree",
+ "test-log",
  "thiserror",
  "tiny-keccak",
  "tracing",

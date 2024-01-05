@@ -33,9 +33,15 @@ ics23.workspace = true
 itertools.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
-tiny-keccak = { version = "2.0.2", features = ["keccak"] }
+tiny-keccak.workspace = true
 tracing.workspace = true
 proptest = { workspace = true, optional = true }
 
 [dev-dependencies]
+namada_core = { path = "../core", features = ["testing"] }
+
+assert_matches.workspace = true
+chrono.workspace = true
+pretty_assertions.workspace = true
 proptest.workspace = true
+test-log.workspace = true

@@ -14,7 +14,6 @@ use namada_core::types::address::{
 };
 use namada_core::types::chain::{ChainId, CHAIN_ID_LENGTH};
 use namada_core::types::eth_bridge_pool::is_pending_transfer_key;
-use namada_core::types::ethereum_events::Uint;
 use namada_core::types::hash::{Error as HashError, Hash};
 pub use namada_core::types::hash::{Sha256Hasher, StorageHasher};
 use namada_core::types::storage::{
@@ -164,6 +163,8 @@ pub enum Error {
     NoMerkleTree { height: BlockHeight },
     #[error("Code hash error: {0}")]
     InvalidCodeHash(HashError),
+    #[error("DB error: {0}")]
+    DbError(#[from] namada_storage::DbError),
 }
 
 impl<D, H> State<D, H>
@@ -324,7 +325,8 @@ where
             // prune old merkle tree stores
             self.prune_merkle_tree_stores(&mut batch)?;
         }
-        self.db.exec_batch(batch)
+        self.db.exec_batch(batch)?;
+        Ok(())
     }
 
     /// Find the root hash of the merkle tree
@@ -853,7 +855,7 @@ where
 
     /// Execute write batch.
     pub fn exec_batch(&mut self, batch: D::WriteBatch) -> Result<()> {
-        self.db.exec_batch(batch)
+        Ok(self.db.exec_batch(batch)?)
     }
 
     /// Batch write the value with the given height and account subspace key to
@@ -875,8 +877,12 @@ where
             // Update the merkle tree
             self.block.tree.update(key, value)?;
         }
-        self.db
-            .batch_write_subspace_val(batch, self.block.height, key, value)
+        Ok(self.db.batch_write_subspace_val(
+            batch,
+            self.block.height,
+            key,
+            value,
+        )?)
     }
 
     /// Batch delete the value with the given height and account subspace key
@@ -889,8 +895,9 @@ where
     ) -> Result<i64> {
         // Update the merkle tree
         self.block.tree.delete(key)?;
-        self.db
-            .batch_delete_subspace_val(batch, self.block.height, key)
+        Ok(self
+            .db
+            .batch_delete_subspace_val(batch, self.block.height, key)?)
     }
 
     // Prune merkle tree stores. Use after updating self.block.height in the
@@ -1006,7 +1013,7 @@ where
 
     /// Check it the given transaction's hash is already present in storage
     pub fn has_replay_protection_entry(&self, hash: &Hash) -> Result<bool> {
-        self.db.has_replay_protection_entry(hash)
+        Ok(self.db.has_replay_protection_entry(hash)?)
     }
 
     /// Write the provided tx hash to storage
@@ -1015,7 +1022,8 @@ where
         batch: &mut D::WriteBatch,
         key: &Key,
     ) -> Result<()> {
-        self.db.write_replay_protection_entry(batch, key)
+        self.db.write_replay_protection_entry(batch, key)?;
+        Ok(())
     }
 
     /// Delete the provided tx hash from storage
@@ -1024,7 +1032,8 @@ where
         batch: &mut D::WriteBatch,
         key: &Key,
     ) -> Result<()> {
-        self.db.delete_replay_protection_entry(batch, key)
+        self.db.delete_replay_protection_entry(batch, key)?;
+        Ok(())
     }
 
     /// Iterate the replay protection storage from the last block
@@ -1118,12 +1127,12 @@ mod tests {
     use namada_core::types::dec::Dec;
     use namada_core::types::time::{self, Duration};
     use namada_core::types::token;
+    use namada_parameters::Parameters;
     use proptest::prelude::*;
     use proptest::test_runner::Config;
 
     use super::testing::*;
     use super::*;
-    use crate::ledger::parameters::{self, Parameters};
 
     prop_compose! {
         /// Setup test input data with arbitrary epoch duration, epoch start
@@ -1210,7 +1219,7 @@ mod tests {
                 fee_unshielding_descriptions_limit: 15,
                 minimum_gas_price: BTreeMap::default(),
             };
-            parameters.init_storage(&mut wl_storage).unwrap();
+            namada_parameters::init_storage(&parameters, &mut wl_storage).unwrap();
             // Initialize pred_epochs to the current height
             wl_storage
                 .storage
@@ -1280,8 +1289,8 @@ mod tests {
                 Duration::seconds(min_duration + min_duration_delta).into();
             parameters.max_expected_time_per_block =
                 Duration::seconds(max_expected_time_per_block + max_time_per_block_delta).into();
-            parameters::update_max_expected_time_per_block_parameter(&mut wl_storage, &parameters.max_expected_time_per_block).unwrap();
-            parameters::update_epoch_parameter(&mut wl_storage, &parameters.epoch_duration).unwrap();
+            namada_parameters::update_max_expected_time_per_block_parameter(&mut wl_storage, &parameters.max_expected_time_per_block).unwrap();
+            namada_parameters::update_epoch_parameter(&mut wl_storage, &parameters.epoch_duration).unwrap();
 
             // Test for 2.
             let epoch_before = wl_storage.storage.block.epoch;

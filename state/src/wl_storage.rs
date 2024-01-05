@@ -553,8 +553,7 @@ impl_storage_traits!(TempWlStorage<'_, D, H>);
 mod tests {
     use std::collections::BTreeMap;
 
-    use borsh::BorshDeserialize;
-    use borsh_ext::BorshSerializeExt;
+    use namada_core::borsh::{BorshDeserialize, BorshSerializeExt};
     use namada_core::types::address::InternalAddress;
     use namada_core::types::storage::DbKeySeg;
     use proptest::prelude::*;
@@ -564,7 +563,7 @@ mod tests {
     use test_log::test;
 
     use super::*;
-    use crate::ledger::storage::testing::TestWlStorage;
+    use crate::testing::TestWlStorage;
 
     proptest! {
         // Generate arb valid input for `test_prefix_iters_aux`

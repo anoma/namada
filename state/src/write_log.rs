@@ -727,6 +727,7 @@ impl WriteLog {
 
 #[cfg(test)]
 mod tests {
+    use assert_matches::assert_matches;
     use namada_core::types::hash::Hash;
     use namada_core::types::{address, storage};
     use pretty_assertions::assert_eq;
@@ -893,10 +894,9 @@ mod tests {
 
     #[test]
     fn test_commit() {
-        let mut storage =
-            crate::ledger::storage::testing::TestStorage::default();
+        let mut storage = crate::testing::TestStorage::default();
         let mut write_log = WriteLog::default();
-        let mut batch = crate::ledger::storage::testing::TestStorage::batch();
+        let mut batch = crate::testing::TestStorage::batch();
         let address_gen = EstablishedAddressGen::new("test");
 
         let key1 =
@@ -954,10 +954,9 @@ mod tests {
 
     #[test]
     fn test_replay_protection_commit() {
-        let mut storage =
-            crate::ledger::storage::testing::TestStorage::default();
+        let mut storage = crate::testing::TestStorage::default();
         let mut write_log = WriteLog::default();
-        let mut batch = crate::ledger::storage::testing::TestStorage::batch();
+        let mut batch = crate::testing::TestStorage::batch();
 
         // write some replay protection keys
         write_log
