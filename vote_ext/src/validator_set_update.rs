@@ -425,6 +425,8 @@ pub use tag::SerializeWithAbiEncode;
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use data_encoding::HEXLOWER;
     use namada_core::types::ethereum_events::EthAddress;
 

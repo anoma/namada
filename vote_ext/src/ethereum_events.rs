@@ -151,7 +151,7 @@ mod tests {
     use namada_core::types::ethereum_events::{EthereumEvent, Uint};
     use namada_core::types::hash::Hash;
     use namada_core::types::key;
-    use namada_tx::proto::Signed;
+    use namada_tx::Signed;
 
     use super::*;
 
