@@ -23,8 +23,8 @@ pub use context::ValidationParams;
 use namada_core::ibc::apps::nft_transfer::types::error::NftTransferError;
 use namada_core::ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as MsgNftTransfer;
 use namada_core::ibc::apps::transfer::handler::{
-    send_transfer_execute, send_transfer_validate,
     send_nft_transfer_execute, send_nft_transfer_validate,
+    send_transfer_execute, send_transfer_validate,
 };
 use namada_core::ibc::apps::transfer::types::error::TokenTransferError;
 use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;

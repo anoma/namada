@@ -337,6 +337,12 @@ mod tests {
     };
     use crate::core::types::address::{nam, InternalAddress};
     use crate::core::types::storage::Epoch;
+    use crate::ibc::apps::nft_transfer::types::events::TransferEvent as NftTransferEvent;
+    use crate::ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as MsgNftTransfer;
+    use crate::ibc::apps::nft_transfer::types::packet::PacketData as NftPacketData;
+    use crate::ibc::apps::nft_transfer::types::{
+        PrefixedClassId, TokenId, TokenIds, VERSION as NFT_VERSION,
+    };
     use crate::ibc::apps::transfer::types::events::{
         AckEvent, DenomTraceEvent, RecvEvent, TimeoutEvent, TransferEvent,
     };
@@ -412,6 +418,7 @@ mod tests {
     use crate::tendermint::time::Time as TmTime;
     use crate::token::storage_key::balance_key;
     use crate::token::Amount;
+    use crate::types::ibc::{NftClass, NftMetadata};
     use crate::types::key::testing::keypair_1;
     use crate::types::storage::{BlockHash, BlockHeight, TxIndex};
     use crate::types::time::DurationSecs;
@@ -527,6 +534,11 @@ mod tests {
         PortId::transfer()
     }
 
+    fn get_nft_port_id() -> PortId {
+        PortId::from_str(crate::ibc::apps::nft_transfer::types::PORT_ID_STR)
+            .unwrap()
+    }
+
     fn get_channel_id() -> ChannelId {
         ChannelId::new(0)
     }
@@ -568,6 +580,26 @@ mod tests {
 
     fn get_channel_counterparty() -> ChanCounterparty {
         let counterpart_port_id = PortId::transfer();
+        let counterpart_channel_id = ChannelId::new(0);
+        ChanCounterparty::new(counterpart_port_id, Some(counterpart_channel_id))
+    }
+
+    fn get_channel_for_nft(
+        channel_state: ChanState,
+        order: Order,
+    ) -> ChannelEnd {
+        ChannelEnd::new(
+            channel_state,
+            order,
+            get_channel_counterparty_for_nft(),
+            vec![get_connection_id()],
+            ChanVersion::new(NFT_VERSION.to_string()),
+        )
+        .unwrap()
+    }
+
+    fn get_channel_counterparty_for_nft() -> ChanCounterparty {
+        let counterpart_port_id = get_nft_port_id();
         let counterpart_channel_id = ChannelId::new(0);
         ChanCounterparty::new(counterpart_port_id, Some(counterpart_channel_id))
     }
@@ -641,6 +673,35 @@ mod tests {
         }
     }
 
+    fn nft_packet_from_message(
+        msg: &MsgNftTransfer,
+        sequence: Sequence,
+        counterparty: &ChanCounterparty,
+    ) -> Packet {
+        // the packet data should be updated
+        let mut packet_data = msg.packet_data.clone();
+        packet_data.class_uri = Some(DUMMY_URI.parse().unwrap());
+        packet_data.class_data = Some(DUMMY_DATA.parse().unwrap());
+        packet_data.token_uris = vec![DUMMY_URI.parse().unwrap()];
+        packet_data.token_data = vec![DUMMY_DATA.parse().unwrap()];
+        let data = serde_json::to_vec(&packet_data)
+            .expect("Encoding NftPacketData failed");
+
+        Packet {
+            seq_on_a: sequence,
+            port_id_on_a: msg.port_id_on_a.clone(),
+            chan_id_on_a: msg.chan_id_on_a.clone(),
+            port_id_on_b: counterparty.port_id.clone(),
+            chan_id_on_b: counterparty
+                .channel_id()
+                .expect("the counterparty channel should exist")
+                .clone(),
+            data,
+            timeout_height_on_b: msg.timeout_height_on_b,
+            timeout_timestamp_on_b: msg.timeout_timestamp_on_b,
+        }
+    }
+
     fn commitment(packet: &Packet) -> PacketCommitment {
         let timeout = packet.timeout_timestamp_on_b.nanoseconds().to_be_bytes();
         let revision_number = packet
@@ -660,6 +721,33 @@ mod tests {
         ]
         .concat();
         sha2::Sha256::digest(&input).to_vec().into()
+    }
+
+    fn get_nft_class_id() -> PrefixedClassId {
+        "nft-transfer/channel-14/nftclass".parse().unwrap()
+    }
+
+    fn get_nft_id() -> TokenId {
+        "nft_token".parse().unwrap()
+    }
+
+    const DUMMY_DATA: &str = r#"{"name":{"value":"Crypto Creatures"},"image":{"value":"binary","mime":"image/png"}}"#;
+    const DUMMY_URI: &str = "http://example.com";
+    fn dummy_nft_class() -> NftClass {
+        NftClass {
+            class_id: get_nft_class_id(),
+            class_uri: DUMMY_URI.parse().unwrap(),
+            class_data: DUMMY_DATA.parse().unwrap(),
+        }
+    }
+
+    fn dummy_nft_metadata() -> NftMetadata {
+        NftMetadata {
+            class_id: "nft-transfer/channel-14/nftclass".parse().unwrap(),
+            token_id: get_nft_id(),
+            token_uri: DUMMY_URI.parse().unwrap(),
+            token_data: DUMMY_DATA.parse().unwrap(),
+        }
     }
 
     #[test]
@@ -2701,6 +2789,169 @@ mod tests {
         let event = RawIbcEvent::TimeoutPacket(TimeoutPacket::new(
             packet,
             Order::Unordered,
+        ));
+        let message_event = RawIbcEvent::Message(MessageEvent::Channel);
+        wl_storage
+            .write_log
+            .emit_ibc_event(message_event.try_into().unwrap());
+        wl_storage
+            .write_log
+            .emit_ibc_event(event.try_into().unwrap());
+
+        let tx_index = TxIndex::default();
+        let tx_code = vec![];
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+
+        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        tx.add_code(tx_code, None)
+            .add_serialized_data(tx_data)
+            .sign_wrapper(keypair_1());
+
+        let gas_meter = VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        );
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::cache();
+
+        let verifiers = BTreeSet::new();
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &wl_storage.storage,
+            &wl_storage.write_log,
+            &tx,
+            &tx_index,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+        let ibc = Ibc { ctx };
+        assert!(
+            ibc.validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+    }
+
+    #[test]
+    fn test_send_packet_for_nft() {
+        let mut keys_changed = BTreeSet::new();
+        let mut wl_storage = init_storage();
+        insert_init_client(&mut wl_storage);
+
+        // insert an open connection
+        let conn_key = connection_key(&get_connection_id());
+        let conn = get_connection(ConnState::Open);
+        let bytes = conn.encode_vec();
+        wl_storage
+            .write_log
+            .write(&conn_key, bytes)
+            .expect("write failed");
+        // insert an Open channel
+        let channel_key = channel_key(&get_nft_port_id(), &get_channel_id());
+        let channel = get_channel_for_nft(ChanState::Open, Order::Unordered);
+        let bytes = channel.encode_vec();
+        wl_storage
+            .write_log
+            .write(&channel_key, bytes)
+            .expect("write failed");
+        // init nft
+        let class_id = get_nft_class_id();
+        let token_id = get_nft_id();
+        let sender = established_address_1();
+        let ibc_token = ibc::storage::ibc_token_for_nft(&class_id, &token_id);
+        let balance_key = balance_key(&ibc_token, &sender);
+        let amount = Amount::from_u64(1);
+        wl_storage
+            .write_log
+            .write(&balance_key, amount.serialize_to_vec())
+            .expect("write failed");
+        // nft class
+        let class = dummy_nft_class();
+        let class_key = ibc::storage::nft_class_key(&class_id);
+        wl_storage
+            .write_log
+            .write(&class_key, class.serialize_to_vec())
+            .expect("write failed");
+        // nft metadata
+        let metadata = dummy_nft_metadata();
+        let metadata_key = ibc::storage::nft_metadata_key(&class_id, &token_id);
+        wl_storage
+            .write_log
+            .write(&metadata_key, metadata.serialize_to_vec())
+            .expect("write failed");
+
+        wl_storage.write_log.commit_tx();
+        wl_storage.commit_block().expect("commit failed");
+        // for next block
+        wl_storage
+            .storage
+            .set_header(get_dummy_header())
+            .expect("Setting a dummy header shouldn't fail");
+        wl_storage
+            .storage
+            .begin_block(BlockHash::default(), BlockHeight(2))
+            .unwrap();
+
+        // prepare data
+        let msg = MsgNftTransfer {
+            port_id_on_a: get_nft_port_id(),
+            chan_id_on_a: get_channel_id(),
+            packet_data: NftPacketData {
+                class_id,
+                class_uri: None,
+                class_data: None,
+                token_ids: TokenIds(vec![token_id]),
+                token_uris: vec![],
+                token_data: vec![],
+                sender: sender.to_string().into(),
+                receiver: "receiver".to_string().into(),
+                memo: "memo".to_string().into(),
+            },
+            timeout_height_on_b: TimeoutHeight::At(Height::new(0, 10).unwrap()),
+            timeout_timestamp_on_b: Timestamp::none(),
+        };
+
+        // the sequence send
+        let seq_key =
+            next_sequence_send_key(&get_nft_port_id(), &get_channel_id());
+        let sequence = get_next_seq(&wl_storage, &seq_key);
+        wl_storage
+            .write_log
+            .write(&seq_key, (u64::from(sequence) + 1).to_be_bytes().to_vec())
+            .expect("write failed");
+        keys_changed.insert(seq_key);
+        // packet commitment
+        let packet = nft_packet_from_message(
+            &msg,
+            sequence,
+            &get_channel_counterparty_for_nft(),
+        );
+        let commitment_key =
+            commitment_key(&msg.port_id_on_a, &msg.chan_id_on_a, sequence);
+        let commitment = commitment(&packet);
+        let bytes = commitment.into_vec();
+        wl_storage
+            .write_log
+            .write(&commitment_key, bytes)
+            .expect("write failed");
+        keys_changed.insert(commitment_key);
+        // event
+        let transfer_event = NftTransferEvent {
+            sender: msg.packet_data.sender.clone(),
+            receiver: msg.packet_data.receiver.clone(),
+            class: msg.packet_data.class_id.clone(),
+            tokens: msg.packet_data.token_ids.clone(),
+            memo: msg.packet_data.memo.clone(),
+        };
+        let event = RawIbcEvent::Module(ModuleEvent::from(transfer_event));
+        wl_storage
+            .write_log
+            .emit_ibc_event(event.try_into().unwrap());
+        let event = RawIbcEvent::SendPacket(SendPacket::new(
+            packet,
+            Order::Unordered,
+            get_connection_id(),
         ));
         let message_event = RawIbcEvent::Message(MessageEvent::Channel);
         wl_storage
