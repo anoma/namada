@@ -29,7 +29,7 @@ pub enum Error {
     KeyRetrival(#[from] storage::Error),
     /// Transaction Errors
     #[error("{0}")]
-    Tx(#[from] TxError),
+    Tx(#[from] TxSubmitError),
     /// Event Errors
     #[error("{0}")]
     Event(#[from] EventError),
@@ -117,7 +117,7 @@ pub enum EncodingError {
 
 /// Errors to do with transaction events.
 #[derive(Error, Debug, Clone)]
-pub enum TxError {
+pub enum TxSubmitError {
     /// Accepted tx timeout
     #[error("Timed out waiting for tx to be accepted")]
     AcceptTimeout,

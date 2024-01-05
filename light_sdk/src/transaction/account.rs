@@ -1,7 +1,7 @@
-use namada_core::types::address::Address;
-use namada_core::types::hash::Hash;
-use namada_core::types::key::common;
-use namada_tx::Tx;
+use namada_sdk::tx::Tx;
+use namada_sdk::types::address::Address;
+use namada_sdk::types::hash::Hash;
+use namada_sdk::types::key::common;
 
 use super::GlobalArgs;
 use crate::transaction;
@@ -21,12 +21,11 @@ impl InitAccount {
         threshold: u8,
         args: GlobalArgs,
     ) -> Self {
-        let init_account =
-            namada_core::types::transaction::account::InitAccount {
-                public_keys,
-                vp_code_hash,
-                threshold,
-            };
+        let init_account = namada_sdk::account::InitAccount {
+            public_keys,
+            vp_code_hash,
+            threshold,
+        };
 
         Self(transaction::build_tx(
             args,
@@ -105,13 +104,12 @@ impl UpdateAccount {
         threshold: Option<u8>,
         args: GlobalArgs,
     ) -> Self {
-        let update_account =
-            namada_core::types::transaction::account::UpdateAccount {
-                addr,
-                vp_code_hash,
-                public_keys,
-                threshold,
-            };
+        let update_account = namada_sdk::account::UpdateAccount {
+            addr,
+            vp_code_hash,
+            public_keys,
+            threshold,
+        };
 
         Self(transaction::build_tx(
             args,

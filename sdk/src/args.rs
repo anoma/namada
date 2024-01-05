@@ -496,13 +496,13 @@ impl InitProposal {
                 self.proposal_data.as_ref(),
             )
             .map_err(|e| {
-                crate::error::TxError::FailedGovernaneProposalDeserialize(
+                crate::error::TxSubmitError::FailedGovernaneProposalDeserialize(
                     e.to_string(),
                 )
             })?
             .validate(&governance_parameters, current_epoch, self.tx.force)
             .map_err(|e| {
-                crate::error::TxError::InvalidProposal(e.to_string())
+                crate::error::TxSubmitError::InvalidProposal(e.to_string())
             })?;
 
             tx::build_pgf_funding_proposal(context, self, proposal).await
@@ -511,7 +511,7 @@ impl InitProposal {
                 self.proposal_data.as_ref(),
             )
             .map_err(|e| {
-                crate::error::TxError::FailedGovernaneProposalDeserialize(
+                crate::error::TxSubmitError::FailedGovernaneProposalDeserialize(
                     e.to_string(),
                 )
             })?;
@@ -530,7 +530,7 @@ impl InitProposal {
                     self.tx.force,
                 )
                 .map_err(|e| {
-                    crate::error::TxError::InvalidProposal(e.to_string())
+                    crate::error::TxSubmitError::InvalidProposal(e.to_string())
                 })?;
 
             tx::build_pgf_stewards_proposal(context, self, proposal).await
@@ -539,7 +539,7 @@ impl InitProposal {
                 self.proposal_data.as_ref(),
             )
             .map_err(|e| {
-                crate::error::TxError::FailedGovernaneProposalDeserialize(
+                crate::error::TxSubmitError::FailedGovernaneProposalDeserialize(
                     e.to_string(),
                 )
             })?;
@@ -558,7 +558,7 @@ impl InitProposal {
                     self.tx.force,
                 )
                 .map_err(|e| {
-                    crate::error::TxError::InvalidProposal(e.to_string())
+                    crate::error::TxSubmitError::InvalidProposal(e.to_string())
                 })?;
             tx::build_default_proposal(context, self, proposal).await
         }

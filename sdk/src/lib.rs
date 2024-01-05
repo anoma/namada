@@ -1,13 +1,12 @@
 extern crate alloc;
 
-pub use namada_core::{ibc, tendermint, tendermint_proto};
-pub use namada_tx::proto;
-use namada_tx::Tx;
+pub use namada_core::{borsh, ibc, tendermint, tendermint_proto, types};
 #[cfg(feature = "tendermint-rpc")]
 pub use tendermint_rpc;
 pub use {
-    bip39, borsh, masp_primitives, masp_proofs, namada_core as core,
-    namada_proof_of_stake as proof_of_stake, zeroize,
+    bip39, masp_primitives, masp_proofs, namada_account as account,
+    namada_governance as governance, namada_proof_of_stake as proof_of_stake,
+    namada_state as state, namada_storage as storage, zeroize,
 };
 
 pub mod eth_bridge;
@@ -45,6 +44,7 @@ use namada_core::types::key::*;
 use namada_core::types::masp::{TransferSource, TransferTarget};
 use namada_core::types::token;
 use namada_tx::data::wrapper::GasLimit;
+use namada_tx::Tx;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use crate::io::Io;

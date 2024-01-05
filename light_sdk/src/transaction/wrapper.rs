@@ -1,8 +1,8 @@
-use namada_core::proto::{Section, Signature, Signer, Tx, TxError};
-use namada_core::types::hash::Hash;
-use namada_core::types::key::common;
-use namada_core::types::storage::Epoch;
-use namada_core::types::transaction::{Fee, GasLimit};
+use namada_sdk::tx::data::{Fee, GasLimit};
+use namada_sdk::tx::{Section, Signature, Signer, Tx, TxError};
+use namada_sdk::types::hash::Hash;
+use namada_sdk::types::key::common;
+use namada_sdk::types::storage::Epoch;
 
 #[allow(missing_docs)]
 pub struct Wrapper(Tx);

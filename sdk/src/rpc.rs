@@ -36,7 +36,7 @@ use serde::Serialize;
 
 use crate::args::InputAmount;
 use crate::control_flow::time;
-use crate::error::{EncodingError, Error, QueryError, TxError};
+use crate::error::{EncodingError, Error, QueryError, TxSubmitError};
 use crate::events::Event;
 use crate::internal_macros::echo_error;
 use crate::io::Io;
@@ -97,8 +97,12 @@ pub async fn query_tx_status(
             "Transaction status query deadline of {deadline:?} exceeded"
         );
         match status {
-            TxEventQuery::Accepted(_) => Error::Tx(TxError::AcceptTimeout),
-            TxEventQuery::Applied(_) => Error::Tx(TxError::AppliedTimeout),
+            TxEventQuery::Accepted(_) => {
+                Error::Tx(TxSubmitError::AcceptTimeout)
+            }
+            TxEventQuery::Applied(_) => {
+                Error::Tx(TxSubmitError::AppliedTimeout)
+            }
         }
     })
 }

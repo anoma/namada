@@ -1,11 +1,11 @@
 use std::str::FromStr;
 
-pub use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
-use namada_core::ibc::primitives::Msg;
-use namada_core::types::hash::Hash;
-use namada_core::types::key::common;
-use namada_core::types::time::DateTimeUtc;
-use namada_tx::Tx;
+pub use namada_sdk::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
+use namada_sdk::ibc::primitives::Msg;
+use namada_sdk::tx::Tx;
+use namada_sdk::types::hash::Hash;
+use namada_sdk::types::key::common;
+use namada_sdk::types::time::DateTimeUtc;
 
 use super::GlobalArgs;
 use crate::transaction;
@@ -32,7 +32,7 @@ impl IbcTransfer {
 
         let mut data = vec![];
         prost::Message::encode(&packet_data.to_any(), &mut data).unwrap();
-        tx.set_data(namada_core::proto::Data::new(data));
+        tx.set_data(namada_sdk::tx::Data::new(data));
 
         Self(tx)
     }

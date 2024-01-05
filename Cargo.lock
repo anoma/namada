@@ -4542,7 +4542,6 @@ dependencies = [
  "borsh",
  "borsh-ext",
  "ibc 0.47.0",
- "namada_core",
  "namada_sdk",
  "prost 0.12.3",
  "tendermint-config",

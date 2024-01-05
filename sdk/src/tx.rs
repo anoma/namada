@@ -1,4 +1,5 @@
 //! SDK functions to construct different types of transactions
+
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::File;
@@ -50,11 +51,11 @@ use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
 use namada_token::storage_key::balance_key;
 use namada_tx::data::pgf::UpdateStewardCommission;
 use namada_tx::data::{pos, ResultCode, TxResult};
-use namada_tx::{MaspBuilder, Tx};
+pub use namada_tx::{Signature, *};
 
 use crate::args::{self, InputAmount};
 use crate::control_flow::time;
-use crate::error::{EncodingError, Error, QueryError, Result, TxError};
+use crate::error::{EncodingError, Error, QueryError, Result, TxSubmitError};
 use crate::io::Io;
 use crate::masp::TransferErr::Build;
 use crate::masp::{make_asset_type, ShieldedContext, ShieldedTransfer};
@@ -315,7 +316,9 @@ pub async fn broadcast_tx(
             wrapper_hash,
             decrypted_hash,
         } => Ok((tx, wrapper_hash, decrypted_hash)),
-        TxBroadcastData::DryRun(tx) => Err(TxError::ExpectLiveRun(tx.clone())),
+        TxBroadcastData::DryRun(tx) => {
+            Err(TxSubmitError::ExpectLiveRun(tx.clone()))
+        }
     }?;
 
     tracing::debug!(
@@ -347,7 +350,7 @@ pub async fn broadcast_tx(
         }
         Ok(response)
     } else {
-        Err(Error::from(TxError::TxBroadcast(RpcError::server(
+        Err(Error::from(TxSubmitError::TxBroadcast(RpcError::server(
             serde_json::to_string(&response).map_err(|err| {
                 Error::from(EncodingError::Serde(err.to_string()))
             })?,
@@ -373,7 +376,9 @@ pub async fn submit_tx(
             wrapper_hash,
             decrypted_hash,
         } => Ok((tx, wrapper_hash, decrypted_hash)),
-        TxBroadcastData::DryRun(tx) => Err(TxError::ExpectLiveRun(tx.clone())),
+        TxBroadcastData::DryRun(tx) => {
+            Err(TxSubmitError::ExpectLiveRun(tx.clone()))
+        }
     }?;
 
     // Broadcast the supplied transaction
@@ -603,7 +608,9 @@ pub async fn build_validator_commission_change(
                 "Invalid new commission rate, received {}",
                 rate
             );
-            return Err(Error::from(TxError::InvalidCommissionRate(*rate)));
+            return Err(Error::from(TxSubmitError::InvalidCommissionRate(
+                *rate,
+            )));
         }
 
         let pipeline_epoch_minus_one = epoch + params.pipeline_len - 1;
@@ -627,7 +634,7 @@ pub async fn build_validator_commission_change(
                     );
                     if !tx_args.force {
                         return Err(Error::from(
-                            TxError::InvalidCommissionRate(*rate),
+                            TxSubmitError::InvalidCommissionRate(*rate),
                         ));
                     }
                 }
@@ -642,7 +649,7 @@ pub async fn build_validator_commission_change(
                     );
                     if !tx_args.force {
                         return Err(Error::from(
-                            TxError::InvalidCommissionRate(*rate),
+                            TxSubmitError::InvalidCommissionRate(*rate),
                         ));
                     }
                 }
@@ -650,7 +657,7 @@ pub async fn build_validator_commission_change(
             None => {
                 edisplay_line!(context.io(), "Error retrieving from storage");
                 if !tx_args.force {
-                    return Err(Error::from(TxError::Retrieval));
+                    return Err(Error::from(TxSubmitError::Retrieval));
                 }
             }
         }
@@ -660,7 +667,7 @@ pub async fn build_validator_commission_change(
             "The given address {validator} is not a validator."
         );
         if !tx_args.force {
-            return Err(Error::from(TxError::InvalidValidatorAddress(
+            return Err(Error::from(TxSubmitError::InvalidValidatorAddress(
                 validator,
             )));
         }
@@ -725,7 +732,7 @@ pub async fn build_validator_metadata_change(
                 "Cannot remove a validator's email, which was implied by the \
                  empty string"
             );
-            return Err(Error::from(TxError::InvalidEmail));
+            return Err(Error::from(TxSubmitError::InvalidEmail));
         }
     }
 
@@ -738,7 +745,9 @@ pub async fn build_validator_metadata_change(
                 rate
             );
             if !tx_args.force {
-                return Err(Error::from(TxError::InvalidCommissionRate(*rate)));
+                return Err(Error::from(TxSubmitError::InvalidCommissionRate(
+                    *rate,
+                )));
             }
         }
         let pipeline_epoch_minus_one = epoch + params.pipeline_len - 1;
@@ -762,7 +771,7 @@ pub async fn build_validator_metadata_change(
                     );
                     if !tx_args.force {
                         return Err(Error::from(
-                            TxError::InvalidCommissionRate(*rate),
+                            TxSubmitError::InvalidCommissionRate(*rate),
                         ));
                     }
                 }
@@ -777,7 +786,7 @@ pub async fn build_validator_metadata_change(
                     );
                     if !tx_args.force {
                         return Err(Error::from(
-                            TxError::InvalidCommissionRate(*rate),
+                            TxSubmitError::InvalidCommissionRate(*rate),
                         ));
                     }
                 }
@@ -785,7 +794,7 @@ pub async fn build_validator_metadata_change(
             None => {
                 edisplay_line!(context.io(), "Error retrieving from storage");
                 if !tx_args.force {
-                    return Err(Error::from(TxError::Retrieval));
+                    return Err(Error::from(TxSubmitError::Retrieval));
                 }
             }
         }
@@ -838,18 +847,20 @@ pub async fn build_update_steward_commission(
             "The given address {} is not a steward.",
             &steward
         );
-        return Err(Error::from(TxError::InvalidSteward(steward.clone())));
+        return Err(Error::from(TxSubmitError::InvalidSteward(
+            steward.clone(),
+        )));
     };
 
     let commission = Commission::try_from(commission.as_ref())
-        .map_err(|e| TxError::InvalidStewardCommission(e.to_string()))?;
+        .map_err(|e| TxSubmitError::InvalidStewardCommission(e.to_string()))?;
 
     if !commission.is_valid() && !tx_args.force {
         edisplay_line!(
             context.io(),
             "The sum of all percentage must not be greater than 1."
         );
-        return Err(Error::from(TxError::InvalidStewardCommission(
+        return Err(Error::from(TxSubmitError::InvalidStewardCommission(
             "Commission sum is greater than 1.".to_string(),
         )));
     }
@@ -896,7 +907,9 @@ pub async fn build_resign_steward(
             "The given address {} is not a steward.",
             &steward
         );
-        return Err(Error::from(TxError::InvalidSteward(steward.clone())));
+        return Err(Error::from(TxSubmitError::InvalidSteward(
+            steward.clone(),
+        )));
     };
 
     build(
@@ -937,7 +950,7 @@ pub async fn build_unjail_validator(
             &validator
         );
         if !tx_args.force {
-            return Err(Error::from(TxError::InvalidValidatorAddress(
+            return Err(Error::from(TxSubmitError::InvalidValidatorAddress(
                 validator.clone(),
             )));
         }
@@ -961,9 +974,9 @@ pub async fn build_unjail_validator(
             &validator
         );
         if !tx_args.force {
-            return Err(Error::from(TxError::ValidatorNotCurrentlyJailed(
-                validator.clone(),
-            )));
+            return Err(Error::from(
+                TxSubmitError::ValidatorNotCurrentlyJailed(validator.clone()),
+            ));
         }
     }
 
@@ -984,7 +997,7 @@ pub async fn build_unjail_validator(
                 );
                 if !tx_args.force {
                     return Err(Error::from(
-                        TxError::ValidatorFrozenFromUnjailing(
+                        TxSubmitError::ValidatorFrozenFromUnjailing(
                             validator.clone(),
                         ),
                     ));
@@ -1040,7 +1053,7 @@ pub async fn build_deactivate_validator(
             &validator
         );
         if !tx_args.force {
-            return Err(Error::from(TxError::InvalidValidatorAddress(
+            return Err(Error::from(TxSubmitError::InvalidValidatorAddress(
                 validator.clone(),
             )));
         }
@@ -1065,7 +1078,7 @@ pub async fn build_deactivate_validator(
             &pipeline_epoch
         );
         if !tx_args.force {
-            return Err(Error::from(TxError::ValidatorInactive(
+            return Err(Error::from(TxSubmitError::ValidatorInactive(
                 validator.clone(),
                 pipeline_epoch,
             )));
@@ -1111,7 +1124,7 @@ pub async fn build_reactivate_validator(
             &validator
         );
         if !tx_args.force {
-            return Err(Error::from(TxError::InvalidValidatorAddress(
+            return Err(Error::from(TxSubmitError::InvalidValidatorAddress(
                 validator.clone(),
             )));
         }
@@ -1134,7 +1147,7 @@ pub async fn build_reactivate_validator(
                 &epoch
             );
             if !tx_args.force {
-                return Err(Error::from(TxError::ValidatorNotInactive(
+                return Err(Error::from(TxSubmitError::ValidatorNotInactive(
                     validator.clone(),
                     epoch,
                 )));
@@ -1175,7 +1188,7 @@ pub async fn build_redelegation(
              be requested."
         );
         if !tx_args.force {
-            return Err(Error::from(TxError::RedelegationIsZero));
+            return Err(Error::from(TxSubmitError::RedelegationIsZero));
         }
     }
 
@@ -1198,7 +1211,7 @@ pub async fn build_redelegation(
             &owner
         );
         if !tx_args.force {
-            return Err(Error::from(TxError::RedelegatorIsValidator(
+            return Err(Error::from(TxSubmitError::RedelegatorIsValidator(
                 owner.clone(),
             )));
         }
@@ -1212,7 +1225,7 @@ pub async fn build_redelegation(
              Redelegation is not allowed to the same validator."
         );
         if !tx_args.force {
-            return Err(Error::from(TxError::RedelegationSrcEqDest));
+            return Err(Error::from(TxSubmitError::RedelegationSrcEqDest));
         }
     }
 
@@ -1242,10 +1255,12 @@ pub async fn build_redelegation(
             &owner
         );
         if !tx_args.force {
-            return Err(Error::from(TxError::IncomingRedelIsStillSlashable(
-                src_validator.clone(),
-                owner.clone(),
-            )));
+            return Err(Error::from(
+                TxSubmitError::IncomingRedelIsStillSlashable(
+                    src_validator.clone(),
+                    owner.clone(),
+                ),
+            ));
         }
     }
 
@@ -1269,7 +1284,7 @@ pub async fn build_redelegation(
             &dest_validator,
             &pipeline_epoch
         );
-        return Err(Error::from(TxError::ValidatorInactive(
+        return Err(Error::from(TxSubmitError::ValidatorInactive(
             dest_validator.clone(),
             pipeline_epoch,
         )));
@@ -1290,10 +1305,12 @@ pub async fn build_redelegation(
             bond_amount.to_string_native()
         );
         if !tx_args.force {
-            return Err(Error::from(TxError::RedelegationAmountTooLarge(
-                redel_amount.to_string_native(),
-                bond_amount.to_string_native(),
-            )));
+            return Err(Error::from(
+                TxSubmitError::RedelegationAmountTooLarge(
+                    redel_amount.to_string_native(),
+                    bond_amount.to_string_native(),
+                ),
+            ));
         }
     } else {
         display_line!(
@@ -1389,7 +1406,7 @@ pub async fn build_withdraw(
         );
         rpc::query_and_print_unbonds(context, &bond_source, &validator).await?;
         if !tx_args.force {
-            return Err(Error::from(TxError::NoUnbondReady(epoch)));
+            return Err(Error::from(TxSubmitError::NoUnbondReady(epoch)));
         }
     } else {
         display_line!(
@@ -1485,7 +1502,7 @@ pub async fn build_unbond(
              requested."
         );
         if !tx_args.force {
-            return Err(Error::from(TxError::BondIsZero));
+            return Err(Error::from(TxSubmitError::BondIsZero));
         }
     }
 
@@ -1607,7 +1624,7 @@ pub async fn query_unbonds(
                          occurred"
                     );
                 } else {
-                    return Err(Error::from(TxError::UnboundError));
+                    return Err(Error::from(TxSubmitError::UnboundError));
                 }
             }
             std::cmp::Ordering::Equal => {
@@ -1659,7 +1676,7 @@ pub async fn build_bond(
              requested."
         );
         if !tx_args.force {
-            return Err(Error::from(TxError::BondIsZero));
+            return Err(Error::from(TxSubmitError::BondIsZero));
         }
     }
 
@@ -1697,7 +1714,7 @@ pub async fn build_bond(
             &validator,
             &pipeline_epoch
         );
-        return Err(Error::from(TxError::ValidatorInactive(
+        return Err(Error::from(TxSubmitError::ValidatorInactive(
             validator.clone(),
             pipeline_epoch,
         )));
@@ -1777,7 +1794,7 @@ pub async fn build_default_proposal(
     .await?;
 
     let init_proposal_data = InitProposalData::try_from(proposal.clone())
-        .map_err(|e| TxError::InvalidProposal(e.to_string()))?;
+        .map_err(|e| TxSubmitError::InvalidProposal(e.to_string()))?;
 
     let push_data =
         |tx_builder: &mut Tx, init_proposal_data: &mut InitProposalData| {
@@ -1830,7 +1847,7 @@ pub async fn build_vote_proposal(
     .await?;
 
     let proposal_vote = ProposalVote::try_from(vote.clone())
-        .map_err(|_| TxError::InvalidProposalVote)?;
+        .map_err(|_| TxSubmitError::InvalidProposalVote)?;
 
     let proposal_id = proposal_id.ok_or_else(|| {
         Error::Other("Proposal id must be defined.".to_string())
@@ -1840,13 +1857,15 @@ pub async fn build_vote_proposal(
     {
         proposal
     } else {
-        return Err(Error::from(TxError::ProposalDoesNotExist(proposal_id)));
+        return Err(Error::from(TxSubmitError::ProposalDoesNotExist(
+            proposal_id,
+        )));
     };
 
     let storage_vote =
         StorageProposalVote::build(&proposal_vote, &proposal.r#type)
             .ok_or_else(|| {
-                Error::from(TxError::Other(
+                Error::from(TxSubmitError::Other(
                     "Should be able to build the proposal vote".to_string(),
                 ))
             })?;
@@ -1857,9 +1876,9 @@ pub async fn build_vote_proposal(
         if tx.force {
             eprintln!("Invalid proposal {} vote period.", proposal_id);
         } else {
-            return Err(Error::from(TxError::InvalidProposalVotingPeriod(
-                proposal_id,
-            )));
+            return Err(Error::from(
+                TxSubmitError::InvalidProposalVotingPeriod(proposal_id),
+            ));
         }
     }
 
@@ -1917,7 +1936,7 @@ pub async fn build_pgf_funding_proposal(
     .await?;
 
     let init_proposal_data = InitProposalData::try_from(proposal.clone())
-        .map_err(|e| TxError::InvalidProposal(e.to_string()))?;
+        .map_err(|e| TxSubmitError::InvalidProposal(e.to_string()))?;
 
     let add_section = |tx: &mut Tx, data: &mut InitProposalData| {
         let (_, extra_section_hash) =
@@ -1962,7 +1981,7 @@ pub async fn build_pgf_stewards_proposal(
     .await?;
 
     let init_proposal_data = InitProposalData::try_from(proposal.clone())
-        .map_err(|e| TxError::InvalidProposal(e.to_string()))?;
+        .map_err(|e| TxSubmitError::InvalidProposal(e.to_string()))?;
 
     let add_section = |tx: &mut Tx, data: &mut InitProposalData| {
         let (_, extra_section_hash) =
@@ -2138,7 +2157,7 @@ pub async fn build_ibc_transfer(
             let any_msg = message.to_any();
             let mut data = vec![];
             prost::Message::encode(&any_msg, &mut data)
-                .map_err(TxError::EncodeFailure)?;
+                .map_err(TxSubmitError::EncodeFailure)?;
             data
         }
     };
@@ -2431,14 +2450,16 @@ async fn construct_shielded_parts<N: Namada>(
         Ok(Some(stx)) => stx,
         Ok(None) => return Ok(None),
         Err(Build(builder::Error::InsufficientFunds(_))) => {
-            return Err(TxError::NegativeBalanceAfterTransfer(
+            return Err(TxSubmitError::NegativeBalanceAfterTransfer(
                 Box::new(source.effective_address()),
                 amount.amount().to_string_native(),
                 Box::new(token.clone()),
             )
             .into());
         }
-        Err(err) => return Err(TxError::MaspError(err.to_string()).into()),
+        Err(err) => {
+            return Err(TxSubmitError::MaspError(err.to_string()).into());
+        }
     };
 
     // Get the decoded asset types used in the transaction to give offline
@@ -2472,7 +2493,9 @@ pub async fn build_init_account(
             if public_keys.len() == 1 {
                 1u8
             } else {
-                return Err(Error::from(TxError::MissingAccountThreshold));
+                return Err(Error::from(
+                    TxSubmitError::MissingAccountThreshold,
+                ));
             }
         }
     };
@@ -2533,7 +2556,9 @@ pub async fn build_update_account(
     } else if tx_args.force {
         addr.clone()
     } else {
-        return Err(Error::from(TxError::LocationDoesNotExist(addr.clone())));
+        return Err(Error::from(TxSubmitError::LocationDoesNotExist(
+            addr.clone(),
+        )));
     };
 
     let vp_code_hash = match vp_code_path {
@@ -2679,7 +2704,7 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
             validated_amount,
         )
         .await
-        .map_err(|err| TxError::MaspError(err.to_string()))?;
+        .map_err(|err| TxSubmitError::MaspError(err.to_string()))?;
 
     let transfer = token::Transfer {
         source: source.clone(),
@@ -2767,12 +2792,12 @@ async fn expect_dry_broadcast(
             tx,
             wrapper_hash: _,
             decrypted_hash: _,
-        } => Err(Error::from(TxError::ExpectDryRun(tx))),
+        } => Err(Error::from(TxSubmitError::ExpectDryRun(tx))),
     }
 }
 
 fn lift_rpc_error<T>(res: std::result::Result<T, RpcError>) -> Result<T> {
-    res.map_err(|err| Error::from(TxError::TxBroadcast(err)))
+    res.map_err(|err| Error::from(TxSubmitError::TxBroadcast(err)))
 }
 
 /// Returns the given validator if the given address is a validator,
@@ -2794,7 +2819,9 @@ async fn known_validator_or_err(
             );
             Ok(validator)
         } else {
-            Err(Error::from(TxError::InvalidValidatorAddress(validator)))
+            Err(Error::from(TxSubmitError::InvalidValidatorAddress(
+                validator,
+            )))
         }
     } else {
         Ok(validator)
@@ -2838,7 +2865,7 @@ async fn source_exists_or_err(
     let message =
         format!("The source address {} doesn't exist on chain.", token);
     address_exists_or_err(token, force, context, message, |err| {
-        Error::from(TxError::SourceDoesNotExist(err))
+        Error::from(TxSubmitError::SourceDoesNotExist(err))
     })
     .await
 }
@@ -2854,7 +2881,7 @@ async fn target_exists_or_err(
     let message =
         format!("The target address {} doesn't exist on chain.", token);
     address_exists_or_err(token, force, context, message, |err| {
-        Error::from(TxError::TargetLocationDoesNotExist(err))
+        Error::from(TxSubmitError::TargetLocationDoesNotExist(err))
     })
     .await
 }
@@ -2892,7 +2919,7 @@ async fn check_balance_too_low_err<N: Namada>(
                     );
                     Ok(token::Amount::zero())
                 } else {
-                    Err(Error::from(TxError::BalanceTooLow(
+                    Err(Error::from(TxSubmitError::BalanceTooLow(
                         source.clone(),
                         token.clone(),
                         amount.to_string_native(),
@@ -2913,7 +2940,7 @@ async fn check_balance_too_low_err<N: Namada>(
                 );
                 Ok(token::Amount::zero())
             } else {
-                Err(Error::from(TxError::NoBalanceForToken(
+                Err(Error::from(TxSubmitError::NoBalanceForToken(
                     source.clone(),
                     token.clone(),
                 )))

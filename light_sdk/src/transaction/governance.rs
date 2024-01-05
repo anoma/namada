@@ -1,10 +1,9 @@
-use namada_core::ledger::governance::storage::proposal::ProposalType;
-use namada_core::ledger::governance::storage::vote::StorageProposalVote;
-use namada_core::types::address::Address;
-use namada_core::types::hash::Hash;
-use namada_core::types::key::common;
-use namada_core::types::storage::Epoch;
-use namada_tx::Tx;
+use namada_sdk::governance::{ProposalType, StorageProposalVote};
+use namada_sdk::tx::Tx;
+use namada_sdk::types::address::Address;
+use namada_sdk::types::hash::Hash;
+use namada_sdk::types::key::common;
+use namada_sdk::types::storage::Epoch;
 
 use super::GlobalArgs;
 use crate::transaction;
@@ -28,16 +27,15 @@ impl InitProposal {
         grace_epoch: Epoch,
         args: GlobalArgs,
     ) -> Self {
-        let init_proposal =
-            namada_core::types::transaction::governance::InitProposalData {
-                id,
-                content,
-                author,
-                r#type,
-                voting_start_epoch,
-                voting_end_epoch,
-                grace_epoch,
-            };
+        let init_proposal = namada_sdk::governance::InitProposalData {
+            id,
+            content,
+            author,
+            r#type,
+            voting_start_epoch,
+            voting_end_epoch,
+            grace_epoch,
+        };
 
         Self(transaction::build_tx(
             args,
@@ -80,13 +78,12 @@ impl VoteProposal {
         delegations: Vec<Address>,
         args: GlobalArgs,
     ) -> Self {
-        let vote_proposal =
-            namada_core::types::transaction::governance::VoteProposalData {
-                id,
-                vote,
-                voter,
-                delegations,
-            };
+        let vote_proposal = namada_sdk::governance::VoteProposalData {
+            id,
+            vote,
+            voter,
+            delegations,
+        };
 
         Self(transaction::build_tx(
             args,

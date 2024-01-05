@@ -1,6 +1,6 @@
-use namada_core::types::account::Account;
-use namada_core::types::address::Address;
-use namada_core::types::key::common;
+use namada_sdk::account::Account;
+use namada_sdk::types::address::Address;
+use namada_sdk::types::key::common;
 
 use super::*;
 

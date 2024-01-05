@@ -742,8 +742,8 @@ where
     /// Get the next epoch for which we can request validator set changed
     pub fn get_validator_set_update_epoch(
         &self,
-        current_epoch: namada_sdk::core::types::storage::Epoch,
-    ) -> namada_sdk::core::types::storage::Epoch {
+        current_epoch: namada_sdk::types::storage::Epoch,
+    ) -> namada_sdk::types::storage::Epoch {
         if let Some(delay) = self.wl_storage.storage.update_epoch_blocks_delay {
             if delay == EPOCH_SWITCH_BLOCKS_DELAY {
                 // If we're about to update validator sets for the

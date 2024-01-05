@@ -24,7 +24,7 @@ pub fn query_tx_events(
 pub fn dry_run_tx(
     tendermint_addr: &str,
     tx_bytes: Vec<u8>,
-) -> Result<namada_core::types::transaction::TxResult, Error> {
+) -> Result<namada_sdk::tx::data::TxResult, Error> {
     let client = HttpClient::new(
         TendermintAddress::from_str(tendermint_addr)
             .map_err(|e| Error::Other(e.to_string()))?,
@@ -68,6 +68,6 @@ pub async fn query_tx_status(
     if let Some(e) = maybe_event {
         Ok(e)
     } else {
-        Err(Error::Tx(namada_sdk::error::TxError::AppliedTimeout))
+        Err(Error::Tx(namada_sdk::error::TxSubmitError::AppliedTimeout))
     }
 }

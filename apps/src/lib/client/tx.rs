@@ -995,12 +995,14 @@ where
     let (mut tx_builder, signing_data) = if args.is_offline {
         let proposal = OfflineProposal::try_from(args.proposal_data.as_ref())
             .map_err(|e| {
-                error::TxError::FailedGovernaneProposalDeserialize(
+                error::TxSubmitError::FailedGovernaneProposalDeserialize(
                     e.to_string(),
                 )
             })?
             .validate(current_epoch, args.tx.force)
-            .map_err(|e| error::TxError::InvalidProposal(e.to_string()))?;
+            .map_err(|e| {
+                error::TxSubmitError::InvalidProposal(e.to_string())
+            })?;
 
         let default_signer = Some(proposal.author.clone());
         let signing_data = aux_signing_data(
@@ -1024,7 +1026,7 @@ where
         let output_file_path = signed_offline_proposal
             .serialize(args.tx.output_folder)
             .map_err(|e| {
-                error::TxError::FailedGovernaneProposalDeserialize(
+                error::TxSubmitError::FailedGovernaneProposalDeserialize(
                     e.to_string(),
                 )
             })?;
@@ -1039,12 +1041,14 @@ where
         let proposal =
             PgfFundingProposal::try_from(args.proposal_data.as_ref())
                 .map_err(|e| {
-                    error::TxError::FailedGovernaneProposalDeserialize(
+                    error::TxSubmitError::FailedGovernaneProposalDeserialize(
                         e.to_string(),
                     )
                 })?
                 .validate(&governance_parameters, current_epoch, args.tx.force)
-                .map_err(|e| error::TxError::InvalidProposal(e.to_string()))?;
+                .map_err(|e| {
+                    error::TxSubmitError::InvalidProposal(e.to_string())
+                })?;
 
         submit_reveal_aux(namada, args.tx.clone(), &proposal.proposal.author)
             .await?;
@@ -1055,7 +1059,9 @@ where
             args.proposal_data.as_ref(),
         )
         .map_err(|e| {
-            error::TxError::FailedGovernaneProposalDeserialize(e.to_string())
+            error::TxSubmitError::FailedGovernaneProposalDeserialize(
+                e.to_string(),
+            )
         })?;
         let author_balance = rpc::get_token_balance(
             namada.client(),
@@ -1070,7 +1076,9 @@ where
                 author_balance,
                 args.tx.force,
             )
-            .map_err(|e| error::TxError::InvalidProposal(e.to_string()))?;
+            .map_err(|e| {
+                error::TxSubmitError::InvalidProposal(e.to_string())
+            })?;
 
         submit_reveal_aux(namada, args.tx.clone(), &proposal.proposal.author)
             .await?;
@@ -1079,7 +1087,9 @@ where
     } else {
         let proposal = DefaultProposal::try_from(args.proposal_data.as_ref())
             .map_err(|e| {
-            error::TxError::FailedGovernaneProposalDeserialize(e.to_string())
+            error::TxSubmitError::FailedGovernaneProposalDeserialize(
+                e.to_string(),
+            )
         })?;
         let author_balane = rpc::get_token_balance(
             namada.client(),
@@ -1094,7 +1104,9 @@ where
                 author_balane,
                 args.tx.force,
             )
-            .map_err(|e| error::TxError::InvalidProposal(e.to_string()))?;
+            .map_err(|e| {
+                error::TxSubmitError::InvalidProposal(e.to_string())
+            })?;
 
         submit_reveal_aux(namada, args.tx.clone(), &proposal.proposal.author)
             .await?;
@@ -1131,18 +1143,18 @@ where
         .await?;
 
         let proposal_vote = ProposalVote::try_from(args.vote)
-            .map_err(|_| error::TxError::InvalidProposalVote)?;
+            .map_err(|_| error::TxSubmitError::InvalidProposalVote)?;
 
         let proposal = OfflineSignedProposal::try_from(
             args.proposal_data.clone().unwrap().as_ref(),
         )
-        .map_err(|e| error::TxError::InvalidProposal(e.to_string()))?
+        .map_err(|e| error::TxSubmitError::InvalidProposal(e.to_string()))?
         .validate(
             &signing_data.account_public_keys_map.clone().unwrap(),
             signing_data.threshold,
             args.tx.force,
         )
-        .map_err(|e| error::TxError::InvalidProposal(e.to_string()))?;
+        .map_err(|e| error::TxSubmitError::InvalidProposal(e.to_string()))?;
         let delegations = rpc::get_delegators_delegation_at(
             namada.client(),
             &args.voter,

@@ -1,7 +1,7 @@
-pub use namada_core::types::eth_bridge_pool::{GasFee, TransferToEthereum};
-use namada_core::types::hash::Hash;
-use namada_core::types::key::common;
-use namada_tx::Tx;
+use namada_sdk::tx::Tx;
+pub use namada_sdk::types::eth_bridge_pool::{GasFee, TransferToEthereum};
+use namada_sdk::types::hash::Hash;
+use namada_sdk::types::key::common;
 
 use super::GlobalArgs;
 use crate::transaction;
@@ -19,7 +19,7 @@ impl BridgeTransfer {
         args: GlobalArgs,
     ) -> Self {
         let pending_transfer =
-            namada_core::types::eth_bridge_pool::PendingTransfer {
+            namada_sdk::types::eth_bridge_pool::PendingTransfer {
                 transfer,
                 gas_fee,
             };

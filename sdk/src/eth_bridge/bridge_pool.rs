@@ -29,7 +29,7 @@ use super::{block_on_eth_sync, eth_sync_or_exit, BlockOnEthSync};
 use crate::control_flow::install_shutdown_signal;
 use crate::control_flow::time::{Duration, Instant};
 use crate::error::{
-    EncodingError, Error, EthereumBridgeError, QueryError, TxError,
+    EncodingError, Error, EthereumBridgeError, QueryError, TxSubmitError,
 };
 use crate::eth_bridge::ethers::abi::AbiDecode;
 use crate::internal_macros::echo_error;
@@ -294,7 +294,7 @@ async fn validate_bridge_pool_tx(
         err_tokens.or(err_fees)
     };
     if let Some((token, amount)) = maybe_balance_error {
-        return Err(Error::Tx(TxError::NegativeBalanceAfterTransfer(
+        return Err(Error::Tx(TxSubmitError::NegativeBalanceAfterTransfer(
             Box::new(transfer.transfer.sender),
             amount.to_string(),
             Box::new(token),
