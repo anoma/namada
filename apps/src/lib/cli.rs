@@ -1757,7 +1757,10 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Find a PoS validator by its Tendermint address.")
+                .about(
+                    "Find a PoS validator and its consensus key by its native \
+                     address or Tendermint address.",
+                )
                 .add_args::<args::QueryFindValidator<args::CliTypes>>()
         }
     }
