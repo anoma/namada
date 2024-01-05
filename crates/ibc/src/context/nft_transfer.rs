@@ -4,19 +4,18 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use namada_core::ibc::apps::nft_transfer::context::{
-    NftClassContext, NftContext, NftTransferExecutionContext,
-    NftTransferValidationContext,
+    NftTransferExecutionContext, NftTransferValidationContext,
 };
 use namada_core::ibc::apps::nft_transfer::types::error::NftTransferError;
 use namada_core::ibc::apps::nft_transfer::types::{
     ClassData, ClassUri, Memo, PrefixedClassId, TokenData, TokenId, TokenUri,
     PORT_ID_STR,
 };
-use namada_core::ibc::core::channel::types::error::ChannelError;
 use namada_core::ibc::core::handler::types::error::ContextError;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::types::address::Address;
 use namada_core::types::ibc::{NftClass, NftMetadata, IBC_ESCROW_ADDRESS};
+use namada_core::types::token::DenominatedAmount;
 
 use super::common::IbcCommonContext;
 use crate::storage;
@@ -64,8 +63,8 @@ where
     fn create_or_update_class_validate(
         &self,
         class_id: &PrefixedClassId,
-        class_uri: &ClassUri,
-        class_data: &ClassData,
+        _class_uri: &ClassUri,
+        _class_data: &ClassData,
     ) -> Result<(), NftTransferError> {
         match self.get_nft_class(class_id) {
             Err(NftTransferError::NftClassNotFound) => Ok(()),
@@ -90,11 +89,16 @@ where
     ) -> Result<(), NftTransferError> {
         // Assumes that the class ID is prefixed with "port-id/channel-id" or
         // has no prefix
-        if self.inner.borrow().is_valid_nft_balance(
-            class_id,
-            token_id,
-            from_account,
-        )? {
+
+        // The metadata should exist
+        self.get_nft(class_id, token_id)?;
+
+        // Check the account owns the NFT
+        if self
+            .inner
+            .borrow()
+            .is_nft_owned(class_id, token_id, from_account)?
+        {
             Ok(())
         } else {
             Err(NftTransferError::Other(format!(
@@ -115,7 +119,12 @@ where
     ) -> Result<(), NftTransferError> {
         // Assumes that the class ID is prefixed with "port-id/channel-id" or
         // has no prefix
-        if self.inner.borrow().is_valid_nft_balance(
+
+        // The metadata should exist
+        self.get_nft(class_id, token_id)?;
+
+        // Check the NFT is escrowed
+        if self.inner.borrow().is_nft_owned(
             class_id,
             token_id,
             &IBC_ESCROW_ADDRESS,
@@ -133,13 +142,20 @@ where
     fn mint_nft_validate(
         &self,
         _account: &Self::AccountId,
-        _class_id: &PrefixedClassId,
-        _token_id: &TokenId,
+        class_id: &PrefixedClassId,
+        token_id: &TokenId,
         _token_uri: &TokenUri,
         _token_data: &TokenData,
     ) -> Result<(), NftTransferError> {
-        // validated by Multitoken VP
-        Ok(())
+        match self.get_nft(class_id, token_id) {
+            Err(NftTransferError::NftNotFound) => Ok(()),
+            Err(e) => Err(e),
+            Ok(_) => Err(NftTransferError::Other(format!(
+                "Metadata should not exist for this NFT: class_id {class_id}, \
+                 token_id {token_id}"
+            ))),
+        }
+        // Balance changes will be validated by Multitoken VP
     }
 
     fn burn_nft_validate(
@@ -149,10 +165,14 @@ where
         token_id: &TokenId,
         _memo: &Memo,
     ) -> Result<(), NftTransferError> {
+        // Metadata should exist
+        self.get_nft(class_id, token_id)?;
+
+        // Check the account owns the NFT
         if self
             .inner
             .borrow()
-            .is_valid_nft_balance(class_id, token_id, account)?
+            .is_nft_owned(class_id, token_id, account)?
         {
             Ok(())
         } else {
@@ -212,34 +232,53 @@ where
         self.inner
             .borrow_mut()
             .store_nft_class(class_id, class)
-            .map_err(|e| ContextError::from(e).into())
+            .map_err(|e| e.into())
     }
 
-    /// Executes the escrow of the NFT in a user account.
-    ///
-    /// `memo` field allows to incorporate additional contextual details in the
-    /// escrow execution.
     fn escrow_nft_execute(
         &mut self,
         from_account: &Self::AccountId,
-        port_id: &PortId,
-        channel_id: &ChannelId,
+        _port_id: &PortId,
+        _channel_id: &ChannelId,
         class_id: &PrefixedClassId,
         token_id: &TokenId,
-        memo: &Memo,
-    ) -> Result<(), NftTransferError>;
+        _memo: &Memo,
+    ) -> Result<(), NftTransferError> {
+        let ibc_token = storage::ibc_token_for_nft(class_id, token_id);
+
+        self.inner
+            .borrow_mut()
+            .transfer_token(
+                from_account,
+                &IBC_ESCROW_ADDRESS,
+                &ibc_token,
+                DenominatedAmount::new(1.into(), 0.into()),
+            )
+            .map_err(|e| ContextError::from(e).into())
+    }
 
     /// Executes the unescrow of the NFT in a user account.
     fn unescrow_nft_execute(
         &mut self,
         to_account: &Self::AccountId,
-        port_id: &PortId,
-        channel_id: &ChannelId,
+        _port_id: &PortId,
+        _channel_id: &ChannelId,
         class_id: &PrefixedClassId,
         token_id: &TokenId,
-    ) -> Result<(), NftTransferError>;
+    ) -> Result<(), NftTransferError> {
+        let ibc_token = storage::ibc_token_for_nft(class_id, token_id);
 
-    /// Executes minting of the NFT in a user account.
+        self.inner
+            .borrow_mut()
+            .transfer_token(
+                &IBC_ESCROW_ADDRESS,
+                to_account,
+                &ibc_token,
+                DenominatedAmount::new(1.into(), 0.into()),
+            )
+            .map_err(|e| ContextError::from(e).into())
+    }
+
     fn mint_nft_execute(
         &mut self,
         account: &Self::AccountId,
@@ -247,17 +286,50 @@ where
         token_id: &TokenId,
         token_uri: &TokenUri,
         token_data: &TokenData,
-    ) -> Result<(), NftTransferError>;
+    ) -> Result<(), NftTransferError> {
+        let ibc_token = storage::ibc_token_for_nft(class_id, token_id);
 
-    /// Executes burning of the NFT in a user account.
-    ///
-    /// `memo` field allows to incorporate additional contextual details in the
-    /// burn execution.
+        // create or update the metadata
+        let metadata = NftMetadata {
+            class_id: class_id.clone(),
+            token_id: token_id.clone(),
+            token_uri: token_uri.clone(),
+            token_data: token_data.clone(),
+        };
+        self.inner
+            .borrow_mut()
+            .store_nft_metadata(class_id, token_id, metadata)?;
+
+        self.inner
+            .borrow_mut()
+            .mint_token(
+                account,
+                &ibc_token,
+                DenominatedAmount::new(1.into(), 0.into()),
+            )
+            .map_err(|e| ContextError::from(e).into())
+    }
+
     fn burn_nft_execute(
         &mut self,
         account: &Self::AccountId,
         class_id: &PrefixedClassId,
         token_id: &TokenId,
-        memo: &Memo,
-    ) -> Result<(), NftTransferError>;
+        _memo: &Memo,
+    ) -> Result<(), NftTransferError> {
+        let ibc_token = storage::ibc_token_for_nft(class_id, token_id);
+
+        self.inner
+            .borrow_mut()
+            .delete_nft_metadata(class_id, token_id)?;
+
+        self.inner
+            .borrow_mut()
+            .burn_token(
+                account,
+                &ibc_token,
+                DenominatedAmount::new(1.into(), 0.into()),
+            )
+            .map_err(|e| ContextError::from(e).into())
+    }
 }

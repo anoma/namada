@@ -8,7 +8,8 @@ pub use namada_core::types::ibc::{IbcEvent, IbcShieldedTransfer};
 use namada_core::types::token::DenominatedAmount;
 pub use namada_ibc::storage::is_ibc_key;
 pub use namada_ibc::{
-    IbcActions, IbcCommonContext, IbcStorageContext, ProofSpec, TransferModule,
+    IbcActions, IbcCommonContext, IbcStorageContext, NftTransferModule,
+    ProofSpec, TransferModule,
 };
 use namada_token::denom_to_amount;
 use namada_tx_env::TxEnv;
@@ -20,8 +21,10 @@ use crate::{Ctx, Error};
 pub fn ibc_actions(ctx: &mut Ctx) -> IbcActions<Ctx> {
     let ctx = Rc::new(RefCell::new(ctx.clone()));
     let mut actions = IbcActions::new(ctx.clone());
-    let module = TransferModule::new(ctx);
-    actions.add_transfer_module(module.module_id(), module);
+    let module = TransferModule::new(ctx.clone());
+    actions.add_transfer_module(module);
+    let module = NftTransferModule::new(ctx);
+    actions.add_transfer_module(module);
     actions
 }
 

@@ -24,6 +24,7 @@ mod tests {
     use borsh_ext::BorshSerializeExt;
     use itertools::Itertools;
     use namada::account::pks_handle;
+    use namada::ibc::context::nft_transfer_mod::testing::DummyNftTransferModule;
     use namada::ibc::context::transfer_mod::testing::DummyTransferModule;
     use namada::ibc::primitives::ToProto;
     use namada::ibc::Error as IbcActionError;
@@ -1039,7 +1040,9 @@ mod tests {
         let mut actions = tx_host_env::ibc::ibc_actions(tx::ctx());
         // the dummy module closes the channel
         let dummy_module = DummyTransferModule {};
-        actions.add_transfer_module(dummy_module.module_id(), dummy_module);
+        actions.add_transfer_module(dummy_module);
+        let dummy_module = DummyNftTransferModule {};
+        actions.add_transfer_module(dummy_module);
         actions
             .execute(&tx_data)
             .expect("closing the channel failed");

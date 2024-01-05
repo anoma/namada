@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use std::fmt::Debug;
 use std::rc::Rc;
 
+use namada_core::ibc::apps::transfer::context::TokenTransferValidationContext;
 use namada_core::ibc::apps::transfer::module::{
     on_acknowledgement_packet_execute, on_acknowledgement_packet_validate,
     on_chan_close_confirm_execute, on_chan_close_confirm_validate,
@@ -41,6 +42,12 @@ pub trait ModuleWrapper: Module {
 
     /// Mutable reference of the module
     fn as_module_mut(&mut self) -> &mut dyn Module;
+
+    /// Get the module ID
+    fn module_id(&self) -> ModuleId;
+
+    /// Get the port ID
+    fn port_id(&self) -> PortId;
 }
 
 /// IBC module for token transfer
@@ -63,11 +70,6 @@ where
             ctx: TokenTransferContext::new(ctx),
         }
     }
-
-    /// Get the module ID
-    pub fn module_id(&self) -> ModuleId {
-        ModuleId::new(MODULE_ID_STR.to_string())
-    }
 }
 
 impl<C> ModuleWrapper for TransferModule<C>
@@ -80,6 +82,14 @@ where
 
     fn as_module_mut(&mut self) -> &mut dyn Module {
         self
+    }
+
+    fn module_id(&self) -> ModuleId {
+        ModuleId::new(MODULE_ID_STR.to_string())
+    }
+
+    fn port_id(&self) -> PortId {
+        self.ctx.get_port().expect("The port ID should be set")
     }
 }
 
@@ -334,21 +344,22 @@ fn into_packet_error(error: TokenTransferError) -> PacketError {
 /// Helpers for testing
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
+<<<<<<< HEAD:crates/ibc/src/context/transfer_mod.rs
     use namada_core::ibc::apps::transfer::types::ack_success_b64;
     use namada_core::ibc::core::channel::types::acknowledgement::AcknowledgementStatus;
 
     use super::*;
+=======
+    use std::str::FromStr;
+
+    use super::*;
+    use crate::ibc::apps::transfer::types::{ack_success_b64, PORT_ID_STR};
+    use crate::ibc::core::channel::types::acknowledgement::AcknowledgementStatus;
+>>>>>>> 77a5ca112 (add nft transfer):core/src/ledger/ibc/context/transfer_mod.rs
 
     /// Dummy IBC module for token transfer
     #[derive(Debug)]
     pub struct DummyTransferModule {}
-
-    impl DummyTransferModule {
-        /// Get the module ID
-        pub fn module_id(&self) -> ModuleId {
-            ModuleId::new(MODULE_ID_STR.to_string())
-        }
-    }
 
     impl ModuleWrapper for DummyTransferModule {
         fn as_module(&self) -> &dyn Module {
@@ -357,6 +368,14 @@ pub mod testing {
 
         fn as_module_mut(&mut self) -> &mut dyn Module {
             self
+        }
+
+        fn module_id(&self) -> ModuleId {
+            ModuleId::new(MODULE_ID_STR.to_string())
+        }
+
+        fn port_id(&self) -> PortId {
+            PortId::from_str(PORT_ID_STR).unwrap()
         }
     }
 

@@ -22,7 +22,7 @@ use namada::ibc::core::host::types::identifiers::{
     ClientId, ClientType, ConnectionId, PortId,
 };
 use namada::ibc::primitives::ToProto;
-use namada::ibc::{IbcActions, TransferModule};
+use namada::ibc::{IbcActions, NftTransferModule, TransferModule};
 use namada::ledger::eth_bridge::read_native_erc20_address;
 use namada::ledger::gas::{TxGasMeter, VpGasMeter};
 use namada::ledger::governance::GovernanceVp;
@@ -1179,8 +1179,10 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
         let mut actions = IbcActions::new(ctx.clone());
         actions.set_validation_params(ibc.validation_params().unwrap());
 
-        let module = TransferModule::new(ctx);
-        actions.add_transfer_module(module.module_id(), module);
+        let module = TransferModule::new(ctx.clone());
+        actions.add_transfer_module(module);
+        let module = NftTransferModule::new(ctx);
+        actions.add_transfer_module(module);
 
         group.bench_function(bench_name, |b| {
             b.iter(|| actions.validate(&tx_data).unwrap())
@@ -1277,8 +1279,10 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
         let mut actions = IbcActions::new(ctx.clone());
         actions.set_validation_params(ibc.validation_params().unwrap());
 
-        let module = TransferModule::new(ctx);
-        actions.add_transfer_module(module.module_id(), module);
+        let module = TransferModule::new(ctx.clone());
+        actions.add_transfer_module(module);
+        let module = NftTransferModule::new(ctx);
+        actions.add_transfer_module(module);
 
         group.bench_function(bench_name, |b| {
             b.iter(|| actions.execute(&tx_data).unwrap())

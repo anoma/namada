@@ -12,6 +12,7 @@ use thiserror::Error;
 
 use super::address::{Address, InternalAddress, HASH_LEN};
 use crate::ibc::apps::nft_transfer::context::{NftClassContext, NftContext};
+use crate::ibc::apps::nft_transfer::types::error::NftTransferError;
 use crate::ibc::apps::nft_transfer::types::{
     ClassData, ClassId, ClassUri, PrefixedClassId, TokenData, TokenId, TokenUri,
 };
@@ -251,10 +252,14 @@ pub fn get_shielded_transfer(
         .transpose()
 }
 
+/// NFT class
 #[derive(Clone, Debug)]
 pub struct NftClass {
+    /// NFT class ID
     pub class_id: PrefixedClassId,
+    /// NFT class URI
     pub class_uri: ClassUri,
+    /// NFT class data
     pub class_data: ClassData,
 }
 
@@ -263,8 +268,8 @@ impl BorshSerialize for NftClass {
         &self,
         writer: &mut W,
     ) -> std::io::Result<()> {
-        BorshSerialize::serialize(&self.class_id.to_string(), writer);
-        BorshSerialize::serialize(&self.class_uri.to_string(), writer);
+        BorshSerialize::serialize(&self.class_id.to_string(), writer)?;
+        BorshSerialize::serialize(&self.class_uri.to_string(), writer)?;
         BorshSerialize::serialize(&self.class_data.to_string(), writer)
     }
 }
@@ -277,15 +282,16 @@ impl BorshDeserialize for NftClass {
         let class_id: String = BorshDeserialize::deserialize_reader(reader)?;
         let class_uri: String = BorshDeserialize::deserialize_reader(reader)?;
         let class_data: String = BorshDeserialize::deserialize_reader(reader)?;
-        let class_id = class_id
-            .parse()
-            .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
-        let class_uri = class_uri
-            .parse()
-            .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
-        let class_data = class_data
-            .parse()
-            .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
+        let class_id = class_id.parse().map_err(|e: NftTransferError| {
+            Error::new(ErrorKind::InvalidData, e.to_string())
+        })?;
+        let class_uri = class_uri.parse().map_err(|e: NftTransferError| {
+            Error::new(ErrorKind::InvalidData, e.to_string())
+        })?;
+        let class_data =
+            class_data.parse().map_err(|e: NftTransferError| {
+                Error::new(ErrorKind::InvalidData, e.to_string())
+            })?;
         Ok(Self {
             class_id,
             class_uri,
@@ -308,11 +314,16 @@ impl NftClassContext for NftClass {
     }
 }
 
+/// NFT metadata
 #[derive(Clone, Debug)]
 pub struct NftMetadata {
-    pub class_id: ClassId,
+    /// NFT class ID
+    pub class_id: PrefixedClassId,
+    /// NFT ID
     pub token_id: TokenId,
+    /// NFT URI
     pub token_uri: TokenUri,
+    /// NFT data
     pub token_data: TokenData,
 }
 
@@ -321,9 +332,9 @@ impl BorshSerialize for NftMetadata {
         &self,
         writer: &mut W,
     ) -> std::io::Result<()> {
-        BorshSerialize::serialize(&self.class_id.to_string(), writer);
-        BorshSerialize::serialize(&self.token_id.to_string(), writer);
-        BorshSerialize::serialize(&self.token_uri.to_string(), writer);
+        BorshSerialize::serialize(&self.class_id.to_string(), writer)?;
+        BorshSerialize::serialize(&self.token_id.to_string(), writer)?;
+        BorshSerialize::serialize(&self.token_uri.to_string(), writer)?;
         BorshSerialize::serialize(&self.token_data.to_string(), writer)
     }
 }
@@ -337,18 +348,19 @@ impl BorshDeserialize for NftMetadata {
         let token_id: String = BorshDeserialize::deserialize_reader(reader)?;
         let token_uri: String = BorshDeserialize::deserialize_reader(reader)?;
         let token_data: String = BorshDeserialize::deserialize_reader(reader)?;
-        let class_id = class_id
-            .parse()
-            .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
-        let token_id = token_id
-            .parse()
-            .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
-        let token_uri = token_uri
-            .parse()
-            .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
-        let token_data = token_data
-            .parse()
-            .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
+        let class_id = class_id.parse().map_err(|e: NftTransferError| {
+            Error::new(ErrorKind::InvalidData, e.to_string())
+        })?;
+        let token_id = token_id.parse().map_err(|e: NftTransferError| {
+            Error::new(ErrorKind::InvalidData, e.to_string())
+        })?;
+        let token_uri = token_uri.parse().map_err(|e: NftTransferError| {
+            Error::new(ErrorKind::InvalidData, e.to_string())
+        })?;
+        let token_data =
+            token_data.parse().map_err(|e: NftTransferError| {
+                Error::new(ErrorKind::InvalidData, e.to_string())
+            })?;
         Ok(Self {
             class_id,
             token_id,
@@ -360,7 +372,7 @@ impl BorshDeserialize for NftMetadata {
 
 impl NftContext for NftMetadata {
     fn get_class_id(&self) -> &ClassId {
-        &self.class_id
+        &self.class_id.base_class_id
     }
 
     fn get_id(&self) -> &TokenId {

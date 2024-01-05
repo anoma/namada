@@ -688,7 +688,7 @@ pub trait IbcCommonContext: IbcStorageContext {
 
     /// Store the NFT class
     fn store_nft_class(
-        &self,
+        &mut self,
         class_id: &PrefixedClassId,
         class: NftClass,
     ) -> Result<()> {
@@ -708,7 +708,7 @@ pub trait IbcCommonContext: IbcStorageContext {
 
     /// Store the NFT metadata
     fn store_nft_metadata(
-        &self,
+        &mut self,
         class_id: &PrefixedClassId,
         token_id: &TokenId,
         metadata: NftMetadata,
@@ -717,9 +717,18 @@ pub trait IbcCommonContext: IbcStorageContext {
         self.write(&key, metadata).map_err(ContextError::from)
     }
 
-    /// Validate the NFT balance. If the balance isn't present or 1, returns an
-    /// error.
-    fn is_valid_nft_balance(
+    /// Delete the NFT metadata
+    fn delete_nft_metadata(
+        &mut self,
+        class_id: &PrefixedClassId,
+        token_id: &TokenId,
+    ) -> Result<()> {
+        let key = storage::nft_metadata_key(class_id, token_id);
+        self.delete(&key).map_err(ContextError::from)
+    }
+
+    /// Return true if the NFT is owned by the owner
+    fn is_nft_owned(
         &self,
         class_id: &PrefixedClassId,
         token_id: &TokenId,
