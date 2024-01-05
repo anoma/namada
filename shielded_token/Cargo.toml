@@ -27,3 +27,11 @@ namada_trans_token = { path = "../trans_token" }
 masp_primitives.workspace = true
 rayon = { workspace = true, optional = true }
 tracing.workspace = true
+
+[dev-dependencies]
+namada_core = { path = "../core", features = ["testing"] }
+namada_state = { path = "../state", features = ["testing"] }
+
+proptest.workspace = true
+rayon.workspace = true
+test-log.workspace = true

@@ -488,16 +488,16 @@ mod tests {
 
     use namada_core::types::address;
     use namada_core::types::dec::testing::arb_non_negative_dec;
-    use namada_core::types::testing::arb_amount;
     use namada_core::types::time::DurationSecs;
+    use namada_core::types::token::testing::arb_amount;
     use namada_parameters::{EpochDuration, Parameters};
-    use namada_storage::write_denom;
+    use namada_state::testing::TestWlStorage;
+    use namada_trans_token::{write_denom, Denomination};
     use proptest::prelude::*;
     use proptest::test_runner::Config;
     use test_log::test;
 
     use super::*;
-    use crate::ledger::storage::testing::TestWlStorage;
 
     proptest! {
         #![proptest_config(Config {
@@ -544,10 +544,10 @@ mod tests {
         // Initialize the state
         {
             // Parameters
-            params.init_storage(&mut s).unwrap();
+            namada_parameters::init_storage(&params, &mut s).unwrap();
 
             // Tokens
-            let token_params = Parameters {
+            let token_params = namada_trans_token::Parameters {
                 max_reward_rate: Dec::from_str("0.1").unwrap(),
                 kp_gain_nom: Dec::from_str("0.1").unwrap(),
                 kd_gain_nom: Dec::from_str("0.1").unwrap(),
@@ -555,7 +555,14 @@ mod tests {
             };
 
             for (token_addr, (alias, denom)) in tokens() {
-                token_params.init_storage(&token_addr, &mut s);
+                namada_trans_token::write_params(
+                    &token_params,
+                    &mut s,
+                    &token_addr,
+                )
+                .unwrap();
+                crate::write_params(&token_params, &mut s, &token_addr)
+                    .unwrap();
 
                 write_denom(&mut s, &token_addr, denom).unwrap();
 
