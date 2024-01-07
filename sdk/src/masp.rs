@@ -61,7 +61,7 @@ use namada_core::types::storage::{BlockHeight, Epoch, IndexedTx, TxIndex};
 use namada_core::types::time::{DateTimeUtc, DurationSecs};
 use namada_core::types::token;
 use namada_core::types::token::{Change, MaspDenom, Transfer};
-use namada_core::types::transaction::WrapperTx;
+use namada_core::types::transaction::{TxResult, WrapperTx};
 use rand_core::{CryptoRng, OsRng, RngCore};
 use ripemd::Digest as RipemdDigest;
 use sha2::Digest;
@@ -605,6 +605,7 @@ pub struct ShieldedContext<U: ShieldedUtils> {
     pub last_indexed: IndexedTx,
     /// The commitment tree produced by scanning all transactions up to tx_pos
     pub tree: CommitmentTree<Node>,
+    // FIXME: review these positions, what do they refer to?
     /// Maps viewing keys to applicable note positions
     pub pos_map: HashMap<ViewingKey, BTreeSet<usize>>,
     /// Maps a nullifier to the note position to which it applies
@@ -634,7 +635,10 @@ impl<U: ShieldedUtils + Default> Default for ShieldedContext<U> {
     fn default() -> ShieldedContext<U> {
         ShieldedContext::<U> {
             utils: U::default(),
-            last_indexed: IndexedTx::default(),
+            last_indexed: IndexedTx {
+                height: BlockHeight::first(),
+                index: TxIndex::default(),
+            },
             tree: CommitmentTree::empty(),
             pos_map: HashMap::default(),
             nf_map: HashMap::default(),
@@ -720,6 +724,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let (txs, mut tx_iter);
         if !unknown_keys.is_empty() {
             // Load all transactions accepted until this point
+            eprintln!("FETCHING AGAIN FROM INDEX 0 BECAUSE NEW KEY"); //FIXME: remove
             txs = Self::fetch_shielded_transfers(
                 client,
                 IndexedTx {
@@ -766,8 +771,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
     /// Obtain a chronologically-ordered list of all accepted shielded
     /// transactions from a node.
+    // FIXME: remove all the unwraps, we are in the sdk here
     pub async fn fetch_shielded_transfers<C: Client + Sync>(
         client: &C,
+        // FIXME: just pass the block heigh here? I always query block anyway
+        // FIXME: should probably also cached only the last block height? Yes
         last_indexed_tx: IndexedTx,
     ) -> Result<BTreeMap<IndexedTx, (Epoch, Transfer, Transaction)>, Error>
     {
@@ -776,13 +784,22 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             .await?
             .map_or_else(BlockHeight::first, |block| block.height);
 
+        eprintln!("ABOUT TO REQUEST PAGINATED RESULT"); //FIXME: remove
+        eprintln!("LAST BLOCK HEIGHT: {}", last_block_height); //FIXME: remove
+        eprintln!("LAST INDEXED HEIGHT: {}", last_indexed_tx.height); //FIXME: remove
         let mut shielded_txs = BTreeMap::new();
         // Fetch all the transactions we do not have yet
+        // FIXME: this will actually query another time the already quiered
+        // previous last block height, should probably increase by one here.
+        // Actually, even queryin the same block again shouldn't be a problem
+        // cause I'll simply overwrite the entry in the map in the context
+        // FIXME: the index starts from 1 so I need to check the last indexe
+        // height only in this case, for the other cases I can start from the
+        // following one
         for height in u64::from(last_indexed_tx.height)..=last_block_height.0 {
+            eprintln!("IN HEIGHT {height} LOOP"); //FIXME: remove
             // Get the valid masp transactions at the specified height
             // FIXME: review if we really need extra key for ibc events
-            let tx_query =
-                Query::eq("height", height).and_exists("is_valid_masp_tx");
 
             let epoch = query_epoch_at_height(client, height.into())
                 .await?
@@ -793,228 +810,278 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     )))
                 })?;
 
+            eprintln!("REQUESTING BLOCK AT HEIGHT: {}", height); //FIXME: remove
             // Paginate the results
-            for page in 1.. {
-                let txs_results = client
-                    .tx_search(
-                        tx_query.clone(),
-                        // TODO: currently we are not verifying the merkle
-                        // proof, we should or at least ask a parameter to the
-                        // user ot decide if we want proofs(and their
-                        // verification) or not
-                        false,
-                        page,
-                        100,
-                        Order::Ascending,
-                    )
-                    .await
-                    .map_err(|e| {
-                        Error::from(QueryError::General(e.to_string()))
-                    })?
-                    .txs;
-
-                for result in &txs_results {
-                    let tx_index = TxIndex(result.index);
-                    if BlockHeight(height) == last_indexed_tx.height
-                        && tx_index <= last_indexed_tx.index
-                    {
-                        continue;
-                    }
-                    let tx = Tx::try_from(result.tx.as_ref())
-                        .map_err(|e| Error::Other(e.to_string()))?;
-                    let tx_header = tx.header();
-                    // NOTE: simply looking for masp sections attached to the tx
-                    // is not safe. We don't validate the sections attached to a
-                    // transaction se we could end up with transactions carrying
-                    // an unnecessary masp section. We must instead look for the
-                    // required masp sections in the signed commitments (hashes)
-                    // of the transactions' headers/data sections
-                    if let Some(wrapper_header) = tx_header.wrapper() {
-                        let hash = wrapper_header
-                            .unshield_section_hash
-                            .ok_or_else(|| {
-                                Error::Other(
-                                    "Missing expected fee unshielding section \
-                                     hash"
-                                        .to_string(),
-                                )
-                            })?;
-
-                        let masp_transaction = tx
-                            .get_section(&hash)
-                            .ok_or_else(|| {
-                                Error::Other(
-                                    "Missing expected masp section".to_string(),
-                                )
-                            })?
-                            .masp_tx()
-                            .ok_or_else(|| {
-                                Error::Other(
-                                    "Missing masp transaction".to_string(),
-                                )
-                            })?;
-                        // FIXME: actually, do I realy need the entire transfer
-                        // object? Probably not mayube we can remove
-                        // FIXME: mroe in general. review everything we are
-                        // storing to see if we actually need it
-
-                        // Transfer objects for fee unshielding are absent from
-                        // the tx because they are completely constructed in
-                        // protocol, need to recreate it here
-                        let transfer = Transfer {
-                            source: MASP,
-                            target: wrapper_header.fee_payer(),
-                            token: wrapper_header.fee.token.clone(),
-                            amount: wrapper_header
-                                .get_tx_fee()
-                                .map_err(|e| Error::Other(e.to_string()))?,
-                            key: None,
-                            shielded: Some(hash),
-                        };
-
-                        // Collect the current transaction
-                        shielded_txs.insert(
-                            IndexedTx {
-                                height: height.into(),
-                                index: tx_index,
-                            },
-                            (epoch, transfer, masp_transaction),
-                        );
-                    } else if tx_header.decrypted().is_some() {
-                        let (transfer, masp_transaction) =
-                            match Transfer::try_from_slice(
-                                &tx.data().ok_or_else(|| {
-                                    Error::Other(
-                                        "Missing data section".to_string(),
-                                    )
-                                })?,
-                            ) {
-                                Ok(transfer) => {
-                                    let masp_transaction = tx
-                                        .get_section(
-                                            &transfer.shielded.ok_or_else(
-                                                || {
-                                                    Error::Other(
-                                                        "Missing masp section \
-                                                         hash"
-                                                            .to_string(),
-                                                    )
-                                                },
-                                            )?,
-                                        )
-                                        .ok_or_else(|| {
-                                            Error::Other(
-                                                "Missing masp section in \
-                                                 transaction"
-                                                    .to_string(),
-                                            )
-                                        })?
-                                        .masp_tx()
-                                        .ok_or_else(|| {
-                                            Error::Other(
-                                                "Missing masp transaction"
-                                                    .to_string(),
-                                            )
-                                        })?;
-
-                                    (transfer, masp_transaction)
-                                }
-                                Err(_) => {
-                                    // This should be a MASP over IBC transfer,
-                                    // continue for now, we'll scan the ibc
-                                    // events later
-                                    continue;
-                                }
-                            };
-
-                        // Collect the current transaction
-                        shielded_txs.insert(
-                            IndexedTx {
-                                height: height.into(),
-                                index: tx_index,
-                            },
-                            (epoch, transfer, masp_transaction),
-                        );
-                    }
-                }
-
-                // FIXME: are we already storing masp transactions when we
-                // submit them? In this case I need to make sure we don't
-                // reqrite them from here An incomplete page
-                // signifies no more transactions
-                if txs_results.len() < 100 {
-                    break;
-                }
-            }
-        }
-
-        // Fetch all block events to look for MASP over IBC transactions
-        for height in u64::from(last_indexed_tx.height)..=last_block_height.0 {
-            let epoch = query_epoch_at_height(client, height.into())
-                .await?
-                .ok_or_else(|| {
-                    Error::from(QueryError::General(format!(
-                        "Queried height is greater than the last committed \
-                         block height"
-                    )))
-                })?;
-
-            let events = client
+            // FIXME: I think I'm braking here even before doing the first
+            // transaction, or better I'm livelocking, the ledger runs but the
+            // client never submits transactions FIXME: I get to
+            // here
+            let txs_results = match client
                 .block_results(height)
                 .await
                 .map_err(|e| Error::from(QueryError::General(e.to_string())))?
                 .end_block_events
-                .unwrap_or_default();
-
-            for (ibc_masp_event, tx_index) in
-                events.iter().filter_map(|event| {
-                    if event
-                        .kind
-                        .starts_with(&EventType::Ibc(String::new()).to_string())
-                    {
-                        event
-                            .attributes
-                            .iter()
-                            .find(|attribute| {
+            {
+                // FIXME: imrpove this match
+                Some(events) => events
+                    .into_iter()
+                    .enumerate()
+                    .filter(|(_idx, event)| {
+                        eprintln!("EVENT: {:#?}", event); //FIXME: remove
+                        // FIXME: I also need to save the index in the vec to
+                        // retrieve the tx here
+                        // Filter only the tx events which are valid masp txs
+                        (event.kind == EventType::Accepted.to_string()
+                            || event.kind == EventType::Applied.to_string())
+                            && event.attributes.iter().any(|attribute| {
                                 &attribute.key == "is_valid_masp_tx"
                             })
-                            .map(|tx_index| (event, &tx_index.value))
-                    } else {
-                        None
-                    }
-                })
-            {
-                // FIXME: can we parallelize stuff somewhere when constructing
-                // the internal state of the ShieldeContext?
-                // Masp transaction, collect it
-                let shielded_transfer = ibc_masp_event
+                    })
+                    .collect::<Vec<_>>(),
+                None => {
+                    eprintln!("NO EVENTS IN END BLOCK, CONITNUING"); //FIXME: remove
+                    continue;
+                }
+            };
+
+            eprintln!("BEFORE BLOCK"); //FIXME: remove
+            let block = client
+                .block(height as u32)
+                .await
+                .map_err(|e| Error::from(QueryError::General(e.to_string())))?
+                .block
+                .data;
+
+            // FIXME: but I don't get to here, I must break in between
+            eprintln!("SIZE OF RESPONSE: {}", txs_results.len()); //FIXME: remove
+            // FIXME: seems like we can't find the succesful previous masp
+            // transaction even though it has been flagged
+            // FIXME: I never get here becasuse it seems the result is always
+            // empty
+            for (idx, tx_event) in &txs_results {
+                eprintln!("FOUND TRANSACTION"); //FIXME: remove
+                // FIXME: could I also receive a block height smaller than
+                // the cached one?
+                // FIXME: I think this condition is useless because in case I
+                // just overwrite the entry in the hashmap
+                // if BlockHeight(height) == last_indexed_tx.height
+                //     && tx_index <= last_indexed_tx.index
+                // {
+                //     continue;
+                // }
+
+                let tx = Tx::try_from(block[*idx].as_ref())
+                    .map_err(|e| Error::Other(e.to_string()))?;
+
+                let tx_header = tx.header();
+                // NOTE: simply looking for masp sections attached to the tx
+                // is not safe. We don't validate the sections attached to a
+                // transaction se we could end up with transactions carrying
+                // an unnecessary masp section. We must instead look for the
+                // required masp sections in the signed commitments (hashes)
+                // of the transactions' headers/data sections
+                let (transfer, masp_transaction) = if let Some(wrapper_header) =
+                    tx_header.wrapper()
+                {
+                    eprintln!("FOUND WRAPPER MASP TX"); //FIXME: remove
+                    let hash = wrapper_header
+                        .unshield_section_hash
+                        .ok_or_else(|| {
+                            // FIXME: error here
+                            // FIXME: probably in MockNode I'm getting the
+                            // wrong index
+                            Error::Other(
+                                "Missing expected fee unshielding section hash"
+                                    .to_string(),
+                            )
+                        })?;
+
+                    let masp_transaction = tx
+                        .get_section(&hash)
+                        .ok_or_else(|| {
+                            Error::Other(
+                                "Missing expected masp section".to_string(),
+                            )
+                        })?
+                        .masp_tx()
+                        .ok_or_else(|| {
+                            Error::Other("Missing masp transaction".to_string())
+                        })?;
+                    // FIXME: actually, do I realy need the entire transfer
+                    // object? Probably not mayube we can remove
+
+                    // Transfer objects for fee unshielding are absent from
+                    // the tx because they are completely constructed in
+                    // protocol, need to recreate it here
+                    let transfer = Transfer {
+                        source: MASP,
+                        target: wrapper_header.fee_payer(),
+                        token: wrapper_header.fee.token.clone(),
+                        amount: wrapper_header
+                            .get_tx_fee()
+                            .map_err(|e| Error::Other(e.to_string()))?,
+                        key: None,
+                        shielded: Some(hash),
+                    };
+
+                    (transfer, masp_transaction)
+                } else {
+                    // Expect decrypted transaction
+                    eprintln!("FOUND DECRYPTED MASP TX"); //FIXME: remove
+                    match Transfer::try_from_slice(&tx.data().ok_or_else(
+                        || Error::Other("Missing data section".to_string()),
+                    )?) {
+                        Ok(transfer) => {
+                            let masp_transaction = tx
+                                .get_section(&transfer.shielded.ok_or_else(
+                                    || {
+                                        Error::Other(
+                                            "Missing masp section hash"
+                                                .to_string(),
+                                        )
+                                    },
+                                )?)
+                                .ok_or_else(|| {
+                                    Error::Other(
+                                        "Missing masp section in transaction"
+                                            .to_string(),
+                                    )
+                                })?
+                                .masp_tx()
+                                .ok_or_else(|| {
+                                    Error::Other(
+                                        "Missing masp transaction".to_string(),
+                                    )
+                                })?;
+
+                            (transfer, masp_transaction)
+                        }
+                        Err(_) => {
+                            // This should be a MASP over IBC transaction
+                            let shielded_transfer = tx_event
                     .attributes
                     .iter()
-                    .find(|attribute| &attribute.key == "memo")
-                    .map(|memo| {
-                        IbcShieldedTransfer::try_from(Memo::from(
-                            memo.value.clone(),
-                        ))
-                    });
+                    .find_map(|attribute| {
+                            if attribute.key == "inner_tx" {
+                                                //FIXME: manage unwrap here
+                                              let tx_result = TxResult::from_str(&attribute.value).unwrap();
 
-                if let Some(Ok(shielded_transfer)) = shielded_transfer {
-                    shielded_txs.insert(
-                        IndexedTx {
-                            height: height.into(),
-                            index: TxIndex(
-                                u32::from_str(tx_index)
-                                    .map_err(|e| Error::Other(e.to_string()))?,
-                            ),
-                        },
-                        (
-                            epoch,
-                            shielded_transfer.transfer,
-                            shielded_transfer.masp_tx,
-                        ),
-                    );
-                }
+                                                for ibc_event in tx_result.ibc_events {
+                                                    for (key, value) in ibc_event.attributes {
+                                                        if key == "memo" {
+                                                            return Some(IbcShieldedTransfer::try_from(Memo::from(value)));
+                                                        }
+                                                    }
+                                                }
+                                                None
+                                            } else {None }
+                    }).unwrap().unwrap(); //FIXME:remove these unwraps
+
+                            eprintln!("FOUND IBC MASP EVENT"); //FIXME:remove
+                            (
+                                shielded_transfer.transfer,
+                                shielded_transfer.masp_tx,
+                            )
+                        }
+                    }
+                };
+
+                // Collect the current transaction
+                shielded_txs.insert(
+                    IndexedTx {
+                        height: height.into(),
+                        index: TxIndex(*idx as u32),
+                    },
+                    (epoch, transfer, masp_transaction),
+                );
             }
+
+            // FIXME: are we already storing masp transactions when we
+            // submit them? In this case I need to make sure we don't
+            // reqrite them from here
         }
+
+        // FIXME: we get to here even though we haven't scanned all the blocks!
+        eprintln!("DONE REQUESTING HEIGHT"); //FIXME: remove
+
+        // FIXME: need this thing? I think I'm already marking the tx correctly
+        // FIXME: ah but the issue is that this is not a Transfer object but an
+        // IBC PacketMsg, so I need to derialize diferently FIXME: yes
+        // but the ibc event is already associated with the tx so I can do this
+        // in the previous loop , I don0t need this! Fetch all block
+        // events to look for MASP over IBC transactions for height in
+        // u64::from(last_indexed_tx.height)..=last_block_height.0 {
+        //     let epoch = query_epoch_at_height(client, height.into())
+        //         .await?
+        //         .ok_or_else(|| {
+        //             Error::from(QueryError::General(format!(
+        //                 "Queried height is greater than the last committed \
+        //                  block height"
+        //             )))
+        //         })?;
+
+        //     //FIXME: this has alreaady been queried before, can I reuse?
+        //     let events = client
+        //         .block_results(height)
+        //         .await
+        //         .map_err(|e|
+        // Error::from(QueryError::General(e.to_string())))?
+        //         .end_block_events
+        //         .unwrap_or_default();
+
+        //     for (ibc_masp_event, tx_index) in
+        //         events.iter().filter_map(|event| {
+        //             if event
+        //                 .kind
+        //
+        // .starts_with(&EventType::Ibc(String::new()).to_string())
+        //             {
+        //                 event
+        //                     .attributes
+        //                     .iter()
+        //                     .find(|attribute| {
+        //                         &attribute.key == "is_valid_masp_tx"
+        //                     })
+        //                     .map(|tx_index| (event, &tx_index.value))
+        //             } else {
+        //                 None
+        //             }
+        //         })
+        //     {
+        //         // FIXME: can we parallelize stuff somewhere when
+        // constructing         // the internal state of the
+        // ShieldeContext?         // Masp transaction, collect it
+        //         let shielded_transfer = ibc_masp_event
+        //             .attributes
+        //             .iter()
+        //             .find(|attribute| &attribute.key == "memo")
+        //             .map(|memo| {
+        //                 IbcShieldedTransfer::try_from(Memo::from(
+        //                     memo.value.clone(),
+        //                 ))
+        //             });
+
+        //         if let Some(Ok(shielded_transfer)) = shielded_transfer {
+        //             eprintln!("FOUND IBC MASP EVENT"); //FIXME:remove
+        //             shielded_txs.insert(
+        //                 IndexedTx {
+        //                     height: height.into(),
+        //                     index: TxIndex(
+        //                         u32::from_str(tx_index)
+        //                             .map_err(|e|
+        // Error::Other(e.to_string()))?,                     ),
+        //                 },
+        //                 (
+        //                     epoch,
+        //                     shielded_transfer.transfer,
+        //                     shielded_transfer.masp_tx,
+        //                 ),
+        //             );
+        //         }
+        //     }
+        // }
+
+        // eprintln!("DONE REQUESTING IBC EVENTS"); //FIXME: remove
 
         Ok(shielded_txs)
     }
@@ -1181,8 +1248,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     ) -> Result<Option<MaspAmount>, Error> {
         // Cannot query the balance of a key that's not in the map
         if !self.pos_map.contains_key(vk) {
+            eprintln!("KEY NOT IN MAP"); //FIXME: remove
             return Ok(None);
         }
+        eprintln!("KEY IN MAP"); //FIXME: remove
         let mut val_acc = I128Sum::zero();
         // Retrieve the notes that can be spent by this key
         if let Some(avail_notes) = self.pos_map.get(vk) {
@@ -1595,7 +1664,13 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             })?;
 
         let tx_query = Query::eq("height", indexed_tx.height.to_string())
+            // FIXME: actually this condition seems to be accepted, so I guess I
+            // can query the attribute of the events or the field of the
+            // response of a transaction
+            // FIXME: well it works but in the integration test where the
+            // responses are mocked
             .and_eq("tx.index", indexed_tx.index.to_string());
+        eprintln!("TX SEARCH IN COMPUTE PINNED BALANCE"); //FIXME: remove
         let tx_results = client
             .tx_search(
                 tx_query.clone(),

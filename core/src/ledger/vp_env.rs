@@ -110,7 +110,6 @@ where
 
     /// Get the shielded action including the transfer and the masp tx
     fn get_shielded_action(
-        // FIXME: I need this
         &self,
         tx_data: &Tx,
     ) -> Result<(Transfer, Transaction), storage_api::Error> {

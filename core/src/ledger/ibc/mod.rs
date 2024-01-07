@@ -102,7 +102,6 @@ where
     pub fn execute(&mut self, tx_data: &[u8]) -> Result<(), Error> {
         let message = decode_message(tx_data)?;
         match &message {
-            // FIXME: look here for MASP on IBC
             IbcMessage::Transfer(msg) => {
                 let mut token_transfer_ctx =
                     TokenTransferContext::new(self.ctx.inner.clone());

@@ -1220,7 +1220,6 @@ pub fn is_masp_allowed_key(key: &Key) -> bool {
     match &key.segments[..] {
         [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
             if *addr == MASP
-            //FIXME: place the check back in the masp vp if needed
                 && (key.starts_with(PIN_KEY_PREFIX)
                     || key == MASP_NOTE_COMMITMENT_TREE_KEY) =>
         {
