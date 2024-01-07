@@ -793,10 +793,17 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         // previous last block height, should probably increase by one here.
         // Actually, even queryin the same block again shouldn't be a problem
         // cause I'll simply overwrite the entry in the map in the context
-        // FIXME: the index starts from 1 so I need to check the last indexe
-        // height only in this case, for the other cases I can start from the
-        // following one
-        for height in u64::from(last_indexed_tx.height)..=last_block_height.0 {
+        // FIXME: instead it's apparently a problem, the integratio ntests were
+        // failing becasue of this FIXME: the index starts from 1 so I
+        // need to check the last indexe height only in this case, for
+        // the other cases I can start from the following one
+        // FIXME: refator this if with methods in IndexedTx
+        let first_height_to_query = if last_indexed_tx.height.0 <= 1 {
+            1
+        } else {
+            last_indexed_tx.height.next_height().0
+        };
+        for height in first_height_to_query..=last_block_height.0 {
             eprintln!("IN HEIGHT {height} LOOP"); //FIXME: remove
             // Get the valid masp transactions at the specified height
             // FIXME: review if we really need extra key for ibc events
@@ -827,10 +834,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     .into_iter()
                     .enumerate()
                     .filter(|(_idx, event)| {
-                        eprintln!("EVENT: {:#?}", event); //FIXME: remove
-                        // FIXME: I also need to save the index in the vec to
-                        // retrieve the tx here
+                        // eprintln!("EVENT: {:#?}", event); //FIXME: remove
                         // Filter only the tx events which are valid masp txs
+                        // FIXME: probably no need the condition on the event
+                        // type, it's redundant
                         (event.kind == EventType::Accepted.to_string()
                             || event.kind == EventType::Applied.to_string())
                             && event.attributes.iter().any(|attribute| {
@@ -927,11 +934,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     (transfer, masp_transaction)
                 } else {
                     // Expect decrypted transaction
-                    eprintln!("FOUND DECRYPTED MASP TX"); //FIXME: remove
+                    eprintln!("FOUND DECRYPTED MASP TX AT HEIGHT: {}", height); //FIXME: remove
                     match Transfer::try_from_slice(&tx.data().ok_or_else(
                         || Error::Other("Missing data section".to_string()),
                     )?) {
                         Ok(transfer) => {
+                            eprintln!("DECRYPTED TX: {:#?}", transfer); //FIXME: remove
                             let masp_transaction = tx
                                 .get_section(&transfer.shielded.ok_or_else(
                                     || {
@@ -1646,6 +1654,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             }
         }
         // Construct the key for where the transaction ID would be stored
+        // FIXME: should index the tx hash, not the block and height? Yes it's
+        // faster to query, less data
         let pin_key = namada_core::types::token::masp_pin_tx_key(&owner.hash());
         // Obtain the transaction pointer at the key
         // If we don't discard the error message then a test fails,
@@ -1663,40 +1673,15 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 )))
             })?;
 
-        let tx_query = Query::eq("height", indexed_tx.height.to_string())
-            // FIXME: actually this condition seems to be accepted, so I guess I
-            // can query the attribute of the events or the field of the
-            // response of a transaction
-            // FIXME: well it works but in the integration test where the
-            // responses are mocked
-            .and_eq("tx.index", indexed_tx.index.to_string());
-        eprintln!("TX SEARCH IN COMPUTE PINNED BALANCE"); //FIXME: remove
-        let tx_results = client
-            .tx_search(
-                tx_query.clone(),
-                // TODO: currently we are not verifying the merkle
-                // proof, we should or at least ask a parameter to the
-                // user ot decide if we want proofs(and their
-                // verification) or not
-                false,
-                1,
-                100,
-                Order::Ascending,
-            )
+        let block = client
+            .block(indexed_tx.height.0 as u32)
             .await
             .map_err(|e| Error::from(QueryError::General(e.to_string())))?
-            .txs;
+            .block
+            .data;
 
-        let tx = Tx::try_from(
-            tx_results
-                .first()
-                .ok_or_else(|| {
-                    Error::Other("Missing expected pinned masp tx".to_string())
-                })?
-                .tx
-                .as_ref(),
-        )
-        .map_err(|e| Error::Other(e.to_string()))?;
+        let tx = Tx::try_from(block[indexed_tx.index.0 as usize].as_ref())
+            .map_err(|e| Error::Other(e.to_string()))?;
 
         let shielded =
             match Transfer::try_from_slice(&tx.data().ok_or_else(|| {
@@ -1716,7 +1701,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                         Error::Other("Missing masp transaction".to_string())
                     })?,
                 Err(_) => {
-                    // FIXME: add support for pinned ibc masp txs
+                    // FIXME: add support for pinned ibc masp txs?
                     // FIXME: probably need to review also how we do it in
                     // fewtch_shielded_transfer
                     return Err(Error::Other("IBC Masp pinned tx".to_string()));

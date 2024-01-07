@@ -34,11 +34,12 @@ use namada::types::control_flow::time::Duration;
 use namada::types::ethereum_events::EthereumEvent;
 use namada::types::hash::Hash;
 use namada::types::key::tm_consensus_key_raw_hash;
-use namada::types::storage::{BlockHash, BlockHeight, Epoch, Header, TxIndex};
+use namada::types::storage::{BlockHash, BlockHeight, Epoch, Header};
 use namada::types::time::DateTimeUtc;
-use namada_sdk::proto::Tx;
 use namada_sdk::queries::Client;
 use regex::Regex;
+use tendermint_rpc::endpoint::block;
+use tendermint_rpc::Response;
 use tokio::sync::mpsc;
 
 use crate::facade::tendermint_proto::v0_37::abci::{
@@ -249,9 +250,7 @@ pub struct MockNode {
     pub test_dir: ManuallyDrop<TestDir>,
     pub keep_temp: bool,
     pub results: Arc<Mutex<Vec<NodeResults>>>,
-    #[allow(clippy::type_complexity)]
-    pub valid_masp_txs:
-        Arc<Mutex<HashMap<BlockHeight, HashMap<TxIndex, Vec<u8>>>>>,
+    pub blocks: Arc<Mutex<HashMap<BlockHeight, block::Response>>>,
     pub services: Arc<MockServices>,
     pub auto_drive_services: bool,
 }
@@ -402,44 +401,90 @@ impl MockNode {
         let (proposer_address, votes) = self.prepare_request();
 
         let mut locked = self.shell.lock().unwrap();
+        let height = locked
+            .wl_storage
+            .storage
+            .get_last_block_height()
+            .next_height();
 
-        // build finalize block abci request
-        let req = {
-            // check if we have protocol txs to be included
-            // in the finalize block request
-            let txs = {
-                let req = RequestPrepareProposal {
-                    proposer_address: proposer_address.clone().into(),
-                    ..Default::default()
-                };
-                let txs = locked.prepare_proposal(req).txs;
-
-                txs.into_iter()
-                    .map(|tx| ProcessedTx {
-                        tx,
-                        result: TxResult {
-                            code: 0,
-                            info: String::new(),
-                        },
-                    })
-                    .collect()
+        // check if we have protocol txs to be included
+        // in the finalize block request
+        let txs: Vec<ProcessedTx> = {
+            let req = RequestPrepareProposal {
+                proposer_address: proposer_address.clone().into(),
+                ..Default::default()
             };
-            FinalizeBlock {
-                hash: BlockHash([0u8; 32]),
-                header: Header {
-                    hash: Hash([0; 32]),
-                    time: DateTimeUtc::now(),
-                    next_validators_hash: Hash([0; 32]),
-                },
-                byzantine_validators: vec![],
-                txs,
-                proposer_address,
-                votes,
-            }
+            let txs = locked.prepare_proposal(req).txs;
+
+            txs.into_iter()
+                .map(|tx| ProcessedTx {
+                    tx,
+                    result: TxResult {
+                        code: 0,
+                        info: String::new(),
+                    },
+                })
+                .collect()
+        };
+        // build finalize block abci request
+        let req = FinalizeBlock {
+            hash: BlockHash([0u8; 32]),
+            header: Header {
+                hash: Hash([0; 32]),
+                time: DateTimeUtc::now(),
+                next_validators_hash: Hash([0; 32]),
+            },
+            byzantine_validators: vec![],
+            txs: txs.clone(),
+            proposer_address,
+            votes,
         };
 
         locked.finalize_block(req).expect("Test failed");
         locked.commit();
+
+        // Cache the block
+        self.blocks.lock().unwrap().insert(
+            height,
+            block::Response {
+                block_id: tendermint::block::Id {
+                    hash: tendermint::Hash::None,
+                    part_set_header: tendermint::block::parts::Header::default(
+                    ),
+                },
+                block: tendermint::block::Block::new(
+                    tendermint::block::Header {
+                        version: tendermint::block::header::Version {
+                            block: 0,
+                            app: 0,
+                        },
+                        chain_id: locked
+                            .chain_id
+                            .to_string()
+                            .try_into()
+                            .unwrap(),
+                        height: 1u32.into(),
+                        time: tendermint::Time::now(),
+                        last_block_id: None,
+                        last_commit_hash: None,
+                        data_hash: None,
+                        validators_hash: tendermint::Hash::None,
+                        next_validators_hash: tendermint::Hash::None,
+                        consensus_hash: tendermint::Hash::None,
+                        app_hash: tendermint::AppHash::default(),
+                        last_results_hash: None,
+                        evidence_hash: None,
+                        proposer_address: tendermint::account::Id::new(
+                            [0u8; 20],
+                        ),
+                    },
+                    txs.into_iter().map(|tx| tx.tx.to_vec()).collect(),
+                    tendermint::evidence::List::default(),
+                    None,
+                )
+                .unwrap(),
+            },
+        );
     }
 
     /// Advance to a block height that allows
@@ -470,6 +515,11 @@ impl MockNode {
             ..Default::default()
         };
         let mut locked = self.shell.lock().unwrap();
+        let height = locked
+            .wl_storage
+            .storage
+            .get_last_block_height()
+            .next_height();
         let (result, tx_results) = locked.process_proposal(req);
 
         let mut errors: Vec<_> = tx_results
@@ -511,7 +561,6 @@ impl MockNode {
 
         // process the results
         let resp = locked.finalize_block(req).unwrap();
-        let height = locked.wl_storage.storage.get_block_height().0;
         let mut error_codes = resp
             .events
             .into_iter()
@@ -524,47 +573,6 @@ impl MockNode {
                 )
                 .unwrap();
                 if code == ResultCode::Ok {
-                    if e.attributes.get("is_valid_masp_tx").is_some() {
-                        // Cache if it was a masp transaction for future queries
-                        // It's either:
-                        //    - Wrapper tx with fee unshielding
-                        //    - Decrypted masp tx
-                        // NOTE: ignoring masp over ibc for now
-                        let tx_hash = e.attributes.get("hash").unwrap();
-                        let idx = txs
-                            .iter()
-                            .position(|bytes| {
-                                let mut tx =
-                                    Tx::try_from(bytes.as_ref()).unwrap();
-                                let current_tx_hash =
-                                    if tx.header().decrypted().is_some() {
-                                        tx.update_header(
-                                        namada::types::transaction::TxType::Raw,
-                                    );
-                                        tx.header_hash()
-                                    } else {
-                                        tx.header_hash()
-                                    };
-
-                                &current_tx_hash.to_string() == tx_hash
-                            })
-                            .unwrap();
-                        self.valid_masp_txs
-                            .lock()
-                            .unwrap()
-                            .entry(height)
-                            .and_modify(|list| {
-                                let _ = list.insert(
-                                    TxIndex(idx as u32),
-                                    txs[idx].clone(),
-                                );
-                            })
-                            .or_insert(
-                                vec![(TxIndex(idx as u32), txs[idx].clone())]
-                                    .into_iter()
-                                    .collect(),
-                            );
-                    }
                     NodeResults::Ok
                 } else {
                     NodeResults::Failed(code)
@@ -572,6 +580,47 @@ impl MockNode {
             })
             .collect::<Vec<_>>();
         self.results.lock().unwrap().append(&mut error_codes);
+        self.blocks.lock().unwrap().insert(
+            height,
+            block::Response {
+                block_id: tendermint::block::Id {
+                    hash: tendermint::Hash::None,
+                    part_set_header: tendermint::block::parts::Header::default(
+                    ),
+                },
+                block: tendermint::block::Block::new(
+                    tendermint::block::Header {
+                        version: tendermint::block::header::Version {
+                            block: 0,
+                            app: 0,
+                        },
+                        chain_id: locked
+                            .chain_id
+                            .to_string()
+                            .try_into()
+                            .unwrap(),
+                        height: 1u32.into(),
+                        time: tendermint::Time::now(),
+                        last_block_id: None,
+                        last_commit_hash: None,
+                        data_hash: None,
+                        validators_hash: tendermint::Hash::None,
+                        next_validators_hash: tendermint::Hash::None,
+                        consensus_hash: tendermint::Hash::None,
+                        app_hash: tendermint::AppHash::default(),
+                        last_results_hash: None,
+                        evidence_hash: None,
+                        proposer_address: tendermint::account::Id::new(
+                            [0u8; 20],
+                        ),
+                    },
+                    txs,
+                    tendermint::evidence::List::default(),
+                    None,
+                )
+                .unwrap(),
+            },
+        );
         locked.commit();
     }
 
@@ -654,12 +703,55 @@ impl<'a> Client for &'a MockNode {
 
     async fn perform<R>(
         &self,
-        _request: R,
+        request: R,
     ) -> std::result::Result<R::Output, RpcError>
     where
         R: SimpleRequest,
     {
-        unreachable!()
+        self.drive_mock_services_bg().await;
+        // NOTE: atm this is only needed to query blocks at a specific height
+        match request.method() {
+            tendermint_rpc::Method::Block => {
+                let request_str = request.into_json();
+                const QUERY_PARSING_REGEX_STR: &str = r#".*"height": "(.)+".*"#;
+
+                lazy_static! {
+                    /// Compiled regular expression used to parse queries.
+                    static ref QUERY_PARSING_REGEX: Regex = Regex::new(QUERY_PARSING_REGEX_STR).unwrap();
+                }
+
+                let captures =
+                    QUERY_PARSING_REGEX.captures(&request_str).unwrap();
+                let mut height_str = captures
+                    .get(0)
+                    .unwrap()
+                    .as_str()
+                    .rsplit(':')
+                    .next()
+                    .unwrap()
+                    .to_owned();
+                height_str.retain(|c| !(c.is_whitespace() || c == '"'));
+                let height = BlockHeight::from_str(&height_str).unwrap();
+
+                match self.blocks.lock().unwrap().get(&height) {
+                    Some(block) => {
+                        let wrapper =
+                            tendermint_rpc::response::Wrapper::new_with_id(
+                                tendermint_rpc::Id::None,
+                                Some(block),
+                                None,
+                            );
+
+                        let response = serde_json::to_string(&wrapper).unwrap();
+                        R::Response::from_string(response).map(Into::into)
+                    }
+                    None => Err(RpcError::invalid_params(format!(
+                        "Could not find block height {height}"
+                    ))),
+                }
+            }
+            _ => unimplemented!(),
+        }
     }
 
     /// `/abci_info`: get information about the ABCI application.
@@ -820,9 +912,11 @@ impl<'a> Client for &'a MockNode {
         let events: Vec<_> = locked
             .event_log()
             .iter()
-            .enumerate()
-            .flat_map(|(index, event)| {
-                if index == encoded_event.log_index() {
+            .flat_map(|event| {
+                if usize::from_str(event.attributes.get("height").unwrap())
+                    .unwrap()
+                    == encoded_event.log_index()
+                {
                     Some(event)
                 } else {
                     None
@@ -842,7 +936,6 @@ impl<'a> Client for &'a MockNode {
             })
             .collect();
         let has_events = !events.is_empty();
-
         Ok(tendermint_rpc::endpoint::block_results::Response {
             height,
             txs_results: None,
@@ -858,67 +951,16 @@ impl<'a> Client for &'a MockNode {
     /// `/tx_search`: search for transactions with their results.
     async fn tx_search(
         &self,
-        query: namada::tendermint_rpc::query::Query,
+        _query: namada::tendermint_rpc::query::Query,
         _prove: bool,
         _page: u32,
         _per_page: u8,
         _order: namada::tendermint_rpc::Order,
     ) -> Result<tendermint_rpc::endpoint::tx_search::Response, RpcError> {
-        // NOTE: atm, this is only needed by the client to query masp txs, so we
-        // pretend all requests are for masp transactions
-        self.drive_mock_services_bg().await;
-        let (block_height, tx_index) = parse_masp_tx_search_query(query);
-        match self.valid_masp_txs.lock().unwrap().get(&block_height) {
-            Some(response) => {
-                if let Some(ref idx) = tx_index {
-                    let tx = response
-                        .get(idx)
-                        .expect("Missing expected indexed transaction")
-                        .to_owned();
-
-                    let txs =
-                        vec![namada::tendermint_rpc::endpoint::tx::Response {
-                            hash: namada::tendermint::Hash::Sha256([0u8; 32]),
-                            height: (block_height.0 as u32).into(),
-                            index: idx.0,
-                            tx_result: Default::default(),
-                            tx,
-                            proof: None,
-                        }];
-
-                    Ok(namada::tendermint_rpc::endpoint::tx_search::Response {
-                        txs,
-                        total_count: 1,
-                    })
-                } else {
-                    let total_count = response.len() as u32;
-                    let txs = response
-                        .iter()
-                        .map(|(idx, bytes)| {
-                            namada::tendermint_rpc::endpoint::tx::Response {
-                                hash: namada::tendermint::Hash::Sha256(
-                                    [0u8; 32],
-                                ),
-                                height: (block_height.0 as u32).into(),
-                                index: idx.0,
-                                tx_result: Default::default(),
-                                tx: bytes.to_owned(),
-                                proof: None,
-                            }
-                        })
-                        .collect::<Vec<_>>();
-
-                    Ok(namada::tendermint_rpc::endpoint::tx_search::Response {
-                        txs,
-                        total_count,
-                    })
-                }
-            }
-            None => Ok(namada::tendermint_rpc::endpoint::tx_search::Response {
-                txs: vec![],
-                total_count: 0,
-            }),
-        }
+        // In the past, some cli commands for masp called this. However, these
+        // commands are not currently supported, so we do not need to fill
+        // in this function for now.
+        unreachable!()
     }
 
     /// `/health`: get node health.
@@ -955,52 +997,6 @@ fn parse_tm_query(
         ),
         _ => unreachable!("We only query accepted or applied txs"),
     }
-}
-
-// Parse a tx_search query expecting it to require block height (and optionally
-// an index) for unfetched masp txs
-fn parse_masp_tx_search_query(
-    query: namada::tendermint_rpc::query::Query,
-) -> (BlockHeight, Option<TxIndex>) {
-    // height = 0 AND is_valid_masp_tx EXISTS
-    let height = query
-        .conditions
-        .iter()
-        .find(|condition| condition.key == "height")
-        .expect("Block height is required in tx_search");
-    let idx = query
-        .conditions
-        .iter()
-        .find(|condition| condition.key == "tx.index");
-
-    let index = idx.map(|idx| {
-        if let namada::tendermint_rpc::query::Operation::Eq(
-            namada::tendermint_rpc::query::Operand::String(ref index),
-        ) = idx.operation
-        {
-            TxIndex(u32::from_str(index).unwrap())
-        } else {
-            unreachable!("Missing expected tx index");
-        }
-    });
-
-    if let namada::tendermint_rpc::query::Operation::Eq(
-        namada::tendermint_rpc::query::Operand::Unsigned(block_height),
-    ) = height.operation
-    {
-        return (block_height.into(), index);
-    } else if let namada::tendermint_rpc::query::Operation::Eq(
-        namada::tendermint_rpc::query::Operand::String(ref block_height),
-    ) = height.operation
-    {
-        return (BlockHeight(u64::from_str(block_height).unwrap()), index);
-    } else {
-    }
-
-    unreachable!(
-        "We only query txs based on the height of their blocks and possibly \
-         an index"
-    )
 }
 
 /// A Namada event log index and event type encoded as

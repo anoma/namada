@@ -191,7 +191,7 @@ fn create_node(
         keep_temp,
         services: Arc::new(services),
         results: Arc::new(Mutex::new(vec![])),
-        valid_masp_txs: Arc::new(Mutex::new(HashMap::new())),
+        blocks: Arc::new(Mutex::new(HashMap::new())),
         auto_drive_services,
     };
     let init_req =
