@@ -344,10 +344,10 @@ fn validate_pos_changes(
 mod tests {
     use address::testing::arb_non_internal_address;
     use namada::ledger::pos::{GenesisValidator, PosParams};
-    use namada::proto::{Code, Data, Signature};
+    use namada::tx::data::{self, TxType};
+    use namada::tx::{Code, Data, Signature};
     use namada::types::dec::Dec;
     use namada::types::storage::Epoch;
-    use namada::types::transaction::{self, TxType};
     use namada_test_utils::TestWasms;
     // Use this as `#[test]` annotation to enable logging
     use namada_tests::log::test;
@@ -398,7 +398,7 @@ mod tests {
         // able to transfer from it
         tx_env.credit_tokens(&source, &token, amount);
         // write the denomination of NAM into storage
-        storage_api::token::write_denom(
+        token::write_denom(
             &mut tx_env.wl_storage,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -449,7 +449,7 @@ mod tests {
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner, &target, &token]);
         // write the denomination of NAM into storage
-        storage_api::token::write_denom(
+        token::write_denom(
             &mut tx_env.wl_storage,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -511,7 +511,7 @@ mod tests {
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, amount);
         // write the denomination of NAM into storage
-        storage_api::token::write_denom(
+        token::write_denom(
             &mut tx_env.wl_storage,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -604,7 +604,7 @@ mod tests {
         tx_env.spawn_accounts([&target, &token]);
         tx_env.init_account_storage(&vp_owner, vec![public_key], 1);
         // write the denomination of NAM into storage
-        storage_api::token::write_denom(
+        token::write_denom(
             &mut tx_env.wl_storage,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -694,7 +694,7 @@ mod tests {
                     .ref_to();
             let commission_rate = Dec::new(5, 2).unwrap();
             let max_commission_rate_change = Dec::new(1, 2).unwrap();
-            let args = transaction::pos::BecomeValidator {
+            let args = data::pos::BecomeValidator {
                 address: address.clone(),
                 consensus_key,
                 eth_cold_key,
@@ -767,7 +767,7 @@ mod tests {
         tx_env.spawn_accounts([&target, &token]);
         tx_env.init_account_storage(&validator, vec![public_key], 1);
         // write the denomination of NAM into storage
-        storage_api::token::write_denom(
+        token::write_denom(
             &mut tx_env.wl_storage,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -863,7 +863,7 @@ mod tests {
         tx_env.init_account_storage(&vp_owner, vec![public_key.clone()], 1);
 
         // write the denomination of NAM into storage
-        storage_api::token::write_denom(
+        token::write_denom(
             &mut tx_env.wl_storage,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -963,7 +963,7 @@ mod tests {
                     .ref_to();
             let commission_rate = Dec::new(5, 2).unwrap();
             let max_commission_rate_change = Dec::new(1, 2).unwrap();
-            let args = transaction::pos::BecomeValidator {
+            let args = data::pos::BecomeValidator {
                 address: address.clone(),
                 consensus_key,
                 eth_cold_key,
@@ -1051,7 +1051,7 @@ mod tests {
         tx_env.init_account_storage(&validator, vec![public_key.clone()], 1);
 
         // write the denomination of NAM into storage
-        storage_api::token::write_denom(
+        token::write_denom(
             &mut tx_env.wl_storage,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),

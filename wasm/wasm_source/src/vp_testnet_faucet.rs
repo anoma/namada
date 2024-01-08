@@ -42,8 +42,7 @@ fn validate_tx(
                 let post: token::Amount =
                     ctx.read_post(key)?.unwrap_or_default();
                 let change = post.change() - pre.change();
-                let maybe_denom =
-                    storage_api::token::read_denom(&ctx.pre(), token)?;
+                let maybe_denom = token::read_denom(&ctx.pre(), token)?;
                 if maybe_denom.is_none() {
                     debug_log!(
                         "A denomination for token address {} does not exist \
@@ -108,7 +107,7 @@ fn validate_tx(
 #[cfg(test)]
 mod tests {
     use address::testing::arb_non_internal_address;
-    use namada::proto::{Code, Data, Signature};
+    use namada::tx::{Code, Data, Signature};
     use namada::types::transaction::TxType;
     use namada_test_utils::TestWasms;
     // Use this as `#[test]` annotation to enable logging
@@ -118,8 +117,8 @@ mod tests {
     use namada_tests::vp::*;
     use namada_tx_prelude::{StorageWrite, TxEnv};
     use namada_vp_prelude::account::AccountPublicKeysMap;
-    use namada_vp_prelude::borsh_ext::BorshSerializeExt;
     use namada_vp_prelude::key::RefTo;
+    use namada_vp_prelude::BorshSerializeExt;
     use proptest::prelude::*;
     use storage::testing::arb_account_storage_key_no_vp;
 
@@ -275,14 +274,10 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(validate_tx(
-            &CTX,
-            signed_tx,
-            vp_owner,
-            keys_changed,
-            verifiers
-        )
-        .unwrap());
+        assert!(
+            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
+                .unwrap()
+        );
     }
 
     prop_compose! {
@@ -372,7 +367,7 @@ mod tests {
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, amount);
         // write the denomination of NAM into storage
-        storage_api::token::write_denom(&mut tx_env.wl_storage, &token, token::NATIVE_MAX_DECIMAL_PLACES.into()).unwrap();
+        token::write_denom(&mut tx_env.wl_storage, &token, token::NATIVE_MAX_DECIMAL_PLACES.into()).unwrap();
         tx_env.commit_genesis();
 
         // Construct a PoW solution like a client would
