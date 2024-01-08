@@ -38,7 +38,7 @@ pub use namada_storage::{
 pub use namada_tx::{Section, Tx};
 use namada_vm_env::vp::*;
 use namada_vm_env::{read_from_buffer, read_key_val_bytes_from_buffer};
-pub use namada_vp_env::VpEnv;
+pub use namada_vp_env::{collection_validation, VpEnv};
 pub use sha2::{Digest, Sha256, Sha384, Sha512};
 pub use {
     namada_account as account, namada_parameters as parameters,

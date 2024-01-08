@@ -7,20 +7,19 @@ use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::storage::testing::TestStorage;
 use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{Sha256Hasher, WlStorage};
-use namada::proto::Tx;
+pub use namada::tx::data::TxType;
+use namada::tx::Tx;
 use namada::types::address::Address;
 use namada::types::hash::Hash;
 use namada::types::storage::{Key, TxIndex};
 use namada::types::time::DurationSecs;
-pub use namada::types::transaction::TxType;
-use namada::types::{key, token};
 use namada::vm::prefix_iter::PrefixIterators;
 use namada::vm::wasm::run::Error;
 use namada::vm::wasm::{self, TxCache, VpCache};
 use namada::vm::{self, WasmCacheRwAccess};
-use namada_tx_prelude::borsh_ext::BorshSerializeExt;
+use namada::{account, token};
 use namada_tx_prelude::transaction::TxSentinel;
-use namada_tx_prelude::{storage_api, Ctx};
+use namada_tx_prelude::{BorshSerializeExt, Ctx};
 use namada_vp_prelude::key::common;
 use tempfile::TempDir;
 
@@ -172,7 +171,7 @@ impl TestTxEnv {
         public_keys: Vec<common::PublicKey>,
         threshold: u8,
     ) {
-        storage_api::account::init_account_storage(
+        account::init_account_storage(
             &mut self.wl_storage,
             owner,
             &public_keys,
@@ -187,7 +186,7 @@ impl TestTxEnv {
         address: &Address,
         threshold: u8,
     ) {
-        let storage_key = key::threshold_key(address);
+        let storage_key = account::threshold_key(address);
         self.wl_storage
             .storage
             .write(&storage_key, threshold.serialize_to_vec())
@@ -217,7 +216,7 @@ impl TestTxEnv {
         token: &Address,
         amount: token::Amount,
     ) {
-        let storage_key = token::balance_key(token, target);
+        let storage_key = token::storage_key::balance_key(token, target);
         self.wl_storage
             .storage
             .write(&storage_key, amount.serialize_to_vec())

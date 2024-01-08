@@ -15,10 +15,10 @@ use escargot::CargoBuild;
 use eyre::eyre;
 use namada::ledger::queries::{Rpc, RPC};
 use namada::tendermint_rpc::HttpClient;
+use namada::token;
 use namada::types::address::Address;
 use namada::types::key::*;
 use namada::types::storage::Epoch;
-use namada::types::token;
 use namada_apps::config::genesis::chain::DeriveEstablishedAddress;
 use namada_apps::config::genesis::templates;
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
@@ -136,7 +136,7 @@ pub fn find_balance(
     owner: &Address,
 ) -> Result<token::Amount> {
     let ledger_address = get_actor_rpc(test, node);
-    let balance_key = token::balance_key(token, owner);
+    let balance_key = token::storage_key::balance_key(token, owner);
     let mut bytes = run!(
         test,
         Bin::Client,

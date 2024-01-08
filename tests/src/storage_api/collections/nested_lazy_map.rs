@@ -6,13 +6,12 @@ mod tests {
     use borsh::{BorshDeserialize, BorshSerialize};
     use namada::types::address::{self, Address};
     use namada::types::storage;
-    use namada_tx_prelude::storage::KeySeg;
-    use namada_tx_prelude::storage_api::collections::lazy_map::{
+    use namada_tx_prelude::collections::lazy_map::{
         NestedMap, NestedSubKey, SubKey,
     };
-    use namada_tx_prelude::storage_api::collections::{
-        lazy_map, LazyCollection, LazyMap,
-    };
+    use namada_tx_prelude::collections::{LazyCollection, LazyMap};
+    use namada_tx_prelude::storage::KeySeg;
+    use namada_vp_prelude::collection_validation::{self, LazyCollectionExt};
     use proptest::prelude::*;
     use proptest::test_runner::Config;
     use proptest_state_machine::{
@@ -523,8 +522,8 @@ mod tests {
                 let current_transitions =
                     normalize_transitions(&self.current_transitions);
                 for transition in &current_transitions {
-                    use lazy_map::Action;
-                    use lazy_map::NestedAction::At;
+                    use collection_validation::lazy_map::Action;
+                    use collection_validation::lazy_map::NestedAction::At;
 
                     match transition {
                         Transition::CommitTx | Transition::CommitTxAndBlock => {

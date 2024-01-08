@@ -57,7 +57,7 @@ use namada::ledger::ibc::storage::*;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::queries::RPC;
 use namada::ledger::storage::ics23_specs::ibc_proof_specs;
-use namada::ledger::storage::traits::Sha256Hasher;
+use namada::state::Sha256Hasher;
 use namada::tendermint::abci::Event as AbciEvent;
 use namada::tendermint::block::Height as TmHeight;
 use namada::types::address::{Address, InternalAddress};

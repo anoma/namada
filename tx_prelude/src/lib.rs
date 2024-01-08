@@ -36,8 +36,8 @@ pub use namada_governance::storage as gov_storage;
 pub use namada_macros::transaction;
 pub use namada_parameters::storage as parameters_storage;
 pub use namada_storage::{
-    iter_prefix, iter_prefix_bytes, Error, OptionExt, ResultExt, StorageRead,
-    StorageWrite,
+    collections, iter_prefix, iter_prefix_bytes, Error, OptionExt, ResultExt,
+    StorageRead, StorageWrite,
 };
 pub use namada_tx::{data as transaction, Section, Tx};
 pub use namada_tx_env::TxEnv;

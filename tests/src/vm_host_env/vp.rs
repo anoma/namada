@@ -1,18 +1,18 @@
 use std::collections::BTreeSet;
 
+use namada::gas::TxGasMeter;
 use namada::ledger::gas::VpGasMeter;
 use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::storage::testing::TestStorage;
 use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{Sha256Hasher, WlStorage};
-use namada::proto::Tx;
+use namada::tx::data::TxType;
+use namada::tx::Tx;
 use namada::types::address::{self, Address};
 use namada::types::storage::{self, Key, TxIndex};
-use namada::types::transaction::TxType;
 use namada::vm::prefix_iter::PrefixIterators;
 use namada::vm::wasm::{self, VpCache};
 use namada::vm::{self, WasmCacheRwAccess};
-use namada_core::ledger::gas::TxGasMeter;
 use namada_tx_prelude::validity_predicate::VpSentinel;
 use namada_vp_prelude::Ctx;
 use tempfile::TempDir;
@@ -116,7 +116,7 @@ mod native_vp_host_env {
 
     // TODO replace with `std::concat_idents` once stabilized (https://github.com/rust-lang/rust/issues/29599)
     use concat_idents::concat_idents;
-    use namada::ledger::storage::traits::Sha256Hasher;
+    use namada::state::Sha256Hasher;
     use namada::vm::host_env::*;
     use namada::vm::WasmCacheRwAccess;
 

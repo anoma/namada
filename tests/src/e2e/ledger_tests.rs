@@ -20,15 +20,15 @@ use borsh_ext::BorshSerializeExt;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use data_encoding::HEXLOWER;
+use namada::governance::cli::onchain::{
+    PgfFunding, PgfFundingTarget, StewardsUpdate,
+};
+use namada::token;
 use namada::types::address::Address;
 use namada::types::storage::Epoch;
-use namada::types::token;
 use namada_apps::config::ethereum_bridge;
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
-use namada_core::ledger::governance::cli::onchain::{
-    PgfFunding, PgfFundingTarget, StewardsUpdate,
-};
 use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_sdk::masp::fs::FsShieldedUtils;
 use namada_test_utils::TestWasms;
@@ -659,7 +659,8 @@ fn ledger_txs_and_queries() -> Result<()> {
     // as setup in `genesis/e2e-tests-single-node.toml`
     let christel_balance = token::Amount::native_whole(2000000);
     let nam = find_address(&test, NAM)?;
-    let storage_key = token::balance_key(&nam, &christel).to_string();
+    let storage_key =
+        token::storage_key::balance_key(&nam, &christel).to_string();
     let query_args_and_expected_response = vec![
         // 8. Query storage key and get hex-encoded raw bytes
         (
