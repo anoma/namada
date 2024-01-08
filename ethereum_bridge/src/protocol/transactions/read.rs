@@ -54,7 +54,7 @@ where
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
-    use borsh_ext::BorshSerializeExt;
+    use namada_core::borsh::BorshSerializeExt;
     use namada_core::types::storage;
     use namada_core::types::token::Amount;
     use namada_state::testing::TestWlStorage;

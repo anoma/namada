@@ -1,6 +1,6 @@
 //! Helpers for writing to storage
-use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::Result;
+use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::types::hash::StorageHasher;
 use namada_core::types::storage;
 use namada_core::types::token::Amount;
@@ -42,12 +42,13 @@ where
 
 #[cfg(test)]
 mod tests {
-    use borsh::BorshDeserialize;
-    use borsh_ext::BorshSerializeExt;
     use eyre::{eyre, Result};
+    use namada_core::borsh::BorshSerializeExt;
     use namada_core::types::storage;
     use namada_state::testing::TestWlStorage;
     use namada_storage::{StorageRead, StorageWrite};
+
+    use super::*;
 
     #[test]
     /// Test updating a value

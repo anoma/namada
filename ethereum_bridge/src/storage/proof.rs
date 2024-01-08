@@ -123,9 +123,9 @@ mod test_ethbridge_proofs {
     //! Test ethereum bridge proofs.
 
     use assert_matches::assert_matches;
-    use namada_core::proto::Signed;
     use namada_core::types::ethereum_events::EthAddress;
     use namada_core::types::key;
+    use namada_tx::Signed;
 
     use super::*;
 

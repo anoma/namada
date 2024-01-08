@@ -300,8 +300,6 @@ mod tests {
     use std::collections::{BTreeSet, HashMap, HashSet};
 
     use borsh::BorshDeserialize;
-    use namada_core::ledger::storage::mockdb::MockDBWriteBatch;
-    use namada_state::testing::TestWlStorage;
     use namada_core::types::address;
     use namada_core::types::ethereum_events::testing::{
         arbitrary_amount, arbitrary_eth_address, arbitrary_nonce,
@@ -310,8 +308,9 @@ mod tests {
     use namada_core::types::ethereum_events::{
         EthereumEvent, TransferToNamada,
     };
-    use namada_core::types::token::{balance_key, minted_balance_key};
     use namada_core::types::voting_power::FractionalVotingPower;
+    use namada_state::testing::TestWlStorage;
+    use namada_storage::mockdb::MockDBWriteBatch;
     use namada_storage::StorageRead;
 
     use super::*;
@@ -321,6 +320,7 @@ mod tests {
     };
     use crate::storage::wrapped_erc20s;
     use crate::test_utils;
+    use crate::token::storage_key::{balance_key, minted_balance_key};
 
     /// All kinds of [`Keys`].
     enum KeyKind {

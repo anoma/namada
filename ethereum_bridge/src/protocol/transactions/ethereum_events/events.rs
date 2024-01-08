@@ -19,7 +19,6 @@ use namada_core::types::ethereum_events::{
 };
 use namada_core::types::ethereum_structs::EthBridgeEvent;
 use namada_core::types::storage::{BlockHeight, Key, KeySeg};
-use namada_core::types::token;
 use namada_parameters::read_epoch_duration_parameter;
 use namada_state::{DBIter, StorageHasher, WlStorage, DB};
 use namada_storage::{StorageRead, StorageWrite};
@@ -32,6 +31,7 @@ use crate::storage::bridge_pool::{
 use crate::storage::eth_bridge_queries::{EthAssetMint, EthBridgeQueries};
 use crate::storage::parameters::read_native_erc20_address;
 use crate::storage::{self as bridge_storage};
+use crate::token;
 
 /// Updates storage based on the given confirmed `event`. For example, for a
 /// confirmed [`EthereumEvent::TransfersToNamada`], mint the corresponding
@@ -580,10 +580,8 @@ mod tests {
     use std::collections::HashMap;
 
     use assert_matches::assert_matches;
-    use borsh_ext::BorshSerializeExt;
     use eyre::Result;
-    use namada_core::ledger::storage::mockdb::MockDBWriteBatch;
-    use namada_core::ledger::storage::types::encode;
+    use namada_core::borsh::BorshSerializeExt;
     use namada_core::types::address::testing::gen_implicit_address;
     use namada_core::types::address::{gen_established_address, nam, wnam};
     use namada_core::types::eth_bridge_pool::GasFee;
@@ -592,12 +590,14 @@ mod tests {
     };
     use namada_core::types::time::DurationSecs;
     use namada_core::types::token::Amount;
-    use namada_core::types::{address, eth_bridge_pool};
+    use namada_core::types::{address, encode, eth_bridge_pool};
     use namada_parameters::{update_epoch_parameter, EpochDuration};
     use namada_state::testing::TestWlStorage;
+    use namada_storage::mockdb::MockDBWriteBatch;
 
     use super::*;
     use crate::storage::bridge_pool::get_pending_key;
+    use crate::storage::wrapped_erc20s;
     use crate::test_utils::{self, stored_keys_count};
 
     fn init_storage(wl_storage: &mut TestWlStorage) {
@@ -1251,8 +1251,10 @@ mod tests {
         let amount = Amount::from(100);
 
         // pre wNAM balance - 0
-        let receiver_wnam_balance_key =
-            token::balance_key(&wrapped_erc20s::token(&wnam()), &receiver);
+        let receiver_wnam_balance_key = token::storage_key::balance_key(
+            &wrapped_erc20s::token(&wnam()),
+            &receiver,
+        );
         assert!(
             wl_storage
                 .read_bytes(&receiver_wnam_balance_key)
@@ -1261,10 +1263,11 @@ mod tests {
         );
 
         let bridge_pool_initial_balance = Amount::from(100_000_000);
-        let bridge_pool_native_token_balance_key = token::balance_key(
-            &wl_storage.storage.native_token,
-            &BRIDGE_ADDRESS,
-        );
+        let bridge_pool_native_token_balance_key =
+            token::storage_key::balance_key(
+                &wl_storage.storage.native_token,
+                &BRIDGE_ADDRESS,
+            );
         let bridge_pool_native_erc20_supply_key =
             minted_balance_key(&wrapped_erc20s::token(&wnam()));
         StorageWrite::write(
@@ -1277,8 +1280,10 @@ mod tests {
             &bridge_pool_native_erc20_supply_key,
             amount,
         )?;
-        let receiver_native_token_balance_key =
-            token::balance_key(&wl_storage.storage.native_token, &receiver);
+        let receiver_native_token_balance_key = token::storage_key::balance_key(
+            &wl_storage.storage.native_token,
+            &receiver,
+        );
 
         let changed_keys =
             redeem_native_token(&mut wl_storage, &wnam(), &receiver, &amount)?;

@@ -1,8 +1,8 @@
 //! Parameters for configuring the Ethereum bridge
 use std::num::NonZeroU64;
 
-use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::{eyre, Result};
+use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::storage::Key;
 use namada_core::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
@@ -367,8 +367,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use borsh_ext::BorshSerializeExt;
     use eyre::Result;
+    use namada_core::borsh::BorshSerializeExt;
     use namada_core::types::ethereum_events::EthAddress;
     use namada_state::testing::TestWlStorage;
 

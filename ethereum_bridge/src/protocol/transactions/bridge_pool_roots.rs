@@ -225,7 +225,6 @@ mod test_apply_bp_roots_to_storage {
 
     use assert_matches::assert_matches;
     use borsh::BorshDeserialize;
-    use namada_core::proto::{SignableEthMessage, Signed};
     use namada_core::types::address;
     use namada_core::types::ethereum_events::Uint;
     use namada_core::types::keccak::{keccak_hash, KeccakHash};
@@ -235,6 +234,7 @@ mod test_apply_bp_roots_to_storage {
     use namada_proof_of_stake::storage::write_pos_params;
     use namada_state::testing::TestWlStorage;
     use namada_storage::StorageRead;
+    use namada_tx::{SignableEthMessage, Signed};
     use namada_vote_ext::bridge_pool_roots;
 
     use super::*;

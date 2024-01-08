@@ -2,7 +2,9 @@
 
 use eyre::eyre;
 use namada_core::types::address::{Address, InternalAddress};
-use namada_core::types::eth_bridge_pool::erc20_token_address;
+pub use namada_core::types::eth_bridge_pool::{
+    erc20_nut_address as nut, erc20_token_address as token,
+};
 use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::storage::{self, DbKeySeg};
 use namada_trans_token::storage_key::{
@@ -32,7 +34,7 @@ pub struct Key {
 
 impl From<&Key> for storage::Key {
     fn from(mt_key: &Key) -> Self {
-        let token = erc20_token_address(&mt_key.asset);
+        let token = token(&mt_key.asset);
         match &mt_key.suffix {
             KeyType::Balance { owner } => balance_key(&token, owner),
             KeyType::Supply => minted_balance_key(&token),
@@ -107,13 +109,14 @@ mod test {
     use std::result::Result;
     use std::str::FromStr;
 
+    use assert_matches::assert_matches;
     use namada_core::types::address::{nam, Address};
     use namada_core::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
     use namada_core::types::storage::DbKeySeg;
-    use namada_core::types::token::BALANCE_STORAGE_KEY;
 
     use super::*;
-    use crate::ledger::eth_bridge::ADDRESS;
+    use crate::token::storage_key::BALANCE_STORAGE_KEY;
+    use crate::ADDRESS;
 
     const MULTITOKEN_ADDRESS: Address =
         Address::Internal(InternalAddress::Multitoken);
