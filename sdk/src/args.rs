@@ -1493,6 +1493,54 @@ impl<C: NamadaTypes> MetaDataChange<C> {
             ..self
         }
     }
+
+    /// New validator email
+    pub fn email(self, email: String) -> Self {
+        Self {
+            email: Some(email),
+            ..self
+        }
+    }
+
+    /// New validator description
+    pub fn description(self, description: String) -> Self {
+        Self {
+            description: Some(description),
+            ..self
+        }
+    }
+
+    /// New validator website
+    pub fn website(self, website: String) -> Self {
+        Self {
+            website: Some(website),
+            ..self
+        }
+    }
+
+    /// New validator discord handle
+    pub fn discord_handle(self, discord_handle: String) -> Self {
+        Self {
+            discord_handle: Some(discord_handle),
+            ..self
+        }
+    }
+
+    /// New validator avatar url
+    pub fn avatar(self, avatar: String) -> Self {
+        Self {
+            avatar: Some(avatar),
+            ..self
+        }
+    }
+
+    /// New validator commission rate
+    pub fn commission_rate(self, commission_rate: Dec) -> Self {
+        Self {
+            commission_rate: Some(commission_rate),
+            ..self
+        }
+    }
 }
 
 impl MetaDataChange {
