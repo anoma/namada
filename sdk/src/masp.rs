@@ -50,9 +50,8 @@ use masp_proofs::bellman::groth16::PreparedVerifyingKey;
 use masp_proofs::bls12_381::Bls12;
 use masp_proofs::prover::LocalTxProver;
 use masp_proofs::sapling::SaplingVerificationContext;
-use namada_core::ibc::apps::transfer::types::Memo;
+use namada_core::ledger::ibc::IbcMessage;
 use namada_core::types::address::{Address, MASP};
-use namada_core::types::ibc::IbcShieldedTransfer;
 use namada_core::types::masp::{
     BalanceOwner, ExtendedViewingKey, PaymentAddress, TransferSource,
     TransferTarget,
@@ -780,10 +779,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             let epoch = query_epoch_at_height(client, height.into())
                 .await?
                 .ok_or_else(|| {
-                    Error::from(QueryError::General(format!(
+                    Error::from(QueryError::General(
                         "Queried height is greater than the last committed \
                          block height"
-                    )))
+                            .to_string(),
+                    ))
                 })?;
 
             let txs_results = match client
@@ -894,9 +894,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     (transfer, masp_transaction)
                 } else {
                     // Expect decrypted transaction
-                    match Transfer::try_from_slice(&tx.data().ok_or_else(
-                        || Error::Other("Missing data section".to_string()),
-                    )?) {
+                    let tx_data = tx.data().ok_or_else(|| {
+                        Error::Other("Missing data section".to_string())
+                    })?;
+                    match Transfer::try_from_slice(&tx_data) {
                         Ok(transfer) => {
                             let masp_transaction = tx
                                 .get_section(&transfer.shielded.ok_or_else(
@@ -923,24 +924,43 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                             (transfer, masp_transaction)
                         }
                         Err(_) => {
-                            // This should be a MASP over IBC transaction
-                            let shielded_transfer = tx_event
-                    .attributes
-                    .iter()
-                    .find_map(|attribute| {
-                            if attribute.key == "inner_tx" {
-                                              let tx_result = TxResult::from_str(&attribute.value).unwrap();
+                            // This should be a MASP over IBC transaction, it
+                            // could be a ShieldedTransfer or an Envelop
+                            // message, need to try both
+                            let message =
+                                namada_core::ledger::ibc::decode_message(
+                                    &tx_data,
+                                )
+                                .map_err(|e| Error::Other(e.to_string()))?;
 
-                                                for ibc_event in tx_result.ibc_events {
-                                                    for (key, value) in ibc_event.attributes {
-                                                        if key == "memo" {
-                                                            return Some(IbcShieldedTransfer::try_from(Memo::from(value)));
-                                                        }
+                            let shielded_transfer = match message {
+                                IbcMessage::ShieldedTransfer(msg) => {
+                                    msg.shielded_transfer
+                                }
+                                IbcMessage::Envelope(_) => {
+                                    tx_event
+                                        .attributes
+                                        .iter()
+                                        .find_map(|attribute| {
+                                            if attribute.key == "inner_tx" {
+                                                let tx_result = TxResult::from_str(&attribute.value).unwrap();
+                                                for ibc_event in &tx_result.ibc_events {
+
+                                                let event = namada_core::types::ibc::get_shielded_transfer(ibc_event).ok().flatten();
+                                                    if event.is_some() {
+                                                        return event;
                                                     }
-                                                }
+                                                 }
+                                                 None
+                                            } else {
                                                 None
-                                            } else {None }
-                    }).ok_or_else(|| Error::Other("Missing expected memo field in IBC over MASP transaction".to_string()))?.map_err(|e| Error::Other(e.to_string()))?;
+                                            }
+                                    }).ok_or_else(|| Error::Other("Couldn't deserialize masp tx to ibc message envelope".to_string()))?
+                                }
+                                _ => {
+                                    return Err(Error::Other("Couldn't deserialize masp tx to a valid ibc message".to_string()));
+                                }
+                            };
 
                             (
                                 shielded_transfer.transfer,
@@ -1535,10 +1555,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let tx_epoch = query_epoch_at_height(client, indexed_tx.height)
             .await?
             .ok_or_else(|| {
-                Error::from(QueryError::General(format!(
+                Error::from(QueryError::General(
                     "Queried height is greater than the last committed block \
                      height"
-                )))
+                        .to_string(),
+                ))
             })?;
 
         let block = client
