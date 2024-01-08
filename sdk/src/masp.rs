@@ -775,7 +775,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             last_indexed_tx.map_or_else(|| 0, |last| last.index.0 + 1);
         for height in first_height_to_query..=last_block_height.0 {
             // Get the valid masp transactions at the specified height
-
             let epoch = query_epoch_at_height(client, height.into())
                 .await?
                 .ok_or_else(|| {
@@ -786,48 +785,21 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     ))
                 })?;
 
-            let txs_results = match client
-                .block_results(height)
-                .await
-                .map_err(|e| Error::from(QueryError::General(e.to_string())))?
-                .end_block_events
-            {
-                Some(events) => events
-                    .into_iter()
-                    .filter_map(|event| {
-                        // Filter only the tx events which are valid masp txs
-                        // and that we haven't fetched yet
-                        let tx_index =
-                            event.attributes.iter().find_map(|attribute| {
-                                if attribute.key == "is_valid_masp_tx" {
-                                    Some(TxIndex(
-                                        u32::from_str(&attribute.value)
-                                            .unwrap(),
-                                    ))
-                                } else {
-                                    None
-                                }
-                            });
+            let first_index_to_query = if height == first_height_to_query {
+                Some(TxIndex(first_idx_to_query))
+            } else {
+                None
+            };
 
-                        match tx_index {
-                            Some(idx) => {
-                                if height == first_height_to_query {
-                                    if idx.0 >= first_idx_to_query {
-                                        Some((idx, event))
-                                    } else {
-                                        None
-                                    }
-                                } else {
-                                    Some((idx, event))
-                                }
-                            }
-                            None => None,
-                        }
-                    })
-                    .collect::<Vec<_>>(),
-                None => {
-                    continue;
-                }
+            let txs_results = match get_indexed_masp_events_at_height(
+                client,
+                height.into(),
+                first_index_to_query,
+            )
+            .await?
+            {
+                Some(events) => events,
+                None => continue,
             };
 
             // Query the actual block to get the txs bytes. If we only need one
@@ -1546,8 +1518,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         // Obtain the transaction pointer at the key
         // If we don't discard the error message then a test fails,
         // however the error underlying this will go undetected
-        // FIXME: we could index the comet tx hash here so that we could just
-        // query it via a single rpc call to the /tx endpoint
         let indexed_tx =
             rpc::query_storage_value::<C, IndexedTx>(client, &pin_key)
                 .await
@@ -1572,29 +1542,79 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let tx = Tx::try_from(block[indexed_tx.index.0 as usize].as_ref())
             .map_err(|e| Error::Other(e.to_string()))?;
 
-        let shielded =
-            match Transfer::try_from_slice(&tx.data().ok_or_else(|| {
-                Error::Other("Missing data section".to_string())
-            })?) {
-                Ok(transfer) => tx
-                    .get_section(&transfer.shielded.ok_or_else(|| {
-                        Error::Other("Missing masp section hash".to_string())
-                    })?)
-                    .ok_or_else(|| {
-                        Error::Other(
-                            "Missing masp section in transaction".to_string(),
+        let tx_data = tx
+            .data()
+            .ok_or_else(|| Error::Other("Missing data section".to_string()))?;
+        let shielded = match Transfer::try_from_slice(&tx_data) {
+            Ok(transfer) => tx
+                .get_section(&transfer.shielded.ok_or_else(|| {
+                    Error::Other("Missing masp section hash".to_string())
+                })?)
+                .ok_or_else(|| {
+                    Error::Other(
+                        "Missing masp section in transaction".to_string(),
+                    )
+                })?
+                .masp_tx()
+                .ok_or_else(|| {
+                    Error::Other("Missing masp transaction".to_string())
+                })?,
+            Err(_) => {
+                // Try Masp over IBC
+
+                let message =
+                    namada_core::ledger::ibc::decode_message(&tx_data)
+                        .map_err(|e| Error::Other(e.to_string()))?;
+
+                let shielded_transfer = match message {
+                    IbcMessage::ShieldedTransfer(msg) => msg.shielded_transfer,
+                    IbcMessage::Envelope(_) => {
+                        // Need the tx event to extract the memo. The result is
+                        // in the first index of the collection
+                        let tx_events = get_indexed_masp_events_at_height(
+                            client,
+                            indexed_tx.height,
+                            Some(indexed_tx.index),
                         )
-                    })?
-                    .masp_tx()
-                    .ok_or_else(|| {
-                        Error::Other("Missing masp transaction".to_string())
-                    })?,
-                Err(_) => {
-                    // FIXME: add support for pinned ibc masp txs, but I need to
-                    // query tx to do this
-                    return Err(Error::Other("IBC Masp pinned tx".to_string()));
-                }
-            };
+                        .await?
+                        .ok_or_else(|| {
+                            Error::Other(format!(
+                                "Missing required ibc event at block height {}",
+                                indexed_tx.height
+                            ))
+                        })?;
+
+                        tx_events[0].1
+                            .attributes
+                                        .iter()
+                                        .find_map(|attribute| {
+                                            if attribute.key == "inner_tx" {
+                                                let tx_result = TxResult::from_str(&attribute.value).unwrap();
+                                                for ibc_event in &tx_result.ibc_events {
+
+                                                let event = namada_core::types::ibc::get_shielded_transfer(ibc_event).ok().flatten();
+                                                    if event.is_some() {
+                                                        return event;
+                                                    }
+                                                 }
+                                                 None
+                                            } else {
+                                                None
+                                            }
+                                    }).ok_or_else(|| Error::Other("Couldn't deserialize masp tx to ibc message envelope".to_string()))?
+                    }
+                    _ => {
+                        return Err(Error::Other(
+                            "Couldn't deserialize masp tx to a valid ibc \
+                             message"
+                                .to_string(),
+                        ));
+                    }
+                };
+
+                shielded_transfer.masp_tx
+            }
+        };
 
         // Accumulate the combined output note value into this Amount
         let mut val_acc = I128Sum::zero();
@@ -2269,6 +2289,51 @@ fn convert_amount(
         .try_into()
         .map_err(|_| Error::Other(format!("This can't fail: {}", line!())))?;
     Ok((asset_types, amount))
+}
+
+// Retrieves all the indexes and tx events at the specified height which refer
+// to a valid masp transaction. If an index is given, it filters only the
+// transactions with an index equal or greater to the provided one.
+async fn get_indexed_masp_events_at_height<C: Client + Sync>(
+    client: &C,
+    height: BlockHeight,
+    first_idx_to_query: Option<TxIndex>,
+) -> Result<Option<Vec<(TxIndex, crate::tendermint::abci::Event)>>, Error> {
+    let first_idx_to_query = first_idx_to_query.unwrap_or_default();
+
+    Ok(client
+        .block_results(height)
+        .await
+        .map_err(|e| Error::from(QueryError::General(e.to_string())))?
+        .end_block_events
+        .map(|events| {
+            events
+                .into_iter()
+                .filter_map(|event| {
+                    let tx_index =
+                        event.attributes.iter().find_map(|attribute| {
+                            if attribute.key == "is_valid_masp_tx" {
+                                Some(TxIndex(
+                                    u32::from_str(&attribute.value).unwrap(),
+                                ))
+                            } else {
+                                None
+                            }
+                        });
+
+                    match tx_index {
+                        Some(idx) => {
+                            if idx >= first_idx_to_query {
+                                Some((idx, event))
+                            } else {
+                                None
+                            }
+                        }
+                        None => None,
+                    }
+                })
+                .collect::<Vec<_>>()
+        }))
 }
 
 mod tests {

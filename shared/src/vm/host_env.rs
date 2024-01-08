@@ -113,7 +113,6 @@ where
     pub tx: HostRef<'a, &'a Tx>,
     /// The transaction index is used to identify a shielded transaction's
     /// parent
-    // FIXME: still need this?
     pub tx_index: HostRef<'a, &'a TxIndex>,
     /// The verifiers whose validity predicates should be triggered.
     pub verifiers: MutHostRef<'a, &'a BTreeSet<Address>>,
@@ -276,7 +275,6 @@ where
     pub tx: HostRef<'a, &'a Tx>,
     /// The transaction index is used to identify a shielded transaction's
     /// parent
-    // FIXME: still need this?
     pub tx_index: HostRef<'a, &'a TxIndex>,
     /// The runner of the [`vp_eval`] function
     pub eval_runner: HostRef<'a, &'a EVAL>,
