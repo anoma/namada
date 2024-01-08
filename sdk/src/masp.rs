@@ -70,7 +70,6 @@ use thiserror::Error;
 #[cfg(feature = "testing")]
 use crate::error::EncodingError;
 use crate::error::{Error, PinnedBalanceError, QueryError};
-use crate::events::EventType;
 use crate::io::Io;
 use crate::proto::Tx;
 use crate::queries::Client;
@@ -602,10 +601,9 @@ pub struct ShieldedContext<U: ShieldedUtils> {
     #[borsh(skip)]
     pub utils: U,
     /// The last indexed transaction to be processed in this context
-    pub last_indexed: IndexedTx,
+    pub last_indexed: Option<IndexedTx>,
     /// The commitment tree produced by scanning all transactions up to tx_pos
     pub tree: CommitmentTree<Node>,
-    // FIXME: review these positions, what do they refer to?
     /// Maps viewing keys to applicable note positions
     pub pos_map: HashMap<ViewingKey, BTreeSet<usize>>,
     /// Maps a nullifier to the note position to which it applies
@@ -635,10 +633,7 @@ impl<U: ShieldedUtils + Default> Default for ShieldedContext<U> {
     fn default() -> ShieldedContext<U> {
         ShieldedContext::<U> {
             utils: U::default(),
-            last_indexed: IndexedTx {
-                height: BlockHeight::first(),
-                index: TxIndex::default(),
-            },
+            last_indexed: None,
             tree: CommitmentTree::empty(),
             pos_map: HashMap::default(),
             nf_map: HashMap::default(),
@@ -725,14 +720,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         if !unknown_keys.is_empty() {
             // Load all transactions accepted until this point
             eprintln!("FETCHING AGAIN FROM INDEX 0 BECAUSE NEW KEY"); //FIXME: remove
-            txs = Self::fetch_shielded_transfers(
-                client,
-                IndexedTx {
-                    height: BlockHeight::first(),
-                    index: TxIndex::default(),
-                },
-            )
-            .await?;
+            txs = Self::fetch_shielded_transfers(client, None).await?;
             tx_iter = txs.iter();
             // Do this by constructing a shielding context only for unknown keys
             let mut tx_ctx = Self {
@@ -774,9 +762,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     // FIXME: remove all the unwraps, we are in the sdk here
     pub async fn fetch_shielded_transfers<C: Client + Sync>(
         client: &C,
-        // FIXME: just pass the block heigh here? I always query block anyway
-        // FIXME: should probably also cached only the last block height? Yes
-        last_indexed_tx: IndexedTx,
+        last_indexed_tx: Option<IndexedTx>,
     ) -> Result<BTreeMap<IndexedTx, (Epoch, Transfer, Transaction)>, Error>
     {
         // Query for the last produced block height
@@ -786,27 +772,16 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
         eprintln!("ABOUT TO REQUEST PAGINATED RESULT"); //FIXME: remove
         eprintln!("LAST BLOCK HEIGHT: {}", last_block_height); //FIXME: remove
-        eprintln!("LAST INDEXED HEIGHT: {}", last_indexed_tx.height); //FIXME: remove
+        eprintln!("LAST INDEXED HEIGHT: {:#?}", last_indexed_tx); //FIXME: remove
         let mut shielded_txs = BTreeMap::new();
         // Fetch all the transactions we do not have yet
-        // FIXME: this will actually query another time the already quiered
-        // previous last block height, should probably increase by one here.
-        // Actually, even queryin the same block again shouldn't be a problem
-        // cause I'll simply overwrite the entry in the map in the context
-        // FIXME: instead it's apparently a problem, the integratio ntests were
-        // failing becasue of this FIXME: the index starts from 1 so I
-        // need to check the last indexe height only in this case, for
-        // the other cases I can start from the following one
-        // FIXME: refator this if with methods in IndexedTx
-        let first_height_to_query = if last_indexed_tx.height.0 <= 1 {
-            1
-        } else {
-            last_indexed_tx.height.next_height().0
-        };
+        let first_height_to_query =
+            last_indexed_tx.map_or_else(|| 1, |last| last.height.0);
+        let first_idx_to_query =
+            last_indexed_tx.map_or_else(|| 0, |last| last.index.0 + 1);
         for height in first_height_to_query..=last_block_height.0 {
             eprintln!("IN HEIGHT {height} LOOP"); //FIXME: remove
             // Get the valid masp transactions at the specified height
-            // FIXME: review if we really need extra key for ibc events
 
             let epoch = query_epoch_at_height(client, height.into())
                 .await?
@@ -818,11 +793,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 })?;
 
             eprintln!("REQUESTING BLOCK AT HEIGHT: {}", height); //FIXME: remove
-            // Paginate the results
-            // FIXME: I think I'm braking here even before doing the first
-            // transaction, or better I'm livelocking, the ledger runs but the
-            // client never submits transactions FIXME: I get to
-            // here
             let txs_results = match client
                 .block_results(height)
                 .await
@@ -832,17 +802,36 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 // FIXME: imrpove this match
                 Some(events) => events
                     .into_iter()
-                    .enumerate()
-                    .filter(|(_idx, event)| {
-                        // eprintln!("EVENT: {:#?}", event); //FIXME: remove
+                    .filter_map(|event| {
                         // Filter only the tx events which are valid masp txs
-                        // FIXME: probably no need the condition on the event
-                        // type, it's redundant
-                        (event.kind == EventType::Accepted.to_string()
-                            || event.kind == EventType::Applied.to_string())
-                            && event.attributes.iter().any(|attribute| {
-                                &attribute.key == "is_valid_masp_tx"
-                            })
+                        // and that we haven't fetched yet
+                        let tx_index =
+                            event.attributes.iter().find_map(|attribute| {
+                                if attribute.key == "is_valid_masp_tx" {
+                                    Some(TxIndex(
+                                        // FIXME: ok to unwrap here?
+                                        u32::from_str(&attribute.value)
+                                            .unwrap(),
+                                    ))
+                                } else {
+                                    None
+                                }
+                            });
+
+                        match tx_index {
+                            Some(idx) => {
+                                if height == first_height_to_query {
+                                    if idx.0 >= first_idx_to_query {
+                                        Some((idx, event))
+                                    } else {
+                                        None
+                                    }
+                                } else {
+                                    Some((idx, event))
+                                }
+                            }
+                            None => None,
+                        }
                     })
                     .collect::<Vec<_>>(),
                 None => {
@@ -852,6 +841,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             };
 
             eprintln!("BEFORE BLOCK"); //FIXME: remove
+            // Query the actual block to get the txs bytes. If we only need one
+            // tx it might be slightly better to query the /tx endpoint to
+            // reduce the amount of data sent over the network, but this is a
+            // minimal improvement and it's even hard to tell how many times
+            // we'd need a single masp tx to make this worth it
             let block = client
                 .block(height as u32)
                 .await
@@ -859,25 +853,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 .block
                 .data;
 
-            // FIXME: but I don't get to here, I must break in between
             eprintln!("SIZE OF RESPONSE: {}", txs_results.len()); //FIXME: remove
-            // FIXME: seems like we can't find the succesful previous masp
-            // transaction even though it has been flagged
-            // FIXME: I never get here becasuse it seems the result is always
-            // empty
-            for (idx, tx_event) in &txs_results {
-                eprintln!("FOUND TRANSACTION"); //FIXME: remove
-                // FIXME: could I also receive a block height smaller than
-                // the cached one?
-                // FIXME: I think this condition is useless because in case I
-                // just overwrite the entry in the hashmap
-                // if BlockHeight(height) == last_indexed_tx.height
-                //     && tx_index <= last_indexed_tx.index
-                // {
-                //     continue;
-                // }
-
-                let tx = Tx::try_from(block[*idx].as_ref())
+            for (idx, tx_event) in txs_results {
+                let tx = Tx::try_from(block[idx.0 as usize].as_ref())
                     .map_err(|e| Error::Other(e.to_string()))?;
 
                 let tx_header = tx.header();
@@ -894,9 +872,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     let hash = wrapper_header
                         .unshield_section_hash
                         .ok_or_else(|| {
-                            // FIXME: error here
-                            // FIXME: probably in MockNode I'm getting the
-                            // wrong index
                             Error::Other(
                                 "Missing expected fee unshielding section hash"
                                     .to_string(),
@@ -914,8 +889,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                         .ok_or_else(|| {
                             Error::Other("Missing masp transaction".to_string())
                         })?;
-                    // FIXME: actually, do I realy need the entire transfer
-                    // object? Probably not mayube we can remove
 
                     // Transfer objects for fee unshielding are absent from
                     // the tx because they are completely constructed in
@@ -998,98 +971,14 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 shielded_txs.insert(
                     IndexedTx {
                         height: height.into(),
-                        index: TxIndex(*idx as u32),
+                        index: idx,
                     },
                     (epoch, transfer, masp_transaction),
                 );
             }
-
-            // FIXME: are we already storing masp transactions when we
-            // submit them? In this case I need to make sure we don't
-            // reqrite them from here
         }
 
-        // FIXME: we get to here even though we haven't scanned all the blocks!
         eprintln!("DONE REQUESTING HEIGHT"); //FIXME: remove
-
-        // FIXME: need this thing? I think I'm already marking the tx correctly
-        // FIXME: ah but the issue is that this is not a Transfer object but an
-        // IBC PacketMsg, so I need to derialize diferently FIXME: yes
-        // but the ibc event is already associated with the tx so I can do this
-        // in the previous loop , I don0t need this! Fetch all block
-        // events to look for MASP over IBC transactions for height in
-        // u64::from(last_indexed_tx.height)..=last_block_height.0 {
-        //     let epoch = query_epoch_at_height(client, height.into())
-        //         .await?
-        //         .ok_or_else(|| {
-        //             Error::from(QueryError::General(format!(
-        //                 "Queried height is greater than the last committed \
-        //                  block height"
-        //             )))
-        //         })?;
-
-        //     //FIXME: this has alreaady been queried before, can I reuse?
-        //     let events = client
-        //         .block_results(height)
-        //         .await
-        //         .map_err(|e|
-        // Error::from(QueryError::General(e.to_string())))?
-        //         .end_block_events
-        //         .unwrap_or_default();
-
-        //     for (ibc_masp_event, tx_index) in
-        //         events.iter().filter_map(|event| {
-        //             if event
-        //                 .kind
-        //
-        // .starts_with(&EventType::Ibc(String::new()).to_string())
-        //             {
-        //                 event
-        //                     .attributes
-        //                     .iter()
-        //                     .find(|attribute| {
-        //                         &attribute.key == "is_valid_masp_tx"
-        //                     })
-        //                     .map(|tx_index| (event, &tx_index.value))
-        //             } else {
-        //                 None
-        //             }
-        //         })
-        //     {
-        //         // FIXME: can we parallelize stuff somewhere when
-        // constructing         // the internal state of the
-        // ShieldeContext?         // Masp transaction, collect it
-        //         let shielded_transfer = ibc_masp_event
-        //             .attributes
-        //             .iter()
-        //             .find(|attribute| &attribute.key == "memo")
-        //             .map(|memo| {
-        //                 IbcShieldedTransfer::try_from(Memo::from(
-        //                     memo.value.clone(),
-        //                 ))
-        //             });
-
-        //         if let Some(Ok(shielded_transfer)) = shielded_transfer {
-        //             eprintln!("FOUND IBC MASP EVENT"); //FIXME:remove
-        //             shielded_txs.insert(
-        //                 IndexedTx {
-        //                     height: height.into(),
-        //                     index: TxIndex(
-        //                         u32::from_str(tx_index)
-        //                             .map_err(|e|
-        // Error::Other(e.to_string()))?,                     ),
-        //                 },
-        //                 (
-        //                     epoch,
-        //                     shielded_transfer.transfer,
-        //                     shielded_transfer.masp_tx,
-        //                 ),
-        //             );
-        //         }
-        //     }
-        // }
-
-        // eprintln!("DONE REQUESTING IBC EVENTS"); //FIXME: remove
 
         Ok(shielded_txs)
     }
@@ -1231,7 +1120,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 change: -tx.amount.amount().change(),
             },
         );
-        self.last_indexed = indexed_tx;
+        self.last_indexed = Some(indexed_tx);
 
         self.delta_map
             .insert(indexed_tx, (epoch, transfer_delta, transaction_delta));
@@ -1701,9 +1590,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                         Error::Other("Missing masp transaction".to_string())
                     })?,
                 Err(_) => {
-                    // FIXME: add support for pinned ibc masp txs?
-                    // FIXME: probably need to review also how we do it in
-                    // fewtch_shielded_transfer
+                    // FIXME: add support for pinned ibc masp txs? Yes
                     return Err(Error::Other("IBC Masp pinned tx".to_string()));
                 }
             };
@@ -2234,7 +2121,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let _ = self.save().await;
         // Required for filtering out rejected transactions from Tendermint
         // responses
-        // FIXME: here we query the reulst of only the last block
         let block_results = rpc::query_results(client).await?;
         let mut transfers = self.get_tx_deltas().clone();
         // Construct the set of addresses relevant to user's query
@@ -2251,8 +2137,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         for addr in relevant_addrs {
             for prop in ["transfer.source", "transfer.target"] {
                 // Query transactions involving the current address
-                // FIXME: bnut it seems like here we query all transactions, not
-                // only those from the last block
                 let mut tx_query = Query::eq(prop, addr.encode());
                 // Elaborate the query if requested by the user
                 if let Some(token) = &query_token {

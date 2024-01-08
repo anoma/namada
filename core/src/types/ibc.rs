@@ -239,8 +239,6 @@ pub fn get_shielded_transfer(
         return Ok(None);
     }
 
-    // FIXME: I should place the is_masp_tx attribute directly on the ibc event
-    // not in finalize block FIXME: maybe it's not possible
     event
         .attributes
         .get("memo")

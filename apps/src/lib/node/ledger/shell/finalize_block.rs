@@ -422,7 +422,8 @@ where
                                 tx_event["hash"]
                             );
                             if is_committed_fee_unshield {
-                                tx_event["is_valid_masp_tx"] = String::new();
+                                tx_event["is_valid_masp_tx"] =
+                                    format!("{}", tx_index);
                             }
                             self.wl_storage.storage.tx_queue.push(TxInQueue {
                                 tx: wrapper.expect("Missing expected wrapper"),
@@ -440,7 +441,8 @@ where
                                     address::InternalAddress::Masp,
                                 ),
                             ) {
-                                tx_event["is_valid_masp_tx"] = String::new();
+                                tx_event["is_valid_masp_tx"] =
+                                    format!("{}", tx_index);
                             }
                             changed_keys
                                 .extend(result.changed_keys.iter().cloned());
@@ -468,18 +470,7 @@ where
                                 .map(|ibc_event| {
                                     // Add the IBC event besides the tx_event
                                     let mut event = Event::from(ibc_event);
-                                    // Add the height for IBC event query
                                     event["height"] = height.to_string();
-                                    if tx_event
-                                        .attributes
-                                        .contains_key("is_valid_masp_tx")
-                                    {
-                                        // Add the tx index for masp txs clients
-                                        // queries
-                                        // FIXME: review this
-                                        event["is_valid_masp_tx"] =
-                                            tx_index.to_string();
-                                    }
                                     event
                                 })
                                 // eth bridge events
@@ -565,7 +556,8 @@ where
                         // The fee unshield operation could still have been
                         // committed
                         if is_committed_fee_unshield {
-                            tx_event["is_valid_masp_tx"] = String::new();
+                            tx_event["is_valid_masp_tx"] =
+                                format!("{}", tx_index);
                         }
                     } else {
                         tx_event["code"] = ResultCode::WasmRuntimeError.into();
