@@ -719,7 +719,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let (txs, mut tx_iter);
         if !unknown_keys.is_empty() {
             // Load all transactions accepted until this point
-            eprintln!("FETCHING AGAIN FROM INDEX 0 BECAUSE NEW KEY"); //FIXME: remove
             txs = Self::fetch_shielded_transfers(client, None).await?;
             tx_iter = txs.iter();
             // Do this by constructing a shielding context only for unknown keys
@@ -759,7 +758,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
     /// Obtain a chronologically-ordered list of all accepted shielded
     /// transactions from a node.
-    // FIXME: remove all the unwraps, we are in the sdk here
     pub async fn fetch_shielded_transfers<C: Client + Sync>(
         client: &C,
         last_indexed_tx: Option<IndexedTx>,
@@ -770,9 +768,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             .await?
             .map_or_else(BlockHeight::first, |block| block.height);
 
-        eprintln!("ABOUT TO REQUEST PAGINATED RESULT"); //FIXME: remove
-        eprintln!("LAST BLOCK HEIGHT: {}", last_block_height); //FIXME: remove
-        eprintln!("LAST INDEXED HEIGHT: {:#?}", last_indexed_tx); //FIXME: remove
         let mut shielded_txs = BTreeMap::new();
         // Fetch all the transactions we do not have yet
         let first_height_to_query =
@@ -780,7 +775,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let first_idx_to_query =
             last_indexed_tx.map_or_else(|| 0, |last| last.index.0 + 1);
         for height in first_height_to_query..=last_block_height.0 {
-            eprintln!("IN HEIGHT {height} LOOP"); //FIXME: remove
             // Get the valid masp transactions at the specified height
 
             let epoch = query_epoch_at_height(client, height.into())
@@ -792,14 +786,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     )))
                 })?;
 
-            eprintln!("REQUESTING BLOCK AT HEIGHT: {}", height); //FIXME: remove
             let txs_results = match client
                 .block_results(height)
                 .await
                 .map_err(|e| Error::from(QueryError::General(e.to_string())))?
                 .end_block_events
             {
-                // FIXME: imrpove this match
                 Some(events) => events
                     .into_iter()
                     .filter_map(|event| {
@@ -809,7 +801,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                             event.attributes.iter().find_map(|attribute| {
                                 if attribute.key == "is_valid_masp_tx" {
                                     Some(TxIndex(
-                                        // FIXME: ok to unwrap here?
                                         u32::from_str(&attribute.value)
                                             .unwrap(),
                                     ))
@@ -835,12 +826,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     })
                     .collect::<Vec<_>>(),
                 None => {
-                    eprintln!("NO EVENTS IN END BLOCK, CONITNUING"); //FIXME: remove
                     continue;
                 }
             };
 
-            eprintln!("BEFORE BLOCK"); //FIXME: remove
             // Query the actual block to get the txs bytes. If we only need one
             // tx it might be slightly better to query the /tx endpoint to
             // reduce the amount of data sent over the network, but this is a
@@ -853,7 +842,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 .block
                 .data;
 
-            eprintln!("SIZE OF RESPONSE: {}", txs_results.len()); //FIXME: remove
             for (idx, tx_event) in txs_results {
                 let tx = Tx::try_from(block[idx.0 as usize].as_ref())
                     .map_err(|e| Error::Other(e.to_string()))?;
@@ -868,7 +856,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 let (transfer, masp_transaction) = if let Some(wrapper_header) =
                     tx_header.wrapper()
                 {
-                    eprintln!("FOUND WRAPPER MASP TX"); //FIXME: remove
                     let hash = wrapper_header
                         .unshield_section_hash
                         .ok_or_else(|| {
@@ -907,12 +894,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     (transfer, masp_transaction)
                 } else {
                     // Expect decrypted transaction
-                    eprintln!("FOUND DECRYPTED MASP TX AT HEIGHT: {}", height); //FIXME: remove
                     match Transfer::try_from_slice(&tx.data().ok_or_else(
                         || Error::Other("Missing data section".to_string()),
                     )?) {
                         Ok(transfer) => {
-                            eprintln!("DECRYPTED TX: {:#?}", transfer); //FIXME: remove
                             let masp_transaction = tx
                                 .get_section(&transfer.shielded.ok_or_else(
                                     || {
@@ -944,7 +929,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     .iter()
                     .find_map(|attribute| {
                             if attribute.key == "inner_tx" {
-                                                //FIXME: manage unwrap here
                                               let tx_result = TxResult::from_str(&attribute.value).unwrap();
 
                                                 for ibc_event in tx_result.ibc_events {
@@ -956,9 +940,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                                                 }
                                                 None
                                             } else {None }
-                    }).unwrap().unwrap(); //FIXME:remove these unwraps
+                    }).ok_or_else(|| Error::Other("Missing expected memo field in IBC over MASP transaction".to_string()))?.map_err(|e| Error::Other(e.to_string()))?;
 
-                            eprintln!("FOUND IBC MASP EVENT"); //FIXME:remove
                             (
                                 shielded_transfer.transfer,
                                 shielded_transfer.masp_tx,
@@ -977,8 +960,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 );
             }
         }
-
-        eprintln!("DONE REQUESTING HEIGHT"); //FIXME: remove
 
         Ok(shielded_txs)
     }
@@ -1145,10 +1126,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     ) -> Result<Option<MaspAmount>, Error> {
         // Cannot query the balance of a key that's not in the map
         if !self.pos_map.contains_key(vk) {
-            eprintln!("KEY NOT IN MAP"); //FIXME: remove
             return Ok(None);
         }
-        eprintln!("KEY IN MAP"); //FIXME: remove
         let mut val_acc = I128Sum::zero();
         // Retrieve the notes that can be spent by this key
         if let Some(avail_notes) = self.pos_map.get(vk) {
@@ -1543,12 +1522,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             }
         }
         // Construct the key for where the transaction ID would be stored
-        // FIXME: should index the tx hash, not the block and height? Yes it's
-        // faster to query, less data
         let pin_key = namada_core::types::token::masp_pin_tx_key(&owner.hash());
         // Obtain the transaction pointer at the key
         // If we don't discard the error message then a test fails,
         // however the error underlying this will go undetected
+        // FIXME: we could index the comet tx hash here so that we could just
+        // query it via a single rpc call to the /tx endpoint
         let indexed_tx =
             rpc::query_storage_value::<C, IndexedTx>(client, &pin_key)
                 .await
@@ -1590,7 +1569,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                         Error::Other("Missing masp transaction".to_string())
                     })?,
                 Err(_) => {
-                    // FIXME: add support for pinned ibc masp txs? Yes
+                    // FIXME: add support for pinned ibc masp txs, but I need to
+                    // query tx to do this
                     return Err(Error::Other("IBC Masp pinned tx".to_string()));
                 }
             };
