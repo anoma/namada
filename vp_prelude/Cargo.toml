@@ -17,16 +17,16 @@ default = []
 
 [dependencies]
 namada_account = { path = "../account" }
-namada_core = { path = "../core", default-features = false }
+namada_core = { path = "../core" }
 namada_governance = { path = "../governance" }
 namada_ibc = { path = "../ibc" }
 namada_macros = { path = "../macros" }
 namada_parameters = { path = "../parameters" }
-namada_proof_of_stake = { path = "../proof_of_stake", default-features = false }
+namada_proof_of_stake = { path = "../proof_of_stake" }
 namada_storage = { path = "../storage" }
 namada_token = { path = "../token" }
 namada_tx = { path = "../tx" }
-namada_vm_env = { path = "../vm_env", default-features = false }
+namada_vm_env = { path = "../vm_env" }
 namada_vp_env = { path = "../vp_env" }
 
 borsh.workspace = true

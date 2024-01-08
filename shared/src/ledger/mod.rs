@@ -140,6 +140,7 @@ mod test {
     use namada_sdk::queries::{
         EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
     };
+    use namada_sdk::tendermint_rpc::{self, Error as RpcError, Response};
     use namada_state::testing::TestWlStorage;
     use namada_state::StorageWrite;
     use namada_test_utils::TestWasms;
@@ -147,7 +148,6 @@ mod test {
     use namada_tx::data::TxType;
     use namada_tx::{Code, Data, Tx};
     use tempfile::TempDir;
-    use tendermint_rpc::{Error as RpcError, Response};
 
     use crate::ledger::events::log::EventLog;
     use crate::ledger::queries::Client;

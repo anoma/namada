@@ -13,7 +13,7 @@ repository.workspace = true
 version.workspace = true
 
 [features]
-default = ["rand"]
+default = []
 mainnet = []
 wasm-runtime = ["rayon"]
 rand = ["dep:rand", "rand_core"]

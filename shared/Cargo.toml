@@ -15,9 +15,9 @@ version.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["namada-sdk", "wasm-runtime"]
+default = ["wasm-runtime"]
 mainnet = ["namada_core/mainnet"]
-std = ["fd-lock"]
+std = ["fd-lock", "namada_sdk/std"]
 wasm-runtime = [
   "namada_core/wasm-runtime",
   "loupe",
@@ -159,6 +159,7 @@ namada_ethereum_bridge = { path = "../ethereum_bridge", default-features = false
 namada_proof_of_stake = { path = "../proof_of_stake", default-features = false, features = [
   "testing",
 ] }
+namada_sdk = { path = "../sdk", features = ["std", "testing"] }
 namada_state = { path = "../state", features = ["testing"] }
 namada_test_utils = { path = "../test_utils" }
 

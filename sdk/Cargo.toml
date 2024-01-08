@@ -21,7 +21,7 @@ multicore = ["masp_proofs/multicore"]
 
 namada-sdk = ["tendermint-rpc", "masp_primitives/transparent-inputs"]
 
-std = ["fd-lock"]
+std = ["fd-lock", "dep:rand", "rand_core", "namada_core/rand"]
 
 # tendermint-rpc support
 tendermint-rpc = ["async-client", "dep:tendermint-rpc"]
@@ -35,9 +35,13 @@ async-send = []
 
 # for integration tests and test utilities
 testing = [
+  "namada_account/testing",
   "namada_core/testing",
   "namada_ethereum_bridge/testing",
+  "namada_governance/testing",
+  "namada_ibc/testing",
   "namada_proof_of_stake/testing",
+  "namada_tx/testing",
   "async-client",
   "proptest",
 ]
@@ -52,7 +56,7 @@ namada_ethereum_bridge = { path = "../ethereum_bridge", default-features = false
 namada_governance = { path = "../governance" }
 namada_ibc = { path = "../ibc" }
 namada_parameters = { path = "../parameters" }
-namada_proof_of_stake = { path = "../proof_of_stake", default-features = false }
+namada_proof_of_stake = { path = "../proof_of_stake" }
 namada_state = { path = "../state" }
 namada_storage = { path = "../storage" }
 namada_token = { path = "../token" }
@@ -81,8 +85,8 @@ parse_duration = "2.1.1"
 paste.workspace = true
 proptest = { workspace = true, optional = true }
 prost.workspace = true
-rand.workspace = true
-rand_core.workspace = true
+rand = { workspace = true, optional = true }
+rand_core = { workspace = true, optional = true }
 ripemd.workspace = true
 serde.workspace = true
 serde_json.workspace = true

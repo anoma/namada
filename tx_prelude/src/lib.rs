@@ -20,6 +20,7 @@ use masp_primitives::transaction::Transaction;
 pub use namada_core::borsh::{
     BorshDeserialize, BorshSerialize, BorshSerializeExt,
 };
+pub use namada_core::ledger::eth_bridge;
 use namada_core::types::account::AccountPublicKeysMap;
 pub use namada_core::types::address::Address;
 use namada_core::types::chain::CHAIN_ID_LENGTH;
@@ -42,10 +43,7 @@ pub use namada_tx::{data as transaction, Section, Tx};
 pub use namada_tx_env::TxEnv;
 use namada_vm_env::tx::*;
 use namada_vm_env::{read_from_buffer, read_key_val_bytes_from_buffer};
-pub use {
-    namada_ethereum_bridge as eth_bridge, namada_governance as governance,
-    namada_parameters as parameters,
-};
+pub use {namada_governance as governance, namada_parameters as parameters};
 
 /// Log a string. The message will be printed at the `tracing::Level::Info`.
 pub fn log_string<T: AsRef<str>>(msg: T) {
