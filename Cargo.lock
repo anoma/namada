@@ -4195,7 +4195,6 @@ dependencies = [
  "ethbridge-bridge-contract",
  "ethers",
  "eyre",
- "fd-lock",
  "futures",
  "ibc-testkit",
  "itertools 0.10.5",

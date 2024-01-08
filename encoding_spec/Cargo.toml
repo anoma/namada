@@ -16,7 +16,7 @@ version.workspace = true
 default = []
 
 [dependencies]
-namada = { path = "../shared", features = ["std", "tendermint-rpc", "download-params"] }
+namada = { path = "../shared", features = ["rand", "tendermint-rpc", "download-params"] }
 borsh.workspace = true
 itertools.workspace = true
 lazy_static.workspace = true

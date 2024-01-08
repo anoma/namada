@@ -62,7 +62,7 @@ integration = []
 
 [dependencies]
 namada = {path = "../shared", features = ["multicore", "http-client", "tendermint-rpc", "std"]}
-namada_sdk = {path = "../sdk", default-features = false, features = ["wasm-runtime", "download-params", "std"]}
+namada_sdk = {path = "../sdk", default-features = false, features = ["wasm-runtime", "download-params", "std", "rand"]}
 namada_test_utils = {path = "../test_utils", optional = true}
 
 ark-serialize.workspace = true

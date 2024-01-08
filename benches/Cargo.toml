@@ -40,7 +40,7 @@ path = "host_env.rs"
 [dependencies]
 
 [dev-dependencies]
-namada = { path = "../shared", features = ["std", "testing"] }
+namada = { path = "../shared", features = ["rand", "testing"] }
 namada_apps = { path = "../apps", features = ["benches"] }
 masp_primitives.workspace = true
 borsh.workspace = true
