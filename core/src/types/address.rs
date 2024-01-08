@@ -728,7 +728,7 @@ pub mod tests {
 }
 
 /// Generate a new established address.
-#[cfg(feature = "rand")]
+#[cfg(any(test, feature = "rand"))]
 pub fn gen_established_address(seed: impl AsRef<str>) -> Address {
     use rand::prelude::ThreadRng;
     use rand::{thread_rng, RngCore};

@@ -4,7 +4,6 @@ use std::num::TryFromIntError;
 use namada_core::types::address::Address;
 use namada_core::types::dec::Dec;
 use namada_core::types::storage::Epoch;
-use namada_storage;
 use thiserror::Error;
 
 use crate::rewards;

@@ -11,7 +11,7 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXUPPER;
-#[cfg(feature = "rand")]
+#[cfg(any(test, feature = "rand"))]
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -225,7 +225,7 @@ pub trait SigScheme: Eq + Ord + Debug + Serialize + Default {
     const TYPE: SchemeType;
 
     /// Generate a keypair.
-    #[cfg(feature = "rand")]
+    #[cfg(any(test, feature = "rand"))]
     fn generate<R>(csprng: &mut R) -> Self::SecretKey
     where
         R: CryptoRng + RngCore;
