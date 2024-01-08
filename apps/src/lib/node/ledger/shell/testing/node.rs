@@ -39,7 +39,6 @@ use namada::types::time::DateTimeUtc;
 use namada_sdk::queries::Client;
 use regex::Regex;
 use tendermint_rpc::endpoint::block;
-use tendermint_rpc::Response;
 use tokio::sync::mpsc;
 
 use crate::facade::tendermint_proto::v0_37::abci::{
@@ -703,55 +702,12 @@ impl<'a> Client for &'a MockNode {
 
     async fn perform<R>(
         &self,
-        request: R,
+        _request: R,
     ) -> std::result::Result<R::Output, RpcError>
     where
         R: SimpleRequest,
     {
-        self.drive_mock_services_bg().await;
-        // NOTE: atm this is only needed to query blocks at a specific height
-        match request.method() {
-            tendermint_rpc::Method::Block => {
-                let request_str = request.into_json();
-                const QUERY_PARSING_REGEX_STR: &str = r#".*"height": "(.)+".*"#;
-
-                lazy_static! {
-                    /// Compiled regular expression used to parse queries.
-                    static ref QUERY_PARSING_REGEX: Regex = Regex::new(QUERY_PARSING_REGEX_STR).unwrap();
-                }
-
-                let captures =
-                    QUERY_PARSING_REGEX.captures(&request_str).unwrap();
-                let mut height_str = captures
-                    .get(0)
-                    .unwrap()
-                    .as_str()
-                    .rsplit(':')
-                    .next()
-                    .unwrap()
-                    .to_owned();
-                height_str.retain(|c| !(c.is_whitespace() || c == '"'));
-                let height = BlockHeight::from_str(&height_str).unwrap();
-
-                match self.blocks.lock().unwrap().get(&height) {
-                    Some(block) => {
-                        let wrapper =
-                            tendermint_rpc::response::Wrapper::new_with_id(
-                                tendermint_rpc::Id::None,
-                                Some(block),
-                                None,
-                            );
-
-                        let response = serde_json::to_string(&wrapper).unwrap();
-                        R::Response::from_string(response).map(Into::into)
-                    }
-                    None => Err(RpcError::invalid_params(format!(
-                        "Could not find block height {height}"
-                    ))),
-                }
-            }
-            _ => unimplemented!(),
-        }
+        unimplemented!("Client's perform method is not implemented for testing")
     }
 
     /// `/abci_info`: get information about the ABCI application.
@@ -946,6 +902,29 @@ impl<'a> Client for &'a MockNode {
             consensus_param_updates: None,
             app_hash: namada::tendermint::hash::AppHash::default(),
         })
+    }
+
+    async fn block<H>(
+        &self,
+        height: H,
+    ) -> Result<tendermint_rpc::endpoint::block::Response, RpcError>
+    where
+        H: Into<tendermint::block::Height> + Send,
+    {
+        // NOTE: atm this is only needed to query blocks at a
+        // specific height for masp transactions
+        let height = BlockHeight(height.into().into());
+
+        self.blocks
+            .lock()
+            .unwrap()
+            .get(&height)
+            .cloned()
+            .ok_or_else(|| {
+                RpcError::invalid_params(format!(
+                    "Could not find block at height {height}"
+                ))
+            })
     }
 
     /// `/tx_search`: search for transactions with their results.
