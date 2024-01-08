@@ -23,8 +23,7 @@ pub use {
 #[cfg(feature = "wasm-runtime")]
 mod dry_run_tx {
     use namada_sdk::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
-    use namada_state::{DBIter, StorageHasher, DB};
-    use namada_storage::ResultExt;
+    use namada_state::{DBIter, ResultExt, StorageHasher, DB};
 
     use super::protocol;
     use crate::vm::wasm::{TxCache, VpCache};
@@ -34,7 +33,7 @@ mod dry_run_tx {
     pub fn dry_run_tx<D, H, CA>(
         mut ctx: RequestCtx<'_, D, H, VpCache<CA>, TxCache<CA>>,
         request: &RequestQuery,
-    ) -> namada_storage::Result<EncodedResponseQuery>
+    ) -> namada_state::StorageResult<EncodedResponseQuery>
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
@@ -115,7 +114,9 @@ mod dry_run_tx {
         .into_storage_result()?;
         cumulated_gas = cumulated_gas
             .checked_add(tx_gas_meter.get_tx_consumed_gas())
-            .ok_or(namada_storage::Error::SimpleMessage("Overflow in gas"))?;
+            .ok_or(namada_state::StorageError::SimpleMessage(
+                "Overflow in gas",
+            ))?;
         // Account gas for both inner and wrapper (if available)
         data.gas_used = cumulated_gas;
         // NOTE: the keys changed by the wrapper transaction (if any) are not
@@ -133,23 +134,24 @@ mod dry_run_tx {
 mod test {
     use borsh::BorshDeserialize;
     use borsh_ext::BorshSerializeExt;
+    use namada_core::types::address;
     use namada_core::types::hash::Hash;
     use namada_core::types::storage::{BlockHeight, Key};
-    use namada_core::types::transaction::decrypted::DecryptedTx;
-    use namada_core::types::transaction::TxType;
-    use namada_core::types::{address, token};
     use namada_sdk::queries::{
         EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
     };
     use namada_state::testing::TestWlStorage;
-    use namada_storage::StorageWrite;
+    use namada_state::StorageWrite;
     use namada_test_utils::TestWasms;
+    use namada_tx::data::decrypted::DecryptedTx;
+    use namada_tx::data::TxType;
+    use namada_tx::{Code, Data, Tx};
     use tempfile::TempDir;
     use tendermint_rpc::{Error as RpcError, Response};
 
     use crate::ledger::events::log::EventLog;
     use crate::ledger::queries::Client;
-    use crate::proto::{Code, Data, Tx};
+    use crate::token;
     use crate::vm::wasm::{TxCache, VpCache};
     use crate::vm::{wasm, WasmCacheRoAccess};
 
@@ -191,9 +193,7 @@ mod test {
                 .storage
                 .write(
                     &max_block_gas_key,
-                    namada_core::ledger::storage::types::encode(
-                        &20_000_000_u64,
-                    ),
+                    namada_core::types::encode(&20_000_000_u64),
                 )
                 .expect(
                     "Max block gas parameter must be initialized in storage",
@@ -268,8 +268,8 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_shell_queries_router_with_client() -> namada_storageResult<()>
-    {
+    async fn test_shell_queries_router_with_client()
+    -> namada_state::StorageResult<()> {
         // Initialize the `TestClient`
         let mut client = TestClient::new(RPC);
         // store the wasm code
@@ -306,7 +306,7 @@ mod test {
         // Request storage value for a balance key ...
         let token_addr = address::testing::established_address_1();
         let owner = address::testing::established_address_2();
-        let balance_key = token::balance_key(&token_addr, &owner);
+        let balance_key = token::storage_key::balance_key(&token_addr, &owner);
         // ... there should be no value yet.
         let read_balance = RPC
             .shell()
@@ -316,7 +316,7 @@ mod test {
         assert!(read_balance.data.is_empty());
 
         // Request storage prefix iterator
-        let balance_prefix = token::balance_prefix(&token_addr);
+        let balance_prefix = token::storage_key::balance_prefix(&token_addr);
         let read_balances = RPC
             .shell()
             .storage_prefix(&client, None, None, false, &balance_prefix)
@@ -350,7 +350,7 @@ mod test {
         );
 
         // Request storage prefix iterator
-        let balance_prefix = token::balance_prefix(&token_addr);
+        let balance_prefix = token::storage_key::balance_prefix(&token_addr);
         let read_balances = RPC
             .shell()
             .storage_prefix(&client, None, None, false, &balance_prefix)

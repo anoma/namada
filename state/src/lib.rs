@@ -34,7 +34,7 @@ pub use namada_merkle_tree::{
 };
 use namada_merkle_tree::{Error as MerkleTreeError, MerkleRoot};
 use namada_parameters::{self, EpochDuration, Parameters};
-pub use namada_storage::*;
+pub use namada_storage::{Error as StorageError, Result as StorageResult, *};
 use thiserror::Error;
 use tx_queue::{ExpiredTxsQueue, TxQueue};
 pub use wl_storage::{

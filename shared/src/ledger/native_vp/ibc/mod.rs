@@ -263,8 +263,8 @@ pub fn get_dummy_genesis_validator()
     use crate::core::types::address::testing::established_address_1;
     use crate::core::types::dec::Dec;
     use crate::core::types::key::testing::common_sk_from_simple_seed;
+    use crate::token::Amount;
     use crate::types::key;
-    use crate::types::token::Amount;
 
     let address = established_address_1();
     let tokens = Amount::native_whole(1);
@@ -317,22 +317,16 @@ mod tests {
     };
     use ibc_testkit::testapp::ibc::clients::mock::consensus_state::MockConsensusState;
     use ibc_testkit::testapp::ibc::clients::mock::header::MockHeader;
-    use namada_core::ledger::governance::parameters::GovernanceParameters;
     use namada_gas::TxGasMeter;
-    use namada_storage::StorageRead;
+    use namada_governance::parameters::GovernanceParameters;
+    use namada_state::testing::TestWlStorage;
+    use namada_state::StorageRead;
+    use namada_tx::data::TxType;
+    use namada_tx::{Code, Data, Section, Signature, Tx};
     use prost::Message;
     use sha2::Digest;
 
     use super::*;
-    use crate::core::ledger::ibc::storage::{
-        ack_key, calc_hash, channel_counter_key, channel_key,
-        client_connections_key, client_counter_key, client_state_key,
-        client_update_height_key, client_update_timestamp_key, commitment_key,
-        connection_counter_key, connection_key, consensus_state_key,
-        ibc_denom_key, next_sequence_ack_key, next_sequence_recv_key,
-        next_sequence_send_key, receipt_key,
-    };
-    use crate::core::ledger::storage::testing::TestWlStorage;
     use crate::core::types::address::testing::{
         established_address_1, established_address_2,
     };
@@ -396,19 +390,26 @@ mod tests {
     use crate::ibc::core::router::types::event::ModuleEvent;
     use crate::ibc::primitives::proto::{Any, Protobuf};
     use crate::ibc::primitives::{Msg, Timestamp};
+    use crate::ibc::storage::{
+        ack_key, calc_hash, channel_counter_key, channel_key,
+        client_connections_key, client_counter_key, client_state_key,
+        client_update_height_key, client_update_timestamp_key, commitment_key,
+        connection_counter_key, connection_key, consensus_state_key,
+        ibc_denom_key, next_sequence_ack_key, next_sequence_recv_key,
+        next_sequence_send_key, receipt_key,
+    };
     use crate::ledger::gas::VpGasMeter;
     use crate::ledger::parameters::storage::{
         get_epoch_duration_storage_key, get_max_expected_time_per_block_key,
     };
     use crate::ledger::parameters::EpochDuration;
     use crate::ledger::{ibc, pos};
-    use crate::proto::{Code, Data, Section, Signature, Tx};
     use crate::tendermint::time::Time as TmTime;
+    use crate::token::storage_key::balance_key;
+    use crate::token::Amount;
     use crate::types::key::testing::keypair_1;
     use crate::types::storage::{BlockHash, BlockHeight, TxIndex};
     use crate::types::time::DurationSecs;
-    use crate::types::token::{balance_key, Amount};
-    use crate::types::transaction::TxType;
     use crate::vm::wasm;
 
     const ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
@@ -449,7 +450,7 @@ mod tests {
         let time_key = get_max_expected_time_per_block_key();
         wl_storage
             .write_log
-            .write(&time_key, crate::ledger::storage::types::encode(&time))
+            .write(&time_key, namada_core::types::encode(&time))
             .expect("write failed");
         // set a dummy header
         wl_storage

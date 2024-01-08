@@ -81,7 +81,6 @@ namada_parameters = { path = "../parameters" }
 namada_proof_of_stake = { path = "../proof_of_stake" }
 namada_sdk = { path = "../sdk", default-features = false }
 namada_state = { path = "../state" }
-namada_storage = { path = "../storage" }
 namada_token = { path = "../token" }
 namada_tx = { path = "../tx" }
 namada_tx_env = { path = "../tx_env" }

@@ -5,13 +5,13 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use borsh_ext::BorshSerializeExt;
 use namada_core::types::storage::Epochs;
 use namada_ibc::{IbcCommonContext, IbcStorageContext};
-use namada_storage::{StorageRead, StorageWrite};
-use namada_token::{self as token, Amount, DenominatedAmount};
+use namada_state::{StorageRead, StorageWrite};
 
 use crate::ledger::ibc::storage::is_ibc_key;
 use crate::ledger::native_vp::CtxPreStorageRead;
-use crate::ledger::storage::write_log::StorageModification;
-use crate::ledger::storage::{self as ledger_storage, StorageHasher};
+use crate::state::write_log::StorageModification;
+use crate::state::{self as ledger_storage, StorageHasher};
+use crate::token::{self as token, Amount, DenominatedAmount};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::ibc::{IbcEvent, IbcShieldedTransfer};
 use crate::types::storage::{
@@ -20,7 +20,7 @@ use crate::types::storage::{
 use crate::vm::WasmCacheAccess;
 
 /// Result of a storage API call.
-pub type Result<T> = std::result::Result<T, namada_storage::Error>;
+pub type Result<T> = std::result::Result<T, namada_state::StorageError>;
 
 /// Pseudo execution environment context for ibc native vp
 #[derive(Debug)]
@@ -203,7 +203,7 @@ where
         token: &Address,
         amount: DenominatedAmount,
     ) -> Result<()> {
-        let amount = namada_token::denom_to_amount(amount, token, self)?;
+        let amount = crate::token::denom_to_amount(amount, token, self)?;
         let src_key = token::storage_key::balance_key(token, src);
         let dest_key = token::storage_key::balance_key(token, dest);
         let src_bal: Option<Amount> = self.ctx.read(&src_key)?;
@@ -218,12 +218,12 @@ where
     }
 
     fn handle_masp_tx(&mut self, shielded: &IbcShieldedTransfer) -> Result<()> {
-        namada_token::utils::handle_masp_tx(
+        crate::token::utils::handle_masp_tx(
             self,
             &shielded.transfer,
             &shielded.masp_tx,
         )?;
-        namada_token::utils::update_note_commitment_tree(
+        crate::token::utils::update_note_commitment_tree(
             self,
             &shielded.masp_tx,
         )
@@ -235,7 +235,7 @@ where
         token: &Address,
         amount: DenominatedAmount,
     ) -> Result<()> {
-        let amount = namada_token::denom_to_amount(amount, token, self)?;
+        let amount = crate::token::denom_to_amount(amount, token, self)?;
         let target_key = token::storage_key::balance_key(token, target);
         let mut target_bal: Amount =
             self.ctx.read(&target_key)?.unwrap_or_default();
@@ -262,7 +262,7 @@ where
         token: &Address,
         amount: DenominatedAmount,
     ) -> Result<()> {
-        let amount = namada_token::denom_to_amount(amount, token, self)?;
+        let amount = crate::token::denom_to_amount(amount, token, self)?;
         let target_key = token::storage_key::balance_key(token, target);
         let mut target_bal: Amount =
             self.ctx.read(&target_key)?.unwrap_or_default();

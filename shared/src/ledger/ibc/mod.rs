@@ -4,8 +4,7 @@ pub use namada_ibc::storage;
 use namada_ibc::storage::{
     channel_counter_key, client_counter_key, connection_counter_key,
 };
-use namada_state::{StorageHasher, WlStorage};
-use namada_storage::StorageWrite;
+use namada_state::{StorageHasher, StorageWrite, WlStorage};
 
 /// Initialize storage in the genesis block.
 pub fn init_genesis_storage<DB, H>(storage: &mut WlStorage<DB, H>)

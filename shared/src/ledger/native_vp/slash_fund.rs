@@ -5,15 +5,15 @@ use std::collections::BTreeSet;
 use namada_core::ledger::slash_fund;
 /// SlashFund storage
 pub use namada_core::ledger::slash_fund::storage;
-use namada_storage::StorageRead;
+use namada_state::StorageRead;
 use namada_tx::Tx;
 use thiserror::Error;
 
 use crate::ledger::native_vp::{self, governance, Ctx, NativeVp};
-use crate::ledger::storage::{self as ledger_storage, StorageHasher};
+use crate::state::{self as ledger_storage, StorageHasher};
+use crate::token;
 use crate::types::address::Address;
 use crate::types::storage::Key;
-use crate::types::token;
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]

@@ -12,18 +12,18 @@ use std::collections::BTreeSet;
 
 use borsh::BorshDeserialize;
 use eyre::WrapErr;
+use namada_core::types::storage;
 use namada_core::types::storage::Epochs;
 use namada_core::types::validity_predicate::VpSentinel;
 use namada_gas::GasMetering;
-use namada_storage::{ResultExt, StorageRead};
 use namada_tx::Tx;
 pub use namada_vp_env::VpEnv;
 
 use super::vp_host_fns;
 use crate::ledger::gas::VpGasMeter;
-use crate::ledger::storage;
-use crate::ledger::storage::write_log::WriteLog;
-use crate::ledger::storage::{State, StorageHasher};
+use crate::state;
+use crate::state::write_log::WriteLog;
+use crate::state::{ResultExt, State, StorageHasher, StorageRead};
 use crate::types::address::Address;
 use crate::types::hash::Hash;
 use crate::types::ibc::IbcEvent;
@@ -34,9 +34,9 @@ use crate::vm::prefix_iter::PrefixIterators;
 use crate::vm::WasmCacheAccess;
 
 /// Possible error in a native VP host function call
-/// The `namada_storage::Error` may wrap the `vp_host_fns::RuntimeError` and can
-/// be extended with other custom errors when using `trait VpEnv`.
-pub type Error = namada_storage::Error;
+/// The `state::StorageError` may wrap the `vp_host_fns::RuntimeError`
+/// and can be extended with other custom errors when using `trait VpEnv`.
+pub type Error = state::StorageError;
 
 /// A native VP module should implement its validation logic using this trait.
 pub trait NativeVp {
@@ -60,7 +60,7 @@ pub trait NativeVp {
 #[derive(Debug)]
 pub struct Ctx<'a, DB, H, CA>
 where
-    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    DB: state::DB + for<'iter> state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -99,7 +99,7 @@ where
 #[derive(Debug)]
 pub struct CtxPreStorageRead<'view, 'a: 'view, DB, H, CA>
 where
-    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    DB: state::DB + for<'iter> state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -111,7 +111,7 @@ where
 #[derive(Debug)]
 pub struct CtxPostStorageRead<'view, 'a: 'view, DB, H, CA>
 where
-    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    DB: state::DB + for<'iter> state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -120,7 +120,7 @@ where
 
 impl<'a, DB, H, CA> Ctx<'a, DB, H, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    DB: 'static + state::DB + for<'iter> state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -174,16 +174,16 @@ where
 impl<'view, 'a: 'view, DB, H, CA> StorageRead
     for CtxPreStorageRead<'view, 'a, DB, H, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    DB: 'static + state::DB + for<'iter> state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    type PrefixIter<'iter> = storage::PrefixIter<'iter, DB> where Self: 'iter;
+    type PrefixIter<'iter> = state::PrefixIter<'iter, DB> where Self: 'iter;
 
     fn read_bytes(
         &self,
-        key: &crate::types::storage::Key,
-    ) -> Result<Option<Vec<u8>>, namada_storage::Error> {
+        key: &storage::Key,
+    ) -> Result<Option<Vec<u8>>, state::StorageError> {
         vp_host_fns::read_pre(
             &mut self.ctx.gas_meter.borrow_mut(),
             self.ctx.storage,
@@ -194,10 +194,7 @@ where
         .into_storage_result()
     }
 
-    fn has_key(
-        &self,
-        key: &crate::types::storage::Key,
-    ) -> Result<bool, namada_storage::Error> {
+    fn has_key(&self, key: &storage::Key) -> Result<bool, state::StorageError> {
         vp_host_fns::has_key_pre(
             &mut self.ctx.gas_meter.borrow_mut(),
             self.ctx.storage,
@@ -210,8 +207,8 @@ where
 
     fn iter_prefix<'iter>(
         &'iter self,
-        prefix: &crate::types::storage::Key,
-    ) -> Result<Self::PrefixIter<'iter>, namada_storage::Error> {
+        prefix: &storage::Key,
+    ) -> Result<Self::PrefixIter<'iter>, state::StorageError> {
         vp_host_fns::iter_prefix_pre(
             &mut self.ctx.gas_meter.borrow_mut(),
             self.ctx.write_log,
@@ -228,7 +225,7 @@ where
     fn iter_next<'iter>(
         &'iter self,
         iter: &mut Self::PrefixIter<'iter>,
-    ) -> Result<Option<(String, Vec<u8>)>, namada_storage::Error> {
+    ) -> Result<Option<(String, Vec<u8>)>, state::StorageError> {
         vp_host_fns::iter_next::<DB>(
             &mut self.ctx.gas_meter.borrow_mut(),
             iter,
@@ -237,38 +234,38 @@ where
         .into_storage_result()
     }
 
-    fn get_chain_id(&self) -> Result<String, namada_storage::Error> {
+    fn get_chain_id(&self) -> Result<String, state::StorageError> {
         self.ctx.get_chain_id()
     }
 
-    fn get_block_height(&self) -> Result<BlockHeight, namada_storage::Error> {
+    fn get_block_height(&self) -> Result<BlockHeight, state::StorageError> {
         self.ctx.get_block_height()
     }
 
     fn get_block_header(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<Header>, namada_storage::Error> {
+    ) -> Result<Option<Header>, state::StorageError> {
         self.ctx.get_block_header(height)
     }
 
-    fn get_block_hash(&self) -> Result<BlockHash, namada_storage::Error> {
+    fn get_block_hash(&self) -> Result<BlockHash, state::StorageError> {
         self.ctx.get_block_hash()
     }
 
-    fn get_block_epoch(&self) -> Result<Epoch, namada_storage::Error> {
+    fn get_block_epoch(&self) -> Result<Epoch, state::StorageError> {
         self.ctx.get_block_epoch()
     }
 
-    fn get_tx_index(&self) -> Result<TxIndex, namada_storage::Error> {
+    fn get_tx_index(&self) -> Result<TxIndex, state::StorageError> {
         self.ctx.get_tx_index().into_storage_result()
     }
 
-    fn get_native_token(&self) -> Result<Address, namada_storage::Error> {
+    fn get_native_token(&self) -> Result<Address, state::StorageError> {
         self.ctx.get_native_token()
     }
 
-    fn get_pred_epochs(&self) -> namada_storage::Result<Epochs> {
+    fn get_pred_epochs(&self) -> state::StorageResult<Epochs> {
         self.ctx.get_pred_epochs()
     }
 }
@@ -276,16 +273,16 @@ where
 impl<'view, 'a: 'view, DB, H, CA> StorageRead
     for CtxPostStorageRead<'view, 'a, DB, H, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    DB: 'static + state::DB + for<'iter> state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    type PrefixIter<'iter> = storage::PrefixIter<'iter, DB> where Self: 'iter;
+    type PrefixIter<'iter> = state::PrefixIter<'iter, DB> where Self: 'iter;
 
     fn read_bytes(
         &self,
-        key: &crate::types::storage::Key,
-    ) -> Result<Option<Vec<u8>>, namada_storage::Error> {
+        key: &storage::Key,
+    ) -> Result<Option<Vec<u8>>, state::StorageError> {
         vp_host_fns::read_post(
             &mut self.ctx.gas_meter.borrow_mut(),
             self.ctx.storage,
@@ -296,10 +293,7 @@ where
         .into_storage_result()
     }
 
-    fn has_key(
-        &self,
-        key: &crate::types::storage::Key,
-    ) -> Result<bool, namada_storage::Error> {
+    fn has_key(&self, key: &storage::Key) -> Result<bool, state::StorageError> {
         vp_host_fns::has_key_post(
             &mut self.ctx.gas_meter.borrow_mut(),
             self.ctx.storage,
@@ -312,8 +306,8 @@ where
 
     fn iter_prefix<'iter>(
         &'iter self,
-        prefix: &crate::types::storage::Key,
-    ) -> Result<Self::PrefixIter<'iter>, namada_storage::Error> {
+        prefix: &storage::Key,
+    ) -> Result<Self::PrefixIter<'iter>, state::StorageError> {
         vp_host_fns::iter_prefix_post(
             &mut self.ctx.gas_meter.borrow_mut(),
             self.ctx.write_log,
@@ -330,7 +324,7 @@ where
     fn iter_next<'iter>(
         &'iter self,
         iter: &mut Self::PrefixIter<'iter>,
-    ) -> Result<Option<(String, Vec<u8>)>, namada_storage::Error> {
+    ) -> Result<Option<(String, Vec<u8>)>, state::StorageError> {
         vp_host_fns::iter_next::<DB>(
             &mut self.ctx.gas_meter.borrow_mut(),
             iter,
@@ -339,51 +333,51 @@ where
         .into_storage_result()
     }
 
-    fn get_chain_id(&self) -> Result<String, namada_storage::Error> {
+    fn get_chain_id(&self) -> Result<String, state::StorageError> {
         self.ctx.get_chain_id()
     }
 
-    fn get_block_height(&self) -> Result<BlockHeight, namada_storage::Error> {
+    fn get_block_height(&self) -> Result<BlockHeight, state::StorageError> {
         self.ctx.get_block_height()
     }
 
     fn get_block_header(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<Header>, namada_storage::Error> {
+    ) -> Result<Option<Header>, state::StorageError> {
         self.ctx.get_block_header(height)
     }
 
-    fn get_block_hash(&self) -> Result<BlockHash, namada_storage::Error> {
+    fn get_block_hash(&self) -> Result<BlockHash, state::StorageError> {
         self.ctx.get_block_hash()
     }
 
-    fn get_block_epoch(&self) -> Result<Epoch, namada_storage::Error> {
+    fn get_block_epoch(&self) -> Result<Epoch, state::StorageError> {
         self.ctx.get_block_epoch()
     }
 
-    fn get_tx_index(&self) -> Result<TxIndex, namada_storage::Error> {
+    fn get_tx_index(&self) -> Result<TxIndex, state::StorageError> {
         self.ctx.get_tx_index().into_storage_result()
     }
 
-    fn get_native_token(&self) -> Result<Address, namada_storage::Error> {
+    fn get_native_token(&self) -> Result<Address, state::StorageError> {
         Ok(self.ctx.storage.native_token.clone())
     }
 
-    fn get_pred_epochs(&self) -> namada_storage::Result<Epochs> {
+    fn get_pred_epochs(&self) -> state::StorageResult<Epochs> {
         self.ctx.get_pred_epochs()
     }
 }
 
 impl<'view, 'a: 'view, DB, H, CA> VpEnv<'view> for Ctx<'a, DB, H, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    DB: 'static + state::DB + for<'iter> state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
     type Post = CtxPostStorageRead<'view, 'a, DB, H, CA>;
     type Pre = CtxPreStorageRead<'view, 'a, DB, H, CA>;
-    type PrefixIter<'iter> = storage::PrefixIter<'iter, DB> where Self: 'iter;
+    type PrefixIter<'iter> = state::PrefixIter<'iter, DB> where Self: 'iter;
 
     fn pre(&'view self) -> Self::Pre {
         CtxPreStorageRead { ctx: self }
@@ -396,7 +390,7 @@ where
     fn read_temp<T: borsh::BorshDeserialize>(
         &self,
         key: &Key,
-    ) -> Result<Option<T>, namada_storage::Error> {
+    ) -> Result<Option<T>, state::StorageError> {
         vp_host_fns::read_temp(
             &mut self.gas_meter.borrow_mut(),
             self.write_log,
@@ -410,7 +404,7 @@ where
     fn read_bytes_temp(
         &self,
         key: &Key,
-    ) -> Result<Option<Vec<u8>>, namada_storage::Error> {
+    ) -> Result<Option<Vec<u8>>, state::StorageError> {
         vp_host_fns::read_temp(
             &mut self.gas_meter.borrow_mut(),
             self.write_log,
@@ -420,7 +414,7 @@ where
         .into_storage_result()
     }
 
-    fn get_chain_id(&self) -> Result<String, namada_storage::Error> {
+    fn get_chain_id(&self) -> Result<String, state::StorageError> {
         vp_host_fns::get_chain_id(
             &mut self.gas_meter.borrow_mut(),
             self.storage,
@@ -429,7 +423,7 @@ where
         .into_storage_result()
     }
 
-    fn get_block_height(&self) -> Result<BlockHeight, namada_storage::Error> {
+    fn get_block_height(&self) -> Result<BlockHeight, state::StorageError> {
         vp_host_fns::get_block_height(
             &mut self.gas_meter.borrow_mut(),
             self.storage,
@@ -441,7 +435,7 @@ where
     fn get_block_header(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<Header>, namada_storage::Error> {
+    ) -> Result<Option<Header>, state::StorageError> {
         vp_host_fns::get_block_header(
             &mut self.gas_meter.borrow_mut(),
             self.storage,
@@ -451,7 +445,7 @@ where
         .into_storage_result()
     }
 
-    fn get_block_hash(&self) -> Result<BlockHash, namada_storage::Error> {
+    fn get_block_hash(&self) -> Result<BlockHash, state::StorageError> {
         vp_host_fns::get_block_hash(
             &mut self.gas_meter.borrow_mut(),
             self.storage,
@@ -460,7 +454,7 @@ where
         .into_storage_result()
     }
 
-    fn get_block_epoch(&self) -> Result<Epoch, namada_storage::Error> {
+    fn get_block_epoch(&self) -> Result<Epoch, state::StorageError> {
         vp_host_fns::get_block_epoch(
             &mut self.gas_meter.borrow_mut(),
             self.storage,
@@ -469,7 +463,7 @@ where
         .into_storage_result()
     }
 
-    fn get_tx_index(&self) -> Result<TxIndex, namada_storage::Error> {
+    fn get_tx_index(&self) -> Result<TxIndex, state::StorageError> {
         vp_host_fns::get_tx_index(
             &mut self.gas_meter.borrow_mut(),
             self.tx_index,
@@ -478,7 +472,7 @@ where
         .into_storage_result()
     }
 
-    fn get_native_token(&self) -> Result<Address, namada_storage::Error> {
+    fn get_native_token(&self) -> Result<Address, state::StorageError> {
         vp_host_fns::get_native_token(
             &mut self.gas_meter.borrow_mut(),
             self.storage,
@@ -487,7 +481,7 @@ where
         .into_storage_result()
     }
 
-    fn get_pred_epochs(&self) -> namada_storage::Result<Epochs> {
+    fn get_pred_epochs(&self) -> state::StorageResult<Epochs> {
         vp_host_fns::get_pred_epochs(
             &mut self.gas_meter.borrow_mut(),
             self.storage,
@@ -499,7 +493,7 @@ where
     fn get_ibc_events(
         &self,
         event_type: String,
-    ) -> Result<Vec<IbcEvent>, namada_storage::Error> {
+    ) -> Result<Vec<IbcEvent>, state::StorageError> {
         vp_host_fns::get_ibc_events(
             &mut self.gas_meter.borrow_mut(),
             self.write_log,
@@ -511,7 +505,7 @@ where
     fn iter_prefix<'iter>(
         &'iter self,
         prefix: &Key,
-    ) -> Result<Self::PrefixIter<'iter>, namada_storage::Error> {
+    ) -> Result<Self::PrefixIter<'iter>, state::StorageError> {
         vp_host_fns::iter_prefix_pre(
             &mut self.gas_meter.borrow_mut(),
             self.write_log,
@@ -526,7 +520,7 @@ where
         &self,
         vp_code_hash: Hash,
         input_data: Tx,
-    ) -> Result<bool, namada_storage::Error> {
+    ) -> Result<bool, state::StorageError> {
         #[cfg(feature = "wasm-runtime")]
         {
             use std::marker::PhantomData;
@@ -583,13 +577,13 @@ where
         }
     }
 
-    fn charge_gas(&self, used_gas: u64) -> Result<(), namada_storage::Error> {
+    fn charge_gas(&self, used_gas: u64) -> Result<(), state::StorageError> {
         self.gas_meter.borrow_mut().consume(used_gas).map_err(|_| {
             Error::SimpleMessage("Gas limit exceeded in native vp")
         })
     }
 
-    fn get_tx_code_hash(&self) -> Result<Option<Hash>, namada_storage::Error> {
+    fn get_tx_code_hash(&self) -> Result<Option<Hash>, state::StorageError> {
         vp_host_fns::get_tx_code_hash(
             &mut self.gas_meter.borrow_mut(),
             self.tx,
@@ -601,36 +595,36 @@ where
     fn read_pre<T: borsh::BorshDeserialize>(
         &self,
         key: &Key,
-    ) -> Result<Option<T>, namada_storage::Error> {
+    ) -> Result<Option<T>, state::StorageError> {
         self.pre().read(key).map_err(Into::into)
     }
 
     fn read_bytes_pre(
         &self,
         key: &Key,
-    ) -> Result<Option<Vec<u8>>, namada_storage::Error> {
+    ) -> Result<Option<Vec<u8>>, state::StorageError> {
         self.pre().read_bytes(key).map_err(Into::into)
     }
 
     fn read_post<T: borsh::BorshDeserialize>(
         &self,
         key: &Key,
-    ) -> Result<Option<T>, namada_storage::Error> {
+    ) -> Result<Option<T>, state::StorageError> {
         self.post().read(key).map_err(Into::into)
     }
 
     fn read_bytes_post(
         &self,
         key: &Key,
-    ) -> Result<Option<Vec<u8>>, namada_storage::Error> {
+    ) -> Result<Option<Vec<u8>>, state::StorageError> {
         self.post().read_bytes(key).map_err(Into::into)
     }
 
-    fn has_key_pre(&self, key: &Key) -> Result<bool, namada_storage::Error> {
+    fn has_key_pre(&self, key: &Key) -> Result<bool, state::StorageError> {
         self.pre().has_key(key).map_err(Into::into)
     }
 
-    fn has_key_post(&self, key: &Key) -> Result<bool, namada_storage::Error> {
+    fn has_key_post(&self, key: &Key) -> Result<bool, state::StorageError> {
         self.post().has_key(key).map_err(Into::into)
     }
 }
@@ -669,7 +663,7 @@ pub trait StorageReader {
 
 impl<'a, DB, H, CA> StorageReader for &Ctx<'a, DB, H, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    DB: 'static + state::DB + for<'iter> state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {

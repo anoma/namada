@@ -14,15 +14,7 @@ use namada_core::types::address::{Address, MASP};
 use namada_core::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
 use namada_gas::MASP_VERIFY_SHIELDED_TX_GAS;
 use namada_sdk::masp::verify_shielded_tx;
-use namada_storage::OptionExt;
-use namada_token::storage_key::{
-    is_masp_allowed_key, is_masp_key, is_masp_nullifier_key,
-    is_masp_tx_pin_key, is_masp_tx_prefix_key, HEAD_TX_KEY,
-    MASP_CONVERT_ANCHOR_KEY, MASP_NOTE_COMMITMENT_ANCHOR_PREFIX,
-    MASP_NOTE_COMMITMENT_TREE_KEY, MASP_NULLIFIERS_KEY, PIN_KEY_PREFIX,
-    TX_KEY_PREFIX,
-};
-use namada_token::{self as token, Transfer};
+use namada_state::OptionExt;
 use namada_tx::Tx;
 use namada_vp_env::VpEnv;
 use ripemd::Digest as RipemdDigest;
@@ -31,6 +23,14 @@ use thiserror::Error;
 
 use crate::ledger::native_vp;
 use crate::ledger::native_vp::{Ctx, NativeVp};
+use crate::token::storage_key::{
+    is_masp_allowed_key, is_masp_key, is_masp_nullifier_key,
+    is_masp_tx_pin_key, is_masp_tx_prefix_key, HEAD_TX_KEY,
+    MASP_CONVERT_ANCHOR_KEY, MASP_NOTE_COMMITMENT_ANCHOR_PREFIX,
+    MASP_NOTE_COMMITMENT_TREE_KEY, MASP_NULLIFIERS_KEY, PIN_KEY_PREFIX,
+    TX_KEY_PREFIX,
+};
+use crate::token::{self as token, Transfer};
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]
@@ -384,7 +384,7 @@ where
     ) -> Result<bool> {
         let epoch = self.ctx.get_block_epoch()?;
         let (transfer, shielded_tx) = self.ctx.get_shielded_action(tx_data)?;
-        let transfer_amount = namada_token::denom_to_amount(
+        let transfer_amount = crate::token::denom_to_amount(
             transfer.amount,
             &transfer.token,
             &self.ctx.pre(),

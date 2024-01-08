@@ -5,13 +5,13 @@ use std::collections::BTreeSet;
 use eyre::WrapErr;
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::storage::Key;
-use namada_core::types::token::Amount;
 use namada_state::StorageHasher;
-use namada_token::storage_key::is_any_token_balance_key;
 use namada_tx::Tx;
 use namada_vp_env::VpEnv;
 
 use crate::ledger::native_vp::{Ctx, NativeVp};
+use crate::token::storage_key::is_any_token_balance_key;
+use crate::token::Amount;
 use crate::vm::WasmCacheAccess;
 
 /// Generic error that may be returned by the validity predicate
@@ -121,19 +121,19 @@ mod test_nuts {
     use std::env::temp_dir;
 
     use assert_matches::assert_matches;
-    use borsh_ext::BorshSerializeExt;
+    use namada_core::borsh::BorshSerializeExt;
     use namada_core::types::address::testing::arb_non_internal_address;
     use namada_core::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
     use namada_core::types::storage::TxIndex;
-    use namada_core::types::token::balance_key;
-    use namada_core::types::transaction::TxType;
     use namada_ethereum_bridge::storage::wrapped_erc20s;
     use namada_state::testing::TestWlStorage;
-    use namada_storage::StorageWrite;
+    use namada_state::StorageWrite;
+    use namada_tx::data::TxType;
     use proptest::prelude::*;
 
     use super::*;
     use crate::ledger::gas::{TxGasMeter, VpGasMeter};
+    use crate::token::storage_key::balance_key;
     use crate::vm::wasm::VpCache;
     use crate::vm::WasmCacheRwAccess;
 

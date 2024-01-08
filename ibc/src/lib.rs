@@ -33,6 +33,7 @@ use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::ibc::core::router::types::error::RouterError;
 use namada_core::ibc::core::router::types::module::ModuleId;
 use namada_core::ibc::primitives::proto::Any;
+pub use namada_core::ibc::*;
 use namada_core::types::address::{Address, MASP};
 use namada_core::types::ibc::{
     get_shielded_transfer, is_ibc_denom, MsgShieldedTransfer,

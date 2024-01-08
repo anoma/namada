@@ -6,11 +6,10 @@ use eyre::{eyre, WrapErr};
 use masp_primitives::transaction::Transaction;
 use namada_core::types::hash::Hash;
 use namada_core::types::storage::Key;
-use namada_core::types::token::Amount;
 use namada_gas::TxGasMeter;
 use namada_sdk::tx::TX_TRANSFER_WASM;
 use namada_state::wl_storage::WriteLogAndStorage;
-use namada_storage::StorageRead;
+use namada_state::StorageRead;
 use namada_tx::data::protocol::ProtocolTxType;
 use namada_tx::data::{DecryptedTx, TxResult, TxType, VpsResult, WrapperTx};
 use namada_tx::{Section, Tx};
@@ -30,8 +29,9 @@ use crate::ledger::native_vp::parameters::{self, ParametersVp};
 use crate::ledger::native_vp::{self, NativeVp};
 use crate::ledger::pgf::PgfVp;
 use crate::ledger::pos::{self, PosVP};
-use crate::ledger::storage::write_log::WriteLog;
-use crate::ledger::storage::{DBIter, State, StorageHasher, WlStorage, DB};
+use crate::state::write_log::WriteLog;
+use crate::state::{DBIter, State, StorageHasher, WlStorage, DB};
+use crate::token::Amount;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage;
 use crate::types::storage::TxIndex;
@@ -393,7 +393,7 @@ pub fn transfer_fee<WLS>(
 where
     WLS: WriteLogAndStorage + StorageRead,
 {
-    let balance = namada_token::read_balance(
+    let balance = crate::token::read_balance(
         wl_storage,
         &wrapper.fee.token,
         &wrapper.fee_payer(),
@@ -402,7 +402,7 @@ where
 
     match wrapper.get_tx_fee() {
         Ok(fees) => {
-            let fees = namada_token::denom_to_amount(
+            let fees = crate::token::denom_to_amount(
                 fees,
                 &wrapper.fee.token,
                 wl_storage,
@@ -461,7 +461,7 @@ where
 /// Transfer `token` from `src` to `dest`. Returns an `Err` if `src` has
 /// insufficient balance or if the transfer the `dest` would overflow (This can
 /// only happen if the total supply doesn't fit in `token::Amount`). Contrary to
-/// `namada_token::transfer` this function updates the tx write log and
+/// `crate::token::transfer` this function updates the tx write log and
 /// not the block write log.
 fn token_transfer<WLS>(
     wl_storage: &mut WLS,
@@ -473,17 +473,17 @@ fn token_transfer<WLS>(
 where
     WLS: WriteLogAndStorage + StorageRead,
 {
-    let src_key = namada_token::storage_key::balance_key(token, src);
-    let src_balance = namada_token::read_balance(wl_storage, token, src)
+    let src_key = crate::token::storage_key::balance_key(token, src);
+    let src_balance = crate::token::read_balance(wl_storage, token, src)
         .expect("Token balance read in protocol must not fail");
     match src_balance.checked_sub(amount) {
         Some(new_src_balance) => {
             if src == dest {
                 return Ok(());
             }
-            let dest_key = namada_token::storage_key::balance_key(token, dest);
+            let dest_key = crate::token::storage_key::balance_key(token, dest);
             let dest_balance =
-                namada_token::read_balance(wl_storage, token, dest)
+                crate::token::read_balance(wl_storage, token, dest)
                     .expect("Token balance read in protocol must not fail");
             match dest_balance.checked_add(amount) {
                 Some(new_dest_balance) => {
@@ -514,7 +514,7 @@ pub fn check_fees<WLS>(wl_storage: &WLS, wrapper: &WrapperTx) -> Result<()>
 where
     WLS: WriteLogAndStorage + StorageRead,
 {
-    let balance = namada_token::read_balance(
+    let balance = crate::token::read_balance(
         wl_storage,
         &wrapper.fee.token,
         &wrapper.fee_payer(),
@@ -526,7 +526,7 @@ where
         .map_err(|e| Error::FeeError(e.to_string()))?;
 
     let fees =
-        namada_token::denom_to_amount(fees, &wrapper.fee.token, wl_storage)
+        crate::token::denom_to_amount(fees, &wrapper.fee.token, wl_storage)
             .map_err(|e| Error::FeeError(e.to_string()))?;
     if balance.checked_sub(fees).is_some() {
         Ok(())
@@ -1097,16 +1097,12 @@ mod tests {
 
     use borsh::BorshDeserialize;
     use eyre::Result;
-    use namada_core::proto::{SignableEthMessage, Signed};
     use namada_core::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
     use namada_core::types::ethereum_events::{
         EthereumEvent, TransferToNamada,
     };
     use namada_core::types::keccak::keccak_hash;
     use namada_core::types::storage::BlockHeight;
-    use namada_core::types::token::Amount;
-    use namada_core::types::vote_extensions::bridge_pool_roots::BridgePoolRootVext;
-    use namada_core::types::vote_extensions::ethereum_events::EthereumEventsVext;
     use namada_core::types::voting_power::FractionalVotingPower;
     use namada_core::types::{address, key};
     use namada_ethereum_bridge::protocol::transactions::votes::{
@@ -1116,7 +1112,11 @@ mod tests {
     use namada_ethereum_bridge::storage::proof::EthereumProof;
     use namada_ethereum_bridge::storage::{vote_tallies, vp};
     use namada_ethereum_bridge::test_utils;
-    use namada_storage::StorageRead;
+    use namada_state::StorageRead;
+    use namada_token::Amount;
+    use namada_tx::{SignableEthMessage, Signed};
+    use namada_vote_ext::bridge_pool_roots::BridgePoolRootVext;
+    use namada_vote_ext::ethereum_events::EthereumEventsVext;
 
     use super::*;
 
@@ -1164,7 +1164,9 @@ mod tests {
         };
         let signing_key = key::testing::keypair_1();
         let signed = vext.sign(&signing_key);
-        let tx = EthereumTxData::EthEventsVext(signed);
+        let tx = EthereumTxData::EthEventsVext(
+            namada_vote_ext::ethereum_events::SignedVext(signed),
+        );
 
         apply_eth_tx(tx.clone(), &mut wl_storage)?;
         apply_eth_tx(tx, &mut wl_storage)?;

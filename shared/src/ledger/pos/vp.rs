@@ -14,7 +14,7 @@ pub use namada_proof_of_stake::types;
 //     is_validator_max_commission_rate_change_key,
 // };
 use namada_state::StorageHasher;
-use namada_storage::StorageRead;
+use namada_state::StorageRead;
 use namada_tx::Tx;
 use thiserror::Error;
 

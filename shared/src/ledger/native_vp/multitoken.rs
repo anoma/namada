@@ -2,16 +2,16 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use namada_token::storage_key::{
-    is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
-    minter_key,
-};
-use namada_token::{Amount, Change};
 use namada_tx::Tx;
 use namada_vp_env::VpEnv;
 use thiserror::Error;
 
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
+use crate::token::storage_key::{
+    is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
+    minter_key,
+};
+use crate::token::{Amount, Change};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{Key, KeySeg};
 use crate::vm::WasmCacheAccess;
@@ -141,23 +141,24 @@ mod tests {
 
     use borsh_ext::BorshSerializeExt;
     use namada_gas::TxGasMeter;
+    use namada_state::testing::TestWlStorage;
+    use namada_tx::data::TxType;
+    use namada_tx::{Code, Data, Section, Signature, Tx};
 
     use super::*;
-    use crate::core::ledger::storage::testing::TestWlStorage;
     use crate::core::types::address::nam;
     use crate::core::types::address::testing::{
         established_address_1, established_address_2,
     };
     use crate::ledger::gas::VpGasMeter;
     use crate::ledger::ibc::storage::ibc_token;
-    use crate::proto::{Code, Data, Section, Signature, Tx};
+    use crate::token::storage_key::{
+        balance_key, minted_balance_key, minter_key,
+    };
+    use crate::token::Amount;
     use crate::types::address::{Address, InternalAddress};
     use crate::types::key::testing::keypair_1;
     use crate::types::storage::TxIndex;
-    use crate::types::token::{
-        balance_key, minted_balance_key, minter_key, Amount,
-    };
-    use crate::types::transaction::TxType;
     use crate::vm::wasm::compilation_cache::common::testing::cache as wasm_cache;
 
     const ADDRESS: Address = Address::Internal(InternalAddress::Multitoken);

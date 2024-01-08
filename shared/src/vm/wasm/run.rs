@@ -17,7 +17,7 @@ use wasmer::{BaseTunables, Module, Store};
 use super::memory::{Limit, WasmMemory};
 use super::TxCache;
 use crate::ledger::gas::VpGasMeter;
-use crate::ledger::storage::write_log::WriteLog;
+use crate::state::write_log::WriteLog;
 use crate::types::address::Address;
 use crate::types::hash::{Error as TxHashError, Hash};
 use crate::types::internal::HostEnvResult;
@@ -633,15 +633,15 @@ mod tests {
     use borsh_ext::BorshSerializeExt;
     use itertools::Either;
     use namada_test_utils::TestWasms;
+    use namada_tx::data::TxType;
+    use namada_tx::{Code, Data};
     use test_log::test;
     use wasmer_vm::TrapCode;
 
     use super::*;
-    use crate::ledger::storage::testing::TestStorage;
-    use crate::proto::{Code, Data};
+    use crate::state::testing::TestStorage;
+    use crate::tx::data::eval_vp::EvalVp;
     use crate::types::hash::Hash;
-    use crate::types::transaction::TxType;
-    use crate::types::validity_predicate::EvalVp;
     use crate::vm::wasm;
 
     const TX_GAS_LIMIT: u64 = 10_000_000_000;

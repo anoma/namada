@@ -18,19 +18,19 @@ use std::marker::PhantomData;
 use borsh::BorshDeserialize;
 use eyre::eyre;
 use namada_core::hints;
-use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_core::types::eth_bridge_pool::erc20_token_address;
 use namada_ethereum_bridge::storage::bridge_pool::{
     get_pending_key, is_bridge_pool_key, BRIDGE_POOL_ADDRESS,
 };
 use namada_ethereum_bridge::storage::parameters::read_native_erc20_address;
 use namada_ethereum_bridge::storage::whitelist;
+use namada_ethereum_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_state::{DBIter, StorageHasher, DB};
-use namada_token::storage_key::balance_key;
-use namada_token::Amount;
 use namada_tx::Tx;
 
 use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
+use crate::token::storage_key::balance_key;
+use crate::token::Amount;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::eth_bridge_pool::{PendingTransfer, TransferToEthereumKind};
 use crate::types::ethereum_events::EthAddress;
@@ -642,27 +642,27 @@ mod test_bridge_pool_vp {
     use std::env::temp_dir;
 
     use borsh::BorshDeserialize;
-    use borsh_ext::BorshSerializeExt;
-    use namada_core::ledger::eth_bridge::storage::bridge_pool::get_signed_root_key;
+    use namada_core::borsh::BorshSerializeExt;
     use namada_core::types::address;
+    use namada_ethereum_bridge::storage::bridge_pool::get_signed_root_key;
     use namada_ethereum_bridge::storage::parameters::{
         Contracts, EthereumBridgeParams, UpgradeableContract,
     };
+    use namada_ethereum_bridge::storage::wrapped_erc20s;
     use namada_gas::TxGasMeter;
-    use namada_storage::StorageWrite;
+    use namada_state::StorageWrite;
+    use namada_tx::data::TxType;
 
     use super::*;
     use crate::ledger::gas::VpGasMeter;
-    use crate::ledger::storage::mockdb::MockDB;
-    use crate::ledger::storage::traits::Sha256Hasher;
-    use crate::ledger::storage::write_log::WriteLog;
-    use crate::ledger::storage::{State, WlStorage};
+    use crate::state::mockdb::MockDB;
+    use crate::state::write_log::WriteLog;
+    use crate::state::{Sha256Hasher, State, WlStorage};
     use crate::types::address::{nam, wnam, InternalAddress};
     use crate::types::chain::ChainId;
     use crate::types::eth_bridge_pool::{GasFee, TransferToEthereum};
     use crate::types::hash::Hash;
     use crate::types::storage::TxIndex;
-    use crate::types::transaction::TxType;
     use crate::vm::wasm::VpCache;
     use crate::vm::WasmCacheRwAccess;
 
