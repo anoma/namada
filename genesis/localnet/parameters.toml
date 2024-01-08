@@ -1,6 +1,6 @@
 # General protocol parameters.
 [parameters]
-native_token = "NAM"
+native_token = "naan"
 # Minimum number of blocks in an epoch.
 min_num_of_blocks = 4
 # Maximum expected time per block (in seconds).
@@ -28,7 +28,7 @@ fee_unshielding_descriptions_limit = 15
 
 # Map of the cost per gas unit for every token allowed for fee payment
 [parameters.minimum_gas_price]
-nam = "0.000001"
+naan = "0.000001"
 
 # Proof of stake parameters.
 [pos_params]

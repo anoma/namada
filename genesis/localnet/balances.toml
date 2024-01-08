@@ -14,7 +14,7 @@
 # As for the established addresses, these are derived from their respective
 # genesis tx toml files.
 
-[token.NAM]
+[token.naan]
 # albert
 tnam1qxfj3sf6a0meahdu9t6znp05g8zx4dkjtgyn9gfu = "2000000"
 tpknam1qrnw8mxyqlj60mykgevnldcj5mg2fya7fs5a8xqdkd2gwtxhef0zy8a2wha = "2000000"
