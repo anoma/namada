@@ -17,6 +17,7 @@ default = []
 testing = [
     "namada_account",
     "namada_core/testing",
+    "namada_state/testing",
 ]
 
 [dependencies]
