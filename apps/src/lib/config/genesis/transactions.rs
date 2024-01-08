@@ -10,20 +10,20 @@ use itertools::{Either, Itertools};
 use ledger_namada_rs::NamadaApp;
 use ledger_transport_hid::hidapi::HidApi;
 use ledger_transport_hid::TransportNativeHID;
-use namada::core::types::account::AccountPublicKeysMap;
-use namada::core::types::address::{Address, EstablishedAddress};
-use namada::core::types::chain::ChainId;
-use namada::core::types::key::SerializeWithBorsh;
-use namada::core::types::string_encoding::StringEncoded;
+use namada::account::AccountPublicKeysMap;
 use namada::ledger::pos::common::PublicKey;
 use namada::ledger::pos::types::ValidatorMetaData;
 use namada::tx::data::{pos, Fee, TxType};
 use namada::tx::{
     verify_standalone_sig, Code, Commitment, Data, Section, SignatureIndex, Tx,
 };
-use namada::types::address::nam;
+use namada::types::address::{nam, Address, EstablishedAddress};
+use namada::types::chain::ChainId;
 use namada::types::dec::Dec;
-use namada::types::key::{common, ed25519, RefTo, SigScheme};
+use namada::types::key::{
+    common, ed25519, RefTo, SerializeWithBorsh, SigScheme,
+};
+use namada::types::string_encoding::StringEncoded;
 use namada::types::time::DateTimeUtc;
 use namada::types::token;
 use namada::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};

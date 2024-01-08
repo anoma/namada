@@ -6,12 +6,10 @@ use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use masp_proofs::bls12_381;
 use namada::account::protocol_pk_key;
-use namada::core::types::storage::KeySeg;
 use namada::ledger::parameters::Parameters;
 use namada::ledger::{ibc, pos};
 use namada::proof_of_stake::BecomeValidator;
-use namada::state::{DBIter, StorageHasher, DB};
-use namada::storage::StorageWrite;
+use namada::state::{DBIter, StorageHasher, StorageWrite, DB};
 use namada::token::storage_key::{
     MASP_CONVERT_ANCHOR_KEY, MASP_NOTE_COMMITMENT_ANCHOR_PREFIX,
     MASP_NOTE_COMMITMENT_TREE_KEY,
@@ -19,6 +17,7 @@ use namada::token::storage_key::{
 use namada::token::{credit_tokens, write_denom};
 use namada::types::address::{Address, MASP};
 use namada::types::hash::Hash as CodeHash;
+use namada::types::storage::KeySeg;
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::vm::validate_untrusted_wasm;
 use namada_sdk::eth_bridge::EthBridgeStatus;
@@ -153,7 +152,7 @@ where
         let commitment_tree_anchor_key = Key::from(MASP.to_db_key())
             .push(&MASP_NOTE_COMMITMENT_ANCHOR_PREFIX.to_owned())
             .expect("Cannot obtain a storage key")
-            .push(&namada::core::types::hash::Hash(
+            .push(&namada::types::hash::Hash(
                 bls12_381::Scalar::from(anchor).to_bytes(),
             ))
             .expect("Cannot obtain a storage key");
@@ -167,7 +166,7 @@ where
             .expect("Cannot obtain a storage key");
         self.wl_storage.write(
             &convert_anchor_key,
-            namada::core::types::hash::Hash(
+            namada::types::hash::Hash(
                 bls12_381::Scalar::from(
                     self.wl_storage.storage.conversion_state.tree.root(),
                 )
@@ -216,7 +215,7 @@ where
         // Initialize protocol parameters
         let parameters = genesis.get_chain_parameters(&self.wasm_dir);
         self.store_wasms(&parameters)?;
-        parameters.init_storage(&mut self.wl_storage).unwrap();
+        parameters::init_storage(&parameters, &mut self.wl_storage).unwrap();
 
         // Initialize governance parameters
         let gov_params = genesis.get_gov_params();
@@ -952,8 +951,8 @@ mod test {
     use std::collections::BTreeMap;
     use std::str::FromStr;
 
-    use namada::core::types::string_encoding::StringEncoded;
     use namada::state::DBIter;
+    use namada::types::string_encoding::StringEncoded;
     use namada_sdk::wallet::alias::Alias;
 
     use super::*;

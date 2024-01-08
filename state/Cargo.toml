@@ -19,7 +19,7 @@ default = []
 testing = ["proptest", "namada_core/testing"]
 
 [dependencies]
-namada_core = { path = "../core" }
+namada_core = { path = "../core", default-features = false }
 namada_gas = { path = "../gas" }
 namada_merkle_tree = { path = "../merkle_tree" }
 namada_parameters = { path = "../parameters" }

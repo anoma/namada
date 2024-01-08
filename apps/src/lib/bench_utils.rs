@@ -14,10 +14,6 @@ use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use masp_proofs::prover::LocalTxProver;
 use namada::core::ledger::ibc::storage::port_key;
-use namada::core::types::address::{self, Address};
-use namada::core::types::key::common::SecretKey;
-use namada::core::types::storage::Key;
-use namada::core::types::token::{Amount, Transfer};
 use namada::governance::storage::proposal::ProposalType;
 use namada::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
 use namada::ibc::apps::transfer::types::packet::PacketData;
@@ -59,21 +55,22 @@ use namada::ledger::native_vp::ibc::get_dummy_header;
 use namada::ledger::queries::{
     Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
-use namada::storage::StorageRead;
+use namada::state::StorageRead;
 use namada::tendermint::Hash;
 use namada::tendermint_rpc::{self};
 use namada::tx::data::governance::InitProposalData;
 use namada::tx::data::pos::Bond;
 use namada::tx::{Code, Data, Section, Signature, Tx};
-use namada::types::address::InternalAddress;
+use namada::types::address::{self, Address, InternalAddress};
 use namada::types::chain::ChainId;
 use namada::types::io::StdIo;
+use namada::types::key::common::SecretKey;
 use namada::types::masp::{
     ExtendedViewingKey, PaymentAddress, TransferSource, TransferTarget,
 };
-use namada::types::storage::{BlockHeight, Epoch, KeySeg, TxIndex};
+use namada::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
 use namada::types::time::DateTimeUtc;
-use namada::types::token::DenominatedAmount;
+use namada::types::token::{Amount, DenominatedAmount, Transfer};
 use namada::vm::wasm::run;
 use namada::{proof_of_stake, tendermint};
 use namada_sdk::masp::{
@@ -864,7 +861,7 @@ impl BenchShieldedCtx {
 
         let mut hasher = Sha256::new();
         let shielded_section_hash = shielded.clone().map(|transaction| {
-            namada::core::types::hash::Hash(
+            namada::types::hash::Hash(
                 Section::MaspTx(transaction)
                     .hash(&mut hasher)
                     .finalize_reset()

@@ -51,10 +51,9 @@ use namada::state::tx_queue::{ExpiredTx, TxInQueue};
 use namada::state::wl_storage::WriteLogAndStorage;
 use namada::state::write_log::WriteLog;
 use namada::state::{
-    DBIter, Sha256Hasher, State, StorageHasher, TempWlStorage, WlStorage, DB,
-    EPOCH_SWITCH_BLOCKS_DELAY,
+    DBIter, Sha256Hasher, State, StorageHasher, StorageRead, TempWlStorage,
+    WlStorage, DB, EPOCH_SWITCH_BLOCKS_DELAY,
 };
-use namada::storage::StorageRead;
 use namada::token;
 pub use namada::tx::data::ResultCode;
 use namada::tx::data::{DecryptedTx, TxType, WrapperTx};
@@ -124,7 +123,7 @@ pub enum Error {
     #[error("Error loading wasm: {0}")]
     LoadingWasm(String),
     #[error("Error reading from or writing to storage: {0}")]
-    Storage(#[from] namada::storage::Error),
+    Storage(#[from] namada::state::StorageError),
     #[error("Transaction replay attempt: {0}")]
     ReplayAttempt(String),
 }
@@ -165,7 +164,7 @@ pub fn rollback(config: config::Ledger) -> Result<()> {
     tracing::info!("Rollback Namada state");
 
     db.rollback(tendermint_block_height)
-        .map_err(|e| Error::Storage(namada::storage::Error::new(e)))
+        .map_err(|e| Error::Storage(namada::state::StorageError::new(e)))
 }
 
 #[derive(Debug)]
@@ -1498,7 +1497,7 @@ where
         // because we're using domain types in InitChain, but FinalizeBlock is
         // shimmed with a different old type. The joy...
         mut validator_conv: F,
-    ) -> namada::storage::Result<Vec<V>>
+    ) -> namada::state::StorageResult<Vec<V>>
     where
         F: FnMut(common::PublicKey, i64) -> V,
     {
@@ -1560,15 +1559,15 @@ mod test_utils {
     use std::path::PathBuf;
 
     use data_encoding::HEXUPPER;
-    use namada::core::ledger::masp_conversions::update_allowed_conversions;
-    use namada::core::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
     use namada::ledger::parameters::{EpochDuration, Parameters};
     use namada::proof_of_stake::parameters::PosParams;
     use namada::proof_of_stake::storage::validator_consensus_key_handle;
     use namada::state::mockdb::MockDB;
-    use namada::state::{LastBlock, Sha256Hasher};
-    use namada::storage::StorageWrite;
+    use namada::state::{
+        LastBlock, Sha256Hasher, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY,
+    };
     use namada::tendermint::abci::types::VoteInfo;
+    use namada::token::conversion::update_allowed_conversions;
     use namada::tx::data::{Fee, TxType, WrapperTx};
     use namada::tx::{Code, Data};
     use namada::types::address;
@@ -2142,8 +2141,7 @@ mod test_utils {
             fee_unshielding_descriptions_limit: 0,
             minimum_gas_price: Default::default(),
         };
-        params
-            .init_storage(&mut shell.wl_storage)
+        parameters::init_storage(&params, &mut shell.wl_storage)
             .expect("Test failed");
         // make wl_storage to update conversion for a new epoch
         let token_params = token::Parameters {
@@ -2156,10 +2154,14 @@ mod test_utils {
         // Needed for storage but not for this test.
         for (token, _) in address::tokens() {
             let addr = address::gen_deterministic_established_address(token);
-            token_params.init_storage(&addr, &mut shell.wl_storage);
+            token::write_params(&token_params, &mut shell.wl_storage, &addr)
+                .unwrap();
             shell
                 .wl_storage
-                .write(&token::minted_balance_key(&addr), token::Amount::zero())
+                .write(
+                    &token::storage_key::minted_balance_key(&addr),
+                    token::Amount::zero(),
+                )
                 .unwrap();
             shell
                 .wl_storage
@@ -2172,16 +2174,15 @@ mod test_utils {
             "nam".to_string(),
             shell.wl_storage.storage.native_token.clone(),
         );
-        token_params.init_storage(
-            &shell.wl_storage.storage.native_token.clone(),
-            &mut shell.wl_storage,
-        );
+        let addr = shell.wl_storage.storage.native_token.clone();
+        token::write_params(&token_params, &mut shell.wl_storage, &addr)
+            .unwrap();
         // final adjustments so that updating allowed conversions doesn't panic
         // with divide by zero
         shell
             .wl_storage
             .write(
-                &token::minted_balance_key(
+                &token::storage_key::minted_balance_key(
                     &shell.wl_storage.storage.native_token.clone(),
                 ),
                 token::Amount::zero(),
@@ -2271,10 +2272,8 @@ mod test_utils {
 #[cfg(test)]
 mod shell_tests {
     use namada::core::ledger::replay_protection;
-    use namada::storage::token::read_denom;
-    use namada::tx::data::protocol::{
-        ethereum_tx_data_variants, ProtocolTx, ProtocolTxType,
-    };
+    use namada::token::read_denom;
+    use namada::tx::data::protocol::{ProtocolTx, ProtocolTxType};
     use namada::tx::data::{Fee, WrapperTx};
     use namada::tx::{
         Code, Data, Section, SignableEthMessage, Signature, Signed, Tx,
@@ -2282,7 +2281,10 @@ mod shell_tests {
     use namada::types::ethereum_events::EthereumEvent;
     use namada::types::key::RefTo;
     use namada::types::storage::{BlockHeight, Epoch};
-    use namada::vote_ext::{bridge_pool_roots, ethereum_events};
+    use namada::vote_ext::{
+        bridge_pool_roots, ethereum_events, ethereum_tx_data_variants,
+    };
+    use namada::{parameters, token};
 
     use super::*;
     use crate::node::ledger::shell::test_utils;
@@ -2407,7 +2409,7 @@ mod shell_tests {
                 assert!(ext.verify(&protocol_key.ref_to()).is_ok());
                 ext
             };
-            let tx = EthereumTxData::EthEventsVext(ext)
+            let tx = EthereumTxData::EthEventsVext(ext.into())
                 .sign(&protocol_key, shell.chain_id.clone())
                 .to_bytes();
             let rsp = shell.mempool_validate(&tx, Default::default());
@@ -2437,7 +2439,7 @@ mod shell_tests {
                 assert!(ext.verify(&protocol_key.ref_to()).is_ok());
                 ext
             };
-            let tx = EthereumTxData::EthEventsVext(ext)
+            let tx = EthereumTxData::EthEventsVext(ext.into())
                 .sign(&protocol_key, shell.chain_id.clone())
                 .to_bytes();
             let rsp = shell.mempool_validate(&tx, Default::default());
@@ -2471,7 +2473,8 @@ mod shell_tests {
                 block_height: shell.wl_storage.storage.get_last_block_height(),
                 ethereum_events: vec![ethereum_event],
             }
-            .sign(protocol_key),
+            .sign(protocol_key)
+            .into(),
         )
         .sign(protocol_key, shell.chain_id.clone())
         .to_bytes();
@@ -2527,7 +2530,7 @@ mod shell_tests {
             assert!(ext.verify(&protocol_key.ref_to()).is_ok());
             ext
         };
-        let tx = EthereumTxData::EthEventsVext(ext)
+        let tx = EthereumTxData::EthEventsVext(ext.into())
             .sign(&protocol_key, shell.chain_id.clone())
             .to_bytes();
         let rsp = shell.mempool_validate(&tx, Default::default());
@@ -2723,8 +2726,7 @@ mod shell_tests {
         )));
 
         // Write wrapper hash to storage
-        let mut batch =
-            namada::core::ledger::storage::testing::TestStorage::batch();
+        let mut batch = namada::state::testing::TestStorage::batch();
         let wrapper_hash = wrapper.header_hash();
         let wrapper_hash_key = replay_protection::last_key(&wrapper_hash);
         shell
@@ -2855,7 +2857,7 @@ mod shell_tests {
         let (shell, _recv, _, _) = test_utils::setup();
 
         let block_gas_limit =
-            namada::parameters::get_max_block_gas(&shell.wl_storage).unwrap();
+            parameters::get_max_block_gas(&shell.wl_storage).unwrap();
         let keypair = super::test_utils::gen_keypair();
 
         let mut wrapper =

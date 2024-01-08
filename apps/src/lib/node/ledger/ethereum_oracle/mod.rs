@@ -9,12 +9,12 @@ use ethabi::Address;
 use ethbridge_events::{event_codecs, EventKind};
 use itertools::Either;
 use namada::core::hints;
-use namada::core::types::ethereum_structs;
 use namada::eth_bridge::ethers;
 use namada::eth_bridge::ethers::providers::{Http, Middleware, Provider};
 use namada::eth_bridge::oracle::config::Config;
 use namada::types::control_flow::time::{Constant, Duration, Instant, Sleep};
 use namada::types::ethereum_events::EthereumEvent;
+use namada::types::ethereum_structs;
 use namada_sdk::eth_bridge::{eth_syncing_status_timeout, SyncStatus};
 use num256::Uint256;
 use thiserror::Error;
@@ -602,7 +602,7 @@ fn process_queue(
 
 pub mod last_processed_block {
     //! Functionality to do with publishing which blocks we have processed.
-    use namada::core::types::ethereum_structs;
+    use namada::types::ethereum_structs;
     use tokio::sync::watch;
 
     pub type Sender = watch::Sender<Option<ethereum_structs::BlockHeight>>;

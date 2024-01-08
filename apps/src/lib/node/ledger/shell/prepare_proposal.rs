@@ -374,10 +374,6 @@ mod test_prepare_proposal {
     use std::collections::BTreeSet;
 
     use borsh_ext::BorshSerializeExt;
-    use namada::core::ledger::namada::storage::collections::lazy_map::{
-        NestedSubKey, SubKey,
-    };
-    use namada::core::ledger::namada::token::read_denom;
     use namada::ledger::gas::Gas;
     use namada::ledger::pos::PosQueries;
     use namada::ledger::replay_protection;
@@ -387,24 +383,23 @@ mod test_prepare_proposal {
     };
     use namada::proof_of_stake::types::WeightedValidator;
     use namada::proof_of_stake::Epoch;
-    use namada::tx::data::protocol::{
-        ethereum_tx_data_variants, EthereumTxData,
-    };
+    use namada::state::collections::lazy_map::{NestedSubKey, SubKey};
+    use namada::token;
+    use namada::token::{read_denom, Amount, DenominatedAmount};
     use namada::tx::data::{Fee, TxType, WrapperTx};
     use namada::tx::{Code, Data, Header, Section, Signature, Signed};
     use namada::types::address::{self, Address};
     use namada::types::ethereum_events::EthereumEvent;
     use namada::types::key::RefTo;
     use namada::types::storage::{BlockHeight, InnerEthEventsQueue};
-    use namada::types::token;
-    use namada::types::token::{Amount, DenominatedAmount};
-    use namada::vote_ext::ethereum_events;
+    use namada::vote_ext::{ethereum_events, ethereum_tx_data_variants};
 
     use super::*;
     use crate::config::ValidatorLocalConfig;
     use crate::node::ledger::shell::test_utils::{
         self, gen_keypair, get_pkh_from_address, TestShell,
     };
+    use crate::node::ledger::shell::EthereumTxData;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;
 
@@ -413,7 +408,7 @@ mod test_prepare_proposal {
         shell: &TestShell,
         vext: Signed<ethereum_events::Vext>,
     ) {
-        let tx = EthereumTxData::EthEventsVext(vext)
+        let tx = EthereumTxData::EthEventsVext(vext.into())
             .sign(
                 shell.mode.get_protocol_key().expect("Test failed"),
                 shell.chain_id.clone(),
@@ -699,10 +694,11 @@ mod test_prepare_proposal {
             ext
         };
 
-        let vote =
-            EthereumTxData::EthEventsVext(signed_eth_ev_vote_extension.clone())
-                .sign(&protocol_key, shell.chain_id.clone())
-                .to_bytes();
+        let vote = EthereumTxData::EthEventsVext(
+            signed_eth_ev_vote_extension.clone().into(),
+        )
+        .sign(&protocol_key, shell.chain_id.clone())
+        .to_bytes();
         let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
             txs: vec![vote.into()],
             ..Default::default()
@@ -717,7 +713,7 @@ mod test_prepare_proposal {
             _ => panic!("Test failed"),
         };
 
-        assert_eq!(signed_eth_ev_vote_extension, rsp_ext);
+        assert_eq!(signed_eth_ev_vote_extension, rsp_ext.0);
     }
 
     /// Test that the decrypted txs are included
@@ -731,7 +727,7 @@ mod test_prepare_proposal {
         let mut expected_decrypted = vec![];
 
         // Load some tokens to tx signer to pay fees
-        let balance_key = token::balance_key(
+        let balance_key = token::storage_key::balance_key(
             &shell.wl_storage.storage.native_token,
             &Address::from(&keypair.ref_to()),
         );
@@ -1130,7 +1126,7 @@ mod test_prepare_proposal {
             // Remove the allowed btc
             *local_config = Some(ValidatorLocalConfig {
                 accepted_gas_tokens: std::collections::HashMap::from([(
-                    namada::core::types::address::nam(),
+                    namada::types::address::nam(),
                     Amount::from(1),
                 )]),
             });
@@ -1236,7 +1232,7 @@ mod test_prepare_proposal {
             // Remove btc and increase minimum for nam
             *local_config = Some(ValidatorLocalConfig {
                 accepted_gas_tokens: std::collections::HashMap::from([(
-                    namada::core::types::address::nam(),
+                    namada::types::address::nam(),
                     Amount::from(100),
                 )]),
             });
@@ -1433,7 +1429,7 @@ mod test_prepare_proposal {
                 assert!(ext.verify(&protocol_key.ref_to()).is_ok());
                 ext
             };
-            let tx = EthereumTxData::EthEventsVext(ext)
+            let tx = EthereumTxData::EthEventsVext(ext.into())
                 .sign(&protocol_key, shell.chain_id.clone())
                 .to_bytes();
             let req = RequestPrepareProposal {
@@ -1481,7 +1477,7 @@ mod test_prepare_proposal {
                 assert!(ext.verify(&protocol_key.ref_to()).is_ok());
                 ext
             };
-            let tx = EthereumTxData::EthEventsVext(ext)
+            let tx = EthereumTxData::EthEventsVext(ext.into())
                 .sign(&protocol_key, shell.chain_id.clone())
                 .to_bytes();
             let req = RequestPrepareProposal {
@@ -1504,7 +1500,7 @@ mod test_prepare_proposal {
                 panic!("No ethereum events found in proposal");
             };
             assert_eq!(ext.data.ethereum_events.len(), 2);
-            let found_event = ext.data.ethereum_events.remove(1);
+            let found_event = ext.0.data.ethereum_events.remove(1);
             assert_eq!(found_event, event2);
         }
     }

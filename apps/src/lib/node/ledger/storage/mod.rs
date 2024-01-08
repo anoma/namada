@@ -53,22 +53,22 @@ mod tests {
     use std::collections::HashMap;
 
     use itertools::Itertools;
-    use namada::core::ledger::masp_conversions::update_allowed_conversions;
     use namada::eth_bridge::storage::proof::BridgePoolRootProof;
     use namada::ledger::eth_bridge::storage::bridge_pool;
     use namada::ledger::gas::STORAGE_ACCESS_GAS_PER_BYTE;
     use namada::ledger::ibc::storage::ibc_key;
     use namada::ledger::parameters::{EpochDuration, Parameters};
     use namada::state::write_log::WriteLog;
-    use namada::state::{types, StoreType, WlStorage};
-    use namada::storage::{self, StorageWrite};
+    use namada::state::{self, StorageWrite, StoreType, WlStorage};
+    use namada::token::conversion::update_allowed_conversions;
     use namada::types::chain::ChainId;
     use namada::types::ethereum_events::Uint;
     use namada::types::hash::Hash;
     use namada::types::keccak::KeccakHash;
     use namada::types::storage::{BlockHash, BlockHeight, Key};
     use namada::types::time::DurationSecs;
-    use namada::types::{address, storage, token};
+    use namada::types::{address, storage};
+    use namada::{parameters, token, types};
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::test_runner::Config;
@@ -167,7 +167,8 @@ mod tests {
             fee_unshielding_descriptions_limit: 0,
             minimum_gas_price: Default::default(),
         };
-        params.init_storage(&mut wl_storage).expect("Test failed");
+        parameters::init_storage(&params, &mut wl_storage)
+            .expect("Test failed");
         // insert and commit
         wl_storage
             .storage
@@ -191,9 +192,12 @@ mod tests {
         // Needed for storage but not for this test.
         for (token, _) in address::tokens() {
             let addr = address::gen_deterministic_established_address(token);
-            token_params.init_storage(&addr, &mut wl_storage);
+            token::write_params(&token_params, &mut wl_storage, &addr).unwrap();
             wl_storage
-                .write(&token::minted_balance_key(&addr), token::Amount::zero())
+                .write(
+                    &token::storage_key::minted_balance_key(&addr),
+                    token::Amount::zero(),
+                )
                 .unwrap();
             wl_storage
                 .storage
@@ -206,14 +210,12 @@ mod tests {
             .conversion_state
             .tokens
             .insert("nam".to_string(), wl_storage.storage.native_token.clone());
-        token_params.init_storage(
-            &wl_storage.storage.native_token.clone(),
-            &mut wl_storage,
-        );
+        let addr = wl_storage.storage.native_token.clone();
+        token::write_params(&token_params, &mut wl_storage, &addr).unwrap();
 
         wl_storage
             .write(
-                &token::minted_balance_key(
+                &token::storage_key::minted_balance_key(
                     &wl_storage.storage.native_token.clone(),
                 ),
                 token::Amount::zero(),
@@ -710,7 +712,7 @@ mod tests {
         }
 
         // Then try to iterate over their prefix
-        let iter = namada::storage::iter_prefix(&storage, &prefix)
+        let iter = state::iter_prefix(&storage, &prefix)
             .unwrap()
             .map(Result::unwrap);
 
@@ -725,7 +727,7 @@ mod tests {
         storage.commit_block().unwrap();
 
         // Again, try to iterate over their prefix
-        let iter = namada::storage::iter_prefix(&storage, &prefix)
+        let iter = state::iter_prefix(&storage, &prefix)
             .unwrap()
             .map(Result::unwrap);
         itertools::assert_equal(iter, expected);
@@ -743,7 +745,7 @@ mod tests {
             storage.write(&key, i / 2).unwrap();
         }
 
-        let iter = namada::storage::iter_prefix(&storage, &prefix)
+        let iter = state::iter_prefix(&storage, &prefix)
             .unwrap()
             .map(Result::unwrap);
 
@@ -763,7 +765,7 @@ mod tests {
         }
 
         // Check that iter_prefix doesn't return deleted keys anymore
-        let iter = namada::storage::iter_prefix(&storage, &prefix)
+        let iter = state::iter_prefix(&storage, &prefix)
             .unwrap()
             .map(Result::unwrap);
         let expected = merged
@@ -776,7 +778,7 @@ mod tests {
         storage.commit_block().unwrap();
 
         // And check again
-        let iter = namada::storage::iter_prefix(&storage, &prefix)
+        let iter = state::iter_prefix(&storage, &prefix)
             .unwrap()
             .map(Result::unwrap);
         itertools::assert_equal(iter, expected);

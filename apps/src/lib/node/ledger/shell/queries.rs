@@ -66,10 +66,10 @@ where
 // access to the `Shell` there
 #[cfg(test)]
 mod test_queries {
-    use namada::core::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
     use namada::ledger::pos::PosQueries;
     use namada::proof_of_stake::storage::read_consensus_validator_set_addresses_with_stake;
     use namada::proof_of_stake::types::WeightedValidator;
+    use namada::state::EPOCH_SWITCH_BLOCKS_DELAY;
     use namada::tendermint::abci::types::VoteInfo;
     use namada::types::storage::Epoch;
     use namada_sdk::eth_bridge::{EthBridgeQueries, SendValsetUpd};

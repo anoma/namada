@@ -1,7 +1,6 @@
 use std::fmt::Debug;
 
 use namada_core::types::address::EstablishedAddressGen;
-use namada_core::types::ethereum_structs;
 use namada_core::types::hash::{Error as HashError, Hash};
 use namada_core::types::storage::{
     BlockHash, BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue,
@@ -9,7 +8,7 @@ use namada_core::types::storage::{
 };
 use namada_core::types::time::DateTimeUtc;
 use namada_core::types::token::ConversionState;
-use namada_core::types::uint::Uint;
+use namada_core::types::{ethereum_events, ethereum_structs};
 use namada_merkle_tree::{
     Error as MerkleTreeError, MerkleTreeStoresRead, MerkleTreeStoresWrite,
     StoreType,
@@ -233,7 +232,7 @@ pub trait DB: Debug {
         &self,
         height: BlockHeight,
         last_height: BlockHeight,
-    ) -> Result<Option<Uint>>;
+    ) -> Result<Option<ethereum_events::Uint>>;
 
     /// Write a replay protection entry
     fn write_replay_protection_entry(

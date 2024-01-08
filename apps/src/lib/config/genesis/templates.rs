@@ -5,7 +5,6 @@ use std::marker::PhantomData;
 use std::path::Path;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada::core::types::{ethereum_structs, token};
 use namada::eth_bridge::storage::parameters::{
     Contracts, Erc20WhitelistEntry, MinimumConfirmations,
 };
@@ -15,6 +14,7 @@ use namada::types::dec::Dec;
 use namada::types::token::{
     Amount, DenominatedAmount, Denomination, NATIVE_MAX_DECIMAL_PLACES,
 };
+use namada::types::{ethereum_structs, token};
 use serde::{Deserialize, Serialize};
 
 use super::transactions::{self, Transactions};
@@ -926,9 +926,9 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
 
-    use namada::core::types::key;
-    use namada::core::types::string_encoding::StringEncoded;
+    use namada::types::key;
     use namada::types::key::RefTo;
+    use namada::types::string_encoding::StringEncoded;
     use tempfile::tempdir;
 
     use super::*;

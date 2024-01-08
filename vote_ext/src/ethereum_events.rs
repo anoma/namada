@@ -27,6 +27,12 @@ impl Deref for SignedVext {
     }
 }
 
+impl From<Signed<Vext>> for SignedVext {
+    fn from(value: Signed<Vext>) -> Self {
+        Self(value)
+    }
+}
+
 /// Represents a set of [`EthereumEvent`] instances seen by some validator.
 ///
 /// This struct will be created and signed over by each consensus validator,

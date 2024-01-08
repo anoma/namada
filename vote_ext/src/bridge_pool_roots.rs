@@ -74,6 +74,12 @@ impl Deref for SignedVext {
     }
 }
 
+impl From<Signed<BridgePoolRootVext>> for SignedVext {
+    fn from(value: Signed<BridgePoolRootVext>) -> Self {
+        Self(value)
+    }
+}
+
 impl Vext {
     /// Creates a new signed [`Vext`].
     #[inline]

@@ -1,8 +1,11 @@
 use borsh::BorshDeserialize;
-use namada::storage::{self, StorageRead};
+use namada::state::{self, StorageRead};
 use namada::types::storage::Key;
 
-pub(super) fn force_read<S, T>(storage: &S, key: &Key) -> storage::Result<T>
+pub(super) fn force_read<S, T>(
+    storage: &S,
+    key: &Key,
+) -> state::StorageResult<T>
 where
     S: StorageRead,
     T: BorshDeserialize,

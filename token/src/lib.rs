@@ -11,7 +11,7 @@ pub mod storage_key {
 
 use namada_core::types::address::Address;
 use namada_storage::{Result, StorageRead, StorageWrite};
-use namada_trans_token::Parameters;
+pub use namada_trans_token::Parameters;
 
 /// Initialize parameters for the token in storage during the genesis block.
 pub fn write_params<S>(

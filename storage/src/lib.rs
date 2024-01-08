@@ -8,7 +8,7 @@ pub mod mockdb;
 pub mod tx_queue;
 pub mod types;
 
-pub use db::{Error as DbError, *};
+pub use db::{Error as DbError, Result as DbResult, *};
 pub use error::{CustomError, Error, OptionExt, Result, ResultExt};
 use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
 use namada_core::types::address::Address;

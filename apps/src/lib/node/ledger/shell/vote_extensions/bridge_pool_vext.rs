@@ -199,7 +199,7 @@ where
 
 #[cfg(test)]
 mod test_bp_vote_extensions {
-    use namada::core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
+    use namada::ethereum_bridge::storage::bridge_pool::get_key_from_hash;
     use namada::ledger::pos::PosQueries;
     use namada::proof_of_stake::storage::{
         consensus_validator_set_handle,
@@ -209,7 +209,7 @@ mod test_bp_vote_extensions {
         Position as ValidatorPosition, WeightedValidator,
     };
     use namada::proof_of_stake::{become_validator, BecomeValidator, Epoch};
-    use namada::storage::StorageWrite;
+    use namada::state::StorageWrite;
     use namada::tendermint::abci::types::VoteInfo;
     use namada::tx::{SignableEthMessage, Signed};
     use namada::types::ethereum_events::Uint;
@@ -310,7 +310,7 @@ mod test_bp_vote_extensions {
             shell.wl_storage.storage.get_last_block_height();
         shell.commit();
         assert!(shell.validate_bp_roots_vext(
-            vote_ext,
+            vote_ext.0,
             shell.wl_storage.storage.get_last_block_height()
         ));
     }
@@ -343,11 +343,11 @@ mod test_bp_vote_extensions {
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         assert_eq!(
-            vote_ext,
+            vote_ext.0,
             shell.extend_vote_with_bp_roots().expect("Test failed")
         );
         assert!(shell.validate_bp_roots_vext(
-            vote_ext,
+            vote_ext.0,
             shell.wl_storage.storage.get_last_block_height(),
         ))
     }
@@ -380,12 +380,12 @@ mod test_bp_vote_extensions {
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         let valid = shell
             .filter_invalid_bp_roots_vexts(vec![
-                vote_ext.clone(),
-                vote_ext.clone(),
+                vote_ext.0.clone(),
+                vote_ext.0.clone(),
             ])
             .map(|(_, vext)| vext)
             .collect::<Vec<_>>();
-        assert_eq!(valid, vec![vote_ext]);
+        assert_eq!(valid, vec![vote_ext.0]);
     }
 
     /// Test that Bridge pool roots signed by a non-validator are rejected
@@ -413,7 +413,7 @@ mod test_bp_vote_extensions {
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         assert!(!shell.validate_bp_roots_vext(
-            bp_root,
+            bp_root.0,
             shell.wl_storage.pos_queries().get_current_decision_height(),
         ))
     }
@@ -443,7 +443,7 @@ mod test_bp_vote_extensions {
         }
         .sign(&bertha_keypair());
         assert!(!shell.validate_bp_roots_vext(
-            bp_root,
+            bp_root.0,
             shell.wl_storage.storage.get_last_block_height()
         ))
     }
@@ -464,7 +464,7 @@ mod test_bp_vote_extensions {
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
 
         assert!(!shell.validate_bp_roots_vext(
-            bp_root,
+            bp_root.0,
             shell.wl_storage.storage.get_last_block_height()
         ))
     }
@@ -507,7 +507,7 @@ mod test_bp_vote_extensions {
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         assert!(!shell.validate_bp_roots_vext(
-            bp_root,
+            bp_root.0,
             shell.wl_storage.storage.get_last_block_height()
         ))
     }
@@ -531,7 +531,7 @@ mod test_bp_vote_extensions {
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         assert!(!shell.validate_bp_roots_vext(
-            bp_root,
+            bp_root.0,
             shell.wl_storage.storage.get_last_block_height()
         ))
     }
@@ -582,7 +582,7 @@ mod test_bp_vote_extensions {
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         assert!(shell.validate_bp_roots_vext(
-            bp_root,
+            bp_root.0,
             shell.wl_storage.pos_queries().get_current_decision_height()
         ));
         let to_sign = keccak_hash([[2; 32], Uint::from(0).to_bytes()].concat());
@@ -598,7 +598,7 @@ mod test_bp_vote_extensions {
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         assert!(shell.validate_bp_roots_vext(
-            bp_root,
+            bp_root.0,
             shell.wl_storage.pos_queries().get_current_decision_height()
         ));
     }
@@ -649,7 +649,7 @@ mod test_bp_vote_extensions {
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         assert!(!shell.validate_bp_roots_vext(
-            bp_root,
+            bp_root.0,
             shell.wl_storage.pos_queries().get_current_decision_height()
         ));
     }

@@ -48,7 +48,6 @@ use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
 use itertools::Either;
-use namada::core::types::ethereum_structs;
 use namada::eth_bridge::storage::proof::BridgePoolRootProof;
 use namada::ledger::eth_bridge::storage::bridge_pool;
 use namada::ledger::replay_protection;
@@ -56,17 +55,17 @@ use namada::ledger::storage::tx_queue::TxQueue;
 use namada::state::merkle_tree::{base_tree_key_prefix, subtree_key_prefix};
 use namada::state::types::PrefixIterator;
 use namada::state::{
-    BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error,
-    MerkleTreeStoresRead, Result, StoreType, DB,
+    BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, DbError as Error,
+    DbResult as Result, MerkleTreeStoresRead, StoreType, DB,
 };
 use namada::types;
-use namada::types::ethereum_events::Uint;
 use namada::types::storage::{
     BlockHeight, BlockResults, Epoch, EthEventsQueue, Header, Key, KeySeg,
     KEY_SEGMENT_SEPARATOR,
 };
 use namada::types::time::DateTimeUtc;
 use namada::types::token::ConversionState;
+use namada::types::{ethereum_events, ethereum_structs};
 use rayon::prelude::*;
 use rocksdb::{
     BlockBasedOptions, ColumnFamily, ColumnFamilyDescriptor, Direction,
@@ -1453,7 +1452,7 @@ impl DB for RocksDB {
         &self,
         height: BlockHeight,
         last_height: BlockHeight,
-    ) -> Result<Option<Uint>> {
+    ) -> Result<Option<ethereum_events::Uint>> {
         let nonce_key = bridge_pool::get_signed_root_key();
         let bytes = if height == BlockHeight(0) || height >= last_height {
             self.read_subspace_val(&nonce_key)?

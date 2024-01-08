@@ -255,9 +255,6 @@ where
 
 #[cfg(test)]
 mod test_vote_extensions {
-    use namada::core::ledger::namada::storage::collections::lazy_map::{
-        NestedSubKey, SubKey,
-    };
     use namada::ledger::pos::PosQueries;
     use namada::proof_of_stake::storage::{
         consensus_validator_set_handle,
@@ -265,6 +262,7 @@ mod test_vote_extensions {
     };
     use namada::proof_of_stake::types::WeightedValidator;
     use namada::proof_of_stake::Epoch;
+    use namada::state::collections::lazy_map::{NestedSubKey, SubKey};
     use namada::tendermint::abci::types::VoteInfo;
     use namada::types::key::RefTo;
     use namada::vote_ext::validator_set_update;
@@ -504,7 +502,7 @@ mod test_vote_extensions {
                 validator_addr: validator_addr.clone(),
             }
             .sign(eth_bridge_key);
-            ext.sig = test_utils::invalidate_signature(ext.sig);
+            ext.0.sig = test_utils::invalidate_signature(ext.0.sig);
             Some(ext)
         };
         assert!(!shell.validate_valset_upd_vext(
