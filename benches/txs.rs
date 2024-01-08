@@ -2,17 +2,15 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use namada::core::ledger::governance::storage::proposal::ProposalType;
-use namada::core::ledger::governance::storage::vote::{
-    StorageProposalVote, VoteType,
-};
-use namada::core::ledger::pgf::storage::steward::StewardDetail;
+use namada::account::{InitAccount, UpdateAccount};
 use namada::core::types::key::{
     common, SecretKey as SecretKeyInterface, SigScheme,
 };
 use namada::core::types::token::Amount;
-use namada::core::types::transaction::account::{InitAccount, UpdateAccount};
-use namada::core::types::transaction::pos::{BecomeValidator, MetaDataChange};
+use namada::governance::pgf::storage::steward::StewardDetail;
+use namada::governance::storage::proposal::ProposalType;
+use namada::governance::storage::vote::{StorageProposalVote, VoteType};
+use namada::governance::{InitProposalData, VoteProposalData};
 use namada::ibc::core::channel::types::channel::Order;
 use namada::ibc::core::channel::types::msgs::MsgChannelOpenInit;
 use namada::ibc::core::channel::types::Version as ChannelVersion;
@@ -24,23 +22,21 @@ use namada::ibc::core::host::types::identifiers::{
     ClientId, ClientType, ConnectionId, PortId,
 };
 use namada::ledger::eth_bridge::read_native_erc20_address;
-use namada::ledger::storage_api::{StorageRead, StorageWrite};
 use namada::proof_of_stake::storage::read_pos_params;
 use namada::proof_of_stake::types::SlashType;
 use namada::proof_of_stake::{self, KeySeg};
-use namada::proto::{Code, Section};
+use namada::state::{StorageRead, StorageWrite};
+use namada::tx::data::pos::{
+    BecomeValidator, Bond, CommissionChange, ConsensusKeyChange,
+    MetaDataChange, Redelegation, Withdraw,
+};
+use namada::tx::{Code, Section};
 use namada::types::address::{self, Address};
 use namada::types::eth_bridge_pool::{GasFee, PendingTransfer};
 use namada::types::hash::Hash;
 use namada::types::key::{ed25519, secp256k1, PublicKey, RefTo};
 use namada::types::masp::{TransferSource, TransferTarget};
 use namada::types::storage::Key;
-use namada::types::transaction::governance::{
-    InitProposalData, VoteProposalData,
-};
-use namada::types::transaction::pos::{
-    Bond, CommissionChange, ConsensusKeyChange, Redelegation, Withdraw,
-};
 use namada_apps::bench_utils::{
     BenchShell, BenchShieldedCtx, ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY,
     BERTHA_PAYMENT_ADDRESS, TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM,
@@ -479,9 +475,9 @@ fn init_proposal(c: &mut Criterion) {
                         }
                         "complete_proposal" => {
                             let max_code_size_key =
-                namada::core::ledger::governance::storage::keys::get_max_proposal_code_size_key();
+                namada::governance::storage::keys::get_max_proposal_code_size_key();
                             let max_proposal_content_key =
-                    namada::core::ledger::governance::storage::keys::get_max_proposal_content_key();
+                    namada::governance::storage::keys::get_max_proposal_content_key();
                             let max_code_size: u64 = shell
                                 .wl_storage
                                 .read(&max_code_size_key)
@@ -902,7 +898,7 @@ fn resign_steward(c: &mut Criterion) {
         b.iter_batched_ref(
             || {
                 let mut shell = BenchShell::default();
-                namada::core::ledger::pgf::storage::keys::stewards_handle()
+                namada::governance::pgf::storage::keys::stewards_handle()
                     .insert(
                         &mut shell.wl_storage,
                         defaults::albert_address(),
@@ -931,7 +927,7 @@ fn update_steward_commission(c: &mut Criterion) {
         b.iter_batched_ref(
             || {
                 let mut shell = BenchShell::default();
-                namada::core::ledger::pgf::storage::keys::stewards_handle()
+                namada::governance::pgf::storage::keys::stewards_handle()
                     .insert(
                         &mut shell.wl_storage,
                         defaults::albert_address(),
@@ -939,14 +935,13 @@ fn update_steward_commission(c: &mut Criterion) {
                     )
                     .unwrap();
 
-                let data =
-                    namada::types::transaction::pgf::UpdateStewardCommission {
-                        steward: defaults::albert_address(),
-                        commission: HashMap::from([(
-                            defaults::albert_address(),
-                            namada::types::dec::Dec::zero(),
-                        )]),
-                    };
+                let data = namada::tx::data::pgf::UpdateStewardCommission {
+                    steward: defaults::albert_address(),
+                    commission: HashMap::from([(
+                        defaults::albert_address(),
+                        namada::types::dec::Dec::zero(),
+                    )]),
+                };
                 let tx = shell.generate_tx(
                     TX_UPDATE_STEWARD_COMMISSION,
                     data,

@@ -6,16 +6,13 @@ use std::str::FromStr;
 use criterion::{criterion_group, criterion_main, Criterion};
 use masp_primitives::bls12_381;
 use masp_primitives::sapling::Node;
-use namada::core::ledger::governance::storage::proposal::ProposalType;
-use namada::core::ledger::governance::storage::vote::{
-    StorageProposalVote, VoteType,
-};
-use namada::core::ledger::ibc::{IbcActions, TransferModule};
-use namada::core::ledger::pgf::storage::steward::StewardDetail;
-use namada::core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada::core::types::address::{self, Address};
 use namada::core::types::token::{Amount, Transfer};
 use namada::eth_bridge::storage::whitelist;
+use namada::governance::pgf::storage::steward::StewardDetail;
+use namada::governance::storage::proposal::ProposalType;
+use namada::governance::storage::vote::{StorageProposalVote, VoteType};
+use namada::governance::{InitProposalData, VoteProposalData};
 use namada::ibc::core::channel::types::channel::Order;
 use namada::ibc::core::channel::types::msgs::MsgChannelOpenInit;
 use namada::ibc::core::channel::types::Version as ChannelVersion;
@@ -26,6 +23,7 @@ use namada::ibc::core::connection::types::Counterparty;
 use namada::ibc::core::host::types::identifiers::{
     ClientId, ClientType, ConnectionId, PortId,
 };
+use namada::ibc::{IbcActions, TransferModule};
 use namada::ledger::eth_bridge::read_native_erc20_address;
 use namada::ledger::gas::{TxGasMeter, VpGasMeter};
 use namada::ledger::governance::GovernanceVp;
@@ -40,22 +38,20 @@ use namada::ledger::native_vp::parameters::ParametersVp;
 use namada::ledger::native_vp::{Ctx, NativeVp};
 use namada::ledger::pgf::PgfVp;
 use namada::ledger::pos::PosVP;
-use namada::namada_sdk::masp::verify_shielded_tx;
-use namada::namada_sdk::masp_primitives::merkle_tree::CommitmentTree;
-use namada::namada_sdk::masp_primitives::transaction::Transaction;
 use namada::proof_of_stake;
 use namada::proof_of_stake::KeySeg;
-use namada::proto::{Code, Section, Tx};
+use namada::sdk::masp::verify_shielded_tx;
+use namada::sdk::masp_primitives::merkle_tree::CommitmentTree;
+use namada::sdk::masp_primitives::transaction::Transaction;
+use namada::state::{StorageRead, StorageWrite};
+use namada::token::storage_key::{
+    MASP_NOTE_COMMITMENT_ANCHOR_PREFIX, MASP_NOTE_COMMITMENT_TREE_KEY,
+};
+use namada::tx::{Code, Section, Tx};
 use namada::types::address::{InternalAddress, MASP};
 use namada::types::eth_bridge_pool::{GasFee, PendingTransfer};
 use namada::types::masp::{TransferSource, TransferTarget};
 use namada::types::storage::{Epoch, TxIndex};
-use namada::types::token::{
-    MASP_NOTE_COMMITMENT_ANCHOR_PREFIX, MASP_NOTE_COMMITMENT_TREE_KEY,
-};
-use namada::types::transaction::governance::{
-    InitProposalData, VoteProposalData,
-};
 use namada_apps::bench_utils::{
     generate_foreign_key_tx, BenchShell, BenchShieldedCtx,
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
@@ -143,9 +139,9 @@ fn governance(c: &mut Criterion) {
             }
             "complete_proposal" => {
                 let max_code_size_key =
-                namada::core::ledger::governance::storage::keys::get_max_proposal_code_size_key();
+                namada::governance::storage::keys::get_max_proposal_code_size_key();
                 let max_proposal_content_key =
-                    namada::core::ledger::governance::storage::keys::get_max_proposal_content_key();
+                    namada::governance::storage::keys::get_max_proposal_content_key();
                 let max_code_size: u64 = shell
                     .wl_storage
                     .read(&max_code_size_key)
@@ -640,7 +636,7 @@ fn pgf(c: &mut Criterion) {
         "steward_inflation_rate",
     ] {
         let mut shell = BenchShell::default();
-        namada::core::ledger::pgf::storage::keys::stewards_handle()
+        namada::governance::pgf::storage::keys::stewards_handle()
             .insert(
                 &mut shell.wl_storage,
                 defaults::albert_address(),
@@ -660,14 +656,13 @@ fn pgf(c: &mut Criterion) {
                 vec![&defaults::albert_keypair()],
             ),
             "steward_inflation_rate" => {
-                let data =
-                    namada::types::transaction::pgf::UpdateStewardCommission {
-                        steward: defaults::albert_address(),
-                        commission: HashMap::from([(
-                            defaults::albert_address(),
-                            namada::types::dec::Dec::zero(),
-                        )]),
-                    };
+                let data = namada::tx::data::pgf::UpdateStewardCommission {
+                    steward: defaults::albert_address(),
+                    commission: HashMap::from([(
+                        defaults::albert_address(),
+                        namada::types::dec::Dec::zero(),
+                    )]),
+                };
                 shell.generate_tx(
                     TX_UPDATE_STEWARD_COMMISSION,
                     data,
@@ -971,24 +966,21 @@ fn parameters(c: &mut Criterion) {
             "parameter_change" => {
                 // Simulate governance proposal to modify a parameter
                 let min_proposal_fund_key =
-            namada::core::ledger::governance::storage::keys::get_min_proposal_fund_key();
+            namada::governance::storage::keys::get_min_proposal_fund_key();
                 shell
                     .wl_storage
                     .write(&min_proposal_fund_key, 1_000)
                     .unwrap();
 
-                let proposal_key = namada::core::ledger::governance::storage::keys::get_proposal_execution_key(0);
+                let proposal_key = namada::governance::storage::keys::get_proposal_execution_key(0);
                 shell.wl_storage.write(&proposal_key, 0).unwrap();
 
                 // Return a dummy tx for validation
-                let mut tx = Tx::from_type(
-                    namada::types::transaction::TxType::Decrypted(
-                        namada::types::transaction::DecryptedTx::Decrypted,
-                    ),
-                );
-                tx.set_data(namada::proto::Data::new(
-                    borsh::to_vec(&0).unwrap(),
-                ));
+                let mut tx =
+                    Tx::from_type(namada::tx::data::TxType::Decrypted(
+                        namada::tx::data::DecryptedTx::Decrypted,
+                    ));
+                tx.set_data(namada::tx::Data::new(borsh::to_vec(&0).unwrap()));
                 tx
             }
             _ => panic!("Unexpected bench test"),
@@ -1050,24 +1042,21 @@ fn pos(c: &mut Criterion) {
             "parameter_change" => {
                 // Simulate governance proposal to modify a parameter
                 let min_proposal_fund_key =
-            namada::core::ledger::governance::storage::keys::get_min_proposal_fund_key();
+            namada::governance::storage::keys::get_min_proposal_fund_key();
                 shell
                     .wl_storage
                     .write(&min_proposal_fund_key, 1_000)
                     .unwrap();
 
-                let proposal_key = namada::core::ledger::governance::storage::keys::get_proposal_execution_key(0);
+                let proposal_key = namada::governance::storage::keys::get_proposal_execution_key(0);
                 shell.wl_storage.write(&proposal_key, 0).unwrap();
 
                 // Return a dummy tx for validation
-                let mut tx = Tx::from_type(
-                    namada::types::transaction::TxType::Decrypted(
-                        namada::types::transaction::DecryptedTx::Decrypted,
-                    ),
-                );
-                tx.set_data(namada::proto::Data::new(
-                    borsh::to_vec(&0).unwrap(),
-                ));
+                let mut tx =
+                    Tx::from_type(namada::tx::data::TxType::Decrypted(
+                        namada::tx::data::DecryptedTx::Decrypted,
+                    ));
+                tx.set_data(namada::tx::Data::new(borsh::to_vec(&0).unwrap()));
                 tx
             }
             _ => panic!("Unexpected bench test"),

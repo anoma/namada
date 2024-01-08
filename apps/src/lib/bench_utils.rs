@@ -13,8 +13,8 @@ use borsh_ext::BorshSerializeExt;
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use masp_proofs::prover::LocalTxProver;
-use namada::core::ledger::ibc::storage::port_key;
 use namada::governance::storage::proposal::ProposalType;
+use namada::governance::InitProposalData;
 use namada::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
 use namada::ibc::apps::transfer::types::packet::PacketData;
 use namada::ibc::apps::transfer::types::PrefixedCoin;
@@ -48,6 +48,7 @@ use namada::ibc::core::host::types::path::{
 };
 use namada::ibc::primitives::proto::{Any, Protobuf};
 use namada::ibc::primitives::{Msg, Timestamp as IbcTimestamp};
+use namada::ibc::storage::port_key;
 use namada::ledger::dry_run_tx;
 use namada::ledger::gas::TxGasMeter;
 use namada::ledger::ibc::storage::{channel_key, connection_key};
@@ -58,7 +59,6 @@ use namada::ledger::queries::{
 use namada::state::StorageRead;
 use namada::tendermint::Hash;
 use namada::tendermint_rpc::{self};
-use namada::tx::data::governance::InitProposalData;
 use namada::tx::data::pos::Bond;
 use namada::tx::{Code, Data, Section, Signature, Tx};
 use namada::types::address::{self, Address, InternalAddress};
@@ -798,7 +798,7 @@ impl Default for BenchShieldedCtx {
         }
 
         crate::wallet::save(&chain_ctx.wallet).unwrap();
-        namada::core::ledger::masp_conversions::update_allowed_conversions(
+        namada::token::conversion::update_allowed_conversions(
             &mut shell.wl_storage,
         )
         .unwrap();

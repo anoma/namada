@@ -1,22 +1,20 @@
 use std::collections::BTreeSet;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use namada::core::ledger::governance::storage::vote::{
-    StorageProposalVote, VoteType,
-};
+use namada::account::UpdateAccount;
 use namada::core::types::address::{self, Address};
 use namada::core::types::key::{
     common, SecretKey as SecretKeyInterface, SigScheme,
 };
 use namada::core::types::token::{Amount, Transfer};
-use namada::core::types::transaction::account::UpdateAccount;
+use namada::governance::storage::vote::{StorageProposalVote, VoteType};
+use namada::governance::VoteProposalData;
 use namada::ledger::gas::{TxGasMeter, VpGasMeter};
-use namada::proto::{Code, Section};
+use namada::tx::data::pos::{Bond, CommissionChange};
+use namada::tx::{Code, Section};
 use namada::types::hash::Hash;
 use namada::types::key::ed25519;
 use namada::types::storage::{Key, TxIndex};
-use namada::types::transaction::governance::VoteProposalData;
-use namada::types::transaction::pos::{Bond, CommissionChange};
 use namada::vm::wasm::run;
 use namada_apps::bench_utils::{
     generate_foreign_key_tx, BenchShell, TX_BOND_WASM,
