@@ -8,7 +8,7 @@ use namada::core::ledger::pgf::inflation as pgf_inflation;
 use namada::ledger::events::EventType;
 use namada::ledger::gas::{GasMetering, TxGasMeter};
 use namada::ledger::pos::namada_proof_of_stake;
-use namada::ledger::protocol;
+use namada::ledger::protocol::{self, WrapperArgs};
 use namada::ledger::storage::wl_storage::WriteLogAndStorage;
 use namada::ledger::storage::write_log::StorageModification;
 use namada::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
@@ -268,134 +268,146 @@ where
                 continue;
             }
 
-            let (mut tx_event, embedding_wrapper, mut tx_gas_meter, wrapper) =
-                match &tx_header.tx_type {
-                    TxType::Wrapper(wrapper) => {
-                        stats.increment_wrapper_txs();
-                        let tx_event = Event::new_tx_event(&tx, height.0);
-                        let gas_meter = TxGasMeter::new(wrapper.gas_limit);
-                        (tx_event, None, gas_meter, Some(tx.clone()))
-                    }
-                    TxType::Decrypted(inner) => {
-                        // We remove the corresponding wrapper tx from the queue
-                        let tx_in_queue = self
-                            .wl_storage
-                            .storage
-                            .tx_queue
-                            .pop()
-                            .expect("Missing wrapper tx in queue");
-                        let mut event = Event::new_tx_event(&tx, height.0);
+            let (
+                mut tx_event,
+                embedding_wrapper,
+                mut tx_gas_meter,
+                wrapper,
+                mut wrapper_args,
+            ) = match &tx_header.tx_type {
+                TxType::Wrapper(wrapper) => {
+                    stats.increment_wrapper_txs();
+                    let tx_event = Event::new_tx_event(&tx, height.0);
+                    let gas_meter = TxGasMeter::new(wrapper.gas_limit);
+                    (
+                        tx_event,
+                        None,
+                        gas_meter,
+                        Some(tx.clone()),
+                        Some(WrapperArgs {
+                            block_proposer: &native_block_proposer_address,
+                            is_committed_fee_unshield: false,
+                        }),
+                    )
+                }
+                TxType::Decrypted(inner) => {
+                    // We remove the corresponding wrapper tx from the queue
+                    let tx_in_queue = self
+                        .wl_storage
+                        .storage
+                        .tx_queue
+                        .pop()
+                        .expect("Missing wrapper tx in queue");
+                    let mut event = Event::new_tx_event(&tx, height.0);
 
-                        match inner {
-                            DecryptedTx::Decrypted => {
-                                if let Some(code_sec) = tx
-                                    .get_section(tx.code_sechash())
-                                    .and_then(|x| Section::code_sec(x.as_ref()))
-                                {
-                                    stats.increment_tx_type(
-                                        code_sec.code.hash().to_string(),
-                                    );
-                                }
-                            }
-                            DecryptedTx::Undecryptable => {
-                                tracing::info!(
-                                    "Tx with hash {} was un-decryptable",
-                                    tx_in_queue.tx.header_hash()
+                    match inner {
+                        DecryptedTx::Decrypted => {
+                            if let Some(code_sec) = tx
+                                .get_section(tx.code_sechash())
+                                .and_then(|x| Section::code_sec(x.as_ref()))
+                            {
+                                stats.increment_tx_type(
+                                    code_sec.code.hash().to_string(),
                                 );
-                                event["info"] =
-                                    "Transaction is invalid.".into();
-                                event["log"] = "Transaction could not be \
-                                                decrypted."
-                                    .into();
-                                event["code"] =
-                                    ResultCode::Undecryptable.into();
-                                response.events.push(event);
-                                continue;
                             }
                         }
+                        DecryptedTx::Undecryptable => {
+                            tracing::info!(
+                                "Tx with hash {} was un-decryptable",
+                                tx_in_queue.tx.header_hash()
+                            );
+                            event["info"] = "Transaction is invalid.".into();
+                            event["log"] =
+                                "Transaction could not be decrypted.".into();
+                            event["code"] = ResultCode::Undecryptable.into();
+                            response.events.push(event);
+                            continue;
+                        }
+                    }
 
-                        (
-                            event,
-                            Some(tx_in_queue.tx),
-                            TxGasMeter::new_from_sub_limit(tx_in_queue.gas),
-                            None,
-                        )
-                    }
-                    TxType::Raw => {
-                        tracing::error!(
-                            "Internal logic error: FinalizeBlock received a \
-                             TxType::Raw transaction"
-                        );
-                        continue;
-                    }
-                    TxType::Protocol(protocol_tx) => match protocol_tx.tx {
-                        ProtocolTxType::BridgePoolVext
-                        | ProtocolTxType::BridgePool
-                        | ProtocolTxType::ValSetUpdateVext
-                        | ProtocolTxType::ValidatorSetUpdate => (
-                            Event::new_tx_event(&tx, height.0),
-                            None,
-                            TxGasMeter::new_from_sub_limit(0.into()),
-                            None,
-                        ),
-                        ProtocolTxType::EthEventsVext => {
-                            let ext =
+                    (
+                        event,
+                        Some(tx_in_queue.tx),
+                        TxGasMeter::new_from_sub_limit(tx_in_queue.gas),
+                        None,
+                        None,
+                    )
+                }
+                TxType::Raw => {
+                    tracing::error!(
+                        "Internal logic error: FinalizeBlock received a \
+                         TxType::Raw transaction"
+                    );
+                    continue;
+                }
+                TxType::Protocol(protocol_tx) => match protocol_tx.tx {
+                    ProtocolTxType::BridgePoolVext
+                    | ProtocolTxType::BridgePool
+                    | ProtocolTxType::ValSetUpdateVext
+                    | ProtocolTxType::ValidatorSetUpdate => (
+                        Event::new_tx_event(&tx, height.0),
+                        None,
+                        TxGasMeter::new_from_sub_limit(0.into()),
+                        None,
+                        None,
+                    ),
+                    ProtocolTxType::EthEventsVext => {
+                        let ext =
                             ethereum_tx_data_variants::EthEventsVext::try_from(
                                 &tx,
                             )
                             .unwrap();
-                            if self
-                                .mode
-                                .get_validator_address()
-                                .map(|validator| {
-                                    validator == &ext.data.validator_addr
-                                })
-                                .unwrap_or(false)
-                            {
-                                for event in ext.data.ethereum_events.iter() {
-                                    self.mode.dequeue_eth_event(event);
-                                }
+                        if self
+                            .mode
+                            .get_validator_address()
+                            .map(|validator| {
+                                validator == &ext.data.validator_addr
+                            })
+                            .unwrap_or(false)
+                        {
+                            for event in ext.data.ethereum_events.iter() {
+                                self.mode.dequeue_eth_event(event);
                             }
-                            (
-                                Event::new_tx_event(&tx, height.0),
-                                None,
-                                TxGasMeter::new_from_sub_limit(0.into()),
-                                None,
-                            )
                         }
-                        ProtocolTxType::EthereumEvents => {
-                            let digest =
+                        (
+                            Event::new_tx_event(&tx, height.0),
+                            None,
+                            TxGasMeter::new_from_sub_limit(0.into()),
+                            None,
+                            None,
+                        )
+                    }
+                    ProtocolTxType::EthereumEvents => {
+                        let digest =
                             ethereum_tx_data_variants::EthereumEvents::try_from(
                                 &tx,
                             ).unwrap();
-                            if let Some(address) =
-                                self.mode.get_validator_address().cloned()
+                        if let Some(address) =
+                            self.mode.get_validator_address().cloned()
+                        {
+                            let this_signer = &(
+                                address,
+                                self.wl_storage.storage.get_last_block_height(),
+                            );
+                            for MultiSignedEthEvent { event, signers } in
+                                &digest.events
                             {
-                                let this_signer = &(
-                                    address,
-                                    self.wl_storage
-                                        .storage
-                                        .get_last_block_height(),
-                                );
-                                for MultiSignedEthEvent { event, signers } in
-                                    &digest.events
-                                {
-                                    if signers.contains(this_signer) {
-                                        self.mode.dequeue_eth_event(event);
-                                    }
+                                if signers.contains(this_signer) {
+                                    self.mode.dequeue_eth_event(event);
                                 }
                             }
-                            (
-                                Event::new_tx_event(&tx, height.0),
-                                None,
-                                TxGasMeter::new_from_sub_limit(0.into()),
-                                None,
-                            )
                         }
-                    },
-                };
+                        (
+                            Event::new_tx_event(&tx, height.0),
+                            None,
+                            TxGasMeter::new_from_sub_limit(0.into()),
+                            None,
+                            None,
+                        )
+                    }
+                },
+            };
 
-            let mut is_committed_fee_unshield = false;
             match protocol::dispatch_tx(
                 tx,
                 processed_tx.tx.as_ref(),
@@ -408,8 +420,7 @@ where
                 &mut self.wl_storage,
                 &mut self.vp_wasm_cache,
                 &mut self.tx_wasm_cache,
-                Some(&native_block_proposer_address),
-                &mut is_committed_fee_unshield,
+                wrapper_args.as_mut(),
             )
             .map_err(Error::TxApply)
             {
@@ -421,7 +432,10 @@ where
                                 "Wrapper transaction {} was accepted",
                                 tx_event["hash"]
                             );
-                            if is_committed_fee_unshield {
+                            if wrapper_args
+                                .expect("Missing required wrapper arguments")
+                                .is_committed_fee_unshield
+                            {
                                 tx_event["is_valid_masp_tx"] =
                                     format!("{}", tx_index);
                             }
@@ -555,7 +569,10 @@ where
                         tx_event["code"] = ResultCode::InvalidTx.into();
                         // The fee unshield operation could still have been
                         // committed
-                        if is_committed_fee_unshield {
+                        if wrapper_args
+                            .expect("Missing required wrapper arguments")
+                            .is_committed_fee_unshield
+                        {
                             tx_event["is_valid_masp_tx"] =
                                 format!("{}", tx_index);
                         }

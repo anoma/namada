@@ -71,7 +71,6 @@ mod dry_run_tx {
                         &mut ctx.tx_wasm_cache,
                     ),
                     None,
-                    &mut false,
                 )
                 .into_storage_result()?;
 
