@@ -1,7 +1,10 @@
 //! A tx for adding a transfer request across the Ethereum bridge
 //! into the bridge pool.
-use eth_bridge::storage::{bridge_pool, native_erc20_key};
 use eth_bridge_pool::{GasFee, PendingTransfer, TransferToEthereum};
+use namada_tx_prelude::eth_bridge_pool::{
+    get_pending_key, BRIDGE_POOL_ADDRESS,
+};
+use namada_tx_prelude::parameters::native_erc20_key;
 use namada_tx_prelude::*;
 
 #[transaction(gas = 1038546)]
@@ -22,7 +25,7 @@ fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
     token::undenominated_transfer(
         ctx,
         payer,
-        &bridge_pool::BRIDGE_POOL_ADDRESS,
+        &BRIDGE_POOL_ADDRESS,
         fee_token_addr,
         amount,
     )?;
@@ -49,14 +52,14 @@ fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
         token::undenominated_transfer(
             ctx,
             sender,
-            &bridge_pool::BRIDGE_POOL_ADDRESS,
+            &BRIDGE_POOL_ADDRESS,
             &token,
             amount,
         )?;
     }
     log_string("Escrow succeeded");
     // add transfer into the pool
-    let pending_key = bridge_pool::get_pending_key(&transfer);
+    let pending_key = get_pending_key(&transfer);
     ctx.write_bytes(&pending_key, transfer.serialize_to_vec())
         .wrap_err("Could not write transfer to bridge pool")?;
     Ok(())

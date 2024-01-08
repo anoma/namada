@@ -10,7 +10,8 @@ use namada_macros::StorageKeys;
 use serde::{Deserialize, Serialize};
 
 use super::address::InternalAddress;
-use super::storage;
+use super::keccak::KeccakHash;
+use super::storage::{self, KeySeg};
 use crate as namada_core; // This is needed for `StorageKeys` macro
 use crate::types::address::Address;
 use crate::types::eth_abi::Encode;
@@ -45,6 +46,21 @@ pub fn is_pending_transfer_key(key: &storage::Key) -> bool {
         _ => return false,
     };
     !Segments::ALL.iter().any(|s| s == &segment)
+}
+
+/// Get the storage key for the transfers in the pool
+pub fn get_pending_key(transfer: &PendingTransfer) -> Key {
+    get_key_from_hash(&transfer.keccak256())
+}
+
+/// Get the storage key for the transfers using the hash
+pub fn get_key_from_hash(hash: &KeccakHash) -> Key {
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(BRIDGE_POOL_ADDRESS),
+            hash.to_db_key(),
+        ],
+    }
 }
 
 /// A version used in our Ethereuem smart contracts

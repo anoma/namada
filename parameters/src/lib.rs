@@ -8,6 +8,7 @@ use namada_core::types::chain::ProposalBytes;
 use namada_core::types::dec::Dec;
 use namada_core::types::hash::Hash;
 pub use namada_core::types::parameters::*;
+use namada_core::types::storage::Key;
 use namada_core::types::time::DurationSecs;
 use namada_core::types::token;
 use namada_storage::{self, ResultExt, StorageRead, StorageWrite};
@@ -468,4 +469,9 @@ where
         .read(&storage::get_max_tx_bytes_key())?
         .expect("The max tx bytes param should be present in storage");
     Ok(tx_size <= max_tx_bytes as usize)
+}
+
+/// Storage key for the Ethereum address of wNam.
+pub fn native_erc20_key() -> Key {
+    storage::get_native_erc20_key_at_addr(ADDRESS)
 }

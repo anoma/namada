@@ -12,6 +12,7 @@ pub mod wrapped_erc20s;
 use namada_core::ledger::eth_bridge::ADDRESS;
 use namada_core::types::address::Address;
 use namada_core::types::storage::{DbKeySeg, Key, KeySeg};
+pub use namada_parameters::native_erc20_key;
 use namada_parameters::storage::*;
 use namada_parameters::ADDRESS as PARAM_ADDRESS;
 use namada_trans_token::storage_key::balance_key;
@@ -57,11 +58,6 @@ pub fn active_key() -> Key {
 /// Storage key for the minimum confirmations parameter.
 pub fn min_confirmations_key() -> Key {
     get_min_confirmations_key_at_addr(PARAM_ADDRESS)
-}
-
-/// Storage key for the Ethereum address of wNam.
-pub fn native_erc20_key() -> Key {
-    get_native_erc20_key_at_addr(PARAM_ADDRESS)
 }
 
 /// Storage key for the Ethereum address of the bridge contract.
