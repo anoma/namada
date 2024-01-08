@@ -2,14 +2,13 @@ use std::ops::Deref;
 use std::str::FromStr;
 
 use assert_matches::assert_matches;
-use namada_core::ledger::storage_api::collections::lazy_map::Collectable;
-use namada_core::ledger::storage_api::token::{credit_tokens, read_balance};
-use namada_core::ledger::storage_api::StorageRead;
+use namada_core::types::address;
 use namada_core::types::dec::Dec;
 use namada_core::types::storage::{BlockHeight, Epoch};
 use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
-use namada_core::types::{address, token};
 use namada_state::testing::TestWlStorage;
+use namada_storage::collections::lazy_map::Collectable;
+use namada_storage::StorageRead;
 use proptest::prelude::*;
 use proptest::test_runner::Config;
 // Use `RUST_LOG=info` (or another tracing level) and `--nocapture` to see
@@ -32,10 +31,11 @@ use crate::tests::helpers::{
     advance_epoch, arb_genesis_validators, arb_redelegation_amounts,
     test_slashes_with_unbonding_params,
 };
+use crate::token::{credit_tokens, read_balance};
 use crate::types::{BondId, GenesisValidator, SlashType};
 use crate::{
-    bond_tokens, redelegate_tokens, staking_token_address, unbond_tokens,
-    withdraw_tokens, OwnedPosParams, RedelegationError,
+    bond_tokens, redelegate_tokens, staking_token_address, token,
+    unbond_tokens, withdraw_tokens, OwnedPosParams, RedelegationError,
 };
 
 proptest! {
@@ -255,7 +255,10 @@ fn test_simple_redelegation_aux(
     );
 
     let delegator_balance = storage
-        .read::<token::Amount>(&token::balance_key(&staking_token, &delegator))
+        .read::<token::Amount>(&token::storage_key::balance_key(
+            &staking_token,
+            &delegator,
+        ))
         .unwrap()
         .unwrap_or_default();
     assert_eq!(
@@ -644,7 +647,10 @@ fn test_redelegation_with_slashing_aux(
     );
 
     let delegator_balance = storage
-        .read::<token::Amount>(&token::balance_key(&staking_token, &delegator))
+        .read::<token::Amount>(&token::storage_key::balance_key(
+            &staking_token,
+            &delegator,
+        ))
         .unwrap()
         .unwrap_or_default();
     assert_eq!(delegator_balance, del_balance - amount_delegate);

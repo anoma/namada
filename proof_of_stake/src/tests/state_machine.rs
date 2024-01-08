@@ -16,8 +16,7 @@ use namada_state::testing::TestWlStorage;
 use namada_storage::collections::lazy_map::{
     Collectable, NestedSubKey, SubKey,
 };
-use namada_storage::{token, StorageRead};
-use namada_trans_token::read_balance;
+use namada_storage::StorageRead;
 use proptest::prelude::*;
 use proptest::test_runner::Config;
 use proptest_state_machine::{
@@ -37,6 +36,7 @@ use crate::storage::{
     read_consensus_validator_set_addresses_with_stake,
 };
 use crate::tests::helpers::{advance_epoch, arb_params_and_genesis_validators};
+use crate::token::{self, read_balance};
 use crate::types::{
     BondId, EagerRedelegatedBondsMap, GenesisValidator, ReverseOrdTokenAmount,
     Slash, SlashType, ValidatorState, WeightedValidator,

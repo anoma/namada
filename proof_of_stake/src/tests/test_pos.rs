@@ -2,9 +2,6 @@
 
 use std::collections::{BTreeMap, HashSet};
 
-use namada_core::ledger::storage_api::collections::lazy_map::Collectable;
-use namada_core::ledger::storage_api::token::{credit_tokens, read_balance};
-use namada_core::ledger::storage_api::StorageRead;
 use namada_core::types::address::Address;
 use namada_core::types::dec::Dec;
 use namada_core::types::key::testing::{
@@ -12,8 +9,10 @@ use namada_core::types::key::testing::{
 };
 use namada_core::types::key::RefTo;
 use namada_core::types::storage::{BlockHeight, Epoch};
-use namada_core::types::{address, key, token};
+use namada_core::types::{address, key};
 use namada_state::testing::TestWlStorage;
+use namada_storage::collections::lazy_map::Collectable;
+use namada_storage::StorageRead;
 use proptest::prelude::*;
 use proptest::test_runner::Config;
 // Use `RUST_LOG=info` (or another tracing level) and `--nocapture` to see
@@ -38,6 +37,7 @@ use crate::test_utils::test_init_genesis;
 use crate::tests::helpers::{
     advance_epoch, arb_genesis_validators, arb_params_and_genesis_validators,
 };
+use crate::token::{credit_tokens, read_balance};
 use crate::types::{
     into_tm_voting_power, BondDetails, BondId, BondsAndUnbondsDetails,
     GenesisValidator, SlashType, UnbondDetails, ValidatorState, VoteInfo,
@@ -47,9 +47,9 @@ use crate::{
     below_capacity_validator_set_handle, bond_handle, bond_tokens,
     change_consensus_key, consensus_validator_set_handle, is_delegator,
     is_validator, read_validator_stake, redelegate_tokens,
-    staking_token_address, unbond_handle, unbond_tokens, unjail_validator,
-    validator_consensus_key_handle, validator_set_positions_handle,
-    validator_state_handle, withdraw_tokens,
+    staking_token_address, token, unbond_handle, unbond_tokens,
+    unjail_validator, validator_consensus_key_handle,
+    validator_set_positions_handle, validator_state_handle, withdraw_tokens,
 };
 
 proptest! {
@@ -298,7 +298,7 @@ fn test_bonds_aux(params: OwnedPosParams, validators: Vec<GenesisValidator>) {
     let pipeline_epoch = current_epoch + params.pipeline_len;
     let staking_token = staking_token_address(&s);
     let pos_balance_pre = s
-        .read::<token::Amount>(&token::balance_key(
+        .read::<token::Amount>(&token::storage_key::balance_key(
             &staking_token,
             &crate::ADDRESS,
         ))
@@ -409,7 +409,8 @@ fn test_bonds_aux(params: OwnedPosParams, validators: Vec<GenesisValidator>) {
     let delegator = address::testing::gen_implicit_address();
     let amount_del = token::Amount::from_uint(201_000_000, 0).unwrap();
     credit_tokens(&mut s, &staking_token, &delegator, amount_del).unwrap();
-    let balance_key = token::balance_key(&staking_token, &delegator);
+    let balance_key =
+        token::storage_key::balance_key(&staking_token, &delegator);
     let balance = s
         .read::<token::Amount>(&balance_key)
         .unwrap()
@@ -744,7 +745,7 @@ fn test_bonds_aux(params: OwnedPosParams, validators: Vec<GenesisValidator>) {
     }
 
     let pos_balance = s
-        .read::<token::Amount>(&token::balance_key(
+        .read::<token::Amount>(&token::storage_key::balance_key(
             &staking_token,
             &crate::ADDRESS,
         ))
@@ -762,7 +763,7 @@ fn test_bonds_aux(params: OwnedPosParams, validators: Vec<GenesisValidator>) {
     assert!(unbond_iter.is_none());
 
     let pos_balance = s
-        .read::<token::Amount>(&token::balance_key(
+        .read::<token::Amount>(&token::storage_key::balance_key(
             &staking_token,
             &crate::ADDRESS,
         ))
@@ -788,7 +789,7 @@ fn test_bonds_aux(params: OwnedPosParams, validators: Vec<GenesisValidator>) {
     assert!(unbond_iter.is_none());
 
     let pos_balance = s
-        .read::<token::Amount>(&token::balance_key(
+        .read::<token::Amount>(&token::storage_key::balance_key(
             &staking_token,
             &crate::ADDRESS,
         ))

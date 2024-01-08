@@ -11,8 +11,6 @@ use namada_core::types::uint::{Uint, I256};
 use namada_parameters::storage as params_storage;
 use namada_storage::collections::lazy_map::NestedSubKey;
 use namada_storage::{ResultExt, StorageRead, StorageWrite};
-use namada_trans_token::credit_tokens;
-use namada_trans_token::storage_key::minted_balance_key;
 use thiserror::Error;
 
 use crate::storage::{
@@ -21,6 +19,8 @@ use crate::storage::{
     rewards_accumulator_handle, validator_commission_rate_handle,
     validator_rewards_products_handle, validator_state_handle,
 };
+use crate::token::credit_tokens;
+use crate::token::storage_key::minted_balance_key;
 use crate::types::{into_tm_voting_power, BondId, ValidatorState, VoteInfo};
 use crate::{
     bond_amounts_for_rewards, get_total_consensus_stake, staking_token_address,
