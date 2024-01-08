@@ -250,11 +250,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // tables.push(pos_bonds_table);
 
     // Then add the rest of definitions sorted by their names
-    for (declaration, defition) in definitions
+    for (declaration, definition) in definitions
         .into_iter()
         .sorted_by_key(|(key, _val)| key.clone())
     {
-        tables.push(definition_to_table(&declaration, defition))
+        tables.push(definition_to_table(&declaration, definition))
     }
 
     // Print the tables to markdown

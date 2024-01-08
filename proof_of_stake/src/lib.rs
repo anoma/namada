@@ -931,7 +931,7 @@ where
             remaining = token::Amount::zero();
 
             // NOTE: When there are multiple `src_validators` from which we're
-            // unbonding, `validator_to_modify` cannot get overriden, because
+            // unbonding, `validator_to_modify` cannot get overridden, because
             // only one of them can be a partial unbond (`new_entry`
             // is partial unbond)
             if let Some((bond_epoch, new_bond_amount)) =
