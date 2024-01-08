@@ -14,7 +14,8 @@ use super::address::{Address, InternalAddress, HASH_LEN};
 use crate::ibc::apps::nft_transfer::context::{NftClassContext, NftContext};
 use crate::ibc::apps::nft_transfer::types::error::NftTransferError;
 use crate::ibc::apps::nft_transfer::types::{
-    ClassData, ClassId, ClassUri, PrefixedClassId, TokenData, TokenId, TokenUri,
+    ClassData, ClassId, ClassUri, PrefixedClassId, TokenData, TokenId,
+    TokenUri, TracePath as NftTracePath,
 };
 use crate::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
 use crate::ibc::apps::transfer::types::{Memo, PrefixedDenom, TracePath};
@@ -30,6 +31,20 @@ use crate::types::token::Transfer;
 pub const EVENT_TYPE_PACKET: &str = "fungible_token_packet";
 /// The event type defined in ibc-rs for IBC denom
 pub const EVENT_TYPE_DENOM_TRACE: &str = "denomination_trace";
+/// The event attribute key defined in ibc-rs for IBC denom
+pub const EVENT_ATTRIBUTE_DENOM: &str = "denom";
+/// The event attribute key defined in ibc-rs for a receiver
+pub const EVENT_ATTRIBUTE_RECEIVER: &str = "receiver";
+/// The event attribute key defined in ibc-rs for a trace hash
+pub const EVENT_ATTRIBUTE_TRACE: &str = "trace_hash";
+/// The event type defined in ibc-rs for receiving an NFT
+pub const EVENT_TYPE_NFT_PACKET: &str = "non_fungible_token_packet";
+/// The event type defined in ibc-rs for NFT trace
+pub const EVENT_TYPE_TOKEN_TRACE: &str = "token_trace";
+/// The event attribute key defined in ibc-rs for NFT class ID
+pub const EVENT_ATTRIBUTE_CLASS: &str = "class";
+/// The event attribute key defined in ibc-rs for NFT token ID
+pub const EVENT_ATTRIBUTE_TOKEN: &str = "token";
 /// The escrow address for IBC transfer
 pub const IBC_ESCROW_ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
 
@@ -205,6 +220,24 @@ pub fn is_ibc_denom(denom: impl AsRef<str>) -> Option<(TracePath, String)> {
         prefixed_denom.trace_path,
         prefixed_denom.base_denom.to_string(),
     ))
+}
+
+/// Returns the trace path and the token string if the trace is an NFT one
+pub fn is_nft_trace(
+    trace: impl AsRef<str>,
+) -> Option<(NftTracePath, String, String)> {
+    // The trace should be {port}/{channel}/.../{class_id}/{token_id}
+    if let Some((class_id, token_id)) = trace.as_ref().rsplit_once('/') {
+        let prefixed_class_id = PrefixedClassId::from_str(class_id).ok()?;
+        // The base token isn't decoded because it could be non Namada token
+        Some((
+            prefixed_class_id.trace_path,
+            prefixed_class_id.base_class_id.to_string(),
+            token_id.to_string(),
+        ))
+    } else {
+        None
+    }
 }
 
 impl From<IbcShieldedTransfer> for Memo {

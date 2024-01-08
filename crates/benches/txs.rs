@@ -18,7 +18,7 @@ use namada::ibc::core::connection::types::msgs::MsgConnectionOpenInit;
 use namada::ibc::core::connection::types::version::Version;
 use namada::ibc::core::connection::types::Counterparty;
 use namada::ibc::core::host::types::identifiers::{
-    ClientId, ClientType, ConnectionId, PortId,
+    ClientId, ConnectionId, PortId,
 };
 use namada::ibc::primitives::ToProto;
 use namada::ledger::eth_bridge::read_native_erc20_address;
@@ -750,13 +750,9 @@ fn ibc(c: &mut Criterion) {
 
     // Connection handshake
     let msg = MsgConnectionOpenInit {
-        client_id_on_a: ClientId::new(
-            ClientType::new("01-tendermint").unwrap(),
-            1,
-        )
-        .unwrap(),
+        client_id_on_a: ClientId::new("07-tendermint", 1).unwrap(),
         counterparty: Counterparty::new(
-            ClientId::from_str("01-tendermint-1").unwrap(),
+            ClientId::from_str("07-tendermint-1").unwrap(),
             None,
             CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
         ),

@@ -23,7 +23,7 @@ use thiserror::Error;
 const CLIENTS_COUNTER: &str = "clients/counter";
 const CONNECTIONS_COUNTER: &str = "connections/counter";
 const CHANNELS_COUNTER: &str = "channelEnds/counter";
-const DENOM: &str = "ibc_denom";
+const TRACE: &str = "ibc_trace";
 const NFT_CLASS: &str = "nft_class";
 const NFT_METADATA: &str = "nft_meta";
 
@@ -385,12 +385,12 @@ pub fn port_id(key: &Key) -> Result<PortId> {
     }
 }
 
-/// The storage key prefix to get the denom name with the hashed IBC denom. The
-/// address is given as string because the given address could be non-Namada
-/// token.
-pub fn ibc_denom_key_prefix(addr: Option<String>) -> Key {
+/// The storage key prefix to get the denom/class name with the hashed IBC
+/// denom/class. The address is given as string because the given address could
+/// be non-Namada token.
+pub fn ibc_trace_key_prefix(addr: Option<String>) -> Key {
     let prefix = Key::from(Address::Internal(InternalAddress::Ibc).to_db_key())
-        .push(&DENOM.to_string().to_db_key())
+        .push(&TRACE.to_string().to_db_key())
         .expect("Cannot obtain a storage key");
 
     if let Some(addr) = addr {
@@ -404,11 +404,11 @@ pub fn ibc_denom_key_prefix(addr: Option<String>) -> Key {
 
 /// The storage key to get the denom name with the hashed IBC denom. The address
 /// is given as string because the given address could be non-Namada token.
-pub fn ibc_denom_key(
+pub fn ibc_trace_key(
     addr: impl AsRef<str>,
     token_hash: impl AsRef<str>,
 ) -> Key {
-    ibc_denom_key_prefix(Some(addr.as_ref().to_string()))
+    ibc_trace_key_prefix(Some(addr.as_ref().to_string()))
         .push(&token_hash.as_ref().to_string().to_db_key())
         .expect("Cannot obtain a storage key")
 }
@@ -455,7 +455,7 @@ pub fn is_ibc_key(key: &Key) -> bool {
 }
 
 /// Returns the owner and the token hash if the given key is the denom key
-pub fn is_ibc_denom_key(key: &Key) -> Option<(String, String)> {
+pub fn is_ibc_trace_key(key: &Key) -> Option<(String, String)> {
     match &key.segments[..] {
         [
             DbKeySeg::AddressSeg(addr),
@@ -464,7 +464,7 @@ pub fn is_ibc_denom_key(key: &Key) -> Option<(String, String)> {
             DbKeySeg::StringSeg(hash),
         ] => {
             if addr == &Address::Internal(InternalAddress::Ibc)
-                && prefix == DENOM
+                && prefix == TRACE
             {
                 Some((owner.clone(), hash.clone()))
             } else {

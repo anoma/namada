@@ -40,8 +40,8 @@ use namada::ibc::core::connection::types::{
 };
 use namada::ibc::core::host::types::identifiers::{
     ChainId as IbcChainId, ChannelId as NamadaChannelId, ChannelId, ClientId,
-    ClientType, ConnectionId, ConnectionId as NamadaConnectionId,
-    PortId as NamadaPortId, PortId,
+    ConnectionId, ConnectionId as NamadaConnectionId, PortId as NamadaPortId,
+    PortId,
 };
 use namada::ibc::core::host::types::path::{
     ClientConsensusStatePath, ClientStatePath, Path as IbcPath,
@@ -421,9 +421,7 @@ impl BenchShell {
             .set_header(get_dummy_header())
             .unwrap();
         // Set client state
-        let client_id =
-            ClientId::new(ClientType::new("01-tendermint").unwrap(), 1)
-                .unwrap();
+        let client_id = ClientId::new("01-tendermint", 1).unwrap();
         let client_state_key = addr_key.join(&Key::from(
             IbcPath::ClientState(ClientStatePath(client_id.clone()))
                 .to_string()

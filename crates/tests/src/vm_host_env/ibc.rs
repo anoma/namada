@@ -291,7 +291,7 @@ pub fn init_storage() -> (Address, Address) {
 }
 
 pub fn client_id() -> ClientId {
-    ClientId::new(client_type(), 0).expect("invalid client ID")
+    ClientId::new(&client_type().to_string(), 0).expect("invalid client ID")
 }
 
 pub fn prepare_client() -> (ClientId, Any, HashMap<storage::Key, Vec<u8>>) {
@@ -442,8 +442,8 @@ pub fn msg_upgrade_client(client_id: ClientId) -> MsgUpgradeClient {
 }
 
 pub fn msg_connection_open_init(client_id: ClientId) -> MsgConnectionOpenInit {
-    let client_type = client_type();
-    let counterparty_client_id = ClientId::new(client_type, 42).unwrap();
+    let counterparty_client_id =
+        ClientId::new(&client_type().to_string(), 42).unwrap();
     let commitment_prefix =
         CommitmentPrefix::try_from(COMMITMENT_PREFIX.to_vec()).unwrap();
     let counterparty =
@@ -522,8 +522,8 @@ fn dummy_proof_height() -> Height {
 }
 
 fn dummy_connection_counterparty() -> ConnCounterparty {
-    let client_type = client_type();
-    let client_id = ClientId::new(client_type, 42).expect("invalid client ID");
+    let client_id = ClientId::new(&client_type().to_string(), 42)
+        .expect("invalid client ID");
     let conn_id = ConnectionId::new(12);
     let commitment_prefix =
         CommitmentPrefix::try_from(COMMITMENT_PREFIX.to_vec())

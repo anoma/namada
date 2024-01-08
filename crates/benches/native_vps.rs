@@ -19,7 +19,7 @@ use namada::ibc::core::connection::types::msgs::MsgConnectionOpenInit;
 use namada::ibc::core::connection::types::version::Version;
 use namada::ibc::core::connection::types::Counterparty;
 use namada::ibc::core::host::types::identifiers::{
-    ClientId, ClientType, ConnectionId, PortId,
+    ClientId, ConnectionId, PortId,
 };
 use namada::ibc::primitives::ToProto;
 use namada::ibc::{IbcActions, NftTransferModule, TransferModule};
@@ -312,13 +312,9 @@ fn ibc(c: &mut Criterion) {
     // NOTE: Ibc encompass a variety of different messages that can be executed,
     // here we only benchmark a few of those Connection handshake
     let msg = MsgConnectionOpenInit {
-        client_id_on_a: ClientId::new(
-            ClientType::new("01-tendermint").unwrap(),
-            1,
-        )
-        .unwrap(),
+        client_id_on_a: ClientId::new("07-tendermint", 1).unwrap(),
         counterparty: Counterparty::new(
-            ClientId::from_str("01-tendermint-1").unwrap(),
+            ClientId::from_str("07-tendermint-1").unwrap(),
             None,
             CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
         ),
@@ -1098,13 +1094,9 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
 
     // Connection handshake
     let msg = MsgConnectionOpenInit {
-        client_id_on_a: ClientId::new(
-            ClientType::new("01-tendermint").unwrap(),
-            1,
-        )
-        .unwrap(),
+        client_id_on_a: ClientId::new("07-tendermint", 1).unwrap(),
         counterparty: Counterparty::new(
-            ClientId::from_str("01-tendermint-1").unwrap(),
+            ClientId::from_str("07-tendermint-1").unwrap(),
             None,
             CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
         ),
@@ -1198,13 +1190,9 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
 
     // Connection handshake
     let msg = MsgConnectionOpenInit {
-        client_id_on_a: ClientId::new(
-            ClientType::new("01-tendermint").unwrap(),
-            1,
-        )
-        .unwrap(),
+        client_id_on_a: ClientId::new("07-tendermint", 1).unwrap(),
         counterparty: Counterparty::new(
-            ClientId::from_str("01-tendermint-1").unwrap(),
+            ClientId::from_str("07-tendermint-1").unwrap(),
             None,
             CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
         ),

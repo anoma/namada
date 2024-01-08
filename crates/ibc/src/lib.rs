@@ -20,10 +20,12 @@ pub use context::token_transfer::TokenTransferContext;
 pub use context::transfer_mod::{ModuleWrapper, TransferModule};
 use context::IbcContext;
 pub use context::ValidationParams;
+use namada_core::ibc::apps::nft_transfer::handler::{
+    send_nft_transfer_execute, send_nft_transfer_validate,
+};
 use namada_core::ibc::apps::nft_transfer::types::error::NftTransferError;
 use namada_core::ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as MsgNftTransfer;
 use namada_core::ibc::apps::transfer::handler::{
-    send_nft_transfer_execute, send_nft_transfer_validate,
     send_transfer_execute, send_transfer_validate,
 };
 use namada_core::ibc::apps::transfer::types::error::TokenTransferError;
@@ -38,13 +40,14 @@ use namada_core::ibc::core::handler::types::msgs::MsgEnvelope;
 use namada_core::ibc::core::host::types::error::IdentifierError;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::ibc::core::router::types::error::RouterError;
-use namada_core::ibc::core::router::types::module::ModuleId;
 use namada_core::ibc::primitives::proto::Any;
 pub use namada_core::ibc::*;
 use namada_core::types::address::{Address, MASP};
 use namada_core::types::ibc::{
-    get_shielded_transfer, is_ibc_denom, MsgShieldedTransfer,
-    EVENT_TYPE_DENOM_TRACE, EVENT_TYPE_PACKET,
+    get_shielded_transfer, is_ibc_denom, is_nft_trace, MsgShieldedTransfer,
+    EVENT_ATTRIBUTE_CLASS, EVENT_ATTRIBUTE_DENOM, EVENT_ATTRIBUTE_RECEIVER,
+    EVENT_ATTRIBUTE_TOKEN, EVENT_ATTRIBUTE_TRACE, EVENT_TYPE_DENOM_TRACE,
+    EVENT_TYPE_NFT_PACKET, EVENT_TYPE_PACKET, EVENT_TYPE_TOKEN_TRACE,
 };
 use namada_core::types::masp::PaymentAddress;
 use prost::Message;
@@ -63,8 +66,8 @@ pub enum Error {
     TokenTransfer(TokenTransferError),
     #[error("IBC NFT transfer error: {0}")]
     NftTransfer(NftTransferError),
-    #[error("Denom error: {0}")]
-    Denom(String),
+    #[error("Trace error: {0}")]
+    Trace(String),
     #[error("Invalid chain ID: {0}")]
     ChainId(IdentifierError),
     #[error("Handling MASP transaction error: {0}")]
@@ -143,53 +146,61 @@ where
                     .map_err(|e| Error::Context(Box::new(e)))?;
                 // the current ibc-rs execution doesn't store the denom for the
                 // token hash when transfer with MsgRecvPacket
-                self.store_denom(envelope)?;
+                self.store_trace(envelope)?;
                 // For receiving the token to a shielded address
                 self.handle_masp_tx(message)
             }
         }
     }
 
-    /// Store the denom when transfer with MsgRecvPacket
-    fn store_denom(&mut self, envelope: &MsgEnvelope) -> Result<(), Error> {
+    /// Store the trace path when transfer with MsgRecvPacket
+    fn store_trace(&mut self, envelope: &MsgEnvelope) -> Result<(), Error> {
         if let MsgEnvelope::Packet(PacketMsg::Recv(_)) = envelope {
-            if let Some((trace_hash, ibc_denom, receiver)) =
+            if let Some((trace_hash, ibc_trace, receiver)) =
                 self.get_minted_token_info()?
             {
-                // If the denomination trace event has the trace hash and
-                // the IBC denom, a token has been minted. The raw IBC denom
-                // including the port ID, the channel ID and the base token
-                // is stored to be restored from the trace hash. The amount
-                // denomination is also set for the minting.
+                // If the trace event has the trace hash and
+                // the IBC denom or NFT IDs, a token has been minted.
+                // The raw IBC trace including the port ID,
+                // the channel ID and the base token is stored to be restored
+                // from the trace hash.
                 self.ctx
                     .inner
                     .borrow_mut()
-                    .store_ibc_denom(&receiver, &trace_hash, &ibc_denom)
+                    .store_ibc_trace(&receiver, &trace_hash, &ibc_trace)
                     .map_err(|e| {
-                        Error::Denom(format!(
-                            "Writing the IBC denom failed: {}",
+                        Error::Trace(format!(
+                            "Writing the IBC trace failed: {}",
                             e
                         ))
                     })?;
-                if let Some((_, base_token)) = is_ibc_denom(&ibc_denom) {
-                    self.ctx
-                        .inner
-                        .borrow_mut()
-                        .store_ibc_denom(base_token, trace_hash, &ibc_denom)
-                        .map_err(|e| {
-                            Error::Denom(format!(
-                                "Writing the IBC denom failed: {}",
-                                e
-                            ))
-                        })?;
-                }
+                let base_token = if let Some((_, base_token)) =
+                    is_ibc_denom(&ibc_trace)
+                {
+                    base_token
+                } else if let Some((_, _, token_id)) = is_nft_trace(&ibc_trace)
+                {
+                    token_id
+                } else {
+                    return Ok(());
+                };
+                self.ctx
+                    .inner
+                    .borrow_mut()
+                    .store_ibc_trace(base_token, trace_hash, &ibc_trace)
+                    .map_err(|e| {
+                        Error::Trace(format!(
+                            "Writing the IBC trace failed: {}",
+                            e
+                        ))
+                    })?;
             }
         }
         Ok(())
     }
 
-    /// Get the minted IBC denom, the trace hash, and the receiver from IBC
-    /// events
+    /// Get the trace hash, the minted IBC denom/NFT trace, and the receiver
+    /// from IBC events
     fn get_minted_token_info(
         &self,
     ) -> Result<Option<(String, String, String)>, Error> {
@@ -199,45 +210,66 @@ where
             .borrow()
             .get_ibc_events(EVENT_TYPE_PACKET)
             .map_err(|_| {
-                Error::Denom("Reading the IBC event failed".to_string())
+                Error::Trace("Reading the IBC event failed".to_string())
             })?;
-        // The receiving event should be only one in the single IBC transaction
-        let receiver = match receive_event
-            .first()
-            .as_ref()
-            .and_then(|event| event.attributes.get("receiver"))
-        {
-            // Check the receiver address
-            Some(receiver) => Some(
-                Address::decode(receiver)
-                    .or_else(|_| {
-                        // Replace it with MASP address when the receiver is a
-                        // payment address
-                        PaymentAddress::from_str(receiver).map(|_| MASP)
-                    })
+        let (receive_event, trace_event_type, attribute_key) =
+            if receive_event.is_empty() {
+                // check the packet is for an NFT
+                let receive_event = self
+                    .ctx
+                    .inner
+                    .borrow()
+                    .get_ibc_events(EVENT_TYPE_NFT_PACKET)
                     .map_err(|_| {
-                        Error::Denom(format!(
-                            "Decoding the receiver address failed: {:?}",
-                            receive_event
-                        ))
-                    })?
-                    .to_string(),
-            ),
-            None => None,
-        };
-        let denom_event = self
+                        Error::Trace("Reading the IBC event failed".to_string())
+                    })?;
+                (receive_event, EVENT_TYPE_TOKEN_TRACE, EVENT_ATTRIBUTE_CLASS)
+            } else {
+                (receive_event, EVENT_TYPE_DENOM_TRACE, EVENT_ATTRIBUTE_DENOM)
+            };
+        // The receiving event should be only one in the single IBC transaction
+        let receiver =
+            match receive_event.first().as_ref().and_then(|event| {
+                event.attributes.get(EVENT_ATTRIBUTE_RECEIVER)
+            }) {
+                // Check the receiver address
+                Some(receiver) => Some(
+                    Address::decode(receiver)
+                        .or_else(|_| {
+                            // Replace it with MASP address when the receiver is
+                            // a payment address
+                            PaymentAddress::from_str(receiver).map(|_| MASP)
+                        })
+                        .map_err(|_| {
+                            Error::Trace(format!(
+                                "Decoding the receiver address failed: {:?}",
+                                receive_event
+                            ))
+                        })?
+                        .to_string(),
+                ),
+                None => None,
+            };
+        // Get the event including the trace hash
+        let trace_event = self
             .ctx
             .inner
             .borrow()
-            .get_ibc_events(EVENT_TYPE_DENOM_TRACE)
+            .get_ibc_events(trace_event_type)
             .map_err(|_| {
-                Error::Denom("Reading the IBC event failed".to_string())
+                Error::Trace("Reading the IBC event failed".to_string())
             })?;
-        // The denom event should be only one in the single IBC transaction
-        Ok(denom_event.first().as_ref().and_then(|event| {
-            let trace_hash = event.attributes.get("trace_hash").cloned()?;
-            let denom = event.attributes.get("denom").cloned()?;
-            Some((trace_hash, denom, receiver?))
+        // The event should be only one in the single IBC transaction
+        Ok(trace_event.first().as_ref().and_then(|event| {
+            let trace_hash =
+                event.attributes.get(EVENT_ATTRIBUTE_TRACE).cloned()?;
+            let mut ibc_trace = event.attributes.get(attribute_key).cloned()?;
+            if trace_event_type == EVENT_TYPE_TOKEN_TRACE {
+                let token_id =
+                    event.attributes.get(EVENT_ATTRIBUTE_TOKEN).cloned()?;
+                ibc_trace = format!("{ibc_trace}/{token_id}");
+            }
+            Some((trace_hash, ibc_trace, receiver?))
         }))
     }
 

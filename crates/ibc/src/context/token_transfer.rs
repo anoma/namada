@@ -15,9 +15,8 @@ use namada_core::ibc::core::handler::types::error::ContextError;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::types::address::Address;
 use namada_core::types::ibc::IBC_ESCROW_ADDRESS;
-use namada_core::types::token;
 use namada_core::types::uint::Uint;
-use namada_trans_token::{Amount, DenominatedAmount, Denomination};
+use namada_trans_token::{read_denom, Amount, DenominatedAmount, Denomination};
 
 use super::common::IbcCommonContext;
 use crate::storage;

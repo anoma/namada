@@ -31,7 +31,7 @@ use namada::governance::utils::{
 };
 use namada::ledger::events::Event;
 use namada::ledger::ibc::storage::{
-    ibc_denom_key, ibc_denom_key_prefix, is_ibc_denom_key,
+    ibc_trace_key, ibc_trace_key_prefix, is_ibc_trace_key,
 };
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::types::{CommissionPair, Slash};
@@ -645,12 +645,12 @@ async fn lookup_token_alias(
     owner: &Address,
 ) -> String {
     if let Address::Internal(InternalAddress::IbcToken(trace_hash)) = token {
-        let ibc_denom_key =
-            ibc_denom_key(owner.to_string(), trace_hash.to_string());
-        match query_storage_value::<_, String>(context.client(), &ibc_denom_key)
+        let ibc_trace_key =
+            ibc_trace_key(owner.to_string(), trace_hash.to_string());
+        match query_storage_value::<_, String>(context.client(), &ibc_trace_key)
             .await
         {
-            Ok(ibc_denom) => get_ibc_denom_alias(context, ibc_denom).await,
+            Ok(ibc_trace) => get_ibc_trace_alias(context, ibc_trace).await,
             Err(_) => token.to_string(),
         }
     } else {
@@ -684,27 +684,27 @@ async fn query_tokens(
     }
     let prefixes = match (base_token, owner) {
         (Some(base_token), Some(owner)) => vec![
-            ibc_denom_key_prefix(Some(base_token.to_string())),
-            ibc_denom_key_prefix(Some(owner.to_string())),
+            ibc_trace_key_prefix(Some(base_token.to_string())),
+            ibc_trace_key_prefix(Some(owner.to_string())),
         ],
         (Some(base_token), None) => {
-            vec![ibc_denom_key_prefix(Some(base_token.to_string()))]
+            vec![ibc_trace_key_prefix(Some(base_token.to_string()))]
         }
         (None, Some(_)) => {
             // Check all IBC denoms because the owner might not know IBC token
             // transfers in the same chain
-            vec![ibc_denom_key_prefix(None)]
+            vec![ibc_trace_key_prefix(None)]
         }
-        (None, None) => vec![ibc_denom_key_prefix(None)],
+        (None, None) => vec![ibc_trace_key_prefix(None)],
     };
 
     for prefix in prefixes {
         let ibc_denoms = query_storage_prefix::<String>(context, &prefix).await;
         if let Some(ibc_denoms) = ibc_denoms {
-            for (key, ibc_denom) in ibc_denoms {
-                if let Some((_, hash)) = is_ibc_denom_key(&key) {
+            for (key, ibc_trace) in ibc_denoms {
+                if let Some((_, hash)) = is_ibc_trace_key(&key) {
                     let ibc_denom_alias =
-                        get_ibc_denom_alias(context, ibc_denom).await;
+                        get_ibc_trace_alias(context, ibc_trace).await;
                     let hash: IbcTokenHash = hash.parse().expect(
                         "Parsing an IBC token hash from storage shouldn't fail",
                     );
@@ -718,12 +718,12 @@ async fn query_tokens(
     tokens
 }
 
-async fn get_ibc_denom_alias(
+async fn get_ibc_trace_alias(
     context: &impl Namada,
-    ibc_denom: impl AsRef<str>,
+    ibc_trace: impl AsRef<str>,
 ) -> String {
     let wallet = context.wallet().await;
-    is_ibc_denom(&ibc_denom)
+    is_ibc_denom(&ibc_trace)
         .map(|(trace_path, base_token)| {
             let base_token_alias = match Address::decode(&base_token) {
                 Ok(base_token) => wallet.lookup_alias(&base_token),
@@ -735,7 +735,7 @@ async fn get_ibc_denom_alias(
                 format!("{}/{}", trace_path, base_token_alias)
             }
         })
-        .unwrap_or(ibc_denom.as_ref().to_string())
+        .unwrap_or(ibc_trace.as_ref().to_string())
 }
 
 /// Query votes for the given proposal

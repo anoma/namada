@@ -332,9 +332,12 @@ fn into_packet_error(error: NftTransferError) -> PacketError {
 pub mod testing {
     use std::str::FromStr;
 
+    use namada_core::ibc::apps::nft_transfer::types::{
+        ack_success_b64, PORT_ID_STR,
+    };
+    use namada_core::ibc::core::channel::types::acknowledgement::AcknowledgementStatus;
+
     use super::*;
-    use crate::ibc::apps::nft_transfer::types::{ack_success_b64, PORT_ID_STR};
-    use crate::ibc::core::channel::types::acknowledgement::AcknowledgementStatus;
 
     /// Dummy IBC module for token transfer
     #[derive(Debug)]

@@ -184,8 +184,12 @@ where
         // Balance changes will be validated by Multitoken VP
     }
 
-    fn class_hash_string(&self, class_id: &PrefixedClassId) -> Option<String> {
-        Some(storage::calc_hash(class_id.to_string()))
+    fn token_hash_string(
+        &self,
+        class_id: &PrefixedClassId,
+        token_id: &TokenId,
+    ) -> Option<String> {
+        Some(storage::calc_hash(format!("{class_id}/{token_id}")))
     }
 
     /// Returns the NFT
@@ -231,7 +235,7 @@ where
         };
         self.inner
             .borrow_mut()
-            .store_nft_class(class_id, class)
+            .store_nft_class(class)
             .map_err(|e| e.into())
     }
 
@@ -296,9 +300,7 @@ where
             token_uri: token_uri.clone(),
             token_data: token_data.clone(),
         };
-        self.inner
-            .borrow_mut()
-            .store_nft_metadata(class_id, token_id, metadata)?;
+        self.inner.borrow_mut().store_nft_metadata(metadata)?;
 
         self.inner
             .borrow_mut()

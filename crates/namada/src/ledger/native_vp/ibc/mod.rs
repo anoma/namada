@@ -23,7 +23,7 @@ use namada_vp_env::VpEnv;
 use thiserror::Error;
 
 use crate::ibc::core::host::types::identifiers::ChainId as IbcChainId;
-use crate::ledger::ibc::storage::{calc_hash, is_ibc_denom_key, is_ibc_key};
+use crate::ledger::ibc::storage::{calc_hash, is_ibc_key, is_ibc_trace_key};
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::ledger::parameters::read_epoch_duration_parameter;
 use crate::vm::WasmCacheAccess;
@@ -83,7 +83,7 @@ where
         self.validate_with_msg(&tx_data)?;
 
         // Validate the denom store if a denom key has been changed
-        self.validate_denom(keys_changed)?;
+        self.validate_trace(keys_changed)?;
 
         Ok(true)
     }
@@ -184,27 +184,27 @@ where
         })
     }
 
-    fn validate_denom(&self, keys_changed: &BTreeSet<Key>) -> VpResult<()> {
+    fn validate_trace(&self, keys_changed: &BTreeSet<Key>) -> VpResult<()> {
         for key in keys_changed {
-            if let Some((_, hash)) = is_ibc_denom_key(key) {
+            if let Some((_, hash)) = is_ibc_trace_key(key) {
                 match self.ctx.read_post::<String>(key).map_err(|e| {
-                    ActionError::Denom(format!(
-                        "Getting the denom failed: Key {}, Error {}",
+                    ActionError::Trace(format!(
+                        "Getting the trace failed: Key {}, Error {}",
                         key, e
                     ))
                 })? {
-                    Some(denom) => {
-                        if calc_hash(&denom) != hash {
-                            return Err(ActionError::Denom(format!(
-                                "The denom is invalid: Key {}, Denom {}",
-                                key, denom
+                    Some(trace) => {
+                        if calc_hash(&trace) != hash {
+                            return Err(ActionError::Trace(format!(
+                                "The trace is invalid: Key {}, Trace {}",
+                                key, trace
                             ))
                             .into());
                         }
                     }
                     None => {
-                        return Err(ActionError::Denom(format!(
-                            "The corresponding denom wasn't stored: Key {}",
+                        return Err(ActionError::Trace(format!(
+                            "The corresponding trace wasn't stored: Key {}",
                             key
                         ))
                         .into());
@@ -337,11 +337,15 @@ mod tests {
     };
     use crate::core::types::address::{nam, InternalAddress};
     use crate::core::types::storage::Epoch;
-    use crate::ibc::apps::nft_transfer::types::events::TransferEvent as NftTransferEvent;
+    use crate::ibc::apps::nft_transfer::types::events::{
+        RecvEvent as NftRecvEvent, TokenTraceEvent,
+        TransferEvent as NftTransferEvent,
+    };
     use crate::ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as MsgNftTransfer;
     use crate::ibc::apps::nft_transfer::types::packet::PacketData as NftPacketData;
     use crate::ibc::apps::nft_transfer::types::{
-        PrefixedClassId, TokenId, TokenIds, VERSION as NFT_VERSION,
+        self as nft_types, PrefixedClassId, TokenId, TokenIds,
+        VERSION as NFT_VERSION,
     };
     use crate::ibc::apps::transfer::types::events::{
         AckEvent, DenomTraceEvent, RecvEvent, TimeoutEvent, TransferEvent,
@@ -406,8 +410,8 @@ mod tests {
         client_connections_key, client_counter_key, client_state_key,
         client_update_height_key, client_update_timestamp_key, commitment_key,
         connection_counter_key, connection_key, consensus_state_key,
-        ibc_denom_key, next_sequence_ack_key, next_sequence_recv_key,
-        next_sequence_send_key, receipt_key,
+        ibc_trace_key, next_sequence_ack_key, next_sequence_recv_key,
+        next_sequence_send_key, nft_class_key, nft_metadata_key, receipt_key,
     };
     use crate::ledger::gas::VpGasMeter;
     use crate::ledger::parameters::storage::{
@@ -555,7 +559,8 @@ mod tests {
     }
 
     fn get_conn_counterparty() -> ConnCounterparty {
-        let counterpart_client_id = ClientId::new(client_type(), 22).unwrap();
+        let counterpart_client_id =
+            ClientId::new(&client_type().to_string(), 22).unwrap();
         let counterpart_conn_id = ConnectionId::new(32);
         let commitment_prefix =
             CommitmentPrefix::try_from(COMMITMENT_PREFIX.to_vec())
@@ -724,11 +729,11 @@ mod tests {
     }
 
     fn get_nft_class_id() -> PrefixedClassId {
-        "nft-transfer/channel-14/nftclass".parse().unwrap()
+        "nft-transfer/channel-14/myclass".parse().unwrap()
     }
 
     fn get_nft_id() -> TokenId {
-        "nft_token".parse().unwrap()
+        "mytoken".parse().unwrap()
     }
 
     const DUMMY_DATA: &str = r#"{"name":{"value":"Crypto Creatures"},"image":{"value":"binary","mime":"image/png"}}"#;
@@ -743,7 +748,7 @@ mod tests {
 
     fn dummy_nft_metadata() -> NftMetadata {
         NftMetadata {
-            class_id: "nft-transfer/channel-14/nftclass".parse().unwrap(),
+            class_id: get_nft_class_id(),
             token_id: get_nft_id(),
             token_uri: DUMMY_URI.parse().unwrap(),
             token_data: DUMMY_DATA.parse().unwrap(),
@@ -2241,12 +2246,8 @@ mod tests {
             timeout_timestamp_on_b: Timestamp::none(),
         };
         let counterparty = get_channel_counterparty();
-        let mut packet =
+        let packet =
             packet_from_message(&transfer_msg, 1.into(), &counterparty);
-        packet.port_id_on_a = counterparty.port_id().clone();
-        packet.chan_id_on_a = counterparty.channel_id().cloned().unwrap();
-        packet.port_id_on_b = get_port_id();
-        packet.chan_id_on_b = get_channel_id();
         let msg = MsgRecvPacket {
             packet: packet.clone(),
             proof_commitment_on_a: dummy_proof(),
@@ -2287,20 +2288,20 @@ mod tests {
             packet.chan_id_on_b.clone(),
         ));
         let trace_hash = calc_hash(coin.denom.to_string());
-        let denom_key = ibc_denom_key(receiver.to_string(), &trace_hash);
+        let trace_key = ibc_trace_key(receiver.to_string(), &trace_hash);
         let bytes = coin.denom.to_string().serialize_to_vec();
         wl_storage
             .write_log
-            .write(&denom_key, bytes)
+            .write(&trace_key, bytes)
             .expect("write failed");
-        keys_changed.insert(denom_key);
-        let denom_key = ibc_denom_key(nam().to_string(), &trace_hash);
+        keys_changed.insert(trace_key);
+        let trace_key = ibc_trace_key(nam().to_string(), &trace_hash);
         let bytes = coin.denom.to_string().serialize_to_vec();
         wl_storage
             .write_log
-            .write(&denom_key, bytes)
+            .write(&trace_key, bytes)
             .expect("write failed");
-        keys_changed.insert(denom_key);
+        keys_changed.insert(trace_key);
         // event
         let recv_event = RecvEvent {
             sender: sender.to_string().into(),
@@ -2953,6 +2954,225 @@ mod tests {
             Order::Unordered,
             get_connection_id(),
         ));
+        let message_event = RawIbcEvent::Message(MessageEvent::Channel);
+        wl_storage
+            .write_log
+            .emit_ibc_event(message_event.try_into().unwrap());
+        wl_storage
+            .write_log
+            .emit_ibc_event(event.try_into().unwrap());
+
+        let tx_index = TxIndex::default();
+        let tx_code = vec![];
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+
+        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        tx.add_code(tx_code, None)
+            .add_serialized_data(tx_data)
+            .sign_wrapper(keypair_1());
+
+        let gas_meter = VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        );
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::cache();
+
+        let verifiers = BTreeSet::new();
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &wl_storage.storage,
+            &wl_storage.write_log,
+            &tx,
+            &tx_index,
+            gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+        let ibc = Ibc { ctx };
+        assert!(
+            ibc.validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+    }
+
+    #[test]
+    fn test_recv_packet_for_nft() {
+        let mut keys_changed = BTreeSet::new();
+        let mut wl_storage = init_storage();
+        insert_init_client(&mut wl_storage);
+
+        // insert an open connection
+        let conn_key = connection_key(&get_connection_id());
+        let conn = get_connection(ConnState::Open);
+        let bytes = conn.encode_vec();
+        wl_storage
+            .write_log
+            .write(&conn_key, bytes)
+            .expect("write failed");
+        // insert an open channel
+        let channel_key = channel_key(&get_nft_port_id(), &get_channel_id());
+        let channel = get_channel_for_nft(ChanState::Open, Order::Unordered);
+        let bytes = channel.encode_vec();
+        wl_storage
+            .write_log
+            .write(&channel_key, bytes)
+            .expect("write failed");
+        wl_storage.write_log.commit_tx();
+        wl_storage.commit_block().expect("commit failed");
+        // for next block
+        wl_storage
+            .storage
+            .set_header(get_dummy_header())
+            .expect("Setting a dummy header shouldn't fail");
+        wl_storage
+            .storage
+            .begin_block(BlockHash::default(), BlockHeight(2))
+            .unwrap();
+
+        // prepare data
+        let sender = established_address_1();
+        let receiver = established_address_2();
+        let class = dummy_nft_class();
+        let metadata = dummy_nft_metadata();
+        let transfer_msg = MsgNftTransfer {
+            port_id_on_a: get_nft_port_id(),
+            chan_id_on_a: get_channel_id(),
+            packet_data: NftPacketData {
+                class_id: class.class_id.clone(),
+                class_uri: Some(class.class_uri.clone()),
+                class_data: Some(class.class_data),
+                token_ids: TokenIds(vec![metadata.token_id.clone()]),
+                token_uris: vec![metadata.token_uri.clone()],
+                token_data: vec![metadata.token_data],
+                sender: sender.to_string().into(),
+                receiver: receiver.to_string().into(),
+                memo: "memo".to_string().into(),
+            },
+            timeout_height_on_b: TimeoutHeight::At(Height::new(0, 10).unwrap()),
+            timeout_timestamp_on_b: Timestamp::none(),
+        };
+        let counterparty = get_channel_counterparty_for_nft();
+        let packet =
+            nft_packet_from_message(&transfer_msg, 1.into(), &counterparty);
+        let msg = MsgRecvPacket {
+            packet: packet.clone(),
+            proof_commitment_on_a: dummy_proof(),
+            proof_height_on_a: Height::new(0, 1).unwrap(),
+            signer: "account0".to_string().into(),
+        };
+
+        // the sequence send
+        let receipt_key = receipt_key(
+            &msg.packet.port_id_on_b,
+            &msg.packet.chan_id_on_b,
+            msg.packet.seq_on_a,
+        );
+        let bytes = [1_u8].to_vec();
+        wl_storage
+            .write_log
+            .write(&receipt_key, bytes)
+            .expect("write failed");
+        keys_changed.insert(receipt_key);
+        // packet commitment
+        let ack_key = ack_key(
+            &packet.port_id_on_b,
+            &packet.chan_id_on_b,
+            msg.packet.seq_on_a,
+        );
+        let transfer_ack =
+            AcknowledgementStatus::success(nft_types::ack_success_b64());
+        let acknowledgement: Acknowledgement = transfer_ack.into();
+        let bytes = sha2::Sha256::digest(acknowledgement.as_bytes()).to_vec();
+        wl_storage
+            .write_log
+            .write(&ack_key, bytes)
+            .expect("write failed");
+        keys_changed.insert(ack_key);
+        // trace
+        let mut class_id = transfer_msg.packet_data.class_id.clone();
+        class_id.add_trace_prefix(nft_types::TracePrefix::new(
+            packet.port_id_on_b.clone(),
+            packet.chan_id_on_b.clone(),
+        ));
+        let token_id = transfer_msg.packet_data.token_ids.0.first().unwrap();
+        let ibc_trace = format!("{class_id}/{token_id}");
+        let trace_hash = calc_hash(&ibc_trace);
+        let trace_key = ibc_trace_key(receiver.to_string(), &trace_hash);
+        let bytes = ibc_trace.serialize_to_vec();
+        wl_storage
+            .write_log
+            .write(&trace_key, bytes)
+            .expect("write failed");
+        keys_changed.insert(trace_key);
+        let trace_key = ibc_trace_key(token_id, &trace_hash);
+        let bytes = ibc_trace.serialize_to_vec();
+        wl_storage
+            .write_log
+            .write(&trace_key, bytes)
+            .expect("write failed");
+        keys_changed.insert(trace_key);
+        // NFT class
+        let class_key = nft_class_key(&class_id);
+        let mut class = dummy_nft_class();
+        class.class_id = class_id.clone();
+        let bytes = class.serialize_to_vec();
+        wl_storage
+            .write_log
+            .write(&class_key, bytes)
+            .expect("write failed");
+        keys_changed.insert(class_key);
+        // NFT metadata
+        let metadata_key = nft_metadata_key(&class_id, token_id);
+        let mut metadata = dummy_nft_metadata();
+        metadata.class_id = class_id.clone();
+        let bytes = metadata.serialize_to_vec();
+        wl_storage
+            .write_log
+            .write(&metadata_key, bytes)
+            .expect("write failed");
+        keys_changed.insert(metadata_key);
+        // event
+        let recv_event = NftRecvEvent {
+            sender: sender.to_string().into(),
+            receiver: receiver.to_string().into(),
+            class: transfer_msg.packet_data.class_id.clone(),
+            tokens: TokenIds(vec![token_id.clone()]),
+            memo: "memo".to_string().into(),
+            success: true,
+        };
+        let event = RawIbcEvent::Module(ModuleEvent::from(recv_event));
+        wl_storage
+            .write_log
+            .emit_ibc_event(event.try_into().unwrap());
+        let trace_event = TokenTraceEvent {
+            trace_hash: Some(trace_hash),
+            class: class_id,
+            token: token_id.clone(),
+        };
+        let event = RawIbcEvent::Module(ModuleEvent::from(trace_event));
+        wl_storage
+            .write_log
+            .emit_ibc_event(event.try_into().unwrap());
+        let event = RawIbcEvent::ReceivePacket(ReceivePacket::new(
+            msg.packet.clone(),
+            Order::Unordered,
+            get_connection_id(),
+        ));
+        let message_event = RawIbcEvent::Message(MessageEvent::Channel);
+        wl_storage
+            .write_log
+            .emit_ibc_event(message_event.try_into().unwrap());
+        wl_storage
+            .write_log
+            .emit_ibc_event(event.try_into().unwrap());
+        let event =
+            RawIbcEvent::WriteAcknowledgement(WriteAcknowledgement::new(
+                packet,
+                acknowledgement,
+                get_connection_id(),
+            ));
         let message_event = RawIbcEvent::Message(MessageEvent::Channel);
         wl_storage
             .write_log

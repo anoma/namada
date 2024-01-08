@@ -498,12 +498,35 @@ dependencies = [
 
 [[package]]
 name = "borsh"
+version = "0.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4114279215a005bc675e386011e594e1d9b800918cea18fcadadcce864a2046b"
+dependencies = [
+ "borsh-derive 0.10.3",
+ "hashbrown 0.11.2",
+]
+
+[[package]]
+name = "borsh"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9897ef0f1bd2362169de6d7e436ea2237dc1085d7d1e4db75f4be34d86f309d1"
 dependencies = [
- "borsh-derive",
+ "borsh-derive 1.2.1",
  "cfg_aliases",
+]
+
+[[package]]
+name = "borsh-derive"
+version = "0.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0754613691538d51f329cce9af41d7b7ca150bc973056f1156611489475f54f7"
+dependencies = [
+ "borsh-derive-internal",
+ "borsh-schema-derive-internal",
+ "proc-macro-crate 0.1.5",
+ "proc-macro2",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -521,11 +544,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "borsh-derive-internal"
+version = "0.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "afb438156919598d2c7bad7e1c0adf3d26ed3840dbc010db1a882a65583ca2fb"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "borsh-ext"
 version = "1.2.0"
 source = "git+https://github.com/heliaxdev/borsh-ext?tag=v1.2.0#a62fee3e847e512cad9ac0f1fd5a900e5db9ba37"
 dependencies = [
- "borsh",
+ "borsh 1.2.1",
+]
+
+[[package]]
+name = "borsh-schema-derive-internal"
+version = "0.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "634205cc43f74a1b9046ef87c4540ebda95696ec0f315024860cad7c5b0f5ccd"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -1252,6 +1297,12 @@ name = "dunce"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56ce8c6da7551ec6c462cbaf3bfbc75131ebbfa1c944aeaa9dab51ca1c5f0c3b"
+
+[[package]]
+name = "dyn-clone"
+version = "1.0.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "545b22097d44f8a9581187cdf93de7a71e4722bf51200cfaba810865b49a495d"
 
 [[package]]
 name = "dynasm"
@@ -2321,19 +2372,21 @@ dependencies = [
 
 [[package]]
 name = "ibc"
-version = "0.48.1"
+version = "0.49.1"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
 dependencies = [
  "ibc-apps",
  "ibc-clients",
  "ibc-core",
  "ibc-core-host-cosmos",
- "ibc-derive 0.4.0",
+ "ibc-derive 0.5.0",
  "ibc-primitives",
 ]
 
 [[package]]
 name = "ibc-app-nft-transfer"
-version = "0.48.1"
+version = "0.49.1"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
 dependencies = [
  "ibc-app-nft-transfer-types",
  "ibc-core",
@@ -2342,21 +2395,27 @@ dependencies = [
 
 [[package]]
 name = "ibc-app-nft-transfer-types"
-version = "0.48.1"
+version = "0.49.1"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
 dependencies = [
+ "borsh 0.10.3",
  "derive_more",
  "displaydoc",
  "http 1.0.0",
  "ibc-core",
  "ibc-proto",
  "mime",
+ "parity-scale-codec",
+ "scale-info",
+ "schemars",
  "serde",
  "serde-json-wasm",
 ]
 
 [[package]]
 name = "ibc-app-transfer"
-version = "0.48.1"
+version = "0.49.1"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
 dependencies = [
  "ibc-app-transfer-types",
  "ibc-core",
@@ -2365,7 +2424,8 @@ dependencies = [
 
 [[package]]
 name = "ibc-app-transfer-types"
-version = "0.48.1"
+version = "0.49.1"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
 dependencies = [
  "derive_more",
  "displaydoc",
@@ -2378,7 +2438,8 @@ dependencies = [
 
 [[package]]
 name = "ibc-apps"
-version = "0.48.1"
+version = "0.49.1"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
 dependencies = [
  "ibc-app-nft-transfer",
  "ibc-app-transfer",
@@ -2386,7 +2447,8 @@ dependencies = [
 
 [[package]]
 name = "ibc-client-tendermint"
-version = "0.48.1"
+version = "0.49.1"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
 dependencies = [
  "ibc-client-tendermint-types",
  "ibc-core-client",
@@ -2401,7 +2463,8 @@ dependencies = [
 
 [[package]]
 name = "ibc-client-tendermint-types"
-version = "0.48.1"
+version = "0.49.1"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
 dependencies = [
  "displaydoc",
  "ibc-core-client-types",
@@ -2417,14 +2480,16 @@ dependencies = [
 
 [[package]]
 name = "ibc-clients"
-version = "0.48.1"
+version = "0.49.1"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
 dependencies = [
  "ibc-client-tendermint",
 ]
 
 [[package]]
 name = "ibc-core"
-version = "0.48.1"
+version = "0.49.1"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
 dependencies = [
  "ibc-core-channel",
  "ibc-core-client",
@@ -2438,7 +2503,8 @@ dependencies = [
 
 [[package]]
 name = "ibc-core-channel"
-version = "0.48.1"
+version = "0.49.1"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
 dependencies = [
  "ibc-core-channel-types",
  "ibc-core-client",
@@ -2452,8 +2518,10 @@ dependencies = [
 
 [[package]]
 name = "ibc-core-channel-types"
-version = "0.48.1"
+version = "0.49.1"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
 dependencies = [
+ "borsh 0.10.3",
  "derive_more",
  "displaydoc",
  "ibc-core-client-types",
@@ -2462,6 +2530,9 @@ dependencies = [
  "ibc-core-host-types",
  "ibc-primitives",
  "ibc-proto",
+ "parity-scale-codec",
+ "scale-info",
+ "schemars",
  "serde",
  "sha2 0.10.8",
  "subtle-encoding",
@@ -2470,7 +2541,8 @@ dependencies = [
 
 [[package]]
 name = "ibc-core-client"
-version = "0.48.1"
+version = "0.49.1"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
 dependencies = [
  "ibc-core-client-context",
  "ibc-core-client-types",
@@ -2482,7 +2554,8 @@ dependencies = [
 
 [[package]]
 name = "ibc-core-client-context"
-version = "0.48.1"
+version = "0.49.1"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
 dependencies = [
  "derive_more",
  "displaydoc",
@@ -2490,7 +2563,7 @@ dependencies = [
  "ibc-core-commitment-types",
  "ibc-core-handler-types",
  "ibc-core-host-types",
- "ibc-derive 0.4.0",
+ "ibc-derive 0.5.0",
  "ibc-primitives",
  "subtle-encoding",
  "tendermint",
@@ -2498,14 +2571,19 @@ dependencies = [
 
 [[package]]
 name = "ibc-core-client-types"
-version = "0.48.1"
+version = "0.49.1"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
 dependencies = [
+ "borsh 0.10.3",
  "derive_more",
  "displaydoc",
  "ibc-core-commitment-types",
  "ibc-core-host-types",
  "ibc-primitives",
  "ibc-proto",
+ "parity-scale-codec",
+ "scale-info",
+ "schemars",
  "serde",
  "subtle-encoding",
  "tendermint",
@@ -2513,20 +2591,26 @@ dependencies = [
 
 [[package]]
 name = "ibc-core-commitment-types"
-version = "0.48.1"
+version = "0.49.1"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
 dependencies = [
+ "borsh 0.10.3",
  "derive_more",
  "displaydoc",
  "ibc-primitives",
  "ibc-proto",
  "ics23",
+ "parity-scale-codec",
+ "scale-info",
+ "schemars",
  "serde",
  "subtle-encoding",
 ]
 
 [[package]]
 name = "ibc-core-connection"
-version = "0.48.1"
+version = "0.49.1"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
 dependencies = [
  "ibc-core-client",
  "ibc-core-connection-types",
@@ -2537,8 +2621,10 @@ dependencies = [
 
 [[package]]
 name = "ibc-core-connection-types"
-version = "0.48.1"
+version = "0.49.1"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
 dependencies = [
+ "borsh 0.10.3",
  "derive_more",
  "displaydoc",
  "ibc-core-client-types",
@@ -2546,6 +2632,9 @@ dependencies = [
  "ibc-core-host-types",
  "ibc-primitives",
  "ibc-proto",
+ "parity-scale-codec",
+ "scale-info",
+ "schemars",
  "serde",
  "subtle-encoding",
  "tendermint",
@@ -2553,7 +2642,8 @@ dependencies = [
 
 [[package]]
 name = "ibc-core-handler"
-version = "0.48.1"
+version = "0.49.1"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
 dependencies = [
  "ibc-core-channel",
  "ibc-core-client",
@@ -2567,8 +2657,10 @@ dependencies = [
 
 [[package]]
 name = "ibc-core-handler-types"
-version = "0.48.1"
+version = "0.49.1"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
 dependencies = [
+ "borsh 0.10.3",
  "derive_more",
  "displaydoc",
  "ibc-core-channel-types",
@@ -2579,6 +2671,9 @@ dependencies = [
  "ibc-core-router-types",
  "ibc-primitives",
  "ibc-proto",
+ "parity-scale-codec",
+ "scale-info",
+ "schemars",
  "serde",
  "subtle-encoding",
  "tendermint",
@@ -2586,7 +2681,8 @@ dependencies = [
 
 [[package]]
 name = "ibc-core-host"
-version = "0.48.1"
+version = "0.49.1"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
 dependencies = [
  "derive_more",
  "displaydoc",
@@ -2603,7 +2699,8 @@ dependencies = [
 
 [[package]]
 name = "ibc-core-host-cosmos"
-version = "0.48.1"
+version = "0.49.1"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
 dependencies = [
  "derive_more",
  "displaydoc",
@@ -2625,17 +2722,23 @@ dependencies = [
 
 [[package]]
 name = "ibc-core-host-types"
-version = "0.48.1"
+version = "0.49.1"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
 dependencies = [
+ "borsh 0.10.3",
  "derive_more",
  "displaydoc",
  "ibc-primitives",
+ "parity-scale-codec",
+ "scale-info",
+ "schemars",
  "serde",
 ]
 
 [[package]]
 name = "ibc-core-router"
-version = "0.48.1"
+version = "0.49.1"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
 dependencies = [
  "derive_more",
  "displaydoc",
@@ -2648,26 +2751,21 @@ dependencies = [
 
 [[package]]
 name = "ibc-core-router-types"
-version = "0.48.1"
+version = "0.49.1"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
 dependencies = [
+ "borsh 0.10.3",
  "derive_more",
  "displaydoc",
  "ibc-core-host-types",
  "ibc-primitives",
  "ibc-proto",
+ "parity-scale-codec",
+ "scale-info",
+ "schemars",
  "serde",
  "subtle-encoding",
  "tendermint",
-]
-
-[[package]]
-name = "ibc-derive"
-version = "0.4.0"
-dependencies = [
- "darling",
- "proc-macro2",
- "quote",
- "syn 2.0.39",
 ]
 
 [[package]]
@@ -2683,13 +2781,29 @@ dependencies = [
 ]
 
 [[package]]
-name = "ibc-primitives"
-version = "0.48.1"
+name = "ibc-derive"
+version = "0.5.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
 dependencies = [
+ "darling",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.39",
+]
+
+[[package]]
+name = "ibc-primitives"
+version = "0.49.1"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
+dependencies = [
+ "borsh 0.10.3",
  "derive_more",
  "displaydoc",
  "ibc-proto",
+ "parity-scale-codec",
  "prost 0.12.3",
+ "scale-info",
+ "schemars",
  "serde",
  "tendermint",
  "time",
@@ -2701,10 +2815,14 @@ version = "0.39.1"
 source = "git+https://github.com/heliaxdev/ibc-proto-rs?branch=yuji/feat/ics721-impl#b60972f15585c417c2745344c2844444824524fa"
 dependencies = [
  "base64 0.21.5",
+ "borsh 0.10.3",
  "bytes",
  "flex-error",
  "ics23",
+ "parity-scale-codec",
  "prost 0.12.3",
+ "scale-info",
+ "schemars",
  "serde",
  "subtle-encoding",
  "tendermint-proto",
@@ -2712,7 +2830,8 @@ dependencies = [
 
 [[package]]
 name = "ibc-testkit"
-version = "0.48.1"
+version = "0.49.1"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
 dependencies = [
  "derive_more",
  "displaydoc",
@@ -2828,7 +2947,7 @@ name = "index-set"
 version = "0.8.0"
 source = "git+https://github.com/heliaxdev/index-set?tag=v0.8.1#b0d928f83cf0d465ccda299d131e8df2859b5184"
 dependencies = [
- "borsh",
+ "borsh 1.2.1",
  "serde",
 ]
 
@@ -3099,7 +3218,7 @@ name = "masp_note_encryption"
 version = "1.0.0"
 source = "git+https://github.com/anoma/masp?tag=v1.0.0#c3c6047a9c9da54058afc71219b913ac9f79e48b"
 dependencies = [
- "borsh",
+ "borsh 1.2.1",
  "chacha20",
  "chacha20poly1305",
  "cipher",
@@ -3118,7 +3237,7 @@ dependencies = [
  "blake2b_simd",
  "blake2s_simd",
  "bls12_381",
- "borsh",
+ "borsh 1.2.1",
  "byteorder",
  "ff",
  "fpe",
@@ -3282,7 +3401,7 @@ version = "0.30.0"
 dependencies = [
  "async-trait",
  "bimap",
- "borsh",
+ "borsh 1.2.1",
  "borsh-ext",
  "circular-queue",
  "clru",
@@ -3345,7 +3464,7 @@ dependencies = [
  "ark-bls12-381",
  "ark-serialize",
  "bech32 0.8.1",
- "borsh",
+ "borsh 1.2.1",
  "borsh-ext",
  "chrono",
  "data-encoding",
@@ -3355,7 +3474,7 @@ dependencies = [
  "ethbridge-structs",
  "eyre",
  "ibc",
- "ibc-derive 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ibc-derive 0.4.0",
  "ibc-testkit",
  "ics23",
  "impl-num-traits",
@@ -3395,7 +3514,7 @@ dependencies = [
 name = "namada_ethereum_bridge"
 version = "0.30.0"
 dependencies = [
- "borsh",
+ "borsh 1.2.1",
  "borsh-ext",
  "ethers",
  "eyre",
@@ -3426,7 +3545,7 @@ dependencies = [
 name = "namada_proof_of_stake"
 version = "0.30.0"
 dependencies = [
- "borsh",
+ "borsh 1.2.1",
  "data-encoding",
  "derivative",
  "namada_core",
@@ -3443,7 +3562,7 @@ version = "0.30.0"
 dependencies = [
  "async-trait",
  "bimap",
- "borsh",
+ "borsh 1.2.1",
  "borsh-ext",
  "circular-queue",
  "data-encoding",
@@ -3487,7 +3606,7 @@ dependencies = [
 name = "namada_test_utils"
 version = "0.30.0"
 dependencies = [
- "borsh",
+ "borsh 1.2.1",
  "namada_core",
  "strum 0.24.1",
 ]
@@ -3530,7 +3649,7 @@ dependencies = [
 name = "namada_tx_prelude"
 version = "0.30.0"
 dependencies = [
- "borsh",
+ "borsh 1.2.1",
  "borsh-ext",
  "masp_primitives",
  "namada_core",
@@ -3545,7 +3664,7 @@ dependencies = [
 name = "namada_vm_env"
 version = "0.30.0"
 dependencies = [
- "borsh",
+ "borsh 1.2.1",
  "masp_primitives",
  "namada_core",
 ]
@@ -3554,7 +3673,7 @@ dependencies = [
 name = "namada_vp_prelude"
 version = "0.30.0"
 dependencies = [
- "borsh",
+ "borsh 1.2.1",
  "borsh-ext",
  "namada_core",
  "namada_macros",
@@ -3568,7 +3687,7 @@ dependencies = [
 name = "namada_wasm_for_tests"
 version = "0.30.0"
 dependencies = [
- "borsh",
+ "borsh 1.2.1",
  "getrandom 0.2.11",
  "namada_test_utils",
  "namada_tests",
@@ -4164,6 +4283,15 @@ dependencies = [
  "impl-serde",
  "scale-info",
  "uint",
+]
+
+[[package]]
+name = "proc-macro-crate"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d6ea3c4595b96363c13943497db34af4460fb474a95c43f4446ad341b8c9785"
+dependencies = [
+ "toml 0.5.11",
 ]
 
 [[package]]
@@ -4901,6 +5029,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "schemars"
+version = "0.8.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "45a28f4c49489add4ce10783f7911893516f15afe45d015608d41faca6bc4d29"
+dependencies = [
+ "dyn-clone",
+ "schemars_derive",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "schemars_derive"
+version = "0.8.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c767fd6fa65d9ccf9cf026122c1b555f2ef9a4f0cea69da4d7dbc3e258d30967"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "serde_derive_internals",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5057,6 +5209,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.39",
+]
+
+[[package]]
+name = "serde_derive_internals"
+version = "0.26.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85bf8229e7920a9f636479437026331ce11aa132b4dde37d121944a44d6e5f3c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -5259,7 +5422,7 @@ name = "sparse-merkle-tree"
 version = "0.3.1-pre"
 source = "git+https://github.com/heliaxdev/sparse-merkle-tree?rev=515687fe7884cb365067ac86c66ac3613de176bb#515687fe7884cb365067ac86c66ac3613de176bb"
 dependencies = [
- "borsh",
+ "borsh 1.2.1",
  "cfg-if 1.0.0",
  "ics23",
  "sha2 0.9.9",
