@@ -130,15 +130,12 @@ mod testing {
 
             // Initialize mock gas limit
             let max_block_gas_key =
-                namada_core::ledger::parameters::storage::get_max_block_gas_key(
-                );
+                namada_parameters::storage::get_max_block_gas_key();
             wl_storage
                 .storage
                 .write(
                     &max_block_gas_key,
-                    namada_core::ledger::storage::types::encode(
-                        &20_000_000_u64,
-                    ),
+                    namada_core::types::encode(&20_000_000_u64),
                 )
                 .expect(
                     "Max block gas parameter must be initialized in storage",

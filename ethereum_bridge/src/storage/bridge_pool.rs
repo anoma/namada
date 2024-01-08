@@ -8,6 +8,7 @@ pub use namada_core::types::eth_bridge_pool::{
 use namada_core::types::eth_bridge_pool::{PendingTransfer, Segments};
 use namada_core::types::keccak::KeccakHash;
 use namada_core::types::storage::{DbKeySeg, Key, KeySeg};
+pub use namada_state::merkle_tree::eth_bridge_pool::BridgePoolTree;
 
 /// Get the storage key for the transfers in the pool
 pub fn get_pending_key(transfer: &PendingTransfer) -> Key {

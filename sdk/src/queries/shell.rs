@@ -539,7 +539,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use namada_core::types::{address, token};
+    use namada_core::types::address;
     use namada_token::storage_key::balance_key;
 
     use crate::queries::RPC;

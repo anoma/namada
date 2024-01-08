@@ -104,6 +104,7 @@ tokio = { workspace = true, default-features = false, features = ["sync"] }
 wasmtimer = "0.2.0"
 
 [dev-dependencies]
+namada_account = { path = "../account", features = ["testing"]}
 namada_core = { path = "../core", default-features = false, features = [
   "rand",
   "testing",
@@ -111,11 +112,16 @@ namada_core = { path = "../core", default-features = false, features = [
 namada_ethereum_bridge = { path = "../ethereum_bridge", default-features = false, features = [
   "testing",
 ] }
+namada_governance = { path = "../governance", features = ["testing"] }
+namada_ibc = { path = "../ibc", features = ["testing"] }
+namada_parameters = {path = "../parameters"}
 namada_proof_of_stake = { path = "../proof_of_stake", default-features = false, features = [
   "testing",
 ] }
 namada_state = { path = "../state", features = ["testing"] }
 namada_test_utils = { path = "../test_utils" }
+namada_tx = { path = "../tx", features = ["testing"]}
+namada_vote_ext = {path = "../vote_ext"}
 
 assert_matches.workspace = true
 base58.workspace = true

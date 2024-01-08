@@ -22,7 +22,6 @@ ethers-derive = [
 ]
 # for integration tests and test utilities
 testing = [
-  "ibc-testkit",
   "rand",
   "proptest",
 ]
@@ -41,8 +40,6 @@ ethabi.workspace = true
 ethbridge-structs.workspace = true
 eyre.workspace = true
 ibc.workspace = true
-ibc-derive.workspace = true
-ibc-testkit = {workspace = true, optional = true}
 ics23.workspace = true
 impl-num-traits = "0.1.2"
 index-set.workspace = true

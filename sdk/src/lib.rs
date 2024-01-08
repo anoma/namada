@@ -765,7 +765,7 @@ where
 pub mod testing {
     use governance::ProposalType;
     use ibc::primitives::proto::Any;
-    use namada_core::ledger::ibc::testing::arb_ibc_any;
+    use namada_account::{InitAccount, UpdateAccount};
     use namada_core::types::address::testing::{
         arb_established_address, arb_non_internal_address,
     };
@@ -776,24 +776,23 @@ pub mod testing {
         arb_denominated_amount, arb_transfer,
     };
     use namada_core::types::token::Transfer;
-    use namada_core::types::transaction::account::{
-        InitAccount, UpdateAccount,
+    use namada_governance::storage::proposal::testing::{
+        arb_init_proposal, arb_vote_proposal,
     };
-    use namada_core::types::transaction::governance::{
-        InitProposalData, VoteProposalData,
-    };
-    use namada_core::types::transaction::pgf::UpdateStewardCommission;
-    use namada_core::types::transaction::pos::{
+    use namada_governance::{InitProposalData, VoteProposalData};
+    use namada_ibc::testing::arb_ibc_any;
+    use namada_tx::data::pgf::UpdateStewardCommission;
+    use namada_tx::data::pos::{
         BecomeValidator, Bond, CommissionChange, ConsensusKeyChange,
         MetaDataChange, Redelegation, Unbond, Withdraw,
     };
+    use namada_tx::data::{DecryptedTx, Fee, TxType, WrapperTx};
     use proptest::prelude::{Just, Strategy};
     use proptest::{option, prop_compose};
     use prost::Message;
 
     use super::*;
     use crate::account::tests::{arb_init_account, arb_update_account};
-    use crate::governance::tests::{arb_init_proposal, arb_vote_proposal};
     use crate::tx::data::pgf::tests::arb_update_steward_commission;
     use crate::tx::data::pos::tests::{
         arb_become_validator, arb_bond, arb_commission_change,
@@ -805,7 +804,6 @@ pub mod testing {
     use crate::types::eth_bridge_pool::testing::arb_pending_transfer;
     use crate::types::key::testing::arb_common_pk;
     use crate::types::time::{DateTime, DateTimeUtc, Utc};
-    use crate::types::transaction::{DecryptedTx, Fee, TxType, WrapperTx};
 
     #[derive(Debug)]
     #[allow(clippy::large_enum_variant)]

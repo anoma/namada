@@ -837,11 +837,6 @@ mod test_ethbridge_router {
     use std::collections::BTreeMap;
 
     use assert_matches::assert_matches;
-    use namada_core::ledger::eth_bridge::storage::bridge_pool::{
-        get_pending_key, get_signed_root_key, BridgePoolTree,
-    };
-    use namada_core::ledger::eth_bridge::storage::whitelist;
-    use namada_core::ledger::storage::mockdb::MockDBWriteBatch;
     use namada_core::types::address::nam;
     use namada_core::types::address::testing::established_address_1;
     use namada_core::types::eth_abi::Encode;
@@ -850,17 +845,22 @@ mod test_ethbridge_router {
     };
     use namada_core::types::ethereum_events::EthAddress;
     use namada_core::types::storage::BlockHeight;
-    use namada_core::types::vote_extensions::validator_set_update;
-    use namada_core::types::vote_extensions::validator_set_update::{
-        EthAddrBook, VotingPowersMapExt,
-    };
     use namada_core::types::voting_power::{
         EthBridgeVotingPower, FractionalVotingPower,
     };
     use namada_ethereum_bridge::protocol::transactions::validator_set_update::aggregate_votes;
+    use namada_ethereum_bridge::storage::bridge_pool::{
+        get_pending_key, get_signed_root_key, BridgePoolTree,
+    };
     use namada_ethereum_bridge::storage::proof::BridgePoolRootProof;
+    use namada_ethereum_bridge::storage::whitelist;
     use namada_proof_of_stake::pos_queries::PosQueries;
+    use namada_state::mockdb::MockDBWriteBatch;
     use namada_storage::StorageWrite;
+    use namada_vote_ext::validator_set_update;
+    use namada_vote_ext::validator_set_update::{
+        EthAddrBook, VotingPowersMapExt,
+    };
 
     use super::test_utils::bertha_address;
     use super::*;
@@ -1006,14 +1006,14 @@ mod test_ethbridge_router {
             .unwrap();
         let expected = {
             let mut proof =
-                EthereumProof::new((1.into(), vext.data.voting_powers));
+                EthereumProof::new((1.into(), vext.0.data.voting_powers));
             proof.attach_signature(
                 client
                     .wl_storage
                     .ethbridge_queries()
                     .get_eth_addr_book(&established_address_1(), Some(0.into()))
                     .expect("Test failed"),
-                vext.sig,
+                vext.0.sig,
             );
             proof.encode()
         };
