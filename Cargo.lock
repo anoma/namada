@@ -4526,6 +4526,7 @@ dependencies = [
  "namada_storage",
  "namada_trans_token",
  "primitive-types",
+ "proptest",
  "prost 0.12.3",
  "sha2 0.9.9",
  "thiserror",

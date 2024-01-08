@@ -27,6 +27,7 @@ ibc-derive.workspace = true
 ibc.workspace = true
 ics23.workspace = true
 primitive-types.workspace = true
+proptest.workspace = true
 prost.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
