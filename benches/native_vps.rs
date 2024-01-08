@@ -522,8 +522,9 @@ fn setup_storage_for_masp_verification(
         .wl_storage
         .write(&anchor_key, ())
         .unwrap();
-
-    shielded_ctx.shell.commit();
+    shielded_ctx.shell.commit_block();
+    // Cache the masp tx so that it can be returned when queried
+    shielded_ctx.shell.last_block_masp_txs.push(shield_tx);
 
     let (mut shielded_ctx, signed_tx) = match bench_name {
         "shielding" => shielded_ctx.generate_masp_tx(

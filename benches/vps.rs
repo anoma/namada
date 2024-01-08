@@ -275,14 +275,14 @@ fn vp_implicit(c: &mut Criterion) {
             // Reveal public key
             shell.execute_tx(&reveal_pk);
             shell.wl_storage.commit_tx();
-            shell.commit();
+            shell.commit_block();
         }
 
         if bench_name == "transfer" || bench_name == "pos" {
             // Transfer some tokens to the implicit address
             shell.execute_tx(&received_transfer);
             shell.wl_storage.commit_tx();
-            shell.commit();
+            shell.commit_block();
         }
 
         // Run the tx to validate
