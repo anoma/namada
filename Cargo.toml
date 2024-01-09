@@ -25,6 +25,7 @@ exclude = [
   "wasm",
   "wasm_for_tests",
   "test_fixtures",
+  "scripts/address_filtering",
 ]
 
 [workspace.package]
