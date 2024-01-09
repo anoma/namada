@@ -24,6 +24,7 @@ pub use {
 mod dry_run_tx {
     use namada_sdk::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
     use namada_state::{DBIter, ResultExt, StorageHasher, DB};
+    use namada_tx::data::GasLimit;
 
     use super::protocol;
     use crate::vm::wasm::{TxCache, VpCache};
@@ -83,10 +84,10 @@ mod dry_run_tx {
             TxType::Protocol(_) | TxType::Decrypted(_) => {
                 // If dry run only the inner tx, use the max block gas as the
                 // gas limit
-                TxGasMeter::new(
+                TxGasMeter::new(GasLimit::from(
                     namada_parameters::get_max_block_gas(ctx.wl_storage)
                         .unwrap(),
-                )
+                ))
             }
             TxType::Raw => {
                 // Cast tx to a decrypted for execution
@@ -94,10 +95,10 @@ mod dry_run_tx {
 
                 // If dry run only the inner tx, use the max block gas as the
                 // gas limit
-                TxGasMeter::new(
+                TxGasMeter::new(GasLimit::from(
                     namada_parameters::get_max_block_gas(ctx.wl_storage)
                         .unwrap(),
-                )
+                ))
             }
         };
 

@@ -11,7 +11,9 @@ use namada_sdk::tx::TX_TRANSFER_WASM;
 use namada_state::wl_storage::WriteLogAndStorage;
 use namada_state::StorageRead;
 use namada_tx::data::protocol::ProtocolTxType;
-use namada_tx::data::{DecryptedTx, TxResult, TxType, VpsResult, WrapperTx};
+use namada_tx::data::{
+    DecryptedTx, GasLimit, TxResult, TxType, VpsResult, WrapperTx,
+};
 use namada_tx::{Section, Tx};
 use namada_vote_ext::EthereumTxData;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -310,14 +312,14 @@ where
         // The unshielding tx does not charge gas, instantiate a
         // custom gas meter for this step
         let mut tx_gas_meter =
-            TxGasMeter::new(
+            TxGasMeter::new(GasLimit::from(
                 wl_storage
                     .read::<u64>(
                         &namada_parameters::storage::get_fee_unshielding_gas_limit_key(
                         ),
                     )
                     .expect("Error reading the storage")
-                    .expect("Missing fee unshielding gas limit in storage"),
+                    .expect("Missing fee unshielding gas limit in storage")),
             );
 
         // If it fails, do not return early

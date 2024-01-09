@@ -10,6 +10,7 @@ mod finalize_block;
 mod governance;
 mod init_chain;
 pub use init_chain::InitChainValidation;
+use namada_sdk::tx::data::GasLimit;
 pub mod prepare_proposal;
 pub mod process_proposal;
 pub(super) mod queries;
@@ -1428,7 +1429,7 @@ where
                     Error::TxApply(protocol::Error::FeeUnshieldingError(e))
                 })?;
 
-            let fee_unshielding_gas_limit: Gas = temp_wl_storage
+            let fee_unshielding_gas_limit: GasLimit = temp_wl_storage
                 .read(&parameters::storage::get_fee_unshielding_gas_limit_key())
                 .expect("Error reading from storage")
                 .expect("Missing fee unshielding gas limit in storage");
