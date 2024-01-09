@@ -39,8 +39,8 @@ pub const COMMON_SIG_HRP: &str = "signam";
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum DecodeError {
-    #[error("Error decoding from Bech32m: {0}")]
-    DecodeBech32(bech32::Error),
+    #[error("Error decoding {0} from Bech32m: {1}")]
+    DecodeBech32(String, bech32::Error),
     #[error("Error decoding from base32: {0}")]
     DecodeBase32(bech32::Error),
     #[error("Unexpected Bech32m human-readable part {0}, expected {1}")]
@@ -81,7 +81,7 @@ pub trait Format: Sized {
     /// Try to decode `Self` from a string
     fn decode(string: impl AsRef<str>) -> Result<Self, DecodeError> {
         let (hrp, hash_base32, variant) = bech32::decode(string.as_ref())
-            .map_err(DecodeError::DecodeBech32)?;
+            .map_err(| e | DecodeError::DecodeBech32(String::from(string.as_ref()), e))?;
         if hrp != Self::HRP {
             return Err(DecodeError::UnexpectedBech32Hrp(
                 hrp,
