@@ -71,7 +71,7 @@ mod test_queries {
     use namada::proof_of_stake::types::WeightedValidator;
     use namada::state::EPOCH_SWITCH_BLOCKS_DELAY;
     use namada::tendermint::abci::types::VoteInfo;
-    use namada::types::storage::Epoch;
+    use namada::types::storage::{BlockHash, Epoch};
     use namada_sdk::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 
     use super::*;
@@ -99,6 +99,9 @@ mod test_queries {
                 for (curr_epoch, curr_block_height, can_send) in
                     epoch_assertions
                 {
+                    shell.wl_storage.storage.begin_block(
+                        BlockHash::default(), curr_block_height.into()).unwrap();
+
                     if prev_epoch != Some(curr_epoch) {
                         prev_epoch = Some(curr_epoch);
                         shell.start_new_epoch_in(EPOCH_NUM_BLOCKS);

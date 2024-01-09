@@ -259,6 +259,38 @@ where
     pub fn delete_tx_hash(&mut self, hash: Hash) -> write_log::Result<()> {
         self.write_log.delete_tx_hash(hash)
     }
+
+    #[inline]
+    pub fn get_current_decision_height(&self) -> BlockHeight {
+        self.storage.get_last_block_height() + 1
+    }
+
+    /// Check if we are at a given [`BlockHeight`] offset, `height_offset`,
+    /// within the current epoch.
+    pub fn is_deciding_offset_within_epoch(&self, height_offset: u64) -> bool {
+        let current_decision_height = self.get_current_decision_height();
+
+        // NOTE: the first stored height in `fst_block_heights_of_each_epoch`
+        // is 0, because of a bug (should be 1), so this code needs to
+        // handle that case
+        //
+        // we can remove this check once that's fixed
+        if self.storage.get_current_epoch().0 == storage::Epoch(0) {
+            let height_offset_within_epoch = BlockHeight(1 + height_offset);
+            return current_decision_height == height_offset_within_epoch;
+        }
+
+        let pred_epochs = &self.storage.block.pred_epochs;
+        let fst_heights_of_each_epoch = pred_epochs.first_block_heights();
+
+        fst_heights_of_each_epoch
+            .last()
+            .map(|&h| {
+                let height_offset_within_epoch = h + height_offset;
+                current_decision_height == height_offset_within_epoch
+            })
+            .unwrap_or(false)
+    }
 }
 
 /// Prefix iterator for [`WlStorage`].
