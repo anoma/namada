@@ -14,12 +14,12 @@ use namada_core::ledger::storage;
 use namada_core::ledger::storage_api::OptionExt;
 use namada_core::ledger::vp_env::VpEnv;
 use namada_core::proto::Tx;
+use namada_core::types::address::Address;
 use namada_core::types::address::InternalAddress::Masp;
-use namada_core::types::address::{Address, MASP};
-use namada_core::types::storage::{Epoch, IndexedTx, Key, KeySeg};
+use namada_core::types::storage::{Epoch, IndexedTx, Key};
 use namada_core::types::token::{
     self, is_masp_allowed_key, is_masp_key, is_masp_nullifier_key,
-    PIN_KEY_PREFIX,
+    masp_pin_tx_key,
 };
 use namada_sdk::masp::verify_shielded_tx;
 use ripemd::Digest as RipemdDigest;
@@ -301,10 +301,7 @@ where
 
         // Validate pin key
         if let Some(key) = pin_key {
-            let pin_key = Key::from(MASP.to_db_key())
-                .push(&(PIN_KEY_PREFIX.to_owned() + key))
-                .expect("Cannot obtain a storage key");
-            match self.ctx.read_post::<IndexedTx>(&pin_key)? {
+            match self.ctx.read_post::<IndexedTx>(&masp_pin_tx_key(key))? {
                 Some(IndexedTx { height, index })
                     if height == self.ctx.get_block_height()?
                         && index == self.ctx.get_tx_index()? => {}

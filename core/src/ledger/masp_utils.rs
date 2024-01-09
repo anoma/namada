@@ -6,10 +6,9 @@ use masp_primitives::transaction::Transaction;
 
 use super::storage_api::{StorageRead, StorageWrite};
 use crate::ledger::storage_api::{Error, Result};
-use crate::types::address::MASP;
-use crate::types::storage::{IndexedTx, Key, KeySeg};
+use crate::types::storage::IndexedTx;
 use crate::types::token::{
-    masp_commitment_tree_key, masp_nullifier_key, PIN_KEY_PREFIX,
+    masp_commitment_tree_key, masp_nullifier_key, masp_pin_tx_key,
 };
 
 // Writes the nullifiers of the provided masp transaction to storage
@@ -73,11 +72,8 @@ pub fn handle_masp_tx(
 
     // If storage key has been supplied, then pin this transaction to it
     if let Some(key) = pin_key {
-        let pin_key = Key::from(MASP.to_db_key())
-            .push(&(PIN_KEY_PREFIX.to_owned() + key))
-            .expect("Cannot obtain a storage key");
         ctx.write(
-            &pin_key,
+            &masp_pin_tx_key(key),
             IndexedTx {
                 height: ctx.get_block_height()?,
                 index: ctx.get_tx_index()?,
