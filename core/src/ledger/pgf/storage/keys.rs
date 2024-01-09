@@ -63,7 +63,7 @@ pub fn fundings_key_prefix() -> Key {
 }
 
 /// LazyMap handler for the pgf fundings substorage
-pub fn fundings_handle() -> LazyMap<Address, StoragePgfFunding> {
+pub fn fundings_handle() -> LazyMap<String, StoragePgfFunding> {
     LazyMap::open(fundings_key_prefix())
 }
 

@@ -1,18 +1,24 @@
 //! PGF lib code.
 
+use crate::ledger::governance::storage::proposal::PGFTarget;
 use crate::ledger::parameters::storage as params_storage;
+use crate::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
+use crate::ledger::storage_api::ibc::transfer_over_ibc;
 use crate::ledger::storage_api::pgf::{
     get_parameters, get_payments, get_stewards,
 };
-use crate::ledger::storage_api::token::credit_tokens;
-use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
+use crate::ledger::storage_api::token::{credit_tokens, transfer};
+use crate::ledger::storage_api::{self, StorageRead};
 use crate::types::dec::Dec;
 use crate::types::token;
 
 /// Apply the PGF inflation.
-pub fn apply_inflation<S>(storage: &mut S) -> storage_api::Result<()>
+pub fn apply_inflation<D, H>(
+    storage: &mut WlStorage<D, H>,
+) -> storage_api::Result<()>
 where
-    S: StorageRead + StorageWrite,
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
 {
     let pgf_parameters = get_parameters(storage)?;
     let staking_token = storage.get_native_token()?;
@@ -46,26 +52,36 @@ where
     pgf_fundings.sort_by(|a, b| a.id.cmp(&b.id));
 
     for funding in pgf_fundings {
-        if storage_api::token::transfer(
-            storage,
-            &staking_token,
-            &super::ADDRESS,
-            &funding.detail.target,
-            funding.detail.amount,
-        )
-        .is_ok()
-        {
-            tracing::info!(
-                "Paying {} tokens for {} project.",
-                funding.detail.amount.to_string_native(),
-                &funding.detail.target,
-            );
-        } else {
-            tracing::warn!(
-                "Failed to pay {} tokens for {} project.",
-                funding.detail.amount.to_string_native(),
-                &funding.detail.target,
-            );
+        let result = match &funding.detail {
+            PGFTarget::Internal(target) => transfer(
+                storage,
+                &staking_token,
+                &super::ADDRESS,
+                &target.target,
+                target.amount,
+            ),
+            PGFTarget::Ibc(target) => transfer_over_ibc(
+                storage,
+                &staking_token,
+                &super::ADDRESS,
+                target,
+            ),
+        };
+        match result {
+            Ok(()) => {
+                tracing::info!(
+                    "Paying {} tokens for {} project.",
+                    funding.detail.amount().to_string_native(),
+                    &funding.detail.target(),
+                );
+            }
+            Err(_) => {
+                tracing::warn!(
+                    "Failed to pay {} tokens for {} project.",
+                    funding.detail.amount().to_string_native(),
+                    &funding.detail.target(),
+                );
+            }
         }
     }
 

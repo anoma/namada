@@ -5,6 +5,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use crate::ledger::governance::cli::onchain::{
     PgfAction, PgfContinous, PgfRetro, PgfSteward, StewardsUpdate,
 };
@@ -81,11 +82,128 @@ pub enum AddRemove<T> {
     Eq,
     PartialOrd,
 )]
-pub struct PGFTarget {
+pub enum PGFTarget {
+    /// Funding target on this chain
+    Internal(PGFInternalTarget),
+    /// Funding target on another chain
+    Ibc(PGFIbcTarget),
+}
+
+impl PGFTarget {
+    /// Returns the funding target as String
+    pub fn target(&self) -> String {
+        match self {
+            PGFTarget::Internal(t) => t.target.to_string(),
+            PGFTarget::Ibc(t) => t.target.clone(),
+        }
+    }
+
+    /// Returns the funding amount
+    pub fn amount(&self) -> Amount {
+        match self {
+            PGFTarget::Internal(t) => t.amount,
+            PGFTarget::Ibc(t) => t.amount,
+        }
+    }
+}
+
+/// The target of a PGF payment
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+    Ord,
+    Eq,
+    PartialOrd,
+)]
+pub struct PGFInternalTarget {
     /// The target address
     pub target: Address,
     /// The amount of token to fund the target address
     pub amount: Amount,
+}
+
+/// The target of a PGF payment
+#[derive(
+    Debug, Clone, PartialEq, Serialize, Deserialize, Ord, Eq, PartialOrd,
+)]
+pub struct PGFIbcTarget {
+    /// The target address on the target chain
+    pub target: String,
+    /// The amount of token to fund the target address
+    pub amount: Amount,
+    /// Port ID to fund
+    pub port_id: PortId,
+    /// Channel ID to fund
+    pub channel_id: ChannelId,
+}
+
+impl BorshSerialize for PGFIbcTarget {
+    fn serialize<W: std::io::Write>(
+        &self,
+        writer: &mut W,
+    ) -> std::io::Result<()> {
+        BorshSerialize::serialize(&self.target, writer)?;
+        BorshSerialize::serialize(&self.amount, writer)?;
+        BorshSerialize::serialize(&self.port_id.to_string(), writer)?;
+        BorshSerialize::serialize(&self.channel_id.to_string(), writer)
+    }
+}
+
+impl borsh::BorshDeserialize for PGFIbcTarget {
+    fn deserialize_reader<R: std::io::Read>(
+        reader: &mut R,
+    ) -> std::io::Result<Self> {
+        use std::io::{Error, ErrorKind};
+        let target: String = BorshDeserialize::deserialize_reader(reader)?;
+        let amount: Amount = BorshDeserialize::deserialize_reader(reader)?;
+        let port_id: String = BorshDeserialize::deserialize_reader(reader)?;
+        let port_id: PortId = port_id.parse().map_err(|err| {
+            Error::new(
+                ErrorKind::InvalidData,
+                format!("Error decoding port ID: {}", err),
+            )
+        })?;
+        let channel_id: String = BorshDeserialize::deserialize_reader(reader)?;
+        let channel_id: ChannelId = channel_id.parse().map_err(|err| {
+            Error::new(
+                ErrorKind::InvalidData,
+                format!("Error decoding channel ID: {}", err),
+            )
+        })?;
+        Ok(Self {
+            target,
+            amount,
+            port_id,
+            channel_id,
+        })
+    }
+}
+
+impl borsh::BorshSchema for PGFIbcTarget {
+    fn add_definitions_recursively(
+        definitions: &mut BTreeMap<
+            borsh::schema::Declaration,
+            borsh::schema::Definition,
+        >,
+    ) {
+        let fields = borsh::schema::Fields::NamedFields(vec![
+            ("target".into(), String::declaration()),
+            ("amount".into(), Amount::declaration()),
+            ("port_id".into(), String::declaration()),
+            ("channel_id".into(), String::declaration()),
+        ]);
+        let definition = borsh::schema::Definition::Struct { fields };
+        definitions.insert(Self::declaration(), definition);
+    }
+
+    fn declaration() -> borsh::schema::Declaration {
+        std::any::type_name::<Self>().into()
+    }
 }
 
 /// The actions that a PGF Steward can propose to execute
@@ -168,35 +286,22 @@ impl TryFrom<PgfSteward> for AddRemove<Address> {
     }
 }
 
-impl TryFrom<PgfContinous> for PGFAction {
-    type Error = ProposalTypeError;
-
-    fn try_from(value: PgfContinous) -> Result<Self, Self::Error> {
+impl From<PgfContinous> for PGFAction {
+    fn from(value: PgfContinous) -> Self {
         match value.action {
             PgfAction::Add => {
-                Ok(PGFAction::Continuous(AddRemove::Add(PGFTarget {
-                    target: value.target.address,
-                    amount: value.target.amount,
-                })))
+                PGFAction::Continuous(AddRemove::Add(value.target))
             }
             PgfAction::Remove => {
-                Ok(PGFAction::Continuous(AddRemove::Remove(PGFTarget {
-                    target: value.target.address,
-                    amount: value.target.amount,
-                })))
+                PGFAction::Continuous(AddRemove::Remove(value.target))
             }
         }
     }
 }
 
-impl TryFrom<PgfRetro> for PGFAction {
-    type Error = ProposalTypeError;
-
-    fn try_from(value: PgfRetro) -> Result<Self, Self::Error> {
-        Ok(PGFAction::Retro(PGFTarget {
-            target: value.target.address,
-            amount: value.target.amount,
-        }))
+impl From<PgfRetro> for PGFAction {
+    fn from(value: PgfRetro) -> Self {
+        PGFAction::Retro(value.target)
     }
 }
 
@@ -319,6 +424,9 @@ pub mod testing {
     use proptest::{collection, option, prop_compose};
 
     use super::*;
+    use crate::ledger::governance::storage::proposal::{
+        PGFInternalTarget, PGFTarget,
+    };
     use crate::types::address::testing::arb_non_internal_address;
     use crate::types::hash::testing::arb_hash;
     use crate::types::token::testing::arb_amount;
@@ -341,10 +449,10 @@ pub mod testing {
             target in arb_non_internal_address(),
             amount in arb_amount(),
         ) -> PGFTarget {
-            PGFTarget {
+            PGFTarget::Internal(PGFInternalTarget {
                 target,
                 amount,
-            }
+            })
         }
     }
 
