@@ -1811,6 +1811,7 @@ fn proposal_submission() -> Result<()> {
     let albert = find_address(&test, ALBERT)?;
     let valid_proposal_json_path = prepare_proposal_data(
         &test,
+        0,
         albert,
         TestWasms::TxProposalCode.read_bytes(),
         12,
@@ -1883,6 +1884,7 @@ fn proposal_submission() -> Result<()> {
     let albert = find_address(&test, ALBERT)?;
     let invalid_proposal_json = prepare_proposal_data(
         &test,
+        1,
         albert,
         TestWasms::TxProposalCode.read_bytes(),
         1,
@@ -2141,7 +2143,7 @@ fn pgf_governance_proposal() -> Result<()> {
     };
 
     let valid_proposal_json_path =
-        prepare_proposal_data(&test, albert, pgf_stewards, 12);
+        prepare_proposal_data(&test, 0, albert, pgf_stewards, 12);
     let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
 
     let submit_proposal_args = vec![
@@ -2330,7 +2332,7 @@ fn pgf_governance_proposal() -> Result<()> {
     };
 
     let valid_proposal_json_path =
-        prepare_proposal_data(&test, albert, pgf_funding, 36);
+        prepare_proposal_data(&test, 1, albert, pgf_funding, 36);
     let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
 
     let submit_proposal_args = vec![
@@ -2926,6 +2928,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
             let author = find_address(&test, source).unwrap();
             let valid_proposal_json_path = prepare_proposal_data(
                 &test,
+                0,
                 author,
                 TestWasms::TxProposalCode.read_bytes(),
                 12,
@@ -3042,12 +3045,14 @@ fn test_epoch_sleep() -> Result<()> {
 /// This can be submitted with "init-proposal" command.
 fn prepare_proposal_data(
     test: &setup::Test,
+    id: u64,
     source: Address,
     data: impl serde::Serialize,
     start_epoch: u64,
 ) -> PathBuf {
     let valid_proposal_json = json!({
         "proposal": {
+            "id": id,
             "content": {
                 "title": "TheTitle",
                 "authors": "test@test.com",
