@@ -12,7 +12,7 @@ use namada_storage::collections::{Nested, Simple};
 use super::{read_data, Data, LazyCollectionExt};
 use crate::VpEnv;
 
-/// Possible sub-keys of a [`LazyMap`], together with their [`validation::Data`]
+/// Possible sub-keys of a [`LazyMap`], together with their [`Data`]
 /// that contains prior and posterior state.
 #[derive(Clone, Debug)]
 pub enum SubKeyWithData<K, V> {

@@ -214,7 +214,7 @@ use crate::tendermint::abci::response::Info;
 use crate::tendermint::block::Height;
 
 /// A client with async request dispatcher method, which can be used to invoke
-/// type-safe methods from a root [`crate::ledger::queries::Router`], generated
+/// type-safe methods from a root [`Router`], generated
 /// via `router!` macro.
 #[cfg(any(test, feature = "async-client"))]
 #[cfg_attr(feature = "async-send", async_trait::async_trait)]

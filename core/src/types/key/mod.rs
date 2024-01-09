@@ -390,7 +390,7 @@ pub fn tm_raw_hash_to_string(raw_hash: impl AsRef<[u8]>) -> String {
     HEXUPPER.encode(raw_hash.as_ref())
 }
 
-/// A serialization method to provide to [`Signed`], such
+/// A serialization method to provide to `namada_tx::Signed`, such
 /// that we may sign serialized data.
 ///
 /// This is a higher level version of [`SignableBytes`].
@@ -412,12 +412,12 @@ pub trait Signable<T> {
 }
 
 /// Tag type that indicates we should use [`BorshSerialize`]
-/// to sign data in a [`Signed`] wrapper.
+/// to sign data in a [`Signable`] wrapper.
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct SerializeWithBorsh;
 
 /// Tag type that indicates we should use ABI serialization
-/// to sign data in a [`Signed`] wrapper.
+/// to sign data in a [`Signable`] wrapper.
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct SignableEthMessage;
 

@@ -1545,7 +1545,7 @@ where
     }
 
     /// Check if we are at a given [`BlockHeight`] offset, `height_offset`,
-    /// within the current [`Epoch`].
+    /// within the current epoch.
     pub fn is_deciding_offset_within_epoch(&self, height_offset: u64) -> bool {
         self.wl_storage
             .pos_queries()

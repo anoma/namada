@@ -130,7 +130,7 @@ pub struct ValidatorSetUpdateVext {
 impl Vext {
     /// Creates a new signed [`Vext`].
     ///
-    /// For more information, read the docs of [`SignedVext::new`].
+    /// For more information, read the docs of [`SignedVext`].
     #[inline]
     pub fn sign(&self, sk: &common::SecretKey) -> SignedVext {
         SignedVext(Signed::new(sk, self.clone()))
@@ -395,7 +395,7 @@ mod tag {
     };
 
     /// Tag type that indicates we should use [`AbiEncode`]
-    /// to sign data in a [`crate::proto::Signed`] wrapper.
+    /// to sign data in a [`namada_tx::Signed`] wrapper.
     #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
     pub struct SerializeWithAbiEncode;
 

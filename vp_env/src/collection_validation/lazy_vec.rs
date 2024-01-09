@@ -13,7 +13,7 @@ use namada_storage::ResultExt;
 use super::{read_data, Data, LazyCollectionExt};
 use crate::VpEnv;
 
-/// Possible sub-keys of a [`LazyVec`], together with their [`validation::Data`]
+/// Possible sub-keys of a [`LazyVec`], together with their [`Data`]
 /// that contains prior and posterior state.
 #[derive(Debug)]
 pub enum SubKeyWithData<T> {
