@@ -388,12 +388,14 @@ mod test_proc_macros {
 
         let expected_impl = quote! {
             impl Keys {
-                #[allow(dead_code)]
-                const ALL: &[&'static str] = {
+                /// A list of all storage keys
+                pub const ALL: &[&'static str] = {
                     let Keys { bird, is, the, word } = Self::VALUES;
                     &[bird, is, the, word]
                 };
-                const VALUES: Keys = Self {
+
+                /// Storage keys values
+                pub const VALUES: Keys = Self {
                     bird: "bird",
                     is: "is",
                     the: "the",
@@ -401,66 +403,66 @@ mod test_proc_macros {
                 };
             }
             #[allow(missing_docs)]
-            pub(crate) fn is_bird_key_at_addr(key: &Key, address: &Address) -> bool {
+            pub fn is_bird_key_at_addr(key: &namada_core::types::storage::Key, address: &Address) -> bool {
                 matches!(&key.segments[..], [
-                    DbKeySeg::AddressSeg(a),
-                    DbKeySeg::StringSeg(bird),
+                    namada_core::types::storage::DbKeySeg::AddressSeg(a),
+                    namada_core::types::storage::DbKeySeg::StringSeg(bird),
                 ] if a == address && bird == Keys::VALUES.bird)
             }
             #[allow(missing_docs)]
-            pub(crate) fn get_bird_key_at_addr(address: Address) -> Key {
-                Key {
+            pub fn get_bird_key_at_addr(address: Address) -> namada_core::types::storage::Key {
+                namada_core::types::storage::Key {
                     segments: vec![
-                        DbKeySeg::AddressSeg(address),
-                        DbKeySeg::StringSeg(Keys::VALUES.bird.to_string()),
+                        namada_core::types::storage::DbKeySeg::AddressSeg(address),
+                        namada_core::types::storage::DbKeySeg::StringSeg(Keys::VALUES.bird.to_string()),
                     ],
                 }
             }
             #[allow(missing_docs)]
-            pub(crate) fn is_is_key_at_addr(key: &Key, address: &Address) -> bool {
+            pub fn is_is_key_at_addr(key: &namada_core::types::storage::Key, address: &Address) -> bool {
                 matches!(&key.segments[..], [
-                    DbKeySeg::AddressSeg(a),
-                    DbKeySeg::StringSeg(is),
+                    namada_core::types::storage::DbKeySeg::AddressSeg(a),
+                    namada_core::types::storage::DbKeySeg::StringSeg(is),
                 ] if a == address && is == Keys::VALUES.is)
             }
             #[allow(missing_docs)]
-            pub(crate) fn get_is_key_at_addr(address: Address) -> Key {
-                Key {
+            pub fn get_is_key_at_addr(address: Address) -> namada_core::types::storage::Key {
+                namada_core::types::storage::Key {
                     segments: vec![
-                        DbKeySeg::AddressSeg(address),
-                        DbKeySeg::StringSeg(Keys::VALUES.is.to_string()),
+                        namada_core::types::storage::DbKeySeg::AddressSeg(address),
+                        namada_core::types::storage::DbKeySeg::StringSeg(Keys::VALUES.is.to_string()),
                     ],
                 }
             }
             #[allow(missing_docs)]
-            pub(crate) fn is_the_key_at_addr(key: &Key, address: &Address) -> bool {
+            pub fn is_the_key_at_addr(key: &namada_core::types::storage::Key, address: &Address) -> bool {
                 matches!(&key.segments[..], [
-                    DbKeySeg::AddressSeg(a),
-                    DbKeySeg::StringSeg(the),
+                    namada_core::types::storage::DbKeySeg::AddressSeg(a),
+                    namada_core::types::storage::DbKeySeg::StringSeg(the),
                 ] if a == address && the == Keys::VALUES.the)
             }
             #[allow(missing_docs)]
-            pub(crate) fn get_the_key_at_addr(address: Address) -> Key {
-                Key {
+            pub fn get_the_key_at_addr(address: Address) -> namada_core::types::storage::Key {
+                namada_core::types::storage::Key {
                     segments: vec![
-                        DbKeySeg::AddressSeg(address),
-                        DbKeySeg::StringSeg(Keys::VALUES.the.to_string()),
+                        namada_core::types::storage::DbKeySeg::AddressSeg(address),
+                        namada_core::types::storage::DbKeySeg::StringSeg(Keys::VALUES.the.to_string()),
                     ],
                 }
             }
             #[allow(missing_docs)]
-            pub(crate) fn is_word_key_at_addr(key: &Key, address: &Address) -> bool {
+            pub fn is_word_key_at_addr(key: &namada_core::types::storage::Key, address: &Address) -> bool {
                 matches!(&key.segments[..], [
-                    DbKeySeg::AddressSeg(a),
-                    DbKeySeg::StringSeg(word),
+                    namada_core::types::storage::DbKeySeg::AddressSeg(a),
+                    namada_core::types::storage::DbKeySeg::StringSeg(word),
                 ] if a == address && word == Keys::VALUES.word)
             }
             #[allow(missing_docs)]
-            pub(crate) fn get_word_key_at_addr(address: Address) -> Key {
-                Key {
+            pub fn get_word_key_at_addr(address: Address) -> namada_core::types::storage::Key {
+                namada_core::types::storage::Key {
                     segments: vec![
-                        DbKeySeg::AddressSeg(address),
-                        DbKeySeg::StringSeg(Keys::VALUES.word.to_string()),
+                        namada_core::types::storage::DbKeySeg::AddressSeg(address),
+                        namada_core::types::storage::DbKeySeg::StringSeg(Keys::VALUES.word.to_string()),
                     ],
                 }
             }
@@ -468,7 +470,7 @@ mod test_proc_macros {
         let expected_impl: File =
             syn::parse2(expected_impl).expect("Test failed");
 
-        assert_eq!(test_impl, expected_impl);
+        pretty_assertions::assert_eq!(test_impl, expected_impl);
     }
 
     /// Test if we reject structs with non static string fields in
@@ -517,45 +519,46 @@ mod test_proc_macros {
 
         let expected_impl = quote! {
             impl Keys {
-                #[allow(dead_code)]
-                const ALL: &[&'static str] = {
+                /// A list of all storage keys
+                pub const ALL: &[&'static str] = {
                     let Keys { param1, param2 } = Self::VALUES;
                     &[param1, param2]
                 };
-                const VALUES: Keys = Self {
+                /// Storage keys values
+                pub const VALUES: Keys = Self {
                     param1: "param1",
                     param2: "param2"
                 };
             }
             #[allow(missing_docs)]
-            pub(crate) fn is_param1_key_at_addr(key: &Key, address: &Address) -> bool {
+            pub fn is_param1_key_at_addr(key: &namada_core::types::storage::Key, address: &Address) -> bool {
                 matches!(&key.segments[..], [
-                    DbKeySeg::AddressSeg(a),
-                    DbKeySeg::StringSeg(param1),
+                    namada_core::types::storage::DbKeySeg::AddressSeg(a),
+                    namada_core::types::storage::DbKeySeg::StringSeg(param1),
                 ] if a == address && param1 == Keys::VALUES.param1)
             }
             #[allow(missing_docs)]
-            pub(crate) fn get_param1_key_at_addr(address: Address) -> Key {
-                Key {
+            pub fn get_param1_key_at_addr(address: Address) -> namada_core::types::storage::Key {
+                namada_core::types::storage::Key {
                     segments: vec![
-                        DbKeySeg::AddressSeg(address),
-                        DbKeySeg::StringSeg(Keys::VALUES.param1.to_string()),
+                        namada_core::types::storage::DbKeySeg::AddressSeg(address),
+                        namada_core::types::storage::DbKeySeg::StringSeg(Keys::VALUES.param1.to_string()),
                     ],
                 }
             }
             #[allow(missing_docs)]
-            pub(crate) fn is_param2_key_at_addr(key: &Key, address: &Address) -> bool {
+            pub fn is_param2_key_at_addr(key: &namada_core::types::storage::Key, address: &Address) -> bool {
                 matches!(&key.segments[..], [
-                    DbKeySeg::AddressSeg(a),
-                    DbKeySeg::StringSeg(param2),
+                    namada_core::types::storage::DbKeySeg::AddressSeg(a),
+                    namada_core::types::storage::DbKeySeg::StringSeg(param2),
                 ] if a == address && param2 == Keys::VALUES.param2)
             }
             #[allow(missing_docs)]
-            pub(crate) fn get_param2_key_at_addr(address: Address) -> Key {
-                Key {
+            pub fn get_param2_key_at_addr(address: Address) -> namada_core::types::storage::Key {
+                namada_core::types::storage::Key {
                     segments: vec![
-                        DbKeySeg::AddressSeg(address),
-                        DbKeySeg::StringSeg(Keys::VALUES.param2.to_string()),
+                        namada_core::types::storage::DbKeySeg::AddressSeg(address),
+                        namada_core::types::storage::DbKeySeg::StringSeg(Keys::VALUES.param2.to_string()),
                     ],
                 }
             }
@@ -563,6 +566,6 @@ mod test_proc_macros {
         let expected_impl: File =
             syn::parse2(expected_impl).expect("Test failed");
 
-        assert_eq!(test_impl, expected_impl);
+        pretty_assertions::assert_eq!(test_impl, expected_impl);
     }
 }

@@ -4548,6 +4548,7 @@ dependencies = [
 name = "namada_macros"
 version = "0.29.0"
 dependencies = [
+ "pretty_assertions",
  "proc-macro2",
  "quote",
  "syn 1.0.109",
