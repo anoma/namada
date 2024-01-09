@@ -14,15 +14,12 @@ use namada_core::ledger::storage;
 use namada_core::ledger::storage_api::OptionExt;
 use namada_core::ledger::vp_env::VpEnv;
 use namada_core::proto::Tx;
+use namada_core::types::address::Address;
 use namada_core::types::address::InternalAddress::Masp;
-use namada_core::types::address::{Address, MASP};
-use namada_core::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
+use namada_core::types::storage::{BlockHeight, Epoch, Key, TxIndex};
 use namada_core::types::token::{
     self, is_masp_allowed_key, is_masp_key, is_masp_nullifier_key,
-    is_masp_tx_pin_key, is_masp_tx_prefix_key, Transfer, HEAD_TX_KEY,
-    MASP_CONVERT_ANCHOR_KEY, MASP_NOTE_COMMITMENT_ANCHOR_PREFIX,
-    MASP_NOTE_COMMITMENT_TREE_KEY, MASP_NULLIFIERS_KEY, PIN_KEY_PREFIX,
-    TX_KEY_PREFIX,
+    is_masp_tx_pin_key, is_masp_tx_prefix_key, Transfer,
 };
 use namada_sdk::masp::verify_shielded_tx;
 use ripemd::Digest as RipemdDigest;
@@ -60,11 +57,15 @@ fn asset_type_from_epoched_address(
     epoch: Epoch,
     token: &Address,
     denom: token::MaspDenom,
-) -> AssetType {
+) -> Result<AssetType> {
     // Timestamp the chosen token with the current epoch
     let token_bytes = (token, denom, epoch.0).serialize_to_vec();
     // Generate the unique asset identifier from the unique token address
-    AssetType::new(token_bytes.as_ref()).expect("unable to create asset type")
+    AssetType::new(token_bytes.as_ref()).map_err(|()| {
+        Error::NativeVpError(native_vp::Error::SimpleMessage(
+            "Unable to create asset type",
+        ))
+    })
 }
 
 /// Checks if the reported transparent amount and the unshielded
@@ -91,12 +92,16 @@ fn convert_amount(
     token: &Address,
     val: token::Amount,
     denom: token::MaspDenom,
-) -> I128Sum {
-    let asset_type = asset_type_from_epoched_address(epoch, token, denom);
+) -> Result<I128Sum> {
+    let asset_type = asset_type_from_epoched_address(epoch, token, denom)?;
     // Combine the value and unit into one amount
 
     I128Sum::from_nonnegative(asset_type, denom.denominate(&val) as i128)
-        .expect("invalid value or asset type for amount")
+        .map_err(|()| {
+            Error::NativeVpError(native_vp::Error::SimpleMessage(
+                "Invalid value for amount",
+            ))
+        })
 }
 
 impl<'a, DB, H, CA> MaspVp<'a, DB, H, CA>
@@ -126,11 +131,9 @@ where
         };
 
         for description in shielded_spends {
-            let nullifier_key = Key::from(MASP.to_db_key())
-                .push(&MASP_NULLIFIERS_KEY.to_owned())
-                .expect("Cannot obtain a storage key")
-                .push(&namada_core::types::hash::Hash(description.nullifier.0))
-                .expect("Cannot obtain a storage key");
+            let nullifier_key = namada_core::types::token::masp_nullifier_key(
+                &description.nullifier,
+            );
             if self.ctx.has_key_pre(&nullifier_key)?
                 || revealed_nullifiers.contains(&nullifier_key)
             {
@@ -177,9 +180,7 @@ where
     ) -> Result<bool> {
         // Check that the merkle tree in storage has been correctly updated with
         // the output descriptions cmu
-        let tree_key = Key::from(MASP.to_db_key())
-            .push(&MASP_NOTE_COMMITMENT_TREE_KEY.to_owned())
-            .expect("Cannot obtain a storage key");
+        let tree_key = namada_core::types::token::masp_commitment_tree_key();
         let mut previous_tree: CommitmentTree<Node> =
             self.ctx.read_pre(&tree_key)?.ok_or(Error::NativeVpError(
                 native_vp::Error::SimpleMessage("Cannot read storage"),
@@ -233,13 +234,10 @@ where
         };
 
         for description in shielded_spends {
-            let anchor_key = Key::from(MASP.to_db_key())
-                .push(&MASP_NOTE_COMMITMENT_ANCHOR_PREFIX.to_owned())
-                .expect("Cannot obtain a storage key")
-                .push(&namada_core::types::hash::Hash(
-                    description.anchor.to_bytes(),
-                ))
-                .expect("Cannot obtain a storage key");
+            let anchor_key =
+                namada_core::types::token::masp_commitment_anchor_key(
+                    description.anchor,
+                );
 
             // Check if the provided anchor was published before
             if !self.ctx.has_key_pre(&anchor_key)? {
@@ -260,9 +258,8 @@ where
     ) -> Result<bool> {
         if let Some(bundle) = transaction.sapling_bundle() {
             if !bundle.shielded_converts.is_empty() {
-                let anchor_key = Key::from(MASP.to_db_key())
-                    .push(&MASP_CONVERT_ANCHOR_KEY.to_owned())
-                    .expect("Cannot obtain a storage key");
+                let anchor_key =
+                    namada_core::types::token::masp_convert_anchor_key();
                 let expected_anchor = self
                     .ctx
                     .read_pre::<namada_core::types::hash::Hash>(&anchor_key)?
@@ -320,9 +317,7 @@ where
         }
 
         // Validate head tx
-        let head_tx_key = Key::from(MASP.to_db_key())
-            .push(&HEAD_TX_KEY.to_owned())
-            .expect("Cannot obtain a storage key");
+        let head_tx_key = namada_core::types::token::masp_head_tx_key();
         let pre_head: u64 = self.ctx.read_pre(&head_tx_key)?.unwrap_or(0);
         let post_head: u64 = self.ctx.read_post(&head_tx_key)?.unwrap_or(0);
 
@@ -331,9 +326,7 @@ where
         }
 
         // Validate tx key
-        let current_tx_key = Key::from(MASP.to_db_key())
-            .push(&(TX_KEY_PREFIX.to_owned() + &pre_head.to_string()))
-            .expect("Cannot obtain a storage key");
+        let current_tx_key = namada_core::types::token::masp_tx_key(pre_head);
         match self
             .ctx
             .read_post::<(Epoch, BlockHeight, TxIndex, Transfer, Transaction)>(
@@ -355,9 +348,7 @@ where
 
         // Validate pin key
         if let Some(key) = &transfer.key {
-            let pin_key = Key::from(MASP.to_db_key())
-                .push(&(PIN_KEY_PREFIX.to_owned() + key))
-                .expect("Cannot obtain a storage key");
+            let pin_key = namada_core::types::token::masp_pin_tx_key(key);
             match self.ctx.read_post::<u64>(&pin_key)? {
                 Some(tx_idx) if tx_idx == pre_head => (),
                 _ => return Ok(false),
@@ -406,7 +397,7 @@ where
                     &transfer.token,
                     transfer_amount,
                     denom,
-                );
+                )?;
 
                 // Non-masp sources add to transparent tx pool
                 transparent_tx_pool += transp_amt;
@@ -518,7 +509,7 @@ where
                     &transfer.token,
                     transfer_amount,
                     denom,
-                );
+                )?;
 
                 // Non-masp destinations subtract from transparent tx pool
                 transparent_tx_pool -= transp_amt;

@@ -54,12 +54,10 @@ use namada_core::types::masp::{
     BalanceOwner, ExtendedViewingKey, PaymentAddress, TransferSource,
     TransferTarget,
 };
-use namada_core::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
+use namada_core::types::storage::{BlockHeight, Epoch, TxIndex};
 use namada_core::types::time::{DateTimeUtc, DurationSecs};
 use namada_core::types::token;
-use namada_core::types::token::{
-    Change, MaspDenom, Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX,
-};
+use namada_core::types::token::{Change, MaspDenom, Transfer};
 use namada_core::types::transaction::WrapperTx;
 use rand_core::{CryptoRng, OsRng, RngCore};
 use ripemd::Digest as RipemdDigest;
@@ -770,14 +768,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         BTreeMap<(BlockHeight, TxIndex), (Epoch, Transfer, Transaction)>,
         Error,
     > {
-        // The address of the MASP account
-        let masp_addr = MASP;
         // Construct the key where last transaction pointer is stored
-        let head_tx_key = Key::from(masp_addr.to_db_key())
-            .push(&HEAD_TX_KEY.to_owned())
-            .map_err(|k| {
-                Error::Other(format!("Cannot obtain a storage key: {}", k))
-            })?;
+        let head_tx_key = namada_core::types::token::masp_head_tx_key();
         // Query for the index of the last accepted transaction
         let head_txidx = query_storage_value::<C, u64>(client, &head_tx_key)
             .await
@@ -786,11 +778,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         // Fetch all the transactions we do not have yet
         for i in last_txidx..head_txidx {
             // Construct the key for where the current transaction is stored
-            let current_tx_key = Key::from(masp_addr.to_db_key())
-                .push(&(TX_KEY_PREFIX.to_owned() + &i.to_string()))
-                .map_err(|e| {
-                    Error::Other(format!("Cannot obtain a storage key {}", e))
-                })?;
+            let current_tx_key = namada_core::types::token::masp_tx_key(i);
             // Obtain the current transaction
             let (tx_epoch, tx_height, tx_index, current_tx, current_stx) =
                 query_storage_value::<
@@ -1370,14 +1358,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 return Err(Error::from(PinnedBalanceError::InvalidViewingKey));
             }
         }
-        // The address of the MASP account
-        let masp_addr = MASP;
         // Construct the key for where the transaction ID would be stored
-        let pin_key = Key::from(masp_addr.to_db_key())
-            .push(&(PIN_KEY_PREFIX.to_owned() + &owner.hash()))
-            .map_err(|_| {
-                Error::Other("Cannot obtain a storage key".to_string())
-            })?;
+        let pin_key = namada_core::types::token::masp_pin_tx_key(&owner.hash());
         // Obtain the transaction pointer at the key
         // If we don't discard the error message then a test fails,
         // however the error underlying this will go undetected
@@ -1385,11 +1367,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             .await
             .map_err(|_| PinnedBalanceError::NoTransactionPinned)?;
         // Construct the key for where the pinned transaction is stored
-        let tx_key = Key::from(masp_addr.to_db_key())
-            .push(&(TX_KEY_PREFIX.to_owned() + &txidx.to_string()))
-            .map_err(|_| {
-                Error::Other("Cannot obtain a storage key".to_string())
-            })?;
+        let tx_key = namada_core::types::token::masp_tx_key(txidx);
         // Obtain the pointed to transaction
         let (tx_epoch, _tx_height, _tx_index, _tx, shielded) =
             rpc::query_storage_value::<
