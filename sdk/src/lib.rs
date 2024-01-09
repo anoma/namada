@@ -338,23 +338,15 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
 
     /// Make a CommissionRateChange builder from the given minimum set of
     /// arguments
-    #[allow(clippy::too_many_arguments)]
-    fn new_change_metadata(
-        &self,
-        validator: Address,
-        email: Option<String>,
-        description: Option<String>,
-        website: Option<String>,
-        discord_handle: Option<String>,
-        commission_rate: Option<Dec>,
-    ) -> args::MetaDataChange {
+    fn new_change_metadata(&self, validator: Address) -> args::MetaDataChange {
         args::MetaDataChange {
             validator,
-            email,
-            description,
-            website,
-            discord_handle,
-            commission_rate,
+            email: None,
+            description: None,
+            website: None,
+            discord_handle: None,
+            avatar: None,
+            commission_rate: None,
             tx_code_path: PathBuf::from(TX_CHANGE_METADATA_WASM),
             tx: self.tx_builder(),
         }
@@ -384,6 +376,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             description: None,
             website: None,
             discord_handle: None,
+            avatar: None,
         }
     }
 
@@ -415,6 +408,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             description: None,
             website: None,
             discord_handle: None,
+            avatar: None,
         }
     }
 
