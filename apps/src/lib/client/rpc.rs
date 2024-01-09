@@ -14,6 +14,7 @@ use itertools::Either;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::{Node, ViewingKey};
+use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::core::ledger::governance::cli::offline::{
     find_offline_proposal, find_offline_votes, read_offline_files,
@@ -48,7 +49,7 @@ use namada::types::storage::{BlockHeight, BlockResults, Epoch, Key, KeySeg};
 use namada::types::token::{Change, MaspDenom};
 use namada::types::{storage, token};
 use namada_sdk::error::{is_pinned_error, Error, PinnedBalanceError};
-use namada_sdk::masp::{Conversions, MaspAmount, MaspChange};
+use namada_sdk::masp::{make_asset_type, Conversions, MaspChange};
 use namada_sdk::proof_of_stake::types::ValidatorMetaData;
 use namada_sdk::rpc::{
     self, enriched_bonds_and_unbonds, query_epoch, TxResponse,
@@ -775,6 +776,26 @@ pub async fn query_proposal_by_id<C: namada::ledger::queries::Client + Sync>(
     namada_sdk::rpc::query_proposal_by_id(client, proposal_id).await
 }
 
+/// Get given epoched token from the supplied value sum
+pub fn extract_amount(
+    value_sum: I128Sum,
+    token: &Address,
+    epoch: Epoch,
+) -> token::Amount {
+    let mut amount = token::Amount::zero();
+    for denom in MaspDenom::iter() {
+        let asset_type = make_asset_type(Some(epoch), token, denom).expect(
+            "unable to make asset type given token, epoch, and denomination",
+        );
+        let value: u128 = value_sum[&asset_type]
+            .try_into()
+            .expect("MASP balance is negative");
+        amount += token::Amount::from_masp_denominated_u128(value, denom)
+            .expect("MASP balance is too high");
+    }
+    amount
+}
+
 /// Query token shielded balance(s)
 pub async fn query_shielded_balance(
     context: &impl Namada,
@@ -820,14 +841,11 @@ pub async fn query_shielded_balance(
                 // Query the multi-asset balance at the given spending key
                 let viewing_key =
                     ExtendedFullViewingKey::from(viewing_keys[0]).fvk.vk;
-                let balance: MaspAmount = if no_conversions {
+                let balance = if no_conversions {
                     context
                         .shielded_mut()
                         .await
-                        .compute_shielded_balance(
-                            context.client(),
-                            &viewing_key,
-                        )
+                        .compute_shielded_balance(&viewing_key)
                         .await
                         .unwrap()
                         .expect("context should contain viewing key")
@@ -846,10 +864,7 @@ pub async fn query_shielded_balance(
                         .expect("context should contain viewing key")
                 };
 
-                let total_balance = balance
-                    .get(&(epoch, token.clone()))
-                    .cloned()
-                    .unwrap_or_default();
+                let total_balance = extract_amount(balance, &token, epoch);
                 if total_balance.is_zero() {
                     display_line!(
                         context.io(),
@@ -861,12 +876,7 @@ pub async fn query_shielded_balance(
                         context.io(),
                         "{}: {}",
                         token_alias,
-                        context
-                            .format_amount(
-                                &token,
-                                token::Amount::from(total_balance),
-                            )
-                            .await
+                        context.format_amount(&token, total_balance,).await
                     );
                 }
             }
@@ -878,21 +888,15 @@ pub async fn query_shielded_balance(
             for fvk in viewing_keys {
                 // Query the multi-asset balance at the given spending key
                 let viewing_key = ExtendedFullViewingKey::from(fvk).fvk.vk;
+                let mut shielded = context.shielded_mut().await;
                 let balance = if no_conversions {
-                    context
-                        .shielded_mut()
-                        .await
-                        .compute_shielded_balance(
-                            context.client(),
-                            &viewing_key,
-                        )
+                    shielded
+                        .compute_shielded_balance(&viewing_key)
                         .await
                         .unwrap()
                         .expect("context should contain viewing key")
                 } else {
-                    context
-                        .shielded_mut()
-                        .await
+                    shielded
                         .compute_exchanged_balance(
                             context.client(),
                             context.io(),
@@ -903,6 +907,9 @@ pub async fn query_shielded_balance(
                         .unwrap()
                         .expect("context should contain viewing key")
                 };
+                let balance = shielded
+                    .decode_amount(context.client(), balance, epoch)
+                    .await;
                 for (key, value) in balance.iter() {
                     if !balances.contains_key(key) {
                         balances.insert(key.clone(), Vec::new());
@@ -915,20 +922,16 @@ pub async fn query_shielded_balance(
             // TODO Implement a function for this
 
             let mut balance_map = HashMap::new();
-            for ((asset_epoch, token_addr), balances) in balances {
-                if asset_epoch == epoch {
-                    // remove this from here, should not be making the
-                    // hashtable creation any uglier
-                    if balances.is_empty() {
-                        display_line!(
-                            context.io(),
-                            "No shielded {} balance found for any wallet key",
-                            &token_addr
-                        );
-                    }
-                    for (fvk, value) in balances {
-                        balance_map.insert((fvk, token_addr.clone()), value);
-                    }
+            for (token_addr, balances) in balances {
+                if balances.is_empty() {
+                    display_line!(
+                        context.io(),
+                        "No shielded {} balance found for any wallet key",
+                        &token_addr
+                    );
+                }
+                for (fvk, value) in balances {
+                    balance_map.insert((fvk, token_addr.clone()), value);
                 }
             }
             for ((fvk, token), token_balance) in balance_map {
@@ -965,10 +968,7 @@ pub async fn query_shielded_balance(
                         context
                             .shielded_mut()
                             .await
-                            .compute_shielded_balance(
-                                context.client(),
-                                &viewing_key,
-                            )
+                            .compute_shielded_balance(&viewing_key)
                             .await
                             .unwrap()
                             .expect("context should contain viewing key")
@@ -987,6 +987,11 @@ pub async fn query_shielded_balance(
                             .expect("context should contain viewing key")
                     };
 
+                    let balance = context
+                        .shielded_mut()
+                        .await
+                        .decode_all_amounts(context.client(), balance)
+                        .await;
                     for ((_, address), val) in balance.iter() {
                         if !val.is_zero() {
                             found_any = true;
@@ -1019,7 +1024,7 @@ pub async fn query_shielded_balance(
                 let balance = context
                     .shielded_mut()
                     .await
-                    .compute_shielded_balance(context.client(), &viewing_key)
+                    .compute_shielded_balance(&viewing_key)
                     .await
                     .unwrap()
                     .expect("context should contain viewing key");
@@ -1047,21 +1052,23 @@ pub async fn query_shielded_balance(
 
 pub async fn print_decoded_balance(
     context: &impl Namada,
-    decoded_balance: MaspAmount,
+    balance: I128Sum,
     epoch: Epoch,
 ) {
-    if decoded_balance.is_empty() {
+    if balance.is_zero() {
         display_line!(context.io(), "No shielded balance found for given key");
     } else {
-        for ((_, token_addr), amount) in decoded_balance
-            .iter()
-            .filter(|((token_epoch, _), _)| *token_epoch == epoch)
-        {
+        let decoded_balance = context
+            .shielded_mut()
+            .await
+            .decode_amount(context.client(), balance, epoch)
+            .await;
+        for (token_addr, amount) in decoded_balance {
             display_line!(
                 context.io(),
                 "{} : {}",
-                lookup_token_alias(context, token_addr, &MASP).await,
-                context.format_amount(token_addr, (*amount).into()).await,
+                lookup_token_alias(context, &token_addr, &MASP).await,
+                context.format_amount(&token_addr, amount.into()).await,
             );
         }
     }
@@ -1069,15 +1076,20 @@ pub async fn print_decoded_balance(
 
 pub async fn print_decoded_balance_with_epoch(
     context: &impl Namada,
-    decoded_balance: MaspAmount,
+    balance: I128Sum,
 ) {
     let tokens = context
         .wallet()
         .await
         .get_addresses_with_vp_type(AddressVpType::Token);
-    if decoded_balance.is_empty() {
+    if balance.is_zero() {
         display_line!(context.io(), "No shielded balance found for given key");
     }
+    let decoded_balance = context
+        .shielded_mut()
+        .await
+        .decode_all_amounts(context.client(), balance)
+        .await;
     for ((epoch, token_addr), value) in decoded_balance.iter() {
         let asset_value = (*value).into();
         let alias = tokens

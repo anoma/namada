@@ -474,12 +474,6 @@ pub fn is_amount_required(src: I128Sum, dest: I128Sum, delta: I128Sum) -> bool {
     false
 }
 
-// #[derive(BorshSerialize, BorshDeserialize, Debug, Clone)]
-// pub struct MaspAmount {
-//     pub asset: Address,
-//     pub amount: token::Amount,
-// }
-
 /// a masp change
 #[derive(BorshSerialize, BorshDeserialize, Debug, Clone)]
 pub struct MaspChange {
@@ -582,6 +576,11 @@ impl From<MaspAmount> for I128Sum {
     }
 }
 
+/// An extension of Option's cloned method for pair types
+fn cloned_pair<T: Clone, U: Clone>((a, b): (&T, &U)) -> (T, U) {
+    (a.clone(), b.clone())
+}
+
 /// Represents the amount used of different conversions
 pub type Conversions =
     BTreeMap<AssetType, (AllowedConversion, MerklePath<Node>, i128)>;
@@ -590,7 +589,7 @@ pub type Conversions =
 pub type TransferDelta = HashMap<Address, MaspChange>;
 
 /// Represents the changes that were made to a list of shielded accounts
-pub type TransactionDelta = HashMap<ViewingKey, MaspAmount>;
+pub type TransactionDelta = HashMap<ViewingKey, I128Sum>;
 
 /// Represents the current state of the shielded pool from the perspective of
 /// the chosen viewing keys.
@@ -734,9 +733,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             while tx_ctx.last_txidx != self.last_txidx {
                 if let Some(((height, idx), (epoch, tx, stx))) = tx_iter.next()
                 {
-                    tx_ctx
-                        .scan_tx(client, *height, *idx, *epoch, tx, stx)
-                        .await?;
+                    tx_ctx.scan_tx(*height, *idx, *epoch, tx, stx)?;
                 } else {
                     break;
                 }
@@ -753,7 +750,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         // Now that we possess the unspent notes corresponding to both old and
         // new keys up until tx_pos, proceed to scan the new transactions.
         for ((height, idx), (epoch, tx, stx)) in &mut tx_iter {
-            self.scan_tx(client, *height, *idx, *epoch, tx, stx).await?;
+            self.scan_tx(*height, *idx, *epoch, tx, stx)?;
         }
         Ok(())
     }
@@ -815,9 +812,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     /// we have spent are updated. The witness map is maintained to make it
     /// easier to construct note merkle paths in other code. See
     /// <https://zips.z.cash/protocol/protocol.pdf#scan>
-    pub async fn scan_tx<C: Client + Sync>(
+    pub fn scan_tx(
         &mut self,
-        client: &C,
         height: BlockHeight,
         index: TxIndex,
         epoch: Epoch,
@@ -880,23 +876,17 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     // Note the account changes
                     let balance = transaction_delta
                         .entry(*vk)
-                        .or_insert_with(MaspAmount::default);
-                    *balance += self
-                        .decode_all_amounts(
-                            client,
-                            I128Sum::from_nonnegative(
-                                note.asset_type,
-                                note.value as i128,
-                            )
-                            .map_err(|()| {
-                                Error::Other(
-                                    "found note with invalid value or asset \
-                                     type"
-                                        .to_string(),
-                                )
-                            })?,
+                        .or_insert_with(I128Sum::zero);
+                    *balance += I128Sum::from_nonnegative(
+                        note.asset_type,
+                        note.value as i128,
+                    )
+                    .map_err(|()| {
+                        Error::Other(
+                            "found note with invalid value or asset type"
+                                .to_string(),
                         )
-                        .await;
+                    })?;
 
                     self.vk_map.insert(note_pos, *vk);
                     break;
@@ -916,23 +906,18 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 // Note the account changes
                 let balance = transaction_delta
                     .entry(self.vk_map[note_pos])
-                    .or_insert_with(MaspAmount::default);
+                    .or_insert_with(I128Sum::zero);
                 let note = self.note_map[note_pos];
-                *balance -= self
-                    .decode_all_amounts(
-                        client,
-                        I128Sum::from_nonnegative(
-                            note.asset_type,
-                            note.value as i128,
-                        )
-                        .map_err(|()| {
-                            Error::Other(
-                                "found note with invalid value or asset type"
-                                    .to_string(),
-                            )
-                        })?,
+                *balance -= I128Sum::from_nonnegative(
+                    note.asset_type,
+                    note.value as i128,
+                )
+                .map_err(|()| {
+                    Error::Other(
+                        "found note with invalid value or asset type"
+                            .to_string(),
                     )
-                    .await;
+                })?;
             }
         }
         // Record the changes to the transparent accounts
@@ -968,11 +953,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     /// Compute the total unspent notes associated with the viewing key in the
     /// context. If the key is not in the context, then we do not know the
     /// balance and hence we return None.
-    pub async fn compute_shielded_balance<C: Client + Sync>(
+    pub async fn compute_shielded_balance(
         &mut self,
-        client: &C,
         vk: &ViewingKey,
-    ) -> Result<Option<MaspAmount>, Error> {
+    ) -> Result<Option<I128Sum>, Error> {
         // Cannot query the balance of a key that's not in the map
         if !self.pos_map.contains_key(vk) {
             return Ok(None);
@@ -1002,7 +986,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 })?
             }
         }
-        Ok(Some(self.decode_all_amounts(client, val_acc).await))
+        Ok(Some(val_acc))
     }
 
     /// Query the ledger for the decoding of the given asset type and cache it
@@ -1063,10 +1047,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         io: &impl Io,
         vk: &ViewingKey,
         target_epoch: Epoch,
-    ) -> Result<Option<MaspAmount>, Error> {
+    ) -> Result<Option<I128Sum>, Error> {
         // First get the unexchanged balance
-        if let Some(balance) = self.compute_shielded_balance(client, vk).await?
-        {
+        if let Some(balance) = self.compute_shielded_balance(vk).await? {
             let exchanged_amount = self
                 .compute_exchanged_amount(
                     client,
@@ -1078,9 +1061,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 .await?
                 .0;
             // And then exchange balance into current asset types
-            Ok(Some(
-                self.decode_all_amounts(client, exchanged_amount).await,
-            ))
+            Ok(Some(exchanged_amount))
         } else {
             Ok(None)
         }
@@ -1094,14 +1075,13 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     #[allow(clippy::too_many_arguments)]
     async fn apply_conversion(
         &mut self,
-        client: &(impl Client + Sync),
         io: &impl Io,
         conv: AllowedConversion,
-        asset_type: (Epoch, Address, MaspDenom),
+        asset_type: AssetType,
         value: i128,
         usage: &mut i128,
-        input: &mut MaspAmount,
-        output: &mut MaspAmount,
+        input: &mut I128Sum,
+        output: &mut I128Sum,
     ) -> Result<(), Error> {
         // we do not need to convert negative values
         if value <= 0 {
@@ -1110,15 +1090,13 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         // If conversion if possible, accumulate the exchanged amount
         let conv: I128Sum = I128Sum::from_sum(conv.into());
         // The amount required of current asset to qualify for conversion
-        let masp_asset =
-            make_asset_type(Some(asset_type.0), &asset_type.1, asset_type.2)?;
-        let threshold = -conv[&masp_asset];
+        let threshold = -conv[&asset_type];
         if threshold == 0 {
             edisplay_line!(
                 io,
                 "Asset threshold of selected conversion for asset type {} is \
                  0, this is a bug, please report it.",
-                masp_asset
+                asset_type
             );
         }
         // We should use an amount of the AllowedConversion that almost
@@ -1126,17 +1104,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let required = value / threshold;
         // Forget about the trace amount left over because we cannot
         // realize its value
-        let trace = MaspAmount(HashMap::from([(
-            (asset_type.0, asset_type.1),
-            Change::from(value % threshold),
-        )]));
+        let trace = I128Sum::from_pair(asset_type, value % threshold)
+            .expect("the trace should be a valid i128");
         // Record how much more of the given conversion has been used
         *usage += required;
         // Apply the conversions to input and move the trace amount to output
-        *input += self
-            .decode_all_amounts(client, conv.clone() * required)
-            .await
-            - trace.clone();
+        *input += conv * required - trace.clone();
         *output += trace;
         Ok(())
     }
@@ -1149,102 +1122,86 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         &mut self,
         client: &(impl Client + Sync),
         io: &impl Io,
-        mut input: MaspAmount,
+        mut input: I128Sum,
         target_epoch: Epoch,
         mut conversions: Conversions,
     ) -> Result<(I128Sum, Conversions), Error> {
         // Where we will store our exchanged value
-        let mut output = MaspAmount::default();
+        let mut output = I128Sum::zero();
         // Repeatedly exchange assets until it is no longer possible
-        while let Some(((asset_epoch, token_addr), value)) = input.iter().next()
+        while let Some((asset_type, value)) =
+            input.components().next().map(cloned_pair)
         {
-            let value = *value;
-            let asset_epoch = *asset_epoch;
-            let token_addr = token_addr.clone();
-            for denom in MaspDenom::iter() {
-                let target_asset_type =
-                    make_asset_type(Some(target_epoch), &token_addr, denom)?;
-                let asset_type =
-                    make_asset_type(Some(asset_epoch), &token_addr, denom)?;
-                let at_target_asset_type = target_epoch == asset_epoch;
+            let target_asset_type = self
+                .decode_asset_type(client, asset_type)
+                .await
+                .map(|(addr, denom, _epoch)| {
+                    make_asset_type(Some(target_epoch), &addr, denom)
+                })
+                .transpose()?
+                .unwrap_or(asset_type);
+            let at_target_asset_type = target_asset_type == asset_type;
 
-                let denom_value = denom.denominate_i128(&value);
-                self.query_allowed_conversion(
-                    client,
-                    target_asset_type,
-                    &mut conversions,
-                )
+            self.query_allowed_conversion(
+                client,
+                target_asset_type,
+                &mut conversions,
+            )
+            .await;
+            self.query_allowed_conversion(client, asset_type, &mut conversions)
                 .await;
-                self.query_allowed_conversion(
-                    client,
+            if let (Some((conv, _wit, usage)), false) =
+                (conversions.get_mut(&asset_type), at_target_asset_type)
+            {
+                display_line!(
+                    io,
+                    "converting current asset type to latest asset type..."
+                );
+                // Not at the target asset type, not at the latest asset
+                // type. Apply conversion to get from
+                // current asset type to the latest
+                // asset type.
+                self.apply_conversion(
+                    io,
+                    conv.clone(),
                     asset_type,
-                    &mut conversions,
+                    value,
+                    usage,
+                    &mut input,
+                    &mut output,
                 )
-                .await;
-                if let (Some((conv, _wit, usage)), false) =
-                    (conversions.get_mut(&asset_type), at_target_asset_type)
-                {
-                    display_line!(
-                        io,
-                        "converting current asset type to latest asset type..."
-                    );
-                    // Not at the target asset type, not at the latest asset
-                    // type. Apply conversion to get from
-                    // current asset type to the latest
-                    // asset type.
-                    self.apply_conversion(
-                        client,
-                        io,
-                        conv.clone(),
-                        (asset_epoch, token_addr.clone(), denom),
-                        denom_value,
-                        usage,
-                        &mut input,
-                        &mut output,
-                    )
-                    .await?;
-                } else if let (Some((conv, _wit, usage)), false) = (
-                    conversions.get_mut(&target_asset_type),
-                    at_target_asset_type,
-                ) {
-                    display_line!(
-                        io,
-                        "converting latest asset type to target asset type..."
-                    );
-                    // Not at the target asset type, yet at the latest asset
-                    // type. Apply inverse conversion to get
-                    // from latest asset type to the target
-                    // asset type.
-                    self.apply_conversion(
-                        client,
-                        io,
-                        conv.clone(),
-                        (asset_epoch, token_addr.clone(), denom),
-                        denom_value,
-                        usage,
-                        &mut input,
-                        &mut output,
-                    )
-                    .await?;
-                } else {
-                    // At the target asset type. Then move component over to
-                    // output.
-                    let mut comp = MaspAmount::default();
-                    comp.insert(
-                        (asset_epoch, token_addr.clone()),
-                        denom_value.into(),
-                    );
-                    for ((e, token), val) in input.iter() {
-                        if *token == token_addr && *e == asset_epoch {
-                            comp.insert((*e, token.clone()), *val);
-                        }
-                    }
-                    output += comp.clone();
-                    input -= comp;
-                }
+                .await?;
+            } else if let (Some((conv, _wit, usage)), false) = (
+                conversions.get_mut(&target_asset_type),
+                at_target_asset_type,
+            ) {
+                display_line!(
+                    io,
+                    "converting latest asset type to target asset type..."
+                );
+                // Not at the target asset type, yet at the latest asset
+                // type. Apply inverse conversion to get
+                // from latest asset type to the target
+                // asset type.
+                self.apply_conversion(
+                    io,
+                    conv.clone(),
+                    asset_type,
+                    value,
+                    usage,
+                    &mut input,
+                    &mut output,
+                )
+                .await?;
+            } else {
+                // At the target asset type. Then move component over to
+                // output.
+                let comp = input.project(asset_type);
+                output += comp.clone();
+                input -= comp;
             }
         }
-        Ok((output.into(), conversions))
+        Ok((output, conversions))
     }
 
     /// Collect enough unspent notes in this context to exceed the given amount
@@ -1295,13 +1252,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                                     .to_string(),
                             )
                         })?;
-                let input =
-                    self.decode_all_amounts(context.client(), pre_contr).await;
                 let (contr, proposed_convs) = self
                     .compute_exchanged_amount(
                         context.client(),
                         context.io(),
-                        input,
+                        pre_contr,
                         target_epoch,
                         conversions.clone(),
                     )
@@ -1449,15 +1404,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             Self::compute_pinned_balance(context.client(), owner, viewing_key)
                 .await?;
         display_line!(context.io(), "Pinned balance: {:?}", amt);
-        // Establish connection with which to do exchange rate queries
-        let amount = self.decode_all_amounts(context.client(), amt).await;
-        display_line!(context.io(), "Decoded pinned balance: {:?}", amount);
         // Finally, exchange the balance to the transaction's epoch
         let computed_amount = self
             .compute_exchanged_amount(
                 context.client(),
                 context.io(),
-                amount,
+                amt,
                 ep,
                 BTreeMap::new(),
             )
