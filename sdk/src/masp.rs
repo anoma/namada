@@ -2302,7 +2302,7 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
     let first_idx_to_query = first_idx_to_query.unwrap_or_default();
 
     Ok(client
-        .block_results(height)
+        .block_results(height.0 as u32)
         .await
         .map_err(|e| Error::from(QueryError::General(e.to_string())))?
         .end_block_events

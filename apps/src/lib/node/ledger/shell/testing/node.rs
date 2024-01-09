@@ -857,12 +857,10 @@ impl<'a> Client for &'a MockNode {
         height: H,
     ) -> Result<tendermint_rpc::endpoint::block_results::Response, RpcError>
     where
-        H: TryInto<namada::tendermint::block::Height> + Send,
+        H: Into<namada::tendermint::block::Height> + Send,
     {
         self.drive_mock_services_bg().await;
-        let height = height.try_into().map_err(|_| {
-            RpcError::parse("Could not parse block height".to_string())
-        })?;
+        let height = height.into();
         let encoded_event = EncodedEvent(height.value());
         let locked = self.shell.lock().unwrap();
         let events: Vec<_> = locked

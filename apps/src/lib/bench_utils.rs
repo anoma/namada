@@ -816,19 +816,15 @@ impl Client for BenchShell {
         tendermint_rpc::Error,
     >
     where
-        H: TryInto<namada::tendermint::block::Height> + Send,
+        H: Into<namada::tendermint::block::Height> + Send,
     {
         // NOTE: atm this is only needed to query block results at a specific
         // height for masp transactions
-        let height = height.try_into().map_err(|_| {
-            tendermint_rpc::Error::parse(
-                "Could not parse block height".to_string(),
-            )
-        })?;
+        let height = height.into();
 
         // We can expect all the masp tranfers to have happened only in the last
         // block
-        let end_block_events = if u64::from(height)
+        let end_block_events = if height.value()
             == self.inner.wl_storage.storage.get_last_block_height().0
         {
             Some(

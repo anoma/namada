@@ -301,13 +301,10 @@ pub trait Client {
         height: H,
     ) -> Result<tendermint_rpc::endpoint::block_results::Response, RpcError>
     where
-        H: TryInto<Height> + Send,
+        H: Into<Height> + Send,
     {
-        let height = height.try_into().map_err(|_| {
-            RpcError::parse("Could not parse to height".to_string())
-        })?;
         self.perform(tendermint_rpc::endpoint::block_results::Request::new(
-            height,
+            height.into(),
         ))
         .await
     }
