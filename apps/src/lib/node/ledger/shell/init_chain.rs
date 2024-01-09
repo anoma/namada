@@ -95,6 +95,16 @@ where
         init: request::InitChain,
         #[cfg(any(test, feature = "testing"))] _num_validators: u64,
     ) -> Result<response::InitChain> {
+        // Sleep for 30s
+        use std::str::FromStr;
+        std::env::var("NAMADA_INIT_CHAIN_SLEEP")
+            .ok()
+            .and_then(|s| u64::from_str(&s).ok())
+            .map(std::time::Duration::from_secs)
+            .map(std::thread::sleep)
+            .expect("Could not sleep before init_chain");
+
+
         let mut response = response::InitChain::default();
         let chain_id = self.wl_storage.storage.chain_id.as_str();
         if chain_id != init.chain_id.as_str() {
