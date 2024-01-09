@@ -2,13 +2,10 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use namada::ledger::pos::PosQueries;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
 use namada::proto::Signed;
 use namada::types::ethereum_events::EthereumEvent;
-use namada::types::storage::BlockHeight;
-use namada::types::token;
 use namada::types::vote_extensions::ethereum_events::{
     self, MultiSignedEthEvent,
 };
@@ -22,151 +19,6 @@ where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
 {
-    /// Validates an Ethereum events vote extension issued at the provided
-    /// block height.
-    ///
-    /// Checks that at epoch of the provided height:
-    ///  * The inner Namada address corresponds to a consensus validator.
-    ///  * The validator correctly signed the extension.
-    ///  * The validator signed over the correct height inside of the extension.
-    ///  * There are no duplicate Ethereum events in this vote extension, and
-    ///    the events are sorted in ascending order.
-    #[inline]
-    #[allow(dead_code)]
-    pub fn validate_eth_events_vext(
-        &self,
-        ext: Signed<ethereum_events::Vext>,
-        last_height: BlockHeight,
-    ) -> bool {
-        self.validate_eth_events_vext_and_get_it_back(ext, last_height)
-            .is_ok()
-    }
-
-    /// This method behaves exactly like [`Self::validate_eth_events_vext`],
-    /// with the added bonus of returning the vote extension back, if it
-    /// is valid.
-    pub fn validate_eth_events_vext_and_get_it_back(
-        &self,
-        ext: Signed<ethereum_events::Vext>,
-        last_height: BlockHeight,
-    ) -> std::result::Result<
-        (token::Amount, Signed<ethereum_events::Vext>),
-        VoteExtensionError,
-    > {
-        // NOTE: for ABCI++, we should pass
-        // `last_height` here, instead of `ext.data.block_height`
-        let ext_height_epoch = match self
-            .wl_storage
-            .pos_queries()
-            .get_epoch(ext.data.block_height)
-        {
-            Some(epoch) => epoch,
-            _ => {
-                tracing::debug!(
-                    block_height = ?ext.data.block_height,
-                    "The epoch of the Ethereum events vote extension's \
-                     block height should always be known",
-                );
-                return Err(VoteExtensionError::UnexpectedEpoch);
-            }
-        };
-        if !self
-            .wl_storage
-            .ethbridge_queries()
-            .is_bridge_active_at(ext_height_epoch)
-        {
-            tracing::debug!(
-                vext_epoch = ?ext_height_epoch,
-                "The Ethereum bridge was not enabled when the Ethereum
-                 events' vote extension was cast",
-            );
-            return Err(VoteExtensionError::EthereumBridgeInactive);
-        }
-        if ext.data.block_height > last_height {
-            tracing::debug!(
-                ext_height = ?ext.data.block_height,
-                ?last_height,
-                "Ethereum events vote extension issued for a block height \
-                 higher than the chain's last height."
-            );
-            return Err(VoteExtensionError::UnexpectedBlockHeight);
-        }
-        if ext.data.block_height.0 == 0 {
-            tracing::debug!("Dropping vote extension issued at genesis");
-            return Err(VoteExtensionError::UnexpectedBlockHeight);
-        }
-        self.validate_eth_events(&ext.data)?;
-        // get the public key associated with this validator
-        let validator = &ext.data.validator_addr;
-        let (voting_power, pk) = self
-            .wl_storage
-            .pos_queries()
-            .get_validator_from_address(validator, Some(ext_height_epoch))
-            .map_err(|err| {
-                tracing::debug!(
-                    ?err,
-                    %validator,
-                    "Could not get public key from Storage for some validator, \
-                     while validating Ethereum events vote extension"
-                );
-                VoteExtensionError::PubKeyNotInStorage
-            })?;
-        // verify the signature of the vote extension
-        ext.verify(&pk)
-            .map_err(|err| {
-                tracing::debug!(
-                    ?err,
-                    ?ext.sig,
-                    ?pk,
-                    %validator,
-                    "Failed to verify the signature of an Ethereum events vote \
-                     extension issued by some validator"
-                );
-                VoteExtensionError::VerifySigFailed
-            })
-            .map(|_| (voting_power, ext))
-    }
-
-    /// Validate a batch of Ethereum events contained in
-    /// an [`ethereum_events::Vext`].
-    ///
-    /// The supplied Ethereum events must be ordered in
-    /// ascending ordering, must not contain any dupes
-    /// and must have valid nonces.
-    fn validate_eth_events(
-        &self,
-        ext: &ethereum_events::Vext,
-    ) -> std::result::Result<(), VoteExtensionError> {
-        // verify if we have any duplicate Ethereum events,
-        // and if these are sorted in ascending order
-        let have_dupes_or_non_sorted = {
-            !ext.ethereum_events
-                // TODO: move to `array_windows` when it reaches Rust stable
-                .windows(2)
-                .all(|evs| evs[0] < evs[1])
-        };
-        let validator = &ext.validator_addr;
-        if have_dupes_or_non_sorted {
-            tracing::debug!(
-                %validator,
-                "Found duplicate or non-sorted Ethereum events in a vote extension from \
-                 some validator"
-            );
-            return Err(VoteExtensionError::HaveDupesOrNonSorted);
-        }
-        // for the proposal to be valid, at least one of the
-        // event's nonces must be valid
-        if ext.ethereum_events.iter().any(|event| {
-            self.wl_storage
-                .ethbridge_queries()
-                .validate_eth_event_nonce(event)
-        }) {
-            Ok(())
-        } else {
-            Err(VoteExtensionError::InvalidEthEventNonce)
-        }
-    }
-
     /// Checks the channel from the Ethereum oracle monitoring
     /// the fullnode and retrieves all seen Ethereum events.
     pub fn new_ethereum_events(&mut self) -> Vec<EthereumEvent> {
@@ -199,15 +51,17 @@ where
         + 'iter,
     ) -> impl Iterator<
         Item = std::result::Result<
-            (token::Amount, Signed<ethereum_events::Vext>),
+            Signed<ethereum_events::Vext>,
             VoteExtensionError,
         >,
     > + 'iter {
         vote_extensions.into_iter().map(|vote_extension| {
-            self.validate_eth_events_vext_and_get_it_back(
-                vote_extension,
+            validate_eth_events_vext(
+                &self.wl_storage,
+                &vote_extension,
                 self.wl_storage.storage.get_last_block_height(),
-            )
+            )?;
+            Ok(vote_extension)
         })
     }
 
@@ -218,8 +72,7 @@ where
         &'iter self,
         vote_extensions: impl IntoIterator<Item = Signed<ethereum_events::Vext>>
         + 'iter,
-    ) -> impl Iterator<Item = (token::Amount, Signed<ethereum_events::Vext>)> + 'iter
-    {
+    ) -> impl Iterator<Item = Signed<ethereum_events::Vext>> + 'iter {
         self.validate_eth_events_vext_list(vote_extensions)
             .filter_map(|ext| ext.ok())
     }
@@ -243,7 +96,7 @@ where
         let mut event_observers = BTreeMap::new();
         let mut signatures = HashMap::new();
 
-        for (_validator_voting_power, vote_extension) in
+        for vote_extension in
             self.filter_invalid_eth_events_vexts(vote_extensions)
         {
             let validator_addr = vote_extension.data.validator_addr;
@@ -314,6 +167,7 @@ mod test_vote_extensions {
     use namada::types::storage::{Epoch, InnerEthEventsQueue};
     use namada::types::vote_extensions::ethereum_events;
 
+    use super::validate_eth_events_vext;
     use crate::node::ledger::shell::test_utils::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
 
@@ -524,10 +378,14 @@ mod test_vote_extensions {
             validator_addr: address.clone(),
         }
         .sign(&signing_key);
-        assert!(!shell.validate_eth_events_vext(
-            ethereum_events,
-            shell.wl_storage.pos_queries().get_current_decision_height(),
-        ))
+        assert!(
+            validate_eth_events_vext(
+                &shell.wl_storage,
+                &ethereum_events,
+                shell.wl_storage.pos_queries().get_current_decision_height(),
+            )
+            .is_err()
+        )
     }
 
     /// Test that validation of Ethereum events cast during the
@@ -637,7 +495,14 @@ mod test_vote_extensions {
                 .is_ok()
         );
 
-        assert!(shell.validate_eth_events_vext(vote_ext, signed_height));
+        assert!(
+            validate_eth_events_vext(
+                &shell.wl_storage,
+                &vote_ext,
+                signed_height
+            )
+            .is_ok()
+        );
     }
 
     /// Test for ABCI++ that an [`ethereum_events::Vext`] that incorrectly
@@ -668,10 +533,14 @@ mod test_vote_extensions {
             shell.wl_storage.storage.get_last_block_height() + 1;
         let signed_vext = ethereum_events
             .sign(shell.mode.get_protocol_key().expect("Test failed"));
-        assert!(!shell.validate_eth_events_vext(
-            signed_vext,
-            shell.wl_storage.storage.get_last_block_height()
-        ))
+        assert!(
+            validate_eth_events_vext(
+                &shell.wl_storage,
+                &signed_vext,
+                shell.wl_storage.storage.get_last_block_height()
+            )
+            .is_err()
+        )
     }
 
     /// Test if we reject Ethereum events vote extensions
@@ -697,9 +566,13 @@ mod test_vote_extensions {
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
 
-        assert!(!shell.validate_eth_events_vext(
-            vote_ext,
-            shell.wl_storage.storage.get_last_block_height()
-        ))
+        assert!(
+            validate_eth_events_vext(
+                &shell.wl_storage,
+                &vote_ext,
+                shell.wl_storage.storage.get_last_block_height()
+            )
+            .is_err()
+        )
     }
 }
