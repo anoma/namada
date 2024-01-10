@@ -154,7 +154,7 @@ pub struct ProposalResult {
 
 impl Display for ProposalResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let percentage = self
+        let yay_fraction = self
             .total_yay_power
             .checked_div(self.total_voting_power)
             .unwrap_or_default();
@@ -165,7 +165,7 @@ impl Display for ProposalResult {
             self.result,
             self.total_yay_power.to_string_native(),
             self.total_nay_power.to_string_native(),
-            percentage
+            yay_fraction
                 .checked_mul(token::Amount::from_u64(100))
                 .unwrap_or_default()
                 .to_string_native()
