@@ -188,7 +188,7 @@ pub async fn query_transfers(
                 ) || shielded_accounts
                     .values()
                     .cloned()
-                    .any(|x| x.iter().any(check))
+                    .any(|x| !x.get(token).is_zero())
             }
             None => true,
         };
@@ -229,9 +229,9 @@ pub async fn query_transfers(
         for (account, masp_change) in shielded_accounts {
             if fvk_map.contains_key(&account) {
                 display!(context.io(), "  {}:", fvk_map[&account]);
-                for (token_addr, val) in masp_change {
+                for (token_addr, val) in masp_change.components() {
                     let token_alias =
-                        lookup_token_alias(context, &token_addr, &MASP).await;
+                        lookup_token_alias(context, token_addr, &MASP).await;
                     let sign = match val.cmp(&Change::zero()) {
                         Ordering::Greater => "+",
                         Ordering::Less => "-",
@@ -241,7 +241,7 @@ pub async fn query_transfers(
                         context.io(),
                         " {}{} {}",
                         sign,
-                        context.format_amount(&token_addr, val.into()).await,
+                        context.format_amount(token_addr, (*val).into()).await,
                         token_alias,
                     );
                 }
@@ -912,11 +912,11 @@ pub async fn query_shielded_balance(
                 let balance = shielded
                     .decode_amount(context.client(), balance, epoch)
                     .await;
-                for (key, value) in balance.iter() {
-                    if !balances.contains_key(key) {
-                        balances.insert(key.clone(), Vec::new());
-                    }
-                    balances.get_mut(key).unwrap().push((fvk, *value));
+                for (key, value) in balance.components() {
+                    balances
+                        .entry(key.clone())
+                        .or_insert(Vec::new())
+                        .push((fvk, *value));
                 }
             }
 
@@ -1065,12 +1065,12 @@ pub async fn print_decoded_balance(
             .await
             .decode_amount(context.client(), balance, epoch)
             .await;
-        for (token_addr, amount) in decoded_balance {
+        for (token_addr, amount) in decoded_balance.components() {
             display_line!(
                 context.io(),
                 "{} : {}",
-                lookup_token_alias(context, &token_addr, &MASP).await,
-                context.format_amount(&token_addr, amount.into()).await,
+                lookup_token_alias(context, token_addr, &MASP).await,
+                context.format_amount(token_addr, (*amount).into()).await,
             );
         }
     }

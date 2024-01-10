@@ -8,7 +8,7 @@ use std::ops::{Add, AddAssign, BitAnd, Div, Mul, Neg, Rem, Sub, SubAssign};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use impl_num_traits::impl_uint_num_traits;
 use num_integer::Integer;
-use num_traits::CheckedMul;
+use num_traits::{CheckedAdd, CheckedMul, CheckedSub};
 use uint::construct_uint;
 
 use super::dec::{Dec, POS_DECIMAL_PRECISION};
@@ -555,28 +555,6 @@ impl I256 {
         sign
     }
 
-    /// Adds two [`I256`]'s if the absolute value does
-    /// not exceed [`MAX_SIGNED_VALUE`], else returns `None`.
-    pub fn checked_add(&self, other: &Self) -> Option<Self> {
-        if self.non_negative() == other.non_negative() {
-            self.abs().checked_add(other.abs()).and_then(|val| {
-                Self::try_from(val)
-                    .ok()
-                    .map(|val| if !self.non_negative() { -val } else { val })
-            })
-        } else {
-            Some(*self + *other)
-        }
-    }
-
-    /// Subtracts two [`I256`]'s if the absolute value does
-    /// not exceed [`MAX_SIGNED_VALUE`], else returns `None`.
-    pub fn checked_sub(&self, other: &Self) -> Option<Self> {
-        self.checked_add(&other.neg())
-    }
-
-    ///
-
     /// Changed the inner Uint into a canonical representation.
     fn canonical(self) -> Self {
         Self(self.0.canonical())
@@ -735,6 +713,30 @@ impl Mul<Uint> for I256 {
         let is_neg = self.is_negative();
         let prod = self.abs() * rhs;
         if is_neg { -Self(prod) } else { Self(prod) }
+    }
+}
+
+impl CheckedAdd for I256 {
+    /// Adds two [`I256`]'s if the absolute value does
+    /// not exceed [`MAX_SIGNED_VALUE`], else returns `None`.
+    fn checked_add(&self, other: &Self) -> Option<Self> {
+        if self.non_negative() == other.non_negative() {
+            self.abs().checked_add(other.abs()).and_then(|val| {
+                Self::try_from(val)
+                    .ok()
+                    .map(|val| if !self.non_negative() { -val } else { val })
+            })
+        } else {
+            Some(*self + *other)
+        }
+    }
+}
+
+impl CheckedSub for I256 {
+    /// Subtracts two [`I256`]'s if the absolute value does
+    /// not exceed [`MAX_SIGNED_VALUE`], else returns `None`.
+    fn checked_sub(&self, other: &Self) -> Option<Self> {
+        self.checked_add(&other.neg())
     }
 }
 

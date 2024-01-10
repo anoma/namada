@@ -35,7 +35,7 @@ use masp_primitives::transaction::components::sapling::builder::SaplingMetadata;
 use masp_primitives::transaction::components::transparent::builder::TransparentBuilder;
 use masp_primitives::transaction::components::{
     ConvertDescription, I128Sum, OutputDescription, SpendDescription, TxOut,
-    U64Sum,
+    U64Sum, ValueSum,
 };
 use masp_primitives::transaction::fees::fixed::FeeRule;
 use masp_primitives::transaction::sighash::{signature_hash, SignableInput};
@@ -58,7 +58,7 @@ use namada_core::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
 use namada_core::types::time::{DateTimeUtc, DurationSecs};
 use namada_core::types::token;
 use namada_core::types::token::{
-    Change, MaspDenom, Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX,
+    MaspDenom, Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX,
 };
 use namada_core::types::transaction::WrapperTx;
 use rand_core::{CryptoRng, OsRng, RngCore};
@@ -75,7 +75,6 @@ use crate::queries::Client;
 use crate::rpc::{query_conversion, query_storage_value};
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
-use crate::tx::decode_component;
 use crate::{display_line, edisplay_line, rpc, MaybeSend, MaybeSync, Namada};
 
 /// Env var to point to a dir with MASP parameters. When not specified,
@@ -484,10 +483,7 @@ pub struct MaspChange {
 }
 
 /// a masp amount
-#[derive(
-    BorshSerialize, BorshDeserialize, Debug, Clone, Default, PartialEq, Eq,
-)]
-pub struct MaspAmount(pub HashMap<(Epoch, Address), token::Change>);
+pub type MaspAmount = ValueSum<(Epoch, Address), token::Change>;
 
 /// An extension of Option's cloned method for pair types
 fn cloned_pair<T: Clone, U: Clone>((a, b): (&T, &U)) -> (T, U) {
@@ -1344,20 +1340,19 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         client: &C,
         amt: I128Sum,
         target_epoch: Epoch,
-    ) -> HashMap<Address, token::Change> {
-        let mut res = HashMap::new();
+    ) -> ValueSum<Address, token::Change> {
+        let mut res = ValueSum::zero();
         for (asset_type, val) in amt.components() {
             // Decode the asset type
             let decoded = self.decode_asset_type(client, *asset_type).await;
             // Only assets with the target timestamp count
             match decoded {
-                Some(asset_type @ (_, _, epoch)) if epoch == target_epoch => {
-                    decode_component(
-                        asset_type,
-                        *val,
-                        &mut res,
-                        |address, _| address,
-                    );
+                Some((address, denom, epoch)) if epoch == target_epoch => {
+                    let decoded_change =
+                        token::Change::from_masp_denominated(*val, denom)
+                            .expect("expected this to fit");
+                    res += ValueSum::from_pair(address, decoded_change)
+                        .expect("expected this to fit");
                 }
                 _ => {}
             }
@@ -1372,18 +1367,20 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         client: &C,
         amt: I128Sum,
     ) -> MaspAmount {
-        let mut res: HashMap<(Epoch, Address), Change> = HashMap::default();
+        let mut res = MaspAmount::zero();
         for (asset_type, val) in amt.components() {
             // Decode the asset type
-            if let Some(decoded) =
+            if let Some((addr, denom, epoch)) =
                 self.decode_asset_type(client, *asset_type).await
             {
-                decode_component(decoded, *val, &mut res, |address, epoch| {
-                    (epoch, address)
-                })
+                let decoded_change =
+                    token::Change::from_masp_denominated(*val, denom)
+                        .expect("expected this to fit");
+                res += MaspAmount::from_pair((epoch, addr), decoded_change)
+                    .expect("unable to construct decoded amount");
             }
         }
-        MaspAmount(res)
+        res
     }
 
     /// Make shielded components to embed within a Transfer object. If no

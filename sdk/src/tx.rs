@@ -1,6 +1,6 @@
 //! SDK functions to construct different types of transactions
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -492,24 +492,6 @@ pub fn display_inner_resp(context: &impl Namada, resp: &TxResponse) {
         "Full result: {}",
         serde_json::to_string_pretty(&resp).unwrap()
     );
-}
-
-/// decode components of a masp note
-pub fn decode_component<K, F>(
-    (addr, denom, epoch): (Address, MaspDenom, Epoch),
-    val: i128,
-    res: &mut HashMap<K, token::Change>,
-    mk_key: F,
-) where
-    F: FnOnce(Address, Epoch) -> K,
-    K: Eq + std::hash::Hash,
-{
-    let decoded_change = token::Change::from_masp_denominated(val, denom)
-        .expect("expected this to fit");
-
-    res.entry(mk_key(addr, epoch))
-        .and_modify(|val| *val += decoded_change)
-        .or_insert(decoded_change);
 }
 
 /// Save accounts initialized from a tx into the wallet, if any.

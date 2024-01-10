@@ -20,6 +20,7 @@ use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::keccak::KeccakHash;
 use namada_core::types::token::{balance_key, Amount};
 use namada_core::types::voting_power::FractionalVotingPower;
+use num_traits::ops::checked::CheckedSub;
 use owo_colors::OwoColorize;
 use serde::Serialize;
 

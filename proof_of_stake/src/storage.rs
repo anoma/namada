@@ -16,6 +16,7 @@ use namada_core::types::key::{
 };
 use namada_core::types::storage::Epoch;
 use namada_core::types::token;
+use num_traits::CheckedAdd;
 
 use crate::storage_key::consensus_keys_key;
 use crate::types::{
