@@ -1,9 +1,7 @@
 use std::collections::BTreeSet;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use namada::core::ledger::governance::storage::vote::{
-    StorageProposalVote, VoteType,
-};
+use namada::core::ledger::governance::storage::vote::ProposalVote;
 use namada::core::types::address::{self, Address};
 use namada::core::types::key::{
     common, SecretKey as SecretKeyInterface, SigScheme,
@@ -99,7 +97,7 @@ fn vp_user(c: &mut Criterion) {
         TX_VOTE_PROPOSAL_WASM,
         VoteProposalData {
             id: 0,
-            vote: StorageProposalVote::Yay(VoteType::Default),
+            vote: ProposalVote::Yay,
             voter: defaults::albert_address(),
             delegations: vec![defaults::validator_address()],
         },
@@ -239,7 +237,7 @@ fn vp_implicit(c: &mut Criterion) {
         TX_VOTE_PROPOSAL_WASM,
         VoteProposalData {
             id: 0,
-            vote: StorageProposalVote::Yay(VoteType::Default),
+            vote: ProposalVote::Yay,
             voter: Address::from(&implicit_account.to_public()),
             delegations: vec![], /* NOTE: no need to bond tokens because the
                                   * implicit vp doesn't check that */
@@ -396,7 +394,7 @@ fn vp_validator(c: &mut Criterion) {
         TX_VOTE_PROPOSAL_WASM,
         VoteProposalData {
             id: 0,
-            vote: StorageProposalVote::Yay(VoteType::Default),
+            vote: ProposalVote::Yay,
             voter: defaults::validator_address(),
             delegations: vec![],
         },

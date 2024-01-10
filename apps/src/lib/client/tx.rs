@@ -11,8 +11,9 @@ use namada::core::ledger::governance::cli::offline::{
     OfflineProposal, OfflineSignedProposal, OfflineVote,
 };
 use namada::core::ledger::governance::cli::onchain::{
-    DefaultProposal, PgfFundingProposal, PgfStewardProposal, ProposalVote,
+    DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
+use namada::core::ledger::governance::storage::vote::ProposalVote;
 use namada::core::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::ibc::apps::transfer::types::Memo;
 use namada::proto::{CompressedSignature, Section, Signer, Tx};

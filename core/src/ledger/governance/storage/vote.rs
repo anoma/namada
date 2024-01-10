@@ -3,29 +3,6 @@ use std::fmt::Display;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 
-use super::super::cli::onchain::ProposalVote;
-use super::proposal::ProposalType;
-
-/// The type of a governance vote with the optional associated Memo
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    BorshSerialize,
-    BorshDeserialize,
-    Eq,
-    Serialize,
-    Deserialize,
-)]
-pub enum VoteType {
-    /// A default vote without Memo
-    Default,
-    /// A vote for the PGF stewards
-    PGFSteward,
-    /// A vote for a PGF payment proposal
-    PGFPayment,
-}
-
 #[derive(
     Debug,
     Clone,
@@ -37,110 +14,51 @@ pub enum VoteType {
     Deserialize,
 )]
 /// The vote for a proposal
-pub enum StorageProposalVote {
+pub enum ProposalVote {
     /// Yes
-    Yay(VoteType),
+    Yay,
     /// No
     Nay,
     /// Abstain
     Abstain,
 }
 
-impl StorageProposalVote {
+impl ProposalVote {
     /// Check if a vote is yay
     pub fn is_yay(&self) -> bool {
-        matches!(self, StorageProposalVote::Yay(_))
+        matches!(self, ProposalVote::Yay)
     }
 
     /// Check if a vote is nay
     pub fn is_nay(&self) -> bool {
-        matches!(self, StorageProposalVote::Nay)
+        matches!(self, ProposalVote::Nay)
     }
 
     /// Check if a vote is abstain
     pub fn is_abstain(&self) -> bool {
-        matches!(self, StorageProposalVote::Abstain)
-    }
-
-    /// Check if two votes are equal
-    pub fn is_same_side(&self, other: &Self) -> bool {
-        std::mem::discriminant(self) == std::mem::discriminant(other)
-    }
-
-    /// Check if vote is of type default
-    pub fn is_default_vote(&self) -> bool {
-        matches!(
-            self,
-            StorageProposalVote::Yay(VoteType::Default)
-                | StorageProposalVote::Nay
-        )
-    }
-
-    /// Check if a vote is compatible with a proposal
-    pub fn is_compatible(&self, proposal_type: &ProposalType) -> bool {
-        match self {
-            StorageProposalVote::Yay(vote_type) => proposal_type.eq(vote_type),
-            StorageProposalVote::Nay => true,
-            StorageProposalVote::Abstain => true,
-        }
-    }
-
-    /// Create a new vote
-    pub fn build(
-        proposal_vote: &ProposalVote,
-        proposal_type: &ProposalType,
-    ) -> Option<Self> {
-        match (proposal_vote, proposal_type) {
-            (ProposalVote::Yay, ProposalType::Default(_)) => {
-                Some(StorageProposalVote::Yay(VoteType::Default))
-            }
-            (ProposalVote::Yay, ProposalType::PGFSteward(_)) => {
-                Some(StorageProposalVote::Yay(VoteType::PGFSteward))
-            }
-            (ProposalVote::Yay, ProposalType::PGFPayment(_)) => {
-                Some(StorageProposalVote::Yay(VoteType::PGFPayment))
-            }
-            (ProposalVote::Nay, ProposalType::Default(_)) => {
-                Some(StorageProposalVote::Nay)
-            }
-            (ProposalVote::Nay, ProposalType::PGFSteward(_)) => {
-                Some(StorageProposalVote::Nay)
-            }
-            (ProposalVote::Nay, ProposalType::PGFPayment(_)) => {
-                Some(StorageProposalVote::Nay)
-            }
-            _ => None,
-        }
+        matches!(self, ProposalVote::Abstain)
     }
 }
 
-impl Display for StorageProposalVote {
+impl Display for ProposalVote {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            StorageProposalVote::Yay(vote_type) => match vote_type {
-                VoteType::Default
-                | VoteType::PGFSteward
-                | VoteType::PGFPayment => write!(f, "yay"),
-            },
-
-            StorageProposalVote::Nay => write!(f, "nay"),
-            StorageProposalVote::Abstain => write!(f, "abstain"),
+            ProposalVote::Yay => write!(f, "yay"),
+            ProposalVote::Nay => write!(f, "nay"),
+            ProposalVote::Abstain => write!(f, "abstain"),
         }
     }
 }
 
-impl PartialEq<VoteType> for ProposalType {
-    fn eq(&self, other: &VoteType) -> bool {
-        match self {
-            Self::Default(_) => {
-                matches!(other, VoteType::Default)
-            }
-            Self::PGFSteward(_) => {
-                matches!(other, VoteType::PGFSteward)
-            }
-            Self::PGFPayment(_) => {
-                matches!(other, VoteType::PGFPayment)
-            }
+impl TryFrom<String> for ProposalVote {
+    type Error = String;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.trim().to_lowercase().as_str() {
+            "yay" => Ok(ProposalVote::Yay),
+            "nay" => Ok(ProposalVote::Nay),
+            "abstain" => Ok(ProposalVote::Abstain),
+            _ => Err("invalid vote".to_string()),
         }
     }
 }
@@ -149,28 +67,14 @@ impl PartialEq<VoteType> for ProposalType {
 /// Testing helpers and strategies for governance votes
 pub mod testing {
     use proptest::prelude::{Just, Strategy};
-    use proptest::prop_compose;
 
     use super::*;
 
-    prop_compose! {
-        /// Geerate an arbitrary vote type
-        pub fn arb_vote_type()(discriminant in 0..3) -> VoteType {
-            match discriminant {
-                0 => VoteType::Default,
-                1 => VoteType::PGFSteward,
-                2 => VoteType::PGFPayment,
-                _ => unreachable!(),
-            }
-        }
-    }
-
     /// Generate an arbitrary proposal vote
-    pub fn arb_proposal_vote() -> impl Strategy<Value = StorageProposalVote> {
-        arb_vote_type()
-            .prop_map(StorageProposalVote::Yay)
+    pub fn arb_proposal_vote() -> impl Strategy<Value = ProposalVote> {
+        Just(ProposalVote::Yay)
             .boxed()
-            .prop_union(Just(StorageProposalVote::Nay).boxed())
-            .or(Just(StorageProposalVote::Abstain).boxed())
+            .prop_union(Just(ProposalVote::Nay).boxed())
+            .or(Just(ProposalVote::Abstain).boxed())
     }
 }

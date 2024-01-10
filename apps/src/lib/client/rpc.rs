@@ -733,6 +733,43 @@ async fn get_ibc_denom_alias(
         .unwrap_or(ibc_denom.as_ref().to_string())
 }
 
+/// Query votes for the given proposal
+pub async fn query_proposal_votes(
+    context: &impl Namada,
+    args: args::QueryProposalVotes,
+) {
+    let result = namada_sdk::rpc::query_proposal_votes(
+        context.client(),
+        args.proposal_id,
+    )
+    .await
+    .unwrap();
+
+    match args.voter {
+        Some(voter) => {
+            match result.into_iter().find(|vote| vote.delegator == voter) {
+                Some(vote) => display_line!(context.io(), "{}", vote,),
+                None => display_line!(
+                    context.io(),
+                    "The address {} has not voted on proposal {}",
+                    voter,
+                    args.proposal_id
+                ),
+            }
+        }
+        None => {
+            display_line!(
+                context.io(),
+                "Votes for proposal id {}\n",
+                args.proposal_id
+            );
+            for vote in result {
+                display_line!(context.io(), "{}\n", vote);
+            }
+        }
+    }
+}
+
 /// Query Proposals
 pub async fn query_proposal(context: &impl Namada, args: args::QueryProposal) {
     let current_epoch = query_and_print_epoch(context).await;
