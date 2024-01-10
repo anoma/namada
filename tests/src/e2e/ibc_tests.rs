@@ -1577,7 +1577,7 @@ fn propose_funding(
     let epoch = get_epoch(test_a, &rpc_a)?;
     let start_epoch = (epoch.0 + 3) / 3 * 3;
     let proposal_json_path =
-        prepare_proposal_data(test_a, albert, pgf_funding, start_epoch);
+        prepare_proposal_data(test_a, 0, albert, pgf_funding, start_epoch);
 
     let submit_proposal_args = vec![
         "init-proposal",
