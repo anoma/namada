@@ -414,7 +414,7 @@ mod test_bp_vote_extensions {
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         assert!(!shell.validate_bp_roots_vext(
             bp_root.0,
-            shell.wl_storage.pos_queries().get_current_decision_height(),
+            shell.get_current_decision_height(),
         ))
     }
 
@@ -583,7 +583,7 @@ mod test_bp_vote_extensions {
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         assert!(shell.validate_bp_roots_vext(
             bp_root.0,
-            shell.wl_storage.pos_queries().get_current_decision_height()
+            shell.get_current_decision_height()
         ));
         let to_sign = keccak_hash([[2; 32], Uint::from(0).to_bytes()].concat());
         let sig = Signed::<_, SignableEthMessage>::new(
@@ -599,7 +599,7 @@ mod test_bp_vote_extensions {
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         assert!(shell.validate_bp_roots_vext(
             bp_root.0,
-            shell.wl_storage.pos_queries().get_current_decision_height()
+            shell.get_current_decision_height()
         ));
     }
 
@@ -650,7 +650,7 @@ mod test_bp_vote_extensions {
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         assert!(!shell.validate_bp_roots_vext(
             bp_root.0,
-            shell.wl_storage.pos_queries().get_current_decision_height()
+            shell.get_current_decision_height()
         ));
     }
 }

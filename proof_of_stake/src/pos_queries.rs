@@ -201,26 +201,6 @@ where
         validator.ok_or_else(|| Error::NotValidatorKeyHash(addr_hash.into()))
     }
 
-    /// Check if we are at a given [`BlockHeight`] offset, `height_offset`,
-    /// within the current [`Epoch`].
-    pub fn is_deciding_offset_within_epoch(self, height_offset: u64) -> bool {
-        let current_decision_height = self.get_current_decision_height();
-
-        let pred_epochs = self
-            .storage
-            .get_pred_epochs()
-            .expect("Must be able to read pred epochs");
-        let fst_heights_of_each_epoch = pred_epochs.first_block_heights();
-
-        fst_heights_of_each_epoch
-            .last()
-            .map(|&h| {
-                let height_offset_within_epoch = h + height_offset;
-                current_decision_height == height_offset_within_epoch
-            })
-            .unwrap_or(false)
-    }
-
     /// Given some [`BlockHeight`], return the corresponding [`Epoch`].
     ///
     /// This method may return [`None`] if the corresponding data has
@@ -237,12 +217,6 @@ where
     #[inline]
     pub fn get_height(self, epoch: Epoch) -> Option<BlockHeight> {
         self.storage.get_epoch_start_height(epoch).unwrap()
-    }
-
-    /// Retrieves the [`BlockHeight`] that is currently being decided.
-    #[inline]
-    pub fn get_current_decision_height(self) -> BlockHeight {
-        self.storage.get_block_height().unwrap()
     }
 
     /// Retrieve the `max_proposal_bytes` consensus parameter from storage.

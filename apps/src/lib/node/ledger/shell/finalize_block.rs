@@ -827,7 +827,6 @@ mod test_finalize_block {
     use namada::ledger::native_vp::parameters::ParametersVp;
     use namada::ledger::native_vp::NativeVp;
     use namada::ledger::parameters::EpochDuration;
-    use namada::ledger::pos::PosQueries;
     use namada::proof_of_stake::storage::{
         enqueued_slashes_handle, get_num_consensus_validators,
         read_consensus_validator_set_addresses_with_stake, read_total_stake,
@@ -5064,8 +5063,7 @@ mod test_finalize_block {
         // we advance forward to the next epoch
         let mut req = FinalizeBlock::default();
         req.header.time = namada::types::time::DateTimeUtc::now();
-        let current_decision_height =
-            shell.wl_storage.pos_queries().get_current_decision_height();
+        let current_decision_height = shell.get_current_decision_height();
         if let Some(b) = shell.wl_storage.storage.last_block.as_mut() {
             b.height = current_decision_height + 11;
         }

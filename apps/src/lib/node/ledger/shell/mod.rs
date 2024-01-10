@@ -35,10 +35,10 @@ use namada::core::hints;
 use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
 use namada::ledger::gas::{Gas, TxGasMeter};
+use namada::ledger::pos::into_tm_voting_power;
 use namada::ledger::pos::namada_proof_of_stake::types::{
     ConsensusValidator, ValidatorSetUpdate,
 };
-use namada::ledger::pos::{into_tm_voting_power, PosQueries};
 use namada::ledger::protocol::{
     apply_wasm_tx, get_fee_unshielding_transaction,
     get_transfer_hash_from_storage, ShellParams,
@@ -1544,11 +1544,16 @@ where
         )
     }
 
+    /// Retrieves the [`BlockHeight`] that is currently being decided.
+    #[inline]
+    pub fn get_current_decision_height(&self) -> BlockHeight {
+        self.wl_storage.get_current_decision_height()
+    }
+
     /// Check if we are at a given [`BlockHeight`] offset, `height_offset`,
     /// within the current epoch.
     pub fn is_deciding_offset_within_epoch(&self, height_offset: u64) -> bool {
         self.wl_storage
-            .pos_queries()
             .is_deciding_offset_within_epoch(height_offset)
     }
 }

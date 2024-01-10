@@ -114,8 +114,6 @@ mod test_queries {
                     assert_eq!(
                         curr_block_height,
                         shell
-                            .wl_storage
-                            .pos_queries()
                             .get_current_decision_height()
                             .0
                     );

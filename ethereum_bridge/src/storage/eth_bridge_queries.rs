@@ -279,9 +279,7 @@ where
         } else {
             // offset of 1 => are we at the 2nd
             // block within the epoch?
-            self.wl_storage
-                .pos_queries()
-                .is_deciding_offset_within_epoch(1)
+            self.wl_storage.is_deciding_offset_within_epoch(1)
         }
     }
 

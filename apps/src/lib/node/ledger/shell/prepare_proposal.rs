@@ -2,7 +2,6 @@
 
 use namada::core::hints;
 use namada::gas::TxGasMeter;
-use namada::ledger::pos::PosQueries;
 use namada::ledger::protocol::get_fee_unshielding_transaction;
 use namada::ledger::storage::tx_queue::TxInQueue;
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
@@ -130,7 +129,6 @@ where
         block_time: Option<Timestamp>,
         block_proposer: &Address,
     ) -> (Vec<TxBytes>, BlockAllocator<BuildingDecryptedTxBatch>) {
-        let pos_queries = self.wl_storage.pos_queries();
         let block_time = block_time.and_then(|block_time| {
             // If error in conversion, default to last block datetime, it's
             // valid because of mempool check
@@ -163,7 +161,7 @@ where
                                     ?tx_bytes,
                                     bin_resource_left,
                                     proposal_height =
-                                        ?pos_queries.get_current_decision_height(),
+                                        ?self.get_current_decision_height(),
                                     "Dropping encrypted tx from the current proposal",
                                 );
                                 false
@@ -175,7 +173,7 @@ where
                                     ?tx_bytes,
                                     bin_resource,
                                     proposal_height =
-                                        ?pos_queries.get_current_decision_height(),
+                                        ?self.get_current_decision_height(),
                                     "Dropping large encrypted tx from the current proposal",
                                 );
                                 true
@@ -257,7 +255,6 @@ where
         &self,
         mut alloc: BlockAllocator<BuildingDecryptedTxBatch>,
     ) -> (Vec<TxBytes>, BlockAllocator<BuildingProtocolTxBatch>) {
-        let pos_queries = self.wl_storage.pos_queries();
         let txs = self
             .wl_storage
             .storage
@@ -282,7 +279,7 @@ where
                                 ?tx_bytes,
                                 bin_space_left,
                                 proposal_height =
-                                    ?pos_queries.get_current_decision_height(),
+                                    ?self.get_current_decision_height(),
                                 "Dropping decrypted tx from the current proposal",
                             );
                             false
@@ -292,7 +289,7 @@ where
                                 ?tx_bytes,
                                 bin_size,
                                 proposal_height =
-                                    ?pos_queries.get_current_decision_height(),
+                                    ?self.get_current_decision_height(),
                                 "Dropping large decrypted tx from the current proposal",
                             );
                             true
@@ -323,7 +320,6 @@ where
         }
 
         let deserialized_iter = self.deserialize_vote_extensions(txs);
-        let pos_queries = self.wl_storage.pos_queries();
 
         deserialized_iter.take_while(|tx_bytes|
             alloc.try_alloc(&tx_bytes[..])
@@ -342,7 +338,7 @@ where
                                 ?tx_bytes,
                                 bin_resource_left,
                                 proposal_height =
-                                    ?pos_queries.get_current_decision_height(),
+                                    ?self.get_current_decision_height(),
                                 "Dropping protocol tx from the current proposal",
                             );
                             false
@@ -354,7 +350,7 @@ where
                                 ?tx_bytes,
                                 bin_resource,
                                 proposal_height =
-                                    ?pos_queries.get_current_decision_height(),
+                                    ?self.get_current_decision_height(),
                                 "Dropping large protocol tx from the current proposal",
                             );
                             true
@@ -669,9 +665,10 @@ mod test_prepare_proposal {
         };
         shell.start_new_epoch(Some(req));
         assert_eq!(
-            shell.wl_storage.pos_queries().get_epoch(
-                shell.wl_storage.pos_queries().get_current_decision_height()
-            ),
+            shell
+                .wl_storage
+                .pos_queries()
+                .get_epoch(shell.get_current_decision_height()),
             Some(Epoch(1))
         );
 

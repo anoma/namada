@@ -512,16 +512,13 @@ mod test_vote_extensions {
                 }],
                 relayer: gen_established_address(),
             }],
-            block_height: shell
-                .wl_storage
-                .pos_queries()
-                .get_current_decision_height(),
+            block_height: shell.get_current_decision_height(),
             validator_addr: address.clone(),
         }
         .sign(&signing_key);
         assert!(!shell.validate_eth_events_vext(
             ethereum_events,
-            shell.wl_storage.pos_queries().get_current_decision_height(),
+            shell.get_current_decision_height(),
         ))
     }
 
@@ -539,8 +536,7 @@ mod test_vote_extensions {
             .get_validator_address()
             .expect("Test failed")
             .clone();
-        let signed_height =
-            shell.wl_storage.pos_queries().get_current_decision_height();
+        let signed_height = shell.get_current_decision_height();
         let vote_ext = ethereum_events::Vext {
             ethereum_events: vec![EthereumEvent::TransfersToEthereum {
                 nonce: 0.into(),
