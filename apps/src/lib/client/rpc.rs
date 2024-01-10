@@ -476,6 +476,7 @@ pub async fn query_pinned_balance(
                     query_tokens(context, Some(base_token), None).await;
                 for (token_alias, token) in &tokens {
                     let total_balance = balance
+                        .0
                         .get(&(epoch, token.clone()))
                         .cloned()
                         .unwrap_or_default();
@@ -509,6 +510,7 @@ pub async fn query_pinned_balance(
                 let mut found_any = false;
 
                 for ((_, token_addr), value) in balance
+                    .0
                     .iter()
                     .filter(|((token_epoch, _), _)| *token_epoch == epoch)
                 {
@@ -992,12 +994,12 @@ pub async fn query_shielded_balance(
                         .await
                         .decode_all_amounts(context.client(), balance)
                         .await;
-                    for ((_, address), val) in balance.iter() {
+                    for ((_, address), val) in balance.0 {
                         if !val.is_zero() {
                             found_any = true;
                         }
                         let formatted =
-                            context.format_amount(address, (*val).into()).await;
+                            context.format_amount(&address, val.into()).await;
                         display_line!(
                             context.io(),
                             "  {}, owned by {}",
@@ -1090,10 +1092,10 @@ pub async fn print_decoded_balance_with_epoch(
         .await
         .decode_all_amounts(context.client(), balance)
         .await;
-    for ((epoch, token_addr), value) in decoded_balance.iter() {
-        let asset_value = (*value).into();
+    for ((epoch, token_addr), value) in decoded_balance.0 {
+        let asset_value = value.into();
         let alias = tokens
-            .get(token_addr)
+            .get(&token_addr)
             .map(|a| a.to_string())
             .unwrap_or_else(|| token_addr.to_string());
         display_line!(
@@ -1101,7 +1103,7 @@ pub async fn print_decoded_balance_with_epoch(
             "{} | {} : {}",
             alias,
             epoch,
-            context.format_amount(token_addr, asset_value).await,
+            context.format_amount(&token_addr, asset_value).await,
         );
     }
 }
