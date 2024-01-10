@@ -384,6 +384,14 @@ where
     ) -> Result<bool> {
         let epoch = self.ctx.get_block_epoch()?;
         let (transfer, shielded_tx) = self.ctx.get_shielded_action(tx_data)?;
+
+        if u64::from(self.ctx.get_block_height()?)
+            > u64::from(shielded_tx.expiry_height())
+        {
+            tracing::debug!("MASP transaction is expired");
+            return Ok(false);
+        }
+
         let transfer_amount = transfer
             .amount
             .to_amount(&transfer.token, &self.ctx.pre())?;
