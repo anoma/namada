@@ -818,102 +818,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             for (idx, tx_event) in txs_results {
                 let tx = Tx::try_from(block[idx.0 as usize].as_ref())
                     .map_err(|e| Error::Other(e.to_string()))?;
-
-                let tx_header = tx.header();
-                // NOTE: simply looking for masp sections attached to the tx
-                // is not safe. We don't validate the sections attached to a
-                // transaction se we could end up with transactions carrying
-                // an unnecessary masp section. We must instead look for the
-                // required masp sections in the signed commitments (hashes)
-                // of the transactions' headers/data sections
-                let (transfer, masp_transaction) = if let Some(wrapper_header) =
-                    tx_header.wrapper()
-                {
-                    let hash = wrapper_header
-                        .unshield_section_hash
-                        .ok_or_else(|| {
-                            Error::Other(
-                                "Missing expected fee unshielding section hash"
-                                    .to_string(),
-                            )
-                        })?;
-
-                    let masp_transaction = tx
-                        .get_section(&hash)
-                        .ok_or_else(|| {
-                            Error::Other(
-                                "Missing expected masp section".to_string(),
-                            )
-                        })?
-                        .masp_tx()
-                        .ok_or_else(|| {
-                            Error::Other("Missing masp transaction".to_string())
-                        })?;
-
-                    // Transfer objects for fee unshielding are absent from
-                    // the tx because they are completely constructed in
-                    // protocol, need to recreate it here
-                    let transfer = Transfer {
-                        source: MASP,
-                        target: wrapper_header.fee_payer(),
-                        token: wrapper_header.fee.token.clone(),
-                        amount: wrapper_header
-                            .get_tx_fee()
-                            .map_err(|e| Error::Other(e.to_string()))?,
-                        key: None,
-                        shielded: Some(hash),
-                    };
-
-                    (transfer, masp_transaction)
-                } else {
-                    // Expect decrypted transaction
-                    let tx_data = tx.data().ok_or_else(|| {
-                        Error::Other("Missing data section".to_string())
-                    })?;
-                    match Transfer::try_from_slice(&tx_data) {
-                        Ok(transfer) => {
-                            let masp_transaction = tx
-                                .get_section(&transfer.shielded.ok_or_else(
-                                    || {
-                                        Error::Other(
-                                            "Missing masp section hash"
-                                                .to_string(),
-                                        )
-                                    },
-                                )?)
-                                .ok_or_else(|| {
-                                    Error::Other(
-                                        "Missing masp section in transaction"
-                                            .to_string(),
-                                    )
-                                })?
-                                .masp_tx()
-                                .ok_or_else(|| {
-                                    Error::Other(
-                                        "Missing masp transaction".to_string(),
-                                    )
-                                })?;
-
-                            (transfer, masp_transaction)
-                        }
-                        Err(_) => {
-                            // This should be a MASP over IBC transaction, it
-                            // could be a ShieldedTransfer or an Envelop
-                            // message, need to try both
-                            let shielded_transfer =
-                                extract_payload_from_shielded_action::<C>(
-                                    &tx_data,
-                                    ExtractShieldedActionArg::Event(tx_event),
-                                )
-                                .await?;
-
-                            (
-                                shielded_transfer.transfer,
-                                shielded_transfer.masp_tx,
-                            )
-                        }
-                    }
-                };
+                let (transfer, masp_transaction) = Self::extract_masp_tx(
+                    &tx,
+                    ExtractShieldedActionArg::Event::<C>(tx_event),
+                    true,
+                )
+                .await?;
 
                 // Collect the current transaction
                 shielded_txs.insert(
@@ -927,6 +837,106 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         }
 
         Ok(shielded_txs)
+    }
+
+    /// Extract the relevant shield portions of a [`Tx`], if any.
+    async fn extract_masp_tx<'args, C: Client + Sync>(
+        tx: &Tx,
+        action_arg: ExtractShieldedActionArg<'args, C>,
+        check_header: bool,
+    ) -> Result<(Transfer, Transaction), Error> {
+        let maybe_transaction = if check_header {
+            let tx_header = tx.header();
+            // NOTE: simply looking for masp sections attached to the tx
+            // is not safe. We don't validate the sections attached to a
+            // transaction se we could end up with transactions carrying
+            // an unnecessary masp section. We must instead look for the
+            // required masp sections in the signed commitments (hashes)
+            // of the transactions' headers/data sections
+            if let Some(wrapper_header) = tx_header.wrapper() {
+                let hash =
+                    wrapper_header.unshield_section_hash.ok_or_else(|| {
+                        Error::Other(
+                            "Missing expected fee unshielding section hash"
+                                .to_string(),
+                        )
+                    })?;
+
+                let masp_transaction = tx
+                    .get_section(&hash)
+                    .ok_or_else(|| {
+                        Error::Other(
+                            "Missing expected masp section".to_string(),
+                        )
+                    })?
+                    .masp_tx()
+                    .ok_or_else(|| {
+                        Error::Other("Missing masp transaction".to_string())
+                    })?;
+
+                // Transfer objects for fee unshielding are absent from
+                // the tx because they are completely constructed in
+                // protocol, need to recreate it here
+                let transfer = Transfer {
+                    source: MASP,
+                    target: wrapper_header.fee_payer(),
+                    token: wrapper_header.fee.token.clone(),
+                    amount: wrapper_header
+                        .get_tx_fee()
+                        .map_err(|e| Error::Other(e.to_string()))?,
+                    key: None,
+                    shielded: Some(hash),
+                };
+                Some((transfer, masp_transaction))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        let tx = if let Some(tx) = maybe_transaction {
+            tx
+        } else {
+            // Expect decrypted transaction
+            let tx_data = tx.data().ok_or_else(|| {
+                Error::Other("Missing data section".to_string())
+            })?;
+            match Transfer::try_from_slice(&tx_data) {
+                Ok(transfer) => {
+                    let masp_transaction = tx
+                        .get_section(&transfer.shielded.ok_or_else(|| {
+                            Error::Other(
+                                "Missing masp section hash".to_string(),
+                            )
+                        })?)
+                        .ok_or_else(|| {
+                            Error::Other(
+                                "Missing masp section in transaction"
+                                    .to_string(),
+                            )
+                        })?
+                        .masp_tx()
+                        .ok_or_else(|| {
+                            Error::Other("Missing masp transaction".to_string())
+                        })?;
+
+                    (transfer, masp_transaction)
+                }
+                Err(_) => {
+                    // This should be a MASP over IBC transaction, it
+                    // could be a ShieldedTransfer or an Envelop
+                    // message, need to try both
+                    let shielded_transfer =
+                        extract_payload_from_shielded_action::<C>(
+                            &tx_data, action_arg,
+                        )
+                        .await?;
+                    (shielded_transfer.transfer, shielded_transfer.masp_tx)
+                }
+            }
+        };
+        Ok(tx)
     }
 
     /// Applies the given transaction to the supplied context. More precisely,
@@ -1514,39 +1524,16 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
         let tx = Tx::try_from(block[indexed_tx.index.0 as usize].as_ref())
             .map_err(|e| Error::Other(e.to_string()))?;
-
-        let tx_data = tx
-            .data()
-            .ok_or_else(|| Error::Other("Missing data section".to_string()))?;
-        let shielded = match Transfer::try_from_slice(&tx_data) {
-            Ok(transfer) => tx
-                .get_section(&transfer.shielded.ok_or_else(|| {
-                    Error::Other("Missing masp section hash".to_string())
-                })?)
-                .ok_or_else(|| {
-                    Error::Other(
-                        "Missing masp section in transaction".to_string(),
-                    )
-                })?
-                .masp_tx()
-                .ok_or_else(|| {
-                    Error::Other("Missing masp transaction".to_string())
-                })?,
-            Err(_) => {
-                // Try Masp over IBC
-                let shielded_transfer = extract_payload_from_shielded_action(
-                    &tx_data,
-                    ExtractShieldedActionArg::Request((
-                        client,
-                        indexed_tx.height,
-                        Some(indexed_tx.index),
-                    )),
-                )
-                .await?;
-
-                shielded_transfer.masp_tx
-            }
-        };
+        let (_, shielded) = Self::extract_masp_tx(
+            &tx,
+            ExtractShieldedActionArg::Request((
+                client,
+                indexed_tx.height,
+                Some(indexed_tx.index),
+            )),
+            false,
+        )
+        .await?;
 
         // Accumulate the combined output note value into this Amount
         let mut val_acc = I128Sum::zero();
