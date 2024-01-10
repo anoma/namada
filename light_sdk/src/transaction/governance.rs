@@ -19,7 +19,7 @@ impl InitProposal {
     /// Build a raw InitProposal transaction from the given parameters
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        id: Option<u64>,
+        id: u64,
         content: Hash,
         author: Address,
         r#type: ProposalType,

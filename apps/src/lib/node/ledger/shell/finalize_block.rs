@@ -1612,7 +1612,7 @@ mod test_finalize_block {
             shell.proposal_data.insert(proposal_id);
 
             let proposal = InitProposalData {
-                id: Some(proposal_id),
+                id: proposal_id,
                 content: Hash::default(),
                 author: validator.clone(),
                 voting_start_epoch: Epoch::default(),

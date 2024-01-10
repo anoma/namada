@@ -122,7 +122,7 @@ fn governance(c: &mut Criterion) {
                 shell.generate_tx(
                     TX_INIT_PROPOSAL_WASM,
                     InitProposalData {
-                        id: None,
+                        id: 0,
                         content: content_section.get_hash(),
                         author: defaults::albert_address(),
                         r#type: ProposalType::Default(None),
@@ -174,7 +174,7 @@ fn governance(c: &mut Criterion) {
                 shell.generate_tx(
                     TX_INIT_PROPOSAL_WASM,
                     InitProposalData {
-                        id: Some(1),
+                        id: 1,
                         content: content_section.get_hash(),
                         author: defaults::albert_address(),
                         r#type: ProposalType::Default(Some(
@@ -246,7 +246,7 @@ fn governance(c: &mut Criterion) {
 //      let governance_proposal = shell.generate_tx(
 //          TX_INIT_PROPOSAL_WASM,
 //          InitProposalData {
-//              id: None,
+//              id: 0,
 //              content: content_section.get_hash(),
 //              author: defaults::albert_address(),
 //              r#type: ProposalType::Default(None),
