@@ -67,9 +67,9 @@ impl Dec {
     /// the division is impossible (e.g., division by zero or overflow), `None`
     /// is returned.
     ///
-    /// Example:
-    /// ```
-    /// 
+    /// For instance:
+    ///
+    /// ```ignore
     /// let x = Dec::new(3, 1).unwrap(); // Represents 0.3
     /// let y = Dec::new(2, 1).unwrap(); // Represents 0.2
     /// let result = x.trunc_div(&y).unwrap();
@@ -77,9 +77,11 @@ impl Dec {
     /// ```
     ///
     /// # Arguments
+    ///
     /// * `rhs`: The right-hand side `Dec` value for the division.
     ///
     /// # Returns
+    ///
     /// An `Option<Dec>` which is `Some` with the result if the division is
     /// successful, or `None` if the division cannot be performed.
     pub fn trunc_div(&self, rhs: &Self) -> Option<Self> {

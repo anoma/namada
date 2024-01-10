@@ -31,11 +31,10 @@ where
     S: StorageRead + StorageWrite,
 {
     let counter_key = governance_keys::get_counter_key();
-    let proposal_id = if let Some(id) = data.id {
-        id
-    } else {
-        storage.read(&counter_key)?.unwrap()
-    };
+    let proposal_id = storage.read(&counter_key)?.expect(
+        "Storage should have been initialized with an initial governance \
+         proposal id",
+    );
 
     let content_key = governance_keys::get_content_key(proposal_id);
     storage.write_bytes(&content_key, content)?;

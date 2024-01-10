@@ -244,7 +244,7 @@ impl Default for BenchShell {
         let signed_tx = bench_shell.generate_tx(
             TX_INIT_PROPOSAL_WASM,
             InitProposalData {
-                id: None,
+                id: 0,
                 content: content_section.get_hash(),
                 author: defaults::albert_address(),
                 r#type: ProposalType::Default(None),
