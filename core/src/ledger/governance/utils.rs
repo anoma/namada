@@ -112,9 +112,11 @@ impl TallyResult {
                 yay_voting_power >= total_voting_power * 2 / 3
             }
             TallyType::OneHalfOverOneThird => {
-                let at_least_one_third_voted =
-                    yay_voting_power + nay_voting_power + abstain_voting_power
-                        >= total_voting_power / 3;
+                let at_least_one_third_voted = Self::get_total_voted_power(
+                    yay_voting_power,
+                    nay_voting_power,
+                    abstain_voting_power,
+                ) >= total_voting_power / 3;
 
                 // At least half of non-abstained votes are yay
                 let at_last_half_voted_yay =
@@ -122,9 +124,11 @@ impl TallyResult {
                 at_least_one_third_voted && at_last_half_voted_yay
             }
             TallyType::LessOneHalfOverOneThirdNay => {
-                let less_one_third_voted =
-                    yay_voting_power + nay_voting_power + abstain_voting_power
-                        < total_voting_power / 3;
+                let less_one_third_voted = Self::get_total_voted_power(
+                    yay_voting_power,
+                    nay_voting_power,
+                    abstain_voting_power,
+                ) < total_voting_power / 3;
 
                 // More than half of non-abstained votes are yay
                 let more_than_half_voted_yay =
@@ -134,6 +138,14 @@ impl TallyResult {
         };
 
         if passed { Self::Passed } else { Self::Rejected }
+    }
+
+    fn get_total_voted_power(
+        yay_voting_power: VotePower,
+        nay_voting_power: VotePower,
+        abstain_voting_power: VotePower,
+    ) -> VotePower {
+        yay_voting_power + nay_voting_power + abstain_voting_power
     }
 }
 
