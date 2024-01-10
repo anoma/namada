@@ -52,6 +52,7 @@ use masp_proofs::prover::LocalTxProver;
 use masp_proofs::sapling::SaplingVerificationContext;
 use namada_core::ledger::ibc::IbcMessage;
 use namada_core::types::address::{Address, MASP};
+use namada_core::types::ibc::IbcShieldedTransfer;
 use namada_core::types::masp::{
     BalanceOwner, ExtendedViewingKey, PaymentAddress, TransferSource,
     TransferTarget,
@@ -899,40 +900,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                             // This should be a MASP over IBC transaction, it
                             // could be a ShieldedTransfer or an Envelop
                             // message, need to try both
-                            let message =
-                                namada_core::ledger::ibc::decode_message(
+                            let shielded_transfer =
+                                extract_payload_from_shielded_action::<C>(
                                     &tx_data,
+                                    ExtractShieldedActionArg::Event(tx_event),
                                 )
-                                .map_err(|e| Error::Other(e.to_string()))?;
-
-                            let shielded_transfer = match message {
-                                IbcMessage::ShieldedTransfer(msg) => {
-                                    msg.shielded_transfer
-                                }
-                                IbcMessage::Envelope(_) => {
-                                    tx_event
-                                        .attributes
-                                        .iter()
-                                        .find_map(|attribute| {
-                                            if attribute.key == "inner_tx" {
-                                                let tx_result = TxResult::from_str(&attribute.value).unwrap();
-                                                for ibc_event in &tx_result.ibc_events {
-
-                                                let event = namada_core::types::ibc::get_shielded_transfer(ibc_event).ok().flatten();
-                                                    if event.is_some() {
-                                                        return event;
-                                                    }
-                                                 }
-                                                 None
-                                            } else {
-                                                None
-                                            }
-                                    }).ok_or_else(|| Error::Other("Couldn't deserialize masp tx to ibc message envelope".to_string()))?
-                                }
-                                _ => {
-                                    return Err(Error::Other("Couldn't deserialize masp tx to a valid ibc message".to_string()));
-                                }
-                            };
+                                .await?;
 
                             (
                                 shielded_transfer.transfer,
@@ -1561,56 +1534,15 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 })?,
             Err(_) => {
                 // Try Masp over IBC
-
-                let message =
-                    namada_core::ledger::ibc::decode_message(&tx_data)
-                        .map_err(|e| Error::Other(e.to_string()))?;
-
-                let shielded_transfer = match message {
-                    IbcMessage::ShieldedTransfer(msg) => msg.shielded_transfer,
-                    IbcMessage::Envelope(_) => {
-                        // Need the tx event to extract the memo. The result is
-                        // in the first index of the collection
-                        let tx_events = get_indexed_masp_events_at_height(
-                            client,
-                            indexed_tx.height,
-                            Some(indexed_tx.index),
-                        )
-                        .await?
-                        .ok_or_else(|| {
-                            Error::Other(format!(
-                                "Missing required ibc event at block height {}",
-                                indexed_tx.height
-                            ))
-                        })?;
-
-                        tx_events[0].1
-                            .attributes
-                                        .iter()
-                                        .find_map(|attribute| {
-                                            if attribute.key == "inner_tx" {
-                                                let tx_result = TxResult::from_str(&attribute.value).unwrap();
-                                                for ibc_event in &tx_result.ibc_events {
-
-                                                let event = namada_core::types::ibc::get_shielded_transfer(ibc_event).ok().flatten();
-                                                    if event.is_some() {
-                                                        return event;
-                                                    }
-                                                 }
-                                                 None
-                                            } else {
-                                                None
-                                            }
-                                    }).ok_or_else(|| Error::Other("Couldn't deserialize masp tx to ibc message envelope".to_string()))?
-                    }
-                    _ => {
-                        return Err(Error::Other(
-                            "Couldn't deserialize masp tx to a valid ibc \
-                             message"
-                                .to_string(),
-                        ));
-                    }
-                };
+                let shielded_transfer = extract_payload_from_shielded_action(
+                    &tx_data,
+                    ExtractShieldedActionArg::Request((
+                        client,
+                        indexed_tx.height,
+                        Some(indexed_tx.index),
+                    )),
+                )
+                .await?;
 
                 shielded_transfer.masp_tx
             }
@@ -2334,6 +2266,86 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
                 })
                 .collect::<Vec<_>>()
         }))
+}
+
+enum ExtractShieldedActionArg<'args, C: Client + Sync> {
+    Event(crate::tendermint::abci::Event),
+    Request((&'args C, BlockHeight, Option<TxIndex>)),
+}
+
+// Extract the Transfer and Transaction objects from a masp over ibc message
+async fn extract_payload_from_shielded_action<'args, C: Client + Sync>(
+    tx_data: &[u8],
+    args: ExtractShieldedActionArg<'args, C>,
+) -> Result<IbcShieldedTransfer, Error> {
+    let message = namada_core::ledger::ibc::decode_message(tx_data)
+        .map_err(|e| Error::Other(e.to_string()))?;
+
+    let shielded_transfer = match message {
+        IbcMessage::ShieldedTransfer(msg) => msg.shielded_transfer,
+        IbcMessage::Envelope(_) => {
+            let tx_event = match args {
+                ExtractShieldedActionArg::Event(event) => event,
+                ExtractShieldedActionArg::Request((client, height, index)) => {
+                    get_indexed_masp_events_at_height(client, height, index)
+                        .await?
+                        .ok_or_else(|| {
+                            Error::Other(format!(
+                                "Missing required ibc event at block height {}",
+                                height
+                            ))
+                        })?
+                        .first()
+                        .ok_or_else(|| {
+                            Error::Other(format!(
+                                "Missing required ibc event at block height {}",
+                                height
+                            ))
+                        })?
+                        .1
+                        .to_owned()
+                }
+            };
+
+            tx_event
+                .attributes
+                .iter()
+                .find_map(|attribute| {
+                    if attribute.key == "inner_tx" {
+                        let tx_result =
+                            TxResult::from_str(&attribute.value).unwrap();
+                        for ibc_event in &tx_result.ibc_events {
+                            let event =
+                                namada_core::types::ibc::get_shielded_transfer(
+                                    ibc_event,
+                                )
+                                .ok()
+                                .flatten();
+                            if event.is_some() {
+                                return event;
+                            }
+                        }
+                        None
+                    } else {
+                        None
+                    }
+                })
+                .ok_or_else(|| {
+                    Error::Other(
+                        "Couldn't deserialize masp tx to ibc message envelope"
+                            .to_string(),
+                    )
+                })?
+        }
+        _ => {
+            return Err(Error::Other(
+                "Couldn't deserialize masp tx to a valid ibc message"
+                    .to_string(),
+            ));
+        }
+    };
+
+    Ok(shielded_transfer)
 }
 
 mod tests {
