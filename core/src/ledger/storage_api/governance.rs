@@ -39,16 +39,19 @@ where
 
     let content_key = governance_keys::get_content_key(proposal_id);
     // TODO: what write actions are actually desired here?
-    storage.write_bytes(&content_key, content, WriteActions::All)?;
+    storage.write_bytes(&content_key, content, WriteActions::NoDiffsOrMerkl)?;
 
     let author_key = governance_keys::get_author_key(proposal_id);
-    storage.write(&author_key, data.author.clone())?;
+    storage.write_without_merkldiffs(&author_key, data.author.clone())?;
 
     let proposal_type_key = governance_keys::get_proposal_type_key(proposal_id);
     match data.r#type {
         ProposalType::Default(Some(_)) => {
             // Remove wasm code and write it under a different subkey
-            storage.write(&proposal_type_key, ProposalType::Default(None))?;
+            storage.write_without_merkldiffs(
+                &proposal_type_key,
+                ProposalType::Default(None),
+            )?;
             let proposal_code_key =
                 governance_keys::get_proposal_code_key(proposal_id);
             let proposal_code = code.clone().ok_or(
@@ -58,22 +61,31 @@ where
             storage.write_bytes(
                 &proposal_code_key,
                 proposal_code,
-                WriteActions::All,
+                WriteActions::NoDiffsOrMerkl,
             )?
         }
-        _ => storage.write(&proposal_type_key, data.r#type.clone())?,
+        _ => storage.write_without_merkldiffs(
+            &proposal_type_key,
+            data.r#type.clone(),
+        )?,
     }
 
     let voting_start_epoch_key =
         governance_keys::get_voting_start_epoch_key(proposal_id);
-    storage.write(&voting_start_epoch_key, data.voting_start_epoch)?;
+    storage.write_without_merkldiffs(
+        &voting_start_epoch_key,
+        data.voting_start_epoch,
+    )?;
 
     let voting_end_epoch_key =
         governance_keys::get_voting_end_epoch_key(proposal_id);
-    storage.write(&voting_end_epoch_key, data.voting_end_epoch)?;
+    storage.write_without_merkldiffs(
+        &voting_end_epoch_key,
+        data.voting_end_epoch,
+    )?;
 
     let grace_epoch_key = governance_keys::get_grace_epoch_key(proposal_id);
-    storage.write(&grace_epoch_key, data.grace_epoch)?;
+    storage.write_without_merkldiffs(&grace_epoch_key, data.grace_epoch)?;
 
     if let ProposalType::Default(Some(_)) = data.r#type {
         let proposal_code_key =
@@ -84,18 +96,18 @@ where
         storage.write_bytes(
             &proposal_code_key,
             proposal_code,
-            WriteActions::All,
+            WriteActions::NoDiffsOrMerkl,
         )?;
     }
 
-    storage.write(&counter_key, proposal_id + 1)?;
+    storage.write_without_merkldiffs(&counter_key, proposal_id + 1)?;
 
     let min_proposal_funds_key = governance_keys::get_min_proposal_fund_key();
     let min_proposal_funds: token::Amount =
         storage.read(&min_proposal_funds_key)?.unwrap();
 
     let funds_key = governance_keys::get_funds_key(proposal_id);
-    storage.write(&funds_key, min_proposal_funds)?;
+    storage.write_without_merkldiffs(&funds_key, min_proposal_funds)?;
 
     // this key must always be written for each proposal
     let committing_proposals_key =
@@ -103,7 +115,7 @@ where
             proposal_id,
             data.grace_epoch.0,
         );
-    storage.write(&committing_proposals_key, ())?;
+    storage.write_without_merkldiffs(&committing_proposals_key, ())?;
 
     token::transfer(
         storage,
@@ -128,7 +140,7 @@ where
             data.voter.clone(),
             delegation,
         );
-        storage.write(&vote_key, data.vote.clone())?;
+        storage.write_without_merkldiffs(&vote_key, data.vote.clone())?;
     }
     Ok(())
 }

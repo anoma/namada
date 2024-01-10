@@ -269,7 +269,9 @@ where
 {
     if let Some(code) = proposal_code {
         let pending_execution_key = gov_storage::get_proposal_execution_key(id);
-        shell.wl_storage.write(&pending_execution_key, ())?;
+        shell
+            .wl_storage
+            .write_without_merkldiffs(&pending_execution_key, ())?;
 
         let mut tx = Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
         tx.header.chain_id = shell.chain_id.clone();
@@ -326,7 +328,7 @@ where
     for action in stewards {
         match action {
             AddRemove::Add(address) => {
-                pgf_storage::stewards_handle().insert(
+                pgf_storage::stewards_handle().insert_storage_only(
                     storage,
                     address.to_owned(),
                     StewardDetail::base(address),
@@ -354,7 +356,7 @@ where
         match payment {
             PGFAction::Continuous(action) => match action {
                 AddRemove::Add(target) => {
-                    pgf_storage::fundings_handle().insert(
+                    pgf_storage::fundings_handle().insert_storage_only(
                         storage,
                         target.target.clone(),
                         StoragePgfFunding::new(target.clone(), proposal_id),

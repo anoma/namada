@@ -61,34 +61,47 @@ impl GovernanceParameters {
 
         let min_proposal_fund_key =
             goverance_storage::get_min_proposal_fund_key();
-        storage.write(&min_proposal_fund_key, min_proposal_fund)?;
+        storage.write_without_merkldiffs(
+            &min_proposal_fund_key,
+            min_proposal_fund,
+        )?;
 
         let max_proposal_code_size_key =
             goverance_storage::get_max_proposal_code_size_key();
-        storage.write(&max_proposal_code_size_key, max_proposal_code_size)?;
+        storage.write_without_merkldiffs(
+            &max_proposal_code_size_key,
+            max_proposal_code_size,
+        )?;
 
         let min_proposal_voting_period_key =
             goverance_storage::get_min_proposal_voting_period_key();
-        storage.write(
+        storage.write_without_merkldiffs(
             &min_proposal_voting_period_key,
             min_proposal_voting_period,
         )?;
 
         let max_proposal_period_key =
             goverance_storage::get_max_proposal_period_key();
-        storage.write(&max_proposal_period_key, max_proposal_period)?;
+        storage.write_without_merkldiffs(
+            &max_proposal_period_key,
+            max_proposal_period,
+        )?;
 
         let max_proposal_content_size_key =
             goverance_storage::get_max_proposal_content_key();
-        storage
-            .write(&max_proposal_content_size_key, max_proposal_content_size)?;
+        storage.write_without_merkldiffs(
+            &max_proposal_content_size_key,
+            max_proposal_content_size,
+        )?;
 
         let min_proposal_grace_epoch_key =
             goverance_storage::get_min_proposal_grace_epoch_key();
-        storage
-            .write(&min_proposal_grace_epoch_key, min_proposal_grace_epochs)?;
+        storage.write_without_merkldiffs(
+            &min_proposal_grace_epoch_key,
+            min_proposal_grace_epochs,
+        )?;
 
         let counter_key = goverance_storage::get_counter_key();
-        storage.write(&counter_key, u64::MIN)
+        storage.write_without_merkldiffs(&counter_key, u64::MIN)
     }
 }

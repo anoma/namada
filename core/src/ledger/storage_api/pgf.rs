@@ -111,7 +111,7 @@ pub fn update_commission<S>(
 where
     S: storage_api::StorageRead + storage_api::StorageWrite,
 {
-    pgf_keys::stewards_handle().insert(
+    pgf_keys::stewards_handle().insert_storage_only(
         storage,
         address.clone(),
         StewardDetail {
