@@ -1637,6 +1637,29 @@ where
     Ok(epoch.0)
 }
 
+/// Get predecessor epochs function exposed to the wasm VM Tx environment.
+pub fn tx_get_pred_epochs<MEM, DB, H, CA>(
+    env: &TxVmEnv<MEM, DB, H, CA>,
+) -> TxResult<i64>
+where
+    MEM: VmMemory,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    H: StorageHasher,
+    CA: WasmCacheAccess,
+{
+    let storage = unsafe { env.ctx.storage.get() };
+    let pred_epochs = storage.block.pred_epochs.clone();
+    let bytes = pred_epochs.serialize_to_vec();
+    let len: i64 = bytes
+        .len()
+        .try_into()
+        .map_err(TxRuntimeError::NumConversionError)?;
+    tx_charge_gas(env, MEMORY_ACCESS_GAS_PER_BYTE * len as u64)?;
+    let result_buffer = unsafe { env.ctx.result_buffer.get() };
+    result_buffer.replace(bytes);
+    Ok(len)
+}
+
 /// Get the native token's address
 pub fn tx_get_native_token<MEM, DB, H, CA>(
     env: &TxVmEnv<MEM, DB, H, CA>,

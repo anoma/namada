@@ -180,6 +180,18 @@ impl StorageRead for Ctx {
         Ok(Epoch(unsafe { namada_tx_get_block_epoch() }))
     }
 
+    fn get_pred_epochs(
+        &self,
+    ) -> Result<namada_core::types::storage::Epochs, Error> {
+        let read_result = unsafe { namada_tx_get_pred_epochs() };
+        let bytes = read_from_buffer(read_result, namada_tx_result_buffer)
+            .ok_or(Error::SimpleMessage(
+                "Missing result from `namada_tx_get_pred_epochs` call",
+            ))?;
+        Ok(namada_core::types::decode(bytes)
+            .expect("Cannot decode pred epochs"))
+    }
+
     /// Get the native token address
     fn get_native_token(&self) -> Result<Address, Error> {
         let result = Vec::with_capacity(address::ADDRESS_LEN);
@@ -219,10 +231,6 @@ impl StorageRead for Ctx {
     fn get_tx_index(&self) -> Result<TxIndex, namada_storage::Error> {
         let tx_index = unsafe { namada_tx_get_tx_index() };
         Ok(TxIndex(tx_index))
-    }
-
-    fn get_pred_epochs(&self) -> namada_storage::Result<storage::Epochs> {
-        todo!()
     }
 }
 

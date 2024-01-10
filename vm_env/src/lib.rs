@@ -103,6 +103,9 @@ pub mod tx {
         // Get the current block epoch
         pub fn namada_tx_get_block_epoch() -> u64;
 
+        // Get the predecessor epochs
+        pub fn namada_tx_get_pred_epochs() -> i64;
+
         // Get the current tx index
         pub fn namada_tx_get_tx_index() -> u32;
 

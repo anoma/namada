@@ -271,6 +271,16 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_tx_get_pred_epochs() {
+        // The environment must be initialized first
+        tx_host_env::init();
+
+        let pred_epochs = tx::ctx().get_pred_epochs().unwrap();
+        let expected = tx_host_env::take().wl_storage.storage.block.pred_epochs;
+        assert_eq!(expected, pred_epochs);
+    }
+
     /// An example how to write a VP host environment integration test
     #[test]
     fn test_vp_host_env() {
