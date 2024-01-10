@@ -3,8 +3,6 @@
 use borsh::BorshDeserialize;
 use eth_bridge::storage::{bridge_pool, native_erc20_key};
 use eth_bridge_pool::{GasFee, PendingTransfer, TransferToEthereum};
-use namada_tx_prelude::borsh_ext::BorshSerializeExt;
-use namada_tx_prelude::storage_api::WriteActions;
 use namada_tx_prelude::*;
 
 #[transaction(gas = 1038546)]
