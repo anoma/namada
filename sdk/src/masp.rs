@@ -467,7 +467,7 @@ pub fn find_valid_diversifier<R: RngCore + CryptoRng>(
 pub fn is_amount_required(src: I128Sum, dest: I128Sum, delta: I128Sum) -> bool {
     let gap = dest - src;
     for (asset_type, value) in gap.components() {
-        if *value >= 0 && delta[asset_type] >= 0 {
+        if *value > 0 && delta[asset_type] > 0 {
             return true;
         }
     }
