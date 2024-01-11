@@ -170,6 +170,7 @@ mod test_queries {
     test_must_send_valset_upd! {
         epoch_assertions: [
             // (current epoch, current block height, can send valset upd)
+            // NOTE: can send valset upd on every 2nd block of an epoch
             (0, 1, false),
             (0, 2, true),
             (0, 3, false),

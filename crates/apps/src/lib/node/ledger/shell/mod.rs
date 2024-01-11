@@ -1972,7 +1972,7 @@ mod test_utils {
             },
             validators: vec![],
             app_state_bytes: vec![].into(),
-            initial_height: 0_u32.into(),
+            initial_height: 1_u32.into(),
         };
         test.init_chain(req, num_validators);
         test.wl_storage.commit_block().expect("Test failed");
