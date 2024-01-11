@@ -173,8 +173,9 @@ pub async fn query_transfers(
                 .await
                 .unwrap()
                 .0;
-            let dec =
-                shielded.decode_amount(context.client(), amt, epoch).await;
+            let dec = shielded
+                .decode_combine_sum_at_epoch(context.client(), amt, epoch)
+                .await;
             shielded_accounts.insert(acc, dec);
         }
         // Check if this transfer pertains to the supplied token
@@ -910,7 +911,11 @@ pub async fn query_shielded_balance(
                         .expect("context should contain viewing key")
                 };
                 let balance = shielded
-                    .decode_amount(context.client(), balance, epoch)
+                    .decode_combine_sum_at_epoch(
+                        context.client(),
+                        balance,
+                        epoch,
+                    )
                     .await;
                 for (key, value) in balance.components() {
                     balances
@@ -992,7 +997,7 @@ pub async fn query_shielded_balance(
                     let balance = context
                         .shielded_mut()
                         .await
-                        .decode_all_amounts(context.client(), balance)
+                        .decode_combine_sum(context.client(), balance)
                         .await;
                     for ((_, address), val) in balance.0 {
                         if !val.is_zero() {
@@ -1063,7 +1068,7 @@ pub async fn print_decoded_balance(
         let decoded_balance = context
             .shielded_mut()
             .await
-            .decode_amount(context.client(), balance, epoch)
+            .decode_combine_sum_at_epoch(context.client(), balance, epoch)
             .await;
         for (token_addr, amount) in decoded_balance.components() {
             display_line!(
@@ -1090,7 +1095,7 @@ pub async fn print_decoded_balance_with_epoch(
     let decoded_balance = context
         .shielded_mut()
         .await
-        .decode_all_amounts(context.client(), balance)
+        .decode_combine_sum(context.client(), balance)
         .await;
     for ((epoch, token_addr), value) in decoded_balance.0 {
         let asset_value = value.into();

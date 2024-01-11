@@ -992,6 +992,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         usage: &mut i128,
         input: &mut I128Sum,
         output: &mut I128Sum,
+        normed_asset_type: AssetType,
+        normed_output: &mut I128Sum,
     ) -> Result<(), Error> {
         // we do not need to convert negative values
         if value <= 0 {
@@ -1016,11 +1018,15 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         // realize its value
         let trace = I128Sum::from_pair(asset_type, value % threshold)
             .expect("the trace should be a valid i128");
+        let normed_trace =
+            I128Sum::from_pair(normed_asset_type, value % threshold)
+                .expect("the trace should be a valid i128");
         // Record how much more of the given conversion has been used
         *usage += required;
         // Apply the conversions to input and move the trace amount to output
         *input += conv * required - trace.clone();
         *output += trace;
+        *normed_output += normed_trace;
         Ok(())
     }
 
@@ -1035,9 +1041,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         mut input: I128Sum,
         target_epoch: Epoch,
         mut conversions: Conversions,
-    ) -> Result<(I128Sum, Conversions), Error> {
+    ) -> Result<(I128Sum, I128Sum, Conversions), Error> {
         // Where we will store our exchanged value
         let mut output = I128Sum::zero();
+        // Where we will store our normed exchanged value
+        let mut normed_output = I128Sum::zero();
         // Repeatedly exchange assets until it is no longer possible
         while let Some((asset_type, value)) =
             input.components().next().map(cloned_pair)
@@ -1079,6 +1087,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     usage,
                     &mut input,
                     &mut output,
+                    target_asset_type,
+                    &mut normed_output,
                 )
                 .await?;
             } else if let (Some((conv, _wit, usage)), false) = (
@@ -1101,6 +1111,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     usage,
                     &mut input,
                     &mut output,
+                    asset_type,
+                    &mut normed_output,
                 )
                 .await?;
             } else {
@@ -1108,10 +1120,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 // output.
                 let comp = input.project(asset_type);
                 output += comp.clone();
+                normed_output += comp.clone();
                 input -= comp;
             }
         }
-        Ok((output, conversions))
+        Ok((output, normed_output, conversions))
     }
 
     /// Collect enough unspent notes in this context to exceed the given amount
@@ -1135,13 +1148,14 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         // Establish connection with which to do exchange rate queries
         let mut conversions = BTreeMap::new();
         let mut val_acc = I128Sum::zero();
+        let mut normed_val_acc = I128Sum::zero();
         let mut notes = Vec::new();
         // Retrieve the notes that can be spent by this key
         if let Some(avail_notes) = self.pos_map.get(vk).cloned() {
             for note_idx in &avail_notes {
                 // No more transaction inputs are required once we have met
                 // the target amount
-                if val_acc >= target {
+                if normed_val_acc >= target {
                     break;
                 }
                 // Spent notes cannot contribute a new transaction's pool
@@ -1162,7 +1176,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                                     .to_string(),
                             )
                         })?;
-                let (contr, proposed_convs) = self
+                let (contr, normed_contr, proposed_convs) = self
                     .compute_exchanged_amount(
                         context.client(),
                         context.io(),
@@ -1174,13 +1188,14 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
                 // Use this note only if it brings us closer to our target
                 if is_amount_required(
-                    val_acc.clone(),
+                    normed_val_acc.clone(),
                     target.clone(),
-                    contr.clone(),
+                    normed_contr.clone(),
                 ) {
                     // Be sure to record the conversions used in computing
                     // accumulated value
                     val_acc += contr;
+                    normed_val_acc += normed_contr;
                     // Commit the conversions that were used to exchange
                     conversions = proposed_convs;
                     let merkle_path = self
@@ -1327,7 +1342,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             .0;
         display_line!(context.io(), "Exchanged amount: {:?}", computed_amount);
         Ok((
-            self.decode_all_amounts(context.client(), computed_amount)
+            self.decode_combine_sum(context.client(), computed_amount)
                 .await,
             ep,
         ))
@@ -1336,7 +1351,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     /// Convert an amount whose units are AssetTypes to one whose units are
     /// Addresses that they decode to. All asset types not corresponding to
     /// the given epoch are ignored.
-    pub async fn decode_amount<C: Client + Sync>(
+    pub async fn decode_combine_sum_at_epoch<C: Client + Sync>(
         &mut self,
         client: &C,
         amt: I128Sum,
@@ -1362,8 +1377,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     }
 
     /// Convert an amount whose units are AssetTypes to one whose units are
-    /// Addresses that they decode to.
-    pub async fn decode_all_amounts<C: Client + Sync>(
+    /// Addresses that they decode to and combine the denominations.
+    pub async fn decode_combine_sum<C: Client + Sync>(
         &mut self,
         client: &C,
         amt: I128Sum,
@@ -1379,6 +1394,29 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                         .expect("expected this to fit");
                 res += MaspAmount::from_pair((epoch, addr), decoded_change)
                     .expect("unable to construct decoded amount");
+            }
+        }
+        res
+    }
+
+    /// Convert an amount whose units are AssetTypes to one whose units are
+    /// Addresses that they decode to.
+    pub async fn decode_sum<C: Client + Sync>(
+        &mut self,
+        client: &C,
+        amt: I128Sum,
+    ) -> ValueSum<(AssetType, Address, MaspDenom, Epoch), i128> {
+        let mut res = ValueSum::zero();
+        for (asset_type, val) in amt.components() {
+            // Decode the asset type
+            if let Some((addr, denom, epoch)) =
+                self.decode_asset_type(client, *asset_type).await
+            {
+                res += ValueSum::from_pair(
+                    (*asset_type, addr, denom, epoch),
+                    *val,
+                )
+                .expect("unable to construct decoded amount");
             }
         }
         res
@@ -1567,54 +1605,105 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             }
         }
 
+        // Anotate the asset type in the value balance with its decoding in
+        // order to facilitate cross-epoch computations
+        let value_balance = builder.value_balance().map_err(|e| {
+            Error::Other(format!("unable to complete value balance: {}", e))
+        })?;
+        let value_balance = context
+            .shielded_mut()
+            .await
+            .decode_sum(context.client(), value_balance)
+            .await;
+
+        // If we are sending to a transparent output, then we will need to embed
+        // the transparent target address into the shielded transaction so that
+        // it can be signed
+        let transparent_target_hash = if payment_address.is_none() {
+            let target_enc = target
+                .address()
+                .ok_or_else(|| {
+                    Error::Other(
+                        "target address should be transparent".to_string(),
+                    )
+                })?
+                .serialize_to_vec();
+            Some(ripemd::Ripemd160::digest(sha2::Sha256::digest(
+                target_enc.as_ref(),
+            )))
+        } else {
+            None
+        };
+        // This indicates how much more assets need to be sent to the receiver
+        // in order to satisfy the requested transfer amount.
+        let mut rem_amount = amount.amount().raw_amount().0;
+        // If we are sending to a shielded address, we may need the outgoing
+        // viewing key in the following computations.
+        let ovk_opt = spending_key.map(|x| x.expsk.ovk);
+
         // Now handle the outputs of this transaction
-        // If there is a shielded output
-        if let Some(pa) = payment_address {
-            let ovk_opt = spending_key.map(|x| x.expsk.ovk);
-            for (denom, asset_type) in MaspDenom::iter().zip(asset_types.iter())
-            {
-                let amount_part = denom.denominate(&amount.amount());
-                // Skip adding a shielded output if its value is 0
-                if amount_part != 0 {
+        // Loop through the value balance components and see how they which
+        // ones can be given to the receiver
+        for ((asset_type, vbal_token, vbal_denom, vbal_epoch), val) in
+            value_balance.components()
+        {
+            let rem_amount = &mut rem_amount[*vbal_denom as usize];
+            // Only asset types with the correct token can contribute. But
+            // there must be a demonstrated need for it.
+            if vbal_token == token && *vbal_epoch <= epoch && *rem_amount > 0 {
+                let val = u128::try_from(*val).expect(
+                    "value balance in absence of output descriptors should be \
+                     non-negative",
+                );
+                // We want to take at most the remaining quota for the
+                // current denomination to the receiver
+                let contr = std::cmp::min(*rem_amount as u128, val) as u64;
+                // Make transaction output tied to thee currentt token,
+                // denomination, and epoch.
+                if let Some(pa) = payment_address {
+                    // If there is a shielded output
                     builder
                         .add_sapling_output(
                             ovk_opt,
                             pa.into(),
                             *asset_type,
-                            amount_part,
+                            contr,
                             memo.clone(),
                         )
                         .map_err(builder::Error::SaplingBuild)?;
-                }
-            }
-        } else {
-            // Embed the transparent target address into the shielded
-            // transaction so that it can be signed
-            let target_enc = target
-                .address()
-                .ok_or_else(|| {
-                    Error::Other(
-                        "source address should be transparent".to_string(),
-                    )
-                })?
-                .serialize_to_vec();
-            let hash = ripemd::Ripemd160::digest(sha2::Sha256::digest(
-                target_enc.as_ref(),
-            ));
-            for (denom, asset_type) in MaspDenom::iter().zip(asset_types.iter())
-            {
-                let vout = denom.denominate(&amount.amount());
-                // Skip adding a transparent output if its value is 0
-                if vout != 0 {
+                } else {
+                    // If there is a transparent output
+                    let hash = transparent_target_hash
+                        .expect(
+                            "transparent target hash should have been \
+                             computed already",
+                        )
+                        .into();
                     builder
                         .add_transparent_output(
-                            &TransparentAddress(hash.into()),
+                            &TransparentAddress(hash),
                             *asset_type,
-                            vout,
+                            contr,
                         )
                         .map_err(builder::Error::TransparentBuild)?;
                 }
+                // Lower what is required of the remaining contribution
+                *rem_amount -= contr;
             }
+        }
+
+        // Nothing must remain to be included in output
+        if rem_amount != [0; 4] {
+            // Convert the shortfall into a I128Sum
+            let mut shortfall = I128Sum::zero();
+            for (asset_type, val) in asset_types.iter().zip(rem_amount) {
+                shortfall += I128Sum::from_pair(*asset_type, val.into())
+                    .expect("unable to construct value sum");
+            }
+            // Return an insufficient ffunds error
+            return Result::Err(TransferErr::from(
+                builder::Error::InsufficientFunds(shortfall),
+            ));
         }
 
         // Now add outputs representing the change from this payment
