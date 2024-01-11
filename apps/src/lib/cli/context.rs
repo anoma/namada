@@ -370,6 +370,11 @@ impl ArgFromContext for Address {
     ) -> Result<Self, String> {
         struct Skip;
         let raw = raw.as_ref();
+        if raw.is_empty() {
+            // Interpret an empty string as the native token
+            return Ok(ctx.native_token.clone());
+        }
+
         // An address can be either raw (bech32m encoding)
         FromStr::from_str(raw)
             // An Ethereum address
