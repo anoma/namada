@@ -1182,6 +1182,24 @@ impl DB for RocksDB {
         Ok(false)
     }
 
+    fn read_diffs_val(
+        &self,
+        key: &Key,
+        height: BlockHeight,
+        is_old: bool,
+    ) -> Result<Option<Vec<u8>>> {
+        let diffs_cf = self.get_column_family(DIFFS_CF)?;
+        let old_new_seg = if is_old { "old" } else { "new" };
+        let prefix = Key::from(height.to_db_key())
+            .push(&old_new_seg.to_string().to_db_key())
+            .unwrap()
+            .join(key);
+
+        self.0
+            .get_cf(diffs_cf, dbg!(prefix.to_string()))
+            .map_err(|e| Error::DBError(e.into_string()))
+    }
+
     fn read_subspace_val(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
         self.0

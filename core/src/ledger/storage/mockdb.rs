@@ -461,6 +461,22 @@ impl DB for MockDB {
         Ok(false)
     }
 
+    fn read_diffs_val(
+        &self,
+        key: &Key,
+        height: BlockHeight,
+        is_old: bool,
+    ) -> Result<Option<Vec<u8>>> {
+        let old_new_seg = if is_old { "old" } else { "new" };
+
+        let prefix = Key::from(height.to_db_key())
+            .push(&old_new_seg.to_string().to_db_key())
+            .map_err(Error::KeyError)?
+            .join(key);
+
+        Ok(self.0.borrow().get(&prefix.to_string()).cloned())
+    }
+
     fn read_subspace_val(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         let key = Key::parse("subspace").map_err(Error::KeyError)?.join(key);
         Ok(self.0.borrow().get(&key.to_string()).cloned())
