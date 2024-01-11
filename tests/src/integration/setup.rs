@@ -133,7 +133,7 @@ fn finalize_wallet(
         });
 
     // Try to load pre-genesis wallet
-    let pre_genesis_wallet = namada_apps::wallet::load(&pre_genesis_path);
+    let pre_genesis_wallet = namada_apps::wallet::load(&pre_genesis_path).ok();
     let chain_dir = global_args
         .base_dir
         .join(global_args.chain_id.as_ref().unwrap().as_str());
