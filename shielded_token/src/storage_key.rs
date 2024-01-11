@@ -58,17 +58,9 @@ pub fn masp_locked_ratio_target_key(token_addr: &Address) -> storage::Key {
 
 /// Check if the given storage key is a masp key
 pub fn is_masp_key(key: &storage::Key) -> bool {
-    if key.segments.len() >= 2 {
-        matches!(&key.segments[..2],
-        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
-            if *addr == address::MASP
-                && (key == HEAD_TX_KEY
-                    || key.starts_with(TX_KEY_PREFIX)
-                    || key.starts_with(PIN_KEY_PREFIX)
-                    || key.starts_with(MASP_NULLIFIERS_KEY)))
-    } else {
-        false
-    }
+    matches!(&key.segments[..],
+        [DbKeySeg::AddressSeg(addr), ..] if *addr == address::MASP
+    )
 }
 /// Check if the given storage key is allowed to be touched by a masp transfer
 pub fn is_masp_allowed_key(key: &storage::Key) -> bool {
