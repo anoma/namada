@@ -1,5 +1,6 @@
 //! MASP verification wrappers.
 
+use std::cmp::Ordering;
 use std::collections::{btree_map, BTreeMap, BTreeSet, HashMap, HashSet};
 use std::env;
 use std::fmt::Debug;
@@ -1552,13 +1553,17 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             let script = TransparentAddress(hash.into());
             for (denom, asset_type) in MaspDenom::iter().zip(asset_types.iter())
             {
-                builder
-                    .add_transparent_input(TxOut {
-                        asset_type: *asset_type,
-                        value: denom.denominate(&amount.amount()),
-                        address: script,
-                    })
-                    .map_err(builder::Error::TransparentBuild)?;
+                let amount_part = denom.denominate(&amount.amount());
+                // Skip adding an input if its value is 0
+                if amount_part != 0 {
+                    builder
+                        .add_transparent_input(TxOut {
+                            asset_type: *asset_type,
+                            value: amount_part,
+                            address: script,
+                        })
+                        .map_err(builder::Error::TransparentBuild)?;
+                }
             }
         }
 
@@ -1568,15 +1573,19 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             let ovk_opt = spending_key.map(|x| x.expsk.ovk);
             for (denom, asset_type) in MaspDenom::iter().zip(asset_types.iter())
             {
-                builder
-                    .add_sapling_output(
-                        ovk_opt,
-                        pa.into(),
-                        *asset_type,
-                        denom.denominate(&amount.amount()),
-                        memo.clone(),
-                    )
-                    .map_err(builder::Error::SaplingBuild)?;
+                let amount_part = denom.denominate(&amount.amount());
+                // Skip adding a shielded output if its value is 0
+                if amount_part != 0 {
+                    builder
+                        .add_sapling_output(
+                            ovk_opt,
+                            pa.into(),
+                            *asset_type,
+                            amount_part,
+                            memo.clone(),
+                        )
+                        .map_err(builder::Error::SaplingBuild)?;
+                }
             }
         } else {
             // Embed the transparent target address into the shielded
@@ -1595,6 +1604,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             for (denom, asset_type) in MaspDenom::iter().zip(asset_types.iter())
             {
                 let vout = denom.denominate(&amount.amount());
+                // Skip adding a transparent output if its value is 0
                 if vout != 0 {
                     builder
                         .add_transparent_output(
@@ -1621,26 +1631,32 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 })?
                 .components()
             {
-                if *amt >= 0 {
-                    // Send the change in this asset type back to the sender
-                    builder
-                        .add_sapling_output(
-                            Some(sk.expsk.ovk),
-                            sk.default_address().1,
-                            *asset_type,
-                            *amt as u64,
-                            memo.clone(),
-                        )
-                        .map_err(builder::Error::SaplingBuild)?;
-                } else {
-                    // Record how much of the current asset type we are short by
-                    additional += I128Sum::from_nonnegative(*asset_type, -*amt)
-                        .map_err(|()| {
-                            Error::Other(format!(
-                                "from non negative conversion: {}",
-                                line!()
-                            ))
-                        })?;
+                match amt.cmp(&0) {
+                    Ordering::Greater => {
+                        // Send the change in this asset type back to the sender
+                        builder
+                            .add_sapling_output(
+                                Some(sk.expsk.ovk),
+                                sk.default_address().1,
+                                *asset_type,
+                                *amt as u64,
+                                memo.clone(),
+                            )
+                            .map_err(builder::Error::SaplingBuild)?;
+                    }
+                    Ordering::Less => {
+                        // Record how much of the current asset type we are
+                        // short by
+                        additional +=
+                            I128Sum::from_nonnegative(*asset_type, -*amt)
+                                .map_err(|()| {
+                                    Error::Other(format!(
+                                        "from non negative conversion: {}",
+                                        line!()
+                                    ))
+                                })?;
+                    }
+                    Ordering::Equal => {}
                 }
             }
             // If we are short by a non-zero amount, then we have insufficient
