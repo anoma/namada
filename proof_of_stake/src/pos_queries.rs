@@ -210,15 +210,6 @@ where
         self.storage.get_epoch_at_height(height).unwrap()
     }
 
-    /// Given some [`Epoch`], return the corresponding [`BlockHeight`].
-    ///
-    /// This method may return [`None`] if the corresponding data has
-    /// been purged from Namada, or if it is not available yet.
-    #[inline]
-    pub fn get_height(self, epoch: Epoch) -> Option<BlockHeight> {
-        self.storage.get_epoch_start_height(epoch).unwrap()
-    }
-
     /// Retrieve the `max_proposal_bytes` consensus parameter from storage.
     pub fn get_max_proposal_bytes(self) -> ProposalBytes {
         namada_storage::StorageRead::read(
@@ -227,13 +218,6 @@ where
         )
         .expect("Must be able to read ProposalBytes from storage")
         .expect("ProposalBytes must be present in storage")
-    }
-
-    /// Fetch the first [`BlockHeight`] of the last [`Epoch`]
-    /// committed to storage.
-    #[inline]
-    pub fn get_epoch_start_height(self) -> BlockHeight {
-        self.storage.get_current_epoch_start_height().unwrap()
     }
 
     /// Get a validator's Ethereum hot key from storage, at the given epoch, or
