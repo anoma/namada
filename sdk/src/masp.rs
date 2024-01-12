@@ -484,7 +484,7 @@ pub struct MaspChange {
 }
 
 /// a masp amount
-pub type MaspAmount = ValueSum<(Epoch, Address), token::Change>;
+pub type MaspAmount = ValueSum<(Option<Epoch>, Address), token::Change>;
 
 /// An extension of Option's cloned method for pair types
 fn cloned_pair<T: Clone, U: Clone>((a, b): (&T, &U)) -> (T, U) {
@@ -532,7 +532,7 @@ pub struct ShieldedContext<U: ShieldedUtils> {
     /// The set of note positions that have been spent
     pub spents: HashSet<usize>,
     /// Maps asset types to their decodings
-    pub asset_types: HashMap<AssetType, (Address, MaspDenom, Epoch)>,
+    pub asset_types: HashMap<AssetType, (Address, MaspDenom, Option<Epoch>)>,
     /// Maps note positions to their corresponding viewing keys
     pub vk_map: HashMap<usize, ViewingKey>,
 }
@@ -905,7 +905,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         &mut self,
         client: &C,
         asset_type: AssetType,
-    ) -> Option<(Address, MaspDenom, Epoch)> {
+    ) -> Option<(Address, MaspDenom, Option<Epoch>)> {
         // Try to find the decoding in the cache
         if let decoded @ Some(_) = self.asset_types.get(&asset_type) {
             return decoded.cloned();
@@ -919,8 +919,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             MerklePath<Node>,
         ) = rpc::query_conversion(client, asset_type).await?;
         self.asset_types
-            .insert(asset_type, (addr.clone(), denom, ep));
-        Some((addr, denom, ep))
+            .insert(asset_type, (addr.clone(), denom, Some(ep)));
+        Some((addr, denom, Some(ep)))
     }
 
     /// Query the ledger for the conversion that is allowed for the given asset
@@ -938,7 +938,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             if let Some((addr, denom, ep, conv, path)) =
                 query_conversion(client, asset_type).await
             {
-                self.asset_types.insert(asset_type, (addr, denom, ep));
+                self.asset_types.insert(asset_type, (addr, denom, Some(ep)));
                 // If the conversion is 0, then we just have a pure decoding
                 if !conv.is_zero() {
                     conv_entry.insert((conv.into(), path, 0));
@@ -1057,8 +1057,15 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 .decode_asset_type(client, asset_type)
                 .await
                 .map(|(addr, denom, epoch)| {
-                    encode_asset_type(target_epoch, &addr, denom)
-                        .map(|asset_type| (asset_type, target_epoch >= epoch))
+                    encode_asset_type(epoch.map(|_| target_epoch), &addr, denom)
+                        .map(|asset_type| {
+                            (
+                                asset_type,
+                                epoch.map_or(false, |epoch| {
+                                    target_epoch >= epoch
+                                }),
+                            )
+                        })
                         .map_err(|_| {
                             Error::Other(
                                 "unable to create asset type".to_string(),
@@ -1343,7 +1350,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         context: &impl Namada,
         owner: PaymentAddress,
         viewing_key: &ViewingKey,
-    ) -> Result<(MaspAmount, Epoch), Error> {
+    ) -> Result<(ValueSum<Address, token::Change>, Epoch), Error> {
         // Obtain the balance that will be exchanged
         let (amt, ep) =
             Self::compute_pinned_balance(context.client(), owner, viewing_key)
@@ -1362,8 +1369,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             .0;
         display_line!(context.io(), "Exchanged amount: {:?}", computed_amount);
         Ok((
-            self.decode_combine_sum(context.client(), computed_amount)
-                .await,
+            self.decode_combine_sum_to_epoch(
+                context.client(),
+                computed_amount,
+                ep,
+            )
+            .await,
             ep,
         ))
     }
@@ -1383,7 +1394,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             let decoded = self.decode_asset_type(client, *asset_type).await;
             // Only assets with the target timestamp count
             match decoded {
-                Some((address, denom, epoch)) if epoch <= target_epoch => {
+                Some((address, denom, epoch))
+                    if epoch.map_or(true, |epoch| epoch <= target_epoch) =>
+                {
                     let decoded_change =
                         token::Change::from_masp_denominated(*val, denom)
                             .expect("expected this to fit");
@@ -1425,7 +1438,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         &mut self,
         client: &C,
         amt: I128Sum,
-    ) -> ValueSum<(AssetType, Address, MaspDenom, Epoch), i128> {
+    ) -> ValueSum<(AssetType, Address, MaspDenom, Option<Epoch>), i128> {
         let mut res = ValueSum::zero();
         for (asset_type, val) in amt.components() {
             // Decode the asset type
@@ -1558,8 +1571,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         );
 
         // Convert transaction amount into MASP types
-        let (asset_types, masp_amount) =
-            convert_amount(epoch, token, amount.amount())?;
+        let (asset_types, masp_amount) = context
+            .shielded_mut()
+            .await
+            .convert_amount(context.client(), epoch, token, amount.amount())
+            .await?;
 
         // If there are shielded inputs
         if let Some(sk) = spending_key {
@@ -1670,7 +1686,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             let rem_amount = &mut rem_amount[*vbal_denom as usize];
             // Only asset types with the correct token can contribute. But
             // there must be a demonstrated need for it.
-            if vbal_token == token && *vbal_epoch <= epoch && *rem_amount > 0 {
+            if vbal_token == token
+                && vbal_epoch.map_or(true, |vbal_epoch| vbal_epoch <= epoch)
+                && *rem_amount > 0
+            {
                 let val = u128::try_from(*val).expect(
                     "value balance in absence of output descriptors should be \
                      non-negative",
@@ -2012,6 +2031,62 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         }
         Ok(transfers)
     }
+
+    /// Get the asset type with the given epoch, token, and denomination. If it
+    /// does not exist in the protocol, then remove the timestamp. Make sure to
+    /// store the derived AssetType so that future decoding is possible.
+    pub async fn get_asset_type<C: Client + Sync>(
+        &mut self,
+        client: &C,
+        epoch: Epoch,
+        token: Address,
+        denom: MaspDenom,
+    ) -> Result<AssetType, Error> {
+        let mut asset_type = encode_asset_type(Some(epoch), &token, denom)
+            .map_err(|_| {
+                Error::Other("unable to create asset type".to_string())
+            })?;
+        if self.decode_asset_type(client, asset_type).await.is_none() {
+            // If we fail to decode the epoched asset type, then remove the
+            // epoch
+            asset_type =
+                encode_asset_type(None, &token, denom).map_err(|_| {
+                    Error::Other("unable to create asset type".to_string())
+                })?;
+            self.asset_types.insert(asset_type, (token, denom, None));
+        }
+        Ok(asset_type)
+    }
+
+    /// Convert Anoma amount and token type to MASP equivalents
+    async fn convert_amount<C: Client + Sync>(
+        &mut self,
+        client: &C,
+        epoch: Epoch,
+        token: &Address,
+        val: token::Amount,
+    ) -> Result<([AssetType; 4], U64Sum), Error> {
+        let mut amount = U64Sum::zero();
+        let mut asset_types = Vec::new();
+        for denom in MaspDenom::iter() {
+            let asset_type = self
+                .get_asset_type(client, epoch, token.clone(), denom)
+                .await?;
+            // Combine the value and unit into one amount
+            amount +=
+                U64Sum::from_nonnegative(asset_type, denom.denominate(&val))
+                    .map_err(|_| {
+                        Error::Other("invalid value for amount".to_string())
+                    })?;
+            asset_types.push(asset_type);
+        }
+        Ok((
+            asset_types
+                .try_into()
+                .expect("there must be exactly 4 denominations"),
+            amount,
+        ))
+    }
 }
 
 /// Extract the payload from the given Tx object
@@ -2025,33 +2100,6 @@ fn extract_payload(
         Transfer::try_from_slice(&signed[..]).map(|tfer| *transfer = Some(tfer))
     });
     Ok(())
-}
-
-/// Convert Anoma amount and token type to MASP equivalents
-fn convert_amount(
-    epoch: Epoch,
-    token: &Address,
-    val: token::Amount,
-) -> Result<([AssetType; 4], U64Sum), Error> {
-    let mut amount = U64Sum::zero();
-    let asset_types: [AssetType; 4] = MaspDenom::iter()
-        .map(|denom| {
-            let asset_type =
-                encode_asset_type(epoch, token, denom).map_err(|_| {
-                    Error::Other("unable to create asset type".to_string())
-                })?;
-            // Combine the value and unit into one amount
-            amount +=
-                U64Sum::from_nonnegative(asset_type, denom.denominate(&val))
-                    .map_err(|_| {
-                        Error::Other("invalid value for amount".to_string())
-                    })?;
-            Ok(asset_type)
-        })
-        .collect::<Result<Vec<AssetType>, Error>>()?
-        .try_into()
-        .map_err(|_| Error::Other(format!("This can't fail: {}", line!())))?;
-    Ok((asset_types, amount))
 }
 
 mod tests {

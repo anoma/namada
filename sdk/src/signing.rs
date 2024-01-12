@@ -726,7 +726,7 @@ async fn make_ledger_amount_asset(
     output: &mut Vec<String>,
     amount: u64,
     token: &AssetType,
-    assets: &HashMap<AssetType, (Address, MaspDenom, Epoch)>,
+    assets: &HashMap<AssetType, (Address, MaspDenom, Option<Epoch>)>,
     prefix: &str,
 ) {
     if let Some((token, _, _epoch)) = assets.get(token) {
@@ -815,7 +815,7 @@ pub async fn make_ledger_masp_endpoints(
     output: &mut Vec<String>,
     transfer: &Transfer,
     builder: Option<&MaspBuilder>,
-    assets: &HashMap<AssetType, (Address, MaspDenom, Epoch)>,
+    assets: &HashMap<AssetType, (Address, MaspDenom, Option<Epoch>)>,
 ) {
     if transfer.source != MASP {
         output.push(format!("Sender : {}", transfer.source));

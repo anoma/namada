@@ -191,6 +191,12 @@ where
     Ok((noterized_inflation, precision))
 }
 
+// Safely sum a pair of amounts
+#[cfg(any(feature = "wasm-runtime", test))]
+fn sum_pair(pair: (token::Amount, token::Amount)) -> Option<token::Amount> {
+    pair.0.checked_add(pair.1)
+}
+
 // This is only enabled when "wasm-runtime" is on, because we're using rayon
 #[cfg(any(feature = "wasm-runtime", test))]
 /// Update the MASP's allowed conversions
@@ -246,13 +252,13 @@ where
     // notes clients have to use. This trick works under the assumption that
     // reward tokens will then be reinflated back to the current epoch.
     let reward_assets = [
-        encode_asset_type(Epoch(0), &native_token, MaspDenom::Zero)
+        encode_asset_type(Some(Epoch(0)), &native_token, MaspDenom::Zero)
             .into_storage_result()?,
-        encode_asset_type(Epoch(0), &native_token, MaspDenom::One)
+        encode_asset_type(Some(Epoch(0)), &native_token, MaspDenom::One)
             .into_storage_result()?,
-        encode_asset_type(Epoch(0), &native_token, MaspDenom::Two)
+        encode_asset_type(Some(Epoch(0)), &native_token, MaspDenom::Two)
             .into_storage_result()?,
-        encode_asset_type(Epoch(0), &native_token, MaspDenom::Three)
+        encode_asset_type(Some(Epoch(0)), &native_token, MaspDenom::Three)
             .into_storage_result()?,
     ];
     // Conversions from the previous to current asset for each address
@@ -276,12 +282,18 @@ where
             // Provide an allowed conversion from previous timestamp. The
             // negative sign allows each instance of the old asset to be
             // cancelled out/replaced with the new asset
-            let old_asset =
-                encode_asset_type(wl_storage.storage.last_epoch, addr, denom)
-                    .into_storage_result()?;
-            let new_asset =
-                encode_asset_type(wl_storage.storage.block.epoch, addr, denom)
-                    .into_storage_result()?;
+            let old_asset = encode_asset_type(
+                Some(wl_storage.storage.last_epoch),
+                addr,
+                denom,
+            )
+            .into_storage_result()?;
+            let new_asset = encode_asset_type(
+                Some(wl_storage.storage.block.epoch),
+                addr,
+                denom,
+            )
+            .into_storage_result()?;
             // Get the last rewarded amount of the native token
             let normed_inflation = wl_storage
                 .storage
@@ -329,11 +341,12 @@ where
                 if denom == MaspDenom::Three {
                     // The reward for each reward.1 units of the current asset
                     // is reward.0 units of the reward token
-                    total_reward += (addr_bal
-                        * (new_normed_inflation, *normed_inflation))
-                        .0
-                        .checked_sub(addr_bal)
-                        .unwrap_or_default();
+                    total_reward += sum_pair(
+                        addr_bal * (new_normed_inflation, *normed_inflation),
+                    )
+                    .unwrap_or(token::Amount::max())
+                    .checked_sub(addr_bal)
+                    .unwrap_or_default();
                     // Save the new normed inflation
                     *normed_inflation = new_normed_inflation;
                 }
@@ -374,9 +387,7 @@ where
                 if denom == MaspDenom::Three {
                     // The reward for each reward.1 units of the current asset
                     // is reward.0 units of the reward token
-                    total_reward += ((addr_bal * (real_reward, reward.1)).0
-                        * (*normed_inflation, ref_inflation))
-                        .0;
+                    total_reward += (addr_bal * (reward.0, reward.1)).0;
                 }
             }
             // Add a conversion from the previous asset type
@@ -467,9 +478,12 @@ where
         for denom in token::MaspDenom::iter() {
             // Add the decoding entry for the new asset type. An uncommitted
             // node position is used since this is not a conversion.
-            let new_asset =
-                encode_asset_type(wl_storage.storage.block.epoch, &addr, denom)
-                    .into_storage_result()?;
+            let new_asset = encode_asset_type(
+                Some(wl_storage.storage.block.epoch),
+                &addr,
+                denom,
+            )
+            .into_storage_result()?;
             wl_storage.storage.conversion_state.assets.insert(
                 new_asset,
                 (

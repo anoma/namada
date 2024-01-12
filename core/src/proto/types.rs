@@ -767,7 +767,7 @@ pub struct MaspBuilder {
     pub target: crate::types::hash::Hash,
     /// The decoded set of asset types used by the transaction. Useful for
     /// offline wallets trying to display AssetTypes.
-    pub asset_types: HashSet<(Address, MaspDenom, Epoch)>,
+    pub asset_types: HashSet<(Address, MaspDenom, Option<Epoch>)>,
     /// Track how Info objects map to descriptors and outputs
     #[serde(
         serialize_with = "borsh_serde::<SaplingMetadataSerde, _>",

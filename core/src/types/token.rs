@@ -67,6 +67,11 @@ impl Amount {
         }
     }
 
+    /// Convert a [`u128`] to an [`Amount`].
+    pub fn from_u128(x: u128) -> Self {
+        Self { raw: Uint::from(x) }
+    }
+
     /// Get the amount as a [`Change`]
     pub fn change(&self) -> Change {
         self.raw.try_into().unwrap()
@@ -227,7 +232,7 @@ impl Amount {
         if hi != 0 && hi_pos >= 4 {
             return None;
         } else if hi != 0 {
-            raw[denom as usize + 1] = hi;
+            raw[hi_pos] = hi;
         }
         Some(Self { raw: Uint(raw) })
     }

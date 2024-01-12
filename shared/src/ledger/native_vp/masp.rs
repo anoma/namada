@@ -1,16 +1,17 @@
 //! MASP native VP
 
 use std::cmp::Ordering;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use borsh_ext::BorshSerializeExt;
+use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::transaction::Transaction;
 use namada_core::ledger::gas::MASP_VERIFY_SHIELDED_TX_GAS;
 use namada_core::ledger::storage;
-use namada_core::ledger::storage_api::OptionExt;
+use namada_core::ledger::storage_api::{OptionExt, ResultExt};
 use namada_core::ledger::vp_env::VpEnv;
 use namada_core::proto::Tx;
 use namada_core::types::address::InternalAddress::Masp;
@@ -30,6 +31,8 @@ use thiserror::Error;
 
 use crate::ledger::native_vp;
 use crate::ledger::native_vp::{Ctx, NativeVp};
+use crate::types::masp::encode_asset_type;
+use crate::types::token::MaspDenom;
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]
@@ -322,6 +325,19 @@ where
     }
 }
 
+// Make a map to help recognize asset types lacking an epoch
+fn unepoched_tokens(
+    token: &Address,
+) -> Result<HashMap<AssetType, (Address, MaspDenom)>> {
+    let mut unepoched_tokens = HashMap::new();
+    for denom in MaspDenom::iter() {
+        let asset_type = encode_asset_type(None, token, denom)
+            .wrap_err("unable to create asset type")?;
+        unepoched_tokens.insert(asset_type, (token.clone(), denom));
+    }
+    Ok(unepoched_tokens)
+}
+
 impl<'a, DB, H, CA> NativeVp for MaspVp<'a, DB, H, CA>
 where
     DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -368,39 +384,64 @@ where
             let hash =
                 ripemd::Ripemd160::digest(sha2::Sha256::digest(&source_enc));
 
+            // To help recognize asset types not in the conversion tree
+            let unepoched_tokens = unepoched_tokens(&transfer.token)?;
             // Handle transparent input
             // The following boundary conditions must be satisfied
             // 1. Total of transparent input values equals containing transfer
             // amount 2. Asset type must be properly derived
             // 3. Public key must be the hash of the source
             for vin in &transp_bundle.vin {
+                // Non-masp sources add to the transparent tx pool
+                transparent_tx_pool += I128Sum::from_nonnegative(
+                    vin.asset_type,
+                    vin.value as i128,
+                )
+                .ok()
+                .ok_or_err_msg("invalid value or asset type for amount")?;
+
+                // Satisfies 3.
+                if <[u8; 20]>::from(hash) != vin.address.0 {
+                    tracing::debug!(
+                        "the public key of the output account does not match \
+                         the transfer target"
+                    );
+                    return Ok(false);
+                }
                 match conversion_state.assets.get(&vin.asset_type) {
                     // Satisfies 2.
                     Some(((address, denom), asset_epoch, _, _))
-                        if address == &transfer.token
-                            && asset_epoch <= &epoch =>
+                        if *address == transfer.token
+                            && *asset_epoch <= epoch =>
                     {
                         total_in_values += token::Amount::from_masp_denominated(
                             vin.value, *denom,
                         );
-
-                        // Non-masp sources add to the transparent tx pool
-                        transparent_tx_pool += I128Sum::from_nonnegative(
-                            vin.asset_type,
-                            vin.value as i128,
-                        )
-                        .ok()
-                        .ok_or_err_msg(
-                            "invalid value or asset type for amount",
-                        )?;
-
-                        // Satisfies 3.
-                        if <[u8; 20]>::from(hash) != vin.address.0 {
-                            tracing::debug!(
-                                "the public key of the output account does \
-                                 not match the transfer target"
-                            );
+                    }
+                    // Maybe the asset type has no attached epoch
+                    None if unepoched_tokens.contains_key(&vin.asset_type) => {
+                        let (token, denom) = &unepoched_tokens[&vin.asset_type];
+                        // Determine what the asset type would be if it were
+                        // epoched
+                        let epoched_asset_type =
+                            encode_asset_type(Some(epoch), token, *denom)
+                                .wrap_err("unable to create asset type")?;
+                        if conversion_state
+                            .assets
+                            .contains_key(&epoched_asset_type)
+                        {
+                            // If such an epoched asset type is available in the
+                            // conversion tree, then we must reject the
+                            // unepoched variant
+                            tracing::debug!("epoch is missing from asset type");
                             return Ok(false);
+                        } else {
+                            // Otherwise note the contribution to this
+                            // trransparent input
+                            total_in_values +=
+                                token::Amount::from_masp_denominated(
+                                    vin.value, *denom,
+                                );
                         }
                     }
                     // unrecognized asset
@@ -464,8 +505,27 @@ where
             let target_enc = transfer.target.serialize_to_vec();
             let hash =
                 ripemd::Ripemd160::digest(sha2::Sha256::digest(&target_enc));
+            // To help recognize asset types not in the conversion tree
+            let unepoched_tokens = unepoched_tokens(&transfer.token)?;
 
             for out in &transp_bundle.vout {
+                // Non-masp destinations subtract from transparent tx
+                // pool
+                transparent_tx_pool -= I128Sum::from_nonnegative(
+                    out.asset_type,
+                    out.value as i128,
+                )
+                .ok()
+                .ok_or_err_msg("invalid value or asset type for amount")?;
+
+                // Satisfies 3.
+                if <[u8; 20]>::from(hash) != out.address.0 {
+                    tracing::debug!(
+                        "the public key of the output account does not match \
+                         the transfer target"
+                    );
+                    return Ok(false);
+                }
                 match conversion_state.assets.get(&out.asset_type) {
                     // Satisfies 2.
                     Some(((address, denom), asset_epoch, _, _))
@@ -476,25 +536,31 @@ where
                             token::Amount::from_masp_denominated(
                                 out.value, *denom,
                             );
-
-                        // Non-masp destinations subtract from transparent tx
-                        // pool
-                        transparent_tx_pool -= I128Sum::from_nonnegative(
-                            out.asset_type,
-                            out.value as i128,
-                        )
-                        .ok()
-                        .ok_or_err_msg(
-                            "invalid value or asset type for amount",
-                        )?;
-
-                        // Satisfies 3.
-                        if <[u8; 20]>::from(hash) != out.address.0 {
-                            tracing::debug!(
-                                "the public key of the output account does \
-                                 not match the transfer target"
-                            );
+                    }
+                    // Maybe the asset type has no attached epoch
+                    None if unepoched_tokens.contains_key(&out.asset_type) => {
+                        let (token, denom) = &unepoched_tokens[&out.asset_type];
+                        // Determine what the asset type would be if it were
+                        // epoched
+                        let epoched_asset_type =
+                            encode_asset_type(Some(epoch), token, *denom)
+                                .wrap_err("unable to create asset type")?;
+                        if conversion_state
+                            .assets
+                            .contains_key(&epoched_asset_type)
+                        {
+                            // If such an epoched asset type is available in the
+                            // conversion tree, then we must reject the
+                            // unepoched variant
+                            tracing::debug!("epoch is missing from asset type");
                             return Ok(false);
+                        } else {
+                            // Otherwise note the contribution to this
+                            // trransparent input
+                            total_out_values +=
+                                token::Amount::from_masp_denominated(
+                                    out.value, *denom,
+                                );
                         }
                     }
                     // unrecognized asset

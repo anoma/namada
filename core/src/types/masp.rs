@@ -19,12 +19,12 @@ use crate::types::token::MaspDenom;
 
 /// Make asset type corresponding to given address and epoch
 pub fn encode_asset_type(
-    epoch: Epoch,
+    epoch: Option<Epoch>,
     token: &Address,
     denom: MaspDenom,
 ) -> Result<AssetType, std::io::Error> {
     // Timestamp the chosen token with the current epoch
-    let token_bytes = (token, denom, epoch.0).serialize_to_vec();
+    let token_bytes = (token, denom, epoch).serialize_to_vec();
     // Generate the unique asset identifier from the unique token address
     AssetType::new(token_bytes.as_ref()).map_err(|_| {
         std::io::Error::new(

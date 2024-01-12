@@ -249,9 +249,6 @@ pub async fn known_address<C: crate::queries::Client + Sync>(
     }
 }
 
-// Consider how we want to handle this unwrap. It gets used in contexts that
-// often ignore the optional value and do not have any error type surrounding
-// it.
 /// Query a conversion.
 pub async fn query_conversion<C: crate::queries::Client + Sync>(
     client: &C,
@@ -263,9 +260,9 @@ pub async fn query_conversion<C: crate::queries::Client + Sync>(
     masp_primitives::transaction::components::I128Sum,
     MerklePath<Node>,
 )> {
-    Some(unwrap_client_response::<C, _>(
+    unwrap_client_response::<C, _>(
         RPC.shell().read_conversion(client, &asset_type).await,
-    ))
+    )
 }
 
 /// Query conversions

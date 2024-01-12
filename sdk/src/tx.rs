@@ -37,9 +37,7 @@ use namada_core::types::dec::Dec;
 use namada_core::types::hash::Hash;
 use namada_core::types::ibc::{IbcShieldedTransfer, MsgShieldedTransfer};
 use namada_core::types::key::*;
-use namada_core::types::masp::{
-    encode_asset_type, TransferSource, TransferTarget,
-};
+use namada_core::types::masp::{TransferSource, TransferTarget};
 use namada_core::types::storage::Epoch;
 use namada_core::types::time::DateTimeUtc;
 use namada_core::types::token::MaspDenom;
@@ -2217,7 +2215,7 @@ where
 /// Try to decode the given asset type and add its decoding to the supplied set.
 /// Returns true only if a new decoding has been added to the given set.
 async fn add_asset_type(
-    asset_types: &mut HashSet<(Address, MaspDenom, Epoch)>,
+    asset_types: &mut HashSet<(Address, MaspDenom, Option<Epoch>)>,
     context: &impl Namada,
     asset_type: AssetType,
 ) -> bool {
@@ -2239,7 +2237,8 @@ async fn add_asset_type(
 async fn used_asset_types<P, R, K, N>(
     context: &impl Namada,
     builder: &Builder<P, R, K, N>,
-) -> std::result::Result<HashSet<(Address, MaspDenom, Epoch)>, RpcError> {
+) -> std::result::Result<HashSet<(Address, MaspDenom, Option<Epoch>)>, RpcError>
+{
     let mut asset_types = HashSet::new();
     // Collect all the asset types used in the Sapling inputs
     for input in builder.sapling_inputs() {
@@ -2404,7 +2403,12 @@ async fn construct_shielded_parts<N: Namada>(
     target: &TransferTarget,
     token: &Address,
     amount: token::DenominatedAmount,
-) -> Result<Option<(ShieldedTransfer, HashSet<(Address, MaspDenom, Epoch)>)>> {
+) -> Result<
+    Option<(
+        ShieldedTransfer,
+        HashSet<(Address, MaspDenom, Option<Epoch>)>,
+    )>,
+> {
     let stx_result =
         ShieldedContext::<N::ShieldedUtils>::gen_shielded_transfer(
             context, source, target, token, amount,
@@ -2676,17 +2680,14 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
     if let Some(shielded_transfer) = shielded_transfer {
         // TODO: Workaround for decoding the asset_type later
         let mut shielded = context.shielded_mut().await;
-        let mut asset_types = Vec::new();
         for denom in MaspDenom::iter() {
             let epoch = shielded_transfer.epoch;
-            let asset_type =
-                encode_asset_type(epoch, &token, denom).map_err(|_| {
+            shielded
+                .get_asset_type(context.client(), epoch, token.clone(), denom)
+                .await
+                .map_err(|_| {
                     Error::Other("unable to create asset type".to_string())
                 })?;
-            shielded
-                .asset_types
-                .insert(asset_type, (token.clone(), denom, epoch));
-            asset_types.push(asset_type);
         }
         let _ = shielded.save().await;
 
