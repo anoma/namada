@@ -89,7 +89,9 @@ fn transfer(c: &mut Criterion) {
                         );
                     shielded_ctx.shell.execute_tx(&shield_tx);
                     shielded_ctx.shell.wl_storage.commit_tx();
-                    shielded_ctx.shell.commit();
+                    shielded_ctx.shell.commit_block();
+                    // Cache the masp tx so that it can be returned when queried
+                    shielded_ctx.shell.last_block_masp_txs.push(shield_tx);
 
                     let (shielded_ctx, signed_tx) = match bench_name {
                         "transparent" => shielded_ctx.generate_masp_tx(
@@ -850,7 +852,7 @@ fn unjail_validator(c: &mut Criterion) {
                 .unwrap();
 
                 shell.wl_storage.commit_tx();
-                shell.commit();
+                shell.commit_block();
                 // Advance by slash epoch offset epochs
                 for _ in 0..=pos_params.slash_processing_epoch_offset() {
                     shell.advance_epoch();
@@ -1008,7 +1010,7 @@ fn reactivate_validator(c: &mut Criterion) {
                 .unwrap();
 
                 shell.wl_storage.commit_tx();
-                shell.commit();
+                shell.commit_block();
                 // Advance by slash epoch offset epochs
                 for _ in 0..=pos_params.pipeline_len {
                     shell.advance_epoch();

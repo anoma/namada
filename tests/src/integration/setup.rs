@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::mem::ManuallyDrop;
 use std::path::Path;
 use std::str::FromStr;
@@ -190,6 +191,7 @@ fn create_node(
         keep_temp,
         services: Arc::new(services),
         results: Arc::new(Mutex::new(vec![])),
+        blocks: Arc::new(Mutex::new(HashMap::new())),
         auto_drive_services,
     };
     let init_req =

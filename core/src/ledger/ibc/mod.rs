@@ -282,7 +282,10 @@ where
             self.ctx
                 .inner
                 .borrow_mut()
-                .handle_masp_tx(&shielded_transfer)
+                .handle_masp_tx(
+                    &shielded_transfer.masp_tx,
+                    shielded_transfer.transfer.key.as_deref(),
+                )
                 .map_err(|_| {
                     Error::MaspTx("Writing MASP components failed".to_string())
                 })?;
@@ -291,13 +294,18 @@ where
     }
 }
 
-enum IbcMessage {
+/// The different variants of an Ibc message
+pub enum IbcMessage {
+    /// Ibc Envelop
     Envelope(MsgEnvelope),
+    /// Ibc transaprent transfer
     Transfer(MsgTransfer),
+    /// Ibc shielded transfer
     ShieldedTransfer(MsgShieldedTransfer),
 }
 
-fn decode_message(tx_data: &[u8]) -> Result<IbcMessage, Error> {
+/// Tries to decode transaction data to an `IbcMessage`
+pub fn decode_message(tx_data: &[u8]) -> Result<IbcMessage, Error> {
     // ibc-rs message
     if let Ok(any_msg) = Any::decode(tx_data) {
         if let Ok(transfer_msg) = MsgTransfer::try_from(any_msg.clone()) {
