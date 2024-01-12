@@ -26,7 +26,7 @@ use namada_core::types::chain::CHAIN_ID_LENGTH;
 use namada_core::types::hash::{Hash, HASH_LENGTH};
 use namada_core::types::internal::HostEnvResult;
 use namada_core::types::storage::{
-    BlockHash, BlockHeight, Epoch, Header, TxIndex, BLOCK_HASH_LENGTH,
+    BlockHash, BlockHeight, Epoch, Epochs, Header, TxIndex, BLOCK_HASH_LENGTH,
 };
 pub use namada_core::types::*;
 pub use namada_governance::pgf::storage as pgf_storage;
@@ -293,6 +293,11 @@ impl<'view> VpEnv<'view> for Ctx {
         get_block_epoch()
     }
 
+    fn get_pred_epochs(&self) -> namada_storage::Result<storage::Epochs> {
+        // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
+        get_pred_epochs()
+    }
+
     fn get_tx_index(&self) -> Result<TxIndex, Error> {
         get_tx_index()
     }
@@ -361,10 +366,6 @@ impl<'view> VpEnv<'view> for Ctx {
         unsafe { namada_vp_charge_gas(used_gas) };
         Ok(())
     }
-
-    fn get_pred_epochs(&self) -> namada_storage::Result<storage::Epochs> {
-        todo!()
-    }
 }
 
 impl StorageRead for CtxPreStorageRead<'_> {
@@ -427,16 +428,16 @@ impl StorageRead for CtxPreStorageRead<'_> {
         get_block_epoch()
     }
 
+    fn get_pred_epochs(&self) -> namada_storage::Result<storage::Epochs> {
+        get_pred_epochs()
+    }
+
     fn get_tx_index(&self) -> Result<TxIndex, Error> {
         get_tx_index()
     }
 
     fn get_native_token(&self) -> Result<Address, Error> {
         get_native_token()
-    }
-
-    fn get_pred_epochs(&self) -> namada_storage::Result<storage::Epochs> {
-        todo!()
     }
 }
 
@@ -501,16 +502,16 @@ impl StorageRead for CtxPostStorageRead<'_> {
         get_block_epoch()
     }
 
+    fn get_pred_epochs(&self) -> namada_storage::Result<storage::Epochs> {
+        get_pred_epochs()
+    }
+
     fn get_tx_index(&self) -> Result<TxIndex, Error> {
         get_tx_index()
     }
 
     fn get_native_token(&self) -> Result<Address, Error> {
         get_native_token()
-    }
-
-    fn get_pred_epochs(&self) -> namada_storage::Result<storage::Epochs> {
-        todo!()
     }
 }
 
@@ -578,6 +579,16 @@ fn get_block_epoch() -> Result<Epoch, Error> {
 
 fn get_tx_index() -> Result<TxIndex, Error> {
     Ok(TxIndex(unsafe { namada_vp_get_tx_index() }))
+}
+
+fn get_pred_epochs() -> Result<Epochs, Error> {
+    let read_result = unsafe { namada_vp_get_pred_epochs() };
+    let bytes = read_from_buffer(read_result, namada_vp_result_buffer).ok_or(
+        Error::SimpleMessage(
+            "Missing result from `namada_vp_get_pred_epochs` call",
+        ),
+    )?;
+    Ok(namada_core::types::decode(bytes).expect("Cannot decode pred epochs"))
 }
 
 fn get_native_token() -> Result<Address, Error> {

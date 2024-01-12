@@ -1868,6 +1868,32 @@ where
     Ok(epoch.0)
 }
 
+/// Get predecessor epochs function exposed to the wasm VM VP environment.
+pub fn vp_get_pred_epochs<MEM, DB, H, EVAL, CA>(
+    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+) -> vp_host_fns::EnvResult<i64>
+where
+    MEM: VmMemory,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    H: StorageHasher,
+    EVAL: VpEvaluator,
+    CA: WasmCacheAccess,
+{
+    let gas_meter = unsafe { env.ctx.gas_meter.get() };
+    let sentinel = unsafe { env.ctx.sentinel.get() };
+    let storage = unsafe { env.ctx.storage.get() };
+    let pred_epochs =
+        vp_host_fns::get_pred_epochs(gas_meter, storage, sentinel)?;
+    let bytes = pred_epochs.serialize_to_vec();
+    let len: i64 = bytes
+        .len()
+        .try_into()
+        .map_err(vp_host_fns::RuntimeError::NumConversionError)?;
+    let result_buffer = unsafe { env.ctx.result_buffer.get() };
+    result_buffer.replace(bytes);
+    Ok(len)
+}
+
 /// Getting the IBC event function exposed to the wasm VM VP environment.
 pub fn vp_get_ibc_events<MEM, DB, H, EVAL, CA>(
     env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
