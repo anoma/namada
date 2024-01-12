@@ -12,7 +12,8 @@ pub use namada_sdk::wallet::alias::Alias;
 use namada_sdk::wallet::fs::FsWalletStorage;
 use namada_sdk::wallet::store::Store;
 use namada_sdk::wallet::{
-    ConfirmationResponse, FindKeyError, GenRestoreKeyError, Wallet, WalletIo,
+    ConfirmationResponse, FindKeyError, GenRestoreKeyError, LoadStoreError,
+    Wallet, WalletIo,
 };
 pub use namada_sdk::wallet::{ValidatorData, ValidatorKeys};
 use rand_core::OsRng;
@@ -242,12 +243,12 @@ pub fn save(wallet: &Wallet<CliWalletUtils>) -> std::io::Result<()> {
 }
 
 /// Load a wallet from the store file.
-pub fn load(store_dir: &Path) -> Option<Wallet<CliWalletUtils>> {
+pub fn load(
+    store_dir: &Path,
+) -> Result<Wallet<CliWalletUtils>, LoadStoreError> {
     let mut wallet = CliWalletUtils::new(store_dir.to_path_buf());
-    if wallet.load().is_err() {
-        return None;
-    }
-    Some(wallet)
+    wallet.load()?;
+    Ok(wallet)
 }
 
 /// Load a wallet from the store file or create a new wallet without any
