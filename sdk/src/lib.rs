@@ -762,7 +762,9 @@ where
 #[cfg(any(test, feature = "testing"))]
 /// Tests and strategies for transactions
 pub mod testing {
+    use borsh_ext::BorshSerializeExt;
     use ibc::primitives::proto::Any;
+    use masp_primitives::transaction::TransparentAddress;
     use namada_core::ledger::governance::storage::proposal::ProposalType;
     use namada_core::ledger::ibc::testing::arb_ibc_any;
     use namada_core::types::address::testing::{
@@ -789,6 +791,8 @@ pub mod testing {
     use proptest::prelude::{Just, Strategy};
     use proptest::{option, prop_compose};
     use prost::Message;
+    use ripemd::Digest as RipemdDigest;
+    use sha2::Digest;
 
     use super::*;
     use crate::core::types::chain::ChainId;
@@ -810,7 +814,8 @@ pub mod testing {
     use crate::core::types::transaction::{
         DecryptedTx, Fee, TxType, WrapperTx,
     };
-    use crate::proto::{Code, Commitment, Header, Section};
+    use crate::masp::testing::arb_masp_transfer;
+    use crate::proto::{Code, Commitment, Header, MaspBuilder, Section};
 
     #[derive(Debug)]
     #[allow(clippy::large_enum_variant)]
@@ -976,6 +981,45 @@ pub mod testing {
             let mut tx = Tx { header, sections: vec![] };
             tx.add_data(transfer.clone());
             tx.add_code_from_hash(code_hash, Some(TX_TRANSFER_WASM.to_owned()));
+            (tx, TxData::Transfer(transfer))
+        }
+    }
+
+    // Encode the given Address into TransparentAddress
+    fn encode_address(source: &Address) -> TransparentAddress {
+        let hash = ripemd::Ripemd160::digest(sha2::Sha256::digest(
+            source.serialize_to_vec().as_ref(),
+        ));
+        TransparentAddress(hash.into())
+    }
+
+    prop_compose! {
+        // Generate an arbitrary transfer transaction
+        pub fn arb_masp_transfer_tx()(transfer in arb_transfer())(
+            mut header in arb_header(),
+            wrapper in arb_wrapper_tx(),
+            code_hash in arb_hash(),
+            (shielded_transfer, asset_types) in arb_masp_transfer(
+                encode_address(&transfer.source),
+                encode_address(&transfer.target),
+            ),
+            mut transfer in Just(transfer),
+        ) -> (Tx, TxData) {
+            header.tx_type = TxType::Wrapper(Box::new(wrapper));
+            let mut tx = Tx { header, sections: vec![] };
+            tx.add_data(transfer.clone());
+            tx.add_code_from_hash(code_hash, Some(TX_TRANSFER_WASM.to_owned()));
+            let masp_tx_hash = tx.add_masp_tx_section(shielded_transfer.masp_tx).1;
+            transfer.shielded = Some(masp_tx_hash);
+            tx.add_masp_builder(MaspBuilder {
+                asset_types,
+                // Store how the Info objects map to Descriptors/Outputs
+                metadata: shielded_transfer.metadata,
+                // Store the data that was used to construct the Transaction
+                builder: shielded_transfer.builder,
+                // Link the Builder to the Transaction by hash code
+                target: masp_tx_hash,
+            });
             (tx, TxData::Transfer(transfer))
         }
     }

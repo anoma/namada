@@ -45,6 +45,7 @@ async-send = []
 
 # for integration tests and test utilities
 testing = [
+  "masp_primitives/test-dependencies",
   "namada_core/testing",
   "namada_ethereum_bridge/testing",
   "namada_proof_of_stake/testing",
