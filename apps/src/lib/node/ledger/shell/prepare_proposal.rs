@@ -22,6 +22,7 @@ use super::block_alloc::states::{
     EncryptedTxBatchAllocator, NextState, TryAlloc,
 };
 use super::block_alloc::{AllocFailure, BlockAllocator, BlockResources};
+use crate::config::ValidatorLocalConfig;
 use crate::facade::tendermint_proto::google::protobuf::Timestamp;
 use crate::facade::tendermint_proto::v0_37::abci::RequestPrepareProposal;
 use crate::node::ledger::shell::ShellMode;
@@ -44,7 +45,10 @@ where
         &self,
         req: RequestPrepareProposal,
     ) -> response::PrepareProposal {
-        let txs = if let ShellMode::Validator { .. } = self.mode {
+        let txs = if let ShellMode::Validator {
+            ref local_config, ..
+        } = self.mode
+        {
             // start counting allotted space for txs
             let alloc = self.get_encrypted_txs_allocator();
 
@@ -65,6 +69,7 @@ where
                 &req.txs,
                 req.time,
                 &block_proposer,
+                local_config.as_ref(),
             );
             let mut txs = encrypted_txs;
             // decrypt the wrapper txs included in the previous block
@@ -132,6 +137,7 @@ where
         txs: &[TxBytes],
         block_time: Option<Timestamp>,
         block_proposer: &Address,
+        proposer_local_config: Option<&ValidatorLocalConfig>,
     ) -> (Vec<TxBytes>, BlockAllocator<BuildingDecryptedTxBatch>) {
         let pos_queries = self.wl_storage.pos_queries();
         let block_time = block_time.and_then(|block_time| {
@@ -146,7 +152,7 @@ where
         let txs = txs
             .iter()
             .filter_map(|tx_bytes| {
-                match self.validate_wrapper_bytes(tx_bytes, block_time, &mut temp_wl_storage, &mut vp_wasm_cache, &mut tx_wasm_cache, block_proposer) {
+                match validate_wrapper_bytes(tx_bytes, block_time, block_proposer, proposer_local_config, &mut temp_wl_storage, &mut vp_wasm_cache, &mut tx_wasm_cache, ) {
                     Ok(gas) => {
                         temp_wl_storage.write_log.commit_tx();
                         Some((tx_bytes.to_owned(), gas))
@@ -192,59 +198,6 @@ where
         let alloc = alloc.next_state();
 
         (txs, alloc)
-    }
-
-    /// Validity checks on a wrapper tx
-    #[allow(clippy::too_many_arguments)]
-    fn validate_wrapper_bytes<CA>(
-        &self,
-        tx_bytes: &[u8],
-        block_time: Option<DateTimeUtc>,
-        temp_wl_storage: &mut TempWlStorage<D, H>,
-        vp_wasm_cache: &mut VpCache<CA>,
-        tx_wasm_cache: &mut TxCache<CA>,
-        block_proposer: &Address,
-    ) -> Result<u64, ()>
-    where
-        CA: 'static + WasmCacheAccess + Sync,
-    {
-        let tx = Tx::try_from(tx_bytes).map_err(|_| ())?;
-
-        // If tx doesn't have an expiration it is valid. If time cannot be
-        // retrieved from block default to last block datetime which has
-        // already been checked by mempool_validate, so it's valid
-        if let (Some(block_time), Some(exp)) =
-            (block_time.as_ref(), &tx.header().expiration)
-        {
-            if block_time > exp {
-                return Err(());
-            }
-        }
-
-        tx.validate_tx().map_err(|_| ())?;
-        if let TxType::Wrapper(wrapper) = tx.header().tx_type {
-            // Check tx gas limit for tx size
-            let mut tx_gas_meter = TxGasMeter::new(wrapper.gas_limit);
-            tx_gas_meter.add_wrapper_gas(tx_bytes).map_err(|_| ())?;
-
-            self.replay_protection_checks(&tx, temp_wl_storage)
-                .map_err(|_| ())?;
-
-            // Check fees and extract the gas limit of this transaction
-            match self.prepare_proposal_fee_check(
-                &wrapper,
-                protocol::get_fee_unshielding_transaction(&tx, &wrapper),
-                block_proposer,
-                temp_wl_storage,
-                vp_wasm_cache,
-                tx_wasm_cache,
-            ) {
-                Ok(()) => Ok(u64::from(wrapper.gas_limit)),
-                Err(_) => Err(()),
-            }
-        } else {
-            Err(())
-        }
     }
 
     /// Builds a batch of DKG decrypted transactions.
@@ -367,68 +320,114 @@ where
         )
         .collect()
     }
+}
 
-    fn prepare_proposal_fee_check<CA>(
-        &self,
-        wrapper: &WrapperTx,
-        masp_transaction: Option<Transaction>,
-        proposer: &Address,
-        temp_wl_storage: &mut TempWlStorage<D, H>,
-        vp_wasm_cache: &mut VpCache<CA>,
-        tx_wasm_cache: &mut TxCache<CA>,
-    ) -> Result<(), Error>
-    where
-        CA: 'static + WasmCacheAccess + Sync,
+// Validity checks on a wrapper tx
+#[allow(clippy::too_many_arguments)]
+fn validate_wrapper_bytes<D, H, CA>(
+    tx_bytes: &[u8],
+    block_time: Option<DateTimeUtc>,
+    block_proposer: &Address,
+    proposer_local_config: Option<&ValidatorLocalConfig>,
+    temp_wl_storage: &mut TempWlStorage<D, H>,
+    vp_wasm_cache: &mut VpCache<CA>,
+    tx_wasm_cache: &mut TxCache<CA>,
+) -> Result<u64, ()>
+where
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
+    CA: 'static + WasmCacheAccess + Sync,
+{
+    let tx = Tx::try_from(tx_bytes).map_err(|_| ())?;
+
+    // If tx doesn't have an expiration it is valid. If time cannot be
+    // retrieved from block default to last block datetime which has
+    // already been checked by mempool_validate, so it's valid
+    if let (Some(block_time), Some(exp)) =
+        (block_time.as_ref(), &tx.header().expiration)
     {
-        let minimum_gas_price = {
-            let proposer_local_config = if let ShellMode::Validator {
-                ref local_config,
-                ..
-            } = self.mode
-            {
-                local_config.as_ref()
-            } else {
-                None
-            };
+        if block_time > exp {
+            return Err(());
+        }
+    }
 
-            // A local config of the  validator overrides the consensus param
-            // when creating a block
-            match proposer_local_config {
-                Some(config) => config
-                    .accepted_gas_tokens
-                    .get(&wrapper.fee.token)
-                    .ok_or(Error::TxApply(protocol::Error::FeeError(format!(
-                        "The provided {} token is not accepted by the block \
-                         proposer for fee payment",
-                        wrapper.fee.token
-                    ))))?
-                    .to_owned(),
-                None => namada::ledger::parameters::read_gas_cost(
-                    &self.wl_storage,
-                    &wrapper.fee.token,
-                )
-                .expect("Must be able to read gas cost parameter")
-                .ok_or(Error::TxApply(
-                    protocol::Error::FeeError(format!(
-                        "The provided {} token is not allowed for fee payment",
-                        wrapper.fee.token
-                    )),
-                ))?,
-            }
-        };
+    tx.validate_tx().map_err(|_| ())?;
+    if let TxType::Wrapper(wrapper) = tx.header().tx_type {
+        // Check tx gas limit for tx size
+        let mut tx_gas_meter = TxGasMeter::new(wrapper.gas_limit);
+        tx_gas_meter.add_wrapper_gas(tx_bytes).map_err(|_| ())?;
 
-        self.wrapper_fee_check(
-            wrapper,
-            masp_transaction,
-            minimum_gas_price,
+        super::replay_protection_checks(&tx, temp_wl_storage)
+            .map_err(|_| ())?;
+
+        // Check fees and extract the gas limit of this transaction
+        match prepare_proposal_fee_check(
+            &wrapper,
+            protocol::get_fee_unshielding_transaction(&tx, &wrapper),
+            block_proposer,
+            proposer_local_config,
             temp_wl_storage,
             vp_wasm_cache,
             tx_wasm_cache,
-        )?;
-
-        protocol::transfer_fee(temp_wl_storage, proposer, wrapper)
-            .map_err(Error::TxApply)
+        ) {
+            Ok(()) => Ok(u64::from(wrapper.gas_limit)),
+            Err(_) => Err(()),
+        }
+    } else {
+        Err(())
     }
+}
+
+fn prepare_proposal_fee_check<D, H, CA>(
+    wrapper: &WrapperTx,
+    masp_transaction: Option<Transaction>,
+    proposer: &Address,
+    proposer_local_config: Option<&ValidatorLocalConfig>,
+    temp_wl_storage: &mut TempWlStorage<D, H>,
+    vp_wasm_cache: &mut VpCache<CA>,
+    tx_wasm_cache: &mut TxCache<CA>,
+) -> Result<(), Error>
+where
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
+    CA: 'static + WasmCacheAccess + Sync,
+{
+    let minimum_gas_price = {
+        // A local config of the validator overrides the consensus param
+        // when creating a block
+        match proposer_local_config {
+            Some(config) => config
+                .accepted_gas_tokens
+                .get(&wrapper.fee.token)
+                .ok_or(Error::TxApply(protocol::Error::FeeError(format!(
+                    "The provided {} token is not accepted by the block \
+                     proposer for fee payment",
+                    wrapper.fee.token
+                ))))?
+                .to_owned(),
+            None => namada::ledger::parameters::read_gas_cost(
+                temp_wl_storage,
+                &wrapper.fee.token,
+            )
+            .expect("Must be able to read gas cost parameter")
+            .ok_or(Error::TxApply(protocol::Error::FeeError(format!(
+                "The provided {} token is not allowed for fee payment",
+                wrapper.fee.token
+            ))))?,
+        }
+    };
+
+    super::wrapper_fee_check(
+        wrapper,
+        masp_transaction,
+        minimum_gas_price,
+        temp_wl_storage,
+        vp_wasm_cache,
+        tx_wasm_cache,
+    )?;
+
+    protocol::transfer_fee(temp_wl_storage, proposer, wrapper)
+        .map_err(Error::TxApply)
 }
 
 #[cfg(test)]
