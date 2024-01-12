@@ -1,5 +1,5 @@
 use namada_core::ledger::governance::storage::proposal::ProposalType;
-use namada_core::ledger::governance::storage::vote::StorageProposalVote;
+use namada_core::ledger::governance::storage::vote::ProposalVote;
 use namada_core::proto::Tx;
 use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
@@ -75,7 +75,7 @@ impl VoteProposal {
     /// Build a raw VoteProposal transaction from the given parameters
     pub fn new(
         id: u64,
-        vote: StorageProposalVote,
+        vote: ProposalVote,
         voter: Address,
         delegations: Vec<Address>,
         args: GlobalArgs,

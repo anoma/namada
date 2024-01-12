@@ -39,9 +39,7 @@ use tokio::sync::RwLock;
 use super::masp::{ShieldedContext, ShieldedTransfer};
 use crate::args::SdkTypes;
 use crate::core::ledger::governance::storage::proposal::ProposalType;
-use crate::core::ledger::governance::storage::vote::{
-    StorageProposalVote, VoteType,
-};
+use crate::core::ledger::governance::storage::vote::ProposalVote;
 use crate::core::types::eth_bridge_pool::PendingTransfer;
 use crate::error::{EncodingError, Error, TxError};
 use crate::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
@@ -895,21 +893,14 @@ fn to_ledger_decimal(amount: &str) -> String {
 
 /// A ProposalVote wrapper that prints the spending cap with Ledger decimal
 /// formatting.
-struct LedgerProposalVote<'a>(&'a StorageProposalVote);
+struct LedgerProposalVote<'a>(&'a ProposalVote);
 
 impl<'a> Display for LedgerProposalVote<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.0 {
-            StorageProposalVote::Yay(vote_type) => match vote_type {
-                VoteType::Default => write!(f, "yay"),
-                VoteType::PGFSteward => write!(f, "yay for PGF steward"),
-                VoteType::PGFPayment => {
-                    write!(f, "yay for PGF payment proposal")
-                }
-            },
-
-            StorageProposalVote::Nay => write!(f, "nay"),
-            StorageProposalVote::Abstain => write!(f, "abstain"),
+            ProposalVote::Yay => write!(f, "yay"),
+            ProposalVote::Nay => write!(f, "nay"),
+            ProposalVote::Abstain => write!(f, "abstain"),
         }
     }
 }

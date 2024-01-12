@@ -10,7 +10,7 @@ use crate::ledger::governance::storage::keys as governance_keys;
 use crate::ledger::governance::storage::proposal::{
     ProposalType, StorageProposal,
 };
-use crate::ledger::governance::storage::vote::StorageProposalVote;
+use crate::ledger::governance::storage::vote::ProposalVote;
 use crate::ledger::governance::utils::Vote;
 use crate::ledger::governance::ADDRESS as governance_address;
 use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
@@ -168,10 +168,8 @@ where
 {
     let vote_prefix_key =
         governance_keys::get_proposal_vote_prefix_key(proposal_id);
-    let vote_iter = storage_api::iter_prefix::<StorageProposalVote>(
-        storage,
-        &vote_prefix_key,
-    )?;
+    let vote_iter =
+        storage_api::iter_prefix::<ProposalVote>(storage, &vote_prefix_key)?;
 
     let votes = vote_iter
         .filter_map(|vote_result| {
