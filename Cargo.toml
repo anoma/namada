@@ -69,6 +69,7 @@ bech32 = "0.8.0"
 bimap = {version = "0.6.2", features = ["serde"]}
 bit-set = "0.5.2"
 blake2b-rs = "0.2.0"
+bls12_381 = "0.8"
 byte-unit = "4.0.13"
 byteorder = "1.4.2"
 borsh = {version = "1.2.0", features = ["unstable__schema", "derive"]}
@@ -105,6 +106,7 @@ ibc-testkit = {version = "0.48.1", default-features = false}
 ics23 = "0.11.0"
 index-set = { git = "https://github.com/heliaxdev/index-set", tag = "v0.8.1", features = ["serialize-borsh", "serialize-serde"] }
 itertools = "0.10.0"
+jubjub = "0.10"
 k256 = { version = "0.13.0", default-features = false, features = ["ecdsa", "pkcs8", "precomputed-tables", "serde", "std"]}
 lazy_static = "1.4.0"
 ledger-namada-rs = { git = "https://github.com/Zondax/ledger-namada", tag = "v0.0.12" }

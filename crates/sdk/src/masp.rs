@@ -2465,6 +2465,399 @@ mod tests {
     }
 }
 
+#[cfg(any(test, feature = "testing"))]
+/// Tests and strategies for transactions
+pub mod testing {
+    use masp_primitives::consensus::testing::arb_height;
+    use masp_primitives::sapling::prover::mock::MockTxProver;
+    use proptest::prelude::*;
+    use proptest::test_runner::TestRng;
+    use proptest::{collection, option, prop_compose};
+
+    use super::*;
+    use crate::types::storage::testing::arb_epoch;
+    use crate::types::address::testing::arb_address;
+    use crate::masp_primitives::consensus::BranchId;
+    use crate::masp_primitives::merkle_tree::FrozenCommitmentTree;
+    use crate::masp_primitives::sapling::keys::OutgoingViewingKey;
+    use crate::masp_primitives::transaction::components::transparent::testing::arb_transparent_address;
+
+    #[derive(Debug, Clone)]
+    // Adapts a CSPRNG from a PRNG for proptesting
+    pub struct TestCsprng<R: RngCore>(R);
+
+    impl<R: RngCore> CryptoRng for TestCsprng<R> {}
+
+    impl<R: RngCore> RngCore for TestCsprng<R> {
+        fn next_u32(&mut self) -> u32 {
+            self.0.next_u32()
+        }
+
+        fn next_u64(&mut self) -> u64 {
+            self.0.next_u64()
+        }
+
+        fn fill_bytes(&mut self, dest: &mut [u8]) {
+            self.0.fill_bytes(dest)
+        }
+
+        fn try_fill_bytes(
+            &mut self,
+            dest: &mut [u8],
+        ) -> Result<(), rand::Error> {
+            self.0.try_fill_bytes(dest)
+        }
+    }
+
+    prop_compose! {
+        // Expose a random number generator
+        pub fn arb_rng()(rng in Just(()).prop_perturb(|(), rng| rng)) -> TestRng {
+            rng
+        }
+    }
+
+    prop_compose! {
+        // Generate an arbitrary output description with the given value
+        pub fn arb_output_description(
+            asset_type: AssetType,
+            value: u64,
+        )(
+            mut rng in arb_rng().prop_map(TestCsprng),
+        ) -> (Option<OutgoingViewingKey>, masp_primitives::sapling::PaymentAddress, AssetType, u64, MemoBytes) {
+            let mut spending_key_seed = [0; 32];
+            rng.fill_bytes(&mut spending_key_seed);
+            let spending_key = masp_primitives::zip32::ExtendedSpendingKey::master(spending_key_seed.as_ref());
+
+            let viewing_key = ExtendedFullViewingKey::from(&spending_key).fvk.vk;
+            let (div, _g_d) = find_valid_diversifier(&mut rng);
+            let payment_addr = viewing_key
+                .to_payment_address(div)
+                .expect("a PaymentAddress");
+
+            (None, payment_addr, asset_type, value, MemoBytes::empty())
+        }
+    }
+
+    prop_compose! {
+        // Generate an arbitrary spend description with the given value
+        pub fn arb_spend_description(
+            asset_type: AssetType,
+            value: u64,
+        )(
+            address in arb_transparent_address(),
+            expiration_height in arb_height(BranchId::MASP, &TestNetwork),
+            mut rng in arb_rng().prop_map(TestCsprng),
+        ) -> (ExtendedSpendingKey, Diversifier, Note, MerklePath<Node>) {
+            let mut spending_key_seed = [0; 32];
+            rng.fill_bytes(&mut spending_key_seed);
+            let spending_key = masp_primitives::zip32::ExtendedSpendingKey::master(spending_key_seed.as_ref());
+
+            let viewing_key = ExtendedFullViewingKey::from(&spending_key).fvk.vk;
+            let (div, _g_d) = find_valid_diversifier(&mut rng);
+            let payment_addr = viewing_key
+                .to_payment_address(div)
+                .expect("a PaymentAddress");
+
+            let mut builder = Builder::<TestNetwork, _>::new_with_rng(
+                NETWORK,
+                // NOTE: this is going to add 20 more blocks to the actual
+                // expiration but there's no other exposed function that we could
+                // use from the masp crate to specify the expiration better
+                expiration_height.unwrap(),
+                &mut rng,
+            );
+            // Add a transparent input to support our desired shielded output
+            builder.add_transparent_input(TxOut { asset_type, value, address }).unwrap();
+            // Finally add the shielded output that we need
+            builder.add_sapling_output(None, payment_addr, asset_type, value, MemoBytes::empty()).unwrap();
+            // Build a transaction in order to get its shielded outputs
+            let (transaction, metadata) = builder.build(
+                &MockTxProver,
+                &FeeRule::non_standard(U64Sum::zero()),
+            ).unwrap();
+            // Extract the shielded output from the transaction
+            let shielded_output = &transaction
+                .sapling_bundle()
+                .unwrap()
+                .shielded_outputs[metadata.output_index(0).unwrap()];
+
+            // Let's now decrypt the constructed notes
+            let (note, pa, _memo) = try_sapling_note_decryption::<_, OutputDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>>(
+                &NETWORK,
+                1.into(),
+                &PreparedIncomingViewingKey::new(&viewing_key.ivk()),
+                shielded_output,
+            ).unwrap();
+            assert_eq!(payment_addr, pa);
+            // Make a path to out new note
+            let tree = FrozenCommitmentTree::new(&[Node::new(shielded_output.cmu.to_repr())]);
+            (spending_key, div, note, tree.path(0))
+        }
+    }
+
+    prop_compose! {
+        // Generate an arbitrary MASP denomination
+        pub fn arb_masp_denom()(denom in 0..4u8) -> MaspDenom {
+            MaspDenom::from(denom)
+        }
+    }
+
+    // Maximum value for a note partition
+    const MAX_MONEY: u64 = 100;
+    // Maximum number of partitions for a note
+    const MAX_SPLITS: usize = 10;
+    // Maximum number of notes to include in a transaction
+    const MAX_ASSETS: usize = 10;
+
+    prop_compose! {
+        // Arbitrarily partition the given vector of integers into sets and sum
+        // them
+        pub fn arb_partition(values: Vec<u64>)(buckets in 1..values.len())(
+            buckets in Just(buckets),
+            values in Just(values.clone()),
+            assigns in collection::vec(0..buckets, values.len()),
+        ) -> Vec<u64> {
+            let mut buckets = vec![0; buckets];
+            for (bucket, value) in assigns.iter().zip(values) {
+                buckets[*bucket] += value;
+            }
+            buckets
+        }
+    }
+
+    prop_compose! {
+        // Generate arbitrary spend descriptions with the given asset type
+        // partitioning the given values
+        pub fn arb_spend_descriptions(
+            asset: (Address, MaspDenom, Option<Epoch>),
+            values: Vec<u64>,
+        )(partition in arb_partition(values))(
+            spend_description in partition
+                .iter()
+                .map(|value| arb_spend_description(
+                    encode_asset_type(
+                        asset.2,
+                        &asset.0,
+                        asset.1,
+                    ).unwrap(),
+                    *value,
+                )).collect::<Vec<_>>()
+        ) -> Vec<(ExtendedSpendingKey, Diversifier, Note, MerklePath<Node>)> {
+            spend_description
+        }
+    }
+
+    prop_compose! {
+        // Generate arbitrary output descriptions with the given asset type
+        // partitioning the given values
+        pub fn arb_output_descriptions(
+            asset: (Address, MaspDenom, Option<Epoch>),
+            values: Vec<u64>,
+        )(partition in arb_partition(values))(
+            output_description in partition
+                .iter()
+                .map(|value| arb_output_description(
+                    encode_asset_type(
+                        asset.2,
+                        &asset.0,
+                        asset.1,
+                    ).unwrap(),
+                    *value,
+                )).collect::<Vec<_>>()
+        ) -> Vec<(Option<OutgoingViewingKey>, masp_primitives::sapling::PaymentAddress, AssetType, u64, MemoBytes)> {
+            output_description
+        }
+    }
+
+    prop_compose! {
+        // Generate arbitrary spend descriptions with the given asset type
+        // partitioning the given values
+        pub fn arb_txouts(
+            asset: (Address, MaspDenom, Option<Epoch>),
+            values: Vec<u64>,
+            address: TransparentAddress,
+        )(
+            partition in arb_partition(values),
+        ) -> Vec<TxOut> {
+            partition
+                .iter()
+                .map(|value| TxOut {
+                    asset_type: encode_asset_type(
+                        asset.2,
+                        &asset.0,
+                        asset.1,
+                    ).unwrap(),
+                    value: *value,
+                    address,
+                }).collect::<Vec<_>>()
+        }
+    }
+
+    prop_compose! {
+        // Generate an arbitrary shielded MASP transaction builder
+        pub fn arb_shielded_builder()(
+            assets in collection::hash_map(
+                (arb_address(), arb_masp_denom(), option::of(arb_epoch())),
+                collection::vec(..MAX_MONEY, ..MAX_SPLITS),
+                ..MAX_ASSETS,
+            ),
+        )(
+            expiration_height in arb_height(BranchId::MASP, &TestNetwork),
+            rng in arb_rng().prop_map(TestCsprng),
+            spend_descriptions in assets
+                .iter()
+                .map(|(asset, values)| arb_spend_descriptions(asset.clone(), values.clone()))
+                .collect::<Vec<_>>(),
+            output_descriptions in assets
+                .iter()
+                .map(|(asset, values)| arb_output_descriptions(asset.clone(), values.clone()))
+                .collect::<Vec<_>>(),
+            assets in Just(assets),
+        ) -> (
+            Builder::<TestNetwork, TestCsprng<TestRng>>,
+            HashSet<(Address, MaspDenom, Option<Epoch>)>,
+        ) {
+            let mut builder = Builder::<TestNetwork, _>::new_with_rng(
+                NETWORK,
+                // NOTE: this is going to add 20 more blocks to the actual
+                // expiration but there's no other exposed function that we could
+                // use from the masp crate to specify the expiration better
+                expiration_height.unwrap(),
+                rng,
+            );
+            for spend_descriptions in spend_descriptions {
+                for (esk, div, note, path) in spend_descriptions {
+                    builder.add_sapling_spend(esk, div, note, path).unwrap();
+                }
+            }
+            for output_descriptions in output_descriptions {
+                for (ovk, payment_addr, asset_type, value, memo) in output_descriptions {
+                    builder.add_sapling_output(ovk, payment_addr, asset_type, value, memo).unwrap();
+                }
+            }
+            (builder, assets.into_keys().collect())
+        }
+    }
+
+    prop_compose! {
+        // Generate an arbitrary shielding MASP transaction builder
+        pub fn arb_shielding_builder(source: TransparentAddress)(
+            assets in collection::hash_map(
+                (arb_address(), arb_masp_denom(), option::of(arb_epoch())),
+                collection::vec(..MAX_MONEY, ..MAX_SPLITS),
+                ..MAX_ASSETS,
+            ),
+        )(
+            expiration_height in arb_height(BranchId::MASP, &TestNetwork),
+            rng in arb_rng().prop_map(TestCsprng),
+            txins in assets
+                .iter()
+                .map(|(asset, values)| arb_txouts(asset.clone(), values.clone(), source))
+                .collect::<Vec<_>>(),
+            output_descriptions in assets
+                .iter()
+                .map(|(asset, values)| arb_output_descriptions(asset.clone(), values.clone()))
+                .collect::<Vec<_>>(),
+            assets in Just(assets),
+        ) -> (
+            Builder::<TestNetwork, TestCsprng<TestRng>>,
+            HashSet<(Address, MaspDenom, Option<Epoch>)>,
+        ) {
+            let mut builder = Builder::<TestNetwork, _>::new_with_rng(
+                NETWORK,
+                // NOTE: this is going to add 20 more blocks to the actual
+                // expiration but there's no other exposed function that we could
+                // use from the masp crate to specify the expiration better
+                expiration_height.unwrap(),
+                rng,
+            );
+            for txins in txins {
+                for txin in txins {
+                    builder.add_transparent_input(txin).unwrap();
+                }
+            }
+            for output_descriptions in output_descriptions {
+                for (ovk, payment_addr, asset_type, value, memo) in output_descriptions {
+                    builder.add_sapling_output(ovk, payment_addr, asset_type, value, memo).unwrap();
+                }
+            }
+            (builder, assets.into_keys().collect())
+        }
+    }
+
+    prop_compose! {
+        // Generate an arbitrary deshielding MASP transaction builder
+        pub fn arb_deshielding_builder(target: TransparentAddress)(
+            assets in collection::hash_map(
+                (arb_address(), arb_masp_denom(), option::of(arb_epoch())),
+                collection::vec(..MAX_MONEY, ..MAX_SPLITS),
+                ..MAX_ASSETS,
+            ),
+        )(
+            expiration_height in arb_height(BranchId::MASP, &TestNetwork),
+            rng in arb_rng().prop_map(TestCsprng),
+            spend_descriptions in assets
+                .iter()
+                .map(|(asset, values)| arb_spend_descriptions(asset.clone(), values.clone()))
+                .collect::<Vec<_>>(),
+            txouts in assets
+                .iter()
+                .map(|(asset, values)| arb_txouts(asset.clone(), values.clone(), target))
+                .collect::<Vec<_>>(),
+            assets in Just(assets),
+        ) -> (
+            Builder::<TestNetwork, TestCsprng<TestRng>>,
+            HashSet<(Address, MaspDenom, Option<Epoch>)>,
+        ) {
+            let mut builder = Builder::<TestNetwork, _>::new_with_rng(
+                NETWORK,
+                // NOTE: this is going to add 20 more blocks to the actual
+                // expiration but there's no other exposed function that we could
+                // use from the masp crate to specify the expiration better
+                expiration_height.unwrap(),
+                rng,
+            );
+            for spend_descriptions in spend_descriptions {
+                for (esk, div, note, path) in spend_descriptions {
+                    builder.add_sapling_spend(esk, div, note, path).unwrap();
+                }
+            }
+            for txouts in txouts {
+                for txout in txouts {
+                    builder.add_transparent_input(txout).unwrap();
+                }
+            }
+            (builder, assets.into_keys().collect())
+        }
+    }
+
+    prop_compose! {
+        // Generate an arbitrary MASP shielded transfer
+        pub fn arb_masp_transfer(
+            source: TransparentAddress,
+            target: TransparentAddress,
+        )(
+            (builder, asset_types) in prop_oneof![
+                arb_shielded_builder(),
+                arb_shielding_builder(source),
+                arb_deshielding_builder(target),
+            ],
+            epoch in arb_epoch(),
+        ) -> (ShieldedTransfer, HashSet<(Address, MaspDenom, Option<Epoch>)>) {
+            let (masp_tx, metadata) = builder.clone().build(
+                &MockTxProver,
+                &FeeRule::non_standard(U64Sum::zero()),
+            ).unwrap();
+            (ShieldedTransfer {
+                builder: builder.map_builder(WalletMap),
+                metadata,
+                masp_tx,
+                epoch,
+            }, asset_types)
+        }
+    }
+}
+
 #[cfg(feature = "std")]
 /// Implementation of MASP functionality depending on a standard filesystem
 pub mod fs {
