@@ -86,6 +86,7 @@ fn get_tx_args(use_device: bool) -> TxArgs {
         signatures: vec![],
         tx_reveal_code_path: Default::default(),
         password: None,
+        memo: None,
         use_device,
     }
 }

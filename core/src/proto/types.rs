@@ -392,6 +392,8 @@ impl Code {
     }
 }
 
+pub type Memo = Vec<u8>;
+
 #[derive(
     Clone,
     Debug,
@@ -974,6 +976,11 @@ pub struct Header {
     pub code_hash: crate::types::hash::Hash,
     /// The SHA-256 hash of the transaction's data section
     pub data_hash: crate::types::hash::Hash,
+    /// The SHA-256 hash of the transaction's memo section
+    ///
+    /// In case a memo is not present in the transaction, a
+    /// byte array filled with zeroes is present instead
+    pub memo_hash: crate::types::hash::Hash,
     /// The type of this transaction
     pub tx_type: TxType,
 }
@@ -988,6 +995,7 @@ impl Header {
             timestamp: DateTimeUtc::now(),
             code_hash: crate::types::hash::Hash::default(),
             data_hash: crate::types::hash::Hash::default(),
+            memo_hash: crate::types::hash::Hash::default(),
         }
     }
 
@@ -1167,6 +1175,31 @@ impl Tx {
             }
         }
         None
+    }
+
+    /// Set the transaction memo hash stored in the header
+    pub fn set_memo_sechash(&mut self, hash: crate::types::hash::Hash) {
+        self.header.memo_hash = hash;
+    }
+
+    /// Get the hash of this transaction's memo from the heeader
+    pub fn memo_sechash(&self) -> &crate::types::hash::Hash {
+        &self.header.memo_hash
+    }
+
+    /// Get the memo designated by the memo hash in the header
+    pub fn memo(&self) -> Option<Vec<u8>> {
+        if self.memo_sechash() == &crate::types::hash::Hash::default() {
+            return None;
+        }
+        match self
+            .get_section(self.memo_sechash())
+            .as_ref()
+            .map(Cow::as_ref)
+        {
+            Some(Section::ExtraData(section)) => section.code.id(),
+            _ => None,
+        }
     }
 
     /// Add a new section to the transaction
@@ -1483,6 +1516,18 @@ impl Tx {
         let sechash = self
             .add_section(Section::ExtraData(Code::new(code, tag)))
             .get_hash();
+        (self, sechash)
+    }
+
+    /// Add a memo section to the transaction
+    pub fn add_memo(
+        &mut self,
+        memo: &[u8],
+    ) -> (&mut Self, crate::types::hash::Hash) {
+        let sechash = self
+            .add_section(Section::ExtraData(Code::new(memo.to_vec(), None)))
+            .get_hash();
+        self.set_memo_sechash(sechash);
         (self, sechash)
     }
 

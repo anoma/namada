@@ -5,7 +5,7 @@ mod types;
 
 pub use types::{
     standalone_signature, verify_standalone_sig, Code, Commitment,
-    CompressedSignature, Data, Error, Header, MaspBuilder, Section,
+    CompressedSignature, Data, Error, Header, MaspBuilder, Memo, Section,
     SerializeWithBorsh, Signable, SignableEthMessage, Signature,
     SignatureIndex, Signed, Signer, Tx, TxError,
 };
