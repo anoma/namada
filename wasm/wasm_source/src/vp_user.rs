@@ -703,6 +703,7 @@ mod tests {
                 description: None,
                 website: None,
                 discord_handle: None,
+                avatar: None,
             };
             tx::ctx().become_validator(args).unwrap();
         });
@@ -792,6 +793,7 @@ mod tests {
                     Some("desc".to_owned()),
                     Some("website".to_owned()),
                     Some("discord".to_owned()),
+                    Some("avatar".to_owned()),
                     Some(Dec::new(6, 2).unwrap()),
                 )
                 .unwrap();
@@ -972,6 +974,7 @@ mod tests {
                 description: None,
                 website: None,
                 discord_handle: None,
+                avatar: None,
             };
             tx::ctx().become_validator(args).unwrap();
         });
@@ -1076,6 +1079,7 @@ mod tests {
                     Some("desc".to_owned()),
                     Some("website".to_owned()),
                     Some("discord".to_owned()),
+                    Some("avatar".to_owned()),
                     Some(Dec::new(6, 2).unwrap()),
                 )
                 .unwrap();

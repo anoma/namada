@@ -133,6 +133,7 @@ impl BecomeValidator {
         description: Option<String>,
         website: Option<String>,
         discord_handle: Option<String>,
+        avatar: Option<String>,
         args: GlobalArgs,
     ) -> Self {
         let update_account =
@@ -148,6 +149,7 @@ impl BecomeValidator {
                 description,
                 website,
                 discord_handle,
+                avatar,
             };
 
         Self(transaction::build_tx(
@@ -333,12 +335,14 @@ pub struct ChangeMetaData(Tx);
 
 impl ChangeMetaData {
     /// Build a raw ChangeMetadata transaction from the given parameters
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         validator: Address,
         email: Option<String>,
         description: Option<String>,
         website: Option<String>,
         discord_handle: Option<String>,
+        avatar: Option<String>,
         commission_rate: Option<Dec>,
         args: GlobalArgs,
     ) -> Self {
@@ -349,6 +353,7 @@ impl ChangeMetaData {
                 description,
                 website,
                 discord_handle,
+                avatar,
                 commission_rate,
             };
 
