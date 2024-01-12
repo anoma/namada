@@ -1,13 +1,9 @@
 //! Extend Tendermint votes with signatures of the Ethereum
 //! bridge pool root and nonce seen by a quorum of validators.
 use itertools::Itertools;
-use namada::ledger::pos::PosQueries;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
 use namada::proto::Signed;
-use namada::types::keccak::keccak_hash;
-use namada::types::storage::BlockHeight;
-use namada::types::token;
 
 use super::*;
 use crate::node::ledger::shell::Shell;
@@ -17,146 +13,6 @@ where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
 {
-    /// Validates a vote extension issued at the provided
-    /// block height signing over the latest Ethereum bridge
-    /// pool root and nonce.
-    ///
-    /// Checks that at epoch of the provided height:
-    ///  * The inner Namada address corresponds to a consensus validator.
-    ///  * Check that the root and nonce are correct.
-    ///  * The validator correctly signed the extension.
-    ///  * The validator signed over the correct height inside of the extension.
-    ///  * Check that the inner signature is valid.
-    #[inline]
-    #[allow(dead_code)]
-    pub fn validate_bp_roots_vext(
-        &self,
-        ext: Signed<bridge_pool_roots::Vext>,
-        height: BlockHeight,
-    ) -> bool {
-        self.validate_bp_roots_vext_and_get_it_back(ext, height)
-            .is_ok()
-    }
-
-    /// This method behaves exactly like [`Self::validate_bp_roots_vext`],
-    /// with the added bonus of returning the vote extension back, if it
-    /// is valid.
-    pub fn validate_bp_roots_vext_and_get_it_back(
-        &self,
-        ext: Signed<bridge_pool_roots::Vext>,
-        last_height: BlockHeight,
-    ) -> std::result::Result<
-        (token::Amount, Signed<bridge_pool_roots::Vext>),
-        VoteExtensionError,
-    > {
-        // NOTE: for ABCI++, we should pass
-        // `last_height` here, instead of `ext.data.block_height`
-        let ext_height_epoch = match self
-            .wl_storage
-            .pos_queries()
-            .get_epoch(ext.data.block_height)
-        {
-            Some(epoch) => epoch,
-            _ => {
-                tracing::debug!(
-                    block_height = ?ext.data.block_height,
-                    "The epoch of the Bridge pool root's vote extension's \
-                     block height should always be known",
-                );
-                return Err(VoteExtensionError::UnexpectedEpoch);
-            }
-        };
-        if !self
-            .wl_storage
-            .ethbridge_queries()
-            .is_bridge_active_at(ext_height_epoch)
-        {
-            tracing::debug!(
-                vext_epoch = ?ext_height_epoch,
-                "The Ethereum bridge was not enabled when the pool
-                 root's vote extension was cast",
-            );
-            return Err(VoteExtensionError::EthereumBridgeInactive);
-        }
-
-        if ext.data.block_height > last_height {
-            tracing::debug!(
-                ext_height = ?ext.data.block_height,
-                ?last_height,
-                "Bridge pool root's vote extension issued for a block height \
-                 higher than the chain's last height."
-            );
-            return Err(VoteExtensionError::UnexpectedBlockHeight);
-        }
-        if ext.data.block_height.0 == 0 {
-            tracing::debug!("Dropping vote extension issued at genesis");
-            return Err(VoteExtensionError::UnexpectedBlockHeight);
-        }
-
-        // get the public key associated with this validator
-        let validator = &ext.data.validator_addr;
-        let (voting_power, pk) = self
-            .wl_storage
-            .pos_queries()
-            .get_validator_from_address(validator, Some(ext_height_epoch))
-            .map_err(|err| {
-                tracing::debug!(
-                    ?err,
-                    %validator,
-                    "Could not get public key from Storage for some validator, \
-                     while validating Bridge pool root's vote extension"
-                );
-                VoteExtensionError::PubKeyNotInStorage
-            })?;
-        // verify the signature of the vote extension
-        ext.verify(&pk).map_err(|err| {
-            tracing::debug!(
-                ?err,
-                ?ext.sig,
-                ?pk,
-                %validator,
-                "Failed to verify the signature of an Bridge pool root's vote \
-                 extension issued by some validator"
-            );
-            VoteExtensionError::VerifySigFailed
-        })?;
-
-        let bp_root = self
-            .wl_storage
-            .ethbridge_queries()
-            .get_bridge_pool_root_at_height(ext.data.block_height)
-            .expect("We asserted that the queried height is correct")
-            .0;
-        let nonce = self
-            .wl_storage
-            .ethbridge_queries()
-            .get_bridge_pool_nonce_at_height(ext.data.block_height)
-            .to_bytes();
-        let signed = Signed::<_, SignableEthMessage>::new_from(
-            keccak_hash([bp_root, nonce].concat()),
-            ext.data.sig.clone(),
-        );
-        let pk = self
-            .wl_storage
-            .pos_queries()
-            .read_validator_eth_hot_key(validator, Some(ext_height_epoch))
-            .expect("A validator should have an Ethereum hot key in storage.");
-        signed
-            .verify(&pk)
-            .map_err(|err| {
-                tracing::debug!(
-                    ?err,
-                    ?signed.sig,
-                    ?pk,
-                    %validator,
-                    "Failed to verify the signature of an Bridge pool root \
-                    issued by some validator."
-                );
-                VoteExtensionError::InvalidBPRootSig
-            })
-            .map(|_| (voting_power, ext))
-    }
-
     /// Takes an iterator over Bridge pool root vote extension instances,
     /// and returns another iterator. The latter yields
     /// valid Bridge pool root vote extensions, or the reason why these
@@ -168,15 +24,17 @@ where
         + 'iter,
     ) -> impl Iterator<
         Item = std::result::Result<
-            (token::Amount, Signed<bridge_pool_roots::Vext>),
+            Signed<bridge_pool_roots::Vext>,
             VoteExtensionError,
         >,
     > + 'iter {
         vote_extensions.into_iter().map(|vote_extension| {
-            self.validate_bp_roots_vext_and_get_it_back(
-                vote_extension,
+            validate_bp_roots_vext(
+                &self.wl_storage,
+                &vote_extension,
                 self.wl_storage.storage.get_last_block_height(),
-            )
+            )?;
+            Ok(vote_extension)
         })
     }
 
@@ -188,11 +46,10 @@ where
         &'iter self,
         vote_extensions: impl IntoIterator<Item = Signed<bridge_pool_roots::Vext>>
         + 'iter,
-    ) -> impl Iterator<Item = (token::Amount, Signed<bridge_pool_roots::Vext>)> + 'iter
-    {
+    ) -> impl Iterator<Item = Signed<bridge_pool_roots::Vext>> + 'iter {
         self.validate_bp_roots_vext_list(vote_extensions)
             .filter_map(|ext| ext.ok())
-            .dedup_by(|(_, ext_1), (_, ext_2)| {
+            .dedup_by(|ext_1, ext_2| {
                 ext_1.data.validator_addr == ext_2.data.validator_addr
             })
     }
@@ -201,6 +58,8 @@ where
 #[cfg(test)]
 mod test_bp_vote_extensions {
     use namada::core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
+    use namada::eth_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
+    use namada::eth_bridge::storage::eth_bridge_queries::EthBridgeQueries;
     use namada::ledger::pos::PosQueries;
     use namada::ledger::storage_api::StorageWrite;
     use namada::proof_of_stake::storage::{
@@ -219,7 +78,6 @@ mod test_bp_vote_extensions {
     use namada::types::storage::BlockHeight;
     use namada::types::token;
     use namada::types::vote_extensions::bridge_pool_roots;
-    use namada_sdk::eth_bridge::EthBridgeQueries;
 
     use crate::node::ledger::shell::test_utils::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
@@ -310,10 +168,14 @@ mod test_bp_vote_extensions {
         shell.wl_storage.storage.block.height =
             shell.wl_storage.storage.get_last_block_height();
         shell.commit();
-        assert!(shell.validate_bp_roots_vext(
-            vote_ext,
-            shell.wl_storage.storage.get_last_block_height()
-        ));
+        assert!(
+            validate_bp_roots_vext(
+                &shell.wl_storage,
+                &vote_ext,
+                shell.wl_storage.storage.get_last_block_height()
+            )
+            .is_ok()
+        );
     }
 
     /// Test that the function crafting the bridge pool root
@@ -347,10 +209,14 @@ mod test_bp_vote_extensions {
             vote_ext,
             shell.extend_vote_with_bp_roots().expect("Test failed")
         );
-        assert!(shell.validate_bp_roots_vext(
-            vote_ext,
-            shell.wl_storage.storage.get_last_block_height(),
-        ))
+        assert!(
+            validate_bp_roots_vext(
+                &shell.wl_storage,
+                &vote_ext,
+                shell.wl_storage.storage.get_last_block_height(),
+            )
+            .is_ok()
+        )
     }
 
     /// Test that we de-duplicate the bridge pool vexts
@@ -384,7 +250,6 @@ mod test_bp_vote_extensions {
                 vote_ext.clone(),
                 vote_ext.clone(),
             ])
-            .map(|(_, vext)| vext)
             .collect::<Vec<_>>();
         assert_eq!(valid, vec![vote_ext]);
     }
@@ -413,10 +278,14 @@ mod test_bp_vote_extensions {
             sig,
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
-        assert!(!shell.validate_bp_roots_vext(
-            bp_root,
-            shell.wl_storage.pos_queries().get_current_decision_height(),
-        ))
+        assert!(
+            validate_bp_roots_vext(
+                &shell.wl_storage,
+                &bp_root,
+                shell.wl_storage.pos_queries().get_current_decision_height(),
+            )
+            .is_err()
+        )
     }
 
     /// Test that Bridge pool root vext and inner signature
@@ -443,10 +312,14 @@ mod test_bp_vote_extensions {
             sig,
         }
         .sign(&bertha_keypair());
-        assert!(!shell.validate_bp_roots_vext(
-            bp_root,
-            shell.wl_storage.storage.get_last_block_height()
-        ))
+        assert!(
+            validate_bp_roots_vext(
+                &shell.wl_storage,
+                &bp_root,
+                shell.wl_storage.storage.get_last_block_height()
+            )
+            .is_err()
+        )
     }
 
     fn reject_incorrect_block_number(height: BlockHeight, shell: &TestShell) {
@@ -464,10 +337,14 @@ mod test_bp_vote_extensions {
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
 
-        assert!(!shell.validate_bp_roots_vext(
-            bp_root,
-            shell.wl_storage.storage.get_last_block_height()
-        ))
+        assert!(
+            validate_bp_roots_vext(
+                &shell.wl_storage,
+                &bp_root,
+                shell.wl_storage.storage.get_last_block_height()
+            )
+            .is_err()
+        )
     }
 
     /// Test that an [`bridge_pool_roots::Vext`] that labels its included
@@ -507,10 +384,14 @@ mod test_bp_vote_extensions {
             sig,
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
-        assert!(!shell.validate_bp_roots_vext(
-            bp_root,
-            shell.wl_storage.storage.get_last_block_height()
-        ))
+        assert!(
+            validate_bp_roots_vext(
+                &shell.wl_storage,
+                &bp_root,
+                shell.wl_storage.storage.get_last_block_height()
+            )
+            .is_err()
+        )
     }
 
     /// Test that a bridge pool root vext is rejected
@@ -531,10 +412,14 @@ mod test_bp_vote_extensions {
             sig,
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
-        assert!(!shell.validate_bp_roots_vext(
-            bp_root,
-            shell.wl_storage.storage.get_last_block_height()
-        ))
+        assert!(
+            validate_bp_roots_vext(
+                &shell.wl_storage,
+                &bp_root,
+                shell.wl_storage.storage.get_last_block_height()
+            )
+            .is_err()
+        )
     }
 
     /// Test that we can verify vext from several block heights
@@ -582,10 +467,14 @@ mod test_bp_vote_extensions {
             sig,
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
-        assert!(shell.validate_bp_roots_vext(
-            bp_root,
-            shell.wl_storage.pos_queries().get_current_decision_height()
-        ));
+        assert!(
+            validate_bp_roots_vext(
+                &shell.wl_storage,
+                &bp_root,
+                shell.wl_storage.pos_queries().get_current_decision_height()
+            )
+            .is_ok()
+        );
         let to_sign = keccak_hash([[2; 32], Uint::from(0).to_bytes()].concat());
         let sig = Signed::<_, SignableEthMessage>::new(
             shell.mode.get_eth_bridge_keypair().expect("Test failed"),
@@ -598,10 +487,14 @@ mod test_bp_vote_extensions {
             sig,
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
-        assert!(shell.validate_bp_roots_vext(
-            bp_root,
-            shell.wl_storage.pos_queries().get_current_decision_height()
-        ));
+        assert!(
+            validate_bp_roots_vext(
+                &shell.wl_storage,
+                &bp_root,
+                shell.wl_storage.pos_queries().get_current_decision_height()
+            )
+            .is_ok()
+        );
     }
 
     /// Test that if the wrong block height is given for the provided root,
@@ -649,9 +542,13 @@ mod test_bp_vote_extensions {
             sig,
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
-        assert!(!shell.validate_bp_roots_vext(
-            bp_root,
-            shell.wl_storage.pos_queries().get_current_decision_height()
-        ));
+        assert!(
+            validate_bp_roots_vext(
+                &shell.wl_storage,
+                &bp_root,
+                shell.wl_storage.pos_queries().get_current_decision_height()
+            )
+            .is_err()
+        );
     }
 }

@@ -3435,6 +3435,7 @@ dependencies = [
  "tendermint",
  "tendermint-proto",
  "tendermint-rpc",
+ "thiserror",
  "tracing",
 ]
 

@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 use eyre::Result;
 use namada_core::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
 use namada_core::types::address::Address;
+use namada_core::types::key::common;
 use namada_core::types::storage::{BlockHeight, Epoch};
 use namada_core::types::token::Amount;
 use namada_core::types::transaction::TxResult;
@@ -14,7 +15,7 @@ use super::ChangedKeys;
 use crate::protocol::transactions::utils;
 use crate::protocol::transactions::votes::update::NewVotes;
 use crate::protocol::transactions::votes::{self, Votes};
-use crate::storage::eth_bridge_queries::EthBridgeQueries;
+use crate::storage::eth_bridge_queries::{EthBridgeQueries, SendValsetUpd};
 use crate::storage::proof::EthereumProof;
 use crate::storage::vote_tallies;
 
@@ -29,6 +30,42 @@ impl utils::GetVoters for (&validator_set_update::VextDigest, BlockHeight) {
             .zip(std::iter::repeat(epoch_2nd_height))
             .collect()
     }
+}
+
+/// Sign the next set of validators, and return the associated
+/// vote extension protocol transaction.
+pub fn sign_validator_set_update<D, H>(
+    wl_storage: &WlStorage<D, H>,
+    validator_addr: &Address,
+    eth_hot_key: &common::SecretKey,
+) -> Option<validator_set_update::SignedVext>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    wl_storage
+        .ethbridge_queries()
+        .must_send_valset_upd(SendValsetUpd::Now)
+        .then(|| {
+            let next_epoch = wl_storage.storage.get_current_epoch().0.next();
+
+            let voting_powers = wl_storage
+                .ethbridge_queries()
+                .get_consensus_eth_addresses(Some(next_epoch))
+                .iter()
+                .map(|(eth_addr_book, _, voting_power)| {
+                    (eth_addr_book, voting_power)
+                })
+                .collect();
+
+            let ext = validator_set_update::Vext {
+                voting_powers,
+                validator_addr: validator_addr.clone(),
+                signing_epoch: wl_storage.storage.get_current_epoch().0,
+            };
+
+            ext.sign(eth_hot_key)
+        })
 }
 
 pub fn aggregate_votes<D, H>(

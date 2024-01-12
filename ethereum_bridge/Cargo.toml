@@ -33,6 +33,7 @@ rand.workspace = true
 tendermint = {workspace = true}
 tendermint-rpc = {workspace = true}
 tendermint-proto = {workspace = true}
+thiserror.workspace = true
 tracing = "0.1.30"
 
 [dev-dependencies]

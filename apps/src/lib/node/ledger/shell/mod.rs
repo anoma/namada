@@ -33,6 +33,9 @@ use masp_primitives::transaction::Transaction;
 use namada::core::hints;
 use namada::core::ledger::eth_bridge;
 pub use namada::core::types::transaction::ResultCode;
+use namada::eth_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
+use namada::eth_bridge::protocol::validation::ethereum_events::validate_eth_events_vext;
+use namada::eth_bridge::protocol::validation::validator_set_update::validate_valset_upd_vext;
 use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
 use namada::ledger::gas::{Gas, TxGasMeter};
@@ -1143,12 +1146,11 @@ where
                         response,
                         ethereum_tx_data_variants::EthEventsVext::try_from(&tx),
                     );
-                    if let Err(err) = self
-                        .validate_eth_events_vext_and_get_it_back(
-                            ext,
-                            self.wl_storage.storage.get_last_block_height(),
-                        )
-                    {
+                    if let Err(err) = validate_eth_events_vext(
+                        &self.wl_storage,
+                        &ext,
+                        self.wl_storage.storage.get_last_block_height(),
+                    ) {
                         response.code = ResultCode::InvalidVoteExtension.into();
                         response.log = format!(
                             "{INVALID_MSG}: Invalid Ethereum events vote \
@@ -1166,12 +1168,11 @@ where
                             &tx
                         ),
                     );
-                    if let Err(err) = self
-                        .validate_bp_roots_vext_and_get_it_back(
-                            ext,
-                            self.wl_storage.storage.get_last_block_height(),
-                        )
-                    {
+                    if let Err(err) = validate_bp_roots_vext(
+                        &self.wl_storage,
+                        &ext,
+                        self.wl_storage.storage.get_last_block_height(),
+                    ) {
                         response.code = ResultCode::InvalidVoteExtension.into();
                         response.log = format!(
                             "{INVALID_MSG}: Invalid Bridge pool roots vote \
@@ -1189,20 +1190,19 @@ where
                             &tx
                         ),
                     );
-                    if let Err(err) = self
-                        .validate_valset_upd_vext_and_get_it_back(
-                            ext,
-                            // n.b. only accept validator set updates
-                            // issued at the last committed epoch
-                            // (signing off on the validators of the
-                            // next epoch). at the second height
-                            // within an epoch, the new epoch is
-                            // committed to storage, so `last_epoch`
-                            // reflects the current value of the
-                            // epoch.
-                            self.wl_storage.storage.last_epoch,
-                        )
-                    {
+                    if let Err(err) = validate_valset_upd_vext(
+                        &self.wl_storage,
+                        &ext,
+                        // n.b. only accept validator set updates
+                        // issued at the last committed epoch
+                        // (signing off on the validators of the
+                        // next epoch). at the second height
+                        // within an epoch, the new epoch is
+                        // committed to storage, so `last_epoch`
+                        // reflects the current value of the
+                        // epoch.
+                        self.wl_storage.storage.last_epoch,
+                    ) {
                         response.code = ResultCode::InvalidVoteExtension.into();
                         response.log = format!(
                             "{INVALID_MSG}: Invalid validator set update vote \

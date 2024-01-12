@@ -14,10 +14,13 @@ use namada_core::types::address::Address;
 use namada_core::types::ethereum_events::EthereumEvent;
 use namada_core::types::ethereum_structs::EthBridgeEvent;
 use namada_core::types::internal::ExpiredTx;
+use namada_core::types::key::common;
 use namada_core::types::storage::{BlockHeight, Epoch, Key};
 use namada_core::types::token::Amount;
 use namada_core::types::transaction::TxResult;
-use namada_core::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
+use namada_core::types::vote_extensions::ethereum_events::{
+    MultiSignedEthEvent, SignedVext, Vext,
+};
 use namada_proof_of_stake::pos_queries::PosQueries;
 
 use super::ChangedKeys;
@@ -35,6 +38,42 @@ impl utils::GetVoters for &HashSet<EthMsgUpdate> {
             voters
         })
     }
+}
+
+/// Sign the given Ethereum events, and return the associated
+/// vote extension protocol transaction.
+///
+/// __INVARIANT__: Assume `ethereum_events` are sorted in ascending
+/// order.
+pub fn sign_ethereum_events<D, H>(
+    wl_storage: &WlStorage<D, H>,
+    validator_addr: &Address,
+    protocol_key: &common::SecretKey,
+    ethereum_events: Vec<EthereumEvent>,
+) -> Option<SignedVext>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    if !wl_storage.ethbridge_queries().is_bridge_active() {
+        return None;
+    }
+
+    let ext = Vext {
+        block_height: wl_storage.storage.get_last_block_height(),
+        validator_addr: validator_addr.clone(),
+        ethereum_events,
+    };
+    if !ext.ethereum_events.is_empty() {
+        tracing::info!(
+            new_ethereum_events.len = ext.ethereum_events.len(),
+            ?ext.block_height,
+            "Voting for new Ethereum events"
+        );
+        tracing::debug!("New Ethereum events - {:#?}", ext.ethereum_events);
+    }
+
+    Some(ext.sign(protocol_key))
 }
 
 /// Applies derived state changes to storage, based on Ethereum `events` which
