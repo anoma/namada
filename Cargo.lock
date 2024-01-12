@@ -7930,7 +7930,7 @@ dependencies = [
 [[package]]
 name = "wasmer"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
+source = "git+https://github.com/heliaxdev/wasmer?rev=255054f7f58b7b4a525f2fee6b9b86422d1ca15b#255054f7f58b7b4a525f2fee6b9b86422d1ca15b"
 dependencies = [
  "cfg-if 1.0.0",
  "indexmap 1.9.3",
@@ -7956,7 +7956,7 @@ dependencies = [
 [[package]]
 name = "wasmer-artifact"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
+source = "git+https://github.com/heliaxdev/wasmer?rev=255054f7f58b7b4a525f2fee6b9b86422d1ca15b#255054f7f58b7b4a525f2fee6b9b86422d1ca15b"
 dependencies = [
  "enumset",
  "loupe",
@@ -7968,7 +7968,7 @@ dependencies = [
 [[package]]
 name = "wasmer-cache"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
+source = "git+https://github.com/heliaxdev/wasmer?rev=255054f7f58b7b4a525f2fee6b9b86422d1ca15b#255054f7f58b7b4a525f2fee6b9b86422d1ca15b"
 dependencies = [
  "blake3",
  "hex",
@@ -7979,7 +7979,7 @@ dependencies = [
 [[package]]
 name = "wasmer-compiler"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
+source = "git+https://github.com/heliaxdev/wasmer?rev=255054f7f58b7b4a525f2fee6b9b86422d1ca15b#255054f7f58b7b4a525f2fee6b9b86422d1ca15b"
 dependencies = [
  "enumset",
  "loupe",
@@ -7996,7 +7996,7 @@ dependencies = [
 [[package]]
 name = "wasmer-compiler-cranelift"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
+source = "git+https://github.com/heliaxdev/wasmer?rev=255054f7f58b7b4a525f2fee6b9b86422d1ca15b#255054f7f58b7b4a525f2fee6b9b86422d1ca15b"
 dependencies = [
  "cranelift-codegen",
  "cranelift-entity",
@@ -8010,12 +8010,13 @@ dependencies = [
  "tracing",
  "wasmer-compiler",
  "wasmer-types",
+ "wasmer-vm",
 ]
 
 [[package]]
 name = "wasmer-compiler-singlepass"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
+source = "git+https://github.com/heliaxdev/wasmer?rev=255054f7f58b7b4a525f2fee6b9b86422d1ca15b#255054f7f58b7b4a525f2fee6b9b86422d1ca15b"
 dependencies = [
  "byteorder",
  "dynasm",
@@ -8028,12 +8029,13 @@ dependencies = [
  "smallvec",
  "wasmer-compiler",
  "wasmer-types",
+ "wasmer-vm",
 ]
 
 [[package]]
 name = "wasmer-derive"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
+source = "git+https://github.com/heliaxdev/wasmer?rev=255054f7f58b7b4a525f2fee6b9b86422d1ca15b#255054f7f58b7b4a525f2fee6b9b86422d1ca15b"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
@@ -8044,7 +8046,7 @@ dependencies = [
 [[package]]
 name = "wasmer-engine"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
+source = "git+https://github.com/heliaxdev/wasmer?rev=255054f7f58b7b4a525f2fee6b9b86422d1ca15b#255054f7f58b7b4a525f2fee6b9b86422d1ca15b"
 dependencies = [
  "backtrace",
  "enumset",
@@ -8066,7 +8068,7 @@ dependencies = [
 [[package]]
 name = "wasmer-engine-dylib"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
+source = "git+https://github.com/heliaxdev/wasmer?rev=255054f7f58b7b4a525f2fee6b9b86422d1ca15b#255054f7f58b7b4a525f2fee6b9b86422d1ca15b"
 dependencies = [
  "cfg-if 1.0.0",
  "enum-iterator",
@@ -8091,7 +8093,7 @@ dependencies = [
 [[package]]
 name = "wasmer-engine-universal"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
+source = "git+https://github.com/heliaxdev/wasmer?rev=255054f7f58b7b4a525f2fee6b9b86422d1ca15b#255054f7f58b7b4a525f2fee6b9b86422d1ca15b"
 dependencies = [
  "cfg-if 1.0.0",
  "enumset",
@@ -8110,7 +8112,7 @@ dependencies = [
 [[package]]
 name = "wasmer-engine-universal-artifact"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
+source = "git+https://github.com/heliaxdev/wasmer?rev=255054f7f58b7b4a525f2fee6b9b86422d1ca15b#255054f7f58b7b4a525f2fee6b9b86422d1ca15b"
 dependencies = [
  "enum-iterator",
  "enumset",
@@ -8125,7 +8127,7 @@ dependencies = [
 [[package]]
 name = "wasmer-object"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
+source = "git+https://github.com/heliaxdev/wasmer?rev=255054f7f58b7b4a525f2fee6b9b86422d1ca15b#255054f7f58b7b4a525f2fee6b9b86422d1ca15b"
 dependencies = [
  "object 0.28.4",
  "thiserror",
@@ -8136,13 +8138,12 @@ dependencies = [
 [[package]]
 name = "wasmer-types"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
+source = "git+https://github.com/heliaxdev/wasmer?rev=255054f7f58b7b4a525f2fee6b9b86422d1ca15b#255054f7f58b7b4a525f2fee6b9b86422d1ca15b"
 dependencies = [
  "backtrace",
  "enum-iterator",
  "indexmap 1.9.3",
  "loupe",
- "more-asserts",
  "rkyv",
  "serde 1.0.193",
  "thiserror",
@@ -8151,7 +8152,7 @@ dependencies = [
 [[package]]
 name = "wasmer-vm"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
+source = "git+https://github.com/heliaxdev/wasmer?rev=255054f7f58b7b4a525f2fee6b9b86422d1ca15b#255054f7f58b7b4a525f2fee6b9b86422d1ca15b"
 dependencies = [
  "backtrace",
  "cc",
