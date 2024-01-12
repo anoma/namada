@@ -553,7 +553,7 @@ where
         Some(&write_log::StorageModification::Write { .. }) => {
             HostEnvResult::Success.to_i64()
         }
-        Some(&write_log::StorageModification::Delete) => {
+        Some(&write_log::StorageModification::Delete { .. }) => {
             // the given key has been deleted
             HostEnvResult::Fail.to_i64()
         }
@@ -618,7 +618,7 @@ where
             result_buffer.replace(value.clone());
             len
         }
-        Some(&write_log::StorageModification::Delete) => {
+        Some(&write_log::StorageModification::Delete { .. }) => {
             // fail, given key has been deleted
             HostEnvResult::Fail.to_i64()
         }
@@ -771,7 +771,7 @@ where
                 result_buffer.replace(key_val);
                 return Ok(len);
             }
-            Some(&write_log::StorageModification::Delete) => {
+            Some(&write_log::StorageModification::Delete { .. }) => {
                 // check the next because the key has already deleted
                 continue;
             }
@@ -2322,7 +2322,7 @@ where
                 ref value,
                 action: _,
             }) => Some(value.clone()),
-            Some(&write_log::StorageModification::Delete) => None,
+            Some(&write_log::StorageModification::Delete { .. }) => None,
             Some(write_log::StorageModification::InitAccount {
                 ref vp_code_hash,
             }) => Some(vp_code_hash.to_vec()),
@@ -2346,7 +2346,7 @@ where
         ibc_tx_charge_gas(self, gas)?;
         Ok(match log_val {
             Some(&write_log::StorageModification::Write { .. }) => true,
-            Some(&write_log::StorageModification::Delete) => false,
+            Some(&write_log::StorageModification::Delete { .. }) => false,
             Some(&write_log::StorageModification::InitAccount { .. }) => true,
             Some(&write_log::StorageModification::Temp { .. }) => true,
             None => {
@@ -2391,7 +2391,7 @@ where
                 }) => {
                     return Ok(Some((key, value.clone())));
                 }
-                Some(&write_log::StorageModification::Delete) => {
+                Some(&write_log::StorageModification::Delete { .. }) => {
                     // check the next because the key has already deleted
                     continue;
                 }
@@ -2481,6 +2481,9 @@ where
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    // TODO: is it ok to not explicitly use the `_actions` and use the default
+    // behavior????
+
     fn write_bytes(
         &mut self,
         key: &Key,
@@ -2494,7 +2497,11 @@ where
         ibc_tx_charge_gas(self, gas)
     }
 
-    fn delete(&mut self, key: &Key) -> Result<(), storage_api::Error> {
+    fn delete_with_actions(
+        &mut self,
+        key: &Key,
+        _action: WriteActions,
+    ) -> Result<(), storage_api::Error> {
         if key.is_validity_predicate().is_some() {
             return Err(TxRuntimeError::CannotDeleteVp).into_storage_result();
         }

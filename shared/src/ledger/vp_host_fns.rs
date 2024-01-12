@@ -78,7 +78,7 @@ where
             ref value,
             action: _,
         }) => Ok(Some(value.clone())),
-        Some(&write_log::StorageModification::Delete) => {
+        Some(&write_log::StorageModification::Delete { action: _ }) => {
             // Given key has been deleted
             Ok(None)
         }
@@ -122,7 +122,7 @@ where
             ref value,
             action: _,
         }) => Ok(Some(value.clone())),
-        Some(&write_log::StorageModification::Delete) => {
+        Some(&write_log::StorageModification::Delete { action: _ }) => {
             // Given key has been deleted
             Ok(None)
         }
@@ -183,7 +183,7 @@ where
     add_gas(gas_meter, gas, sentinel)?;
     match log_val {
         Some(&write_log::StorageModification::Write { .. }) => Ok(true),
-        Some(&write_log::StorageModification::Delete) => {
+        Some(&write_log::StorageModification::Delete { .. }) => {
             // The given key has been deleted
             Ok(false)
         }
@@ -217,7 +217,7 @@ where
     add_gas(gas_meter, gas, sentinel)?;
     match log_val {
         Some(&write_log::StorageModification::Write { .. }) => Ok(true),
-        Some(&write_log::StorageModification::Delete) => {
+        Some(&write_log::StorageModification::Delete { .. }) => {
             // The given key has been deleted
             Ok(false)
         }

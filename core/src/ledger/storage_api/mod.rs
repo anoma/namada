@@ -160,8 +160,24 @@ pub trait StorageWrite {
         action: WriteActions,
     ) -> Result<()>;
 
-    /// Delete a value at the given key from storage.
-    fn delete(&mut self, key: &storage::Key) -> Result<()>;
+    /// Delete a value at the given key from storage
+    fn delete_with_actions(
+        &mut self,
+        key: &storage::Key,
+        action: WriteActions,
+    ) -> Result<()>;
+
+    /// Delete a value at the given key from storage, including from the diffs
+    /// storage.
+    fn delete(&mut self, key: &storage::Key) -> Result<()> {
+        self.delete_with_actions(key, WriteActions::All)
+    }
+
+    /// Delete a value at the given key from storage, excluding the diffs
+    /// storage.
+    fn delete_without_diffs(&mut self, key: &storage::Key) -> Result<()> {
+        self.delete_with_actions(key, WriteActions::NoDiffsOrMerkl)
+    }
 
     /// Delete all key-vals with a matching prefix.
     fn delete_prefix(&mut self, prefix: &storage::Key) -> Result<()>

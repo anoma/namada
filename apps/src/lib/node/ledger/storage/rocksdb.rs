@@ -1348,21 +1348,31 @@ impl DB for RocksDB {
         &mut self,
         height: BlockHeight,
         key: &Key,
+        action: WriteActions,
     ) -> Result<i64> {
         let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
 
         // Check the length of previous value, if any
-        let prev_len = match self
-            .0
-            .get_cf(subspace_cf, key.to_string())
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(prev_value) => {
-                let prev_len = prev_value.len() as i64;
-                self.write_subspace_diff(height, key, Some(&prev_value), None)?;
-                prev_len
+        let prev_len = if action == WriteActions::NoDiffsOrMerkl {
+            0
+        } else {
+            match self
+                .0
+                .get_cf(subspace_cf, key.to_string())
+                .map_err(|e| Error::DBError(e.into_string()))?
+            {
+                Some(prev_value) => {
+                    let prev_len = prev_value.len() as i64;
+                    self.write_subspace_diff(
+                        height,
+                        key,
+                        Some(&prev_value),
+                        None,
+                    )?;
+                    prev_len
+                }
+                None => 0,
             }
-            None => 0,
         };
 
         // Delete the key-val
@@ -1437,28 +1447,33 @@ impl DB for RocksDB {
         batch: &mut Self::WriteBatch,
         height: BlockHeight,
         key: &Key,
+        action: WriteActions,
     ) -> Result<i64> {
         let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
 
         // Check the length of previous value, if any
-        let prev_len = match self
-            .0
-            .get_cf(subspace_cf, key.to_string())
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(prev_value) => {
-                let prev_len = prev_value.len() as i64;
-                // Persist the previous value
-                self.batch_write_subspace_diff(
-                    batch,
-                    height,
-                    key,
-                    Some(&prev_value),
-                    None,
-                )?;
-                prev_len
+        let prev_len = if action == WriteActions::NoDiffsOrMerkl {
+            0
+        } else {
+            match self
+                .0
+                .get_cf(subspace_cf, key.to_string())
+                .map_err(|e| Error::DBError(e.into_string()))?
+            {
+                Some(prev_value) => {
+                    let prev_len = prev_value.len() as i64;
+                    // Persist the previous value
+                    self.batch_write_subspace_diff(
+                        batch,
+                        height,
+                        key,
+                        Some(&prev_value),
+                        None,
+                    )?;
+                    prev_len
+                }
+                None => 0,
             }
-            None => 0,
         };
 
         // Delete the key-val
@@ -1891,11 +1906,17 @@ mod test {
 
         let mut batch = RocksDB::batch();
         let last_height = BlockHeight(222);
-        db.batch_delete_subspace_val(&mut batch, last_height, &batch_key)
-            .unwrap();
+        db.batch_delete_subspace_val(
+            &mut batch,
+            last_height,
+            &batch_key,
+            WriteActions::All,
+        )
+        .unwrap();
         db.exec_batch(batch.0).unwrap();
 
-        db.delete_subspace_val(last_height, &key).unwrap();
+        db.delete_subspace_val(last_height, &key, WriteActions::All)
+            .unwrap();
 
         let deleted_value = db
             .read_subspace_val_with_height(
@@ -2052,8 +2073,13 @@ mod test {
             WriteActions::All,
         )
         .unwrap();
-        db.batch_delete_subspace_val(&mut batch, height_1, &delete_key)
-            .unwrap();
+        db.batch_delete_subspace_val(
+            &mut batch,
+            height_1,
+            &delete_key,
+            WriteActions::All,
+        )
+        .unwrap();
 
         add_block_to_batch(
             &db,

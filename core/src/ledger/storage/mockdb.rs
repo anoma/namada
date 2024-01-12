@@ -519,9 +519,15 @@ impl DB for MockDB {
         &mut self,
         height: BlockHeight,
         key: &Key,
+        action: WriteActions,
     ) -> Result<i64> {
         // batch_delete are directly committed
-        self.batch_delete_subspace_val(&mut MockDBWriteBatch, height, key)
+        self.batch_delete_subspace_val(
+            &mut MockDBWriteBatch,
+            height,
+            key,
+            action,
+        )
     }
 
     fn batch() -> Self::WriteBatch {
@@ -585,6 +591,7 @@ impl DB for MockDB {
         _batch: &mut Self::WriteBatch,
         height: BlockHeight,
         key: &Key,
+        action: WriteActions,
     ) -> Result<i64> {
         let subspace_key =
             Key::parse("subspace").map_err(Error::KeyError)?.join(key);
@@ -592,12 +599,16 @@ impl DB for MockDB {
         let mut db = self.0.borrow_mut();
         Ok(match db.remove(&subspace_key.to_string()) {
             Some(value) => {
-                let old_key = diff_prefix
-                    .push(&"old".to_string().to_db_key())
-                    .unwrap()
-                    .join(key);
-                db.insert(old_key.to_string(), value.clone());
-                value.len() as i64
+                if action == WriteActions::NoDiffsOrMerkl {
+                    0
+                } else {
+                    let old_key = diff_prefix
+                        .push(&"old".to_string().to_db_key())
+                        .unwrap()
+                        .join(key);
+                    db.insert(old_key.to_string(), value.clone());
+                    value.len() as i64
+                }
             }
             None => 0,
         })

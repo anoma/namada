@@ -63,7 +63,9 @@ mod tests {
     use namada::ledger::parameters::{EpochDuration, Parameters};
     use namada::ledger::storage::write_log::WriteLog;
     use namada::ledger::storage::{types, StoreType, WlStorage, DB};
-    use namada::ledger::storage_api::{self, StorageRead, StorageWrite};
+    use namada::ledger::storage_api::{
+        self, StorageRead, StorageWrite, WriteActions,
+    };
     use namada::types::chain::ChainId;
     use namada::types::ethereum_events::Uint;
     use namada::types::hash::Hash;
@@ -530,7 +532,11 @@ mod tests {
                     storage.write(&key, value_bytes)?;
                 }
                 3 => {
-                    storage.batch_delete_subspace_val(&mut batch, &key)?;
+                    storage.batch_delete_subspace_val(
+                        &mut batch,
+                        &key,
+                        WriteActions::All,
+                    )?;
                 }
                 _ => {
                     let value_bytes = types::encode(&storage.block.height);
@@ -890,7 +896,7 @@ mod tests {
 
         // Delete the data then commit the block
         wls.delete(&key1).unwrap();
-        wls.delete(&key2).unwrap();
+        wls.delete_without_diffs(&key2).unwrap();
         wls.commit_block().unwrap();
 
         // Check the key-vals are removed from the storage subspace

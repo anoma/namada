@@ -331,6 +331,7 @@ pub trait DB: std::fmt::Debug {
         &mut self,
         height: BlockHeight,
         key: &Key,
+        action: WriteActions,
     ) -> Result<i64>;
 
     /// Start write batch.
@@ -359,6 +360,7 @@ pub trait DB: std::fmt::Debug {
         batch: &mut Self::WriteBatch,
         height: BlockHeight,
         key: &Key,
+        action: WriteActions,
     ) -> Result<i64>;
 
     /// Prune Merkle tree stores at the given epoch
@@ -733,18 +735,33 @@ where
 
     /// Delete the specified subspace and returns the gas cost and the size
     /// difference
-    pub fn delete(&mut self, key: &Key) -> Result<(u64, i64)> {
+    pub fn delete_with_actions(
+        &mut self,
+        key: &Key,
+        action: WriteActions,
+    ) -> Result<(u64, i64)> {
         // Note that this method is the same as `StorageWrite::delete`,
         // but with gas and storage bytes len diff accounting
         let mut deleted_bytes_len = 0;
         if self.has_key(key)?.0 {
             self.block.tree.delete(key)?;
             deleted_bytes_len =
-                self.db.delete_subspace_val(self.block.height, key)?;
+                self.db
+                    .delete_subspace_val(self.block.height, key, action)?;
         }
         let gas = (key.len() + deleted_bytes_len as usize) as u64
             * STORAGE_WRITE_GAS_PER_BYTE;
         Ok((gas, deleted_bytes_len))
+    }
+
+    /// Delete including from the diffs storage
+    pub fn delete(&mut self, key: &Key) -> Result<(u64, i64)> {
+        self.delete_with_actions(key, WriteActions::All)
+    }
+
+    /// Delete without manipulating the diffs storage
+    pub fn delete_without_diffs(&mut self, key: &Key) -> Result<(u64, i64)> {
+        self.delete_with_actions(key, WriteActions::NoDiffsOrMerkl)
     }
 
     /// Set the block header.
@@ -1192,11 +1209,12 @@ where
         &mut self,
         batch: &mut D::WriteBatch,
         key: &Key,
+        action: WriteActions,
     ) -> Result<i64> {
         // Update the merkle tree
         self.block.tree.delete(key)?;
         self.db
-            .batch_delete_subspace_val(batch, self.block.height, key)
+            .batch_delete_subspace_val(batch, self.block.height, key, action)
     }
 
     // Prune merkle tree stores. Use after updating self.block.height in the
@@ -1732,7 +1750,7 @@ mod tests {
         assert!(res2.is_none());
 
         wls.delete(&key1).unwrap();
-        wls.delete(&key2).unwrap();
+        wls.delete_without_diffs(&key2).unwrap();
         wls.commit_block().unwrap();
 
         // Check the key-vals are removed from the storage subspace

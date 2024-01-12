@@ -83,7 +83,7 @@ where
                 ref value,
                 action: _,
             }) => Ok(Some(value.clone())),
-            Some(StorageModification::Delete) => Ok(None),
+            Some(StorageModification::Delete { .. }) => Ok(None),
             Some(StorageModification::Temp { .. }) => {
                 unreachable!("Temp shouldn't be inserted")
             }
@@ -166,8 +166,13 @@ where
         Ok(())
     }
 
-    fn delete(&mut self, key: &Key) -> Result<()> {
-        self.store.insert(key.clone(), StorageModification::Delete);
+    fn delete_with_actions(
+        &mut self,
+        key: &Key,
+        action: WriteActions,
+    ) -> Result<()> {
+        self.store
+            .insert(key.clone(), StorageModification::Delete { action });
         Ok(())
     }
 }
@@ -388,7 +393,11 @@ where
         unimplemented!("Validation doesn't write any data")
     }
 
-    fn delete(&mut self, _key: &Key) -> Result<()> {
+    fn delete_with_actions(
+        &mut self,
+        _key: &Key,
+        _action: WriteActions,
+    ) -> Result<()> {
         unimplemented!("Validation doesn't delete any data")
     }
 }

@@ -248,6 +248,15 @@ impl StorageWrite for Ctx {
         unsafe { namada_tx_delete(key.as_ptr() as _, key.len() as _) };
         Ok(())
     }
+
+    // TODO: is this the correct thing to do here?
+    fn delete_with_actions(
+        &mut self,
+        _key: &storage::Key,
+        _action: WriteActions,
+    ) -> storage_api::Result<()> {
+        unimplemented!()
+    }
 }
 
 impl TxEnv for Ctx {

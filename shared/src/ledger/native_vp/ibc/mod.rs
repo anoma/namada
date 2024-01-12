@@ -232,7 +232,7 @@ fn match_value(
             "The value was invalid: Key {}",
             key
         ))),
-        (None, Some(StorageModification::Delete)) => Ok(()),
+        (None, Some(StorageModification::Delete { action: _ })) => Ok(()),
         (None, _) => Err(Error::StateChange(format!(
             "The key was deleted unexpectedly: Key {}",
             key

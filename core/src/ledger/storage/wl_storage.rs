@@ -398,7 +398,9 @@ where
                                 let gas = vp_code_hash.len() as u64;
                                 return Some((key, vp_code_hash.to_vec(), gas));
                             }
-                            write_log::StorageModification::Delete => {
+                            write_log::StorageModification::Delete {
+                                action: _,
+                            } => {
                                 continue;
                             }
                         }
@@ -433,7 +435,9 @@ where
                 ref value,
                 action: _,
             }) => Ok(Some(value.clone())),
-            Some(write_log::StorageModification::Delete) => Ok(None),
+            Some(write_log::StorageModification::Delete { action: _ }) => {
+                Ok(None)
+            }
             Some(write_log::StorageModification::InitAccount {
                 ref vp_code_hash,
             }) => Ok(Some(vp_code_hash.to_vec())),
@@ -457,7 +461,7 @@ where
             Some(&write_log::StorageModification::Write { .. })
             | Some(&write_log::StorageModification::InitAccount { .. })
             | Some(&write_log::StorageModification::Temp { .. }) => Ok(true),
-            Some(&write_log::StorageModification::Delete) => {
+            Some(&write_log::StorageModification::Delete { .. }) => {
                 // the given key has been deleted
                 Ok(false)
             }
@@ -548,10 +552,14 @@ where
         Ok(())
     }
 
-    fn delete(&mut self, key: &storage::Key) -> storage_api::Result<()> {
+    fn delete_with_actions(
+        &mut self,
+        key: &storage::Key,
+        action: WriteActions,
+    ) -> storage_api::Result<()> {
         let _ = self
             .write_log_mut()
-            .protocol_delete(key)
+            .protocol_delete(key, action)
             .into_storage_result();
         Ok(())
     }
