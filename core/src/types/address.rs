@@ -628,17 +628,6 @@ pub fn kartoffel() -> Address {
         .expect("The token address decoding shouldn't fail")
 }
 
-/// Sentinel secret key to indicate a MASP source
-pub fn masp_tx_key() -> crate::types::key::common::SecretKey {
-    use crate::types::key::common;
-    let bytes = [
-        0, 27, 238, 157, 32, 131, 242, 184, 142, 146, 189, 24, 249, 68, 165,
-        205, 71, 213, 158, 25, 253, 52, 217, 87, 52, 171, 225, 110, 131, 238,
-        58, 94, 56,
-    ];
-    common::SecretKey::try_from_slice(bytes.as_ref()).unwrap()
-}
-
 /// Temporary helper for testing
 pub const fn wnam() -> EthAddress {
     // TODO: Replace this with the real wNam ERC20 address once it exists
