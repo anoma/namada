@@ -106,7 +106,7 @@ use crate::facade::tendermint_proto::google::protobuf::Timestamp;
 use crate::node::ledger::shell::Shell;
 use crate::wallet::{defaults, CliWalletUtils};
 
-pub const WASM_DIR: &str = "../wasm";
+pub const WASM_DIR: &str = "../../wasm";
 
 pub const ALBERT_PAYMENT_ADDRESS: &str = "albert_payment";
 pub const ALBERT_SPENDING_KEY: &str = "albert_spending";
@@ -552,7 +552,8 @@ impl BenchShell {
 }
 
 pub fn generate_foreign_key_tx(signer: &SecretKey) -> Tx {
-    let wasm_code = std::fs::read("../wasm_for_tests/tx_write.wasm").unwrap();
+    let wasm_code =
+        std::fs::read("../../wasm_for_tests/tx_write.wasm").unwrap();
 
     let mut tx = Tx::from_type(namada::tx::data::TxType::Decrypted(
         namada::tx::data::DecryptedTx::Decrypted,

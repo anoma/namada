@@ -939,6 +939,8 @@ mod tests {
         let templates_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .unwrap()
+            .parent()
+            .unwrap()
             .join("genesis/localnet");
         assert!(
             load_and_validate(&templates_dir).is_some(),
@@ -950,6 +952,8 @@ mod tests {
     #[test]
     fn test_validate_starter_genesis_templates() {
         let templates_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
             .parent()
             .unwrap()
             .join("genesis/starter");

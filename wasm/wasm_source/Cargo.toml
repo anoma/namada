@@ -39,18 +39,20 @@ vp_implicit = ["namada_vp_prelude", "once_cell"]
 vp_user = ["namada_vp_prelude", "once_cell"]
 
 [dependencies]
-namada_tx_prelude = {path = "../../tx_prelude", optional = true}
-namada_vp_prelude = {path = "../../vp_prelude", optional = true}
+namada_tx_prelude = {path = "../../crates/tx_prelude", optional = true}
+namada_vp_prelude = {path = "../../crates/vp_prelude", optional = true}
+
 once_cell = {version = "1.8.0", optional = true}
 wee_alloc = "0.4.5"
 getrandom = { version = "0.2", features = ["custom"] }
 
 [dev-dependencies]
-namada = {path = "../../shared"}
-namada_tests = {path = "../../tests"}
-namada_test_utils = {path = "../../test_utils"}
-namada_tx_prelude = {path = "../../tx_prelude"}
-namada_vp_prelude = {path = "../../vp_prelude"}
+namada = {path = "../../crates/shared"}
+namada_tests = {path = "../../crates/tests"}
+namada_test_utils = {path = "../../crates/test_utils"}
+namada_tx_prelude = {path = "../../crates/tx_prelude"}
+namada_vp_prelude = {path = "../../crates/vp_prelude"}
+
 proptest = "1.4.0"
 test-log = {version = "0.2.14", default-features = false, features = ["trace"]}
 tracing = "0.1.30"

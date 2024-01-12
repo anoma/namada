@@ -18,7 +18,7 @@ path = "generate_txs.rs"
 
 [dev-dependencies]
 masp_proofs = { workspace = true, default-features = false, features = ["local-prover", "download-params"] }
-namada_sdk = { path = "../sdk", default-features = false, features = ["namada-sdk", "std", "testing"] }
+namada_sdk = { path = "../crates/sdk", default-features = false, features = ["namada-sdk", "std", "testing"] }
 proptest.workspace = true
 serde_json.workspace = true
 tokio = {workspace = true, default-features = false}

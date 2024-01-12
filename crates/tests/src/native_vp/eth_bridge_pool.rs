@@ -54,6 +54,8 @@ mod test_bridge_pool_vp {
         while current_path.file_name().unwrap() != "tests" {
             current_path.pop();
         }
+        // Two-dirs up to root
+        current_path.pop();
         current_path.pop();
         current_path.join("wasm")
     }

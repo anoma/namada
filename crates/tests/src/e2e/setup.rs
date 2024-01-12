@@ -783,7 +783,7 @@ impl Test {
 
 /// A helper that should be ran on start of every e2e test case.
 pub fn working_dir() -> PathBuf {
-    let working_dir = fs::canonicalize("..").unwrap();
+    let working_dir = fs::canonicalize("../..").unwrap();
 
     // Check that cometbft is either on $PATH or `COMETBFT` env var is set
     if std::env::var("COMETBFT").is_err() {

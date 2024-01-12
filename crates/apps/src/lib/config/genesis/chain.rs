@@ -803,6 +803,8 @@ mod test {
         let templates_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .unwrap()
+            .parent()
+            .unwrap()
             .join("genesis/localnet");
         let templates = templates::load_and_validate(&templates_dir).unwrap();
 

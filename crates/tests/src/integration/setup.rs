@@ -35,7 +35,7 @@ pub fn setup() -> Result<(MockNode, MockServicesController)> {
 
 /// Setup folders with genesis, configs, wasm, etc.
 pub fn initialize_genesis() -> Result<(MockNode, MockServicesController)> {
-    let working_dir = std::fs::canonicalize("..").unwrap();
+    let working_dir = std::fs::canonicalize("../..").unwrap();
     let keep_temp = match std::env::var(ENV_VAR_KEEP_TEMP) {
         Ok(val) => val.to_ascii_lowercase() != "false",
         _ => false,
@@ -158,7 +158,7 @@ fn create_node(
 
     // copy compiled wasms into the wasm directory
     copy_wasm_to_chain_dir(
-        &std::fs::canonicalize("..").unwrap(),
+        &std::fs::canonicalize("../..").unwrap(),
         &global_args.base_dir,
         &chain_id,
     );

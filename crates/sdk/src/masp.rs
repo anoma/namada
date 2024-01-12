@@ -4,7 +4,7 @@ use std::collections::{btree_map, BTreeMap, BTreeSet, HashMap, HashSet};
 use std::env;
 use std::fmt::Debug;
 use std::ops::Deref;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 // use async_std::io::prelude::WriteExt;
 // use async_std::io::{self};
@@ -1841,13 +1841,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
             let saved_filepath = env::current_dir()
                 .map_err(|e| Error::Other(e.to_string()))?
-                // One up from "tests" dir to the root dir
+                // Two up from "tests" dir to the root dir
                 .parent()
+                .and_then(Path::parent)
                 .ok_or_else(|| {
-                    Error::Other(
-                        "Can not get parent directory of the current dir"
-                            .to_string(),
-                    )
+                    Error::Other("Can not get root dir".to_string())
                 })?
                 .join(MASP_TEST_PROOFS_DIR)
                 .join(format!("{builder_hash}.bin"));

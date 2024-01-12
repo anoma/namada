@@ -10,10 +10,9 @@ version = "0.29.0"
 crate-type = ["cdylib"]
 
 [dependencies]
-namada_tx_prelude = {path = "../../tx_prelude"}
-borsh = "1.2.0"
+namada_tx_prelude = {path = "../../crates/tx_prelude"}
 wee_alloc = "0.4.5"
 getrandom = { version = "0.2", features = ["custom"] }
 
 [dev-dependencies]
-namada_tests = {path = "../../tests"}
+namada_tests = {path = "../../crates/tests"}

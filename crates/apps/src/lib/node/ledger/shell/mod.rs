@@ -1618,6 +1618,8 @@ mod test_utils {
         while current_path.file_name().unwrap() != "apps" {
             current_path.pop();
         }
+        // Two-dirs up to root
+        current_path.pop();
         current_path.pop();
         current_path
     }

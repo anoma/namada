@@ -6218,7 +6218,6 @@ checksum = "3528ecfd12c466c6f163363caf2d02a71161dd5e1cc6ae7b34207ea2d42d81ed"
 name = "tx_template"
 version = "0.29.0"
 dependencies = [
- "borsh",
  "getrandom 0.2.11",
  "namada_tests",
  "namada_tx_prelude",
@@ -6373,7 +6372,6 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 name = "vp_template"
 version = "0.29.0"
 dependencies = [
- "borsh",
  "getrandom 0.2.11",
  "namada_tests",
  "namada_vp_prelude",
