@@ -1,6 +1,7 @@
 {
     "e2e::eth_bridge_tests::everything": 4,
     "e2e::ibc_tests::run_ledger_ibc": 155,
+    "e2e::ibc_tests::run_ledger_ibc_with_hermes": 130,
     "e2e::eth_bridge_tests::test_add_to_bridge_pool": 10,
     "e2e::ledger_tests::double_signing_gets_slashed": 12,
     "e2e::ledger_tests::invalid_transactions": 13,
