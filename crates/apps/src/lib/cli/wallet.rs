@@ -435,15 +435,12 @@ fn transparent_key_and_address_gen(
                 edisplay_line!(io, "{}", err);
                 cli::safe_exit(1)
             });
-        let (_mnemonic, seed) = Wallet::<CliWalletUtils>::gen_hd_seed(
-            None,
-            &mut OsRng,
-            unsafe_dont_encrypt,
-        )
-        .unwrap_or_else(|err| {
-            edisplay_line!(io, "{}", err);
-            cli::safe_exit(1)
-        });
+        let (_mnemonic, seed) =
+            Wallet::<CliWalletUtils>::gen_hd_seed(None, &mut OsRng)
+                .unwrap_or_else(|err| {
+                    edisplay_line!(io, "{}", err);
+                    cli::safe_exit(1)
+                });
         wallet.derive_store_hd_secret_key(
             scheme,
             Some(alias),
