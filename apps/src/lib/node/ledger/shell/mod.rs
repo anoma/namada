@@ -1763,6 +1763,7 @@ mod test_utils {
             &self,
             req: ProcessProposal,
         ) -> std::result::Result<Vec<ProcessedTx>, TestError> {
+            let time = DateTimeUtc::now();
             let (resp, tx_results) =
                 self.shell.process_proposal(RequestProcessProposal {
                     txs: req
@@ -1780,6 +1781,11 @@ mod test_utils {
                         )
                         .unwrap()
                         .into(),
+                    time: Some(Timestamp {
+                        seconds: time.0.timestamp(),
+                        nanos: time.0.timestamp_subsec_nanos() as i32,
+                    }),
+
                     ..Default::default()
                 });
             let results = tx_results

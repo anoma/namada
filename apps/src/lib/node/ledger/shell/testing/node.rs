@@ -36,6 +36,7 @@ use namada::types::key::tm_consensus_key_raw_hash;
 use namada::types::storage::{BlockHash, BlockHeight, Epoch, Header};
 use namada::types::time::DateTimeUtc;
 use namada_sdk::queries::Client;
+use namada_sdk::tendermint_proto::google::protobuf::Timestamp;
 use regex::Regex;
 use tokio::sync::mpsc;
 
@@ -459,9 +460,14 @@ impl MockNode {
         self.advance_to_allowed_block();
         let (proposer_address, votes) = self.prepare_request();
 
+        let time = DateTimeUtc::now();
         let req = RequestProcessProposal {
             txs: txs.clone().into_iter().map(|tx| tx.into()).collect(),
             proposer_address: proposer_address.clone().into(),
+            time: Some(Timestamp {
+                seconds: time.0.timestamp(),
+                nanos: time.0.timestamp_subsec_nanos() as i32,
+            }),
             ..Default::default()
         };
         let mut locked = self.shell.lock().unwrap();
