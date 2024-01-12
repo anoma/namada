@@ -661,14 +661,13 @@ where
                 }
 
                 // Check that the fee payer has sufficient balance.
-                match self.wrapper_fee_check(
+                match self.process_proposal_fee_check(
                     &wrapper,
                     get_fee_unshielding_transaction(&tx, &wrapper),
+                    block_proposer,
                     temp_wl_storage,
                     vp_wasm_cache,
                     tx_wasm_cache,
-                    Some(block_proposer),
-                    false,
                 ) {
                     Ok(()) => TxResult {
                         code: ResultCode::Ok.into(),
@@ -698,6 +697,41 @@ where
         let is_2nd_height_off = pos_queries.is_deciding_offset_within_epoch(1);
         let is_3rd_height_off = pos_queries.is_deciding_offset_within_epoch(2);
         is_2nd_height_off || is_3rd_height_off
+    }
+
+    fn process_proposal_fee_check<CA>(
+        &self,
+        wrapper: &WrapperTx,
+        masp_transaction: Option<Transaction>,
+        proposer: &Address,
+        temp_wl_storage: &mut TempWlStorage<D, H>,
+        vp_wasm_cache: &mut VpCache<CA>,
+        tx_wasm_cache: &mut TxCache<CA>,
+    ) -> Result<()>
+    where
+        CA: 'static + WasmCacheAccess + Sync,
+    {
+        let minimum_gas_price = namada::ledger::parameters::read_gas_cost(
+            &self.wl_storage,
+            &wrapper.fee.token,
+        )
+        .expect("Must be able to read gas cost parameter")
+        .ok_or(Error::TxApply(protocol::Error::FeeError(format!(
+            "The provided {} token is not allowed for fee payment",
+            wrapper.fee.token
+        ))))?;
+
+        self.wrapper_fee_check(
+            wrapper,
+            masp_transaction,
+            minimum_gas_price,
+            temp_wl_storage,
+            vp_wasm_cache,
+            tx_wasm_cache,
+        )?;
+
+        protocol::transfer_fee(temp_wl_storage, proposer, wrapper)
+            .map_err(Error::TxApply)
     }
 }
 

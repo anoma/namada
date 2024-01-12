@@ -1,9 +1,10 @@
 //! Implementation of the [`RequestPrepareProposal`] ABCI++ method for the Shell
 
+use masp_primitives::transaction::Transaction;
 use namada::core::hints;
 use namada::core::ledger::gas::TxGasMeter;
 use namada::ledger::pos::PosQueries;
-use namada::ledger::protocol::get_fee_unshielding_transaction;
+use namada::ledger::protocol;
 use namada::ledger::storage::{DBIter, StorageHasher, TempWlStorage, DB};
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
 use namada::proto::Tx;
@@ -11,7 +12,7 @@ use namada::types::address::Address;
 use namada::types::internal::TxInQueue;
 use namada::types::key::tm_raw_hash_to_string;
 use namada::types::time::DateTimeUtc;
-use namada::types::transaction::{DecryptedTx, TxType};
+use namada::types::transaction::{DecryptedTx, TxType, WrapperTx};
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::WasmCacheAccess;
 
@@ -229,15 +230,14 @@ where
             self.replay_protection_checks(&tx, temp_wl_storage)
                 .map_err(|_| ())?;
 
-            // Check fees
-            match self.wrapper_fee_check(
+            // Check fees and extract the gas limit of this transaction
+            match self.prepare_proposal_fee_check(
                 &wrapper,
-                get_fee_unshielding_transaction(&tx, &wrapper),
+                protocol::get_fee_unshielding_transaction(&tx, &wrapper),
+                block_proposer,
                 temp_wl_storage,
                 vp_wasm_cache,
                 tx_wasm_cache,
-                Some(block_proposer),
-                true,
             ) {
                 Ok(()) => Ok(u64::from(wrapper.gas_limit)),
                 Err(_) => Err(()),
@@ -366,6 +366,68 @@ where
                 )
         )
         .collect()
+    }
+
+    fn prepare_proposal_fee_check<CA>(
+        &self,
+        wrapper: &WrapperTx,
+        masp_transaction: Option<Transaction>,
+        proposer: &Address,
+        temp_wl_storage: &mut TempWlStorage<D, H>,
+        vp_wasm_cache: &mut VpCache<CA>,
+        tx_wasm_cache: &mut TxCache<CA>,
+    ) -> Result<(), Error>
+    where
+        CA: 'static + WasmCacheAccess + Sync,
+    {
+        let minimum_gas_price = {
+            let proposer_local_config = if let ShellMode::Validator {
+                ref local_config,
+                ..
+            } = self.mode
+            {
+                local_config.as_ref()
+            } else {
+                None
+            };
+
+            // A local config of the  validator overrides the consensus param
+            // when creating a block
+            match proposer_local_config {
+                Some(config) => config
+                    .accepted_gas_tokens
+                    .get(&wrapper.fee.token)
+                    .ok_or(Error::TxApply(protocol::Error::FeeError(format!(
+                        "The provided {} token is not accepted by the block \
+                         proposer for fee payment",
+                        wrapper.fee.token
+                    ))))?
+                    .to_owned(),
+                None => namada::ledger::parameters::read_gas_cost(
+                    &self.wl_storage,
+                    &wrapper.fee.token,
+                )
+                .expect("Must be able to read gas cost parameter")
+                .ok_or(Error::TxApply(
+                    protocol::Error::FeeError(format!(
+                        "The provided {} token is not allowed for fee payment",
+                        wrapper.fee.token
+                    )),
+                ))?,
+            }
+        };
+
+        self.wrapper_fee_check(
+            wrapper,
+            masp_transaction,
+            minimum_gas_price,
+            temp_wl_storage,
+            vp_wasm_cache,
+            tx_wasm_cache,
+        )?;
+
+        protocol::transfer_fee(temp_wl_storage, proposer, wrapper)
+            .map_err(Error::TxApply)
     }
 }
 
