@@ -61,7 +61,7 @@ use namada_core::types::masp::{
 use namada_core::types::storage::{BlockHeight, Epoch, IndexedTx, TxIndex};
 use namada_core::types::time::{DateTimeUtc, DurationSecs};
 use namada_core::types::token;
-use namada_core::types::token::{Change, MaspDenom, Transfer};
+use namada_core::types::token::{MaspDenom, Transfer};
 use namada_core::types::transaction::{TxResult, WrapperTx};
 use rand_core::{CryptoRng, OsRng, RngCore};
 use ripemd::Digest as RipemdDigest;
@@ -641,7 +641,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             // Update this unknown shielded context until it is level with self
             while tx_ctx.last_indexed != self.last_indexed {
                 if let Some((indexed_tx, (epoch, tx, stx))) = tx_iter.next() {
-                    tx_ctx.scan_tx(*indexed_tx, *epoch, tx, stx).await?;
+                    tx_ctx.scan_tx(*indexed_tx, *epoch, tx, stx)?;
                 } else {
                     break;
                 }
@@ -658,7 +658,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         // Now that we possess the unspent notes corresponding to both old and
         // new keys up until tx_pos, proceed to scan the new transactions.
         for (indexed_tx, (epoch, tx, stx)) in &mut tx_iter {
-            self.scan_tx(*indexed_tx, *epoch, tx, stx).await?;
+            self.scan_tx(*indexed_tx, *epoch, tx, stx)?;
         }
         Ok(())
     }
