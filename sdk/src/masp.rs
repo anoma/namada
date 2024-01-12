@@ -1351,7 +1351,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     /// Convert an amount whose units are AssetTypes to one whose units are
     /// Addresses that they decode to. All asset types not corresponding to
     /// the given epoch are ignored.
-    pub async fn decode_combine_sum_at_epoch<C: Client + Sync>(
+    pub async fn decode_combine_sum_to_epoch<C: Client + Sync>(
         &mut self,
         client: &C,
         amt: I128Sum,
@@ -1363,7 +1363,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             let decoded = self.decode_asset_type(client, *asset_type).await;
             // Only assets with the target timestamp count
             match decoded {
-                Some((address, denom, epoch)) if epoch == target_epoch => {
+                Some((address, denom, epoch)) if epoch <= target_epoch => {
                     let decoded_change =
                         token::Change::from_masp_denominated(*val, denom)
                             .expect("expected this to fit");

@@ -174,7 +174,7 @@ pub async fn query_transfers(
                 .unwrap()
                 .0;
             let dec = shielded
-                .decode_combine_sum_at_epoch(context.client(), amt, epoch)
+                .decode_combine_sum_to_epoch(context.client(), amt, epoch)
                 .await;
             shielded_accounts.insert(acc, dec);
         }
@@ -911,7 +911,7 @@ pub async fn query_shielded_balance(
                         .expect("context should contain viewing key")
                 };
                 let balance = shielded
-                    .decode_combine_sum_at_epoch(
+                    .decode_combine_sum_to_epoch(
                         context.client(),
                         balance,
                         epoch,
@@ -1068,7 +1068,7 @@ pub async fn print_decoded_balance(
         let decoded_balance = context
             .shielded_mut()
             .await
-            .decode_combine_sum_at_epoch(context.client(), balance, epoch)
+            .decode_combine_sum_to_epoch(context.client(), balance, epoch)
             .await;
         for (token_addr, amount) in decoded_balance.components() {
             display_line!(
