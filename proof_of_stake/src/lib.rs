@@ -1564,8 +1564,7 @@ where
     S: StorageRead,
 {
     let params = read_pos_params(storage)?;
-    // Outer key is the start epoch used to calculate slashes. The inner
-    // keys are discarded after applying slashes.
+    // Outer key is the start epoch used to calculate slashes.
     let mut amounts: BTreeMap<Epoch, token::Amount> = BTreeMap::default();
 
     // Bonds
@@ -1600,6 +1599,7 @@ where
         }
     }
 
+    // Redelegations
     if bond_id.validator != bond_id.source {
         // Add outgoing redelegations that are still contributing to the source
         // validator's stake
@@ -1668,6 +1668,9 @@ where
 
     if !amounts.is_empty() {
         let slashes = find_validator_slashes(storage, &bond_id.validator)?;
+        let redelegated_bonded =
+            delegator_redelegated_bonds_handle(&bond_id.source)
+                .at(&bond_id.validator);
 
         // Apply slashes
         for (&start, amount) in amounts.iter_mut() {
@@ -1684,7 +1687,30 @@ where
                 .cloned()
                 .collect::<Vec<_>>();
 
-            *amount = apply_list_slashes(&params, &list_slashes, *amount);
+            let slash_epoch_filter =
+                |e: Epoch| e + params.slash_processing_epoch_offset() <= epoch;
+
+            let redelegated_bonds =
+                redelegated_bonded.at(&start).collect_map(storage)?;
+
+            let result_fold = fold_and_slash_redelegated_bonds(
+                storage,
+                &params,
+                &redelegated_bonds,
+                start,
+                &list_slashes,
+                slash_epoch_filter,
+            );
+
+            let total_not_redelegated = *amount - result_fold.total_redelegated;
+
+            let after_not_redelegated = apply_list_slashes(
+                &params,
+                &list_slashes,
+                total_not_redelegated,
+            );
+
+            *amount = after_not_redelegated + result_fold.total_after_slashing;
         }
     }
 
@@ -1715,7 +1741,7 @@ where
     let mut amounts: BTreeMap<Epoch, BTreeMap<Epoch, token::Amount>> =
         BTreeMap::default();
 
-    // Only need to do bonds since rewwards are accumulated during
+    // Only need to do bonds since rewards are accumulated during
     // `unbond_tokens`
     let bonds =
         bond_handle(&bond_id.source, &bond_id.validator).get_data_handler();
