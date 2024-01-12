@@ -8,7 +8,6 @@ use std::iter::Iterator;
 use std::str::FromStr;
 
 use borsh::BorshDeserialize;
-use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
 use itertools::Either;
 use masp_primitives::asset_type::AssetType;
@@ -960,12 +959,6 @@ pub async fn query_shielded_balance(
         (Some(base_token), false) => {
             let tokens = query_tokens(context, Some(&base_token), None).await;
             for (token_alias, token) in tokens {
-                // Compute the unique asset identifier from the token address
-                let token = token;
-                let _asset_type = AssetType::new(
-                    (token.clone(), epoch.0).serialize_to_vec().as_ref(),
-                )
-                .unwrap();
                 let mut found_any = false;
                 display_line!(context.io(), "Shielded Token {}:", token_alias);
                 for fvk in &viewing_keys {
@@ -994,24 +987,18 @@ pub async fn query_shielded_balance(
                             .expect("context should contain viewing key")
                     };
 
-                    let balance = context
-                        .shielded_mut()
-                        .await
-                        .decode_combine_sum(context.client(), balance)
-                        .await;
-                    for ((_, address), val) in balance.0 {
-                        if !val.is_zero() {
-                            found_any = true;
-                        }
-                        let formatted =
-                            context.format_amount(&address, val.into()).await;
-                        display_line!(
-                            context.io(),
-                            "  {}, owned by {}",
-                            formatted,
-                            fvk
-                        );
+                    let total_balance = extract_amount(balance, &token, epoch);
+                    if !total_balance.is_zero() {
+                        found_any = true;
                     }
+                    let formatted =
+                        context.format_amount(&token, total_balance).await;
+                    display_line!(
+                        context.io(),
+                        "  {}, owned by {}",
+                        formatted,
+                        fvk
+                    );
                 }
                 if !found_any {
                     display_line!(
