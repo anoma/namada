@@ -14,7 +14,7 @@ use namada_core::ledger::parameters::storage as parameter_storage;
 use namada_core::proto::SignatureIndex;
 use namada_core::types::account::AccountPublicKeysMap;
 use namada_core::types::address::{
-    masp_tx_key, Address, ImplicitAddress, InternalAddress, MASP,
+    Address, ImplicitAddress, InternalAddress, MASP,
 };
 use namada_core::types::key::*;
 use namada_core::types::masp::{ExtendedViewingKey, PaymentAddress};
@@ -127,21 +127,15 @@ pub fn find_key_by_pk<U: WalletIo>(
     args: &args::Tx,
     public_key: &common::PublicKey,
 ) -> Result<common::SecretKey, Error> {
-    if *public_key == masp_tx_key().ref_to() {
-        // We already know the secret key corresponding to the MASP sentinel key
-        Ok(masp_tx_key())
-    } else {
-        // Otherwise we need to search the wallet for the secret key
-        wallet
-            .find_key_by_pk(public_key, args.password.clone())
-            .map_err(|err| {
-                Error::Other(format!(
-                    "Unable to load the keypair from the wallet for public \
-                     key {}. Failed with: {}",
-                    public_key, err
-                ))
-            })
-    }
+    wallet
+        .find_key_by_pk(public_key, args.password.clone())
+        .map_err(|err| {
+            Error::Other(format!(
+                "Unable to load the keypair from the wallet for public key \
+                 {}. Failed with: {}",
+                public_key, err
+            ))
+        })
 }
 
 /// Given CLI arguments and some defaults, determine the rightful transaction
@@ -162,8 +156,8 @@ pub async fn tx_signers(
 
     // Now actually fetch the signing key and apply it
     match signer {
-        Some(signer) if signer == MASP => Ok(vec![masp_tx_key().ref_to()]),
-
+        // No signature needed if the source is MASP
+        Some(MASP) => Ok(vec![]),
         Some(signer) => Ok(vec![find_pk(context, &signer).await?]),
         None => other_err(
             "All transactions must be signed; please either specify the key \
@@ -359,14 +353,6 @@ pub async fn aux_signing_data(
         }
     };
 
-    if fee_payer == masp_tx_key().to_public() {
-        other_err(
-            "The gas payer cannot be the MASP, please provide a different gas \
-             payer."
-                .to_string(),
-        )?;
-    }
-
     Ok(SigningTxData {
         owner,
         public_keys,
@@ -403,14 +389,6 @@ pub async fn init_validator_signing_data(
             None => public_keys.get(0).ok_or(TxError::InvalidFeePayer)?.clone(),
         }
     };
-
-    if fee_payer == masp_tx_key().to_public() {
-        other_err(
-            "The gas payer cannot be the MASP, please provide a different gas \
-             payer."
-                .to_string(),
-        )?;
-    }
 
     Ok(SigningTxData {
         owner: None,
