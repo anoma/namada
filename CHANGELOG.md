@@ -1,5 +1,75 @@
 # CHANGELOG
 
+## v0.30.0
+
+Namada 0.30.0 is a minor release that primarily upgrades the MASP and WASM VM memory functionality in addition to smaller upgrades to other Namada modules.
+
+### BUG FIXES
+
+- Suppress querying errors when a user has no token balance
+  ([\#1910](https://github.com/anoma/namada/issues/1910))
+- Fix alignment errors on wasmer that cause the ledger to crash.
+  ([\#2384](https://github.com/anoma/namada/pull/2384))
+- Sanitize wasm memory accesses which are outside of the 32-bit address
+  range, to avoid crashing the ledger while executing malicious wasm payloads.
+  ([\#2385](https://github.com/anoma/namada/pull/2385))
+
+### FEATURES
+
+- PGF over IBC ([\#1395](https://github.com/anoma/namada/issues/1395))
+
+### IMPROVEMENTS
+
+- Adds a new `query_proposal_votes` query, improves the formatting of
+  `ProposalResult` and returns early in client if governance voter has no stake.
+  Misc refactors. ([\#2330](https://github.com/anoma/namada/pull/2330))
+- Removes panics from masp vp. Refactors masp storage keys generation.
+  ([\#2345](https://github.com/anoma/namada/pull/2345))
+- Introduce a memo field, to allow including arbitrary data inside of
+  transactions. ([\#2358](https://github.com/anoma/namada/pull/2358))
+- Include validator avatar url in their medatada
+  ([\#2359](https://github.com/anoma/namada/pull/2359))
+- Removed masp data from storage. Updated the client to query the cometBFT rpc
+  endpoints. ([\#2363](https://github.com/anoma/namada/pull/2363))
+- When constructing a governance proposal the id is now a required field.
+  ([\#2365](https://github.com/anoma/namada/pull/2365))
+- Added validator's consensus key look-up to `client find-validator`
+  command, which now also accepts a native validator address.
+  ([\#2368](https://github.com/anoma/namada/pull/2368))
+- Fix the function  to more accurately account for slashes.
+  ([\#2374](https://github.com/anoma/namada/pull/2374))
+- The MASP VP now validates the tx expiration.
+  ([\#2375](https://github.com/anoma/namada/pull/2375))
+- Removed the hardcoded sentinel key of MASP.
+  ([\#2376](https://github.com/anoma/namada/pull/2376))
+- Improved governance variable names and code reuse.
+  ([\#2377](https://github.com/anoma/namada/pull/2377))
+
+### SDK
+
+- Added `QueryProposalVotes` struct. Removes `VoteType`from
+  the `Display` implementation of `LedgerProposalVote`. Updates
+  `build_vote_proposal` to return an error if voter has no delegations.
+  ([\#2330](https://github.com/anoma/namada/pull/2330))
+- Refactors MASP keys construction.
+  ([\#2345](https://github.com/anoma/namada/pull/2345))
+- Add optional memo field to transaction args.
+  ([\#2358](https://github.com/anoma/namada/pull/2358))
+- Modified `ShieldedContext` to use `IndexedTx` to track the last indexed
+  masp tx. Updated `fetch_shielded_transfer` and `compute_pinned_balance`
+  to query the cometBFT rpc endpoints to retrieve masp data.
+  Updated `block_search` to accept a fallible cast to `Height`.
+  ([\#2363](https://github.com/anoma/namada/pull/2363))
+- Cleaned up the unused ibc dependency of the light sdk crate.
+  ([\#2372](https://github.com/anoma/namada/pull/2372))
+- `tx_signers` returns no signing key when the source of a transaction is MASP.
+  ([\#2376](https://github.com/anoma/namada/pull/2376))
+
+### TESTING
+
+- Add IBC E2E test with Hermes
+  ([\#773](https://github.com/anoma/namada/issues/773))
+
 ## v0.29.0
 
 Namada 0.29.0 is a minor release that introduces the light SDK, upgrades the MASP and CLI, and includes other fixes and refactors of the PoS, IBC, and Ethereum Birdge modules.
@@ -57,6 +127,8 @@ and runs them through init_chain. All errors are collected into a report. ([\#22
   ([\#2282](https://github.com/anoma/namada/pull/2282))
 - Refactor internal structure of the Ethereum bridge crate
   ([\#2288](https://github.com/anoma/namada/pull/2288))
+- Move Ethereum bridge transaction code from `apps` to the `ethereum_bridge`
+  crate. ([\#2289](https://github.com/anoma/namada/pull/2289))
 - Move the pos inflation gain parameters to the PosParams.
   ([\#2294](https://github.com/anoma/namada/pull/2294))
 - Move the inflation code for PoS and PGF into their own native modules.
