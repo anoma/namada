@@ -143,7 +143,7 @@ where
             // Invariant: Process slashes before inflation as they may affect
             // the rewards in the current epoch.
             self.process_slashes();
-            self.apply_inflation(current_epoch)?;
+            self.apply_inflation(current_epoch, &mut response)?;
         }
 
         // Consensus set liveness check
@@ -659,7 +659,11 @@ where
     /// account, then update the reward products of the validators. This is
     /// executed while finalizing the first block of a new epoch and is applied
     /// with respect to the previous epoch.
-    fn apply_inflation(&mut self, current_epoch: Epoch) -> Result<()> {
+    fn apply_inflation(
+        &mut self,
+        current_epoch: Epoch,
+        response: &mut shim::response::FinalizeBlock,
+    ) -> Result<()> {
         let last_epoch = current_epoch.prev();
 
         // Get the number of blocks in the last epoch
@@ -682,6 +686,13 @@ where
 
         // Pgf inflation
         pgf_inflation::apply_inflation(&mut self.wl_storage)?;
+        for ibc_event in self.wl_storage.write_log_mut().take_ibc_events() {
+            let mut event = Event::from(ibc_event.clone());
+            // Add the height for IBC event query
+            let height = self.wl_storage.storage.get_last_block_height() + 1;
+            event["height"] = height.to_string();
+            response.events.push(event);
+        }
 
         Ok(())
     }

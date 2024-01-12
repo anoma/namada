@@ -1304,8 +1304,8 @@ pub async fn query_pgf(context: &impl Namada, _args: args::QueryPgf) {
                     context.io(),
                     "{:4}- {} for {}",
                     "",
-                    funding.detail.target,
-                    funding.detail.amount.to_string_native()
+                    funding.detail.target(),
+                    funding.detail.amount().to_string_native()
                 );
             }
         }

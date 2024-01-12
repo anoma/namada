@@ -8,7 +8,7 @@ use crate::ledger::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
 use crate::ledger::governance::storage::proposal::{
-    AddRemove, PGFAction, PGFTarget, ProposalType,
+    AddRemove, PGFAction, ProposalType,
 };
 use crate::ledger::governance::storage::vote::StorageProposalVote;
 use crate::types::address::Address;
@@ -124,12 +124,8 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
             .continuous
             .iter()
             .cloned()
-            .map(|funding| {
-                let target = PGFTarget {
-                    target: funding.address,
-                    amount: funding.amount,
-                };
-                if funding.amount.is_zero() {
+            .map(|target| {
+                if target.amount().is_zero() {
                     PGFAction::Continuous(AddRemove::Remove(target))
                 } else {
                     PGFAction::Continuous(AddRemove::Add(target))
@@ -142,13 +138,7 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
             .retro
             .iter()
             .cloned()
-            .map(|funding| {
-                let target = PGFTarget {
-                    target: funding.address,
-                    amount: funding.amount,
-                };
-                PGFAction::Retro(target)
-            })
+            .map(PGFAction::Retro)
             .collect::<Vec<PGFAction>>();
 
         let extra_data = [continuous_fundings, retro_fundings].concat();

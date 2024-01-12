@@ -12,11 +12,15 @@
 use core::convert::TryFrom;
 use core::str::FromStr;
 use core::time::Duration;
-use std::collections::HashMap;
-use std::path::PathBuf;
+use std::collections::{BTreeSet, HashMap};
+use std::path::{Path, PathBuf};
 
 use color_eyre::eyre::Result;
 use eyre::eyre;
+use namada::core::ledger::governance::cli::onchain::PgfFunding;
+use namada::core::ledger::governance::storage::proposal::{
+    PGFIbcTarget, PGFTarget,
+};
 use namada::ibc::apps::transfer::types::VERSION as ICS20_VERSION;
 use namada::ibc::clients::tendermint::client_state::ClientState as TmClientState;
 use namada::ibc::clients::tendermint::consensus_state::ConsensusState as TmConsensusState;
@@ -55,6 +59,7 @@ use namada::ibc::primitives::{Msg, Signer, Timestamp};
 use namada::ledger::events::EventType;
 use namada::ledger::ibc::storage::*;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
+use namada::ledger::pgf::ADDRESS as PGF_ADDRESS;
 use namada::ledger::queries::RPC;
 use namada::ledger::storage::ics23_specs::ibc_proof_specs;
 use namada::ledger::storage::traits::Sha256Hasher;
@@ -62,7 +67,7 @@ use namada::tendermint::abci::Event as AbciEvent;
 use namada::tendermint::block::Height as TmHeight;
 use namada::types::address::{Address, InternalAddress};
 use namada::types::key::PublicKey;
-use namada::types::storage::{BlockHeight, Key};
+use namada::types::storage::{BlockHeight, Epoch, Key};
 use namada::types::token::Amount;
 use namada_apps::cli::context::ENV_VAR_CHAIN_ID;
 use namada_apps::client::rpc::{
@@ -84,8 +89,11 @@ use tendermint_light_client::components::io::{Io, ProdIo as TmLightClientIo};
 
 use super::setup::set_ethereum_bridge_mode;
 use crate::e2e::helpers::{
-    find_address, get_actor_rpc, get_validator_pk, wait_for_wasm_pre_compile,
+    epochs_per_year_from_min_duration, find_address, get_actor_rpc, get_epoch,
+    get_established_addr_from_pregenesis, get_validator_pk,
+    wait_for_wasm_pre_compile,
 };
+use crate::e2e::ledger_tests::prepare_proposal_data;
 use crate::e2e::setup::{
     self, run_hermes_cmd, setup_hermes, sleep, Bin, NamadaCmd, Test, Who,
 };
@@ -96,7 +104,12 @@ use crate::{run, run_as};
 
 #[test]
 fn run_ledger_ibc() -> Result<()> {
-    let (ledger_a, ledger_b, test_a, test_b) = run_two_nets()?;
+    let update_genesis =
+        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
+            genesis.parameters.parameters.epochs_per_year = 31536;
+            setup::set_validators(1, genesis, base_dir, |_| 0)
+        };
+    let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
     let _bg_ledger_a = ledger_a.background();
     let _bg_ledger_b = ledger_b.background();
 
@@ -177,7 +190,12 @@ fn run_ledger_ibc() -> Result<()> {
 
 #[test]
 fn run_ledger_ibc_with_hermes() -> Result<()> {
-    let (ledger_a, ledger_b, test_a, test_b) = run_two_nets()?;
+    let update_genesis =
+        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
+            genesis.parameters.parameters.epochs_per_year = 31536;
+            setup::set_validators(1, genesis, base_dir, |_| 0)
+        };
+    let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
     let _bg_ledger_a = ledger_a.background();
     let _bg_ledger_b = ledger_b.background();
 
@@ -266,8 +284,88 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
     Ok(())
 }
 
-fn run_two_nets() -> Result<(NamadaCmd, NamadaCmd, Test, Test)> {
-    let (test_a, test_b) = setup_two_single_node_nets()?;
+#[test]
+fn pgf_over_ibc_with_hermes() -> Result<()> {
+    let update_genesis =
+        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(10);
+            // for the trusting period of IBC client
+            genesis.parameters.pos_params.pipeline_len = 10;
+            genesis.parameters.parameters.max_proposal_bytes =
+                Default::default();
+            genesis.parameters.pgf_params.stewards =
+                BTreeSet::from_iter([get_established_addr_from_pregenesis(
+                    ALBERT_KEY, base_dir, &genesis,
+                )
+                .unwrap()]);
+            setup::set_validators(1, genesis, base_dir, |_| 0)
+        };
+    let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
+    let _bg_ledger_a = ledger_a.background();
+    let _bg_ledger_b = ledger_b.background();
+
+    setup_hermes(&test_a, &test_b)?;
+    let port_id_a = "transfer".parse().unwrap();
+    let port_id_b = "transfer".parse().unwrap();
+    let (channel_id_a, channel_id_b) =
+        create_channel_with_hermes(&test_a, &test_b)?;
+
+    // Start relaying
+    let hermes = run_hermes(&test_a)?;
+    let _bg_hermes = hermes.background();
+
+    // Transfer to PGF account
+    transfer_on_chain(
+        &test_a,
+        ALBERT,
+        PGF_ADDRESS.to_string(),
+        NAM,
+        100,
+        ALBERT_KEY,
+    )?;
+
+    // Proposal on Chain A
+    // Delegate some token
+    delegate_token(&test_a)?;
+    let rpc_a = get_actor_rpc(&test_a, Who::Validator(0));
+    let mut epoch = get_epoch(&test_a, &rpc_a).unwrap();
+    let delegated = epoch + 10u64;
+    while epoch <= delegated {
+        sleep(5);
+        epoch = get_epoch(&test_a, &rpc_a).unwrap();
+    }
+    // funding proposal
+    let start_epoch =
+        propose_funding(&test_a, &test_b, &port_id_a, &channel_id_a)?;
+    let mut epoch = get_epoch(&test_a, &rpc_a).unwrap();
+    // Vote
+    while epoch <= start_epoch {
+        sleep(5);
+        epoch = get_epoch(&test_a, &rpc_a).unwrap();
+    }
+    submit_votes(&test_a)?;
+
+    // wait for the grace
+    let grace_epoch = start_epoch + 12u64 + 6u64;
+    while epoch <= grace_epoch {
+        sleep(5);
+        epoch = get_epoch(&test_a, &rpc_a).unwrap();
+    }
+
+    // Check balances after funding over IBC
+    check_funded_balances(&port_id_b, &channel_id_b, &test_b)?;
+
+    Ok(())
+}
+
+fn run_two_nets(
+    update_genesis: impl FnMut(
+        templates::All<templates::Unvalidated>,
+        &Path,
+    ) -> templates::All<templates::Unvalidated>,
+) -> Result<(NamadaCmd, NamadaCmd, Test, Test)> {
+    let (test_a, test_b) = setup_two_single_node_nets(update_genesis)?;
     set_ethereum_bridge_mode(
         &test_a,
         &test_a.net.chain_id,
@@ -305,19 +403,19 @@ fn run_two_nets() -> Result<(NamadaCmd, NamadaCmd, Test, Test)> {
 }
 
 /// Set up two Namada chains to talk to each other via IBC.
-fn setup_two_single_node_nets() -> Result<(Test, Test)> {
+fn setup_two_single_node_nets(
+    mut update_genesis: impl FnMut(
+        templates::All<templates::Unvalidated>,
+        &Path,
+    ) -> templates::All<templates::Unvalidated>,
+) -> Result<(Test, Test)> {
     const ANOTHER_PROXY_APP: u16 = 27659u16;
     const ANOTHER_RPC: u16 = 27660u16;
     const ANOTHER_P2P: u16 = 26655u16;
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
-    // epoch per 100 seconds
-    let update_genesis =
-        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
-            genesis.parameters.parameters.epochs_per_year = 31536;
-            setup::set_validators(1, genesis, base_dir, |_| 0)
-        };
-    let test_a = setup::network(update_genesis, None)?;
+
+    let test_a = setup::network(&mut update_genesis, None)?;
     let test_b = setup::network(update_genesis, None)?;
     let genesis_b_dir = test_b
         .test_dir
@@ -1427,6 +1525,121 @@ fn transfer(
     }
 }
 
+fn delegate_token(test: &Test) -> Result<()> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+    let tx_args = vec![
+        "bond",
+        "--validator",
+        "validator-0",
+        "--source",
+        BERTHA,
+        "--amount",
+        "900",
+        "--node",
+        &rpc,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string(TX_ACCEPTED)?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
+    client.assert_success();
+    Ok(())
+}
+
+fn propose_funding(
+    test_a: &Test,
+    test_b: &Test,
+    src_port_id: &PortId,
+    src_channel_id: &ChannelId,
+) -> Result<Epoch> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
+    let bertha = find_address(test_b, BERTHA)?;
+    let christel = find_address(test_b, CHRISTEL)?;
+
+    let pgf_funding = PgfFunding {
+        continuous: vec![PGFTarget::Ibc(PGFIbcTarget {
+            amount: Amount::from_u64(10),
+            target: bertha.to_string(),
+            port_id: src_port_id.clone(),
+            channel_id: src_channel_id.clone(),
+        })],
+        retro: vec![PGFTarget::Ibc(PGFIbcTarget {
+            amount: Amount::from_u64(5),
+            target: christel.to_string(),
+            port_id: src_port_id.clone(),
+            channel_id: src_channel_id.clone(),
+        })],
+    };
+
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
+    let albert = find_address(test_a, ALBERT)?;
+    let rpc_a = get_actor_rpc(test_a, Who::Validator(0));
+    let epoch = get_epoch(test_a, &rpc_a)?;
+    let start_epoch = (epoch.0 + 3) / 3 * 3;
+    let proposal_json_path =
+        prepare_proposal_data(test_a, albert, pgf_funding, start_epoch);
+
+    let submit_proposal_args = vec![
+        "init-proposal",
+        "--pgf-funding",
+        "--data-path",
+        proposal_json_path.to_str().unwrap(),
+        "--node",
+        &rpc_a,
+    ];
+    let mut client = run!(test_a, Bin::Client, submit_proposal_args, Some(40))?;
+    client.exp_string(TX_ACCEPTED)?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
+    client.assert_success();
+    Ok(start_epoch.into())
+}
+
+fn submit_votes(test: &Test) -> Result<()> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+
+    let submit_proposal_vote = vec![
+        "vote-proposal",
+        "--proposal-id",
+        "0",
+        "--vote",
+        "yay",
+        "--address",
+        "validator-0",
+        "--node",
+        &rpc,
+    ];
+    let mut client = run_as!(
+        test,
+        Who::Validator(0),
+        Bin::Client,
+        submit_proposal_vote,
+        Some(40)
+    )?;
+    client.exp_string(TX_ACCEPTED)?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
+    client.assert_success();
+
+    // Send different yay vote from delegator to check majority on 1/3
+    let submit_proposal_vote_delagator = vec![
+        "vote-proposal",
+        "--proposal-id",
+        "0",
+        "--vote",
+        "yay",
+        "--address",
+        BERTHA,
+        "--node",
+        &rpc,
+    ];
+    let mut client =
+        run!(test, Bin::Client, submit_proposal_vote_delagator, Some(40))?;
+    client.exp_string(TX_ACCEPTED)?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
+    client.assert_success();
+    Ok(())
+}
+
 fn check_tx_height(test: &Test, client: &mut NamadaCmd) -> Result<u32> {
     let (_unread, matched) = client.exp_regex(r"height .*")?;
     // Expecting e.g. "height 1337."
@@ -1702,6 +1915,34 @@ fn check_shielded_balances(
     let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
+    Ok(())
+}
+
+fn check_funded_balances(
+    dest_port_id: &PortId,
+    dest_channel_id: &ChannelId,
+    test_b: &Test,
+) -> Result<()> {
+    // Check the balance on Chain B
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
+    let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/nam");
+    let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
+    let query_args = vec![
+        "balance", "--owner", BERTHA, "--token", &ibc_denom, "--node", &rpc_b,
+    ];
+    let expected = format!("{ibc_denom}: 10");
+    let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
+    client.exp_string(&expected)?;
+    client.assert_success();
+
+    let query_args = vec![
+        "balance", "--owner", CHRISTEL, "--token", &ibc_denom, "--node", &rpc_b,
+    ];
+    let expected = format!("{ibc_denom}: 5");
+    let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
+    client.exp_string(&expected)?;
+    client.assert_success();
+
     Ok(())
 }
 

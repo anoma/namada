@@ -10,6 +10,7 @@ use super::validation::{
     ProposalValidation,
 };
 use crate::ledger::governance::parameters::GovernanceParameters;
+use crate::ledger::governance::storage::proposal::PGFTarget;
 use crate::ledger::storage_api::token;
 use crate::types::address::Address;
 use crate::types::storage::Epoch;
@@ -277,9 +278,9 @@ impl PgfAction {
 )]
 pub struct PgfFunding {
     /// Pgf continuous funding
-    pub continuous: Vec<PgfFundingTarget>,
+    pub continuous: Vec<PGFTarget>,
     /// pgf retro fundings
-    pub retro: Vec<PgfFundingTarget>,
+    pub retro: Vec<PGFTarget>,
 }
 
 /// Pgf continous funding
@@ -288,7 +289,7 @@ pub struct PgfFunding {
 )]
 pub struct PgfContinous {
     /// Pgf target
-    pub target: PgfFundingTarget,
+    pub target: PGFTarget,
     /// Pgf action
     pub action: PgfAction,
 }
@@ -299,18 +300,7 @@ pub struct PgfContinous {
 )]
 pub struct PgfRetro {
     /// Pgf retro target
-    pub target: PgfFundingTarget,
-}
-
-/// Pgf Target
-#[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
-)]
-pub struct PgfFundingTarget {
-    /// Target amount
-    pub amount: token::Amount,
-    /// Target address
-    pub address: Address,
+    pub target: PGFTarget,
 }
 
 /// Represent an proposal vote
