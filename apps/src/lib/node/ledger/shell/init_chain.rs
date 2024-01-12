@@ -157,7 +157,7 @@ where
         // Init masp convert anchor
         let convert_anchor_key =
             namada::core::types::token::masp_convert_anchor_key();
-        self.wl_storage.write(
+        self.wl_storage.write_without_merkldiffs(
             &convert_anchor_key,
             namada::core::types::hash::Hash(
                 bls12_381::Scalar::from(

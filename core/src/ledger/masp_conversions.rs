@@ -444,7 +444,7 @@ where
     wl_storage.storage.conversion_state.tree =
         FrozenCommitmentTree::merge(&tree_parts);
     // Update the anchor in storage
-    wl_storage.write(
+    wl_storage.write_without_merkldiffs(
         &crate::types::token::masp_convert_anchor_key(),
         crate::types::hash::Hash(
             bls12_381::Scalar::from(
