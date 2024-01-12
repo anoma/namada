@@ -518,7 +518,7 @@ fn setup_storage_for_masp_verification(
     shielded_ctx
         .shell
         .wl_storage
-        .write(&anchor_key, ())
+        .write_without_merkldiffs(&anchor_key, ())
         .unwrap();
     shielded_ctx.shell.commit_block();
     // Cache the masp tx so that it can be returned when queried

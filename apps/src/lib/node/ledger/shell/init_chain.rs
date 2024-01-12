@@ -143,12 +143,15 @@ where
         let note_commitment_tree_key =
             namada::core::types::token::masp_commitment_tree_key();
         self.wl_storage
-            .write(&note_commitment_tree_key, empty_commitment_tree)
+            .write_without_merkldiffs(
+                &note_commitment_tree_key,
+                empty_commitment_tree,
+            )
             .unwrap();
         let commitment_tree_anchor_key =
             namada::core::types::token::masp_commitment_anchor_key(anchor);
         self.wl_storage
-            .write(&commitment_tree_anchor_key, ())
+            .write_without_merkldiffs(&commitment_tree_anchor_key, ())
             .unwrap();
 
         // Init masp convert anchor
