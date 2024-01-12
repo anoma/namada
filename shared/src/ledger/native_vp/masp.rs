@@ -15,7 +15,7 @@ use namada_core::ledger::vp_env::VpEnv;
 use namada_core::proto::Tx;
 use namada_core::types::address::Address;
 use namada_core::types::address::InternalAddress::Masp;
-use namada_core::types::storage::{Epoch, IndexedTx, Key};
+use namada_core::types::storage::{IndexedTx, Key};
 use namada_core::types::token::{
     self, is_masp_allowed_key, is_masp_key, is_masp_nullifier_key,
     masp_pin_tx_key,

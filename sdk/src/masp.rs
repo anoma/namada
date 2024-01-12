@@ -61,7 +61,7 @@ use namada_core::types::masp::{
 use namada_core::types::storage::{BlockHeight, Epoch, IndexedTx, TxIndex};
 use namada_core::types::time::{DateTimeUtc, DurationSecs};
 use namada_core::types::token;
-use namada_core::types::token::{Change, MaspDenom, Transfer};
+use namada_core::types::token::{MaspDenom, Transfer};
 use namada_core::types::transaction::{TxResult, WrapperTx};
 use rand_core::{CryptoRng, OsRng, RngCore};
 use ripemd::Digest as RipemdDigest;
