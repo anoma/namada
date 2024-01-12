@@ -1050,16 +1050,31 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         while let Some((asset_type, value)) =
             input.components().next().map(cloned_pair)
         {
-            let target_asset_type = self
+            // Get the equivalent to the current asset in the target epoch and
+            // note whether this equivalent chronologically comes after the
+            // current asset
+            let (target_asset_type, forward_conversion) = self
                 .decode_asset_type(client, asset_type)
                 .await
-                .map(|(addr, denom, _epoch)| {
+                .map(|(addr, denom, epoch)| {
                     make_asset_type(Some(target_epoch), &addr, denom)
+                        .map(|asset_type| (asset_type, target_epoch >= epoch))
                 })
                 .transpose()?
-                .unwrap_or(asset_type);
+                .unwrap_or((asset_type, false));
             let at_target_asset_type = target_asset_type == asset_type;
-
+            let trace_asset_type = if forward_conversion {
+                // If we are doing a forward conversion, then we can assume that
+                // the trace left over in the older epoch has at least a 1-to-1
+                // conversion to the newer epoch.
+                target_asset_type
+            } else {
+                // If we are not doing a forward conversion, then we cannot
+                // lower bound what the asset type will be worth in the target
+                // asset type. So leave the asset type fixed.
+                asset_type
+            };
+            // Fetch and store the required conversions
             self.query_allowed_conversion(
                 client,
                 target_asset_type,
@@ -1087,7 +1102,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     usage,
                     &mut input,
                     &mut output,
-                    target_asset_type,
+                    trace_asset_type,
                     &mut normed_output,
                 )
                 .await?;
@@ -1111,7 +1126,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     usage,
                     &mut input,
                     &mut output,
-                    asset_type,
+                    trace_asset_type,
                     &mut normed_output,
                 )
                 .await?;
