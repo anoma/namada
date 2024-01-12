@@ -6,10 +6,9 @@ use masp_primitives::transaction::Transaction;
 
 use super::storage_api::{StorageRead, StorageWrite};
 use crate::ledger::storage_api::{Error, Result};
-use crate::types::storage::{BlockHeight, Epoch, TxIndex};
+use crate::types::storage::IndexedTx;
 use crate::types::token::{
-    masp_commitment_tree_key, masp_head_tx_key, masp_nullifier_key,
-    masp_pin_tx_key, masp_tx_key, Transfer,
+    masp_commitment_tree_key, masp_nullifier_key, masp_pin_tx_key,
 };
 
 // Writes the nullifiers of the provided masp transaction to storage
@@ -62,25 +61,9 @@ pub fn update_note_commitment_tree(
 /// Handle a MASP transaction.
 pub fn handle_masp_tx(
     ctx: &mut (impl StorageRead + StorageWrite),
-    transfer: &Transfer,
     shielded: &Transaction,
+    pin_key: Option<&str>,
 ) -> Result<()> {
-    let head_tx_key = masp_head_tx_key();
-    let current_tx_idx: u64 =
-        ctx.read(&head_tx_key).unwrap_or(None).unwrap_or(0);
-    let current_tx_key = masp_tx_key(current_tx_idx);
-    // Save the Transfer object and its location within the blockchain
-    // so that clients do not have to separately look these
-    // up
-    let record: (Epoch, BlockHeight, TxIndex, Transfer, Transaction) = (
-        ctx.get_block_epoch()?,
-        ctx.get_block_height()?,
-        ctx.get_tx_index()?,
-        transfer.clone(),
-        shielded.clone(),
-    );
-    ctx.write(&current_tx_key, record)?;
-    ctx.write(&head_tx_key, current_tx_idx + 1)?;
     // TODO: temporarily disabled because of the node aggregation issue in WASM.
     // Using the host env tx_update_masp_note_commitment_tree or directly the
     // update_note_commitment_tree function as a  workaround instead
@@ -88,9 +71,14 @@ pub fn handle_masp_tx(
     reveal_nullifiers(ctx, shielded)?;
 
     // If storage key has been supplied, then pin this transaction to it
-    if let Some(key) = &transfer.key {
-        let pin_key = masp_pin_tx_key(key);
-        ctx.write(&pin_key, current_tx_idx)?;
+    if let Some(key) = pin_key {
+        ctx.write(
+            &masp_pin_tx_key(key),
+            IndexedTx {
+                height: ctx.get_block_height()?,
+                index: ctx.get_tx_index()?,
+            },
+        )?;
     }
 
     Ok(())

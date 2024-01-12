@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::future::poll_fn;
 use std::mem::ManuallyDrop;
 use std::path::PathBuf;
@@ -37,6 +38,7 @@ use namada::types::storage::{BlockHash, BlockHeight, Epoch, Header};
 use namada::types::time::DateTimeUtc;
 use namada_sdk::queries::Client;
 use regex::Regex;
+use tendermint_rpc::endpoint::block;
 use tokio::sync::mpsc;
 
 use crate::facade::tendermint_proto::v0_37::abci::{
@@ -247,6 +249,7 @@ pub struct MockNode {
     pub test_dir: ManuallyDrop<TestDir>,
     pub keep_temp: bool,
     pub results: Arc<Mutex<Vec<NodeResults>>>,
+    pub blocks: Arc<Mutex<HashMap<BlockHeight, block::Response>>>,
     pub services: Arc<MockServices>,
     pub auto_drive_services: bool,
 }
@@ -397,44 +400,90 @@ impl MockNode {
         let (proposer_address, votes) = self.prepare_request();
 
         let mut locked = self.shell.lock().unwrap();
+        let height = locked
+            .wl_storage
+            .storage
+            .get_last_block_height()
+            .next_height();
 
-        // build finalize block abci request
-        let req = {
-            // check if we have protocol txs to be included
-            // in the finalize block request
-            let txs = {
-                let req = RequestPrepareProposal {
-                    proposer_address: proposer_address.clone().into(),
-                    ..Default::default()
-                };
-                let txs = locked.prepare_proposal(req).txs;
-
-                txs.into_iter()
-                    .map(|tx| ProcessedTx {
-                        tx,
-                        result: TxResult {
-                            code: 0,
-                            info: String::new(),
-                        },
-                    })
-                    .collect()
+        // check if we have protocol txs to be included
+        // in the finalize block request
+        let txs: Vec<ProcessedTx> = {
+            let req = RequestPrepareProposal {
+                proposer_address: proposer_address.clone().into(),
+                ..Default::default()
             };
-            FinalizeBlock {
-                hash: BlockHash([0u8; 32]),
-                header: Header {
-                    hash: Hash([0; 32]),
-                    time: DateTimeUtc::now(),
-                    next_validators_hash: Hash([0; 32]),
-                },
-                byzantine_validators: vec![],
-                txs,
-                proposer_address,
-                votes,
-            }
+            let txs = locked.prepare_proposal(req).txs;
+
+            txs.into_iter()
+                .map(|tx| ProcessedTx {
+                    tx,
+                    result: TxResult {
+                        code: 0,
+                        info: String::new(),
+                    },
+                })
+                .collect()
+        };
+        // build finalize block abci request
+        let req = FinalizeBlock {
+            hash: BlockHash([0u8; 32]),
+            header: Header {
+                hash: Hash([0; 32]),
+                time: DateTimeUtc::now(),
+                next_validators_hash: Hash([0; 32]),
+            },
+            byzantine_validators: vec![],
+            txs: txs.clone(),
+            proposer_address,
+            votes,
         };
 
         locked.finalize_block(req).expect("Test failed");
         locked.commit();
+
+        // Cache the block
+        self.blocks.lock().unwrap().insert(
+            height,
+            block::Response {
+                block_id: tendermint::block::Id {
+                    hash: tendermint::Hash::None,
+                    part_set_header: tendermint::block::parts::Header::default(
+                    ),
+                },
+                block: tendermint::block::Block::new(
+                    tendermint::block::Header {
+                        version: tendermint::block::header::Version {
+                            block: 0,
+                            app: 0,
+                        },
+                        chain_id: locked
+                            .chain_id
+                            .to_string()
+                            .try_into()
+                            .unwrap(),
+                        height: 1u32.into(),
+                        time: tendermint::Time::now(),
+                        last_block_id: None,
+                        last_commit_hash: None,
+                        data_hash: None,
+                        validators_hash: tendermint::Hash::None,
+                        next_validators_hash: tendermint::Hash::None,
+                        consensus_hash: tendermint::Hash::None,
+                        app_hash: tendermint::AppHash::default(),
+                        last_results_hash: None,
+                        evidence_hash: None,
+                        proposer_address: tendermint::account::Id::new(
+                            [0u8; 20],
+                        ),
+                    },
+                    txs.into_iter().map(|tx| tx.tx.to_vec()).collect(),
+                    tendermint::evidence::List::default(),
+                    None,
+                )
+                .unwrap(),
+            },
+        );
     }
 
     /// Advance to a block height that allows
@@ -465,6 +514,11 @@ impl MockNode {
             ..Default::default()
         };
         let mut locked = self.shell.lock().unwrap();
+        let height = locked
+            .wl_storage
+            .storage
+            .get_last_block_height()
+            .next_height();
         let (result, tx_results) = locked.process_proposal(req);
 
         let mut errors: Vec<_> = tx_results
@@ -492,6 +546,7 @@ impl MockNode {
             },
             byzantine_validators: vec![],
             txs: txs
+                .clone()
                 .into_iter()
                 .zip(tx_results.into_iter())
                 .map(|(tx, result)| ProcessedTx {
@@ -524,6 +579,47 @@ impl MockNode {
             })
             .collect::<Vec<_>>();
         self.results.lock().unwrap().append(&mut error_codes);
+        self.blocks.lock().unwrap().insert(
+            height,
+            block::Response {
+                block_id: tendermint::block::Id {
+                    hash: tendermint::Hash::None,
+                    part_set_header: tendermint::block::parts::Header::default(
+                    ),
+                },
+                block: tendermint::block::Block::new(
+                    tendermint::block::Header {
+                        version: tendermint::block::header::Version {
+                            block: 0,
+                            app: 0,
+                        },
+                        chain_id: locked
+                            .chain_id
+                            .to_string()
+                            .try_into()
+                            .unwrap(),
+                        height: 1u32.into(),
+                        time: tendermint::Time::now(),
+                        last_block_id: None,
+                        last_commit_hash: None,
+                        data_hash: None,
+                        validators_hash: tendermint::Hash::None,
+                        next_validators_hash: tendermint::Hash::None,
+                        consensus_hash: tendermint::Hash::None,
+                        app_hash: tendermint::AppHash::default(),
+                        last_results_hash: None,
+                        evidence_hash: None,
+                        proposer_address: tendermint::account::Id::new(
+                            [0u8; 20],
+                        ),
+                    },
+                    txs,
+                    tendermint::evidence::List::default(),
+                    None,
+                )
+                .unwrap(),
+            },
+        );
         locked.commit();
     }
 
@@ -611,7 +707,7 @@ impl<'a> Client for &'a MockNode {
     where
         R: SimpleRequest,
     {
-        unreachable!()
+        unimplemented!("Client's perform method is not implemented for testing")
     }
 
     /// `/abci_info`: get information about the ABCI application.
@@ -770,9 +866,11 @@ impl<'a> Client for &'a MockNode {
         let events: Vec<_> = locked
             .event_log()
             .iter()
-            .enumerate()
-            .flat_map(|(index, event)| {
-                if index == encoded_event.log_index() {
+            .flat_map(|event| {
+                if usize::from_str(event.attributes.get("height").unwrap())
+                    .unwrap()
+                    == encoded_event.log_index()
+                {
                     Some(event)
                 } else {
                     None
@@ -792,7 +890,6 @@ impl<'a> Client for &'a MockNode {
             })
             .collect();
         let has_events = !events.is_empty();
-
         Ok(tendermint_rpc::endpoint::block_results::Response {
             height,
             txs_results: None,
@@ -803,6 +900,29 @@ impl<'a> Client for &'a MockNode {
             consensus_param_updates: None,
             app_hash: namada::tendermint::hash::AppHash::default(),
         })
+    }
+
+    async fn block<H>(
+        &self,
+        height: H,
+    ) -> Result<tendermint_rpc::endpoint::block::Response, RpcError>
+    where
+        H: Into<tendermint::block::Height> + Send,
+    {
+        // NOTE: atm this is only needed to query blocks at a
+        // specific height for masp transactions
+        let height = BlockHeight(height.into().into());
+
+        self.blocks
+            .lock()
+            .unwrap()
+            .get(&height)
+            .cloned()
+            .ok_or_else(|| {
+                RpcError::invalid_params(format!(
+                    "Could not find block at height {height}"
+                ))
+            })
     }
 
     /// `/tx_search`: search for transactions with their results.

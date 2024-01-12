@@ -18,7 +18,7 @@ use crate::ledger::storage_api::{self, token, Error, ResultExt, StorageWrite};
 use crate::tendermint::Time as TmTime;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::hash::Hash;
-use crate::types::ibc::{IbcEvent, IbcShieldedTransfer};
+use crate::types::ibc::IbcEvent;
 use crate::types::time::DateTimeUtc;
 use crate::types::token::DenominatedAmount;
 
@@ -100,7 +100,8 @@ where
     /// Handle masp tx
     fn handle_masp_tx(
         &mut self,
-        _shielded: &IbcShieldedTransfer,
+        _shielded: &masp_primitives::transaction::Transaction,
+        _pin_key: Option<&str>,
     ) -> Result<(), Error> {
         unimplemented!("No MASP transfer in an IBC protocol transaction")
     }

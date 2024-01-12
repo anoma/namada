@@ -134,6 +134,14 @@ where
 /// Result of applying a transaction
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// Arguments needed to execute a Wrapper transaction
+pub struct WrapperArgs<'a> {
+    /// The block proposer for the current block
+    pub block_proposer: &'a Address,
+    /// Flag if the wrapper transaction committed the fee unshielding operation
+    pub is_committed_fee_unshield: bool,
+}
+
 /// Dispatch a given transaction to be applied based on its type. Some storage
 /// updates may be derived and applied natively rather than via the wasm
 /// environment, in which case validity predicates will be bypassed.
@@ -150,7 +158,7 @@ pub fn dispatch_tx<'a, D, H, CA>(
     wl_storage: &'a mut WlStorage<D, H>,
     vp_wasm_cache: &'a mut VpCache<CA>,
     tx_wasm_cache: &'a mut TxCache<CA>,
-    block_proposer: Option<&'a Address>,
+    wrapper_args: Option<&mut WrapperArgs>,
 ) -> Result<TxResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -186,7 +194,7 @@ where
                     vp_wasm_cache,
                     tx_wasm_cache,
                 },
-                block_proposer,
+                wrapper_args,
             )?;
             Ok(TxResult {
                 gas_used: tx_gas_meter.get_tx_consumed_gas(),
@@ -231,7 +239,7 @@ pub(crate) fn apply_wrapper_tx<'a, D, H, CA, WLS>(
     fee_unshield_transaction: Option<Transaction>,
     tx_bytes: &[u8],
     mut shell_params: ShellParams<'a, CA, WLS>,
-    block_proposer: Option<&Address>,
+    wrapper_args: Option<&mut WrapperArgs>,
 ) -> Result<BTreeSet<Key>>
 where
     CA: 'static + WasmCacheAccess + Sync,
@@ -252,8 +260,8 @@ where
         wrapper,
         fee_unshield_transaction,
         &mut shell_params,
-        block_proposer,
         &mut changed_keys,
+        wrapper_args,
     )?;
 
     // Account for gas
@@ -293,8 +301,8 @@ fn charge_fee<'a, D, H, CA, WLS>(
     wrapper: &WrapperTx,
     masp_transaction: Option<Transaction>,
     shell_params: &mut ShellParams<'a, CA, WLS>,
-    block_proposer: Option<&Address>,
     changed_keys: &mut BTreeSet<Key>,
+    wrapper_args: Option<&mut WrapperArgs>,
 ) -> Result<()>
 where
     CA: 'static + WasmCacheAccess + Sync,
@@ -310,7 +318,7 @@ where
     } = shell_params;
 
     // Unshield funds if requested
-    if let Some(transaction) = masp_transaction {
+    let requires_fee_unshield = if let Some(transaction) = masp_transaction {
         // The unshielding tx does not charge gas, instantiate a
         // custom gas meter for this step
         let mut tx_gas_meter =
@@ -371,11 +379,18 @@ where
             }
             Err(e) => tracing::error!("{}", e),
         }
-    }
+
+        true
+    } else {
+        false
+    };
 
     // Charge or check fees
-    match block_proposer {
-        Some(proposer) => transfer_fee(*wl_storage, proposer, wrapper)?,
+    match wrapper_args {
+        Some(WrapperArgs {
+            block_proposer,
+            is_committed_fee_unshield: _,
+        }) => transfer_fee(*wl_storage, block_proposer, wrapper)?,
         None => check_fees(*wl_storage, wrapper)?,
     }
 
@@ -383,6 +398,10 @@ where
 
     // Commit tx write log even in case of subsequent errors
     wl_storage.write_log_mut().commit_tx();
+    // Update the flag only after the fee payment has been committed
+    if let Some(args) = wrapper_args {
+        args.is_committed_fee_unshield = requires_fee_unshield;
+    }
 
     Ok(())
 }
