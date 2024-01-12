@@ -1,6 +1,6 @@
 //! SDK functions to construct different types of transactions
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -36,7 +36,9 @@ use namada_core::types::dec::Dec;
 use namada_core::types::hash::Hash;
 use namada_core::types::ibc::{IbcShieldedTransfer, MsgShieldedTransfer};
 use namada_core::types::key::*;
-use namada_core::types::masp::{TransferSource, TransferTarget};
+use namada_core::types::masp::{
+    encode_asset_type, TransferSource, TransferTarget,
+};
 use namada_core::types::storage::Epoch;
 use namada_core::types::time::DateTimeUtc;
 use namada_core::types::token::MaspDenom;
@@ -55,7 +57,7 @@ use crate::control_flow::time;
 use crate::error::{EncodingError, Error, QueryError, Result, TxError};
 use crate::io::Io;
 use crate::masp::TransferErr::Build;
-use crate::masp::{make_asset_type, ShieldedContext, ShieldedTransfer};
+use crate::masp::{ShieldedContext, ShieldedTransfer};
 use crate::proto::{MaspBuilder, Tx};
 use crate::queries::Client;
 use crate::rpc::{
@@ -491,24 +493,6 @@ pub fn display_inner_resp(context: &impl Namada, resp: &TxResponse) {
         "Full result: {}",
         serde_json::to_string_pretty(&resp).unwrap()
     );
-}
-
-/// decode components of a masp note
-pub fn decode_component<K, F>(
-    (addr, denom, epoch): (Address, MaspDenom, Epoch),
-    val: i128,
-    res: &mut HashMap<K, token::Change>,
-    mk_key: F,
-) where
-    F: FnOnce(Address, Epoch) -> K,
-    K: Eq + std::hash::Hash,
-{
-    let decoded_change = token::Change::from_masp_denominated(val, denom)
-        .expect("expected this to fit");
-
-    res.entry(mk_key(addr, epoch))
-        .and_modify(|val| *val += decoded_change)
-        .or_insert(decoded_change);
 }
 
 /// Save accounts initialized from a tx into the wallet, if any.
@@ -2706,7 +2690,10 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
         let mut asset_types = Vec::new();
         for denom in MaspDenom::iter() {
             let epoch = shielded_transfer.epoch;
-            let asset_type = make_asset_type(Some(epoch), &token, denom)?;
+            let asset_type =
+                encode_asset_type(epoch, &token, denom).map_err(|_| {
+                    Error::Other("unable to create asset type".to_string())
+                })?;
             shielded
                 .asset_types
                 .insert(asset_type, (token.clone(), denom, epoch));

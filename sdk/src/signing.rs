@@ -17,7 +17,9 @@ use namada_core::types::address::{
     Address, ImplicitAddress, InternalAddress, MASP,
 };
 use namada_core::types::key::*;
-use namada_core::types::masp::{ExtendedViewingKey, PaymentAddress};
+use namada_core::types::masp::{
+    encode_asset_type, ExtendedViewingKey, PaymentAddress,
+};
 use namada_core::types::storage::Epoch;
 use namada_core::types::token;
 use namada_core::types::token::Transfer;
@@ -45,7 +47,6 @@ use crate::error::{EncodingError, Error, TxError};
 use crate::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
 use crate::ibc::primitives::proto::Any;
 use crate::io::*;
-use crate::masp::make_asset_type;
 use crate::proto::{MaspBuilder, Section, Tx};
 use crate::rpc::validate_amount;
 use crate::tx::{
@@ -1231,7 +1232,7 @@ pub async fn to_ledger_vector(
                     if builder.target == shielded_hash =>
                 {
                     for (addr, denom, epoch) in &builder.asset_types {
-                        match make_asset_type(Some(*epoch), addr, *denom) {
+                        match encode_asset_type(*epoch, addr, *denom) {
                             Err(_) => None,
                             Ok(asset) => {
                                 asset_types.insert(

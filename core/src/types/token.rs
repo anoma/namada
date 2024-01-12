@@ -214,6 +214,26 @@ impl Amount {
         Self { raw: Uint(raw) }
     }
 
+    /// Given a u128 and [`MaspDenom`], construct the corresponding
+    /// amount.
+    pub fn from_masp_denominated_u128(
+        val: u128,
+        denom: MaspDenom,
+    ) -> Option<Self> {
+        let lo = val as u64;
+        let hi = (val >> 64) as u64;
+        let lo_pos = denom as usize;
+        let hi_pos = lo_pos + 1;
+        let mut raw = [0u64; 4];
+        raw[lo_pos] = lo;
+        if hi != 0 && hi_pos >= 4 {
+            return None;
+        } else if hi != 0 {
+            raw[denom as usize + 1] = hi;
+        }
+        Some(Self { raw: Uint(raw) })
+    }
+
     /// Get a string representation of a native token amount.
     pub fn to_string_native(&self) -> String {
         DenominatedAmount {

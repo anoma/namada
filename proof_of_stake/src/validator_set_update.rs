@@ -10,6 +10,7 @@ use namada_core::types::address::Address;
 use namada_core::types::key::PublicKeyTmRawHash;
 use namada_core::types::storage::Epoch;
 use namada_core::types::token;
+use num_traits::ops::checked::CheckedAdd;
 use once_cell::unsync::Lazy;
 
 use crate::storage::{

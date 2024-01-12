@@ -4,7 +4,6 @@ use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashSet};
 
 use borsh_ext::BorshSerializeExt;
-use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::I128Sum;
@@ -49,59 +48,6 @@ where
 {
     /// Context to interact with the host structures.
     pub ctx: Ctx<'a, DB, H, CA>,
-}
-
-/// Generates the current asset type given the provided epoch and an
-/// unique token address
-fn asset_type_from_epoched_address(
-    epoch: Epoch,
-    token: &Address,
-    denom: token::MaspDenom,
-) -> Result<AssetType> {
-    // Timestamp the chosen token with the current epoch
-    let token_bytes = (token, denom, epoch.0).serialize_to_vec();
-    // Generate the unique asset identifier from the unique token address
-    AssetType::new(token_bytes.as_ref()).map_err(|()| {
-        Error::NativeVpError(native_vp::Error::SimpleMessage(
-            "Unable to create asset type",
-        ))
-    })
-}
-
-/// Checks if the reported transparent amount and the unshielded
-/// values agree, if not adds to the debug log
-fn valid_transfer_amount(
-    reporeted_transparent_value: u64,
-    unshielded_transfer_value: u64,
-) -> bool {
-    let res = reporeted_transparent_value == unshielded_transfer_value;
-    if !res {
-        tracing::debug!(
-            "The unshielded amount {} disagrees with the calculated masp \
-             transparented value {}",
-            unshielded_transfer_value,
-            reporeted_transparent_value
-        );
-    }
-    res
-}
-
-/// Convert Namada amount and token type to MASP equivalents
-fn convert_amount(
-    epoch: Epoch,
-    token: &Address,
-    val: token::Amount,
-    denom: token::MaspDenom,
-) -> Result<I128Sum> {
-    let asset_type = asset_type_from_epoched_address(epoch, token, denom)?;
-    // Combine the value and unit into one amount
-
-    I128Sum::from_nonnegative(asset_type, denom.denominate(&val) as i128)
-        .map_err(|()| {
-            Error::NativeVpError(native_vp::Error::SimpleMessage(
-                "Invalid value for amount",
-            ))
-        })
 }
 
 impl<'a, DB, H, CA> MaspVp<'a, DB, H, CA>
@@ -328,6 +274,7 @@ where
         _verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
         let epoch = self.ctx.get_block_epoch()?;
+        let conversion_state = self.ctx.storage.get_conversion_state();
         let (transfer, shielded_tx) = self.ctx.get_shielded_action(tx_data)?;
 
         if u64::from(self.ctx.get_block_height()?)
@@ -355,27 +302,64 @@ where
         }
 
         if transfer.source != Address::Internal(Masp) {
-            // Handle transparent input
-            // Note that the asset type is timestamped so shields
-            // where the shielded value has an incorrect timestamp
-            // are automatically rejected
-            for denom in token::MaspDenom::iter() {
-                let transp_amt = convert_amount(
-                    epoch,
-                    &transfer.token,
-                    transfer_amount,
-                    denom,
-                )?;
-
-                // Non-masp sources add to transparent tx pool
-                transparent_tx_pool += transp_amt;
-            }
-
             // No shielded spends nor shielded converts are allowed
             if shielded_tx.sapling_bundle().is_some_and(|bundle| {
                 !(bundle.shielded_spends.is_empty()
                     && bundle.shielded_converts.is_empty())
             }) {
+                return Ok(false);
+            }
+
+            let transp_bundle =
+                shielded_tx.transparent_bundle().ok_or_err_msg(
+                    "Expected transparent outputs in shielding transaction",
+                )?;
+            let mut total_in_values = token::Amount::zero();
+            let source_enc = transfer.source.serialize_to_vec();
+            let hash =
+                ripemd::Ripemd160::digest(sha2::Sha256::digest(&source_enc));
+
+            // Handle transparent input
+            // The following boundary conditions must be satisfied
+            // 1. Total of transparent input values equals containing transfer
+            // amount 2. Asset type must be properly derived
+            // 3. Public key must be the hash of the source
+            for vin in &transp_bundle.vin {
+                match conversion_state.assets.get(&vin.asset_type) {
+                    // Satisfies 2.
+                    Some(((address, denom), asset_epoch, _, _))
+                        if address == &transfer.token
+                            && asset_epoch <= &epoch =>
+                    {
+                        total_in_values += token::Amount::from_masp_denominated(
+                            vin.value, *denom,
+                        );
+
+                        // Non-masp sources add to the transparent tx pool
+                        transparent_tx_pool += I128Sum::from_nonnegative(
+                            vin.asset_type,
+                            vin.value as i128,
+                        )
+                        .ok()
+                        .ok_or_err_msg(
+                            "invalid value or asset type for amount",
+                        )?;
+
+                        // Satisfies 3.
+                        if <[u8; 20]>::from(hash) != vin.address.0 {
+                            tracing::debug!(
+                                "the public key of the output account does \
+                                 not match the transfer target"
+                            );
+                            return Ok(false);
+                        }
+                    }
+                    // unrecognized asset
+                    _ => return Ok(false),
+                };
+            }
+            // Satisfies 1.
+            if total_in_values != transfer_amount {
                 return Ok(false);
             }
         } else {
@@ -421,89 +405,58 @@ where
         if transfer.target != Address::Internal(Masp) {
             // Handle transparent output
             // The following boundary conditions must be satisfied
-            // 1. One to 4 transparent outputs
-            // 2. Asset type must be properly derived
-            // 3. Value from the output must be the same as the containing
-            // transfer
-            // 4. Public key must be the hash of the target
+            // 1. Total of transparent output values equals containing transfer
+            // amount 2. Asset type must be properly derived
+            // 3. Public key must be the hash of the target
 
-            // Satisfies 1.
             let transp_bundle =
                 shielded_tx.transparent_bundle().ok_or_err_msg(
                     "Expected transparent outputs in unshielding transaction",
                 )?;
 
-            let out_length = transp_bundle.vout.len();
-            if !(1..=4).contains(&out_length) {
-                tracing::debug!(
-                    "Transparent output to a transaction to the masp must be \
-                     between 1 and 4 but is {}",
-                    transp_bundle.vout.len()
-                );
+            let mut total_out_values = token::Amount::zero();
+            let target_enc = transfer.target.serialize_to_vec();
+            let hash =
+                ripemd::Ripemd160::digest(sha2::Sha256::digest(&target_enc));
 
-                return Ok(false);
-            }
-            let mut outs = transp_bundle.vout.iter();
-            let mut valid_count = 0;
-            for denom in token::MaspDenom::iter() {
-                let out = match outs.next() {
-                    Some(out) => out,
-                    None => continue,
+            for out in &transp_bundle.vout {
+                match conversion_state.assets.get(&out.asset_type) {
+                    // Satisfies 2.
+                    Some(((address, denom), asset_epoch, _, _))
+                        if address == &transfer.token
+                            && asset_epoch <= &epoch =>
+                    {
+                        total_out_values +=
+                            token::Amount::from_masp_denominated(
+                                out.value, *denom,
+                            );
+
+                        // Non-masp destinations subtract from transparent tx
+                        // pool
+                        transparent_tx_pool -= I128Sum::from_nonnegative(
+                            out.asset_type,
+                            out.value as i128,
+                        )
+                        .ok()
+                        .ok_or_err_msg(
+                            "invalid value or asset type for amount",
+                        )?;
+
+                        // Satisfies 3.
+                        if <[u8; 20]>::from(hash) != out.address.0 {
+                            tracing::debug!(
+                                "the public key of the output account does \
+                                 not match the transfer target"
+                            );
+                            return Ok(false);
+                        }
+                    }
+                    // unrecognized asset
+                    _ => return Ok(false),
                 };
-
-                // Satisfies 2. and 3.
-                let conversion_state = self.ctx.storage.get_conversion_state();
-                let asset_epoch =
-                    match conversion_state.assets.get(&out.asset_type) {
-                        Some(((address, _), asset_epoch, _, _))
-                            if address == &transfer.token =>
-                        {
-                            asset_epoch
-                        }
-                        _ => {
-                            // we don't know which masp denoms are necessary
-                            // apriori. This is encoded via
-                            // the asset types.
-                            continue;
-                        }
-                    };
-
-                if !valid_transfer_amount(
-                    out.value,
-                    denom.denominate(&transfer_amount),
-                ) {
-                    return Ok(false);
-                }
-
-                let transp_amt = convert_amount(
-                    *asset_epoch,
-                    &transfer.token,
-                    transfer_amount,
-                    denom,
-                )?;
-
-                // Non-masp destinations subtract from transparent tx pool
-                transparent_tx_pool -= transp_amt;
-
-                // Satisfies 4.
-                let target_enc = transfer.target.serialize_to_vec();
-
-                let hash = ripemd::Ripemd160::digest(sha2::Sha256::digest(
-                    &target_enc,
-                ));
-
-                if <[u8; 20]>::from(hash) != out.address.0 {
-                    tracing::debug!(
-                        "the public key of the output account does not match \
-                         the transfer target"
-                    );
-                    return Ok(false);
-                }
-                valid_count += 1;
             }
-            // one or more of the denoms in the batch failed to verify
-            // the asset derivation.
-            if valid_count != out_length {
+            // Satisfies 1.
+            if total_out_values != transfer_amount {
                 return Ok(false);
             }
         } else {
