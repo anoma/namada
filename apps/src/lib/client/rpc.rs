@@ -43,12 +43,14 @@ use namada::types::hash::Hash;
 use namada::types::ibc::{is_ibc_denom, IbcTokenHash};
 use namada::types::io::Io;
 use namada::types::key::*;
-use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
+use namada::types::masp::{
+    encode_asset_type, BalanceOwner, ExtendedViewingKey, PaymentAddress,
+};
 use namada::types::storage::{BlockHeight, BlockResults, Epoch, Key, KeySeg};
 use namada::types::token::{Change, MaspDenom};
 use namada::types::{storage, token};
 use namada_sdk::error::{is_pinned_error, Error, PinnedBalanceError};
-use namada_sdk::masp::{make_asset_type, Conversions, MaspChange};
+use namada_sdk::masp::{Conversions, MaspChange};
 use namada_sdk::proof_of_stake::types::ValidatorMetaData;
 use namada_sdk::rpc::{
     self, enriched_bonds_and_unbonds, query_epoch, TxResponse,
@@ -786,7 +788,7 @@ pub fn extract_amount(
 ) -> token::Amount {
     let mut amount = token::Amount::zero();
     for denom in MaspDenom::iter() {
-        let asset_type = make_asset_type(Some(epoch), token, denom).expect(
+        let asset_type = encode_asset_type(epoch, token, denom).expect(
             "unable to make asset type given token, epoch, and denomination",
         );
         let value: u128 = value_sum[&asset_type]

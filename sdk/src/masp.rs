@@ -52,8 +52,8 @@ use masp_proofs::prover::LocalTxProver;
 use masp_proofs::sapling::SaplingVerificationContext;
 use namada_core::types::address::{Address, MASP};
 use namada_core::types::masp::{
-    BalanceOwner, ExtendedViewingKey, PaymentAddress, TransferSource,
-    TransferTarget,
+    encode_asset_type, BalanceOwner, ExtendedViewingKey, PaymentAddress,
+    TransferSource, TransferTarget,
 };
 use namada_core::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
 use namada_core::types::time::{DateTimeUtc, DurationSecs};
@@ -1057,8 +1057,13 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 .decode_asset_type(client, asset_type)
                 .await
                 .map(|(addr, denom, epoch)| {
-                    make_asset_type(Some(target_epoch), &addr, denom)
+                    encode_asset_type(target_epoch, &addr, denom)
                         .map(|asset_type| (asset_type, target_epoch >= epoch))
+                        .map_err(|_| {
+                            Error::Other(
+                                "unable to create asset type".to_string(),
+                            )
+                        })
                 })
                 .transpose()?
                 .unwrap_or((asset_type, false));
@@ -2022,22 +2027,6 @@ fn extract_payload(
     Ok(())
 }
 
-/// Make asset type corresponding to given address and epoch
-pub fn make_asset_type(
-    epoch: Option<Epoch>,
-    token: &Address,
-    denom: MaspDenom,
-) -> Result<AssetType, Error> {
-    // Typestamp the chosen token with the current epoch
-    let token_bytes = match epoch {
-        None => (token, denom).serialize_to_vec(),
-        Some(epoch) => (token, denom, epoch.0).serialize_to_vec(),
-    };
-    // Generate the unique asset identifier from the unique token address
-    AssetType::new(token_bytes.as_ref())
-        .map_err(|_| Error::Other("unable to create asset type".to_string()))
-}
-
 /// Convert Anoma amount and token type to MASP equivalents
 fn convert_amount(
     epoch: Epoch,
@@ -2047,7 +2036,10 @@ fn convert_amount(
     let mut amount = U64Sum::zero();
     let asset_types: [AssetType; 4] = MaspDenom::iter()
         .map(|denom| {
-            let asset_type = make_asset_type(Some(epoch), token, denom)?;
+            let asset_type =
+                encode_asset_type(epoch, token, denom).map_err(|_| {
+                    Error::Other("unable to create asset type".to_string())
+                })?;
             // Combine the value and unit into one amount
             amount +=
                 U64Sum::from_nonnegative(asset_type, denom.denominate(&val))

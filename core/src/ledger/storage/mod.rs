@@ -29,7 +29,7 @@ use crate::ledger::gas::{
     STORAGE_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE,
 };
 pub use crate::ledger::masp_conversions::{
-    calculate_masp_rewards, encode_asset_type, ConversionState,
+    calculate_masp_rewards, ConversionState,
 };
 use crate::ledger::parameters::{self, EpochDuration, Parameters};
 use crate::ledger::storage::merkle_tree::{

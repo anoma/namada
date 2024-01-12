@@ -37,7 +37,9 @@ use namada_core::types::dec::Dec;
 use namada_core::types::hash::Hash;
 use namada_core::types::ibc::{IbcShieldedTransfer, MsgShieldedTransfer};
 use namada_core::types::key::*;
-use namada_core::types::masp::{TransferSource, TransferTarget};
+use namada_core::types::masp::{
+    encode_asset_type, TransferSource, TransferTarget,
+};
 use namada_core::types::storage::Epoch;
 use namada_core::types::time::DateTimeUtc;
 use namada_core::types::token::MaspDenom;
@@ -56,7 +58,7 @@ use crate::control_flow::time;
 use crate::error::{EncodingError, Error, QueryError, Result, TxError};
 use crate::io::Io;
 use crate::masp::TransferErr::Build;
-use crate::masp::{make_asset_type, ShieldedContext, ShieldedTransfer};
+use crate::masp::{ShieldedContext, ShieldedTransfer};
 use crate::proto::{MaspBuilder, Tx};
 use crate::queries::Client;
 use crate::rpc::{
@@ -2677,7 +2679,10 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
         let mut asset_types = Vec::new();
         for denom in MaspDenom::iter() {
             let epoch = shielded_transfer.epoch;
-            let asset_type = make_asset_type(Some(epoch), &token, denom)?;
+            let asset_type =
+                encode_asset_type(epoch, &token, denom).map_err(|_| {
+                    Error::Other("unable to create asset type".to_string())
+                })?;
             shielded
                 .asset_types
                 .insert(asset_type, (token.clone(), denom, epoch));
