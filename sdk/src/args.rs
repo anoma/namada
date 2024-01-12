@@ -1867,7 +1867,9 @@ pub struct QueryFindValidator<C: NamadaTypes = SdkTypes> {
     /// Common query args
     pub query: Query<C>,
     /// Tendermint address
-    pub tm_addr: String,
+    pub tm_addr: Option<String>,
+    /// Native validator address
+    pub validator_addr: Option<C::Address>,
 }
 
 /// Query the raw bytes of given storage key

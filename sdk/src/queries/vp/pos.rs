@@ -42,6 +42,8 @@ router! {POS,
     ( "validator" ) = {
         ( "is_validator" / [addr: Address] ) -> bool = is_validator,
 
+        ( "consensus_key" / [addr: Address] ) -> Option<common::PublicKey> = consensus_key,
+
         ( "addresses" / [epoch: opt Epoch] )
             -> HashSet<Address> = validator_addresses,
 
@@ -192,6 +194,23 @@ where
     H: 'static + StorageHasher + Sync,
 {
     namada_proof_of_stake::is_validator(ctx.wl_storage, &addr)
+}
+
+/// Find a consensus key of a validator account.
+fn consensus_key<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+    addr: Address,
+) -> storage_api::Result<Option<common::PublicKey>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let current_epoch = ctx.wl_storage.storage.last_epoch;
+    namada_proof_of_stake::storage::get_consensus_key(
+        ctx.wl_storage,
+        &addr,
+        current_epoch,
+    )
 }
 
 /// Find if the given address is a delegator
