@@ -3,10 +3,8 @@
 use data_encoding::HEXUPPER;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
-use masp_proofs::bls12_381;
 use namada::core::ledger::masp_conversions::update_allowed_conversions;
 use namada::core::ledger::pgf::inflation as pgf_inflation;
-use namada::core::types::storage::KeySeg;
 use namada::ledger::events::EventType;
 use namada::ledger::gas::{GasMetering, TxGasMeter};
 use namada::ledger::pos::namada_proof_of_stake;
@@ -19,12 +17,8 @@ use namada::proof_of_stake::storage::{
     find_validator_by_raw_hash, read_last_block_proposer_address,
     write_last_block_proposer_address,
 };
-use namada::types::address::MASP;
 use namada::types::key::tm_raw_hash_to_string;
 use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
-use namada::types::token::{
-    MASP_NOTE_COMMITMENT_ANCHOR_PREFIX, MASP_NOTE_COMMITMENT_TREE_KEY,
-};
 use namada::types::transaction::protocol::{
     ethereum_tx_data_variants, ProtocolTxType,
 };
@@ -567,21 +561,16 @@ where
         tracing::info!("{}", stats.format_tx_executed());
 
         // Update the MASP commitment tree anchor if the tree was updated
-        let tree_key = Key::from(MASP.to_db_key())
-            .push(&MASP_NOTE_COMMITMENT_TREE_KEY.to_owned())
-            .expect("Cannot obtain a storage key");
+        let tree_key = namada::core::types::token::masp_commitment_tree_key();
         if let Some(StorageModification::Write { value }) =
             self.wl_storage.write_log.read(&tree_key).0
         {
             let updated_tree = CommitmentTree::<Node>::try_from_slice(value)
                 .into_storage_result()?;
-            let anchor_key = Key::from(MASP.to_db_key())
-                .push(&MASP_NOTE_COMMITMENT_ANCHOR_PREFIX.to_owned())
-                .expect("Cannot obtain a storage key")
-                .push(&namada::core::types::hash::Hash(
-                    bls12_381::Scalar::from(updated_tree.root()).to_bytes(),
-                ))
-                .expect("Cannot obtain a storage key");
+            let anchor_key =
+                namada::core::types::token::masp_commitment_anchor_key(
+                    updated_tree.root(),
+                );
             self.wl_storage.write(&anchor_key, ())?;
         }
 

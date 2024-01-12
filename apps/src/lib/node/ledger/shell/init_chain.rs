@@ -5,7 +5,6 @@ use std::ops::ControlFlow;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use masp_proofs::bls12_381;
-use namada::core::types::storage::KeySeg;
 use namada::ledger::parameters::Parameters;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
@@ -13,14 +12,10 @@ use namada::ledger::storage_api::token::{credit_tokens, write_denom};
 use namada::ledger::storage_api::StorageWrite;
 use namada::ledger::{ibc, pos};
 use namada::proof_of_stake::BecomeValidator;
-use namada::types::address::{Address, MASP};
+use namada::types::address::Address;
 use namada::types::hash::Hash as CodeHash;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
-use namada::types::token::{
-    MASP_CONVERT_ANCHOR_KEY, MASP_NOTE_COMMITMENT_ANCHOR_PREFIX,
-    MASP_NOTE_COMMITMENT_TREE_KEY,
-};
 use namada::vm::validate_untrusted_wasm;
 use namada_sdk::eth_bridge::EthBridgeStatus;
 use namada_sdk::proof_of_stake::PosParams;
@@ -145,27 +140,20 @@ where
         let empty_commitment_tree: CommitmentTree<Node> =
             CommitmentTree::empty();
         let anchor = empty_commitment_tree.root();
-        let note_commitment_tree_key = Key::from(MASP.to_db_key())
-            .push(&MASP_NOTE_COMMITMENT_TREE_KEY.to_owned())
-            .expect("Cannot obtain a storage key");
+        let note_commitment_tree_key =
+            namada::core::types::token::masp_commitment_tree_key();
         self.wl_storage
             .write(&note_commitment_tree_key, empty_commitment_tree)
             .unwrap();
-        let commitment_tree_anchor_key = Key::from(MASP.to_db_key())
-            .push(&MASP_NOTE_COMMITMENT_ANCHOR_PREFIX.to_owned())
-            .expect("Cannot obtain a storage key")
-            .push(&namada::core::types::hash::Hash(
-                bls12_381::Scalar::from(anchor).to_bytes(),
-            ))
-            .expect("Cannot obtain a storage key");
+        let commitment_tree_anchor_key =
+            namada::core::types::token::masp_commitment_anchor_key(anchor);
         self.wl_storage
             .write(&commitment_tree_anchor_key, ())
             .unwrap();
 
         // Init masp convert anchor
-        let convert_anchor_key = Key::from(MASP.to_db_key())
-            .push(&MASP_CONVERT_ANCHOR_KEY.to_owned())
-            .expect("Cannot obtain a storage key");
+        let convert_anchor_key =
+            namada::core::types::token::masp_convert_anchor_key();
         self.wl_storage.write(
             &convert_anchor_key,
             namada::core::types::hash::Hash(
