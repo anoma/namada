@@ -63,8 +63,8 @@ where
     fn create_or_update_class_validate(
         &self,
         class_id: &PrefixedClassId,
-        _class_uri: &ClassUri,
-        _class_data: &ClassData,
+        _class_uri: Option<&ClassUri>,
+        _class_data: Option<&ClassData>,
     ) -> Result<(), NftTransferError> {
         match self.get_nft_class(class_id) {
             Err(NftTransferError::NftClassNotFound) => Ok(()),
@@ -144,8 +144,8 @@ where
         _account: &Self::AccountId,
         class_id: &PrefixedClassId,
         token_id: &TokenId,
-        _token_uri: &TokenUri,
-        _token_data: &TokenData,
+        _token_uri: Option<&TokenUri>,
+        _token_data: Option<&TokenData>,
     ) -> Result<(), NftTransferError> {
         match self.get_nft(class_id, token_id) {
             Err(NftTransferError::NftNotFound) => Ok(()),
@@ -225,13 +225,13 @@ where
     fn create_or_update_class_execute(
         &self,
         class_id: &PrefixedClassId,
-        class_uri: &ClassUri,
-        class_data: &ClassData,
+        class_uri: Option<&ClassUri>,
+        class_data: Option<&ClassData>,
     ) -> Result<(), NftTransferError> {
         let class = NftClass {
             class_id: class_id.clone(),
-            class_uri: class_uri.clone(),
-            class_data: class_data.clone(),
+            class_uri: class_uri.cloned(),
+            class_data: class_data.cloned(),
         };
         self.inner
             .borrow_mut()
@@ -288,8 +288,8 @@ where
         account: &Self::AccountId,
         class_id: &PrefixedClassId,
         token_id: &TokenId,
-        token_uri: &TokenUri,
-        token_data: &TokenData,
+        token_uri: Option<&TokenUri>,
+        token_data: Option<&TokenData>,
     ) -> Result<(), NftTransferError> {
         let ibc_token = storage::ibc_token_for_nft(class_id, token_id);
 
@@ -297,8 +297,8 @@ where
         let metadata = NftMetadata {
             class_id: class_id.clone(),
             token_id: token_id.clone(),
-            token_uri: token_uri.clone(),
-            token_data: token_data.clone(),
+            token_uri: token_uri.cloned(),
+            token_data: token_data.cloned(),
         };
         self.inner.borrow_mut().store_nft_metadata(metadata)?;
 

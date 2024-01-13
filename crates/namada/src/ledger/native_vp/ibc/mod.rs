@@ -741,8 +741,8 @@ mod tests {
     fn dummy_nft_class() -> NftClass {
         NftClass {
             class_id: get_nft_class_id(),
-            class_uri: DUMMY_URI.parse().unwrap(),
-            class_data: DUMMY_DATA.parse().unwrap(),
+            class_uri: Some(DUMMY_URI.parse().unwrap()),
+            class_data: Some(DUMMY_DATA.parse().unwrap()),
         }
     }
 
@@ -750,8 +750,8 @@ mod tests {
         NftMetadata {
             class_id: get_nft_class_id(),
             token_id: get_nft_id(),
-            token_uri: DUMMY_URI.parse().unwrap(),
-            token_data: DUMMY_DATA.parse().unwrap(),
+            token_uri: Some(DUMMY_URI.parse().unwrap()),
+            token_data: Some(DUMMY_DATA.parse().unwrap()),
         }
     }
 
@@ -3041,11 +3041,11 @@ mod tests {
             chan_id_on_a: get_channel_id(),
             packet_data: NftPacketData {
                 class_id: class.class_id.clone(),
-                class_uri: Some(class.class_uri.clone()),
-                class_data: Some(class.class_data),
+                class_uri: class.class_uri.clone(),
+                class_data: class.class_data,
                 token_ids: TokenIds(vec![metadata.token_id.clone()]),
-                token_uris: vec![metadata.token_uri.clone()],
-                token_data: vec![metadata.token_data],
+                token_uris: vec![metadata.token_uri.unwrap().clone()],
+                token_data: vec![metadata.token_data.unwrap()],
                 sender: sender.to_string().into(),
                 receiver: receiver.to_string().into(),
                 memo: "memo".to_string().into(),

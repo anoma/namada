@@ -10,7 +10,7 @@ use namada::ledger::ibc::storage::ibc_token;
 use namada::types::address::{Address, InternalAddress};
 use namada::types::chain::ChainId;
 use namada::types::ethereum_events::EthAddress;
-use namada::types::ibc::is_ibc_denom;
+use namada::types::ibc::{is_ibc_denom, is_nft_trace};
 use namada::types::io::Io;
 use namada::types::key::*;
 use namada::types::masp::*;
@@ -396,6 +396,11 @@ impl ArgFromContext for Address {
                         let ibc_denom = format!("{trace_path}/{base_token}");
                         ibc_token(ibc_denom)
                     })
+                    .ok_or(Skip)
+            })
+            .or_else(|_| {
+                is_nft_trace(raw)
+                    .map(|(_, _, _)| ibc_token(raw))
                     .ok_or(Skip)
             })
             // Or it can be an alias that may be found in the wallet
