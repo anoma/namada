@@ -20,7 +20,10 @@ fn reveal_nullifiers(
         .sapling_bundle()
         .map_or(&vec![], |description| &description.shielded_spends)
     {
-        ctx.write_without_merkldiffs(&masp_nullifier_key(&description.nullifier), ())?;
+        ctx.write_without_merkldiffs(
+            &masp_nullifier_key(&description.nullifier),
+            (),
+        )?;
     }
 
     Ok(())

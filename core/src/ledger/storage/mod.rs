@@ -49,6 +49,7 @@ use crate::types::storage::{
     BLOCK_HEIGHT_LENGTH, EPOCH_TYPE_LENGTH,
 };
 use crate::types::time::DateTimeUtc;
+use crate::types::token::is_masp_key;
 
 /// A result of a function that may fail
 pub type Result<T> = std::result::Result<T, Error>;
@@ -600,8 +601,11 @@ where
     /// gas cost.
     pub fn has_key(&self, key: &Key) -> Result<(bool, u64)> {
         Ok((
-            // self.block.tree.has_key(key)?,
-            self.db.read_subspace_val(key)?.is_some(),
+            if is_masp_key(key) {
+                self.db.read_subspace_val(key)?.is_some()
+            } else {
+                self.block.tree.has_key(key)?
+            },
             key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE,
         ))
     }
@@ -609,10 +613,12 @@ where
     /// Returns a value from the specified subspace and the gas cost
     pub fn read(&self, key: &Key) -> Result<(Option<Vec<u8>>, u64)> {
         tracing::debug!("storage read key {}", key);
-        // let (present, gas) = self.has_key(key)?;
-        // if !present {
-        //     return Ok((None, gas));
-        // }
+        if !is_masp_key(key) {
+            let (present, gas) = self.has_key(key)?;
+            if !present {
+                return Ok((None, gas));
+            }
+        }
 
         match self.db.read_subspace_val(key)? {
             Some(v) => {
