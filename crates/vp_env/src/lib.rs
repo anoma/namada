@@ -9,7 +9,8 @@ use namada_core::borsh::BorshDeserialize;
 use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
 use namada_core::types::ibc::{
-    get_shielded_transfer, IbcEvent, MsgShieldedTransfer, EVENT_TYPE_PACKET,
+    get_shielded_transfer, IbcEvent, MsgNftTransfer, MsgTransfer,
+    EVENT_TYPE_PACKET,
 };
 use namada_core::types::storage::{
     BlockHash, BlockHeight, Epoch, Epochs, Header, Key, TxIndex,
@@ -131,11 +132,22 @@ where
             return Ok((transfer, masp_tx));
         }
 
-        if let Ok(message) = MsgShieldedTransfer::try_from_slice(&data) {
-            return Ok((
-                message.shielded_transfer.transfer,
-                message.shielded_transfer.masp_tx,
-            ));
+        if let Ok(message) = MsgTransfer::try_from_slice(&data) {
+            if let Some(shielded_transfer) = message.shielded_transfer {
+                return Ok((
+                    shielded_transfer.transfer,
+                    shielded_transfer.masp_tx,
+                ));
+            }
+        }
+
+        if let Ok(message) = MsgNftTransfer::try_from_slice(&data) {
+            if let Some(shielded_transfer) = message.shielded_transfer {
+                return Ok((
+                    shielded_transfer.transfer,
+                    shielded_transfer.masp_tx,
+                ));
+            }
         }
 
         // Shielded transfer over IBC

@@ -2288,7 +2288,22 @@ async fn extract_payload_from_shielded_action<'args, C: Client + Sync>(
         .map_err(|e| Error::Other(e.to_string()))?;
 
     let shielded_transfer = match message {
-        IbcMessage::ShieldedTransfer(msg) => msg.shielded_transfer,
+        IbcMessage::Transfer(msg) => {
+            msg.shielded_transfer.ok_or_else(|| {
+                Error::Other(
+                    "Missing required shielded transfer in IBC message"
+                        .to_string(),
+                )
+            })?
+        }
+        IbcMessage::NftTransfer(msg) => {
+            msg.shielded_transfer.ok_or_else(|| {
+                Error::Other(
+                    "Missing required shielded transfer in IBC message"
+                        .to_string(),
+                )
+            })?
+        }
         IbcMessage::Envelope(_) => {
             let tx_event = match args {
                 ExtractShieldedActionArg::Event(event) => event,
@@ -2342,12 +2357,6 @@ async fn extract_payload_from_shielded_action<'args, C: Client + Sync>(
                             .to_string(),
                     )
                 })?
-        }
-        _ => {
-            return Err(Error::Other(
-                "Couldn't deserialize masp tx to a valid ibc message"
-                    .to_string(),
-            ));
         }
     };
 
