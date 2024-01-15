@@ -572,7 +572,7 @@ jobs:
         nightly_version: [nightly-2023-06-01]
         mold_version: [2.4.0]
         comet_bft: [0.37.2]
-        hermes: [1.7.4-namada-beta6]
+        hermes: [1.7.4-namada-beta7]
         make:
           - index: 0
           - index: 1
