@@ -21,9 +21,8 @@ use namada_core::hints;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::{
     get_pending_key, is_bridge_pool_key, BRIDGE_POOL_ADDRESS,
 };
-use namada_core::ledger::eth_bridge::storage::{active_key, whitelist};
+use namada_core::ledger::eth_bridge::storage::whitelist;
 use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
-use namada_ethereum_bridge::storage::eth_bridge_queries::EthBridgeStatus;
 use namada_ethereum_bridge::storage::parameters::read_native_erc20_address;
 use namada_ethereum_bridge::storage::wrapped_erc20s;
 
@@ -538,28 +537,6 @@ where
             verifiers_len = _verifiers.len(),
             "Ethereum Bridge Pool VP triggered",
         );
-        {
-            let status: EthBridgeStatus = BorshDeserialize::try_from_slice(
-                self.ctx
-                    .storage
-                    .db
-                    .read_subspace_val(&active_key())
-                    .expect(
-                        "Reading the Ethereum bridge active key shouldn't \
-                         fail.",
-                    )
-                    .expect(
-                        "The Ethereum bridge active key should be in storage",
-                    )
-                    .as_slice(),
-            )
-            .expect(
-                "Deserializing the Ethereum bridge active key shouldn't fail.",
-            );
-            if matches!(status, EthBridgeStatus::Disabled) {
-                return Err(eyre!("Bridge closed").into());
-            }
-        }
         let Some(tx_data) = tx.data() else {
             return Err(eyre!("No transaction data found").into());
         };
