@@ -1,0 +1,7 @@
+consensus_key = "unencrypted:00b98b1a637bca2e0df05781a0b9c524bca3a503f4595a2475a14574fbd88f5130"
+eth_cold_key = "unencrypted:0143b73cdaa5d0e1579d3e72401ffcef63893d85d4c94986d8e405792c479bb8d6"
+tendermint_node_key = "unencrypted:00a81e05b5ddf92f558c2eec6b519a7f8da7ca3b4e17ea45abcf46bbd243bf736f"
+
+[validator_keys]
+protocol_keypair = "ED25519_SK_PREFIX00f1d11c81cf685deb1b77740c3658b5638fa71e3989ef013f23d819435ee23352"
+eth_bridge_keypair = "SECP256K1_SK_PREFIX01f2dd125f57d2d10f0da4b323fac4671fe9260ace1eb159751c549c4bd32748e6"

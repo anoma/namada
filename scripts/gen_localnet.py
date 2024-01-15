@@ -52,6 +52,8 @@ parser.add_argument('--localnet-dir', type=str, help='The localnet directory con
 parser.add_argument('-m', '--mode', type=str, help='The mode to run the localnet in. Can be release or debug, defaults to debug.')
 parser.add_argument('--epoch-length', type=int, help='The epoch length in seconds, defaults to parameters.toml value.')
 parser.add_argument('--max-validator-slots', type=int, help='The maximum number of validators, defaults to parameters.toml value.')
+parser.add_argument('--no-chains', type=int, help='Number of chains to run, defaults to 1. If more than 1, base dirs will be under .namada-port. Number of chains must be less than 9.')
+parser.add_argument('--no-vals', type=int, help='Number of validators to run, defaults to 1. If more than 1, base dirs will be under .namada-port. Number of validators must be less or equal to no-chains.')
 # Change any parameters in the parameters.toml file
 parser.add_argument('--params', type=str, help='A string representation of a dictionary of parameters to update in the parameters.toml. Must be of the same format.')
 
@@ -82,6 +84,12 @@ else:
 
 if mode.lower() != 'release':
     mode = 'debug'
+
+BASE_DIRS=[]
+if args.no_chains and args.no_chains > 1:
+    base_dirs = [f'.namada-2{7+i % 10}657' for i in range(args.no_chains)]
+if args.no_vals and args.no_vals > 1:
+    system(f"python3 {namada_dir}/scripts/make_localnet.py --no-vals {args.no_vals} --mode {mode}")
 
 params = {}
 if args.params:
@@ -159,23 +167,42 @@ os.mkdir(temp_dir)
 shutil.move(BASE_DIR + '/' + CHAIN_ID, BASE_DIR + '/tmp/' + CHAIN_ID)
 shutil.move(namada_dir + '/' + CHAIN_ID + '.tar.gz', temp_dir + CHAIN_ID + '.tar.gz')
 
+def join_network(base_dir, genesis_validator):
+    
+    if genesis_validator:
+        PRE_GENESIS_PATH=localnet_dir + '/src/pre-genesis/' + genesis_validator
+        if not os.path.isdir(PRE_GENESIS_PATH) or not os.listdir(PRE_GENESIS_PATH):
+            print(f"Cannot find pre-genesis directory that is not empty at {PRE_GENESIS_PATH}")
+            sys.exit(1)
+
+    if os.path.isdir(base_dir + '/' + CHAIN_ID):
+        shutil.rmtree(base_dir + '/' + CHAIN_ID)
+    if genesis_validator:
+        system(f"NAMADA_NETWORK_CONFIGS_DIR='{temp_dir}' {namadac_bin} --base-dir='{base_dir}' utils join-network --chain-id {CHAIN_ID} --genesis-validator {genesis_validator} --pre-genesis-path {PRE_GENESIS_PATH} --dont-prefetch-wasm")
+    else:
+        system(f"NAMADA_NETWORK_CONFIGS_DIR='{temp_dir}' {namadac_bin} --base-dir='{base_dir}' utils join-network --chain-id {CHAIN_ID} --dont-prefetch-wasm")
+
+    shutil.rmtree(base_dir + '/' + CHAIN_ID + '/wasm/')
+    shutil.copytree(temp_dir + CHAIN_ID + '/wasm/', base_dir + '/' + CHAIN_ID + '/wasm/')
+    # shutil.rmtree(temp_dir + '/' + CHAIN_ID + '/wasm/')
+    genesis_wallet_toml = localnet_dir + '/src/pre-genesis' + '/wallet.toml'
+    wallet = base_dir + '/' + CHAIN_ID + '/wallet.toml'
+    move_genesis_wallet(genesis_wallet_toml, wallet)
+    # Delete the temp dir
+    shutil.rmtree(temp_dir)
+
+
 GENESIS_VALIDATOR='validator-0'
-PRE_GENESIS_PATH=localnet_dir + '/src/pre-genesis/' + GENESIS_VALIDATOR
-if not os.path.isdir(PRE_GENESIS_PATH) or not os.listdir(PRE_GENESIS_PATH):
-    print(f"Cannot find pre-genesis directory that is not empty at {PRE_GENESIS_PATH}")
-    sys.exit(1)
+join_network(BASE_DIR, GENESIS_VALIDATOR)
 
-system(f"NAMADA_NETWORK_CONFIGS_DIR='{temp_dir}' {namadac_bin} --base-dir='{BASE_DIR}' utils join-network --chain-id {CHAIN_ID} --genesis-validator {GENESIS_VALIDATOR} --pre-genesis-path {PRE_GENESIS_PATH} --dont-prefetch-wasm")
+if len(BASE_DIRS)> 0:
+    for base_dir in BASE_DIRS:
+        join_network(base_dir, None)
 
-shutil.rmtree(BASE_DIR + '/' + CHAIN_ID + '/wasm/')
-shutil.move(temp_dir + CHAIN_ID + '/wasm/', BASE_DIR + '/' + CHAIN_ID + '/wasm/')
 
 # Move the genesis wallet to the base dir
-genesis_wallet_toml = localnet_dir + '/src/pre-genesis' + '/wallet.toml'
-wallet = BASE_DIR + '/' + CHAIN_ID + '/wallet.toml'
-move_genesis_wallet(genesis_wallet_toml, wallet)
-# Delete the temp dir
-shutil.rmtree(temp_dir)
+
+
 
 print("Run the ledger using the following command:")
 print(f"{namada_bin} --base-dir='{BASE_DIR}' --chain-id '{CHAIN_ID}' ledger run")

@@ -1,117 +1,60 @@
-# Genesis balances.
-#
-# This files contains the genesis balances of any tokens present at genesis
-# associated with implicit addresses (in the form of public keys) or established
-# addresses.
-#
-# For example:
-# ```
-# [token.NAM]
-# some_pk_bech32m_encoding = 10 # genesis tokens, the amount can have up to 6 decimal places
-# ```
-#
-# The public keys present in here are taken from `pre-genesis/wallet.toml`.
-# As for the established addresses, these are derived from their respective
-# genesis tx toml files.
-
 [token.NAM]
-# albert
 tnam1qxfj3sf6a0meahdu9t6znp05g8zx4dkjtgyn9gfu = "2000000"
 tpknam1qrnw8mxyqlj60mykgevnldcj5mg2fya7fs5a8xqdkd2gwtxhef0zy8a2wha = "2000000"
-# bertha
 tnam1q9rhgyv3ydq0zu3whnftvllqnvhvhm270qxay5tn = "2000000"
 tpknam1qq52dx5e290wyh7ngdt6wudtyd502lg6ln49yvg3vz97e8j2ruux5e3yewq = "2000000"
-# christel
 tnam1q9sx4ekzqaq3xdxtruxkm764nhl00cvcsc7df5jf = "2000000"
 tpknam1qqwfpuvn8x7yqtquejhppef4vddv9ghusec2rkaxav38amamxaxpgj9cs79 = "2000000"
-# daewon
 tpknam1qzz4x4fammhdcfa0g8xw4udkq8s4n6kjhzlxh00ul3da05wuu9wkykqqvjm = "100000000"
-# ester
 tpknam1qypvqpzu74nafjahlwyq272dj76qq9rz30dulyc94883tmj893mquqs74gxv4 = "1000000"
-# validator-0
 tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx = "200000"
 tpknam1qpzrttnzfyt6xfu2vy092eruasll3z52rjfexwapdw0rdww5uktlk3j73dw = "200000"
+tnam1q9juxl8ay4k0wmacnz3ex7lm8d47up4vrsnn6xqx = "1000000"
 
 [token.BTC]
-# albert
 tnam1qxfj3sf6a0meahdu9t6znp05g8zx4dkjtgyn9gfu = "1000000"
-# bertha
 tnam1q9rhgyv3ydq0zu3whnftvllqnvhvhm270qxay5tn = "1000000"
-# christel
 tnam1q9sx4ekzqaq3xdxtruxkm764nhl00cvcsc7df5jf = "1000000"
-# daewon-key
 tpknam1qzz4x4fammhdcfa0g8xw4udkq8s4n6kjhzlxh00ul3da05wuu9wkykqqvjm = "1000000"
-# ester-key
 tpknam1qypvqpzu74nafjahlwyq272dj76qq9rz30dulyc94883tmj893mquqs74gxv4 = "1000000"
-# validator-0
 tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx = "1000000"
 
 [token.ETH]
-# albert
 tnam1qxfj3sf6a0meahdu9t6znp05g8zx4dkjtgyn9gfu = "1000000"
-# bertha
 tnam1q9rhgyv3ydq0zu3whnftvllqnvhvhm270qxay5tn = "1000000"
-# christel
 tnam1q9sx4ekzqaq3xdxtruxkm764nhl00cvcsc7df5jf = "1000000"
-# daewon-key
 tpknam1qzz4x4fammhdcfa0g8xw4udkq8s4n6kjhzlxh00ul3da05wuu9wkykqqvjm = "1000000"
-# ester-key
 tpknam1qypvqpzu74nafjahlwyq272dj76qq9rz30dulyc94883tmj893mquqs74gxv4 = "1000000"
-# validator-0
 tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx = "1000000"
 
 [token.DOT]
-# albert
 tnam1qxfj3sf6a0meahdu9t6znp05g8zx4dkjtgyn9gfu = "1000000"
-# bertha
 tnam1q9rhgyv3ydq0zu3whnftvllqnvhvhm270qxay5tn = "1000000"
-# christel
 tnam1q9sx4ekzqaq3xdxtruxkm764nhl00cvcsc7df5jf = "1000000"
-# daewon-key
 tpknam1qzz4x4fammhdcfa0g8xw4udkq8s4n6kjhzlxh00ul3da05wuu9wkykqqvjm = "1000000"
-# ester-key
 tpknam1qypvqpzu74nafjahlwyq272dj76qq9rz30dulyc94883tmj893mquqs74gxv4 = "1000000"
-# validator-0
 tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx = "1000000"
 
 [token.Schnitzel]
-# albert
 tnam1qxfj3sf6a0meahdu9t6znp05g8zx4dkjtgyn9gfu = "1000000"
-# bertha
 tnam1q9rhgyv3ydq0zu3whnftvllqnvhvhm270qxay5tn = "1000000"
-# christel
 tnam1q9sx4ekzqaq3xdxtruxkm764nhl00cvcsc7df5jf = "1000000"
-# daewon-key
 tpknam1qzz4x4fammhdcfa0g8xw4udkq8s4n6kjhzlxh00ul3da05wuu9wkykqqvjm = "1000000"
-# ester-key
 tpknam1qypvqpzu74nafjahlwyq272dj76qq9rz30dulyc94883tmj893mquqs74gxv4 = "1000000"
-# validator-0
 tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx = "1000000"
 
 [token.Apfel]
-# albert
 tnam1qxfj3sf6a0meahdu9t6znp05g8zx4dkjtgyn9gfu = "1000000"
-# bertha
 tnam1q9rhgyv3ydq0zu3whnftvllqnvhvhm270qxay5tn = "1000000"
-# christel
 tnam1q9sx4ekzqaq3xdxtruxkm764nhl00cvcsc7df5jf = "1000000"
-# daewon-key
 tpknam1qzz4x4fammhdcfa0g8xw4udkq8s4n6kjhzlxh00ul3da05wuu9wkykqqvjm = "1000000"
-# ester-key
 tpknam1qypvqpzu74nafjahlwyq272dj76qq9rz30dulyc94883tmj893mquqs74gxv4 = "1000000"
-# validator-0
 tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx = "1000000"
 
 [token.Kartoffel]
-# albert
 tnam1qxfj3sf6a0meahdu9t6znp05g8zx4dkjtgyn9gfu = "1000000"
-# bertha
 tnam1q9rhgyv3ydq0zu3whnftvllqnvhvhm270qxay5tn = "1000000"
-# christel
 tnam1q9sx4ekzqaq3xdxtruxkm764nhl00cvcsc7df5jf = "1000000"
-# daewon-key
 tpknam1qzz4x4fammhdcfa0g8xw4udkq8s4n6kjhzlxh00ul3da05wuu9wkykqqvjm = "1000000"
-# ester-key
 tpknam1qypvqpzu74nafjahlwyq272dj76qq9rz30dulyc94883tmj893mquqs74gxv4 = "1000000"
-# validator-0
 tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx = "1000000"

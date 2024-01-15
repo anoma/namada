@@ -1,0 +1,24 @@
+[[established_account]]
+vp = "vp_user"
+threshold = 1
+public_keys = ["tpknam1qzwakpck6jsg2du534d4ayw74ew3dmmy7qall2d8lx74fuvxypwdjekc5a7"]
+
+[[validator_account]]
+address = "tnam1q9juxl8ay4k0wmacnz3ex7lm8d47up4vrsnn6xqx"
+vp = "vp_user"
+commission_rate = "0.05"
+max_commission_rate_change = "0.01"
+net_address = "127.0.0.1:28657"
+consensus_key = "tpknam1qr88ykv0gyf8l66t2xtlqk5x5uugtary58rm0xd32h2zf2nvjpt3xg8jr8a"
+protocol_key = "tpknam1qrm8g06uk8azyfwu8p7tyxnf4jvnumw84y6rnz5ax3gck2uthj0w7eq4wf6"
+tendermint_node_key = "tpknam1qp50nahexw9hh2rr9x24yxl2yjhq57azkrxyn5v09n75nm7elchmvjepxgn"
+eth_hot_key = "tpknam1qypqz4wmc3rhath70vmz5qqln5f35kwp6g7x8sn5xga5g0vzgjktkaqs8fpg5"
+eth_cold_key = "tpknam1qypadmrd3plqlxejaa822x529jg8fjeh0jyxmge3xzq8qmqx68yf7wsejdpdp"
+
+[validator_account.metadata]
+email = "validator1@gmail.com"
+
+[[bond]]
+source = "tnam1q9juxl8ay4k0wmacnz3ex7lm8d47up4vrsnn6xqx"
+validator = "tnam1q9juxl8ay4k0wmacnz3ex7lm8d47up4vrsnn6xqx"
+amount = "1000"
