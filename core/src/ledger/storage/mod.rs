@@ -742,7 +742,7 @@ where
 
     /// Delete the specified subspace and returns the gas cost and the size
     /// difference
-    pub fn delete_with_actions(
+    pub fn delete_with_opts(
         &mut self,
         key: &Key,
         action: WriteOpts,
@@ -763,12 +763,12 @@ where
 
     /// Delete including from the diffs storage
     pub fn delete(&mut self, key: &Key) -> Result<(u64, i64)> {
-        self.delete_with_actions(key, WriteOpts::ALL)
+        self.delete_with_opts(key, WriteOpts::ALL)
     }
 
     /// Delete without manipulating the diffs storage
     pub fn delete_without_diffs(&mut self, key: &Key) -> Result<(u64, i64)> {
-        self.delete_with_actions(key, WriteOpts::NONE)
+        self.delete_with_opts(key, WriteOpts::NONE)
     }
 
     /// Set the block header.

@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use borsh::BorshDeserialize;
 
-use super::{token, WriteOpts};
+use super::token;
 use crate::ledger::governance::parameters::GovernanceParameters;
 use crate::ledger::governance::storage::keys as governance_keys;
 use crate::ledger::governance::storage::proposal::{
@@ -38,7 +38,7 @@ where
 
     let content_key = governance_keys::get_content_key(proposal_id);
     // TODO: what write actions are actually desired here?
-    storage.write_bytes(&content_key, content, WriteOpts::ALL)?;
+    storage.write_bytes(&content_key, content)?;
 
     let author_key = governance_keys::get_author_key(proposal_id);
     storage.write(&author_key, data.author.clone())?;
@@ -54,11 +54,7 @@ where
                 storage_api::Error::new_const("Missing proposal code"),
             )?;
             // TODO: what write actions are actually desired here?
-            storage.write_bytes(
-                &proposal_code_key,
-                proposal_code,
-                WriteOpts::ALL,
-            )?
+            storage.write_bytes(&proposal_code_key, proposal_code)?
         }
         _ => storage.write(&proposal_type_key, data.r#type.clone())?,
     }
@@ -80,11 +76,7 @@ where
         let proposal_code =
             code.ok_or(storage_api::Error::new_const("Missing proposal code"))?;
         // TODO: what write actions are desired here?
-        storage.write_bytes(
-            &proposal_code_key,
-            proposal_code,
-            WriteOpts::ALL,
-        )?;
+        storage.write_bytes(&proposal_code_key, proposal_code)?;
     }
 
     storage.write(&counter_key, proposal_id + 1)?;

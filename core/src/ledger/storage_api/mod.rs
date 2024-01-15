@@ -143,7 +143,7 @@ pub trait StorageWrite {
         val: T,
     ) -> Result<()> {
         let bytes = val.serialize_to_vec();
-        self.write_bytes(key, bytes, WriteOpts::ALL)
+        self.write_bytes(key, bytes)
     }
 
     /// Write a value to be encoded with Borsh at the given key to storage.
@@ -155,7 +155,7 @@ pub trait StorageWrite {
         val: T,
     ) -> Result<()> {
         let bytes = val.serialize_to_vec();
-        self.write_bytes(key, bytes, WriteOpts::WRITE_DIFFS)
+        self.write_bytes_with_opts(key, bytes, WriteOpts::WRITE_DIFFS)
     }
 
     /// Write a value to be encoded with Borsh at the given key to storage.
@@ -166,7 +166,7 @@ pub trait StorageWrite {
         val: T,
     ) -> Result<()> {
         let bytes = val.serialize_to_vec();
-        self.write_bytes(key, bytes, WriteOpts::NONE)
+        self.write_bytes_with_opts(key, bytes, WriteOpts::NONE)
     }
 
     /// Write a value as bytes at the given key to storage.
@@ -174,11 +174,21 @@ pub trait StorageWrite {
         &mut self,
         key: &storage::Key,
         val: impl AsRef<[u8]>,
+    ) -> Result<()> {
+        self.write_bytes_with_opts(key, val, WriteOpts::ALL)
+    }
+
+    /// Write a value as bytes at the given key to storage, with provided
+    /// options.
+    fn write_bytes_with_opts(
+        &mut self,
+        key: &storage::Key,
+        val: impl AsRef<[u8]>,
         action: WriteOpts,
     ) -> Result<()>;
 
     /// Delete a value at the given key from storage
-    fn delete_with_actions(
+    fn delete_with_opts(
         &mut self,
         key: &storage::Key,
         action: WriteOpts,
@@ -187,13 +197,13 @@ pub trait StorageWrite {
     /// Delete a value at the given key from storage, including from the diffs
     /// storage.
     fn delete(&mut self, key: &storage::Key) -> Result<()> {
-        self.delete_with_actions(key, WriteOpts::ALL)
+        self.delete_with_opts(key, WriteOpts::ALL)
     }
 
     /// Delete a value at the given key from storage, excluding the diffs
     /// storage.
     fn delete_without_diffs(&mut self, key: &storage::Key) -> Result<()> {
-        self.delete_with_actions(key, WriteOpts::NONE)
+        self.delete_with_opts(key, WriteOpts::NONE)
     }
 
     /// Delete all key-vals with a matching prefix.

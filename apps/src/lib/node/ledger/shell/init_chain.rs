@@ -9,7 +9,7 @@ use namada::ledger::parameters::Parameters;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
 use namada::ledger::storage_api::token::{credit_tokens, write_denom};
-use namada::ledger::storage_api::{StorageWrite, WriteOpts};
+use namada::ledger::storage_api::StorageWrite;
 use namada::ledger::{ibc, pos};
 use namada::proof_of_stake::BecomeValidator;
 use namada::types::address::Address;
@@ -401,18 +401,14 @@ where
 
                 // TODO: what write actions are desired for the data below??
 
-                self.wl_storage
-                    .write_bytes(&code_key, code, WriteOpts::ALL)
-                    .unwrap();
+                self.wl_storage.write_bytes(&code_key, code).unwrap();
                 self.wl_storage.write(&code_len_key, code_len).unwrap();
-                self.wl_storage
-                    .write_bytes(&hash_key, code_hash, WriteOpts::ALL)
-                    .unwrap();
+                self.wl_storage.write_bytes(&hash_key, code_hash).unwrap();
                 if &Some(code_hash) == implicit_vp_code_hash {
                     is_implicit_vp_stored = true;
                 }
                 self.wl_storage
-                    .write_bytes(&code_name_key, code_hash, WriteOpts::ALL)
+                    .write_bytes(&code_name_key, code_hash)
                     .unwrap();
             } else {
                 tracing::warn!("The wasm {name} isn't whitelisted.");
@@ -539,11 +535,7 @@ where
                 let code_hash = CodeHash::sha256(&vp_code);
                 // TODO: what write actions are desired here??
                 self.wl_storage
-                    .write_bytes(
-                        &Key::validity_predicate(address),
-                        code_hash,
-                        WriteOpts::ALL,
-                    )
+                    .write_bytes(&Key::validity_predicate(address), code_hash)
                     .unwrap();
 
                 let public_keys: Vec<_> =
@@ -601,11 +593,7 @@ where
                 let code_hash = CodeHash::sha256(&vp_code);
                 // TODO: what write actions are desired here??
                 self.wl_storage
-                    .write_bytes(
-                        &Key::validity_predicate(address),
-                        code_hash,
-                        WriteOpts::ALL,
-                    )
+                    .write_bytes(&Key::validity_predicate(address), code_hash)
                     .expect("Unable to write user VP");
 
                 self.wl_storage

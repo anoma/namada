@@ -539,7 +539,7 @@ where
 {
     // N.B. Calling this when testing pre- and post- reads in
     // regards to testing native vps is incorrect.
-    fn write_bytes(
+    fn write_bytes_with_opts(
         &mut self,
         key: &storage::Key,
         val: impl AsRef<[u8]>,
@@ -552,7 +552,7 @@ where
         Ok(())
     }
 
-    fn delete_with_actions(
+    fn delete_with_opts(
         &mut self,
         key: &storage::Key,
         action: WriteOpts,

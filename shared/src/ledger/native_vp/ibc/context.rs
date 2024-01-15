@@ -150,7 +150,7 @@ where
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    fn write_bytes(
+    fn write_bytes_with_opts(
         &mut self,
         key: &Key,
         value: impl AsRef<[u8]>,
@@ -166,11 +166,7 @@ where
         Ok(())
     }
 
-    fn delete_with_actions(
-        &mut self,
-        key: &Key,
-        action: WriteOpts,
-    ) -> Result<()> {
+    fn delete_with_opts(&mut self, key: &Key, action: WriteOpts) -> Result<()> {
         self.store
             .insert(key.clone(), StorageModification::Delete { action });
         Ok(())
@@ -384,7 +380,7 @@ where
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    fn write_bytes(
+    fn write_bytes_with_opts(
         &mut self,
         _key: &Key,
         _val: impl AsRef<[u8]>,
@@ -393,7 +389,7 @@ where
         unimplemented!("Validation doesn't write any data")
     }
 
-    fn delete_with_actions(
+    fn delete_with_opts(
         &mut self,
         _key: &Key,
         _action: WriteOpts,

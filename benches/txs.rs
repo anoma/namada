@@ -22,7 +22,7 @@ use namada::ibc::core::host::types::identifiers::{
     ClientId, ClientType, ConnectionId, PortId,
 };
 use namada::ledger::eth_bridge::read_native_erc20_address;
-use namada::ledger::storage_api::{StorageRead, StorageWrite, WriteOpts};
+use namada::ledger::storage_api::{StorageRead, StorageWrite};
 use namada::proof_of_stake::storage::read_pos_params;
 use namada::proof_of_stake::types::SlashType;
 use namada::proof_of_stake::{self, KeySeg};
@@ -657,7 +657,6 @@ fn become_validator(c: &mut Criterion) {
                             &address,
                         ),
                         vec![],
-                        WriteOpts::ALL,
                     )
                     .unwrap();
                 shell

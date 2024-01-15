@@ -5,7 +5,7 @@ use namada_core::ledger::ibc::storage::{
     channel_counter_key, client_counter_key, connection_counter_key,
 };
 use namada_core::ledger::storage::WlStorage;
-use namada_core::ledger::storage_api::{StorageWrite, WriteOpts};
+use namada_core::ledger::storage_api::StorageWrite;
 
 use crate::ledger::storage::{self as ledger_storage, StorageHasher};
 
@@ -24,20 +24,20 @@ where
     let key = client_counter_key();
     let value = 0_u64.to_be_bytes().to_vec();
     storage
-        .write_bytes(&key, value, WriteOpts::ALL)
+        .write_bytes(&key, value)
         .expect("Unable to write the initial client counter");
 
     // the connection counter
     let key = connection_counter_key();
     let value = 0_u64.to_be_bytes().to_vec();
     storage
-        .write_bytes(&key, value, WriteOpts::ALL)
+        .write_bytes(&key, value)
         .expect("Unable to write the initial connection counter");
 
     // the channel counter
     let key = channel_counter_key();
     let value = 0_u64.to_be_bytes().to_vec();
     storage
-        .write_bytes(&key, value, WriteOpts::ALL)
+        .write_bytes(&key, value)
         .expect("Unable to write the initial channel counter");
 }

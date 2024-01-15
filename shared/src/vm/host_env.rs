@@ -2484,7 +2484,7 @@ where
     // TODO: is it ok to not explicitly use the `_actions` and use the default
     // behavior????
 
-    fn write_bytes(
+    fn write_bytes_with_opts(
         &mut self,
         key: &Key,
         data: impl AsRef<[u8]>,
@@ -2497,7 +2497,7 @@ where
         ibc_tx_charge_gas(self, gas)
     }
 
-    fn delete_with_actions(
+    fn delete_with_opts(
         &mut self,
         key: &Key,
         _action: WriteOpts,

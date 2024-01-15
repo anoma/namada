@@ -224,7 +224,7 @@ impl StorageRead for Ctx {
 }
 
 impl StorageWrite for Ctx {
-    fn write_bytes(
+    fn write_bytes_with_opts(
         &mut self,
         key: &storage::Key,
         val: impl AsRef<[u8]>,
@@ -250,7 +250,7 @@ impl StorageWrite for Ctx {
     }
 
     // TODO: is this the correct thing to do here?
-    fn delete_with_actions(
+    fn delete_with_opts(
         &mut self,
         _key: &storage::Key,
         _action: WriteOpts,

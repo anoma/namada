@@ -369,7 +369,6 @@ where
 mod tests {
     use eyre::Result;
     use namada_core::ledger::storage::testing::TestWlStorage;
-    use namada_core::ledger::storage_api::WriteOpts;
     use namada_core::types::ethereum_events::EthAddress;
 
     use super::*;
@@ -448,11 +447,7 @@ mod tests {
         config.init_storage(&mut wl_storage);
         let min_confirmations_key = bridge_storage::min_confirmations_key();
         wl_storage
-            .write_bytes(
-                &min_confirmations_key,
-                vec![42, 1, 2, 3, 4],
-                WriteOpts::ALL,
-            )
+            .write_bytes(&min_confirmations_key, vec![42, 1, 2, 3, 4])
             .unwrap();
 
         // This should panic because the min_confirmations value is not valid
