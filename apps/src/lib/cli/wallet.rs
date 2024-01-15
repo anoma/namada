@@ -284,16 +284,17 @@ fn shielded_key_address_add(
 }
 
 /// Decode the derivation path from the given string unless it is "default",
-/// in which case use the default derivation path for the given scheme.
-pub fn decode_derivation_path(
+/// in which case use the default derivation path for the given transparent
+/// scheme.
+pub fn decode_transparent_derivation_path(
     scheme: SchemeType,
     derivation_path: String,
 ) -> Result<DerivationPath, DerivationPathError> {
     let is_default = derivation_path.eq_ignore_ascii_case("DEFAULT");
     let parsed_derivation_path = if is_default {
-        DerivationPath::default_for_scheme(scheme)
+        DerivationPath::default_for_transparent_scheme(scheme)
     } else {
-        DerivationPath::from_path_str(scheme, &derivation_path)?
+        DerivationPath::from_path_string_for_scheme(scheme, &derivation_path)?
     };
     if !parsed_derivation_path.is_compatible(scheme) {
         println!(
@@ -321,11 +322,12 @@ async fn transparent_key_and_address_derive(
     }: args::KeyDerive,
 ) {
     let mut wallet = load_wallet(ctx);
-    let derivation_path = decode_derivation_path(scheme, derivation_path)
-        .unwrap_or_else(|err| {
-            edisplay_line!(io, "{}", err);
-            cli::safe_exit(1)
-        });
+    let derivation_path =
+        decode_transparent_derivation_path(scheme, derivation_path)
+            .unwrap_or_else(|err| {
+                edisplay_line!(io, "{}", err);
+                cli::safe_exit(1)
+            });
     let alias = alias.to_lowercase();
     let alias = if !use_device {
         let encryption_password =
@@ -430,11 +432,12 @@ fn transparent_key_and_address_gen(
             &mut OsRng,
         )
     } else {
-        let derivation_path = decode_derivation_path(scheme, derivation_path)
-            .unwrap_or_else(|err| {
-                edisplay_line!(io, "{}", err);
-                cli::safe_exit(1)
-            });
+        let derivation_path =
+            decode_transparent_derivation_path(scheme, derivation_path)
+                .unwrap_or_else(|err| {
+                    edisplay_line!(io, "{}", err);
+                    cli::safe_exit(1)
+                });
         let (_mnemonic, seed) =
             Wallet::<CliWalletUtils>::gen_hd_seed(None, &mut OsRng)
                 .unwrap_or_else(|err| {

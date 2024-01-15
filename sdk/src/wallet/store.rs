@@ -799,9 +799,11 @@ mod test_wallet {
         let seed = Seed::new(&mnemonic, PASSPHRASE);
         assert_eq!(format!("{:x}", seed), SEED_EXPECTED);
 
-        let derivation_path =
-            DerivationPath::from_path_str(SCHEME, DERIVATION_PATH)
-                .expect("Derivation path construction cannot fail");
+        let derivation_path = DerivationPath::from_path_string_for_scheme(
+            SCHEME,
+            DERIVATION_PATH,
+        )
+        .expect("Derivation path construction cannot fail");
 
         let sk = derive_hd_secret_key(SCHEME, seed.as_bytes(), derivation_path);
 
@@ -825,13 +827,18 @@ mod test_wallet {
         let seed = Seed::new(&mnemonic, PASSPHRASE);
         assert_eq!(format!("{:x}", seed), SEED_EXPECTED);
 
-        let derivation_path =
-            DerivationPath::from_path_str(SCHEME, DERIVATION_PATH)
-                .expect("Derivation path construction cannot fail");
+        let derivation_path = DerivationPath::from_path_string_for_scheme(
+            SCHEME,
+            DERIVATION_PATH,
+        )
+        .expect("Derivation path construction cannot fail");
 
         let derivation_path_hardened =
-            DerivationPath::from_path_str(SCHEME, DERIVATION_PATH_HARDENED)
-                .expect("Derivation path construction cannot fail");
+            DerivationPath::from_path_string_for_scheme(
+                SCHEME,
+                DERIVATION_PATH_HARDENED,
+            )
+            .expect("Derivation path construction cannot fail");
 
         let sk = derive_hd_secret_key(SCHEME, seed.as_bytes(), derivation_path);
 
@@ -857,8 +864,11 @@ mod test_wallet {
                 .decode(seed.as_bytes())
                 .expect("Seed parsing cannot fail.")
                 .as_slice(),
-            DerivationPath::from_path_str(scheme, derivation_path)
-                .expect("Derivation path construction cannot fail"),
+            DerivationPath::from_path_string_for_scheme(
+                scheme,
+                derivation_path,
+            )
+            .expect("Derivation path construction cannot fail"),
         );
         let sk_expected = if priv_key.starts_with("xprv") {
             // this is an extended private key encoded in base58

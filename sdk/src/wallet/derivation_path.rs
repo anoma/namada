@@ -81,19 +81,23 @@ impl DerivationPath {
         )
     }
 
-    pub fn default_for_scheme(scheme: SchemeType) -> Self {
+    pub fn default_for_transparent_scheme(scheme: SchemeType) -> Self {
         let path = Self::bip44(scheme, 0, 0, 0);
         path.hardened(scheme)
     }
 
-    pub fn from_path_str(
-        scheme: SchemeType,
-        path: &str,
-    ) -> Result<Self, DerivationPathError> {
+    pub fn from_path_string(path: &str) -> Result<Self, DerivationPathError> {
         let inner = DerivationPathInner::from_str(path).map_err(|err| {
             DerivationPathError::InvalidDerivationPath(err.to_string())
         })?;
-        Ok(Self(inner).hardened(scheme))
+        Ok(Self(inner))
+    }
+
+    pub fn from_path_string_for_scheme(
+        scheme: SchemeType,
+        path: &str,
+    ) -> Result<Self, DerivationPathError> {
+        Self::from_path_string(path).map(|dp| dp.hardened(scheme))
     }
 
     pub fn path(&self) -> &[ChildIndex] {
@@ -144,21 +148,25 @@ mod tests {
 
     #[test]
     fn path_is_compatible() {
-        let path_empty =
-            DerivationPath::from_path_str(SchemeType::Secp256k1, "m")
-                .expect("Path construction cannot fail.");
+        let path_empty = DerivationPath::from_path_string_for_scheme(
+            SchemeType::Secp256k1,
+            "m",
+        )
+        .expect("Path construction cannot fail.");
         assert!(path_empty.is_compatible(SchemeType::Ed25519));
         assert!(path_empty.is_compatible(SchemeType::Secp256k1));
         assert!(path_empty.is_compatible(SchemeType::Common));
 
-        let path_one =
-            DerivationPath::from_path_str(SchemeType::Secp256k1, "m/44'")
-                .expect("Path construction cannot fail.");
+        let path_one = DerivationPath::from_path_string_for_scheme(
+            SchemeType::Secp256k1,
+            "m/44'",
+        )
+        .expect("Path construction cannot fail.");
         assert!(path_one.is_compatible(SchemeType::Ed25519));
         assert!(path_one.is_compatible(SchemeType::Secp256k1));
         assert!(path_one.is_compatible(SchemeType::Common));
 
-        let path_two = DerivationPath::from_path_str(
+        let path_two = DerivationPath::from_path_string_for_scheme(
             SchemeType::Secp256k1,
             "m/44'/99999'",
         )
@@ -167,16 +175,20 @@ mod tests {
         assert!(!path_two.is_compatible(SchemeType::Secp256k1));
         assert!(path_two.is_compatible(SchemeType::Common));
 
-        let path_eth =
-            DerivationPath::from_path_str(SchemeType::Secp256k1, "m/44'/60'")
-                .expect("Path construction cannot fail.");
+        let path_eth = DerivationPath::from_path_string_for_scheme(
+            SchemeType::Secp256k1,
+            "m/44'/60'",
+        )
+        .expect("Path construction cannot fail.");
         assert!(!path_eth.is_compatible(SchemeType::Ed25519));
         assert!(path_eth.is_compatible(SchemeType::Secp256k1));
         assert!(path_eth.is_compatible(SchemeType::Common));
 
-        let path_nam =
-            DerivationPath::from_path_str(SchemeType::Ed25519, "m/44'/877'")
-                .expect("Path construction cannot fail.");
+        let path_nam = DerivationPath::from_path_string_for_scheme(
+            SchemeType::Ed25519,
+            "m/44'/877'",
+        )
+        .expect("Path construction cannot fail.");
         assert!(path_nam.is_compatible(SchemeType::Ed25519));
         assert!(!path_nam.is_compatible(SchemeType::Secp256k1));
         assert!(path_nam.is_compatible(SchemeType::Common));
