@@ -73,6 +73,8 @@ pub enum TxRuntimeError {
     MissingTxData,
     #[error("IBC: {0}")]
     Ibc(#[from] namada_core::ledger::ibc::Error),
+    #[error("Invalid Write Options")]
+    InvalidWriteOptions,
 }
 
 type TxResult<T> = std::result::Result<T, TxRuntimeError>;
@@ -817,6 +819,7 @@ pub fn tx_write<MEM, DB, H, CA>(
     key_len: u64,
     val_ptr: u64,
     val_len: u64,
+    write_opts: u8,
 ) -> TxResult<()>
 where
     MEM: VmMemory,
@@ -844,9 +847,12 @@ where
 
     check_address_existence(env, &key)?;
 
+    let write_opts = WriteOpts::from_bits(write_opts)
+        .ok_or_else(|| TxRuntimeError::InvalidWriteOptions)?;
+
     let write_log = unsafe { env.ctx.write_log.get() };
     let (gas, _size_diff) = write_log
-        .write(&key, value)
+        .write_with_opts(&key, value, write_opts)
         .map_err(TxRuntimeError::StorageModificationError)?;
     tx_charge_gas(env, gas)
 }
@@ -950,6 +956,7 @@ pub fn tx_delete<MEM, DB, H, CA>(
     env: &TxVmEnv<MEM, DB, H, CA>,
     key_ptr: u64,
     key_len: u64,
+    write_opts: u8,
 ) -> TxResult<()>
 where
     MEM: VmMemory,
@@ -970,9 +977,12 @@ where
         return Err(TxRuntimeError::CannotDeleteVp);
     }
 
+    let write_opts = WriteOpts::from_bits(write_opts)
+        .ok_or_else(|| TxRuntimeError::InvalidWriteOptions)?;
+
     let write_log = unsafe { env.ctx.write_log.get() };
     let (gas, _size_diff) = write_log
-        .delete(&key)
+        .delete_with_opts(&key, write_opts)
         .map_err(TxRuntimeError::StorageModificationError)?;
     tx_charge_gas(env, gas)
 }

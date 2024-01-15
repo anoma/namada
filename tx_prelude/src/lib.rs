@@ -228,7 +228,7 @@ impl StorageWrite for Ctx {
         &mut self,
         key: &storage::Key,
         val: impl AsRef<[u8]>,
-        _action: WriteOpts,
+        action: WriteOpts,
     ) -> storage_api::Result<()> {
         let key = key.to_string();
         // TODO: do certain write actions need to be considered here??
@@ -238,24 +238,30 @@ impl StorageWrite for Ctx {
                 key.len() as _,
                 val.as_ref().as_ptr() as _,
                 val.as_ref().len() as _,
+                action.bits() as _,
             )
         };
         Ok(())
     }
 
     fn delete(&mut self, key: &storage::Key) -> storage_api::Result<()> {
-        let key = key.to_string();
-        unsafe { namada_tx_delete(key.as_ptr() as _, key.len() as _) };
-        Ok(())
+        self.delete_with_opts(key, WriteOpts::ALL)
     }
 
-    // TODO: is this the correct thing to do here?
     fn delete_with_opts(
         &mut self,
-        _key: &storage::Key,
-        _action: WriteOpts,
+        key: &storage::Key,
+        action: WriteOpts,
     ) -> storage_api::Result<()> {
-        unimplemented!()
+        let key = key.to_string();
+        unsafe {
+            namada_tx_delete(
+                key.as_ptr() as _,
+                key.len() as _,
+                action.bits() as _,
+            )
+        };
+        Ok(())
     }
 }
 

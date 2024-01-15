@@ -208,26 +208,24 @@ impl WriteLog {
         }
     }
 
-    /// Write a key and a value and return the gas cost and the size difference
-    /// Fails with [`Error::UpdateVpOfNewAccount`] when attempting to update a
-    /// validity predicate of a new account that's not yet committed to storage.
-    /// Fails with [`Error::UpdateTemporaryValue`] when attempting to update a
+    /// Write a key and a value, with write options, and return the gas cost and
+    /// the size difference. Fails with [`Error::UpdateVpOfNewAccount`] when
+    /// attempting to update a validity predicate of a new account that's
+    /// not yet committed to storage. Fails with
+    /// [`Error::UpdateTemporaryValue`] when attempting to update a
     /// temporary value.
-    pub fn write(
+    pub fn write_with_opts(
         &mut self,
         key: &storage::Key,
         value: Vec<u8>,
-        // action: WriteActions,
+        action: WriteOpts,
     ) -> Result<(u64, i64)> {
         let len = value.len();
         let gas = key.len() + len;
-        let size_diff = match self.tx_write_log.insert(
-            key.clone(),
-            StorageModification::Write {
-                value,
-                action: WriteOpts::ALL,
-            },
-        ) {
+        let size_diff = match self
+            .tx_write_log
+            .insert(key.clone(), StorageModification::Write { value, action })
+        {
             Some(prev) => match prev {
                 StorageModification::Write {
                     ref value,
@@ -246,6 +244,16 @@ impl WriteLog {
             None => len as i64,
         };
         Ok((gas as u64 * STORAGE_WRITE_GAS_PER_BYTE, size_diff))
+    }
+
+    /// Write a key and value using all write options, and return the gas cost
+    /// and size difference
+    pub fn write(
+        &mut self,
+        key: &storage::Key,
+        value: Vec<u8>,
+    ) -> Result<(u64, i64)> {
+        self.write_with_opts(key, value, WriteOpts::ALL)
     }
 
     /// Write a key and a value.
@@ -317,24 +325,22 @@ impl WriteLog {
         Ok((gas as u64 * MEMORY_ACCESS_GAS_PER_BYTE, size_diff))
     }
 
-    /// Delete a key and its value, and return the gas cost and the size
-    /// difference.
+    /// Delete a key and its value, with write options, and return the gas cost
+    /// and the size difference.
     /// Fails with [`Error::DeleteVp`] for a validity predicate key, which are
     /// not possible to delete.
-    pub fn delete(
+    pub fn delete_with_opts(
         &mut self,
         key: &storage::Key,
-        // action: WriteActions,
+        action: WriteOpts,
     ) -> Result<(u64, i64)> {
         if key.is_validity_predicate().is_some() {
             return Err(Error::DeleteVp);
         }
-        let size_diff = match self.tx_write_log.insert(
-            key.clone(),
-            StorageModification::Delete {
-                action: WriteOpts::ALL,
-            },
-        ) {
+        let size_diff = match self
+            .tx_write_log
+            .insert(key.clone(), StorageModification::Delete { action })
+        {
             Some(prev) => match prev {
                 StorageModification::Write {
                     ref value,
@@ -352,6 +358,12 @@ impl WriteLog {
         };
         let gas = key.len() + size_diff as usize;
         Ok((gas as u64 * STORAGE_WRITE_GAS_PER_BYTE, -size_diff))
+    }
+
+    /// Delete a key and its value, with all write options, and return the gas
+    /// cost and the size difference.
+    pub fn delete(&mut self, key: &storage::Key) -> Result<(u64, i64)> {
+        self.delete_with_opts(key, WriteOpts::ALL)
     }
 
     /// Delete a key and its value.

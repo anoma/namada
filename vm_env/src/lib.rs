@@ -34,6 +34,7 @@ pub mod tx {
             key_len: u64,
             val_ptr: u64,
             val_len: u64,
+            write_opts: u8,
         );
 
         // Write a temporary key/value
@@ -45,7 +46,7 @@ pub mod tx {
         );
 
         // Delete the given key and its value
-        pub fn namada_tx_delete(key_ptr: u64, key_len: u64);
+        pub fn namada_tx_delete(key_ptr: u64, key_len: u64, write_opts: u8);
 
         // Get an ID of a data iterator with key prefix, ordered by storage
         // keys.
