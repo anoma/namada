@@ -45,8 +45,9 @@ impl DerivationPath {
     }
 
     fn bip44_base_indexes_for_scheme(scheme: SchemeType) -> Vec<ChildIndex> {
+        const BIP44_PURPOSE: u32 = 44;
         vec![
-            ChildIndex::Hardened(44),
+            ChildIndex::Hardened(BIP44_PURPOSE),
             match scheme {
                 SchemeType::Secp256k1 => ChildIndex::Hardened(ETH_COIN_TYPE),
                 SchemeType::Ed25519 => ChildIndex::Hardened(NAMADA_COIN_TYPE),
