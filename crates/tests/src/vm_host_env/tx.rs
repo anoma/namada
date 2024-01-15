@@ -521,3 +521,89 @@ mod native_tx_host_env {
         max_signatures_len: u64,
     ) -> i64);
 }
+
+#[cfg(test)]
+mod tests {
+    use namada::types::storage;
+    use namada::vm::host_env::*;
+    use proptest::prelude::*;
+    use test_log::test;
+
+    use super::*;
+
+    proptest! {
+        #[test]
+        fn test_tx_read_cannot_panic(
+            key_ptr in arb_u64(),
+            key in namada::types::storage::testing::arb_key(),
+            read_buffer_ptr in arb_u64(),
+        ) {
+            test_tx_read_cannot_panic_aux(key_ptr, key, read_buffer_ptr)
+        }
+    }
+
+    fn test_tx_read_cannot_panic_aux(
+        key_ptr: u64,
+        key: storage::Key,
+        read_buffer_ptr: u64,
+    ) {
+        use namada::vm::memory::VmMemory;
+
+        let mut test_env = TestTxEnv::default();
+        let TestTxEnv {
+            wl_storage,
+            iterators,
+            verifiers,
+            gas_meter,
+            sentinel,
+            result_buffer,
+            tx_index,
+            vp_wasm_cache,
+            vp_cache_dir: _,
+            tx_wasm_cache,
+            tx_cache_dir: _,
+            tx,
+        } = &mut test_env;
+        let tx_env = vm::host_env::testing::tx_env_with_wasm_memory(
+            &wl_storage.storage,
+            &mut wl_storage.write_log,
+            iterators,
+            verifiers,
+            gas_meter,
+            sentinel,
+            tx,
+            tx_index,
+            result_buffer,
+            vp_wasm_cache,
+            tx_wasm_cache,
+        );
+
+        println!("{key_ptr}, {read_buffer_ptr}");
+        // let _res = namada_tx_read(key_ptr, key_len);
+        let key_bytes = key.to_string().as_bytes().to_vec();
+        let len = key_bytes.len();
+        let res = tx_env.memory.write_bytes(key_ptr, &key_bytes);
+        dbg!(&res);
+        let res = tx_env.memory.read_bytes(key_ptr, len);
+        dbg!(&res);
+        let write_log = unsafe { tx_env.ctx.write_log.get() };
+        write_log.write(&key, vec![5_u8]).unwrap();
+
+        let res = tx_read(&tx_env, key_ptr, len as u64);
+        dbg!(&res);
+
+        let res = tx_result_buffer(&tx_env, read_buffer_ptr);
+        dbg!(&res);
+    }
+
+    fn arb_u64() -> impl Strategy<Value = u64> {
+        prop_oneof![
+            5 => Just(u64::MIN),
+            5 => Just(u64::MIN + 1),
+            5 => u64::MIN + 2..=u32::MAX as u64,
+            1 => Just(u64::MAX),
+            1 => Just(u64::MAX - 1),
+            1 => u32::MAX as u64 + 1..u64::MAX - 1,
+        ]
+    }
+}

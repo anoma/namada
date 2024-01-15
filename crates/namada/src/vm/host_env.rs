@@ -74,7 +74,8 @@ pub enum TxRuntimeError {
     Ibc(#[from] namada_ibc::Error),
 }
 
-type TxResult<T> = std::result::Result<T, TxRuntimeError>;
+/// Result of a tx host env fn call
+pub type TxResult<T> = std::result::Result<T, TxRuntimeError>;
 
 /// A transaction's host environment
 pub struct TxVmEnv<'a, MEM, DB, H, CA>
@@ -2727,6 +2728,7 @@ pub mod testing {
 
     use super::*;
     use crate::vm::memory::testing::NativeMemory;
+    use crate::vm::wasm::memory::WasmMemory;
 
     /// Setup a transaction environment
     #[allow(clippy::too_many_arguments)]
@@ -2750,6 +2752,50 @@ pub mod testing {
     {
         TxVmEnv::new(
             NativeMemory,
+            storage,
+            write_log,
+            iterators,
+            gas_meter,
+            sentinel,
+            tx,
+            tx_index,
+            verifiers,
+            result_buffer,
+            #[cfg(feature = "wasm-runtime")]
+            vp_wasm_cache,
+            #[cfg(feature = "wasm-runtime")]
+            tx_wasm_cache,
+        )
+    }
+
+    /// Setup a transaction environment
+    #[allow(clippy::too_many_arguments)]
+    pub fn tx_env_with_wasm_memory<DB, H, CA>(
+        storage: &State<DB, H>,
+        write_log: &mut WriteLog,
+        iterators: &mut PrefixIterators<'static, DB>,
+        verifiers: &mut BTreeSet<Address>,
+        gas_meter: &mut TxGasMeter,
+        sentinel: &mut TxSentinel,
+        tx: &Tx,
+        tx_index: &TxIndex,
+        result_buffer: &mut Option<Vec<u8>>,
+        #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
+        #[cfg(feature = "wasm-runtime")] tx_wasm_cache: &mut TxCache<CA>,
+    ) -> TxVmEnv<'static, WasmMemory, DB, H, CA>
+    where
+        DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+        H: StorageHasher,
+        CA: WasmCacheAccess,
+    {
+        let store = crate::vm::wasm::compilation_cache::common::store();
+        let initial_memory =
+            crate::vm::wasm::memory::prepare_tx_memory(&store).unwrap();
+        let mut wasm_memory = WasmMemory::default();
+        wasm_memory.inner.initialize(initial_memory);
+
+        TxVmEnv::new(
+            wasm_memory,
             storage,
             write_log,
             iterators,

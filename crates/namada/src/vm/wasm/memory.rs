@@ -246,7 +246,7 @@ fn write_memory_bytes(
 /// The wasm memory
 #[derive(Debug, Clone, Default)]
 pub struct WasmMemory {
-    inner: LazyInit<wasmer::Memory>,
+    pub(crate) inner: LazyInit<wasmer::Memory>,
 }
 
 impl WasmMemory {
