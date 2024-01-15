@@ -2,7 +2,7 @@
 
 use namada_core::ledger::storage::{DBIter, StorageHasher, DB};
 use namada_core::ledger::storage_api;
-use namada_core::ledger::storage_api::token::read_denom;
+use namada_core::ledger::storage_api::token::{read_denom, read_total_supply};
 use namada_core::types::address::Address;
 use namada_core::types::token;
 
@@ -10,6 +10,7 @@ use crate::queries::RequestCtx;
 
 router! {TOKEN,
     ( "denomination" / [addr: Address] ) -> Option<token::Denomination> = denomination,
+    ( "total_supply" / [addr: Address] ) -> Option<token::Amount> = total_supply,
 }
 
 /// Get the number of decimal places (in base 10) for a
@@ -23,6 +24,18 @@ where
     H: 'static + StorageHasher + Sync,
 {
     read_denom(ctx.wl_storage, &addr)
+}
+
+/// Get the total supply for a token address
+fn total_supply<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+    addr: Address,
+) -> storage_api::Result<token::Amount>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    read_total_supply(ctx.wl_storage, &addr)
 }
 
 #[cfg(any(test, feature = "async-client"))]
