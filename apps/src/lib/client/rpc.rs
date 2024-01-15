@@ -1160,53 +1160,20 @@ pub async fn query_proposal_result(
     if args.proposal_id.is_some() {
         let proposal_id =
             args.proposal_id.expect("Proposal id should be defined.");
-        let proposal = if let Some(proposal) =
-            query_proposal_by_id(context.client(), proposal_id)
-                .await
-                .unwrap()
+
+        let proposal_result = namada_sdk::rpc::query_proposal_result(
+            context.client(),
+            proposal_id,
+        )
+        .await;
+
+        let proposal_result = if let Ok(Some(proposal_result)) = proposal_result
         {
-            proposal
+            display_line!(context.io(), "Proposal Id: {} ", proposal_id);
+            display_line!(context.io(), "{:4}{}", "", proposal_result);
         } else {
             edisplay_line!(context.io(), "Proposal {} not found.", proposal_id);
-            return;
         };
-
-        let proposal_result_key =
-            governance_storage::get_proposal_result_key(proposal_id);
-        let proposal_result =
-        // Try to directly query the result in storage first
-            match query_storage_value(context.client(), &proposal_result_key).await {
-                Ok(result) => result,
-                Err(_) => {
-                    // If failure, run the tally
-                    let is_author_steward = query_pgf_stewards(context.client())
-                        .await
-                        .iter()
-                        .any(|steward| steward.address.eq(&proposal.author));
-                    let tally_type = proposal.get_tally_type(is_author_steward);
-                    let total_voting_power = get_total_staked_tokens(
-                        context.client(),
-                        proposal.voting_end_epoch,
-                    )
-                    .await;
-
-                    let votes = compute_proposal_votes(
-                        context.client(),
-                        proposal_id,
-                        proposal.voting_end_epoch,
-                    )
-                    .await;
-
-                    compute_proposal_result(
-                        votes,
-                        total_voting_power,
-                        tally_type,
-                    )
-                }
-            };
-
-        display_line!(context.io(), "Proposal Id: {} ", proposal_id);
-        display_line!(context.io(), "{:4}{}", "", proposal_result);
     } else {
         let proposal_folder = args.proposal_folder.expect(
             "The argument --proposal-folder is required with --offline.",

@@ -11,7 +11,10 @@ use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
 use namada_core::ledger::governance::parameters::GovernanceParameters;
 use namada_core::ledger::governance::storage::proposal::StorageProposal;
-use namada_core::ledger::governance::utils::Vote;
+use namada_core::ledger::governance::utils::{
+    compute_proposal_result, ProposalResult, ProposalVotes, TallyVote, Vote,
+    VotePower,
+};
 use namada_core::ledger::ibc::storage::{
     ibc_denom_key, ibc_denom_key_prefix, is_ibc_denom_key,
 };
@@ -941,6 +944,84 @@ pub async fn get_public_key_at<C: crate::queries::Client + Sync>(
     } else {
         Ok(None)
     }
+}
+
+/// Query the proposal result
+pub async fn query_proposal_result<C: crate::queries::Client + Sync>(
+    client: &C,
+    proposal_id: u64,
+) -> Result<Option<ProposalResult>, Error> {
+    let proposal = query_proposal_by_id(client, proposal_id).await?;
+    let proposal = if let Some(proposal) = proposal {
+        proposal
+    } else {
+        return Ok(None);
+    };
+    let stored_proposal_result = convert_response::<C, Option<ProposalResult>>(
+        RPC.vp().gov().proposal_result(client, &proposal_id).await,
+    )?;
+    let proposal_result = match stored_proposal_result {
+        Some(proposal_result) => proposal_result,
+        None => {
+            let tally_epoch = proposal.voting_end_epoch;
+
+            let is_author_pgf_steward =
+                is_steward(client, &proposal.author).await;
+            let votes = query_proposal_votes(client, proposal_id)
+                .await
+                .unwrap_or_default();
+            let tally_type = proposal.get_tally_type(is_author_pgf_steward);
+            let total_staked_token =
+                get_total_staked_tokens(client, tally_epoch)
+                    .await
+                    .unwrap_or_default();
+
+            let mut proposal_votes = ProposalVotes::default();
+
+            for vote in votes {
+                match vote.is_validator() {
+                    true => {
+                        let voting_power = get_validator_stake(
+                            client,
+                            tally_epoch,
+                            &vote.validator,
+                        )
+                        .await
+                        .unwrap_or_default();
+
+                        proposal_votes.add_validator(
+                            &vote.validator,
+                            voting_power,
+                            vote.data.into(),
+                        );
+                    }
+                    false => {
+                        let voting_power = get_bond_amount_at(
+                            client,
+                            &vote.delegator,
+                            &vote.validator,
+                            tally_epoch,
+                        )
+                        .await
+                        .unwrap_or_default();
+
+                        proposal_votes.add_delegator(
+                            &vote.delegator,
+                            &vote.validator,
+                            voting_power,
+                            vote.data.into(),
+                        );
+                    }
+                }
+            }
+            compute_proposal_result(
+                proposal_votes,
+                total_staked_token,
+                tally_type,
+            )
+        }
+    };
+    Ok(Some(proposal_result))
 }
 
 /// Query a validator's unbonds for a given epoch

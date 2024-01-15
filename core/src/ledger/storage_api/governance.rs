@@ -11,7 +11,7 @@ use crate::ledger::governance::storage::proposal::{
     ProposalType, StorageProposal,
 };
 use crate::ledger::governance::storage::vote::ProposalVote;
-use crate::ledger::governance::utils::Vote;
+use crate::ledger::governance::utils::{ProposalResult, Vote};
 use crate::ledger::governance::ADDRESS as governance_address;
 use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
 use crate::types::address::Address;
@@ -263,4 +263,17 @@ where
     let max_proposal_period: u64 =
         storage.read(&key)?.expect("Parameter should be defined.");
     Ok(max_proposal_period)
+}
+
+/// Get governance proposal result stored in storage if proposal ended
+pub fn get_proposal_result<S>(
+    storage: &S,
+    proposal_id: u64,
+) -> storage_api::Result<Option<ProposalResult>>
+where
+    S: storage_api::StorageRead,
+{
+    let key = governance_keys::get_proposal_result_key(proposal_id);
+    let proposal_result: Option<ProposalResult> = storage.read(&key)?;
+    Ok(proposal_result)
 }
