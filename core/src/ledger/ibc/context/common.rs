@@ -62,7 +62,6 @@ pub trait IbcCommonContext: IbcStorageContext {
     ) -> Result<()> {
         let key = storage::client_state_key(client_id);
         let bytes = Any::from(client_state).encode_to_vec();
-        // TODO: what write options are desired here??
         self.write_bytes(&key, bytes).map_err(ContextError::from)
     }
 
@@ -95,7 +94,6 @@ pub trait IbcCommonContext: IbcStorageContext {
     ) -> Result<()> {
         let key = storage::consensus_state_key(client_id, height);
         let bytes = consensus_state.encode_vec();
-        // TODO: what write options are desired here??
         self.write_bytes(&key, bytes).map_err(ContextError::from)
     }
 
@@ -227,7 +225,6 @@ pub trait IbcCommonContext: IbcStorageContext {
                 "The client timestamp is invalid: ID {client_id}",
             ),
         })?;
-        // TODO: what write options are desired here??
         self.write_bytes(&key, time.encode_vec())
             .map_err(ContextError::from)
     }
@@ -320,7 +317,6 @@ pub trait IbcCommonContext: IbcStorageContext {
     ) -> Result<()> {
         let key = storage::client_update_height_key(client_id);
         let bytes = host_height.encode_vec();
-        // TODO: what write options are desired here??
         self.write_bytes(&key, bytes).map_err(ContextError::from)
     }
 
@@ -356,7 +352,6 @@ pub trait IbcCommonContext: IbcStorageContext {
     ) -> Result<()> {
         let key = storage::connection_key(connection_id);
         let bytes = connection_end.encode_vec();
-        // TODO: what write options are desired here??
         self.write_bytes(&key, bytes).map_err(ContextError::from)
     }
 
@@ -406,7 +401,6 @@ pub trait IbcCommonContext: IbcStorageContext {
     ) -> Result<()> {
         let key = storage::channel_key(port_id, channel_id);
         let bytes = channel_end.encode_vec();
-        // TODO: what write options are desired here??
         self.write_bytes(&key, bytes).map_err(ContextError::from)
     }
 
@@ -493,7 +487,6 @@ pub trait IbcCommonContext: IbcStorageContext {
     /// Store the sequence
     fn store_sequence(&mut self, key: &Key, sequence: Sequence) -> Result<()> {
         let bytes = u64::from(sequence).to_be_bytes().to_vec();
-        // TODO: what write options are desired here??
         self.write_bytes(key, bytes).map_err(ContextError::from)
     }
 
@@ -552,7 +545,6 @@ pub trait IbcCommonContext: IbcStorageContext {
     ) -> Result<()> {
         let key = storage::commitment_key(port_id, channel_id, sequence);
         let bytes = commitment.into_vec();
-        // TODO: what write options are desired here??
         self.write_bytes(&key, bytes).map_err(ContextError::from)
     }
 
@@ -591,7 +583,6 @@ pub trait IbcCommonContext: IbcStorageContext {
         let key = storage::receipt_key(port_id, channel_id, sequence);
         // the value is the same as ibc-go
         let bytes = [1_u8].to_vec();
-        // TODO: what write options are desired here??
         self.write_bytes(&key, bytes).map_err(ContextError::from)
     }
 
@@ -622,7 +613,6 @@ pub trait IbcCommonContext: IbcStorageContext {
     ) -> Result<()> {
         let key = storage::ack_key(port_id, channel_id, sequence);
         let bytes = ack_commitment.into_vec();
-        // TODO: what write options are desired here??
         self.write_bytes(&key, bytes).map_err(ContextError::from)
     }
 

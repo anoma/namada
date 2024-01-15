@@ -553,7 +553,6 @@ impl WriteLog {
                         .map_err(Error::StorageError)?;
                 }
                 StorageModification::InitAccount { vp_code_hash } => {
-                    // TODO: what write actions are required for this?
                     storage
                         .batch_write_subspace_val(
                             batch,

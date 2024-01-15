@@ -116,7 +116,6 @@ where
         keys_changed: &[&Key],
         transaction: &Transaction,
     ) -> Result<bool> {
-        println!("\nCHECKING VALID NULLIFIERS REVEAL\n");
         let mut revealed_nullifiers = HashSet::new();
         let shielded_spends = match transaction.sapling_bundle() {
             Some(bundle) if !bundle.shielded_spends.is_empty() => {
@@ -179,7 +178,6 @@ where
         &self,
         transaction: &Transaction,
     ) -> Result<bool> {
-        println!("\nCHECKING VALID NOTE COMMITMENT\n");
         // Check that the merkle tree in storage has been correctly updated with
         // the output descriptions cmu
         let tree_key = namada_core::types::token::masp_commitment_tree_key();
@@ -223,7 +221,6 @@ where
         &self,
         transaction: &Transaction,
     ) -> Result<bool> {
-        println!("CHECKING VALID SPEND DESCRIPTIONS ANCHOR\n");
         let shielded_spends = match transaction.sapling_bundle() {
             Some(bundle) if !bundle.shielded_spends.is_empty() => {
                 &bundle.shielded_spends
@@ -260,7 +257,6 @@ where
         &self,
         transaction: &Transaction,
     ) -> Result<bool> {
-        println!("CHECKING VALID CONVERT DESCRIPTIONS ANCHOR\n");
         if let Some(bundle) = transaction.sapling_bundle() {
             if !bundle.shielded_converts.is_empty() {
                 let anchor_key =
@@ -332,7 +328,6 @@ where
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
-        println!("\nVALIDATE MASP TX\n");
         let epoch = self.ctx.get_block_epoch()?;
         let (transfer, shielded_tx) = self.ctx.get_shielded_action(tx_data)?;
 
@@ -343,15 +338,12 @@ where
             return Ok(false);
         }
 
-        println!("\ndbg0\n");
-
         let transfer_amount = transfer
             .amount
             .to_amount(&transfer.token, &self.ctx.pre())?;
         let mut transparent_tx_pool = I128Sum::zero();
         // The Sapling value balance adds to the transparent tx pool
         transparent_tx_pool += shielded_tx.sapling_value_balance();
-        println!("\ndbg1\n");
 
         // Check the validity of the keys
         let masp_keys_changed: Vec<&Key> =
@@ -362,7 +354,6 @@ where
         )? {
             return Ok(false);
         }
-        println!("\ndbg2\n");
 
         if transfer.source != Address::Internal(Masp) {
             // Handle transparent input
@@ -380,7 +371,6 @@ where
                 // Non-masp sources add to transparent tx pool
                 transparent_tx_pool += transp_amt;
             }
-            println!("\ndbg2.1\n");
 
             // No shielded spends nor shielded converts are allowed
             if shielded_tx.sapling_bundle().is_some_and(|bundle| {
@@ -411,7 +401,6 @@ where
                     return Ok(false);
                 }
             }
-            println!("\ndbg2.2\n");
 
             if !(self.valid_spend_descriptions_anchor(&shielded_tx)?
                 && self.valid_convert_descriptions_anchor(&shielded_tx)?
@@ -423,14 +412,12 @@ where
                 return Ok(false);
             }
         }
-        println!("\ndbg3\n");
 
         // The transaction must correctly update the note commitment tree
         // in storage with the new output descriptions
         if !self.valid_note_commitment_update(&shielded_tx)? {
             return Ok(false);
         }
-        println!("\ndbg4\n");
 
         if transfer.target != Address::Internal(Masp) {
             // Handle transparent output
@@ -515,7 +502,6 @@ where
                 }
                 valid_count += 1;
             }
-            println!("\ndbg4.1\n");
 
             // one or more of the denoms in the batch failed to verify
             // the asset derivation.
@@ -539,7 +525,6 @@ where
                     return Ok(false);
                 }
             }
-            println!("\ndbg4.2\n");
 
             // Staisfies 2.
             if shielded_tx
@@ -549,7 +534,6 @@ where
                 return Ok(false);
             }
         }
-        println!("\ndbg5\n");
 
         match transparent_tx_pool.partial_cmp(&I128Sum::zero()) {
             None | Some(Ordering::Less) => {
@@ -570,7 +554,6 @@ where
             }
             _ => {}
         }
-        println!("\ndbg6\n");
 
         // Verify the proofs and charge the gas for the expensive execution
         self.ctx

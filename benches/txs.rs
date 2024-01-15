@@ -648,8 +648,6 @@ fn become_validator(c: &mut Criterion) {
             || {
                 let mut shell = BenchShell::default();
                 // Initialize the account to be able to use it
-                // TODO: what write actions are desired here?? can this be turn
-                // into `write` from `write_bytes` anyway?
                 shell
                     .wl_storage
                     .write_bytes(

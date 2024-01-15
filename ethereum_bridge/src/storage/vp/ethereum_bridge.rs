@@ -15,7 +15,6 @@ where
         &wl_storage.storage.native_token,
         &namada_core::ledger::eth_bridge::ADDRESS,
     );
-    // TODO: what write actions are desired here?
     wl_storage.write(&escrow_key, Amount::default()).expect(
         "Initializing the escrow balance of the Ethereum Bridge VP shouldn't \
          fail.",

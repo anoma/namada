@@ -220,7 +220,6 @@ where
             config.init_storage(&mut self.wl_storage);
             self.update_eth_oracle(&Default::default());
         } else {
-            // TODO: what write actions are desired here?
             self.wl_storage
                 .write(
                     &namada::eth_bridge::storage::active_key(),
@@ -399,8 +398,6 @@ where
                 let hash_key = Key::wasm_hash(name);
                 let code_name_key = Key::wasm_code_name(name.to_owned());
 
-                // TODO: what write actions are desired for the data below??
-
                 self.wl_storage.write_bytes(&code_key, code).unwrap();
                 self.wl_storage.write(&code_len_key, code_len).unwrap();
                 self.wl_storage.write_bytes(&hash_key, code_hash).unwrap();
@@ -533,7 +530,6 @@ where
                 );
                 let vp_code = self.lookup_vp(vp, genesis, vp_cache)?;
                 let code_hash = CodeHash::sha256(&vp_code);
-                // TODO: what write actions are desired here??
                 self.wl_storage
                     .write_bytes(&Key::validity_predicate(address), code_hash)
                     .unwrap();
@@ -591,7 +587,6 @@ where
 
                 let vp_code = self.lookup_vp(vp, genesis, vp_cache)?;
                 let code_hash = CodeHash::sha256(&vp_code);
-                // TODO: what write actions are desired here??
                 self.wl_storage
                     .write_bytes(&Key::validity_predicate(address), code_hash)
                     .expect("Unable to write user VP");

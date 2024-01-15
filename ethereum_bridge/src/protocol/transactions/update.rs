@@ -18,7 +18,6 @@ where
 {
     let mut amount = super::read::amount_or_default(wl_storage, key)?;
     update(&mut amount);
-    // TODO: what kind of write actions are desired here?
     wl_storage.write(key, amount)?;
     Ok(amount)
 }
@@ -36,7 +35,6 @@ where
 {
     let mut value = super::read::value(wl_storage, key)?;
     update(&mut value);
-    // TODO: what kind of write actions are desired here?
     wl_storage.write(key, &value)?;
     Ok(value)
 }
