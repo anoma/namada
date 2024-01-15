@@ -38,6 +38,9 @@ pub fn gen_and_store(
     fs::create_dir_all(wallet_dir)?;
     // Write the file
     let mut options = fs::OpenOptions::new();
+    if wallet_path.exists() {
+        println!("Overwriting existing pre-genesis validators")
+    }
     options.create(true).write(true).truncate(true);
     let mut lock = RwLock::new(options.open(wallet_path)?);
     let mut guard = lock.write()?;
