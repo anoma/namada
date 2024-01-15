@@ -5,7 +5,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 use super::cli::offline::OfflineVote;
 use super::storage::proposal::ProposalType;
-use super::storage::vote::StorageProposalVote;
+use super::storage::vote::ProposalVote;
 use crate::types::address::Address;
 use crate::types::storage::Epoch;
 use crate::types::token;
@@ -41,7 +41,14 @@ pub struct Vote {
     /// Field holding the address of the delegator
     pub delegator: Address,
     /// Field holding vote data
-    pub data: StorageProposalVote,
+    pub data: ProposalVote,
+}
+
+impl Display for Vote {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Voter: {}", self.delegator)?;
+        write!(f, "Vote: {}", self.data)
+    }
 }
 
 impl Vote {
@@ -52,6 +59,7 @@ impl Vote {
 }
 
 /// Represent a tally type
+#[derive(Copy, Clone, BorshSerialize, BorshDeserialize)]
 pub enum TallyType {
     /// Represent a tally type for proposal requiring 2/3 of the total voting
     /// power to be yay
@@ -81,7 +89,7 @@ impl TallyType {
 }
 
 /// The result of a proposal
-#[derive(Copy, Clone, BorshSerialize, BorshDeserialize)]
+#[derive(Copy, Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub enum TallyResult {
     /// Proposal was accepted with the associated value
     Passed,
@@ -112,9 +120,11 @@ impl TallyResult {
                 yay_voting_power >= total_voting_power * 2 / 3
             }
             TallyType::OneHalfOverOneThird => {
-                let at_least_one_third_voted =
-                    yay_voting_power + nay_voting_power + abstain_voting_power
-                        >= total_voting_power / 3;
+                let at_least_one_third_voted = Self::get_total_voted_power(
+                    yay_voting_power,
+                    nay_voting_power,
+                    abstain_voting_power,
+                ) >= total_voting_power / 3;
 
                 // At least half of non-abstained votes are yay
                 let at_last_half_voted_yay =
@@ -122,9 +132,11 @@ impl TallyResult {
                 at_least_one_third_voted && at_last_half_voted_yay
             }
             TallyType::LessOneHalfOverOneThirdNay => {
-                let less_one_third_voted =
-                    yay_voting_power + nay_voting_power + abstain_voting_power
-                        < total_voting_power / 3;
+                let less_one_third_voted = Self::get_total_voted_power(
+                    yay_voting_power,
+                    nay_voting_power,
+                    abstain_voting_power,
+                ) < total_voting_power / 3;
 
                 // More than half of non-abstained votes are yay
                 let more_than_half_voted_yay =
@@ -135,6 +147,14 @@ impl TallyResult {
 
         if passed { Self::Passed } else { Self::Rejected }
     }
+
+    fn get_total_voted_power(
+        yay_voting_power: VotePower,
+        nay_voting_power: VotePower,
+        abstain_voting_power: VotePower,
+    ) -> VotePower {
+        yay_voting_power + nay_voting_power + abstain_voting_power
+    }
 }
 
 /// The result with votes of a proposal
@@ -142,6 +162,8 @@ impl TallyResult {
 pub struct ProposalResult {
     /// The result of a proposal
     pub result: TallyResult,
+    /// The type of tally required for this proposal
+    pub tally_type: TallyType,
     /// The total voting power during the proposal tally
     pub total_voting_power: VotePower,
     /// The total voting power from yay votes
@@ -150,27 +172,6 @@ pub struct ProposalResult {
     pub total_nay_power: VotePower,
     /// The total voting power from abstained votes
     pub total_abstain_power: VotePower,
-}
-
-impl Display for ProposalResult {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let percentage = self
-            .total_yay_power
-            .checked_div(self.total_voting_power)
-            .unwrap_or_default();
-
-        write!(
-            f,
-            "{} with {} yay votes and {} nay votes ({:.2}%)",
-            self.result,
-            self.total_yay_power.to_string_native(),
-            self.total_nay_power.to_string_native(),
-            percentage
-                .checked_mul(token::Amount::from_u64(100))
-                .unwrap_or_default()
-                .to_string_native()
-        )
-    }
 }
 
 impl ProposalResult {
@@ -189,16 +190,41 @@ impl ProposalResult {
     }
 }
 
+impl Display for ProposalResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let threshold = match self.tally_type {
+            TallyType::TwoThirds => self.total_voting_power / 3 * 2,
+            _ => {
+                let threshold_one_third = self.total_voting_power / 3;
+                threshold_one_third / 2
+            }
+        };
+
+        write!(
+            f,
+            "{} with {} yay votes, {} nay votes and {} abstain votes, total \
+             voting power: {} threshold was: {}",
+            self.result,
+            self.total_yay_power.to_string_native(),
+            self.total_nay_power.to_string_native(),
+            self.total_abstain_power.to_string_native(),
+            self.total_voting_power.to_string_native(),
+            threshold.to_string_native()
+        )
+    }
+}
+
 /// /// General rappresentation of a vote
+#[derive(Debug)]
 pub enum TallyVote {
     /// Rappresent a vote for a proposal onchain
-    OnChain(StorageProposalVote),
+    OnChain(ProposalVote),
     /// Rappresent a vote for a proposal offline
     Offline(OfflineVote),
 }
 
-impl From<StorageProposalVote> for TallyVote {
-    fn from(vote: StorageProposalVote) -> Self {
+impl From<ProposalVote> for TallyVote {
+    fn from(vote: ProposalVote) -> Self {
         Self::OnChain(vote)
     }
 }
@@ -242,10 +268,10 @@ impl TallyVote {
     ) -> Result<bool, &'static str> {
         match (self, other) {
             (TallyVote::OnChain(vote), TallyVote::OnChain(other_vote)) => {
-                Ok(vote.is_same_side(other_vote))
+                Ok(vote == other_vote)
             }
             (TallyVote::Offline(vote), TallyVote::Offline(other_vote)) => {
-                Ok(vote.is_same_side(other_vote))
+                Ok(vote.vote == other_vote.vote)
             }
             _ => Err("Cannot compare different variants of governance votes"),
         }
@@ -254,6 +280,7 @@ impl TallyVote {
 
 /// Proposal structure holding votes information necessary to compute the
 /// outcome
+#[derive(Default, Debug)]
 pub struct ProposalVotes {
     /// Map from validator address to vote
     pub validators_vote: HashMap<Address, TallyVote>,
@@ -269,7 +296,7 @@ pub struct ProposalVotes {
 pub fn compute_proposal_result(
     votes: ProposalVotes,
     total_voting_power: VotePower,
-    tally_at: TallyType,
+    tally_type: TallyType,
 ) -> ProposalResult {
     let mut yay_voting_power = VotePower::default();
     let mut nay_voting_power = VotePower::default();
@@ -310,6 +337,7 @@ pub fn compute_proposal_result(
                             // Force failure of the proposal
                             return ProposalResult {
                                 result: TallyResult::Rejected,
+                                tally_type,
                                 total_voting_power: VotePower::default(),
                                 total_yay_power: VotePower::default(),
                                 total_nay_power: VotePower::default(),
@@ -352,7 +380,7 @@ pub fn compute_proposal_result(
     }
 
     let tally_result = TallyResult::new(
-        &tally_at,
+        &tally_type,
         yay_voting_power,
         nay_voting_power,
         abstain_voting_power,
@@ -361,6 +389,7 @@ pub fn compute_proposal_result(
 
     ProposalResult {
         result: tally_result,
+        tally_type,
         total_voting_power,
         total_yay_power: yay_voting_power,
         total_nay_power: nay_voting_power,

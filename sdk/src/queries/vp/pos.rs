@@ -22,7 +22,7 @@ use namada_proof_of_stake::storage::{
     bond_handle, read_all_validator_addresses,
     read_below_capacity_validator_set_addresses_with_stake,
     read_consensus_validator_set_addresses_with_stake, read_pos_params,
-    read_total_stake, read_validator_description,
+    read_total_stake, read_validator_avatar, read_validator_description,
     read_validator_discord_handle, read_validator_email,
     read_validator_last_slash_epoch, read_validator_max_commission_rate_change,
     read_validator_stake, read_validator_website, unbond_handle,
@@ -41,6 +41,8 @@ use crate::queries::types::RequestCtx;
 router! {POS,
     ( "validator" ) = {
         ( "is_validator" / [addr: Address] ) -> bool = is_validator,
+
+        ( "consensus_key" / [addr: Address] ) -> Option<common::PublicKey> = consensus_key,
 
         ( "addresses" / [epoch: opt Epoch] )
             -> HashSet<Address> = validator_addresses,
@@ -194,6 +196,23 @@ where
     namada_proof_of_stake::is_validator(ctx.wl_storage, &addr)
 }
 
+/// Find a consensus key of a validator account.
+fn consensus_key<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+    addr: Address,
+) -> storage_api::Result<Option<common::PublicKey>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let current_epoch = ctx.wl_storage.storage.last_epoch;
+    namada_proof_of_stake::storage::get_consensus_key(
+        ctx.wl_storage,
+        &addr,
+        current_epoch,
+    )
+}
+
 /// Find if the given address is a delegator
 fn is_delegator<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
@@ -266,6 +285,7 @@ where
     let website = read_validator_website(ctx.wl_storage, &validator)?;
     let discord_handle =
         read_validator_discord_handle(ctx.wl_storage, &validator)?;
+    let avatar = read_validator_avatar(ctx.wl_storage, &validator)?;
 
     // Email is the only required field for a validator in storage
     match email {
@@ -274,6 +294,7 @@ where
             description,
             website,
             discord_handle,
+            avatar,
         })),
         _ => Ok(None),
     }

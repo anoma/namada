@@ -12,11 +12,15 @@
 use core::convert::TryFrom;
 use core::str::FromStr;
 use core::time::Duration;
-use std::collections::HashMap;
-use std::path::PathBuf;
+use std::collections::{BTreeSet, HashMap};
+use std::path::{Path, PathBuf};
 
 use color_eyre::eyre::Result;
 use eyre::eyre;
+use namada::core::ledger::governance::cli::onchain::PgfFunding;
+use namada::core::ledger::governance::storage::proposal::{
+    PGFIbcTarget, PGFTarget,
+};
 use namada::ibc::apps::transfer::types::VERSION as ICS20_VERSION;
 use namada::ibc::clients::tendermint::client_state::ClientState as TmClientState;
 use namada::ibc::clients::tendermint::consensus_state::ConsensusState as TmConsensusState;
@@ -55,6 +59,7 @@ use namada::ibc::primitives::{Msg, Signer, Timestamp};
 use namada::ledger::events::EventType;
 use namada::ledger::ibc::storage::*;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
+use namada::ledger::pgf::ADDRESS as PGF_ADDRESS;
 use namada::ledger::queries::RPC;
 use namada::ledger::storage::ics23_specs::ibc_proof_specs;
 use namada::ledger::storage::traits::Sha256Hasher;
@@ -62,8 +67,9 @@ use namada::tendermint::abci::Event as AbciEvent;
 use namada::tendermint::block::Height as TmHeight;
 use namada::types::address::{Address, InternalAddress};
 use namada::types::key::PublicKey;
-use namada::types::storage::{BlockHeight, Key};
+use namada::types::storage::{BlockHeight, Epoch, Key};
 use namada::types::token::Amount;
+use namada_apps::cli::context::ENV_VAR_CHAIN_ID;
 use namada_apps::client::rpc::{
     query_pos_parameters, query_storage_value, query_storage_value_bytes,
 };
@@ -83,10 +89,13 @@ use tendermint_light_client::components::io::{Io, ProdIo as TmLightClientIo};
 
 use super::setup::set_ethereum_bridge_mode;
 use crate::e2e::helpers::{
-    find_address, get_actor_rpc, get_validator_pk, wait_for_wasm_pre_compile,
+    epochs_per_year_from_min_duration, find_address, get_actor_rpc, get_epoch,
+    get_established_addr_from_pregenesis, get_validator_pk,
+    wait_for_wasm_pre_compile,
 };
+use crate::e2e::ledger_tests::prepare_proposal_data;
 use crate::e2e::setup::{
-    self, sleep, working_dir, Bin, NamadaCmd, Test, TestDir, Who,
+    self, run_hermes_cmd, setup_hermes, sleep, Bin, NamadaCmd, Test, Who,
 };
 use crate::strings::{
     LEDGER_STARTED, TX_ACCEPTED, TX_APPLIED_SUCCESS, TX_FAILED, VALIDATOR_NODE,
@@ -95,50 +104,14 @@ use crate::{run, run_as};
 
 #[test]
 fn run_ledger_ibc() -> Result<()> {
-    let (test_a, test_b) = setup_two_single_node_nets()?;
-    set_ethereum_bridge_mode(
-        &test_a,
-        &test_a.net.chain_id,
-        Who::Validator(0),
-        ethereum_bridge::ledger::Mode::Off,
-        None,
-    );
-    set_ethereum_bridge_mode(
-        &test_b,
-        &test_b.net.chain_id,
-        Who::Validator(0),
-        ethereum_bridge::ledger::Mode::Off,
-        None,
-    );
-
-    // Run Chain A
-    let mut ledger_a = run_as!(
-        test_a,
-        Who::Validator(0),
-        Bin::Node,
-        &["ledger", "run"],
-        Some(40)
-    )?;
-    ledger_a.exp_string(LEDGER_STARTED)?;
-    // Run Chain B
-    let mut ledger_b = run_as!(
-        test_b,
-        Who::Validator(0),
-        Bin::Node,
-        &["ledger", "run"],
-        Some(40)
-    )?;
-    ledger_b.exp_string(LEDGER_STARTED)?;
-    ledger_a.exp_string(VALIDATOR_NODE)?;
-    ledger_b.exp_string(VALIDATOR_NODE)?;
-
-    wait_for_wasm_pre_compile(&mut ledger_a)?;
-    wait_for_wasm_pre_compile(&mut ledger_b)?;
-
+    let update_genesis =
+        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
+            genesis.parameters.parameters.epochs_per_year = 31536;
+            setup::set_validators(1, genesis, base_dir, |_| 0)
+        };
+    let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
     let _bg_ledger_a = ledger_a.background();
     let _bg_ledger_b = ledger_b.background();
-
-    sleep(5);
 
     let (client_id_a, client_id_b) = create_client(&test_a, &test_b)?;
 
@@ -215,56 +188,242 @@ fn run_ledger_ibc() -> Result<()> {
     Ok(())
 }
 
-/// Set up two Namada chains to talk to each other via IBC.
-fn setup_two_single_node_nets() -> Result<(Test, Test)> {
-    const ANOTHER_PROXY_APP: u16 = 27659u16;
-    const ANOTHER_RPC: u16 = 27660u16;
-    const ANOTHER_P2P: u16 = 26655u16;
-    // Download the shielded pool parameters before starting node
-    let _ = FsShieldedUtils::new(PathBuf::new());
-    // epoch per 100 seconds
+#[test]
+fn run_ledger_ibc_with_hermes() -> Result<()> {
     let update_genesis =
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
             genesis.parameters.parameters.epochs_per_year = 31536;
             setup::set_validators(1, genesis, base_dir, |_| 0)
         };
-    let test_a = setup::network(update_genesis, None)?;
-    let test_b = Test {
-        working_dir: working_dir(),
-        test_dir: TestDir::new(),
-        net: test_a.net.clone(),
-        async_runtime: Default::default(),
-    };
-    for entry in std::fs::read_dir(test_a.test_dir.path()).unwrap() {
-        let entry = entry.unwrap();
-        if entry.path().is_dir() {
-            copy_dir::copy_dir(
-                entry.path(),
-                test_b.test_dir.path().join(entry.file_name()),
-            )
-            .map_err(|e| {
-                eyre!(
-                    "Failed copying directory from test_a to test_b with {}",
-                    e
+    let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
+    let _bg_ledger_a = ledger_a.background();
+    let _bg_ledger_b = ledger_b.background();
+
+    setup_hermes(&test_a, &test_b)?;
+    let port_id_a = "transfer".parse().unwrap();
+    let port_id_b = "transfer".parse().unwrap();
+    let (channel_id_a, channel_id_b) =
+        create_channel_with_hermes(&test_a, &test_b)?;
+
+    // Start relaying
+    let hermes = run_hermes(&test_a)?;
+    let _bg_hermes = hermes.background();
+
+    // Transfer 100000 from the normal account on Chain A to Chain B
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
+    let receiver = find_address(&test_b, BERTHA)?;
+    transfer(
+        &test_a,
+        ALBERT,
+        receiver.to_string(),
+        NAM,
+        "100000",
+        ALBERT_KEY,
+        &port_id_a,
+        &channel_id_a,
+        None,
+        None,
+        None,
+        false,
+    )?;
+    wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
+    check_balances(&port_id_b, &channel_id_b, &test_a, &test_b)?;
+
+    // Transfer 50000 received over IBC on Chain B
+    let token = format!("{port_id_b}/{channel_id_b}/nam");
+    transfer_on_chain(&test_b, BERTHA, ALBERT, token, 50000, BERTHA_KEY)?;
+    check_balances_after_non_ibc(&port_id_b, &channel_id_b, &test_b)?;
+
+    // Transfer 50000 back from the origin-specific account on Chain B to Chain
+    // A
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
+    let receiver = find_address(&test_a, ALBERT)?;
+    // Chain A was the source for the sent token
+    let ibc_denom = format!("{port_id_b}/{channel_id_b}/nam");
+    // Send a token from Chain B
+    transfer(
+        &test_b,
+        BERTHA,
+        receiver.to_string(),
+        ibc_denom,
+        "50000",
+        BERTHA_KEY,
+        &port_id_b,
+        &channel_id_b,
+        None,
+        None,
+        None,
+        false,
+    )?;
+    wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
+    check_balances_after_back(&port_id_b, &channel_id_b, &test_a, &test_b)?;
+
+    // Transfer a token and it will time out and refund
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
+    let receiver = find_address(&test_b, BERTHA)?;
+    // Send a token from Chain A
+    transfer(
+        &test_a,
+        ALBERT,
+        receiver.to_string(),
+        NAM,
+        "100000",
+        ALBERT_KEY,
+        &port_id_a,
+        &channel_id_a,
+        None,
+        Some(Duration::new(0, 0)),
+        None,
+        false,
+    )?;
+    // wait for the timeout and the refund
+    wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
+    // The balance should not be changed
+    check_balances_after_back(&port_id_b, &channel_id_b, &test_a, &test_b)?;
+
+    Ok(())
+}
+
+#[test]
+fn pgf_over_ibc_with_hermes() -> Result<()> {
+    let update_genesis =
+        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(10);
+            // for the trusting period of IBC client
+            genesis.parameters.pos_params.pipeline_len = 10;
+            genesis.parameters.parameters.max_proposal_bytes =
+                Default::default();
+            genesis.parameters.pgf_params.stewards =
+                BTreeSet::from_iter([get_established_addr_from_pregenesis(
+                    ALBERT_KEY, base_dir, &genesis,
                 )
-            })?;
-        } else {
-            std::fs::copy(
-                entry.path(),
-                test_b.test_dir.path().join(entry.file_name()),
-            )
-            .map_err(|e| {
-                eyre!("Failed copying file from test_a to test_b with {}", e)
-            })?;
-        }
+                .unwrap()]);
+            setup::set_validators(1, genesis, base_dir, |_| 0)
+        };
+    let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
+    let _bg_ledger_a = ledger_a.background();
+    let _bg_ledger_b = ledger_b.background();
+
+    setup_hermes(&test_a, &test_b)?;
+    let port_id_a = "transfer".parse().unwrap();
+    let port_id_b = "transfer".parse().unwrap();
+    let (channel_id_a, channel_id_b) =
+        create_channel_with_hermes(&test_a, &test_b)?;
+
+    // Start relaying
+    let hermes = run_hermes(&test_a)?;
+    let _bg_hermes = hermes.background();
+
+    // Transfer to PGF account
+    transfer_on_chain(
+        &test_a,
+        ALBERT,
+        PGF_ADDRESS.to_string(),
+        NAM,
+        100,
+        ALBERT_KEY,
+    )?;
+
+    // Proposal on Chain A
+    // Delegate some token
+    delegate_token(&test_a)?;
+    let rpc_a = get_actor_rpc(&test_a, Who::Validator(0));
+    let mut epoch = get_epoch(&test_a, &rpc_a).unwrap();
+    let delegated = epoch + 10u64;
+    while epoch <= delegated {
+        sleep(5);
+        epoch = get_epoch(&test_a, &rpc_a).unwrap();
     }
+    // funding proposal
+    let start_epoch =
+        propose_funding(&test_a, &test_b, &port_id_a, &channel_id_a)?;
+    let mut epoch = get_epoch(&test_a, &rpc_a).unwrap();
+    // Vote
+    while epoch <= start_epoch {
+        sleep(5);
+        epoch = get_epoch(&test_a, &rpc_a).unwrap();
+    }
+    submit_votes(&test_a)?;
+
+    // wait for the grace
+    let grace_epoch = start_epoch + 12u64 + 6u64;
+    while epoch <= grace_epoch {
+        sleep(5);
+        epoch = get_epoch(&test_a, &rpc_a).unwrap();
+    }
+
+    // Check balances after funding over IBC
+    check_funded_balances(&port_id_b, &channel_id_b, &test_b)?;
+
+    Ok(())
+}
+
+fn run_two_nets(
+    update_genesis: impl FnMut(
+        templates::All<templates::Unvalidated>,
+        &Path,
+    ) -> templates::All<templates::Unvalidated>,
+) -> Result<(NamadaCmd, NamadaCmd, Test, Test)> {
+    let (test_a, test_b) = setup_two_single_node_nets(update_genesis)?;
+    set_ethereum_bridge_mode(
+        &test_a,
+        &test_a.net.chain_id,
+        Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+    set_ethereum_bridge_mode(
+        &test_b,
+        &test_b.net.chain_id,
+        Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+
+    // Run Chain A
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
+    let mut ledger_a =
+        run_as!(test_a, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
+    ledger_a.exp_string(LEDGER_STARTED)?;
+    ledger_a.exp_string(VALIDATOR_NODE)?;
+    // Run Chain B
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
+    let mut ledger_b =
+        run_as!(test_b, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
+    ledger_b.exp_string(LEDGER_STARTED)?;
+    ledger_b.exp_string(VALIDATOR_NODE)?;
+
+    wait_for_wasm_pre_compile(&mut ledger_a)?;
+    wait_for_wasm_pre_compile(&mut ledger_b)?;
+
+    sleep(5);
+
+    Ok((ledger_a, ledger_b, test_a, test_b))
+}
+
+/// Set up two Namada chains to talk to each other via IBC.
+fn setup_two_single_node_nets(
+    mut update_genesis: impl FnMut(
+        templates::All<templates::Unvalidated>,
+        &Path,
+    ) -> templates::All<templates::Unvalidated>,
+) -> Result<(Test, Test)> {
+    const ANOTHER_PROXY_APP: u16 = 27659u16;
+    const ANOTHER_RPC: u16 = 27660u16;
+    const ANOTHER_P2P: u16 = 26655u16;
+    // Download the shielded pool parameters before starting node
+    let _ = FsShieldedUtils::new(PathBuf::new());
+
+    let test_a = setup::network(&mut update_genesis, None)?;
+    let test_b = setup::network(update_genesis, None)?;
     let genesis_b_dir = test_b
         .test_dir
         .path()
         .join(namada_apps::client::utils::NET_ACCOUNTS_DIR)
         .join("validator-0");
     let mut genesis_b = chain::Finalized::read_toml_files(
-        &genesis_b_dir.join(test_a.net.chain_id.as_str()),
+        &genesis_b_dir.join(test_b.net.chain_id.as_str()),
     )
     .map_err(|_| eyre!("Could not read genesis files from test b"))?;
     // chain b's validator needs to listen on a different port than chain a's
@@ -298,12 +457,12 @@ fn setup_two_single_node_nets() -> Result<(Test, Test)> {
         + setup::ANOTHER_CHAIN_PORT_OFFSET;
     validator_tx.tx.data.net_address.set_port(new_port);
     genesis_b
-        .write_toml_files(&genesis_b_dir.join(test_a.net.chain_id.as_str()))
+        .write_toml_files(&genesis_b_dir.join(test_b.net.chain_id.as_str()))
         .map_err(|_| eyre!("Could not write genesis toml files for test_b"))?;
     // modify chain b to use different ports for cometbft
     let mut config = namada_apps::config::Config::load(
         &genesis_b_dir,
-        &test_a.net.chain_id,
+        &test_b.net.chain_id,
         Some(TendermintMode::Validator),
     );
     let proxy_app = &mut config.ledger.cometbft.proxy_app;
@@ -313,11 +472,93 @@ fn setup_two_single_node_nets() -> Result<(Test, Test)> {
     let p2p_addr = &mut config.ledger.cometbft.p2p.laddr;
     set_port(p2p_addr, ANOTHER_P2P);
     config
-        .write(&genesis_b_dir, &test_a.net.chain_id, true)
+        .write(&genesis_b_dir, &test_b.net.chain_id, true)
         .map_err(|e| {
             eyre!("Unable to modify chain b's config file due to {}", e)
         })?;
     Ok((test_a, test_b))
+}
+
+fn create_channel_with_hermes(
+    test_a: &Test,
+    test_b: &Test,
+) -> Result<(ChannelId, ChannelId)> {
+    let args = [
+        "create",
+        "channel",
+        "--a-chain",
+        &test_a.net.chain_id.to_string(),
+        "--b-chain",
+        &test_b.net.chain_id.to_string(),
+        "--a-port",
+        "transfer",
+        "--b-port",
+        "transfer",
+        "--new-client-connection",
+        "--yes",
+    ];
+
+    let mut hermes = run_hermes_cmd(test_a, args, Some(120))?;
+    let (channel_id_a, channel_id_b) =
+        get_channel_ids_from_hermes_output(&mut hermes)?;
+    hermes.assert_success();
+
+    Ok((channel_id_a, channel_id_b))
+}
+
+fn get_channel_ids_from_hermes_output(
+    hermes: &mut NamadaCmd,
+) -> Result<(ChannelId, ChannelId)> {
+    let (_, matched) =
+        hermes.exp_regex("channel handshake already finished .*")?;
+
+    let regex = regex::Regex::new(r"channel-[0-9]+").unwrap();
+    let mut iter = regex.find_iter(&matched);
+    let channel_id_a = iter.next().unwrap().as_str().parse().unwrap();
+    let channel_id_b = iter.next().unwrap().as_str().parse().unwrap();
+
+    Ok((channel_id_a, channel_id_b))
+}
+
+fn run_hermes(test: &Test) -> Result<NamadaCmd> {
+    let args = ["start"];
+    let mut hermes = run_hermes_cmd(test, args, Some(40))?;
+    hermes.exp_string("Hermes has started")?;
+    Ok(hermes)
+}
+
+fn wait_for_packet_relay(
+    port_id: &PortId,
+    channel_id: &ChannelId,
+    test: &Test,
+) -> Result<()> {
+    let args = [
+        "--json",
+        "query",
+        "packet",
+        "pending",
+        "--chain",
+        test.net.chain_id.as_str(),
+        "--port",
+        port_id.as_str(),
+        "--channel",
+        channel_id.as_str(),
+    ];
+    for _ in 0..10 {
+        sleep(10);
+        let mut hermes = run_hermes_cmd(test, args, Some(40))?;
+        // Check no pending packet
+        if hermes
+            .exp_string(
+                "\"dst\":{\"unreceived_acks\":[],\"unreceived_packets\":[]},\"\
+                 src\":{\"unreceived_acks\":[],\"unreceived_packets\":[]}",
+            )
+            .is_ok()
+        {
+            return Ok(());
+        }
+    }
+    Err(eyre!("Pending packet is still left"))
 }
 
 fn create_client(test_a: &Test, test_b: &Test) -> Result<(ClientId, ClientId)> {
@@ -745,6 +986,7 @@ fn transfer_token(
     channel_id_a: &ChannelId,
 ) -> Result<()> {
     // Send a token from Chain A
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
     let receiver = find_address(test_b, BERTHA)?;
     let height = transfer(
         test_a,
@@ -810,6 +1052,7 @@ fn try_invalid_transfers(
     port_id_a: &PortId,
     channel_id_a: &ChannelId,
 ) -> Result<()> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
     let receiver = find_address(test_b, BERTHA)?;
 
     // invalid amount
@@ -871,6 +1114,7 @@ fn transfer_on_chain(
     amount: u64,
     signer: impl AsRef<str>,
 ) -> Result<()> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let rpc = get_actor_rpc(test, Who::Validator(0));
     let tx_args = [
         "transfer",
@@ -904,6 +1148,7 @@ fn transfer_back(
     port_id_b: &PortId,
     channel_id_b: &ChannelId,
 ) -> Result<()> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
     let receiver = find_address(test_a, ALBERT)?;
 
     // Chain A was the source for the sent token
@@ -967,6 +1212,7 @@ fn transfer_timeout(
     port_id_a: &PortId,
     channel_id_a: &ChannelId,
 ) -> Result<()> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
     let receiver = find_address(test_b, BERTHA)?;
 
     // Send a token from Chain A
@@ -1022,6 +1268,8 @@ fn shielded_transfer(
     // Get masp proof for the following IBC transfer from the destination chain
     // It will send 10 BTC from Chain A to PA(B) on Chain B
     let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
+    // Chain B will receive Chain A's BTC
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
     let output_folder = test_b.test_dir.path().to_string_lossy();
     // PA(B) on Chain B will receive BTC on chain A
     let token_addr = find_address(test_a, BTC)?;
@@ -1043,6 +1291,7 @@ fn shielded_transfer(
         "--node",
         &rpc_b,
     ];
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
     let mut client = run!(test_b, Bin::Client, args, Some(120))?;
     let file_path = get_shielded_transfer_path(&mut client)?;
     client.assert_success();
@@ -1174,6 +1423,7 @@ fn submit_ibc_tx(
     signer: &str,
     wait_reveal_pk: bool,
 ) -> Result<u32> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let data_path = test.test_dir.path().join("tx.data");
     let data = make_ibc_data(message);
     std::fs::write(&data_path, data).expect("writing data failed");
@@ -1222,6 +1472,7 @@ fn transfer(
     expected_err: Option<&str>,
     wait_reveal_pk: bool,
 ) -> Result<u32> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let rpc = get_actor_rpc(test, Who::Validator(0));
 
     let channel_id = channel_id.to_string();
@@ -1272,6 +1523,121 @@ fn transfer(
             check_tx_height(test, &mut client)
         }
     }
+}
+
+fn delegate_token(test: &Test) -> Result<()> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+    let tx_args = vec![
+        "bond",
+        "--validator",
+        "validator-0",
+        "--source",
+        BERTHA,
+        "--amount",
+        "900",
+        "--node",
+        &rpc,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string(TX_ACCEPTED)?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
+    client.assert_success();
+    Ok(())
+}
+
+fn propose_funding(
+    test_a: &Test,
+    test_b: &Test,
+    src_port_id: &PortId,
+    src_channel_id: &ChannelId,
+) -> Result<Epoch> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
+    let bertha = find_address(test_b, BERTHA)?;
+    let christel = find_address(test_b, CHRISTEL)?;
+
+    let pgf_funding = PgfFunding {
+        continuous: vec![PGFTarget::Ibc(PGFIbcTarget {
+            amount: Amount::from_u64(10),
+            target: bertha.to_string(),
+            port_id: src_port_id.clone(),
+            channel_id: src_channel_id.clone(),
+        })],
+        retro: vec![PGFTarget::Ibc(PGFIbcTarget {
+            amount: Amount::from_u64(5),
+            target: christel.to_string(),
+            port_id: src_port_id.clone(),
+            channel_id: src_channel_id.clone(),
+        })],
+    };
+
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
+    let albert = find_address(test_a, ALBERT)?;
+    let rpc_a = get_actor_rpc(test_a, Who::Validator(0));
+    let epoch = get_epoch(test_a, &rpc_a)?;
+    let start_epoch = (epoch.0 + 3) / 3 * 3;
+    let proposal_json_path =
+        prepare_proposal_data(test_a, 0, albert, pgf_funding, start_epoch);
+
+    let submit_proposal_args = vec![
+        "init-proposal",
+        "--pgf-funding",
+        "--data-path",
+        proposal_json_path.to_str().unwrap(),
+        "--node",
+        &rpc_a,
+    ];
+    let mut client = run!(test_a, Bin::Client, submit_proposal_args, Some(40))?;
+    client.exp_string(TX_ACCEPTED)?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
+    client.assert_success();
+    Ok(start_epoch.into())
+}
+
+fn submit_votes(test: &Test) -> Result<()> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+
+    let submit_proposal_vote = vec![
+        "vote-proposal",
+        "--proposal-id",
+        "0",
+        "--vote",
+        "yay",
+        "--address",
+        "validator-0",
+        "--node",
+        &rpc,
+    ];
+    let mut client = run_as!(
+        test,
+        Who::Validator(0),
+        Bin::Client,
+        submit_proposal_vote,
+        Some(40)
+    )?;
+    client.exp_string(TX_ACCEPTED)?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
+    client.assert_success();
+
+    // Send different yay vote from delegator to check majority on 1/3
+    let submit_proposal_vote_delagator = vec![
+        "vote-proposal",
+        "--proposal-id",
+        "0",
+        "--vote",
+        "yay",
+        "--address",
+        BERTHA,
+        "--node",
+        &rpc,
+    ];
+    let mut client =
+        run!(test, Bin::Client, submit_proposal_vote_delagator, Some(40))?;
+    client.exp_string(TX_ACCEPTED)?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
+    client.assert_success();
+    Ok(())
 }
 
 fn check_tx_height(test: &Test, client: &mut NamadaCmd) -> Result<u32> {
@@ -1418,6 +1784,7 @@ fn check_balances(
     test_b: &Test,
 ) -> Result<()> {
     // Check the balances on Chain A
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
     let rpc_a = get_actor_rpc(test_a, Who::Validator(0));
     // Check the escrowed balance
     let escrow = Address::Internal(InternalAddress::Ibc).to_string();
@@ -1436,12 +1803,13 @@ fn check_balances(
     client.assert_success();
 
     // Check the balance on Chain B
-    let trace_path = format!("{}/{}", &dest_port_id, &dest_channel_id);
+    let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/nam");
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
     let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
     let query_args = vec![
-        "balance", "--owner", BERTHA, "--token", NAM, "--node", &rpc_b,
+        "balance", "--owner", BERTHA, "--token", &ibc_denom, "--node", &rpc_b,
     ];
-    let expected = format!("{}/nam: 100000", trace_path);
+    let expected = format!("{ibc_denom}: 100000");
     let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
@@ -1452,25 +1820,27 @@ fn check_balances(
 fn check_balances_after_non_ibc(
     port_id: &PortId,
     channel_id: &ChannelId,
-    test: &Test,
+    test_b: &Test,
 ) -> Result<()> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
     // Check the balance on Chain B
-    let trace_path = format!("{}/{}", port_id, channel_id);
-
+    let ibc_denom = format!("{port_id}/{channel_id}/nam");
     // Check the source
-    let rpc = get_actor_rpc(test, Who::Validator(0));
-    let query_args =
-        vec!["balance", "--owner", BERTHA, "--token", NAM, "--node", &rpc];
-    let expected = format!("{}/nam: 50000", trace_path);
-    let mut client = run!(test, Bin::Client, query_args, Some(40))?;
+    let rpc = get_actor_rpc(test_b, Who::Validator(0));
+    let query_args = vec![
+        "balance", "--owner", BERTHA, "--token", &ibc_denom, "--node", &rpc,
+    ];
+    let expected = format!("{ibc_denom}: 50000");
+    let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
 
-    // Check the target
-    let query_args =
-        vec!["balance", "--owner", ALBERT, "--token", NAM, "--node", &rpc];
-    let expected = format!("{}/nam: 50000", trace_path);
-    let mut client = run!(test, Bin::Client, query_args, Some(40))?;
+    // Check the traget
+    let query_args = vec![
+        "balance", "--owner", ALBERT, "--token", &ibc_denom, "--node", &rpc,
+    ];
+    let expected = format!("{ibc_denom}: 50000");
+    let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
 
@@ -1485,6 +1855,7 @@ fn check_balances_after_back(
     test_b: &Test,
 ) -> Result<()> {
     // Check the balances on Chain A
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
     let rpc_a = get_actor_rpc(test_a, Who::Validator(0));
     // Check the escrowed balance
     let escrow = Address::Internal(InternalAddress::Ibc).to_string();
@@ -1503,12 +1874,13 @@ fn check_balances_after_back(
     client.assert_success();
 
     // Check the balance on Chain B
-    let trace_path = format!("{}/{}", dest_port_id, dest_channel_id);
+    let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/nam");
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
     let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
     let query_args = vec![
-        "balance", "--owner", BERTHA, "--token", NAM, "--node", &rpc_b,
+        "balance", "--owner", BERTHA, "--token", &ibc_denom, "--node", &rpc_b,
     ];
-    let expected = format!("{}/nam: 0", trace_path);
+    let expected = format!("{ibc_denom}: 0");
     let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
@@ -1523,9 +1895,12 @@ fn check_shielded_balances(
     test_b: &Test,
 ) -> Result<()> {
     // Check the balance on Chain B
-    let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
     // PA(B) on Chain B has received BTC on chain A
     let token_addr = find_address(test_a, BTC)?.to_string();
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
+    let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
+    let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/btc");
     let query_args = vec![
         "balance",
         "--owner",
@@ -1536,10 +1911,38 @@ fn check_shielded_balances(
         "--node",
         &rpc_b,
     ];
-    let expected = format!("{}/{}/btc: 10", dest_port_id, dest_channel_id);
+    let expected = format!("{ibc_denom}: 10");
     let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
+    Ok(())
+}
+
+fn check_funded_balances(
+    dest_port_id: &PortId,
+    dest_channel_id: &ChannelId,
+    test_b: &Test,
+) -> Result<()> {
+    // Check the balance on Chain B
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
+    let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/nam");
+    let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
+    let query_args = vec![
+        "balance", "--owner", BERTHA, "--token", &ibc_denom, "--node", &rpc_b,
+    ];
+    let expected = format!("{ibc_denom}: 10");
+    let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
+    client.exp_string(&expected)?;
+    client.assert_success();
+
+    let query_args = vec![
+        "balance", "--owner", CHRISTEL, "--token", &ibc_denom, "--node", &rpc_b,
+    ];
+    let expected = format!("{ibc_denom}: 5");
+    let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
+    client.exp_string(&expected)?;
+    client.assert_success();
+
     Ok(())
 }
 

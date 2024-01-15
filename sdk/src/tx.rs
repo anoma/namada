@@ -26,10 +26,9 @@ use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::ibc::primitives::{Msg, Timestamp as IbcTimestamp};
 use namada_core::ledger::governance::cli::onchain::{
     DefaultProposal, OnChainProposal, PgfFundingProposal, PgfStewardProposal,
-    ProposalVote,
 };
 use namada_core::ledger::governance::storage::proposal::ProposalType;
-use namada_core::ledger::governance::storage::vote::StorageProposalVote;
+use namada_core::ledger::governance::storage::vote::ProposalVote;
 use namada_core::ledger::ibc::storage::channel_key;
 use namada_core::ledger::pgf::cli::steward::Commission;
 use namada_core::types::address::{Address, InternalAddress, MASP};
@@ -694,6 +693,7 @@ pub async fn build_validator_metadata_change(
         description,
         website,
         discord_handle,
+        avatar,
         commission_rate,
         tx_code_path,
     }: &args::MetaDataChange,
@@ -797,6 +797,7 @@ pub async fn build_validator_metadata_change(
         website: website.clone(),
         description: description.clone(),
         discord_handle: discord_handle.clone(),
+        avatar: avatar.clone(),
         commission_rate: *commission_rate,
     };
 
@@ -1843,14 +1844,6 @@ pub async fn build_vote_proposal(
         return Err(Error::from(TxError::ProposalDoesNotExist(proposal_id)));
     };
 
-    let storage_vote =
-        StorageProposalVote::build(&proposal_vote, &proposal.r#type)
-            .ok_or_else(|| {
-                Error::from(TxError::Other(
-                    "Should be able to build the proposal vote".to_string(),
-                ))
-            })?;
-
     let is_validator = rpc::is_validator(context.client(), voter).await?;
 
     if !proposal.can_be_voted(epoch, is_validator) {
@@ -1873,9 +1866,15 @@ pub async fn build_vote_proposal(
     .cloned()
     .collect::<Vec<Address>>();
 
+    if delegations.is_empty() {
+        return Err(Error::Other(
+            "Voter address must have delegations".to_string(),
+        ));
+    }
+
     let data = VoteProposalData {
         id: proposal_id,
-        vote: storage_vote,
+        vote: proposal_vote,
         voter: voter.clone(),
         delegations,
     };
@@ -2101,6 +2100,9 @@ pub async fn build_ibc_transfer(
 
     let chain_id = args.tx.chain_id.clone().unwrap();
     let mut tx = Tx::new(chain_id, args.tx.expiration);
+    if let Some(memo) = &args.tx.memo {
+        tx.add_memo(memo);
+    }
 
     let data = match shielded_parts {
         Some((shielded_transfer, asset_types)) => {
@@ -2205,6 +2207,9 @@ where
     let chain_id = tx_args.chain_id.clone().unwrap();
 
     let mut tx_builder = Tx::new(chain_id, tx_args.expiration);
+    if let Some(memo) = &tx_args.memo {
+        tx_builder.add_memo(memo);
+    }
 
     let tx_code_hash = query_wasm_code_hash(context, path.to_string_lossy())
         .await
@@ -2546,6 +2551,9 @@ pub async fn build_update_account(
 
     let chain_id = tx_args.chain_id.clone().unwrap();
     let mut tx = Tx::new(chain_id, tx_args.expiration);
+    if let Some(memo) = &tx_args.memo {
+        tx.add_memo(memo);
+    }
     let extra_section_hash = vp_code_path.as_ref().zip(vp_code_hash).map(
         |(code_path, vp_code_hash)| {
             tx.add_extra_section_from_hash(
@@ -2618,6 +2626,9 @@ pub async fn build_custom(
         let tx_code_hash = query_wasm_code_hash_buf(context, code_path).await?;
         let chain_id = tx_args.chain_id.clone().unwrap();
         let mut tx = Tx::new(chain_id, tx_args.expiration);
+        if let Some(memo) = &tx_args.memo {
+            tx.add_memo(memo);
+        }
         tx.add_code_from_hash(
             tx_code_hash,
             Some(code_path.to_string_lossy().into_owned()),

@@ -68,7 +68,7 @@ use crate::storage::{
     validator_slashes_handle, validator_state_handle,
     validator_total_redelegated_bonded_handle,
     validator_total_redelegated_unbonded_handle, write_last_reward_claim_epoch,
-    write_pos_params, write_validator_address_raw_hash,
+    write_pos_params, write_validator_address_raw_hash, write_validator_avatar,
     write_validator_description, write_validator_discord_handle,
     write_validator_email, write_validator_max_commission_rate_change,
     write_validator_metadata, write_validator_website,
@@ -1564,8 +1564,7 @@ where
     S: StorageRead,
 {
     let params = read_pos_params(storage)?;
-    // Outer key is the start epoch used to calculate slashes. The inner
-    // keys are discarded after applying slashes.
+    // Outer key is the start epoch used to calculate slashes.
     let mut amounts: BTreeMap<Epoch, token::Amount> = BTreeMap::default();
 
     // Bonds
@@ -1600,6 +1599,7 @@ where
         }
     }
 
+    // Redelegations
     if bond_id.validator != bond_id.source {
         // Add outgoing redelegations that are still contributing to the source
         // validator's stake
@@ -1668,6 +1668,9 @@ where
 
     if !amounts.is_empty() {
         let slashes = find_validator_slashes(storage, &bond_id.validator)?;
+        let redelegated_bonded =
+            delegator_redelegated_bonds_handle(&bond_id.source)
+                .at(&bond_id.validator);
 
         // Apply slashes
         for (&start, amount) in amounts.iter_mut() {
@@ -1684,7 +1687,30 @@ where
                 .cloned()
                 .collect::<Vec<_>>();
 
-            *amount = apply_list_slashes(&params, &list_slashes, *amount);
+            let slash_epoch_filter =
+                |e: Epoch| e + params.slash_processing_epoch_offset() <= epoch;
+
+            let redelegated_bonds =
+                redelegated_bonded.at(&start).collect_map(storage)?;
+
+            let result_fold = fold_and_slash_redelegated_bonds(
+                storage,
+                &params,
+                &redelegated_bonds,
+                start,
+                &list_slashes,
+                slash_epoch_filter,
+            );
+
+            let total_not_redelegated = *amount - result_fold.total_redelegated;
+
+            let after_not_redelegated = apply_list_slashes(
+                &params,
+                &list_slashes,
+                total_not_redelegated,
+            );
+
+            *amount = after_not_redelegated + result_fold.total_after_slashing;
         }
     }
 
@@ -1715,7 +1741,7 @@ where
     let mut amounts: BTreeMap<Epoch, BTreeMap<Epoch, token::Amount>> =
         BTreeMap::default();
 
-    // Only need to do bonds since rewwards are accumulated during
+    // Only need to do bonds since rewards are accumulated during
     // `unbond_tokens`
     let bonds =
         bond_handle(&bond_id.source, &bond_id.validator).get_data_handler();
@@ -2558,6 +2584,7 @@ pub fn change_validator_metadata<S>(
     description: Option<String>,
     website: Option<String>,
     discord_handle: Option<String>,
+    avatar: Option<String>,
     commission_rate: Option<Dec>,
     current_epoch: Epoch,
 ) -> storage_api::Result<()>
@@ -2575,6 +2602,9 @@ where
     }
     if let Some(discord) = discord_handle {
         write_validator_discord_handle(storage, validator, &discord)?;
+    }
+    if let Some(avatar) = avatar {
+        write_validator_avatar(storage, validator, &avatar)?;
     }
     if let Some(commission_rate) = commission_rate {
         change_validator_commission_rate(

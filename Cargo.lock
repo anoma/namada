@@ -2901,34 +2901,6 @@ dependencies = [
 
 [[package]]
 name = "ibc"
-version = "0.47.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "184eb22140cb4143bbcf7ddc8fdfeb9cc058ef73a6066f8ea78162e69d3565d1"
-dependencies = [
- "bytes",
- "derive_more",
- "displaydoc",
- "ibc-derive 0.3.0",
- "ibc-proto 0.37.1",
- "ics23",
- "num-traits 0.2.17",
- "primitive-types",
- "prost 0.12.3",
- "serde 1.0.193",
- "serde-json-wasm",
- "serde_derive",
- "sha2 0.10.8",
- "subtle-encoding",
- "tendermint",
- "tendermint-light-client-verifier",
- "tendermint-proto",
- "time",
- "tracing",
- "uint",
-]
-
-[[package]]
-name = "ibc"
 version = "0.48.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "429b6aca6624a9364878e28c90311438c2621a8270942d80732b2651ac38ac74"
@@ -2937,7 +2909,7 @@ dependencies = [
  "ibc-clients",
  "ibc-core",
  "ibc-core-host-cosmos",
- "ibc-derive 0.4.0",
+ "ibc-derive",
  "ibc-primitives",
 ]
 
@@ -2961,7 +2933,7 @@ dependencies = [
  "derive_more",
  "displaydoc",
  "ibc-core",
- "ibc-proto 0.38.0",
+ "ibc-proto",
  "primitive-types",
  "serde 1.0.193",
  "uint",
@@ -3006,7 +2978,7 @@ dependencies = [
  "ibc-core-commitment-types",
  "ibc-core-host-types",
  "ibc-primitives",
- "ibc-proto 0.38.0",
+ "ibc-proto",
  "prost 0.12.3",
  "serde 1.0.193",
  "tendermint",
@@ -3069,7 +3041,7 @@ dependencies = [
  "ibc-core-connection-types",
  "ibc-core-host-types",
  "ibc-primitives",
- "ibc-proto 0.38.0",
+ "ibc-proto",
  "prost 0.12.3",
  "serde 1.0.193",
  "sha2 0.10.8",
@@ -3104,7 +3076,7 @@ dependencies = [
  "ibc-core-commitment-types",
  "ibc-core-handler-types",
  "ibc-core-host-types",
- "ibc-derive 0.4.0",
+ "ibc-derive",
  "ibc-primitives",
  "prost 0.12.3",
  "subtle-encoding",
@@ -3122,7 +3094,7 @@ dependencies = [
  "ibc-core-commitment-types",
  "ibc-core-host-types",
  "ibc-primitives",
- "ibc-proto 0.38.0",
+ "ibc-proto",
  "prost 0.12.3",
  "serde 1.0.193",
  "subtle-encoding",
@@ -3138,7 +3110,7 @@ dependencies = [
  "derive_more",
  "displaydoc",
  "ibc-primitives",
- "ibc-proto 0.38.0",
+ "ibc-proto",
  "ics23",
  "prost 0.12.3",
  "serde 1.0.193",
@@ -3171,7 +3143,7 @@ dependencies = [
  "ibc-core-commitment-types",
  "ibc-core-host-types",
  "ibc-primitives",
- "ibc-proto 0.38.0",
+ "ibc-proto",
  "prost 0.12.3",
  "serde 1.0.193",
  "subtle-encoding",
@@ -3209,7 +3181,7 @@ dependencies = [
  "ibc-core-host-types",
  "ibc-core-router-types",
  "ibc-primitives",
- "ibc-proto 0.38.0",
+ "ibc-proto",
  "prost 0.12.3",
  "serde 1.0.193",
  "subtle-encoding",
@@ -3253,7 +3225,7 @@ dependencies = [
  "ibc-core-handler-types",
  "ibc-core-host-types",
  "ibc-primitives",
- "ibc-proto 0.38.0",
+ "ibc-proto",
  "prost 0.12.3",
  "serde 1.0.193",
  "sha2 0.10.8",
@@ -3299,24 +3271,12 @@ dependencies = [
  "displaydoc",
  "ibc-core-host-types",
  "ibc-primitives",
- "ibc-proto 0.38.0",
+ "ibc-proto",
  "ics23",
  "prost 0.12.3",
  "serde 1.0.193",
  "subtle-encoding",
  "tendermint",
-]
-
-[[package]]
-name = "ibc-derive"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92f1528535e9ca495badb76c143bdd4763c1c9d987f59d1f8b47963ba0c11674"
-dependencies = [
- "darling",
- "proc-macro2",
- "quote",
- "syn 2.0.39",
 ]
 
 [[package]]
@@ -3339,27 +3299,11 @@ checksum = "d5edea4685267fd68514c87e7aa3a62712340c4cff6903f088a9ab571428a08a"
 dependencies = [
  "derive_more",
  "displaydoc",
- "ibc-proto 0.38.0",
+ "ibc-proto",
  "prost 0.12.3",
  "serde 1.0.193",
  "tendermint",
  "time",
-]
-
-[[package]]
-name = "ibc-proto"
-version = "0.37.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "63042806bb2f662ca1c68026231900cfe13361136ddfd0dd09bcb315056a22b8"
-dependencies = [
- "base64 0.21.5",
- "bytes",
- "flex-error",
- "ics23",
- "prost 0.12.3",
- "serde 1.0.193",
- "subtle-encoding",
- "tendermint-proto",
 ]
 
 [[package]]
@@ -3387,8 +3331,8 @@ dependencies = [
  "bytes",
  "derive_more",
  "displaydoc",
- "ibc 0.48.1",
- "ibc-proto 0.38.0",
+ "ibc",
+ "ibc-proto",
  "parking_lot",
  "primitive-types",
  "prost 0.12.3",
@@ -4178,7 +4122,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "namada"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -4250,7 +4194,7 @@ dependencies = [
 
 [[package]]
 name = "namada_apps"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "ark-serialize",
  "ark-std",
@@ -4340,7 +4284,7 @@ dependencies = [
 
 [[package]]
 name = "namada_benchmarks"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "borsh",
  "borsh-ext",
@@ -4356,7 +4300,7 @@ dependencies = [
 
 [[package]]
 name = "namada_core"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "ark-bls12-381",
  "ark-serialize",
@@ -4371,8 +4315,8 @@ dependencies = [
  "ethabi",
  "ethbridge-structs",
  "eyre",
- "ibc 0.48.1",
- "ibc-derive 0.4.0",
+ "ibc",
+ "ibc-derive",
  "ibc-testkit",
  "ics23",
  "impl-num-traits",
@@ -4414,7 +4358,7 @@ dependencies = [
 
 [[package]]
 name = "namada_encoding_spec"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "borsh",
  "itertools 0.10.5",
@@ -4425,7 +4369,7 @@ dependencies = [
 
 [[package]]
 name = "namada_ethereum_bridge"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "assert_matches",
  "borsh",
@@ -4444,13 +4388,14 @@ dependencies = [
  "tendermint",
  "tendermint-proto",
  "tendermint-rpc",
+ "thiserror",
  "toml 0.5.11",
  "tracing",
 ]
 
 [[package]]
 name = "namada_examples"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "masp_proofs",
  "namada_sdk",
@@ -4461,11 +4406,10 @@ dependencies = [
 
 [[package]]
 name = "namada_light_sdk"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "borsh",
  "borsh-ext",
- "ibc 0.47.0",
  "namada_core",
  "namada_sdk",
  "prost 0.12.3",
@@ -4476,7 +4420,7 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4485,7 +4429,7 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "assert_matches",
  "borsh",
@@ -4507,7 +4451,7 @@ dependencies = [
 
 [[package]]
 name = "namada_sdk"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -4558,7 +4502,7 @@ dependencies = [
 
 [[package]]
 name = "namada_test_utils"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "borsh",
  "namada_core",
@@ -4567,7 +4511,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tests"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "assert_cmd",
  "async-trait",
@@ -4618,7 +4562,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "borsh",
  "borsh-ext",
@@ -4633,7 +4577,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "borsh",
  "masp_primitives",
@@ -4642,7 +4586,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "borsh",
  "borsh-ext",
@@ -7986,7 +7930,7 @@ dependencies = [
 [[package]]
 name = "wasmer"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
+source = "git+https://github.com/heliaxdev/wasmer?rev=255054f7f58b7b4a525f2fee6b9b86422d1ca15b#255054f7f58b7b4a525f2fee6b9b86422d1ca15b"
 dependencies = [
  "cfg-if 1.0.0",
  "indexmap 1.9.3",
@@ -8012,7 +7956,7 @@ dependencies = [
 [[package]]
 name = "wasmer-artifact"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
+source = "git+https://github.com/heliaxdev/wasmer?rev=255054f7f58b7b4a525f2fee6b9b86422d1ca15b#255054f7f58b7b4a525f2fee6b9b86422d1ca15b"
 dependencies = [
  "enumset",
  "loupe",
@@ -8024,7 +7968,7 @@ dependencies = [
 [[package]]
 name = "wasmer-cache"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
+source = "git+https://github.com/heliaxdev/wasmer?rev=255054f7f58b7b4a525f2fee6b9b86422d1ca15b#255054f7f58b7b4a525f2fee6b9b86422d1ca15b"
 dependencies = [
  "blake3",
  "hex",
@@ -8035,7 +7979,7 @@ dependencies = [
 [[package]]
 name = "wasmer-compiler"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
+source = "git+https://github.com/heliaxdev/wasmer?rev=255054f7f58b7b4a525f2fee6b9b86422d1ca15b#255054f7f58b7b4a525f2fee6b9b86422d1ca15b"
 dependencies = [
  "enumset",
  "loupe",
@@ -8052,7 +7996,7 @@ dependencies = [
 [[package]]
 name = "wasmer-compiler-cranelift"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
+source = "git+https://github.com/heliaxdev/wasmer?rev=255054f7f58b7b4a525f2fee6b9b86422d1ca15b#255054f7f58b7b4a525f2fee6b9b86422d1ca15b"
 dependencies = [
  "cranelift-codegen",
  "cranelift-entity",
@@ -8066,12 +8010,13 @@ dependencies = [
  "tracing",
  "wasmer-compiler",
  "wasmer-types",
+ "wasmer-vm",
 ]
 
 [[package]]
 name = "wasmer-compiler-singlepass"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
+source = "git+https://github.com/heliaxdev/wasmer?rev=255054f7f58b7b4a525f2fee6b9b86422d1ca15b#255054f7f58b7b4a525f2fee6b9b86422d1ca15b"
 dependencies = [
  "byteorder",
  "dynasm",
@@ -8084,12 +8029,13 @@ dependencies = [
  "smallvec",
  "wasmer-compiler",
  "wasmer-types",
+ "wasmer-vm",
 ]
 
 [[package]]
 name = "wasmer-derive"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
+source = "git+https://github.com/heliaxdev/wasmer?rev=255054f7f58b7b4a525f2fee6b9b86422d1ca15b#255054f7f58b7b4a525f2fee6b9b86422d1ca15b"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
@@ -8100,7 +8046,7 @@ dependencies = [
 [[package]]
 name = "wasmer-engine"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
+source = "git+https://github.com/heliaxdev/wasmer?rev=255054f7f58b7b4a525f2fee6b9b86422d1ca15b#255054f7f58b7b4a525f2fee6b9b86422d1ca15b"
 dependencies = [
  "backtrace",
  "enumset",
@@ -8122,7 +8068,7 @@ dependencies = [
 [[package]]
 name = "wasmer-engine-dylib"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
+source = "git+https://github.com/heliaxdev/wasmer?rev=255054f7f58b7b4a525f2fee6b9b86422d1ca15b#255054f7f58b7b4a525f2fee6b9b86422d1ca15b"
 dependencies = [
  "cfg-if 1.0.0",
  "enum-iterator",
@@ -8147,7 +8093,7 @@ dependencies = [
 [[package]]
 name = "wasmer-engine-universal"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
+source = "git+https://github.com/heliaxdev/wasmer?rev=255054f7f58b7b4a525f2fee6b9b86422d1ca15b#255054f7f58b7b4a525f2fee6b9b86422d1ca15b"
 dependencies = [
  "cfg-if 1.0.0",
  "enumset",
@@ -8166,7 +8112,7 @@ dependencies = [
 [[package]]
 name = "wasmer-engine-universal-artifact"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
+source = "git+https://github.com/heliaxdev/wasmer?rev=255054f7f58b7b4a525f2fee6b9b86422d1ca15b#255054f7f58b7b4a525f2fee6b9b86422d1ca15b"
 dependencies = [
  "enum-iterator",
  "enumset",
@@ -8181,7 +8127,7 @@ dependencies = [
 [[package]]
 name = "wasmer-object"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
+source = "git+https://github.com/heliaxdev/wasmer?rev=255054f7f58b7b4a525f2fee6b9b86422d1ca15b#255054f7f58b7b4a525f2fee6b9b86422d1ca15b"
 dependencies = [
  "object 0.28.4",
  "thiserror",
@@ -8192,13 +8138,12 @@ dependencies = [
 [[package]]
 name = "wasmer-types"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
+source = "git+https://github.com/heliaxdev/wasmer?rev=255054f7f58b7b4a525f2fee6b9b86422d1ca15b#255054f7f58b7b4a525f2fee6b9b86422d1ca15b"
 dependencies = [
  "backtrace",
  "enum-iterator",
  "indexmap 1.9.3",
  "loupe",
- "more-asserts",
  "rkyv",
  "serde 1.0.193",
  "thiserror",
@@ -8207,7 +8152,7 @@ dependencies = [
 [[package]]
 name = "wasmer-vm"
 version = "2.3.0"
-source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
+source = "git+https://github.com/heliaxdev/wasmer?rev=255054f7f58b7b4a525f2fee6b9b86422d1ca15b#255054f7f58b7b4a525f2fee6b9b86422d1ca15b"
 dependencies = [
  "backtrace",
  "cc",

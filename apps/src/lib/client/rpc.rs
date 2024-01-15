@@ -44,10 +44,14 @@ use namada::types::ibc::{is_ibc_denom, IbcTokenHash};
 use namada::types::io::Io;
 use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
-use namada::types::storage::{BlockHeight, BlockResults, Epoch, Key, KeySeg};
+use namada::types::storage::{
+    BlockHeight, BlockResults, Epoch, IndexedTx, Key, KeySeg,
+};
 use namada::types::token::{Change, MaspDenom};
 use namada::types::{storage, token};
-use namada_sdk::error::{is_pinned_error, Error, PinnedBalanceError};
+use namada_sdk::error::{
+    is_pinned_error, Error, PinnedBalanceError, QueryError,
+};
 use namada_sdk::masp::{Conversions, MaspAmount, MaspChange};
 use namada_sdk::proof_of_stake::types::ValidatorMetaData;
 use namada_sdk::rpc::{
@@ -145,7 +149,9 @@ pub async fn query_transfers(
         .map(|fvk| (ExtendedFullViewingKey::from(*fvk).fvk.vk, fvk))
         .collect();
     // Now display historical shielded and transparent transactions
-    for ((height, idx), (epoch, tfer_delta, tx_delta)) in transfers {
+    for (IndexedTx { height, index: idx }, (epoch, tfer_delta, tx_delta)) in
+        transfers
+    {
         // Check if this transfer pertains to the supplied owner
         let mut relevant = match &query_owner {
             Either::Left(BalanceOwner::FullViewingKey(fvk)) => tx_delta
@@ -338,14 +344,19 @@ pub async fn query_transparent_balance(
                             balance
                         );
                     }
-                    Err(e) => {
-                        display_line!(context.io(), "Querying error: {e}");
+                    Err(namada_sdk::error::Error::Query(
+                        QueryError::NoSuchKey(_),
+                    )) => {
                         display_line!(
                             context.io(),
-                            "No {} balance found for {}",
-                            token_alias,
-                            owner
+                            "No {token_alias} balance found for {owner}",
                         )
+                    }
+                    Err(e) => {
+                        display_line!(
+                            context.io(),
+                            "Error querying balance of {token_alias}: {e}"
+                        );
                     }
                 }
             }
@@ -724,6 +735,43 @@ async fn get_ibc_denom_alias(
             }
         })
         .unwrap_or(ibc_denom.as_ref().to_string())
+}
+
+/// Query votes for the given proposal
+pub async fn query_proposal_votes(
+    context: &impl Namada,
+    args: args::QueryProposalVotes,
+) {
+    let result = namada_sdk::rpc::query_proposal_votes(
+        context.client(),
+        args.proposal_id,
+    )
+    .await
+    .unwrap();
+
+    match args.voter {
+        Some(voter) => {
+            match result.into_iter().find(|vote| vote.delegator == voter) {
+                Some(vote) => display_line!(context.io(), "{}", vote,),
+                None => display_line!(
+                    context.io(),
+                    "The address {} has not voted on proposal {}",
+                    voter,
+                    args.proposal_id
+                ),
+            }
+        }
+        None => {
+            display_line!(
+                context.io(),
+                "Votes for proposal id {}\n",
+                args.proposal_id
+            );
+            for vote in result {
+                display_line!(context.io(), "{}\n", vote);
+            }
+        }
+    }
 }
 
 /// Query Proposals
@@ -1304,8 +1352,8 @@ pub async fn query_pgf(context: &impl Namada, _args: args::QueryPgf) {
                     context.io(),
                     "{:4}- {} for {}",
                     "",
-                    funding.detail.target,
-                    funding.detail.amount.to_string_native()
+                    funding.detail.target(),
+                    funding.detail.amount().to_string_native()
                 );
             }
         }
@@ -1992,6 +2040,7 @@ pub async fn query_and_print_metadata(
             description,
             website,
             discord_handle,
+            avatar,
         }) => {
             display_line!(
                 context.io(),
@@ -2017,6 +2066,11 @@ pub async fn query_and_print_metadata(
                 );
             } else {
                 display_line!(context.io(), "No discord handle");
+            }
+            if let Some(avatar) = avatar {
+                display_line!(context.io(), "Avatar: {}", avatar);
+            } else {
+                display_line!(context.io(), "No avatar");
             }
         }
         None => display_line!(
@@ -2245,33 +2299,65 @@ pub async fn query_find_validator<N: Namada>(
     context: &N,
     args: args::QueryFindValidator,
 ) {
-    let args::QueryFindValidator { query: _, tm_addr } = args;
-    if tm_addr.len() != 40 {
-        edisplay_line!(
-            context.io(),
-            "Expected 40 characters in Tendermint address, got {}",
-            tm_addr.len()
-        );
-        cli::safe_exit(1);
-    }
-    let tm_addr = tm_addr.to_ascii_uppercase();
-    let validator = unwrap_client_response::<N::Client, _>(
-        RPC.vp()
-            .pos()
-            .validator_by_tm_addr(context.client(), &tm_addr)
-            .await,
-    );
-    match validator {
-        Some(address) => {
-            display_line!(
+    let args::QueryFindValidator {
+        query: _,
+        tm_addr,
+        mut validator_addr,
+    } = args;
+    if let Some(tm_addr) = tm_addr {
+        if tm_addr.len() != 40 {
+            edisplay_line!(
                 context.io(),
-                "Found validator address \"{address}\"."
-            )
+                "Expected 40 characters in Tendermint address, got {}",
+                tm_addr.len()
+            );
+            cli::safe_exit(1);
         }
-        None => {
+        let tm_addr = tm_addr.to_ascii_uppercase();
+        let validator = unwrap_client_response::<N::Client, _>(
+            RPC.vp()
+                .pos()
+                .validator_by_tm_addr(context.client(), &tm_addr)
+                .await,
+        );
+        match validator {
+            Some(address) => {
+                display_line!(
+                    context.io(),
+                    "Found validator address \"{address}\"."
+                );
+                if validator_addr.is_none() {
+                    validator_addr = Some(address);
+                }
+            }
+            None => {
+                display_line!(
+                    context.io(),
+                    "No validator with Tendermint address {tm_addr} found."
+                )
+            }
+        }
+    }
+    if let Some(validator_addr) = validator_addr {
+        if let Some(consensus_key) = unwrap_client_response::<N::Client, _>(
+            RPC.vp()
+                .pos()
+                .consensus_key(context.client(), &validator_addr)
+                .await,
+        ) {
+            let pkh: PublicKeyHash = (&consensus_key).into();
+            display_line!(context.io(), "Consensus key: {consensus_key}");
             display_line!(
                 context.io(),
-                "No validator with Tendermint address {tm_addr} found."
+                "Tendermint key: {}",
+                tm_consensus_key_raw_hash(&consensus_key)
+            );
+            display_line!(context.io(), "Consensus key hash: {}", pkh);
+        } else {
+            display_line!(
+                context.io(),
+                "Consensus key for validator {validator_addr} could not be \
+                 found."
             )
         }
     }

@@ -10,6 +10,7 @@ use super::validation::{
     ProposalValidation,
 };
 use crate::ledger::governance::parameters::GovernanceParameters;
+use crate::ledger::governance::storage::proposal::PGFTarget;
 use crate::ledger::storage_api::token;
 use crate::types::address::Address;
 use crate::types::storage::Epoch;
@@ -20,7 +21,7 @@ use crate::types::storage::Epoch;
 /// The proposal structure
 pub struct OnChainProposal {
     /// The proposal id
-    pub id: Option<u64>,
+    pub id: u64,
     /// The proposal content
     pub content: BTreeMap<String, String>,
     /// The proposal author address
@@ -277,9 +278,9 @@ impl PgfAction {
 )]
 pub struct PgfFunding {
     /// Pgf continuous funding
-    pub continuous: Vec<PgfFundingTarget>,
+    pub continuous: Vec<PGFTarget>,
     /// pgf retro fundings
-    pub retro: Vec<PgfFundingTarget>,
+    pub retro: Vec<PGFTarget>,
 }
 
 /// Pgf continous funding
@@ -288,7 +289,7 @@ pub struct PgfFunding {
 )]
 pub struct PgfContinous {
     /// Pgf target
-    pub target: PgfFundingTarget,
+    pub target: PGFTarget,
     /// Pgf action
     pub action: PgfAction,
 }
@@ -299,70 +300,5 @@ pub struct PgfContinous {
 )]
 pub struct PgfRetro {
     /// Pgf retro target
-    pub target: PgfFundingTarget,
-}
-
-/// Pgf Target
-#[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
-)]
-pub struct PgfFundingTarget {
-    /// Target amount
-    pub amount: token::Amount,
-    /// Target address
-    pub address: Address,
-}
-
-/// Represent an proposal vote
-#[derive(
-    Debug,
-    Clone,
-    BorshSerialize,
-    BorshDeserialize,
-    Serialize,
-    Deserialize,
-    PartialEq,
-)]
-pub enum ProposalVote {
-    /// Represent an yay proposal vote
-    Yay,
-    /// Represent an nay proposal vote
-    Nay,
-    /// Represent an abstain proposal vote
-    Abstain,
-}
-
-impl TryFrom<String> for ProposalVote {
-    type Error = String;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        match value.trim().to_lowercase().as_str() {
-            "yay" => Ok(ProposalVote::Yay),
-            "nay" => Ok(ProposalVote::Nay),
-            "abstain" => Ok(ProposalVote::Abstain),
-            _ => Err("invalid vote".to_string()),
-        }
-    }
-}
-
-impl ProposalVote {
-    /// Check if the vote type is yay
-    pub fn is_yay(&self) -> bool {
-        matches!(self, ProposalVote::Yay)
-    }
-
-    /// Check if the vote type is nay
-    pub fn is_nay(&self) -> bool {
-        matches!(self, ProposalVote::Nay)
-    }
-
-    /// Check if the vote type is abstain
-    pub fn is_abstain(&self) -> bool {
-        matches!(self, ProposalVote::Abstain)
-    }
-
-    /// Check if two votes are equal
-    pub fn is_same_side(&self, other: &Self) -> bool {
-        std::mem::discriminant(self) == std::mem::discriminant(other)
-    }
+    pub target: PGFTarget,
 }

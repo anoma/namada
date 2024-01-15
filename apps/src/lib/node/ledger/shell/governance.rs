@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use namada::core::ledger::governance::storage::keys as gov_storage;
 use namada::core::ledger::governance::storage::proposal::{
-    AddRemove, PGFAction, ProposalType, StoragePgfFunding,
+    AddRemove, PGFAction, PGFTarget, ProposalType, StoragePgfFunding,
 };
 use namada::core::ledger::governance::utils::{
     compute_proposal_result, ProposalVotes, TallyResult, TallyType, TallyVote,
@@ -18,7 +18,7 @@ use namada::ledger::pos::BondId;
 use namada::ledger::protocol;
 use namada::ledger::storage::types::encode;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
-use namada::ledger::storage_api::{pgf, token, StorageWrite};
+use namada::ledger::storage_api::{ibc, pgf, token, StorageWrite};
 use namada::proof_of_stake::bond_amount;
 use namada::proof_of_stake::parameters::PosParams;
 use namada::proof_of_stake::storage::read_total_stake;
@@ -135,6 +135,20 @@ where
                              executed and passed.",
                             id
                         );
+
+                        for ibc_event in
+                            shell.wl_storage.write_log_mut().take_ibc_events()
+                        {
+                            let mut event = Event::from(ibc_event.clone());
+                            // Add the height for IBC event query
+                            let height = shell
+                                .wl_storage
+                                .storage
+                                .get_last_block_height()
+                                + 1;
+                            event["height"] = height.to_string();
+                            response.events.push(event);
+                        }
 
                         ProposalEvent::pgf_payments_proposal_event(id, result)
                             .into()
@@ -341,14 +355,15 @@ where
     Ok(true)
 }
 
-fn execute_pgf_payment_proposal<S>(
-    storage: &mut S,
+fn execute_pgf_payment_proposal<D, H>(
+    storage: &mut WlStorage<D, H>,
     token: &Address,
     payments: Vec<PGFAction>,
     proposal_id: u64,
 ) -> Result<bool>
 where
-    S: StorageRead + StorageWrite,
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
 {
     for payment in payments {
         match payment {
@@ -356,49 +371,55 @@ where
                 AddRemove::Add(target) => {
                     pgf_storage::fundings_handle().insert(
                         storage,
-                        target.target.clone(),
+                        target.target().clone(),
                         StoragePgfFunding::new(target.clone(), proposal_id),
                     )?;
                     tracing::info!(
                         "Execute ContinousPgf from proposal id {}: set {} to \
                          {}.",
                         proposal_id,
-                        target.amount.to_string_native(),
-                        target.target
+                        target.amount().to_string_native(),
+                        target.target()
                     );
                 }
                 AddRemove::Remove(target) => {
                     pgf_storage::fundings_handle()
-                        .remove(storage, &target.target)?;
+                        .remove(storage, &target.target())?;
                     tracing::info!(
                         "Execute ContinousPgf from proposal id {}: set {} to \
                          {}.",
                         proposal_id,
-                        target.amount.to_string_native(),
-                        target.target
+                        target.amount().to_string_native(),
+                        target.target()
                     );
                 }
             },
             PGFAction::Retro(target) => {
-                match token::transfer(
-                    storage,
-                    token,
-                    &ADDRESS,
-                    &target.target,
-                    target.amount,
-                ) {
+                let result = match &target {
+                    PGFTarget::Internal(target) => token::transfer(
+                        storage,
+                        token,
+                        &ADDRESS,
+                        &target.target,
+                        target.amount,
+                    ),
+                    PGFTarget::Ibc(target) => {
+                        ibc::transfer_over_ibc(storage, token, &ADDRESS, target)
+                    }
+                };
+                match result {
                     Ok(()) => tracing::info!(
                         "Execute RetroPgf from proposal id {}: sent {} to {}.",
                         proposal_id,
-                        target.amount.to_string_native(),
-                        target.target
+                        target.amount().to_string_native(),
+                        target.target()
                     ),
                     Err(e) => tracing::warn!(
                         "Error in RetroPgf transfer from proposal id {}, \
                          amount {} to {}: {}",
                         proposal_id,
-                        target.amount.to_string_native(),
-                        target.target,
+                        target.amount().to_string_native(),
+                        target.target(),
                         e
                     ),
                 }

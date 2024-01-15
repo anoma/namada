@@ -15,7 +15,7 @@ router! {GOV,
     ( "parameters" ) -> GovernanceParameters = parameters,
 }
 
-/// Find if the given address belongs to a validator account.
+/// Query the provided proposal id
 fn proposal_id<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     id: u64,
@@ -27,7 +27,7 @@ where
     storage_api::governance::get_proposal_by_id(ctx.wl_storage, id)
 }
 
-/// Find if the given address belongs to a validator account.
+/// Query all the votes for the given proposal id
 fn proposal_id_votes<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     id: u64,
@@ -39,7 +39,7 @@ where
     storage_api::governance::get_proposal_votes(ctx.wl_storage, id)
 }
 
-/// Get the governane parameters
+/// Get the governance parameters
 fn parameters<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
 ) -> storage_api::Result<GovernanceParameters>

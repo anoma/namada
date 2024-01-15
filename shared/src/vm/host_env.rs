@@ -31,7 +31,7 @@ use crate::ledger::vp_host_fns;
 use crate::proto::Tx;
 use crate::types::address::{self, Address};
 use crate::types::hash::Hash;
-use crate::types::ibc::{IbcEvent, IbcShieldedTransfer};
+use crate::types::ibc::IbcEvent;
 use crate::types::internal::HostEnvResult;
 use crate::types::storage::{BlockHeight, Epoch, Key, TxIndex};
 use crate::types::token::{
@@ -2554,14 +2554,11 @@ where
 
     fn handle_masp_tx(
         &mut self,
-        shielded: &IbcShieldedTransfer,
+        shielded: &masp_primitives::transaction::Transaction,
+        pin_key: Option<&str>,
     ) -> Result<(), storage_api::Error> {
-        masp_utils::handle_masp_tx(
-            self,
-            &shielded.transfer,
-            &shielded.masp_tx,
-        )?;
-        masp_utils::update_note_commitment_tree(self, &shielded.masp_tx)
+        masp_utils::handle_masp_tx(self, shielded, pin_key)?;
+        masp_utils::update_note_commitment_tree(self, shielded)
     }
 
     fn mint_token(

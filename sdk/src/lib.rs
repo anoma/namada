@@ -141,6 +141,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             signatures: vec![],
             tx_reveal_code_path: PathBuf::from(TX_REVEAL_PK),
             password: None,
+            memo: None,
             use_device: false,
         }
     }
@@ -338,23 +339,15 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
 
     /// Make a CommissionRateChange builder from the given minimum set of
     /// arguments
-    #[allow(clippy::too_many_arguments)]
-    fn new_change_metadata(
-        &self,
-        validator: Address,
-        email: Option<String>,
-        description: Option<String>,
-        website: Option<String>,
-        discord_handle: Option<String>,
-        commission_rate: Option<Dec>,
-    ) -> args::MetaDataChange {
+    fn new_change_metadata(&self, validator: Address) -> args::MetaDataChange {
         args::MetaDataChange {
             validator,
-            email,
-            description,
-            website,
-            discord_handle,
-            commission_rate,
+            email: None,
+            description: None,
+            website: None,
+            discord_handle: None,
+            avatar: None,
+            commission_rate: None,
             tx_code_path: PathBuf::from(TX_CHANGE_METADATA_WASM),
             tx: self.tx_builder(),
         }
@@ -384,6 +377,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             description: None,
             website: None,
             discord_handle: None,
+            avatar: None,
         }
     }
 
@@ -415,6 +409,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             description: None,
             website: None,
             discord_handle: None,
+            avatar: None,
         }
     }
 
@@ -661,6 +656,7 @@ where
                 signatures: vec![],
                 tx_reveal_code_path: PathBuf::from(TX_REVEAL_PK),
                 password: None,
+                memo: None,
                 use_device: false,
             },
         }
@@ -951,6 +947,7 @@ pub mod testing {
             timestamp in arb_date_time_utc(),
             code_hash in arb_hash(),
             data_hash in arb_hash(),
+            memo_hash in arb_hash(),
             tx_type in arb_tx_type(),
         ) -> Header {
             Header {
@@ -959,6 +956,7 @@ pub mod testing {
                 timestamp,
                 data_hash,
                 code_hash,
+                memo_hash,
                 tx_type,
             }
         }

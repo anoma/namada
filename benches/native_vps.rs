@@ -4,12 +4,9 @@ use std::rc::Rc;
 use std::str::FromStr;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use masp_primitives::bls12_381;
 use masp_primitives::sapling::Node;
 use namada::core::ledger::governance::storage::proposal::ProposalType;
-use namada::core::ledger::governance::storage::vote::{
-    StorageProposalVote, VoteType,
-};
+use namada::core::ledger::governance::storage::vote::ProposalVote;
 use namada::core::ledger::ibc::{IbcActions, TransferModule};
 use namada::core::ledger::pgf::storage::steward::StewardDetail;
 use namada::core::ledger::storage_api::{StorageRead, StorageWrite};
@@ -46,13 +43,10 @@ use namada::namada_sdk::masp_primitives::transaction::Transaction;
 use namada::proof_of_stake;
 use namada::proof_of_stake::KeySeg;
 use namada::proto::{Code, Section, Tx};
-use namada::types::address::{InternalAddress, MASP};
+use namada::types::address::InternalAddress;
 use namada::types::eth_bridge_pool::{GasFee, PendingTransfer};
 use namada::types::masp::{TransferSource, TransferTarget};
 use namada::types::storage::{Epoch, TxIndex};
-use namada::types::token::{
-    MASP_NOTE_COMMITMENT_ANCHOR_PREFIX, MASP_NOTE_COMMITMENT_TREE_KEY,
-};
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
@@ -87,7 +81,7 @@ fn governance(c: &mut Criterion) {
                     TX_VOTE_PROPOSAL_WASM,
                     VoteProposalData {
                         id: 0,
-                        vote: StorageProposalVote::Yay(VoteType::Default),
+                        vote: ProposalVote::Yay,
                         voter: defaults::albert_address(),
                         delegations: vec![defaults::validator_address()],
                     },
@@ -103,7 +97,7 @@ fn governance(c: &mut Criterion) {
                     TX_VOTE_PROPOSAL_WASM,
                     VoteProposalData {
                         id: 0,
-                        vote: StorageProposalVote::Nay,
+                        vote: ProposalVote::Nay,
                         voter: defaults::validator_address(),
                         delegations: vec![],
                     },
@@ -128,7 +122,7 @@ fn governance(c: &mut Criterion) {
                 shell.generate_tx(
                     TX_INIT_PROPOSAL_WASM,
                     InitProposalData {
-                        id: None,
+                        id: 0,
                         content: content_section.get_hash(),
                         author: defaults::albert_address(),
                         r#type: ProposalType::Default(None),
@@ -180,7 +174,7 @@ fn governance(c: &mut Criterion) {
                 shell.generate_tx(
                     TX_INIT_PROPOSAL_WASM,
                     InitProposalData {
-                        id: Some(1),
+                        id: 1,
                         content: content_section.get_hash(),
                         author: defaults::albert_address(),
                         r#type: ProposalType::Default(Some(
@@ -252,7 +246,7 @@ fn governance(c: &mut Criterion) {
 //      let governance_proposal = shell.generate_tx(
 //          TX_INIT_PROPOSAL_WASM,
 //          InitProposalData {
-//              id: None,
+//              id: 0,
 //              content: content_section.get_hash(),
 //              author: defaults::albert_address(),
 //              r#type: ProposalType::Default(None),
@@ -511,29 +505,24 @@ fn setup_storage_for_masp_verification(
     shielded_ctx.shell.wl_storage.commit_tx();
 
     // Update the anchor in storage
-    let tree_key = namada::core::types::storage::Key::from(MASP.to_db_key())
-        .push(&MASP_NOTE_COMMITMENT_TREE_KEY.to_owned())
-        .expect("Cannot obtain a storage key");
+    let tree_key = namada::core::types::token::masp_commitment_tree_key();
     let updated_tree: CommitmentTree<Node> = shielded_ctx
         .shell
         .wl_storage
         .read(&tree_key)
         .unwrap()
         .unwrap();
-    let anchor_key = namada::core::types::storage::Key::from(MASP.to_db_key())
-        .push(&MASP_NOTE_COMMITMENT_ANCHOR_PREFIX.to_owned())
-        .expect("Cannot obtain a storage key")
-        .push(&namada::core::types::hash::Hash(
-            bls12_381::Scalar::from(updated_tree.root()).to_bytes(),
-        ))
-        .expect("Cannot obtain a storage key");
+    let anchor_key = namada::core::types::token::masp_commitment_anchor_key(
+        updated_tree.root(),
+    );
     shielded_ctx
         .shell
         .wl_storage
         .write(&anchor_key, ())
         .unwrap();
-
-    shielded_ctx.shell.commit();
+    shielded_ctx.shell.commit_block();
+    // Cache the masp tx so that it can be returned when queried
+    shielded_ctx.shell.last_block_masp_txs.push(shield_tx);
 
     let (mut shielded_ctx, signed_tx) = match bench_name {
         "shielding" => shielded_ctx.generate_masp_tx(

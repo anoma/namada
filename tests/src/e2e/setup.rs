@@ -39,7 +39,7 @@ use rand::Rng;
 use serde_json;
 use tempfile::{tempdir, tempdir_in, TempDir};
 
-use crate::e2e::helpers::generate_bin_command;
+use crate::e2e::helpers::{generate_bin_command, make_hermes_config};
 
 /// For `color_eyre::install`, which fails if called more than once in the same
 /// process
@@ -1139,6 +1139,93 @@ where
 /// Sleep for given `seconds`.
 pub fn sleep(seconds: u64) {
     thread::sleep(time::Duration::from_secs(seconds));
+}
+
+pub fn setup_hermes(test_a: &Test, test_b: &Test) -> Result<()> {
+    println!("\n{}", "Setting up Hermes".underline().green(),);
+
+    make_hermes_config(test_a, test_b)?;
+
+    for test in [test_a, test_b] {
+        let chain_id = test.net.chain_id.as_str();
+        let chain_dir = test.test_dir.as_ref().join(chain_id);
+        let wallet = wallet::wallet_file(chain_dir);
+        let args = [
+            "keys",
+            "add",
+            "--chain",
+            chain_id,
+            "--key-file",
+            &wallet.to_string_lossy(),
+        ];
+        let mut hermes = run_hermes_cmd(test, args, Some(10))?;
+        hermes.assert_success();
+    }
+
+    Ok(())
+}
+
+pub fn run_hermes_cmd<I, S>(
+    test: &Test,
+    args: I,
+    timeout_sec: Option<u64>,
+) -> Result<NamadaCmd>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let mut run_cmd = Command::new("hermes");
+    let hermes_dir = test.test_dir.as_ref().join("hermes");
+    run_cmd.current_dir(hermes_dir.clone());
+    let config_path = hermes_dir.join("config.toml");
+    run_cmd.args(["--config", &config_path.to_string_lossy()]);
+    run_cmd.args(args);
+
+    let args: String =
+        run_cmd.get_args().map(|s| s.to_string_lossy()).join(" ");
+    let cmd_str =
+        format!("{} {}", run_cmd.get_program().to_string_lossy(), args);
+
+    let session = Session::spawn(run_cmd).map_err(|e| {
+        eyre!(
+            "\n\n{}: {}\n{}: {}",
+            "Failed to run Hermes".underline().red(),
+            cmd_str,
+            "Error".underline().red(),
+            e
+        )
+    })?;
+
+    let log_path = {
+        let mut rng = rand::thread_rng();
+        let log_dir = test.get_base_dir(Who::NonValidator).join("logs");
+        std::fs::create_dir_all(&log_dir)?;
+        log_dir.join(format!(
+            "{}-hermes-{}.log",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_micros(),
+            rng.gen::<u64>()
+        ))
+    };
+    let logger = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&log_path)?;
+    let mut session = expectrl::session::log(session, logger).unwrap();
+
+    session.set_expect_timeout(timeout_sec.map(std::time::Duration::from_secs));
+
+    let cmd_process = NamadaCmd {
+        session,
+        cmd_str,
+        log_path,
+    };
+
+    println!("{}:\n{}", "> Running".underline().green(), &cmd_process);
+
+    Ok(cmd_process)
 }
 
 #[allow(dead_code)]

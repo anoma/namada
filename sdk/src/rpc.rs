@@ -15,6 +15,7 @@ use namada_core::ledger::governance::utils::Vote;
 use namada_core::ledger::ibc::storage::{
     ibc_denom_key, ibc_denom_key_prefix, is_ibc_denom_key,
 };
+use namada_core::ledger::pgf::storage::steward::StewardDetail;
 use namada_core::ledger::storage::LastBlock;
 use namada_core::types::account::Account;
 use namada_core::types::address::{Address, InternalAddress};
@@ -221,6 +222,27 @@ pub async fn has_bonds<C: crate::queries::Client + Sync>(
     source: &Address,
 ) -> Result<bool, error::Error> {
     convert_response::<C, bool>(RPC.vp().pos().has_bonds(client, source).await)
+}
+
+/// Get the set of pgf stewards
+pub async fn query_pgf_stewards<C: crate::queries::Client + Sync>(
+    client: &C,
+) -> Result<Vec<StewardDetail>, error::Error> {
+    convert_response::<C, Vec<StewardDetail>>(
+        RPC.vp().pgf().stewards(client).await,
+    )
+}
+
+/// Query the consensus key by validator address
+pub async fn query_validator_consensus_keys<
+    C: crate::queries::Client + Sync,
+>(
+    client: &C,
+    address: &Address,
+) -> Result<Option<common::PublicKey>, error::Error> {
+    convert_response::<C, Option<common::PublicKey>>(
+        RPC.vp().pos().consensus_key(client, address).await,
+    )
 }
 
 /// Get the set of consensus keys registered in the network

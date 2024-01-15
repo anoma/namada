@@ -7,6 +7,7 @@ use std::time::Duration as StdDuration;
 use namada_core::ledger::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
+use namada_core::proto::Memo;
 use namada_core::types::address::Address;
 use namada_core::types::chain::ChainId;
 use namada_core::types::dec::Dec;
@@ -748,6 +749,8 @@ pub struct TxBecomeValidator<C: NamadaTypes = SdkTypes> {
     pub website: Option<String>,
     /// The validator's discord handle
     pub discord_handle: Option<String>,
+    /// The validator's avatar
+    pub avatar: Option<String>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
     /// Don't encrypt the keypair
@@ -785,6 +788,8 @@ pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
     pub website: Option<String>,
     /// The validator's discord handle
     pub discord_handle: Option<String>,
+    /// The validator's avatar
+    pub avatar: Option<String>,
     /// Path to the VP WASM code file
     pub validator_vp_code_path: PathBuf,
     /// Path to the TX WASM code file
@@ -1129,6 +1134,17 @@ impl RevealPk {
     }
 }
 
+/// Query proposal votes
+#[derive(Clone, Debug)]
+pub struct QueryProposalVotes<C: NamadaTypes = SdkTypes> {
+    /// Common query args
+    pub query: Query<C>,
+    /// Proposal id
+    pub proposal_id: u64,
+    /// Voter address
+    pub voter: Option<C::Address>,
+}
+
 /// Query proposal
 #[derive(Clone, Debug)]
 pub struct QueryProposal<C: NamadaTypes = SdkTypes> {
@@ -1456,6 +1472,8 @@ pub struct MetaDataChange<C: NamadaTypes = SdkTypes> {
     pub website: Option<String>,
     /// New validator discord handle
     pub discord_handle: Option<String>,
+    /// New validator avatar url
+    pub avatar: Option<String>,
     /// New validator commission rate
     pub commission_rate: Option<Dec>,
     /// Path to the TX WASM code file
@@ -1484,6 +1502,54 @@ impl<C: NamadaTypes> MetaDataChange<C> {
     pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
         Self {
             tx_code_path,
+            ..self
+        }
+    }
+
+    /// New validator email
+    pub fn email(self, email: String) -> Self {
+        Self {
+            email: Some(email),
+            ..self
+        }
+    }
+
+    /// New validator description
+    pub fn description(self, description: String) -> Self {
+        Self {
+            description: Some(description),
+            ..self
+        }
+    }
+
+    /// New validator website
+    pub fn website(self, website: String) -> Self {
+        Self {
+            website: Some(website),
+            ..self
+        }
+    }
+
+    /// New validator discord handle
+    pub fn discord_handle(self, discord_handle: String) -> Self {
+        Self {
+            discord_handle: Some(discord_handle),
+            ..self
+        }
+    }
+
+    /// New validator avatar url
+    pub fn avatar(self, avatar: String) -> Self {
+        Self {
+            avatar: Some(avatar),
+            ..self
+        }
+    }
+
+    /// New validator commission rate
+    pub fn commission_rate(self, commission_rate: Dec) -> Self {
+        Self {
+            commission_rate: Some(commission_rate),
             ..self
         }
     }
@@ -1812,7 +1878,9 @@ pub struct QueryFindValidator<C: NamadaTypes = SdkTypes> {
     /// Common query args
     pub query: Query<C>,
     /// Tendermint address
-    pub tm_addr: String,
+    pub tm_addr: Option<String>,
+    /// Native validator address
+    pub validator_addr: Option<C::Address>,
 }
 
 /// Query the raw bytes of given storage key
@@ -1872,6 +1940,8 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub tx_reveal_code_path: PathBuf,
     /// Password to decrypt key
     pub password: Option<Zeroizing<String>>,
+    /// Optional memo to be included in the transaction
+    pub memo: Option<Memo>,
     /// Use device to sign the transaction
     pub use_device: bool,
 }

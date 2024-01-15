@@ -9,7 +9,6 @@ use namada_core::ledger::governance::storage::keys as gov_storage;
 use namada_core::ledger::governance::storage::proposal::{
     AddRemove, ProposalType,
 };
-use namada_core::ledger::governance::storage::vote::StorageProposalVote;
 use namada_core::ledger::governance::utils::is_valid_validator_voting_period;
 use namada_core::ledger::storage;
 use namada_core::ledger::storage_api::account;
@@ -188,7 +187,6 @@ where
             gov_storage::get_voting_start_epoch_key(proposal_id);
         let voting_end_epoch_key =
             gov_storage::get_voting_end_epoch_key(proposal_id);
-        let proposal_type_key = gov_storage::get_proposal_type_key(proposal_id);
 
         let current_epoch = self.ctx.get_block_epoch()?;
 
@@ -197,13 +195,9 @@ where
             self.force_read(&voting_start_epoch_key, ReadType::Pre)?;
         let pre_voting_end_epoch: Epoch =
             self.force_read(&voting_end_epoch_key, ReadType::Pre)?;
-        let proposal_type: ProposalType =
-            self.force_read(&proposal_type_key, ReadType::Pre)?;
 
         let voter = gov_storage::get_voter_address(key);
         let delegation_address = gov_storage::get_vote_delegation_address(key);
-
-        let vote: StorageProposalVote = self.force_read(key, ReadType::Post)?;
 
         let (voter_address, delegation_address) =
             match (voter, delegation_address) {
@@ -236,10 +230,6 @@ where
                  start: {pre_voting_start_epoch}, end: {pre_voting_end_epoch}."
             );
             return Ok(false);
-        }
-
-        if !vote.is_compatible(&proposal_type) {
-            return Err(Error::InvalidVoteType);
         }
 
         // first check if validator, then check if delegator

@@ -257,6 +257,7 @@ pub mod cmds {
                 .subcommand(QueryResult::def().display_order(5))
                 .subcommand(QueryRawBytes::def().display_order(5))
                 .subcommand(QueryProposal::def().display_order(5))
+                .subcommand(QueryProposalVotes::def().display_order(5))
                 .subcommand(QueryProposalResult::def().display_order(5))
                 .subcommand(QueryProtocolParameters::def().display_order(5))
                 .subcommand(QueryPgf::def().display_order(5))
@@ -330,6 +331,8 @@ pub mod cmds {
             let query_result = Self::parse_with_ctx(matches, QueryResult);
             let query_raw_bytes = Self::parse_with_ctx(matches, QueryRawBytes);
             let query_proposal = Self::parse_with_ctx(matches, QueryProposal);
+            let query_proposal_votes =
+                Self::parse_with_ctx(matches, QueryProposalVotes);
             let query_proposal_result =
                 Self::parse_with_ctx(matches, QueryProposalResult);
             let query_protocol_parameters =
@@ -385,6 +388,7 @@ pub mod cmds {
                 .or(query_result)
                 .or(query_raw_bytes)
                 .or(query_proposal)
+                .or(query_proposal_votes)
                 .or(query_proposal_result)
                 .or(query_protocol_parameters)
                 .or(query_pgf)
@@ -472,6 +476,7 @@ pub mod cmds {
         QueryFindValidator(QueryFindValidator),
         QueryRawBytes(QueryRawBytes),
         QueryProposal(QueryProposal),
+        QueryProposalVotes(QueryProposalVotes),
         QueryProposalResult(QueryProposalResult),
         QueryProtocolParameters(QueryProtocolParameters),
         QueryPgf(QueryPgf),
@@ -1008,6 +1013,28 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Query the result of a transaction.")
                 .add_args::<args::QueryResult<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct QueryProposalVotes(pub args::QueryProposalVotes<args::CliTypes>);
+
+    impl SubCmd for QueryProposalVotes {
+        const CMD: &'static str = "query-proposal-votes";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryProposalVotes(args::QueryProposalVotes::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query votes for the proposal.")
+                .add_args::<args::QueryProposalVotes<args::CliTypes>>()
         }
     }
 
@@ -1757,7 +1784,10 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Find a PoS validator by its Tendermint address.")
+                .about(
+                    "Find a PoS validator and its consensus key by its native \
+                     address or Tendermint address.",
+                )
                 .add_args::<args::QueryFindValidator<args::CliTypes>>()
         }
     }
@@ -2839,6 +2869,7 @@ pub mod args {
     pub const ALLOW_DUPLICATE_IP: ArgFlag = flag("allow-duplicate-ip");
     pub const AMOUNT: Arg<token::DenominatedAmount> = arg("amount");
     pub const ARCHIVE_DIR: ArgOpt<PathBuf> = arg_opt("archive-dir");
+    pub const AVATAR_OPT: ArgOpt<String> = arg_opt("avatar");
     pub const BALANCE_OWNER: ArgOpt<WalletBalanceOwner> = arg_opt("owner");
     pub const BASE_DIR: ArgDefault<PathBuf> = arg_default(
         "base-dir",
@@ -2964,6 +2995,7 @@ pub mod args {
     pub const MAX_COMMISSION_RATE_CHANGE: Arg<Dec> =
         arg("max-commission-rate-change");
     pub const MAX_ETH_GAS: ArgOpt<u64> = arg_opt("max_eth-gas");
+    pub const MEMO_OPT: ArgOpt<String> = arg_opt("memo");
     pub const MODE: ArgOpt<String> = arg_opt("mode");
     pub const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     pub const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
@@ -3031,7 +3063,7 @@ pub mod args {
     pub const TEMPLATES_PATH: Arg<PathBuf> = arg("templates-path");
     pub const TIMEOUT_HEIGHT: ArgOpt<u64> = arg_opt("timeout-height");
     pub const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
-    pub const TM_ADDRESS: Arg<String> = arg("tm-address");
+    pub const TM_ADDRESS: ArgOpt<String> = arg_opt("tm-address");
     pub const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
     pub const TOKEN: Arg<WalletAddress> = arg("token");
     pub const TOKEN_STR: Arg<String> = arg("token");
@@ -3058,6 +3090,7 @@ pub mod args {
     pub const VALIDATOR_ETH_HOT_KEY: ArgOpt<WalletPublicKey> =
         arg_opt("eth-hot-key");
     pub const VALUE: Arg<String> = arg("value");
+    pub const VOTER_OPT: ArgOpt<WalletAddress> = arg_opt("voter");
     pub const VIEWING_KEY: Arg<WalletViewingKey> = arg("key");
     pub const VP: ArgOpt<String> = arg_opt("vp");
     pub const WALLET_ALIAS_FORCE: ArgFlag = flag("wallet-alias-force");
@@ -4042,6 +4075,7 @@ pub mod args {
                 description: self.description,
                 website: self.website,
                 discord_handle: self.discord_handle,
+                avatar: self.avatar,
                 unsafe_dont_encrypt: self.unsafe_dont_encrypt,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             }
@@ -4064,6 +4098,7 @@ pub mod args {
             let description = DESCRIPTION_OPT.parse(matches);
             let website = WEBSITE_OPT.parse(matches);
             let discord_handle = DISCORD_OPT.parse(matches);
+            let avatar = AVATAR_OPT.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let tx_code_path = PathBuf::from(TX_BECOME_VALIDATOR_WASM);
             Self {
@@ -4080,6 +4115,7 @@ pub mod args {
                 description,
                 website,
                 discord_handle,
+                avatar,
                 unsafe_dont_encrypt,
                 tx_code_path,
             }
@@ -4128,6 +4164,7 @@ pub mod args {
                 .arg(DESCRIPTION_OPT.def().help("The validator's description."))
                 .arg(WEBSITE_OPT.def().help("The validator's website."))
                 .arg(DISCORD_OPT.def().help("The validator's discord handle."))
+                .arg(AVATAR_OPT.def().help("The validator's avatar."))
                 .arg(VALIDATOR_CODE_PATH.def().help(
                     "The path to the validity predicate WASM code to be used \
                      for the validator account. Uses the default validator VP \
@@ -4163,6 +4200,7 @@ pub mod args {
                 description: self.description,
                 website: self.website,
                 discord_handle: self.discord_handle,
+                avatar: self.avatar,
                 validator_vp_code_path: self
                     .validator_vp_code_path
                     .to_path_buf(),
@@ -4193,6 +4231,7 @@ pub mod args {
             let description = DESCRIPTION_OPT.parse(matches);
             let website = WEBSITE_OPT.parse(matches);
             let discord_handle = DISCORD_OPT.parse(matches);
+            let avatar = AVATAR_OPT.parse(matches);
             let validator_vp_code_path = VALIDATOR_CODE_PATH
                 .parse(matches)
                 .unwrap_or_else(|| PathBuf::from(VP_USER_WASM));
@@ -4216,6 +4255,7 @@ pub mod args {
                 description,
                 website,
                 discord_handle,
+                avatar,
                 validator_vp_code_path,
                 unsafe_dont_encrypt,
                 tx_init_account_code_path,
@@ -4268,6 +4308,7 @@ pub mod args {
                 .arg(DESCRIPTION_OPT.def().help("The validator's description."))
                 .arg(WEBSITE_OPT.def().help("The validator's website."))
                 .arg(DISCORD_OPT.def().help("The validator's discord handle."))
+                .arg(AVATAR_OPT.def().help("The validator's avatar."))
                 .arg(VALIDATOR_CODE_PATH.def().help(
                     "The path to the validity predicate WASM code to be used \
                      for the validator account. Uses the default validator VP \
@@ -4785,6 +4826,36 @@ pub mod args {
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>()
                 .arg(PROPOSAL_ID_OPT.def().help("The proposal identifier."))
+        }
+    }
+
+    impl CliToSdk<QueryProposalVotes<SdkTypes>> for QueryProposalVotes<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryProposalVotes<SdkTypes> {
+            QueryProposalVotes::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                proposal_id: self.proposal_id,
+                voter: self.voter.map(|x| ctx.borrow_chain_or_exit().get(&x)),
+            }
+        }
+    }
+
+    impl Args for QueryProposalVotes<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let proposal_id = PROPOSAL_ID.parse(matches);
+            let voter = VOTER_OPT.parse(matches);
+
+            Self {
+                query,
+                proposal_id,
+                voter,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query<CliTypes>>()
+                .arg(PROPOSAL_ID_OPT.def().help("The proposal identifier."))
+                .arg(VOTER_OPT.def().help("The address of the proposal voter."))
         }
     }
 
@@ -5331,6 +5402,7 @@ pub mod args {
                 description: self.description,
                 website: self.website,
                 discord_handle: self.discord_handle,
+                avatar: self.avatar,
                 commission_rate: self.commission_rate,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             }
@@ -5345,6 +5417,7 @@ pub mod args {
             let description = DESCRIPTION_OPT.parse(matches);
             let website = WEBSITE_OPT.parse(matches);
             let discord_handle = DISCORD_OPT.parse(matches);
+            let avatar = AVATAR_OPT.parse(matches);
             let commission_rate = COMMISSION_RATE_OPT.parse(matches);
             let tx_code_path = PathBuf::from(TX_CHANGE_METADATA_WASM);
             Self {
@@ -5354,6 +5427,7 @@ pub mod args {
                 description,
                 website,
                 discord_handle,
+                avatar,
                 commission_rate,
                 tx_code_path,
             }
@@ -5381,6 +5455,10 @@ pub mod args {
                     "The desired new validator discord handle. To remove the \
                      existing discord handle, pass an empty string to this \
                      argument.",
+                ))
+                .arg(AVATAR_OPT.def().help(
+                    "The desired new validator avatar url. To remove the \
+                     existing avatar, pass an empty string to this argument.",
                 ))
                 .arg(
                     COMMISSION_RATE_OPT
@@ -5733,15 +5811,26 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let tm_addr = TM_ADDRESS.parse(matches);
-            Self { query, tm_addr }
+            let validator_addr = VALIDATOR_OPT.parse(matches);
+            Self {
+                query,
+                tm_addr,
+                validator_addr,
+            }
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query<CliTypes>>().arg(
-                TM_ADDRESS
-                    .def()
-                    .help("The address of the validator in Tendermint."),
-            )
+            app.add_args::<Query<CliTypes>>()
+                .arg(
+                    TM_ADDRESS
+                        .def()
+                        .help("The address of the validator in Tendermint."),
+                )
+                .arg(
+                    VALIDATOR_OPT
+                        .def()
+                        .help("The native address of the validator."),
+                )
         }
     }
 
@@ -5750,6 +5839,9 @@ pub mod args {
             QueryFindValidator::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 tm_addr: self.tm_addr,
+                validator_addr: self
+                    .validator_addr
+                    .map(|x| ctx.borrow_chain_or_exit().get(&x)),
             }
         }
     }
@@ -5832,6 +5924,7 @@ pub mod args {
                     .chain_id
                     .or_else(|| Some(ctx.config.ledger.chain_id.clone())),
                 wrapper_fee_payer: self.wrapper_fee_payer.map(|x| ctx.get(&x)),
+                memo: self.memo,
                 use_device: self.use_device,
             }
         }
@@ -5946,6 +6039,11 @@ pub mod args {
                 "Use an attached hardware wallet device to sign the \
                  transaction.",
             ))
+            .arg(
+                MEMO_OPT
+                    .def()
+                    .help("Attach a plaintext memo to the transaction."),
+            )
         }
 
         fn parse(matches: &ArgMatches) -> Self {
@@ -5970,6 +6068,7 @@ pub mod args {
             let tx_reveal_code_path = PathBuf::from(TX_REVEAL_PK);
             let chain_id = CHAIN_ID_OPT.parse(matches);
             let password = None;
+            let memo = MEMO_OPT.parse(matches).map(String::into_bytes);
             let wrapper_fee_payer = FEE_PAYER_OPT.parse(matches);
             let output_folder = OUTPUT_FOLDER_PATH.parse(matches);
             let use_device = USE_DEVICE.parse(matches);
@@ -5995,6 +6094,7 @@ pub mod args {
                 chain_id,
                 wrapper_fee_payer,
                 output_folder,
+                memo,
                 use_device,
             }
         }
@@ -6707,6 +6807,7 @@ pub mod args {
         pub description: Option<String>,
         pub website: Option<String>,
         pub discord_handle: Option<String>,
+        pub avatar: Option<String>,
         pub address: EstablishedAddress,
         pub tx_path: PathBuf,
     }
@@ -6726,6 +6827,7 @@ pub mod args {
             let description = DESCRIPTION_OPT.parse(matches);
             let website = WEBSITE_OPT.parse(matches);
             let discord_handle = DISCORD_OPT.parse(matches);
+            let avatar = AVATAR_OPT.parse(matches);
             let address = RAW_ADDRESS_ESTABLISHED.parse(matches);
             let tx_path = PATH.parse(matches);
             Self {
@@ -6740,6 +6842,7 @@ pub mod args {
                 description,
                 website,
                 discord_handle,
+                avatar,
                 tx_path,
                 address,
             }
@@ -6796,6 +6899,9 @@ pub mod args {
                 .arg(DISCORD_OPT.def().help(
                     "The validator's discord handle. This is an optional \
                      parameter.",
+                ))
+                .arg(AVATAR_OPT.def().help(
+                    "The validator's avatar. This is an optional parameter.",
                 ))
         }
     }

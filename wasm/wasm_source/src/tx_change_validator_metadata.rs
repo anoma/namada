@@ -15,6 +15,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         description,
         website,
         discord_handle,
+        avatar,
         commission_rate,
     } = transaction::pos::MetaDataChange::try_from_slice(&data[..])
         .wrap_err("failed to decode Dec value")?;
@@ -24,6 +25,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         description,
         website,
         discord_handle,
+        avatar,
         commission_rate,
     )
 }

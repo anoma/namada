@@ -127,6 +127,7 @@ impl Ctx {
             description,
             website,
             discord_handle,
+            avatar,
         }: BecomeValidator,
     ) -> EnvResult<Address> {
         let current_epoch = self.get_block_epoch()?;
@@ -151,6 +152,7 @@ impl Ctx {
                     description,
                     website,
                     discord_handle,
+                    avatar,
                 },
                 offset_opt: None,
             },
@@ -180,6 +182,7 @@ impl Ctx {
         description: Option<String>,
         website: Option<String>,
         discord_handle: Option<String>,
+        avatar: Option<String>,
         commission_rate: Option<Dec>,
     ) -> TxResult {
         let current_epoch = self.get_block_epoch()?;
@@ -190,6 +193,7 @@ impl Ctx {
             description,
             website,
             discord_handle,
+            avatar,
             commission_rate,
             current_epoch,
         )

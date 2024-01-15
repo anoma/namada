@@ -27,7 +27,10 @@ use namada_apps::config::ethereum_bridge;
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
 use namada_core::ledger::governance::cli::onchain::{
-    PgfFunding, PgfFundingTarget, StewardsUpdate,
+    PgfFunding, StewardsUpdate,
+};
+use namada_core::ledger::governance::storage::proposal::{
+    PGFInternalTarget, PGFTarget,
 };
 use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_sdk::masp::fs::FsShieldedUtils;
@@ -1811,6 +1814,7 @@ fn proposal_submission() -> Result<()> {
     let albert = find_address(&test, ALBERT)?;
     let valid_proposal_json_path = prepare_proposal_data(
         &test,
+        0,
         albert,
         TestWasms::TxProposalCode.read_bytes(),
         12,
@@ -1883,6 +1887,7 @@ fn proposal_submission() -> Result<()> {
     let albert = find_address(&test, ALBERT)?;
     let invalid_proposal_json = prepare_proposal_data(
         &test,
+        1,
         albert,
         TestWasms::TxProposalCode.read_bytes(),
         1,
@@ -1992,8 +1997,8 @@ fn proposal_submission() -> Result<()> {
     // this is valid because the client filter ALBERT delegation and there are
     // none
     let mut client = run!(test, Bin::Client, submit_proposal_vote, Some(15))?;
-    client.exp_string(TX_APPLIED_SUCCESS)?;
-    client.assert_success();
+    client.exp_string("Voter address must have delegations")?;
+    client.assert_failure();
 
     // 11. Query the proposal and check the result
     let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
@@ -2013,7 +2018,9 @@ fn proposal_submission() -> Result<()> {
     let mut client = run!(test, Bin::Client, query_proposal, Some(15))?;
     client.exp_string("Proposal Id: 0")?;
     client.exp_string(
-        "passed with 100000.000000 yay votes and 900.000000 nay votes (0.%)",
+        "passed with 100000.000000 yay votes, 900.000000 nay votes and \
+         0.000000 abstain votes, total voting power: 100900.000000 threshold \
+         was: 67266.666666",
     )?;
     client.assert_success();
 
@@ -2139,7 +2146,7 @@ fn pgf_governance_proposal() -> Result<()> {
     };
 
     let valid_proposal_json_path =
-        prepare_proposal_data(&test, albert, pgf_stewards, 12);
+        prepare_proposal_data(&test, 0, albert, pgf_stewards, 12);
     let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
 
     let submit_proposal_args = vec![
@@ -2317,18 +2324,18 @@ fn pgf_governance_proposal() -> Result<()> {
     let christel = find_address(&test, CHRISTEL)?;
 
     let pgf_funding = PgfFunding {
-        continuous: vec![PgfFundingTarget {
+        continuous: vec![PGFTarget::Internal(PGFInternalTarget {
             amount: token::Amount::from_u64(10),
-            address: bertha.clone(),
-        }],
-        retro: vec![PgfFundingTarget {
+            target: bertha.clone(),
+        })],
+        retro: vec![PGFTarget::Internal(PGFInternalTarget {
             amount: token::Amount::from_u64(5),
-            address: christel,
-        }],
+            target: christel,
+        })],
     };
 
     let valid_proposal_json_path =
-        prepare_proposal_data(&test, albert, pgf_funding, 36);
+        prepare_proposal_data(&test, 1, albert, pgf_funding, 36);
     let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
 
     let submit_proposal_args = vec![
@@ -2924,6 +2931,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
             let author = find_address(&test, source).unwrap();
             let valid_proposal_json_path = prepare_proposal_data(
                 &test,
+                0,
                 author,
                 TestWasms::TxProposalCode.read_bytes(),
                 12,
@@ -3038,14 +3046,16 @@ fn test_epoch_sleep() -> Result<()> {
 
 /// Prepare proposal data in the test's temp dir from the given source address.
 /// This can be submitted with "init-proposal" command.
-fn prepare_proposal_data(
+pub fn prepare_proposal_data(
     test: &setup::Test,
+    id: u64,
     source: Address,
     data: impl serde::Serialize,
     start_epoch: u64,
 ) -> PathBuf {
     let valid_proposal_json = json!({
         "proposal": {
+            "id": id,
             "content": {
                 "title": "TheTitle",
                 "authors": "test@test.com",

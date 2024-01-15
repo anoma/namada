@@ -61,10 +61,10 @@ use namada::ledger::queries::{
 };
 use namada::ledger::storage_api::StorageRead;
 use namada::proto::{Code, Data, Section, Signature, Tx};
-use namada::tendermint::Hash;
 use namada::tendermint_rpc::{self};
 use namada::types::address::InternalAddress;
 use namada::types::chain::ChainId;
+use namada::types::hash::Hash;
 use namada::types::io::StdIo;
 use namada::types::masp::{
     ExtendedViewingKey, PaymentAddress, TransferSource, TransferTarget,
@@ -125,6 +125,9 @@ static SHELL_INIT: Once = Once::new();
 
 pub struct BenchShell {
     pub inner: Shell,
+    // Cache of the masp transactions in the last block committed, the tx index
+    // coincides with the index in this collection
+    pub last_block_masp_txs: Vec<Tx>,
     // NOTE: Temporary directory should be dropped last since Shell need to
     // flush data on drop
     tempdir: TempDir,
@@ -158,7 +161,7 @@ impl Default for BenchShell {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path().canonicalize().unwrap();
 
-        let mut shell = Shell::new(
+        let shell = Shell::new(
             config::Ledger::new(path, Default::default(), TendermintMode::Full),
             WASM_DIR.into(),
             sender,
@@ -167,8 +170,13 @@ impl Default for BenchShell {
             50 * 1024 * 1024, // 50 kiB
             50 * 1024 * 1024, // 50 kiB
         );
+        let mut bench_shell = BenchShell {
+            inner: shell,
+            last_block_masp_txs: vec![],
+            tempdir,
+        };
 
-        shell
+        bench_shell
             .init_chain(
                 InitChain {
                     time: Timestamp {
@@ -208,7 +216,7 @@ impl Default for BenchShell {
             )
             .unwrap();
         // Commit tx hashes to storage
-        shell.commit();
+        bench_shell.commit_block();
 
         // Bond from Albert to validator
         let bond = Bond {
@@ -217,12 +225,8 @@ impl Default for BenchShell {
             source: Some(defaults::albert_address()),
         };
         let params =
-            proof_of_stake::storage::read_pos_params(&shell.wl_storage)
+            proof_of_stake::storage::read_pos_params(&bench_shell.wl_storage)
                 .unwrap();
-        let mut bench_shell = BenchShell {
-            inner: shell,
-            tempdir,
-        };
         let signed_tx = bench_shell.generate_tx(
             TX_BOND_WASM,
             bond,
@@ -244,7 +248,7 @@ impl Default for BenchShell {
         let signed_tx = bench_shell.generate_tx(
             TX_INIT_PROPOSAL_WASM,
             InitProposalData {
-                id: None,
+                id: 0,
                 content: content_section.get_hash(),
                 author: defaults::albert_address(),
                 r#type: ProposalType::Default(None),
@@ -259,7 +263,7 @@ impl Default for BenchShell {
 
         bench_shell.execute_tx(&signed_tx);
         bench_shell.wl_storage.commit_tx();
-        bench_shell.inner.commit();
+        bench_shell.commit_block();
 
         // Advance epoch for pos benches
         for _ in 0..=(params.pipeline_len + params.unbonding_len) {
@@ -468,7 +472,7 @@ impl BenchShell {
         let consensus_state = ConsensusStateType {
             timestamp: now,
             root: CommitmentRoot::from_bytes(&[]),
-            next_validators_hash: Hash::Sha256([0u8; 32]),
+            next_validators_hash: tendermint::Hash::Sha256([0u8; 32]),
         }
         .into();
 
@@ -553,6 +557,21 @@ impl BenchShell {
             .storage
             .write(&channel_key, channel.encode_vec())
             .unwrap();
+    }
+
+    pub fn commit_block(&mut self) {
+        // Update the block height in state to guarantee a valid response to the
+        // client queries
+        self.inner
+            .wl_storage
+            .storage
+            .begin_block(
+                Hash::default().into(),
+                self.inner.wl_storage.storage.get_last_block_height() + 1,
+            )
+            .unwrap();
+
+        self.inner.commit();
     }
 }
 
@@ -725,9 +744,122 @@ impl Client for BenchShell {
     where
         R: tendermint_rpc::SimpleRequest,
     {
-        Ok(R::Output::from(
-            tendermint_rpc::Response::from_string("MOCK RESPONSE").unwrap(),
-        ))
+        unimplemented!(
+            "Arbitrary queries are not implemented in the benchmarks context"
+        );
+    }
+
+    async fn block<H>(
+        &self,
+        height: H,
+    ) -> Result<tendermint_rpc::endpoint::block::Response, tendermint_rpc::Error>
+    where
+        H: Into<tendermint::block::Height> + Send,
+    {
+        // NOTE: atm this is only needed to query blocks at a specific height
+        // for masp transactions
+        let height = BlockHeight(height.into().into());
+
+        // Given the way we setup and run benchmarks, the masp transactions can
+        // only present in the last block, we can mock the previous
+        // responses with an empty set of transactions
+        let last_block_txs = if height
+            == self.inner.wl_storage.storage.get_last_block_height()
+        {
+            self.last_block_masp_txs.clone()
+        } else {
+            vec![]
+        };
+        Ok(tendermint_rpc::endpoint::block::Response {
+            block_id: tendermint::block::Id {
+                hash: tendermint::Hash::None,
+                part_set_header: tendermint::block::parts::Header::default(),
+            },
+            block: tendermint::block::Block::new(
+                tendermint::block::Header {
+                    version: tendermint::block::header::Version {
+                        block: 0,
+                        app: 0,
+                    },
+                    chain_id: self
+                        .inner
+                        .chain_id
+                        .to_string()
+                        .try_into()
+                        .unwrap(),
+                    height: 1u32.into(),
+                    time: tendermint::Time::now(),
+                    last_block_id: None,
+                    last_commit_hash: None,
+                    data_hash: None,
+                    validators_hash: tendermint::Hash::None,
+                    next_validators_hash: tendermint::Hash::None,
+                    consensus_hash: tendermint::Hash::None,
+                    app_hash: tendermint::AppHash::default(),
+                    last_results_hash: None,
+                    evidence_hash: None,
+                    proposer_address: tendermint::account::Id::new([0u8; 20]),
+                },
+                last_block_txs.into_iter().map(|tx| tx.to_bytes()).collect(),
+                tendermint::evidence::List::default(),
+                None,
+            )
+            .unwrap(),
+        })
+    }
+
+    async fn block_results<H>(
+        &self,
+        height: H,
+    ) -> Result<
+        tendermint_rpc::endpoint::block_results::Response,
+        tendermint_rpc::Error,
+    >
+    where
+        H: Into<namada::tendermint::block::Height> + Send,
+    {
+        // NOTE: atm this is only needed to query block results at a specific
+        // height for masp transactions
+        let height = height.into();
+
+        // We can expect all the masp tranfers to have happened only in the last
+        // block
+        let end_block_events = if height.value()
+            == self.inner.wl_storage.storage.get_last_block_height().0
+        {
+            Some(
+                self.last_block_masp_txs
+                    .iter()
+                    .enumerate()
+                    .map(|(idx, _tx)| {
+                        namada::tendermint::abci::Event {
+                            kind: "applied".to_string(),
+                            // Mock only the masp attribute
+                            attributes: vec![
+                                namada::tendermint::abci::EventAttribute {
+                                    key: "is_valid_masp_tx".to_string(),
+                                    value: format!("{}", idx),
+                                    index: true,
+                                },
+                            ],
+                        }
+                    })
+                    .collect(),
+            )
+        } else {
+            None
+        };
+
+        Ok(tendermint_rpc::endpoint::block_results::Response {
+            height,
+            txs_results: None,
+            finalize_block_events: vec![],
+            begin_block_events: None,
+            end_block_events,
+            validator_updates: vec![],
+            consensus_param_updates: None,
+            app_hash: namada::tendermint::hash::AppHash::default(),
+        })
     }
 }
 

@@ -4,6 +4,9 @@
 use data_encoding::HEXUPPER;
 use namada::core::hints;
 use namada::core::ledger::storage::WlStorage;
+use namada::eth_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
+use namada::eth_bridge::protocol::validation::ethereum_events::validate_eth_events_vext;
+use namada::eth_bridge::protocol::validation::validator_set_update::validate_valset_upd_vext;
 use namada::ledger::pos::PosQueries;
 use namada::ledger::protocol::get_fee_unshielding_transaction;
 use namada::ledger::storage::TempWlStorage;
@@ -13,7 +16,6 @@ use namada::types::internal::TxInQueue;
 use namada::types::transaction::protocol::{
     ethereum_tx_data_variants, ProtocolTxType,
 };
-use namada_sdk::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 
 use super::block_alloc::{BlockSpace, EncryptedTxsBins};
 use super::*;
@@ -203,33 +205,6 @@ where
         (tx_results, metadata)
     }
 
-    /// Validates a list of vote extensions, included in PrepareProposal.
-    ///
-    /// If a vote extension is [`Some`], then it was validated properly,
-    /// and the voting power of the validator who signed it is considered
-    /// in the sum of the total voting power of all received vote extensions.
-    ///
-    /// At least 2/3 of validators by voting power must have included vote
-    /// extensions for this function to consider a proposal valid.
-    fn validate_vexts_in_proposal<I>(&self, mut vote_extensions: I) -> TxResult
-    where
-        I: Iterator<Item = Option<namada::types::token::Amount>>,
-    {
-        if vote_extensions.all(|maybe_ext| maybe_ext.is_some()) {
-            TxResult {
-                code: ResultCode::Ok.into(),
-                info: "Process proposal accepted this transaction".into(),
-            }
-        } else {
-            TxResult {
-                code: ResultCode::InvalidVoteExtension.into(),
-                info: "Process proposal rejected this proposal because at \
-                       least one of the vote extensions included was invalid."
-                    .into(),
-            }
-        }
-    }
-
     /// Checks if the Tx can be deserialized from bytes. Checks the fees and
     /// signatures of the fee payer for a transaction if it is a wrapper tx.
     ///
@@ -373,8 +348,9 @@ where
                         ethereum_tx_data_variants::EthEventsVext::try_from(&tx)
                             .map_err(|err| err.to_string())
                             .and_then(|ext| {
-                                self.validate_eth_events_vext_and_get_it_back(
-                                    ext,
+                                validate_eth_events_vext(
+                                    &self.wl_storage,
+                                    &ext,
                                     self.wl_storage
                                         .storage
                                         .get_last_block_height(),
@@ -400,8 +376,9 @@ where
                         ethereum_tx_data_variants::BridgePoolVext::try_from(&tx)
                             .map_err(|err| err.to_string())
                             .and_then(|ext| {
-                                self.validate_bp_roots_vext_and_get_it_back(
-                                    ext,
+                                validate_bp_roots_vext(
+                                    &self.wl_storage,
+                                    &ext,
                                     self.wl_storage
                                         .storage
                                         .get_last_block_height(),
@@ -429,8 +406,9 @@ where
                         )
                         .map_err(|err| err.to_string())
                         .and_then(|ext| {
-                            self.validate_valset_upd_vext_and_get_it_back(
-                                ext,
+                            validate_valset_upd_vext(
+                                &self.wl_storage,
+                                &ext,
                                 // n.b. only accept validator set updates
                                 // issued at
                                 // the current epoch (signing off on the
@@ -458,67 +436,16 @@ where
                             }
                         })
                     }
-                    ProtocolTxType::EthereumEvents => {
-                        let digest =
-                            ethereum_tx_data_variants::EthereumEvents::try_from(
-                                &tx,
-                            )
-                            .unwrap();
-                        let extensions = digest.decompress(
-                            self.wl_storage.storage.get_last_block_height(),
-                        );
-                        let valid_extensions = self
-                            .validate_eth_events_vext_list(extensions)
-                            .map(|maybe_ext| {
-                                maybe_ext.ok().map(|(power, _)| power)
-                            });
-
-                        self.validate_vexts_in_proposal(valid_extensions)
-                    }
-                    ProtocolTxType::BridgePool => {
-                        let digest =
-                            ethereum_tx_data_variants::BridgePool::try_from(
-                                &tx,
-                            )
-                            .unwrap();
-                        let valid_extensions = self
-                            .validate_bp_roots_vext_list(digest)
-                            .map(|maybe_ext| {
-                                maybe_ext.ok().map(|(power, _)| power)
-                            });
-                        self.validate_vexts_in_proposal(valid_extensions)
-                    }
-                    ProtocolTxType::ValidatorSetUpdate => {
-                        let digest =
-                            ethereum_tx_data_variants::ValidatorSetUpdate::try_from(
-                                &tx,
-                            )
-                            .unwrap();
-                        if !self
-                            .wl_storage
-                            .ethbridge_queries()
-                            .must_send_valset_upd(SendValsetUpd::AtPrevHeight)
-                        {
-                            return TxResult {
-                                code: ResultCode::InvalidVoteExtension.into(),
-                                info: "Process proposal rejected a validator \
-                                       set update vote extension issued at an \
-                                       invalid block height"
-                                    .into(),
-                            };
-                        }
-
-                        let extensions = digest.decompress(
-                            self.wl_storage.storage.get_current_epoch().0,
-                        );
-                        let valid_extensions = self
-                            .validate_valset_upd_vext_list(extensions)
-                            .map(|maybe_ext| {
-                                maybe_ext.ok().map(|(power, _)| power)
-                            });
-
-                        self.validate_vexts_in_proposal(valid_extensions)
-                    }
+                    ProtocolTxType::EthereumEvents
+                    | ProtocolTxType::BridgePool
+                    | ProtocolTxType::ValidatorSetUpdate => TxResult {
+                        code: ResultCode::InvalidVoteExtension.into(),
+                        info: "Process proposal rejected this proposal \
+                               because one of the included vote extensions \
+                               was invalid: ABCI++ code paths are unreachable \
+                               in Namada"
+                            .to_string(),
+                    },
                 }
             }
             TxType::Decrypted(tx_header) => {

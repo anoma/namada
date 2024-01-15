@@ -8,9 +8,9 @@ use crate::ledger::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
 use crate::ledger::governance::storage::proposal::{
-    AddRemove, PGFAction, PGFTarget, ProposalType,
+    AddRemove, PGFAction, ProposalType,
 };
-use crate::ledger::governance::storage::vote::StorageProposalVote;
+use crate::ledger::governance::storage::vote::ProposalVote;
 use crate::types::address::Address;
 use crate::types::hash::Hash;
 use crate::types::storage::Epoch;
@@ -34,7 +34,7 @@ pub enum ProposalError {
 )]
 pub struct InitProposalData {
     /// The proposal id
-    pub id: Option<u64>,
+    pub id: u64,
     /// The proposal content
     pub content: Hash,
     /// The proposal author address
@@ -73,7 +73,7 @@ pub struct VoteProposalData {
     /// The proposal id
     pub id: u64,
     /// The proposal vote
-    pub vote: StorageProposalVote,
+    pub vote: ProposalVote,
     /// The proposal author address
     pub voter: Address,
     /// Delegator addresses
@@ -124,12 +124,8 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
             .continuous
             .iter()
             .cloned()
-            .map(|funding| {
-                let target = PGFTarget {
-                    target: funding.address,
-                    amount: funding.amount,
-                };
-                if funding.amount.is_zero() {
+            .map(|target| {
+                if target.amount().is_zero() {
                     PGFAction::Continuous(AddRemove::Remove(target))
                 } else {
                     PGFAction::Continuous(AddRemove::Add(target))
@@ -142,13 +138,7 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
             .retro
             .iter()
             .cloned()
-            .map(|funding| {
-                let target = PGFTarget {
-                    target: funding.address,
-                    amount: funding.amount,
-                };
-                PGFAction::Retro(target)
-            })
+            .map(PGFAction::Retro)
             .collect::<Vec<PGFAction>>();
 
         let extra_data = [continuous_fundings, retro_fundings].concat();
@@ -180,7 +170,7 @@ pub mod tests {
     prop_compose! {
         /// Generate a proposal initialization
         pub fn arb_init_proposal()(
-            id: Option<u64>,
+            id: u64,
             content in arb_hash(),
             author in arb_non_internal_address(),
             r#type in arb_proposal_type(),

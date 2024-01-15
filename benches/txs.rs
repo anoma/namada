@@ -3,9 +3,7 @@ use std::str::FromStr;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use namada::core::ledger::governance::storage::proposal::ProposalType;
-use namada::core::ledger::governance::storage::vote::{
-    StorageProposalVote, VoteType,
-};
+use namada::core::ledger::governance::storage::vote::ProposalVote;
 use namada::core::ledger::pgf::storage::steward::StewardDetail;
 use namada::core::types::key::{
     common, SecretKey as SecretKeyInterface, SigScheme,
@@ -91,7 +89,9 @@ fn transfer(c: &mut Criterion) {
                         );
                     shielded_ctx.shell.execute_tx(&shield_tx);
                     shielded_ctx.shell.wl_storage.commit_tx();
-                    shielded_ctx.shell.commit();
+                    shielded_ctx.shell.commit_block();
+                    // Cache the masp tx so that it can be returned when queried
+                    shielded_ctx.shell.last_block_masp_txs.push(shield_tx);
 
                     let (shielded_ctx, signed_tx) = match bench_name {
                         "transparent" => shielded_ctx.generate_masp_tx(
@@ -464,7 +464,7 @@ fn init_proposal(c: &mut Criterion) {
                             shell.generate_tx(
                                 TX_INIT_PROPOSAL_WASM,
                                 InitProposalData {
-                                    id: None,
+                                    id: 0,
                                     content: content_section.get_hash(),
                                     author: defaults::albert_address(),
                                     r#type: ProposalType::Default(None),
@@ -514,7 +514,7 @@ fn init_proposal(c: &mut Criterion) {
                             shell.generate_tx(
                                 TX_INIT_PROPOSAL_WASM,
                                 InitProposalData {
-                                    id: Some(1),
+                                    id: 1,
                                     content: content_section.get_hash(),
                                     author: defaults::albert_address(),
                                     r#type: ProposalType::Default(Some(
@@ -550,7 +550,7 @@ fn vote_proposal(c: &mut Criterion) {
         TX_VOTE_PROPOSAL_WASM,
         VoteProposalData {
             id: 0,
-            vote: StorageProposalVote::Yay(VoteType::Default),
+            vote: ProposalVote::Yay,
             voter: defaults::albert_address(),
             delegations: vec![defaults::validator_address()],
         },
@@ -563,7 +563,7 @@ fn vote_proposal(c: &mut Criterion) {
         TX_VOTE_PROPOSAL_WASM,
         VoteProposalData {
             id: 0,
-            vote: StorageProposalVote::Nay,
+            vote: ProposalVote::Nay,
             voter: defaults::validator_address(),
             delegations: vec![],
         },
@@ -627,6 +627,7 @@ fn become_validator(c: &mut Criterion) {
         description: None,
         website: None,
         discord_handle: None,
+        avatar: None,
     };
     let tx = shell.generate_tx(
         TX_BECOME_VALIDATOR_WASM,
@@ -722,6 +723,7 @@ fn change_validator_metadata(c: &mut Criterion) {
         description: Some("I will change this piece of data".to_string()),
         website: None,
         discord_handle: None,
+        avatar: None,
         commission_rate: None,
     };
 
@@ -850,7 +852,7 @@ fn unjail_validator(c: &mut Criterion) {
                 .unwrap();
 
                 shell.wl_storage.commit_tx();
-                shell.commit();
+                shell.commit_block();
                 // Advance by slash epoch offset epochs
                 for _ in 0..=pos_params.slash_processing_epoch_offset() {
                     shell.advance_epoch();
@@ -1008,7 +1010,7 @@ fn reactivate_validator(c: &mut Criterion) {
                 .unwrap();
 
                 shell.wl_storage.commit_tx();
-                shell.commit();
+                shell.commit_block();
                 // Advance by slash epoch offset epochs
                 for _ in 0..=pos_params.pipeline_len {
                     shell.advance_epoch();

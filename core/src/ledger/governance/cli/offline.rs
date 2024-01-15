@@ -6,8 +6,8 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use serde::{Deserialize, Serialize};
 
-use super::onchain::ProposalVote;
 use super::validation::{is_valid_tally_epoch, ProposalValidation};
+use crate::ledger::governance::storage::vote::ProposalVote;
 use crate::proto::SignatureIndex;
 use crate::types::account::AccountPublicKeysMap;
 use crate::types::address::Address;
@@ -249,11 +249,6 @@ impl OfflineVote {
     /// Check if the vote is abstain
     pub fn is_abstain(&self) -> bool {
         self.vote.is_abstain()
-    }
-
-    /// Check if two votes are equal
-    pub fn is_same_side(&self, other: &Self) -> bool {
-        self.vote.is_same_side(&other.vote)
     }
 
     /// compute the hash of a proposal
