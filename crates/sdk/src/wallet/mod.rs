@@ -29,9 +29,9 @@ pub use self::keys::{DecryptionError, StoredKeypair};
 pub use self::store::{ConfirmationResponse, ValidatorData, ValidatorKeys};
 use crate::wallet::store::derive_hd_secret_key;
 
-/// Errors of key generation / recovery
+/// Errors of key generation / derivation
 #[derive(Error, Debug)]
-pub enum GenRestoreKeyError {
+pub enum GenDeriveKeyError {
     /// Derivation path parse error
     #[error("Derivation path parse error")]
     DerivationPathError(DerivationPathError),
@@ -55,7 +55,7 @@ pub trait WalletIo: Sized + Clone {
     fn generate_mnemonic_code(
         mnemonic_type: MnemonicType,
         rng: &mut Self::Rng,
-    ) -> Result<Mnemonic, GenRestoreKeyError> {
+    ) -> Result<Mnemonic, GenDeriveKeyError> {
         const BITS_PER_BYTE: usize = 8;
 
         // generate random mnemonic
@@ -79,7 +79,7 @@ pub trait WalletIo: Sized + Clone {
     }
 
     /// Read mnemonic code from the file/env/stdin.
-    fn read_mnemonic_code() -> Result<Mnemonic, GenRestoreKeyError> {
+    fn read_mnemonic_code() -> Result<Mnemonic, GenDeriveKeyError> {
         panic!("attempted to prompt for alias in non-interactive mode");
     }
 
@@ -537,7 +537,7 @@ impl<U: WalletIo> Wallet<U> {
         derivation_path: DerivationPath,
         mnemonic_passphrase: Option<(Mnemonic, Zeroizing<String>)>,
         password: Option<Zeroizing<String>>,
-    ) -> Result<(String, common::SecretKey), GenRestoreKeyError> {
+    ) -> Result<(String, common::SecretKey), GenDeriveKeyError> {
         let (mnemonic, passphrase) =
             if let Some(mnemonic_passphrase) = mnemonic_passphrase {
                 mnemonic_passphrase
@@ -596,7 +596,7 @@ impl<U: WalletIo> Wallet<U> {
         alias_force: bool,
         password: Option<Zeroizing<String>>,
         rng: &mut (impl CryptoRng + RngCore),
-    ) -> Result<(String, common::SecretKey), GenRestoreKeyError> {
+    ) -> Result<(String, common::SecretKey), GenDeriveKeyError> {
         let sk = gen_secret_key(scheme, rng);
         self.insert_keypair(
             alias.unwrap_or_default(),
@@ -614,7 +614,7 @@ impl<U: WalletIo> Wallet<U> {
     pub fn gen_hd_seed(
         passphrase: Option<Zeroizing<String>>,
         rng: &mut U::Rng,
-    ) -> Result<(Mnemonic, Seed), GenRestoreKeyError> {
+    ) -> Result<(Mnemonic, Seed), GenDeriveKeyError> {
         const MNEMONIC_TYPE: MnemonicType = MnemonicType::Words24;
         let mnemonic = U::generate_mnemonic_code(MNEMONIC_TYPE, rng)?;
         println!(
@@ -646,7 +646,7 @@ impl<U: WalletIo> Wallet<U> {
         seed: Seed,
         derivation_path: DerivationPath,
         password: Option<Zeroizing<String>>,
-    ) -> Result<(String, common::SecretKey), GenRestoreKeyError> {
+    ) -> Result<(String, common::SecretKey), GenDeriveKeyError> {
         let sk = derive_hd_secret_key(
             scheme,
             seed.as_bytes(),
@@ -894,7 +894,7 @@ impl<U: WalletIo> Wallet<U> {
         password: Option<Zeroizing<String>>,
         address: Option<Address>,
         path: Option<DerivationPath>,
-    ) -> Result<String, GenRestoreKeyError> {
+    ) -> Result<String, GenDeriveKeyError> {
         self.store
             .insert_keypair::<U>(
                 alias.into(),
@@ -909,7 +909,7 @@ impl<U: WalletIo> Wallet<U> {
                 self.decrypted_key_cache.insert(alias.clone(), sk);
                 alias.into()
             })
-            .ok_or(GenRestoreKeyError::KeyStorageError)
+            .ok_or(GenDeriveKeyError::KeyStorageError)
     }
 
     /// Insert a new public key with the given alias. If the alias is already
