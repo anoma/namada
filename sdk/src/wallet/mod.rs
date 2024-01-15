@@ -886,6 +886,11 @@ impl<U: WalletIo> Wallet<U> {
             .map(Into::into)
     }
 
+    /// Add a new keypair with the given alias. If the alias is already used,
+    /// will ask whether the existing alias should be replaced, a different
+    /// alias is desired, or the alias creation should be cancelled. Return
+    /// the chosen alias if the keypair has been added, otherwise return
+    /// nothing.
     pub fn insert_keypair(
         &mut self,
         alias: String,
