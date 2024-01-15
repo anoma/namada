@@ -7,7 +7,7 @@ use thiserror::Error;
 
 use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use crate::ledger::governance::cli::onchain::{
-    PgfAction, PgfContinous, PgfRetro, PgfSteward, StewardsUpdate,
+    PgfAction, PgfContinuous, PgfRetro, PgfSteward, StewardsUpdate,
 };
 use crate::ledger::governance::utils::{ProposalStatus, TallyType};
 use crate::ledger::storage_api::token::Amount;
@@ -22,7 +22,7 @@ pub enum ProposalTypeError {
     InvalidProposalType,
 }
 
-/// Storage structure for pgf fundings
+/// Storage structure for pgf funding
 #[derive(
     Debug,
     Clone,
@@ -286,8 +286,8 @@ impl TryFrom<PgfSteward> for AddRemove<Address> {
     }
 }
 
-impl From<PgfContinous> for PGFAction {
-    fn from(value: PgfContinous) -> Self {
+impl From<PgfContinuous> for PGFAction {
+    fn from(value: PgfContinuous) -> Self {
         match value.action {
             PgfAction::Add => {
                 PGFAction::Continuous(AddRemove::Add(value.target))
@@ -306,7 +306,7 @@ impl From<PgfRetro> for PGFAction {
 }
 
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
-/// Proposal rappresentation when fetched from the storage
+/// Proposal representation when fetched from the storage
 pub struct StorageProposal {
     /// The proposal id
     pub id: u64,

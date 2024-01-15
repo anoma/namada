@@ -214,12 +214,12 @@ impl Display for ProposalResult {
     }
 }
 
-/// /// General rappresentation of a vote
+/// General representation of a vote
 #[derive(Debug)]
 pub enum TallyVote {
-    /// Rappresent a vote for a proposal onchain
+    /// Represent a vote for a proposal onchain
     OnChain(ProposalVote),
-    /// Rappresent a vote for a proposal offline
+    /// Represent a vote for a proposal offline
     Offline(OfflineVote),
 }
 

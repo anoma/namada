@@ -36,7 +36,7 @@ Namada 0.30.0 is a minor release that primarily upgrades the MASP and WASM VM me
 - Added validator's consensus key look-up to `client find-validator`
   command, which now also accepts a native validator address.
   ([\#2368](https://github.com/anoma/namada/pull/2368))
-- Fix the function  to more accurately account for slashes.
+- Fix the function `bond_amount` to more accurately account for slashes.
   ([\#2374](https://github.com/anoma/namada/pull/2374))
 - The MASP VP now validates the tx expiration.
   ([\#2375](https://github.com/anoma/namada/pull/2375))

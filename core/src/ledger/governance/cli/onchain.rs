@@ -272,7 +272,7 @@ impl PgfAction {
     }
 }
 
-/// Pgf fundings
+/// Pgf funding
 #[derive(
     Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
@@ -283,11 +283,11 @@ pub struct PgfFunding {
     pub retro: Vec<PGFTarget>,
 }
 
-/// Pgf continous funding
+/// Pgf continuous funding
 #[derive(
     Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
-pub struct PgfContinous {
+pub struct PgfContinuous {
     /// Pgf target
     pub target: PGFTarget,
     /// Pgf action
