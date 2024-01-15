@@ -2,6 +2,7 @@ use core::fmt;
 use std::str::FromStr;
 
 use derivation_path::{ChildIndex, DerivationPath as DerivationPathInner};
+use masp_primitives::zip32;
 use namada_core::types::key::SchemeType;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
@@ -69,6 +70,21 @@ impl DerivationPath {
         Self::new(indexes)
     }
 
+    /// Key path according to zip-0032
+    /// https://zips.z.cash/zip-0032#sapling-key-path
+    fn zip32(account: u32, address: Option<u32>) -> Self {
+        const ZIP32_PURPOSE: u32 = 32;
+        let mut indexes = vec![
+            ChildIndex::Hardened(ZIP32_PURPOSE),
+            ChildIndex::Hardened(NAMADA_COIN_TYPE),
+            ChildIndex::Hardened(account),
+        ];
+        if let Some(address) = address {
+            indexes.push(ChildIndex::Normal(address));
+        }
+        Self::new(indexes)
+    }
+
     fn hardened(&self, scheme: SchemeType) -> Self {
         Self::new(
             self.0
@@ -84,6 +100,10 @@ impl DerivationPath {
     pub fn default_for_transparent_scheme(scheme: SchemeType) -> Self {
         let path = Self::bip44(scheme, 0, 0, 0);
         path.hardened(scheme)
+    }
+
+    pub fn default_for_shielded() -> Self {
+        Self::zip32(0, None)
     }
 
     pub fn from_path_string(path: &str) -> Result<Self, DerivationPathError> {
@@ -137,6 +157,18 @@ impl<'de> Deserialize<'de> for DerivationPath {
 impl IntoHDeriveDerivationPath for DerivationPath {
     fn into(self) -> Result<HDeriveDerivationPath, HDeriveError> {
         HDeriveDerivationPath::from_str(&self.0.to_string())
+    }
+}
+
+impl From<DerivationPath> for Vec<zip32::ChildIndex> {
+    fn from(path: DerivationPath) -> Vec<zip32::ChildIndex> {
+        path.0
+            .into_iter()
+            .map(|idx| match idx {
+                ChildIndex::Normal(idx) => zip32::ChildIndex::NonHardened(*idx),
+                ChildIndex::Hardened(idx) => zip32::ChildIndex::Hardened(*idx),
+            })
+            .collect()
     }
 }
 
