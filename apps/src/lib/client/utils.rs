@@ -940,9 +940,12 @@ pub fn load_pre_genesis_wallet_or_exit(
     base_dir: &Path,
 ) -> (Wallet<CliWalletUtils>, PathBuf) {
     match try_load_pre_genesis_wallet(base_dir) {
-        Ok(wallet) => wallet,
+        Ok(wallet) => {wallet}
         Err(e) => {
-            eprintln!("Error loading the wallet:\n {}", e.to_string());
+            eprintln!(
+                "Error loading the wallet:\n {}",
+                 e.to_string()
+             );
             safe_exit(1)
         }
     }
