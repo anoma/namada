@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 use bimap::BiBTreeMap;
 use itertools::Itertools;
-use masp_primitives::zip32::ExtendedFullViewingKey;
+use masp_primitives::zip32;
 use namada_core::types::address::{Address, ImplicitAddress};
 use namada_core::types::key::*;
 use namada_core::types::masp::{
@@ -394,7 +394,8 @@ impl Store {
             StoredKeypair::new(spendkey, password);
         self.spend_keys.insert(alias.clone(), spendkey_to_store);
         // Simultaneously add the derived viewing key to ease balance viewing
-        let viewkey = ExtendedFullViewingKey::from(&spendkey.into()).into();
+        let viewkey =
+            zip32::ExtendedFullViewingKey::from(&spendkey.into()).into();
         self.view_keys.insert(alias.clone(), viewkey);
         Some(alias)
     }
