@@ -72,6 +72,8 @@ pub enum TxRuntimeError {
     MissingTxData,
     #[error("IBC: {0}")]
     Ibc(#[from] namada_ibc::Error),
+    #[error("No value found in result buffer")]
+    NoValInResultBuffer,
 }
 
 /// Result of a tx host env fn call
@@ -681,7 +683,9 @@ where
     CA: WasmCacheAccess,
 {
     let result_buffer = unsafe { env.ctx.result_buffer.get() };
-    let value = result_buffer.take().unwrap();
+    let value = result_buffer
+        .take()
+        .ok_or(TxRuntimeError::NoValInResultBuffer)?;
     let gas = env
         .memory
         .write_bytes(result_ptr, value)
