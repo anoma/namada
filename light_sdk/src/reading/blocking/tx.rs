@@ -60,7 +60,7 @@ pub fn query_tx_response(
 }
 
 /// Query the status of a given transaction.
-pub async fn query_tx_status(
+pub fn query_tx_status(
     tendermint_addr: &str,
     tx_hash: &str,
 ) -> Result<Event, Error> {

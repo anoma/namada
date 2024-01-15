@@ -12,20 +12,19 @@ use namada_sdk::queries::vp::pos::EnrichedBondsAndUnbondsDetails;
 use super::*;
 
 /// Query the epoch of the last committed block
-pub fn query_epoch(tendermint_addr: &str) -> Result<Epoch, Error> {
+pub async fn query_epoch(tendermint_addr: &str) -> Result<Epoch, Error> {
     let client = HttpClient::new(
         TendermintAddress::from_str(tendermint_addr)
             .map_err(|e| Error::Other(e.to_string()))?,
     )
     .map_err(|e| Error::Other(e.to_string()))?;
-    let rt = Runtime::new().unwrap();
-    rt.block_on(rpc::query_epoch(&client))
+    rpc::query_epoch(&client).await
 }
 
 /// Query the epoch of the given block height, if it exists.
 /// Will return none if the input block height is greater than
 /// the latest committed block height.
-pub fn query_epoch_at_height(
+pub async fn query_epoch_at_height(
     tendermint_addr: &str,
     height: BlockHeight,
 ) -> Result<Option<Epoch>, Error> {
@@ -34,12 +33,11 @@ pub fn query_epoch_at_height(
             .map_err(|e| Error::Other(e.to_string()))?,
     )
     .map_err(|e| Error::Other(e.to_string()))?;
-    let rt = Runtime::new().unwrap();
-    rt.block_on(rpc::query_epoch_at_height(&client, height))
+    rpc::query_epoch_at_height(&client, height).await
 }
 
 /// Check if the given address is a known validator.
-pub fn is_validator(
+pub async fn is_validator(
     tendermint_addr: &str,
     address: &Address,
 ) -> Result<bool, Error> {
@@ -48,12 +46,11 @@ pub fn is_validator(
             .map_err(|e| Error::Other(e.to_string()))?,
     )
     .map_err(|e| Error::Other(e.to_string()))?;
-    let rt = Runtime::new().unwrap();
-    rt.block_on(rpc::is_validator(&client, address))
+    rpc::is_validator(&client, address).await
 }
 
 /// Check if a given address is a known delegator
-pub fn is_delegator(
+pub async fn is_delegator(
     tendermint_addr: &str,
     address: &Address,
 ) -> Result<bool, Error> {
@@ -62,12 +59,11 @@ pub fn is_delegator(
             .map_err(|e| Error::Other(e.to_string()))?,
     )
     .map_err(|e| Error::Other(e.to_string()))?;
-    let rt = Runtime::new().unwrap();
-    rt.block_on(rpc::is_delegator(&client, address))
+    rpc::is_delegator(&client, address).await
 }
 
 /// Check if a given address is a known delegator at the given epoch
-pub fn is_delegator_at(
+pub async fn is_delegator_at(
     tendermint_addr: &str,
     address: &Address,
     epoch: Epoch,
@@ -77,12 +73,11 @@ pub fn is_delegator_at(
             .map_err(|e| Error::Other(e.to_string()))?,
     )
     .map_err(|e| Error::Other(e.to_string()))?;
-    let rt = Runtime::new().unwrap();
-    rt.block_on(rpc::is_delegator_at(&client, address, epoch))
+    rpc::is_delegator_at(&client, address, epoch).await
 }
 
 /// Get the set of consensus keys registered in the network
-pub fn get_consensus_keys(
+pub async fn get_consensus_keys(
     tendermint_addr: &str,
 ) -> Result<BTreeSet<common::PublicKey>, Error> {
     let client = HttpClient::new(
@@ -90,23 +85,21 @@ pub fn get_consensus_keys(
             .map_err(|e| Error::Other(e.to_string()))?,
     )
     .map_err(|e| Error::Other(e.to_string()))?;
-    let rt = Runtime::new().unwrap();
-    rt.block_on(rpc::get_consensus_keys(&client))
+    rpc::get_consensus_keys(&client).await
 }
 
 /// Get the PoS parameters
-pub fn get_pos_params(tendermint_addr: &str) -> Result<PosParams, Error> {
+pub async fn get_pos_params(tendermint_addr: &str) -> Result<PosParams, Error> {
     let client = HttpClient::new(
         TendermintAddress::from_str(tendermint_addr)
             .map_err(|e| Error::Other(e.to_string()))?,
     )
     .map_err(|e| Error::Other(e.to_string()))?;
-    let rt = Runtime::new().unwrap();
-    rt.block_on(rpc::get_pos_params(&client))
+    rpc::get_pos_params(&client).await
 }
 
 /// Get all validators in the given epoch
-pub fn get_all_validators(
+pub async fn get_all_validators(
     tendermint_addr: &str,
     epoch: Epoch,
 ) -> Result<HashSet<Address>, Error> {
@@ -115,12 +108,11 @@ pub fn get_all_validators(
             .map_err(|e| Error::Other(e.to_string()))?,
     )
     .map_err(|e| Error::Other(e.to_string()))?;
-    let rt = Runtime::new().unwrap();
-    rt.block_on(rpc::get_all_validators(&client, epoch))
+    rpc::get_all_validators(&client, epoch).await
 }
 
 /// Get the total staked tokens in the given epoch
-pub fn get_total_staked_tokens(
+pub async fn get_total_staked_tokens(
     tendermint_addr: &str,
     epoch: Epoch,
 ) -> Result<token::Amount, Error> {
@@ -129,12 +121,11 @@ pub fn get_total_staked_tokens(
             .map_err(|e| Error::Other(e.to_string()))?,
     )
     .map_err(|e| Error::Other(e.to_string()))?;
-    let rt = Runtime::new().unwrap();
-    rt.block_on(rpc::get_total_staked_tokens(&client, epoch))
+    rpc::get_total_staked_tokens(&client, epoch).await
 }
 
 /// Get the given validator's stake at the given epoch
-pub fn get_validator_stake(
+pub async fn get_validator_stake(
     tendermint_addr: &str,
     epoch: Epoch,
     validator: &Address,
@@ -144,12 +135,11 @@ pub fn get_validator_stake(
             .map_err(|e| Error::Other(e.to_string()))?,
     )
     .map_err(|e| Error::Other(e.to_string()))?;
-    let rt = Runtime::new().unwrap();
-    rt.block_on(rpc::get_validator_stake(&client, epoch, validator))
+    rpc::get_validator_stake(&client, epoch, validator).await
 }
 
 /// Query and return a validator's state
-pub fn get_validator_state(
+pub async fn get_validator_state(
     tendermint_addr: &str,
     validator: &Address,
     epoch: Option<Epoch>,
@@ -159,12 +149,11 @@ pub fn get_validator_state(
             .map_err(|e| Error::Other(e.to_string()))?,
     )
     .map_err(|e| Error::Other(e.to_string()))?;
-    let rt = Runtime::new().unwrap();
-    rt.block_on(rpc::get_validator_state(&client, validator, epoch))
+    rpc::get_validator_state(&client, validator, epoch).await
 }
 
 /// Get the delegator's delegation
-pub fn get_delegators_delegation(
+pub async fn get_delegators_delegation(
     tendermint_addr: &str,
     address: &Address,
 ) -> Result<HashSet<Address>, Error> {
@@ -173,12 +162,11 @@ pub fn get_delegators_delegation(
             .map_err(|e| Error::Other(e.to_string()))?,
     )
     .map_err(|e| Error::Other(e.to_string()))?;
-    let rt = Runtime::new().unwrap();
-    rt.block_on(rpc::get_delegators_delegation(&client, address))
+    rpc::get_delegators_delegation(&client, address).await
 }
 
 /// Get the delegator's delegation at some epoh
-pub fn get_delegators_delegation_at(
+pub async fn get_delegators_delegation_at(
     tendermint_addr: &str,
     address: &Address,
     epoch: Epoch,
@@ -188,13 +176,12 @@ pub fn get_delegators_delegation_at(
             .map_err(|e| Error::Other(e.to_string()))?,
     )
     .map_err(|e| Error::Other(e.to_string()))?;
-    let rt = Runtime::new().unwrap();
-    rt.block_on(rpc::get_delegators_delegation_at(&client, address, epoch))
+    rpc::get_delegators_delegation_at(&client, address, epoch).await
 }
 
 /// Query and return validator's commission rate and max commission rate
 /// change per epoch
-pub fn query_commission_rate(
+pub async fn query_commission_rate(
     tendermint_addr: &str,
     validator: &Address,
     epoch: Option<Epoch>,
@@ -204,13 +191,12 @@ pub fn query_commission_rate(
             .map_err(|e| Error::Other(e.to_string()))?,
     )
     .map_err(|e| Error::Other(e.to_string()))?;
-    let rt = Runtime::new().unwrap();
-    rt.block_on(rpc::query_commission_rate(&client, validator, epoch))
+    rpc::query_commission_rate(&client, validator, epoch).await
 }
 
 /// Query and return validator's metadata, including the commission rate and
 /// max commission rate change
-pub fn query_metadata(
+pub async fn query_metadata(
     tendermint_addr: &str,
     validator: &Address,
     epoch: Option<Epoch>,
@@ -220,13 +206,12 @@ pub fn query_metadata(
             .map_err(|e| Error::Other(e.to_string()))?,
     )
     .map_err(|e| Error::Other(e.to_string()))?;
-    let rt = Runtime::new().unwrap();
-    rt.block_on(rpc::query_metadata(&client, validator, epoch))
+    rpc::query_metadata(&client, validator, epoch).await
 }
 
 /// Query and return the incoming redelegation epoch for a given pair of
 /// source validator and delegator, if there is any.
-pub fn query_incoming_redelegations(
+pub async fn query_incoming_redelegations(
     tendermint_addr: &str,
     src_validator: &Address,
     delegator: &Address,
@@ -236,16 +221,11 @@ pub fn query_incoming_redelegations(
             .map_err(|e| Error::Other(e.to_string()))?,
     )
     .map_err(|e| Error::Other(e.to_string()))?;
-    let rt = Runtime::new().unwrap();
-    rt.block_on(rpc::query_incoming_redelegations(
-        &client,
-        src_validator,
-        delegator,
-    ))
+    rpc::query_incoming_redelegations(&client, src_validator, delegator).await
 }
 
 /// Query a validator's bonds for a given epoch
-pub fn query_bond(
+pub async fn query_bond(
     tendermint_addr: &str,
     source: &Address,
     validator: &Address,
@@ -256,24 +236,11 @@ pub fn query_bond(
             .map_err(|e| Error::Other(e.to_string()))?,
     )
     .map_err(|e| Error::Other(e.to_string()))?;
-    let rt = Runtime::new().unwrap();
-    rt.block_on(rpc::query_bond(&client, source, validator, epoch))
-}
-
-/// Query a validator's unbonds for a given epoch
-pub fn query_and_print_unbonds(
-    tendermint_addr: &str,
-    source: &Address,
-    validator: &Address,
-) -> Result<HashMap<(Epoch, Epoch), token::Amount>, Error> {
-    let rt = Runtime::new().unwrap();
-    rt.block_on(async {
-        query_unbond_with_slashing(tendermint_addr, source, validator)
-    })
+    rpc::query_bond(&client, source, validator, epoch).await
 }
 
 /// Query withdrawable tokens in a validator account for a given epoch
-pub fn query_withdrawable_tokens(
+pub async fn query_withdrawable_tokens(
     tendermint_addr: &str,
     bond_source: &Address,
     validator: &Address,
@@ -284,17 +251,11 @@ pub fn query_withdrawable_tokens(
             .map_err(|e| Error::Other(e.to_string()))?,
     )
     .map_err(|e| Error::Other(e.to_string()))?;
-    let rt = Runtime::new().unwrap();
-    rt.block_on(rpc::query_withdrawable_tokens(
-        &client,
-        bond_source,
-        validator,
-        epoch,
-    ))
+    rpc::query_withdrawable_tokens(&client, bond_source, validator, epoch).await
 }
 
 /// Query all unbonds for a validator, applying slashes
-pub fn query_unbond_with_slashing(
+pub async fn query_unbond_with_slashing(
     tendermint_addr: &str,
     source: &Address,
     validator: &Address,
@@ -304,12 +265,11 @@ pub fn query_unbond_with_slashing(
             .map_err(|e| Error::Other(e.to_string()))?,
     )
     .map_err(|e| Error::Other(e.to_string()))?;
-    let rt = Runtime::new().unwrap();
-    rt.block_on(rpc::query_unbond_with_slashing(&client, source, validator))
+    rpc::query_unbond_with_slashing(&client, source, validator).await
 }
 
 /// Get the bond amount at the given epoch
-pub fn get_bond_amount_at(
+pub async fn get_bond_amount_at(
     tendermint_addr: &str,
     delegator: &Address,
     validator: &Address,
@@ -320,15 +280,12 @@ pub fn get_bond_amount_at(
             .map_err(|e| Error::Other(e.to_string()))?,
     )
     .map_err(|e| Error::Other(e.to_string()))?;
-    let rt = Runtime::new().unwrap();
-    rt.block_on(rpc::get_bond_amount_at(
-        &client, delegator, validator, epoch,
-    ))
+    rpc::get_bond_amount_at(&client, delegator, validator, epoch).await
 }
 
 /// Get bonds and unbonds with all details (slashes and rewards, if any)
 /// grouped by their bond IDs.
-pub fn bonds_and_unbonds(
+pub async fn bonds_and_unbonds(
     tendermint_addr: &str,
     source: &Option<Address>,
     validator: &Option<Address>,
@@ -338,14 +295,13 @@ pub fn bonds_and_unbonds(
             .map_err(|e| Error::Other(e.to_string()))?,
     )
     .map_err(|e| Error::Other(e.to_string()))?;
-    let rt = Runtime::new().unwrap();
-    rt.block_on(rpc::bonds_and_unbonds(&client, source, validator))
+    rpc::bonds_and_unbonds(&client, source, validator).await
 }
 
 /// Get bonds and unbonds with all details (slashes and rewards, if any)
 /// grouped by their bond IDs, enriched with extra information calculated
 /// from the data.
-pub fn enriched_bonds_and_unbonds(
+pub async fn enriched_bonds_and_unbonds(
     tendermint_addr: &str,
     current_epoch: Epoch,
     source: &Option<Address>,
@@ -356,11 +312,6 @@ pub fn enriched_bonds_and_unbonds(
             .map_err(|e| Error::Other(e.to_string()))?,
     )
     .map_err(|e| Error::Other(e.to_string()))?;
-    let rt = Runtime::new().unwrap();
-    rt.block_on(rpc::enriched_bonds_and_unbonds(
-        &client,
-        current_epoch,
-        source,
-        validator,
-    ))
+    rpc::enriched_bonds_and_unbonds(&client, current_epoch, source, validator)
+        .await
 }
