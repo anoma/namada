@@ -12,7 +12,7 @@ pub use namada_sdk::wallet::alias::Alias;
 use namada_sdk::wallet::fs::FsWalletStorage;
 use namada_sdk::wallet::store::Store;
 use namada_sdk::wallet::{
-    ConfirmationResponse, FindKeyError, GenRestoreKeyError, Wallet, WalletIo,
+    ConfirmationResponse, FindKeyError, GenDeriveKeyError, Wallet, WalletIo,
 };
 pub use namada_sdk::wallet::{ValidatorData, ValidatorKeys};
 use rand_core::OsRng;
@@ -85,11 +85,11 @@ impl WalletIo for CliWalletUtils {
         alias.trim().to_owned()
     }
 
-    fn read_mnemonic_code() -> Result<Mnemonic, GenRestoreKeyError> {
+    fn read_mnemonic_code() -> Result<Mnemonic, GenDeriveKeyError> {
         let phrase = get_secure_user_input("Input mnemonic code: ")
-            .map_err(|_| GenRestoreKeyError::MnemonicInputError)?;
+            .map_err(|_| GenDeriveKeyError::MnemonicInputError)?;
         Mnemonic::from_phrase(phrase.as_ref(), Language::English)
-            .map_err(|_| GenRestoreKeyError::MnemonicInputError)
+            .map_err(|_| GenDeriveKeyError::MnemonicInputError)
     }
 
     fn read_mnemonic_passphrase(confirm: bool) -> Zeroizing<String> {
