@@ -352,6 +352,7 @@ fn pgf_over_ibc_with_hermes() -> Result<()> {
         sleep(5);
         epoch = get_epoch(&test_a, &rpc_a).unwrap();
     }
+    sleep(5);
 
     // Check balances after funding over IBC
     check_funded_balances(&port_id_b, &channel_id_b, &test_b)?;
