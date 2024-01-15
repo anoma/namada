@@ -12,6 +12,7 @@ pub mod token;
 pub mod tx;
 pub mod validation;
 
+use bitflags::bitflags;
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 pub use error::{CustomError, Error, OptionExt, Result, ResultExt};
@@ -21,17 +22,33 @@ use crate::types::storage::{
     self, BlockHash, BlockHeight, Epoch, Header, TxIndex,
 };
 
-/// Write actions to help commit_block determine what parts of the storage to
-/// update
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum WriteActions {
-    /// All
-    All,
-    /// Don't add to merkle tree
-    NoMerkl,
-    /// Don't add to diffs or merkle tree
-    NoDiffsOrMerkl,
+bitflags! {
+    /// Write actions to help commit_block determine what parts of the storage to
+    /// update
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub struct WriteOpts: u8 {
+        /// Modify the merkle tree
+        const MERKLIZE = 0b01;
+        /// Write value to the diffs
+        const WRITE_DIFFS = 0b10;
+        /// Neither update the merkle tree nor write to the diffs
+        const NONE = Self::MERKLIZE.bits() & Self::WRITE_DIFFS.bits();
+        /// Both modify the merkle tree and write to diffs
+        const ALL = Self::MERKLIZE.bits() | Self::WRITE_DIFFS.bits();
+    }
 }
+
+// /// Write actions to help commit_block determine what parts of the storage to
+// /// update
+// #[derive(Clone, Debug, PartialEq, Eq)]
+// pub enum WriteOpts {
+//     /// All
+//     All,
+//     /// Don't add to merkle tree
+//     NoMerkl,
+//     /// Don't add to diffs or merkle tree
+//     NoDiffsOrMerkl,
+// }
 
 /// Common storage read interface
 ///
@@ -126,7 +143,7 @@ pub trait StorageWrite {
         val: T,
     ) -> Result<()> {
         let bytes = val.serialize_to_vec();
-        self.write_bytes(key, bytes, WriteActions::All)
+        self.write_bytes(key, bytes, WriteOpts::ALL)
     }
 
     /// Write a value to be encoded with Borsh at the given key to storage.
@@ -138,7 +155,7 @@ pub trait StorageWrite {
         val: T,
     ) -> Result<()> {
         let bytes = val.serialize_to_vec();
-        self.write_bytes(key, bytes, WriteActions::NoMerkl)
+        self.write_bytes(key, bytes, WriteOpts::WRITE_DIFFS)
     }
 
     /// Write a value to be encoded with Borsh at the given key to storage.
@@ -149,7 +166,7 @@ pub trait StorageWrite {
         val: T,
     ) -> Result<()> {
         let bytes = val.serialize_to_vec();
-        self.write_bytes(key, bytes, WriteActions::NoDiffsOrMerkl)
+        self.write_bytes(key, bytes, WriteOpts::NONE)
     }
 
     /// Write a value as bytes at the given key to storage.
@@ -157,26 +174,26 @@ pub trait StorageWrite {
         &mut self,
         key: &storage::Key,
         val: impl AsRef<[u8]>,
-        action: WriteActions,
+        action: WriteOpts,
     ) -> Result<()>;
 
     /// Delete a value at the given key from storage
     fn delete_with_actions(
         &mut self,
         key: &storage::Key,
-        action: WriteActions,
+        action: WriteOpts,
     ) -> Result<()>;
 
     /// Delete a value at the given key from storage, including from the diffs
     /// storage.
     fn delete(&mut self, key: &storage::Key) -> Result<()> {
-        self.delete_with_actions(key, WriteActions::All)
+        self.delete_with_actions(key, WriteOpts::ALL)
     }
 
     /// Delete a value at the given key from storage, excluding the diffs
     /// storage.
     fn delete_without_diffs(&mut self, key: &storage::Key) -> Result<()> {
-        self.delete_with_actions(key, WriteActions::NoDiffsOrMerkl)
+        self.delete_with_actions(key, WriteOpts::NONE)
     }
 
     /// Delete all key-vals with a matching prefix.

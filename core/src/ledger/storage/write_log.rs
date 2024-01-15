@@ -13,7 +13,7 @@ use crate::ledger::gas::{
 use crate::ledger::replay_protection::{all_key, last_key};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::Storage;
-use crate::ledger::storage_api::WriteActions;
+use crate::ledger::storage_api::WriteOpts;
 use crate::types::address::{Address, EstablishedAddressGen, InternalAddress};
 use crate::types::hash::Hash;
 use crate::types::ibc::IbcEvent;
@@ -53,12 +53,12 @@ pub enum StorageModification {
         /// Value bytes
         value: Vec<u8>,
         /// Action to determine what data to write
-        action: WriteActions,
+        action: WriteOpts,
     },
     /// Delete an existing key-value
     Delete {
         /// Action to determine what data to delet
-        action: WriteActions,
+        action: WriteOpts,
     },
     /// Initialize a new account with established address and a given validity
     /// predicate hash. The key for `InitAccount` inside the [`WriteLog`] must
@@ -225,7 +225,7 @@ impl WriteLog {
             key.clone(),
             StorageModification::Write {
                 value,
-                action: WriteActions::All,
+                action: WriteOpts::ALL,
             },
         ) {
             Some(prev) => match prev {
@@ -257,7 +257,7 @@ impl WriteLog {
         &mut self,
         key: &storage::Key,
         value: Vec<u8>,
-        action: WriteActions,
+        action: WriteOpts,
     ) -> Result<()> {
         if let Some(prev) = self
             .block_write_log
@@ -332,7 +332,7 @@ impl WriteLog {
         let size_diff = match self.tx_write_log.insert(
             key.clone(),
             StorageModification::Delete {
-                action: WriteActions::All,
+                action: WriteOpts::ALL,
             },
         ) {
             Some(prev) => match prev {
@@ -360,7 +360,7 @@ impl WriteLog {
     pub fn protocol_delete(
         &mut self,
         key: &storage::Key,
-        action: WriteActions,
+        action: WriteOpts,
     ) -> Result<()> {
         if key.is_validity_predicate().is_some() {
             return Err(Error::DeleteVp);
@@ -559,7 +559,7 @@ impl WriteLog {
                             batch,
                             key,
                             *vp_code_hash,
-                            WriteActions::All,
+                            WriteOpts::ALL,
                         )
                         .map_err(Error::StorageError)?;
                 }
@@ -1185,15 +1185,15 @@ pub mod testing {
         collection::btree_set(arb_address(), 0..10)
     }
 
-    fn arb_write_actions() -> impl Strategy<Value = WriteActions> {
+    fn arb_write_actions() -> impl Strategy<Value = WriteOpts> {
         prop_oneof![
-            Just(WriteActions::All),
-            Just(WriteActions::NoMerkl),
-            Just(WriteActions::NoDiffsOrMerkl),
+            Just(WriteOpts::ALL),
+            Just(WriteOpts::WRITE_DIFFS),
+            Just(WriteOpts::NONE),
         ]
     }
 
-    fn arb_write_data() -> impl Strategy<Value = (Vec<u8>, WriteActions)> {
+    fn arb_write_data() -> impl Strategy<Value = (Vec<u8>, WriteOpts)> {
         let arb_bytes = any::<Vec<u8>>();
         arb_bytes.prop_flat_map(move |bytes| {
             let arb_action = arb_write_actions();
@@ -1215,11 +1215,11 @@ pub mod testing {
                 arb_write_data().prop_map(|(value, _action)| {
                     StorageModification::Write {
                         value,
-                        action: WriteActions::All,
+                        action: WriteOpts::ALL,
                     }
                 }),
                 Just(StorageModification::Delete {
-                    action: WriteActions::All
+                    action: WriteOpts::ALL
                 }),
                 any::<[u8; HASH_LENGTH]>().prop_map(|hash| {
                     StorageModification::InitAccount {
@@ -1235,11 +1235,11 @@ pub mod testing {
                 arb_write_data().prop_map(|(value, _action)| {
                     StorageModification::Write {
                         value,
-                        action: WriteActions::All,
+                        action: WriteOpts::ALL,
                     }
                 }),
                 Just(StorageModification::Delete {
-                    action: WriteActions::All
+                    action: WriteOpts::ALL
                 }),
                 any::<Vec<u8>>()
                     .prop_map(|value| StorageModification::Temp { value }),

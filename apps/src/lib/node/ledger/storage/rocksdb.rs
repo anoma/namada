@@ -61,7 +61,7 @@ use namada::ledger::storage::{
     types, BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error,
     MerkleTreeStoresRead, Result, StoreType, DB,
 };
-use namada::ledger::storage_api::WriteActions;
+use namada::ledger::storage_api::WriteOpts;
 use namada::types::ethereum_events::Uint;
 use namada::types::internal::TxQueue;
 use namada::types::storage::{
@@ -1306,11 +1306,11 @@ impl DB for RocksDB {
         height: BlockHeight,
         key: &Key,
         value: impl AsRef<[u8]>,
-        action: WriteActions,
+        action: WriteOpts,
     ) -> Result<i64> {
         let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
         let value = value.as_ref();
-        let size_diff = if action == WriteActions::NoDiffsOrMerkl {
+        let size_diff = if !action.contains(WriteOpts::WRITE_DIFFS) {
             0
         } else {
             match self
@@ -1348,12 +1348,12 @@ impl DB for RocksDB {
         &mut self,
         height: BlockHeight,
         key: &Key,
-        action: WriteActions,
+        action: WriteOpts,
     ) -> Result<i64> {
         let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
 
         // Check the length of previous value, if any
-        let prev_len = if action == WriteActions::NoDiffsOrMerkl {
+        let prev_len = if !action.contains(WriteOpts::WRITE_DIFFS) {
             0
         } else {
             match self
@@ -1397,13 +1397,13 @@ impl DB for RocksDB {
         height: BlockHeight,
         key: &Key,
         value: impl AsRef<[u8]>,
-        action: WriteActions,
+        action: WriteOpts,
     ) -> Result<i64> {
         let value = value.as_ref();
         let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
 
         // Diffs
-        let size_diff = if action == WriteActions::NoDiffsOrMerkl {
+        let size_diff = if !action.contains(WriteOpts::WRITE_DIFFS) {
             0
         } else {
             match self
@@ -1447,12 +1447,12 @@ impl DB for RocksDB {
         batch: &mut Self::WriteBatch,
         height: BlockHeight,
         key: &Key,
-        action: WriteActions,
+        action: WriteOpts,
     ) -> Result<i64> {
         let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
 
         // Check the length of previous value, if any
-        let prev_len = if action == WriteActions::NoDiffsOrMerkl {
+        let prev_len = if !action.contains(WriteOpts::WRITE_DIFFS) {
             0
         } else {
             match self
@@ -1801,7 +1801,7 @@ mod test {
             last_height,
             &Key::parse("test").unwrap(),
             vec![1_u8, 1, 1, 1],
-            WriteActions::All,
+            WriteOpts::ALL,
         )
         .unwrap();
 
@@ -1837,7 +1837,7 @@ mod test {
             last_height,
             &batch_key,
             vec![1_u8, 1, 1, 1],
-            WriteActions::All,
+            WriteOpts::ALL,
         )
         .unwrap();
         db.exec_batch(batch.0).unwrap();
@@ -1846,7 +1846,7 @@ mod test {
             last_height,
             &key,
             vec![1_u8, 1, 1, 0],
-            WriteActions::All,
+            WriteOpts::ALL,
         )
         .unwrap();
 
@@ -1857,7 +1857,7 @@ mod test {
             last_height,
             &batch_key,
             vec![2_u8, 2, 2, 2],
-            WriteActions::All,
+            WriteOpts::ALL,
         )
         .unwrap();
         db.exec_batch(batch.0).unwrap();
@@ -1866,7 +1866,7 @@ mod test {
             last_height,
             &key,
             vec![2_u8, 2, 2, 0],
-            WriteActions::All,
+            WriteOpts::ALL,
         )
         .unwrap();
 
@@ -1910,12 +1910,12 @@ mod test {
             &mut batch,
             last_height,
             &batch_key,
-            WriteActions::All,
+            WriteOpts::ALL,
         )
         .unwrap();
         db.exec_batch(batch.0).unwrap();
 
-        db.delete_subspace_val(last_height, &key, WriteActions::All)
+        db.delete_subspace_val(last_height, &key, WriteOpts::ALL)
             .unwrap();
 
         let deleted_value = db
@@ -1970,7 +1970,7 @@ mod test {
                 height,
                 key,
                 [0_u8],
-                WriteActions::All,
+                WriteOpts::ALL,
             )
             .unwrap();
         }
@@ -2024,7 +2024,7 @@ mod test {
             height_0,
             &delete_key,
             &to_delete_val,
-            WriteActions::All,
+            WriteOpts::ALL,
         )
         .unwrap();
         db.batch_write_subspace_val(
@@ -2032,7 +2032,7 @@ mod test {
             height_0,
             &overwrite_key,
             &to_overwrite_val,
-            WriteActions::All,
+            WriteOpts::ALL,
         )
         .unwrap();
 
@@ -2062,7 +2062,7 @@ mod test {
             height_1,
             &add_key,
             &add_val,
-            WriteActions::All,
+            WriteOpts::ALL,
         )
         .unwrap();
         db.batch_write_subspace_val(
@@ -2070,14 +2070,14 @@ mod test {
             height_1,
             &overwrite_key,
             &overwrite_val,
-            WriteActions::All,
+            WriteOpts::ALL,
         )
         .unwrap();
         db.batch_delete_subspace_val(
             &mut batch,
             height_1,
             &delete_key,
-            WriteActions::All,
+            WriteOpts::ALL,
         )
         .unwrap();
 

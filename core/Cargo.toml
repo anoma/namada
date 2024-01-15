@@ -17,15 +17,9 @@ default = ["rand"]
 mainnet = []
 wasm-runtime = ["rayon"]
 rand = ["dep:rand", "rand_core"]
-ethers-derive = [
-  "ethbridge-structs/ethers-derive"
-]
+ethers-derive = ["ethbridge-structs/ethers-derive"]
 # for integration tests and test utilities
-testing = [
-  "ibc-testkit",
-  "rand",
-  "proptest",
-]
+testing = ["ibc-testkit", "rand", "proptest"]
 
 [dependencies]
 namada_macros = {path = "../macros"}
@@ -74,6 +68,7 @@ tiny-keccak = {version = "2.0.2", features = ["keccak"]}
 tracing.workspace = true
 uint = "0.9.5"
 zeroize.workspace = true
+bitflags = "2.4.1"
 
 [dev-dependencies]
 assert_matches.workspace = true

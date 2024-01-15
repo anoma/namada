@@ -5,7 +5,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use borsh_ext::BorshSerializeExt;
 use namada_core::ledger::ibc::{IbcCommonContext, IbcStorageContext};
 use namada_core::ledger::masp_utils;
-use namada_core::ledger::storage_api::WriteActions;
+use namada_core::ledger::storage_api::WriteOpts;
 
 use crate::ledger::ibc::storage::is_ibc_key;
 use crate::ledger::native_vp::CtxPreStorageRead;
@@ -154,7 +154,7 @@ where
         &mut self,
         key: &Key,
         value: impl AsRef<[u8]>,
-        action: WriteActions,
+        action: WriteOpts,
     ) -> Result<()> {
         self.store.insert(
             key.clone(),
@@ -169,7 +169,7 @@ where
     fn delete_with_actions(
         &mut self,
         key: &Key,
-        action: WriteActions,
+        action: WriteOpts,
     ) -> Result<()> {
         self.store
             .insert(key.clone(), StorageModification::Delete { action });
@@ -388,7 +388,7 @@ where
         &mut self,
         _key: &Key,
         _val: impl AsRef<[u8]>,
-        _action: WriteActions,
+        _action: WriteOpts,
     ) -> Result<()> {
         unimplemented!("Validation doesn't write any data")
     }
@@ -396,7 +396,7 @@ where
     fn delete_with_actions(
         &mut self,
         _key: &Key,
-        _action: WriteActions,
+        _action: WriteOpts,
     ) -> Result<()> {
         unimplemented!("Validation doesn't delete any data")
     }

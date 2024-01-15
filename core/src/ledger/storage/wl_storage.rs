@@ -7,7 +7,7 @@ use crate::ledger::parameters::EpochDuration;
 use crate::ledger::storage::write_log::{self, WriteLog};
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use crate::ledger::storage_api::{
-    ResultExt, StorageRead, StorageWrite, WriteActions,
+    ResultExt, StorageRead, StorageWrite, WriteOpts,
 };
 use crate::ledger::{gas, parameters, storage_api};
 use crate::types::address::Address;
@@ -543,7 +543,7 @@ where
         &mut self,
         key: &storage::Key,
         val: impl AsRef<[u8]>,
-        action: WriteActions,
+        action: WriteOpts,
     ) -> storage_api::Result<()> {
         let _ = self
             .write_log_mut()
@@ -555,7 +555,7 @@ where
     fn delete_with_actions(
         &mut self,
         key: &storage::Key,
-        action: WriteActions,
+        action: WriteOpts,
     ) -> storage_api::Result<()> {
         let _ = self
             .write_log_mut()
@@ -720,7 +720,7 @@ mod tests {
                         .protocol_write(
                             key,
                             val.serialize_to_vec(),
-                            WriteActions::All,
+                            WriteOpts::ALL,
                         )
                         .unwrap();
                 }

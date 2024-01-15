@@ -5,7 +5,7 @@ use namada::core::types::account::AccountPublicKeysMap;
 use namada::core::types::address;
 use namada::core::types::token::{Amount, Transfer};
 use namada::ledger::storage::DB;
-use namada::ledger::storage_api::WriteActions;
+use namada::ledger::storage_api::WriteOpts;
 use namada::proto::Signature;
 use namada::vm::wasm::TxCache;
 use namada_apps::bench_utils::{
@@ -323,7 +323,7 @@ fn storage_write(c: &mut Criterion) {
                                 block_height,
                                 &key,
                                 value,
-                                WriteActions::All,
+                                WriteOpts::ALL,
                             )
                             .unwrap();
                     },

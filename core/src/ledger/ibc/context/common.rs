@@ -29,7 +29,7 @@ use crate::ibc::primitives::proto::{Any, Protobuf};
 use crate::ibc::primitives::Timestamp;
 use crate::ledger::ibc::storage;
 use crate::ledger::parameters::storage::get_max_expected_time_per_block_key;
-use crate::ledger::storage_api::{self, WriteActions};
+use crate::ledger::storage_api::{self, WriteOpts};
 use crate::tendermint::Time as TmTime;
 use crate::types::storage::{BlockHeight, Key};
 use crate::types::time::DurationSecs;
@@ -63,7 +63,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         let key = storage::client_state_key(client_id);
         let bytes = Any::from(client_state).encode_to_vec();
         // TODO: what write options are desired here??
-        self.write_bytes(&key, bytes, WriteActions::All)
+        self.write_bytes(&key, bytes, WriteOpts::ALL)
             .map_err(ContextError::from)
     }
 
@@ -97,7 +97,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         let key = storage::consensus_state_key(client_id, height);
         let bytes = consensus_state.encode_vec();
         // TODO: what write options are desired here??
-        self.write_bytes(&key, bytes, WriteActions::All)
+        self.write_bytes(&key, bytes, WriteOpts::ALL)
             .map_err(ContextError::from)
     }
 
@@ -230,7 +230,7 @@ pub trait IbcCommonContext: IbcStorageContext {
             ),
         })?;
         // TODO: what write options are desired here??
-        self.write_bytes(&key, time.encode_vec(), WriteActions::All)
+        self.write_bytes(&key, time.encode_vec(), WriteOpts::ALL)
             .map_err(ContextError::from)
     }
 
@@ -323,7 +323,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         let key = storage::client_update_height_key(client_id);
         let bytes = host_height.encode_vec();
         // TODO: what write options are desired here??
-        self.write_bytes(&key, bytes, WriteActions::All)
+        self.write_bytes(&key, bytes, WriteOpts::ALL)
             .map_err(ContextError::from)
     }
 
@@ -360,7 +360,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         let key = storage::connection_key(connection_id);
         let bytes = connection_end.encode_vec();
         // TODO: what write options are desired here??
-        self.write_bytes(&key, bytes, WriteActions::All)
+        self.write_bytes(&key, bytes, WriteOpts::ALL)
             .map_err(ContextError::from)
     }
 
@@ -411,7 +411,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         let key = storage::channel_key(port_id, channel_id);
         let bytes = channel_end.encode_vec();
         // TODO: what write options are desired here??
-        self.write_bytes(&key, bytes, WriteActions::All)
+        self.write_bytes(&key, bytes, WriteOpts::ALL)
             .map_err(ContextError::from)
     }
 
@@ -499,7 +499,7 @@ pub trait IbcCommonContext: IbcStorageContext {
     fn store_sequence(&mut self, key: &Key, sequence: Sequence) -> Result<()> {
         let bytes = u64::from(sequence).to_be_bytes().to_vec();
         // TODO: what write options are desired here??
-        self.write_bytes(key, bytes, WriteActions::All)
+        self.write_bytes(key, bytes, WriteOpts::ALL)
             .map_err(ContextError::from)
     }
 
@@ -559,7 +559,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         let key = storage::commitment_key(port_id, channel_id, sequence);
         let bytes = commitment.into_vec();
         // TODO: what write options are desired here??
-        self.write_bytes(&key, bytes, WriteActions::All)
+        self.write_bytes(&key, bytes, WriteOpts::ALL)
             .map_err(ContextError::from)
     }
 
@@ -599,7 +599,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         // the value is the same as ibc-go
         let bytes = [1_u8].to_vec();
         // TODO: what write options are desired here??
-        self.write_bytes(&key, bytes, WriteActions::All)
+        self.write_bytes(&key, bytes, WriteOpts::ALL)
             .map_err(ContextError::from)
     }
 
@@ -631,7 +631,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         let key = storage::ack_key(port_id, channel_id, sequence);
         let bytes = ack_commitment.into_vec();
         // TODO: what write options are desired here??
-        self.write_bytes(&key, bytes, WriteActions::All)
+        self.write_bytes(&key, bytes, WriteOpts::ALL)
             .map_err(ContextError::from)
     }
 

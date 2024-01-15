@@ -23,7 +23,7 @@ use masp_primitives::transaction::Transaction;
 pub use namada_core::ledger::governance::storage as gov_storage;
 pub use namada_core::ledger::parameters::storage as parameters_storage;
 pub use namada_core::ledger::storage::types::encode;
-use namada_core::ledger::storage_api::WriteActions;
+use namada_core::ledger::storage_api::WriteOpts;
 pub use namada_core::ledger::storage_api::{
     self, governance, iter_prefix, iter_prefix_bytes, Error, OptionExt,
     ResultExt, StorageRead, StorageWrite,
@@ -228,7 +228,7 @@ impl StorageWrite for Ctx {
         &mut self,
         key: &storage::Key,
         val: impl AsRef<[u8]>,
-        _action: WriteActions,
+        _action: WriteOpts,
     ) -> storage_api::Result<()> {
         let key = key.to_string();
         // TODO: do certain write actions need to be considered here??
@@ -253,7 +253,7 @@ impl StorageWrite for Ctx {
     fn delete_with_actions(
         &mut self,
         _key: &storage::Key,
-        _action: WriteActions,
+        _action: WriteOpts,
     ) -> storage_api::Result<()> {
         unimplemented!()
     }

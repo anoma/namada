@@ -64,7 +64,7 @@ mod tests {
     use namada::ledger::storage::write_log::WriteLog;
     use namada::ledger::storage::{types, StoreType, WlStorage, DB};
     use namada::ledger::storage_api::{
-        self, StorageRead, StorageWrite, WriteActions,
+        self, StorageRead, StorageWrite, WriteOpts,
     };
     use namada::types::chain::ChainId;
     use namada::types::ethereum_events::Uint;
@@ -535,7 +535,7 @@ mod tests {
                     storage.batch_delete_subspace_val(
                         &mut batch,
                         &key,
-                        WriteActions::All,
+                        WriteOpts::ALL,
                     )?;
                 }
                 _ => {
@@ -545,7 +545,7 @@ mod tests {
                         &mut batch,
                         &key,
                         value_bytes,
-                        storage_api::WriteActions::All,
+                        storage_api::WriteOpts::ALL,
                     )?;
                 }
             }

@@ -24,7 +24,7 @@ pub use wl_storage::{
 };
 
 use super::gas::MEMORY_ACCESS_GAS_PER_BYTE;
-use super::storage_api::WriteActions;
+use super::storage_api::WriteOpts;
 use crate::ledger::eth_bridge::storage::bridge_pool::is_pending_transfer_key;
 use crate::ledger::gas::{
     STORAGE_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE,
@@ -322,7 +322,7 @@ pub trait DB: std::fmt::Debug {
         height: BlockHeight,
         key: &Key,
         value: impl AsRef<[u8]>,
-        action: WriteActions,
+        action: WriteOpts,
     ) -> Result<i64>;
 
     /// Delete the value with the given height and account subspace key from the
@@ -332,7 +332,7 @@ pub trait DB: std::fmt::Debug {
         &mut self,
         height: BlockHeight,
         key: &Key,
-        action: WriteActions,
+        action: WriteOpts,
     ) -> Result<i64>;
 
     /// Start write batch.
@@ -350,7 +350,7 @@ pub trait DB: std::fmt::Debug {
         height: BlockHeight,
         key: &Key,
         value: impl AsRef<[u8]>,
-        action: WriteActions,
+        action: WriteOpts,
     ) -> Result<i64>;
 
     /// Batch delete the value with the given height and account subspace key
@@ -361,7 +361,7 @@ pub trait DB: std::fmt::Debug {
         batch: &mut Self::WriteBatch,
         height: BlockHeight,
         key: &Key,
-        action: WriteActions,
+        action: WriteOpts,
     ) -> Result<i64>;
 
     /// Prune Merkle tree stores at the given epoch
@@ -684,7 +684,7 @@ where
         &mut self,
         key: &Key,
         value: impl AsRef<[u8]>,
-        action: WriteActions,
+        action: WriteOpts,
     ) -> Result<(u64, i64)> {
         // Note that this method is the same as `StorageWrite::write_bytes`,
         // but with gas and storage bytes len diff accounting
@@ -697,7 +697,7 @@ where
             self.block.tree.update(key, height)?;
         } else {
             // Update the merkle tree
-            if action == WriteActions::All {
+            if action.contains(WriteOpts::MERKLIZE) {
                 self.block.tree.update(key, value)?;
             }
         }
@@ -719,7 +719,7 @@ where
         key: &Key,
         value: impl AsRef<[u8]>,
     ) -> Result<(u64, i64)> {
-        self.write_with_actions(key, value, WriteActions::All)
+        self.write_with_actions(key, value, WriteOpts::ALL)
     }
 
     /// Write with diffs but no merklization
@@ -728,7 +728,7 @@ where
         key: &Key,
         value: impl AsRef<[u8]>,
     ) -> Result<(u64, i64)> {
-        self.write_with_actions(key, value, WriteActions::NoMerkl)
+        self.write_with_actions(key, value, WriteOpts::WRITE_DIFFS)
     }
 
     /// Write without diffs or merklization
@@ -737,7 +737,7 @@ where
         key: &Key,
         value: impl AsRef<[u8]>,
     ) -> Result<(u64, i64)> {
-        self.write_with_actions(key, value, WriteActions::NoDiffsOrMerkl)
+        self.write_with_actions(key, value, WriteOpts::NONE)
     }
 
     /// Delete the specified subspace and returns the gas cost and the size
@@ -745,7 +745,7 @@ where
     pub fn delete_with_actions(
         &mut self,
         key: &Key,
-        action: WriteActions,
+        action: WriteOpts,
     ) -> Result<(u64, i64)> {
         // Note that this method is the same as `StorageWrite::delete`,
         // but with gas and storage bytes len diff accounting
@@ -763,12 +763,12 @@ where
 
     /// Delete including from the diffs storage
     pub fn delete(&mut self, key: &Key) -> Result<(u64, i64)> {
-        self.delete_with_actions(key, WriteActions::All)
+        self.delete_with_actions(key, WriteOpts::ALL)
     }
 
     /// Delete without manipulating the diffs storage
     pub fn delete_without_diffs(&mut self, key: &Key) -> Result<(u64, i64)> {
-        self.delete_with_actions(key, WriteActions::NoDiffsOrMerkl)
+        self.delete_with_actions(key, WriteOpts::NONE)
     }
 
     /// Set the block header.
@@ -1186,7 +1186,7 @@ where
         batch: &mut D::WriteBatch,
         key: &Key,
         value: impl AsRef<[u8]>,
-        action: WriteActions,
+        action: WriteOpts,
     ) -> Result<i64> {
         let value = value.as_ref();
         if is_pending_transfer_key(key) {
@@ -1196,7 +1196,7 @@ where
             self.block.tree.update(key, height)?;
         } else {
             // Update the merkle tree
-            if action == WriteActions::All {
+            if action.contains(WriteOpts::MERKLIZE) {
                 self.block.tree.update(key, value)?;
             }
         }
@@ -1216,7 +1216,7 @@ where
         &mut self,
         batch: &mut D::WriteBatch,
         key: &Key,
-        action: WriteActions,
+        action: WriteOpts,
     ) -> Result<i64> {
         // Update the merkle tree
         self.block.tree.delete(key)?;

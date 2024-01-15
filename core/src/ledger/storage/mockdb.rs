@@ -19,7 +19,7 @@ use super::{
 use crate::ledger::masp_conversions::ConversionState;
 use crate::ledger::replay_protection;
 use crate::ledger::storage::types::{self, KVBytes, PrefixIterator};
-use crate::ledger::storage_api::WriteActions;
+use crate::ledger::storage_api::WriteOpts;
 use crate::types::ethereum_events::Uint;
 use crate::types::ethereum_structs;
 use crate::types::hash::Hash;
@@ -500,7 +500,7 @@ impl DB for MockDB {
         height: BlockHeight,
         key: &Key,
         value: impl AsRef<[u8]>,
-        action: WriteActions,
+        action: WriteOpts,
     ) -> Result<i64> {
         // batch_write are directly committed
 
@@ -519,7 +519,7 @@ impl DB for MockDB {
         &mut self,
         height: BlockHeight,
         key: &Key,
-        action: WriteActions,
+        action: WriteOpts,
     ) -> Result<i64> {
         // batch_delete are directly committed
         self.batch_delete_subspace_val(
@@ -546,7 +546,7 @@ impl DB for MockDB {
         height: BlockHeight,
         key: &Key,
         value: impl AsRef<[u8]>,
-        action: WriteActions,
+        action: WriteOpts,
     ) -> Result<i64> {
         let value = value.as_ref();
         let subspace_key =
@@ -554,7 +554,7 @@ impl DB for MockDB {
         let current_len = value.len() as i64;
         let diff_prefix = Key::from(height.to_db_key());
         let mut db = self.0.borrow_mut();
-        if action == WriteActions::NoDiffsOrMerkl {
+        if !action.contains(WriteOpts::WRITE_DIFFS) {
             db.insert(subspace_key.to_string(), value.to_owned());
             Ok(0)
         } else {
@@ -591,7 +591,7 @@ impl DB for MockDB {
         _batch: &mut Self::WriteBatch,
         height: BlockHeight,
         key: &Key,
-        action: WriteActions,
+        action: WriteOpts,
     ) -> Result<i64> {
         let subspace_key =
             Key::parse("subspace").map_err(Error::KeyError)?.join(key);
@@ -599,7 +599,7 @@ impl DB for MockDB {
         let mut db = self.0.borrow_mut();
         Ok(match db.remove(&subspace_key.to_string()) {
             Some(value) => {
-                if action == WriteActions::NoDiffsOrMerkl {
+                if !action.contains(WriteOpts::WRITE_DIFFS) {
                     0
                 } else {
                     let old_key = diff_prefix

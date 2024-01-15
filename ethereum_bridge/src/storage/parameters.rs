@@ -369,7 +369,7 @@ where
 mod tests {
     use eyre::Result;
     use namada_core::ledger::storage::testing::TestWlStorage;
-    use namada_core::ledger::storage_api::WriteActions;
+    use namada_core::ledger::storage_api::WriteOpts;
     use namada_core::types::ethereum_events::EthAddress;
 
     use super::*;
@@ -451,7 +451,7 @@ mod tests {
             .write_bytes(
                 &min_confirmations_key,
                 vec![42, 1, 2, 3, 4],
-                WriteActions::All,
+                WriteOpts::ALL,
             )
             .unwrap();
 

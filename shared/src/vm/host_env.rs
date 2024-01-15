@@ -2298,7 +2298,7 @@ where
 }
 
 // Temp. workaround for <https://github.com/anoma/namada/issues/1831>
-use namada_core::ledger::storage_api::{StorageRead, WriteActions};
+use namada_core::ledger::storage_api::{StorageRead, WriteOpts};
 
 use crate::types::storage::BlockHash;
 impl<'a, DB, H, CA> StorageRead for TxCtx<'a, DB, H, CA>
@@ -2488,7 +2488,7 @@ where
         &mut self,
         key: &Key,
         data: impl AsRef<[u8]>,
-        _action: WriteActions,
+        _action: WriteOpts,
     ) -> Result<(), storage_api::Error> {
         let write_log = unsafe { self.write_log.get() };
         let (gas, _size_diff) = write_log
@@ -2500,7 +2500,7 @@ where
     fn delete_with_actions(
         &mut self,
         key: &Key,
-        _action: WriteActions,
+        _action: WriteOpts,
     ) -> Result<(), storage_api::Error> {
         if key.is_validity_predicate().is_some() {
             return Err(TxRuntimeError::CannotDeleteVp).into_storage_result();

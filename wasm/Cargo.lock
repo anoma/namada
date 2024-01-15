@@ -3371,6 +3371,7 @@ dependencies = [
  "ark-bls12-381",
  "ark-serialize",
  "bech32 0.8.1",
+ "bitflags 2.4.1",
  "borsh",
  "borsh-ext",
  "chrono",

@@ -9,7 +9,7 @@ use namada::ledger::parameters::Parameters;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
 use namada::ledger::storage_api::token::{credit_tokens, write_denom};
-use namada::ledger::storage_api::{StorageWrite, WriteActions};
+use namada::ledger::storage_api::{StorageWrite, WriteOpts};
 use namada::ledger::{ibc, pos};
 use namada::proof_of_stake::BecomeValidator;
 use namada::types::address::Address;
@@ -402,17 +402,17 @@ where
                 // TODO: what write actions are desired for the data below??
 
                 self.wl_storage
-                    .write_bytes(&code_key, code, WriteActions::All)
+                    .write_bytes(&code_key, code, WriteOpts::ALL)
                     .unwrap();
                 self.wl_storage.write(&code_len_key, code_len).unwrap();
                 self.wl_storage
-                    .write_bytes(&hash_key, code_hash, WriteActions::All)
+                    .write_bytes(&hash_key, code_hash, WriteOpts::ALL)
                     .unwrap();
                 if &Some(code_hash) == implicit_vp_code_hash {
                     is_implicit_vp_stored = true;
                 }
                 self.wl_storage
-                    .write_bytes(&code_name_key, code_hash, WriteActions::All)
+                    .write_bytes(&code_name_key, code_hash, WriteOpts::ALL)
                     .unwrap();
             } else {
                 tracing::warn!("The wasm {name} isn't whitelisted.");
@@ -542,7 +542,7 @@ where
                     .write_bytes(
                         &Key::validity_predicate(address),
                         code_hash,
-                        WriteActions::All,
+                        WriteOpts::ALL,
                     )
                     .unwrap();
 
@@ -604,7 +604,7 @@ where
                     .write_bytes(
                         &Key::validity_predicate(address),
                         code_hash,
-                        WriteActions::All,
+                        WriteOpts::ALL,
                     )
                     .expect("Unable to write user VP");
 
