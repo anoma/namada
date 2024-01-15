@@ -1670,7 +1670,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         } else {
             None
         };
-        // This indicates how much more assets need to be sent to the receiver
+        // This indicates how many more assets need to be sent to the receiver
         // in order to satisfy the requested transfer amount.
         let mut rem_amount = amount.amount().raw_amount().0;
         // If we are sending to a shielded address, we may need the outgoing
@@ -1678,7 +1678,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let ovk_opt = spending_key.map(|x| x.expsk.ovk);
 
         // Now handle the outputs of this transaction
-        // Loop through the value balance components and see how they which
+        // Loop through the value balance components and see which
         // ones can be given to the receiver
         for ((asset_type, vbal_token, vbal_denom, vbal_epoch), val) in
             value_balance.components()

@@ -191,12 +191,6 @@ where
     Ok((noterized_inflation, precision))
 }
 
-// Safely sum a pair of amounts
-#[cfg(any(feature = "wasm-runtime", test))]
-fn sum_pair(pair: (token::Amount, token::Amount)) -> Option<token::Amount> {
-    pair.0.checked_add(pair.1)
-}
-
 // This is only enabled when "wasm-runtime" is on, because we're using rayon
 #[cfg(any(feature = "wasm-runtime", test))]
 /// Update the MASP's allowed conversions
@@ -341,12 +335,14 @@ where
                 if denom == MaspDenom::Three {
                     // The reward for each reward.1 units of the current asset
                     // is reward.0 units of the reward token
-                    total_reward += sum_pair(
-                        addr_bal * (new_normed_inflation, *normed_inflation),
-                    )
-                    .unwrap_or(token::Amount::max())
-                    .checked_sub(addr_bal)
-                    .unwrap_or_default();
+                    let native_reward =
+                        addr_bal * (new_normed_inflation, *normed_inflation);
+                    total_reward += native_reward
+                        .0
+                        .checked_add(native_reward.1)
+                        .unwrap_or(token::Amount::max())
+                        .checked_sub(addr_bal)
+                        .unwrap_or_default();
                     // Save the new normed inflation
                     *normed_inflation = new_normed_inflation;
                 }

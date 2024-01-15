@@ -409,10 +409,14 @@ where
                     return Ok(false);
                 }
                 match conversion_state.assets.get(&vin.asset_type) {
-                    // Satisfies 2.
+                    // Satisfies 2. Note how the asset's epoch must be equal to
+                    // the present: users must never be allowed to backdate
+                    // transparent inputs to a transaction for they would then
+                    // be able to claim rewards while locking their assets for
+                    // negligible time periods.
                     Some(((address, denom), asset_epoch, _, _))
                         if *address == transfer.token
-                            && *asset_epoch <= epoch =>
+                            && *asset_epoch == epoch =>
                     {
                         total_in_values += token::Amount::from_masp_denominated(
                             vin.value, *denom,
@@ -529,8 +533,8 @@ where
                 match conversion_state.assets.get(&out.asset_type) {
                     // Satisfies 2.
                     Some(((address, denom), asset_epoch, _, _))
-                        if address == &transfer.token
-                            && asset_epoch <= &epoch =>
+                        if *address == transfer.token
+                            && *asset_epoch <= epoch =>
                     {
                         total_out_values +=
                             token::Amount::from_masp_denominated(
@@ -539,29 +543,14 @@ where
                     }
                     // Maybe the asset type has no attached epoch
                     None if unepoched_tokens.contains_key(&out.asset_type) => {
-                        let (token, denom) = &unepoched_tokens[&out.asset_type];
-                        // Determine what the asset type would be if it were
-                        // epoched
-                        let epoched_asset_type =
-                            encode_asset_type(Some(epoch), token, *denom)
-                                .wrap_err("unable to create asset type")?;
-                        if conversion_state
-                            .assets
-                            .contains_key(&epoched_asset_type)
-                        {
-                            // If such an epoched asset type is available in the
-                            // conversion tree, then we must reject the
-                            // unepoched variant
-                            tracing::debug!("epoch is missing from asset type");
-                            return Ok(false);
-                        } else {
-                            // Otherwise note the contribution to this
-                            // trransparent input
-                            total_out_values +=
-                                token::Amount::from_masp_denominated(
-                                    out.value, *denom,
-                                );
-                        }
+                        let (_token, denom) =
+                            &unepoched_tokens[&out.asset_type];
+                        // Otherwise note the contribution to this
+                        // trransparent input
+                        total_out_values +=
+                            token::Amount::from_masp_denominated(
+                                out.value, *denom,
+                            );
                     }
                     // unrecognized asset
                     _ => return Ok(false),
