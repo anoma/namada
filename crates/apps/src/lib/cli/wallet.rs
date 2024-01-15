@@ -170,21 +170,50 @@ fn payment_addresses_list(
 }
 
 /// Generate a spending key.
-fn spending_key_gen(
+fn shielded_key_gen(
     ctx: Context,
     io: &impl Io,
     args::KeyGen {
+        raw,
         alias,
         alias_force,
         unsafe_dont_encrypt,
+        derivation_path,
         ..
     }: args::KeyGen,
 ) {
     let mut wallet = load_wallet(ctx);
     let alias = alias.to_lowercase();
     let password = read_and_confirm_encryption_password(unsafe_dont_encrypt);
-    let (alias, _key) =
-        wallet.gen_store_spending_key(alias, password, alias_force, &mut OsRng);
+    let alias = if raw {
+        wallet.gen_store_spending_key(alias, password, alias_force, &mut OsRng)
+    } else {
+        let derivation_path = decode_shielded_derivation_path(derivation_path)
+            .unwrap_or_else(|err| {
+                edisplay_line!(io, "{}", err);
+                cli::safe_exit(1)
+            });
+        let (_mnemonic, seed) =
+            Wallet::<CliWalletUtils>::gen_hd_seed(None, &mut OsRng)
+                .unwrap_or_else(|err| {
+                    edisplay_line!(io, "{}", err);
+                    cli::safe_exit(1)
+                });
+        wallet.derive_store_hd_spendind_key(
+            alias,
+            alias_force,
+            seed,
+            derivation_path,
+            password,
+        )
+    }
+    .map(|x| x.0)
+    .unwrap_or_else(|| {
+        eprintln!("Failed to generate a key.");
+        println!("No changes are persisted. Exiting.");
+        cli::safe_exit(0);
+    });
+
     wallet
         .save()
         .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
@@ -302,6 +331,21 @@ pub fn decode_transparent_derivation_path(
              the chosen cryptography scheme."
         )
     }
+    println!("Using HD derivation path {}", parsed_derivation_path);
+    Ok(parsed_derivation_path)
+}
+
+/// Decode the derivation path from the given string unless it is "default",
+/// in which case use the default derivation path for the shielded setting.
+pub fn decode_shielded_derivation_path(
+    derivation_path: String,
+) -> Result<DerivationPath, DerivationPathError> {
+    let is_default = derivation_path.eq_ignore_ascii_case("DEFAULT");
+    let parsed_derivation_path = if is_default {
+        DerivationPath::default_for_shielded()
+    } else {
+        DerivationPath::from_path_string(&derivation_path)?
+    };
     println!("Using HD derivation path {}", parsed_derivation_path);
     Ok(parsed_derivation_path)
 }
@@ -474,7 +518,7 @@ fn key_gen(ctx: Context, io: &impl Io, args_key_gen: args::KeyGen) {
     if !args_key_gen.shielded {
         transparent_key_and_address_gen(ctx, io, args_key_gen)
     } else {
-        spending_key_gen(ctx, io, args_key_gen)
+        shielded_key_gen(ctx, io, args_key_gen)
     }
 }
 

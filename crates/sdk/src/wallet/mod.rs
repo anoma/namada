@@ -27,7 +27,7 @@ use zeroize::Zeroizing;
 pub use self::derivation_path::{DerivationPath, DerivationPathError};
 pub use self::keys::{DecryptionError, StoredKeypair};
 pub use self::store::{ConfirmationResponse, ValidatorData, ValidatorKeys};
-use crate::wallet::store::derive_hd_secret_key;
+use crate::wallet::store::{derive_hd_secret_key, derive_hd_spending_key};
 
 /// Errors of key generation / derivation
 #[derive(Error, Debug)]
@@ -569,15 +569,10 @@ impl<U: WalletIo> Wallet<U> {
         password: Option<Zeroizing<String>>,
         force_alias: bool,
         csprng: &mut (impl CryptoRng + RngCore),
-    ) -> (String, ExtendedSpendingKey) {
-        let spendkey = gen_spending_key(csprng);
-        if let Some(alias) =
-            self.insert_spending_key(alias, spendkey, password, force_alias)
-        {
-            (alias, spendkey)
-        } else {
-            panic!("Action cancelled, no changes persisted.");
-        }
+    ) -> Option<(String, ExtendedSpendingKey)> {
+        let spend_key = gen_spending_key(csprng);
+        self.insert_spending_key(alias, spend_key, password, force_alias)
+            .map(|alias| (alias, spend_key))
     }
 
     /// Generate a new keypair, derive an implicit address from its public key
@@ -661,6 +656,28 @@ impl<U: WalletIo> Wallet<U> {
             Some(derivation_path),
         )
         .map(|alias| (alias, sk))
+    }
+
+    /// Derive a masp shielded key from the given seed and path, and insert it
+    /// into the store with the provided alias, converted to lower case. If the
+    /// alias already exists, optionally force overwrite the key for the
+    /// alias.
+    /// If no encryption password is provided, the key will be stored raw
+    /// without encryption.
+    /// Stores the key in decrypted key cache and returns the alias of the key
+    /// and the key itself.
+    pub fn derive_store_hd_spendind_key(
+        &mut self,
+        alias: String,
+        force_alias: bool,
+        seed: Seed,
+        derivation_path: DerivationPath,
+        password: Option<Zeroizing<String>>,
+    ) -> Option<(String, ExtendedSpendingKey)> {
+        let spend_key =
+            derive_hd_spending_key(seed.as_bytes(), derivation_path);
+        self.insert_spending_key(alias, spend_key, password, force_alias)
+            .map(|alias| (alias, spend_key))
     }
 
     /// Generate a disposable signing key for fee payment and store it under the

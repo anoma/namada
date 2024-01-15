@@ -733,6 +733,20 @@ pub fn derive_hd_secret_key(
     }
 }
 
+/// Generate a new spending key from the seed.
+pub fn derive_hd_spending_key(
+    seed: &[u8],
+    derivation_path: DerivationPath,
+) -> ExtendedSpendingKey {
+    let master_spend_key = zip32::sapling::ExtendedSpendingKey::master(seed);
+    let zip32_path: Vec<zip32::ChildIndex> = derivation_path.into();
+    zip32::sapling::ExtendedSpendingKey::from_path(
+        &master_spend_key,
+        &zip32_path,
+    )
+    .into()
+}
+
 impl Display for AddressVpType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
