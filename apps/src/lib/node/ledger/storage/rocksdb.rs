@@ -220,6 +220,7 @@ impl RocksDB {
         key: &Key,
         old_value: Option<&[u8]>,
         new_value: Option<&[u8]>,
+        persist_diffs: bool,
     ) -> Result<()> {
         let cf = self.get_column_family(DIFFS_CF)?;
         let key_prefix = Key::from(height.to_db_key());
@@ -245,6 +246,30 @@ impl RocksDB {
                 .put_cf(cf, new_val_key, new_value)
                 .map_err(|e| Error::DBError(e.into_string()))?;
         }
+
+        // If not persisting the diffs, remove the existing diffs from two block
+        // heights earlier than `height`
+        if !persist_diffs {
+            if let Some(pruned_height) = height.0.checked_sub(1) {
+                let pruned_key_prefix = Key::from(pruned_height.to_db_key());
+                let old_val_key = pruned_key_prefix
+                    .push(&OLD_DIFF_PREFIX.to_owned())
+                    .map_err(Error::KeyError)?
+                    .join(key)
+                    .to_string();
+                self.0
+                    .delete_cf(cf, old_val_key)
+                    .map_err(|e| Error::DBError(e.into_string()))?;
+                let new_val_key = pruned_key_prefix
+                    .push(&NEW_DIFF_PREFIX.to_owned())
+                    .map_err(Error::KeyError)?
+                    .join(key)
+                    .to_string();
+                self.0
+                    .delete_cf(cf, new_val_key)
+                    .map_err(|e| Error::DBError(e.into_string()))?;
+            }
+        }
         Ok(())
     }
 
@@ -257,6 +282,7 @@ impl RocksDB {
         key: &Key,
         old_value: Option<&[u8]>,
         new_value: Option<&[u8]>,
+        persist_diffs: bool,
     ) -> Result<()> {
         let cf = self.get_column_family(DIFFS_CF)?;
         let key_prefix = Key::from(height.to_db_key());
@@ -277,6 +303,26 @@ impl RocksDB {
                 .join(key)
                 .to_string();
             batch.0.put_cf(cf, new_val_key, new_value);
+        }
+
+        // If not persisting the diffs, remove the existing diffs from two block
+        // heights earlier than `height`
+        if !persist_diffs {
+            if let Some(pruned_height) = height.0.checked_sub(1) {
+                let pruned_key_prefix = Key::from(pruned_height.to_db_key());
+                let old_val_key = pruned_key_prefix
+                    .push(&OLD_DIFF_PREFIX.to_owned())
+                    .map_err(Error::KeyError)?
+                    .join(key)
+                    .to_string();
+                batch.0.delete_cf(cf, old_val_key);
+                let new_val_key = pruned_key_prefix
+                    .push(&NEW_DIFF_PREFIX.to_owned())
+                    .map_err(Error::KeyError)?
+                    .join(key)
+                    .to_string();
+                batch.0.delete_cf(cf, new_val_key);
+            }
         }
         Ok(())
     }
@@ -1317,29 +1363,34 @@ impl DB for RocksDB {
     ) -> Result<i64> {
         let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
         let value = value.as_ref();
-        let size_diff = if !action.contains(WriteOpts::WRITE_DIFFS) {
-            0
-        } else {
-            match self
-                .0
-                .get_cf(subspace_cf, key.to_string())
-                .map_err(|e| Error::DBError(e.into_string()))?
-            {
-                Some(prev_value) => {
-                    let size_diff =
-                        value.len() as i64 - prev_value.len() as i64;
-                    self.write_subspace_diff(
-                        height,
-                        key,
-                        Some(&prev_value),
-                        Some(value),
-                    )?;
-                    size_diff
-                }
-                None => {
-                    self.write_subspace_diff(height, key, None, Some(value))?;
-                    value.len() as i64
-                }
+
+        let persist_diffs = action.contains(WriteOpts::WRITE_DIFFS);
+
+        let size_diff = match self
+            .0
+            .get_cf(subspace_cf, key.to_string())
+            .map_err(|e| Error::DBError(e.into_string()))?
+        {
+            Some(prev_value) => {
+                let size_diff = value.len() as i64 - prev_value.len() as i64;
+                self.write_subspace_diff(
+                    height,
+                    key,
+                    Some(&prev_value),
+                    Some(value),
+                    persist_diffs,
+                )?;
+                size_diff
+            }
+            None => {
+                self.write_subspace_diff(
+                    height,
+                    key,
+                    None,
+                    Some(value),
+                    persist_diffs,
+                )?;
+                value.len() as i64
             }
         };
 
@@ -1359,27 +1410,26 @@ impl DB for RocksDB {
     ) -> Result<i64> {
         let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
 
+        let persists_diffs = action.contains(WriteOpts::WRITE_DIFFS);
+
         // Check the length of previous value, if any
-        let prev_len = if !action.contains(WriteOpts::WRITE_DIFFS) {
-            0
-        } else {
-            match self
-                .0
-                .get_cf(subspace_cf, key.to_string())
-                .map_err(|e| Error::DBError(e.into_string()))?
-            {
-                Some(prev_value) => {
-                    let prev_len = prev_value.len() as i64;
-                    self.write_subspace_diff(
-                        height,
-                        key,
-                        Some(&prev_value),
-                        None,
-                    )?;
-                    prev_len
-                }
-                None => 0,
+        let prev_len = match self
+            .0
+            .get_cf(subspace_cf, key.to_string())
+            .map_err(|e| Error::DBError(e.into_string()))?
+        {
+            Some(prev_value) => {
+                let prev_len = prev_value.len() as i64;
+                self.write_subspace_diff(
+                    height,
+                    key,
+                    Some(&prev_value),
+                    None,
+                    persists_diffs,
+                )?;
+                prev_len
             }
+            None => 0,
         };
 
         // Delete the key-val
@@ -1409,37 +1459,37 @@ impl DB for RocksDB {
         let value = value.as_ref();
         let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
 
+        let persist_diffs = action.contains(WriteOpts::WRITE_DIFFS);
+
         // Diffs
-        let size_diff = if !action.contains(WriteOpts::WRITE_DIFFS) {
-            0
-        } else {
-            match self
-                .0
-                .get_cf(subspace_cf, key.to_string())
-                .map_err(|e| Error::DBError(e.into_string()))?
-            {
-                Some(old_value) => {
-                    let size_diff = value.len() as i64 - old_value.len() as i64;
-                    // Persist the previous value
-                    self.batch_write_subspace_diff(
-                        batch,
-                        height,
-                        key,
-                        Some(&old_value),
-                        Some(value),
-                    )?;
-                    size_diff
-                }
-                None => {
-                    self.batch_write_subspace_diff(
-                        batch,
-                        height,
-                        key,
-                        None,
-                        Some(value),
-                    )?;
-                    value.len() as i64
-                }
+        let size_diff = match self
+            .0
+            .get_cf(subspace_cf, key.to_string())
+            .map_err(|e| Error::DBError(e.into_string()))?
+        {
+            Some(old_value) => {
+                let size_diff = value.len() as i64 - old_value.len() as i64;
+                // Persist the previous value
+                self.batch_write_subspace_diff(
+                    batch,
+                    height,
+                    key,
+                    Some(&old_value),
+                    Some(value),
+                    persist_diffs,
+                )?;
+                size_diff
+            }
+            None => {
+                self.batch_write_subspace_diff(
+                    batch,
+                    height,
+                    key,
+                    None,
+                    Some(value),
+                    persist_diffs,
+                )?;
+                value.len() as i64
             }
         };
 
@@ -1458,29 +1508,28 @@ impl DB for RocksDB {
     ) -> Result<i64> {
         let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
 
+        let persist_diffs = action.contains(WriteOpts::WRITE_DIFFS);
+
         // Check the length of previous value, if any
-        let prev_len = if !action.contains(WriteOpts::WRITE_DIFFS) {
-            0
-        } else {
-            match self
-                .0
-                .get_cf(subspace_cf, key.to_string())
-                .map_err(|e| Error::DBError(e.into_string()))?
-            {
-                Some(prev_value) => {
-                    let prev_len = prev_value.len() as i64;
-                    // Persist the previous value
-                    self.batch_write_subspace_diff(
-                        batch,
-                        height,
-                        key,
-                        Some(&prev_value),
-                        None,
-                    )?;
-                    prev_len
-                }
-                None => 0,
+        let prev_len = match self
+            .0
+            .get_cf(subspace_cf, key.to_string())
+            .map_err(|e| Error::DBError(e.into_string()))?
+        {
+            Some(prev_value) => {
+                let prev_len = prev_value.len() as i64;
+                // Persist the previous value
+                self.batch_write_subspace_diff(
+                    batch,
+                    height,
+                    key,
+                    Some(&prev_value),
+                    None,
+                    persist_diffs,
+                )?;
+                prev_len
             }
+            None => 0,
         };
 
         // Delete the key-val

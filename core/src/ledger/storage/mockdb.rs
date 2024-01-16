@@ -30,6 +30,11 @@ use crate::types::storage::{
 };
 use crate::types::time::DateTimeUtc;
 
+const SUBSPACE_CF: &str = "subspace";
+
+const OLD_DIFF_PREFIX: &str = "old";
+const NEW_DIFF_PREFIX: &str = "new";
+
 /// An in-memory DB for testing.
 #[derive(Debug, Default)]
 pub struct MockDB(
@@ -467,7 +472,11 @@ impl DB for MockDB {
         height: BlockHeight,
         is_old: bool,
     ) -> Result<Option<Vec<u8>>> {
-        let old_new_seg = if is_old { "old" } else { "new" };
+        let old_new_seg = if is_old {
+            OLD_DIFF_PREFIX
+        } else {
+            NEW_DIFF_PREFIX
+        };
 
         let prefix = Key::from(height.to_db_key())
             .push(&old_new_seg.to_string().to_db_key())
@@ -478,7 +487,7 @@ impl DB for MockDB {
     }
 
     fn read_subspace_val(&self, key: &Key) -> Result<Option<Vec<u8>>> {
-        let key = Key::parse("subspace").map_err(Error::KeyError)?.join(key);
+        let key = Key::parse(SUBSPACE_CF).map_err(Error::KeyError)?.join(key);
         Ok(self.0.borrow().get(&key.to_string()).cloned())
     }
 
@@ -554,36 +563,54 @@ impl DB for MockDB {
         let current_len = value.len() as i64;
         let diff_prefix = Key::from(height.to_db_key());
         let mut db = self.0.borrow_mut();
-        if !action.contains(WriteOpts::WRITE_DIFFS) {
-            db.insert(subspace_key.to_string(), value.to_owned());
-            Ok(0)
-        } else {
-            Ok(
-                match db.insert(subspace_key.to_string(), value.to_owned()) {
-                    Some(prev_value) => {
-                        let old_key = diff_prefix
-                            .push(&"old".to_string().to_db_key())
-                            .unwrap()
-                            .join(key);
-                        db.insert(old_key.to_string(), prev_value.clone());
-                        let new_key = diff_prefix
-                            .push(&"new".to_string().to_db_key())
-                            .unwrap()
-                            .join(key);
-                        db.insert(new_key.to_string(), value.to_owned());
-                        current_len - prev_value.len() as i64
-                    }
-                    None => {
-                        let new_key = diff_prefix
-                            .push(&"new".to_string().to_db_key())
-                            .unwrap()
-                            .join(key);
-                        db.insert(new_key.to_string(), value.to_owned());
-                        current_len
-                    }
-                },
-            )
+
+        let persist_diffs = action.contains(WriteOpts::WRITE_DIFFS);
+
+        // Diffs
+        let size_diff =
+            match db.insert(subspace_key.to_string(), value.to_owned()) {
+                Some(prev_value) => {
+                    let old_key = diff_prefix
+                        .push(&OLD_DIFF_PREFIX.to_string().to_db_key())
+                        .unwrap()
+                        .join(key);
+                    db.insert(old_key.to_string(), prev_value.clone());
+                    let new_key = diff_prefix
+                        .push(&NEW_DIFF_PREFIX.to_string().to_db_key())
+                        .unwrap()
+                        .join(key);
+                    db.insert(new_key.to_string(), value.to_owned());
+                    current_len - prev_value.len() as i64
+                }
+                None => {
+                    let new_key = diff_prefix
+                        .push(&NEW_DIFF_PREFIX.to_string().to_db_key())
+                        .unwrap()
+                        .join(key);
+                    db.insert(new_key.to_string(), value.to_owned());
+                    current_len
+                }
+            };
+
+        if !persist_diffs {
+            if let Some(pruned_height) = height.0.checked_sub(1) {
+                let pruned_key_prefix = Key::from(pruned_height.to_db_key());
+                let old_val_key = pruned_key_prefix
+                    .push(&NEW_DIFF_PREFIX.to_string().to_db_key())
+                    .unwrap()
+                    .join(key)
+                    .to_string();
+                db.remove(&old_val_key);
+                let new_val_key = pruned_key_prefix
+                    .push(&NEW_DIFF_PREFIX.to_string().to_db_key())
+                    .unwrap()
+                    .join(key)
+                    .to_string();
+                db.remove(&new_val_key);
+            }
         }
+
+        Ok(size_diff)
     }
 
     fn batch_delete_subspace_val(
@@ -594,24 +621,44 @@ impl DB for MockDB {
         action: WriteOpts,
     ) -> Result<i64> {
         let subspace_key =
-            Key::parse("subspace").map_err(Error::KeyError)?.join(key);
+            Key::parse(SUBSPACE_CF).map_err(Error::KeyError)?.join(key);
         let diff_prefix = Key::from(height.to_db_key());
         let mut db = self.0.borrow_mut();
-        Ok(match db.remove(&subspace_key.to_string()) {
+
+        let persist_diffs = action.contains(WriteOpts::WRITE_DIFFS);
+
+        let size_diff = match db.remove(&subspace_key.to_string()) {
             Some(value) => {
-                if !action.contains(WriteOpts::WRITE_DIFFS) {
-                    0
-                } else {
-                    let old_key = diff_prefix
-                        .push(&"old".to_string().to_db_key())
-                        .unwrap()
-                        .join(key);
-                    db.insert(old_key.to_string(), value.clone());
-                    value.len() as i64
+                let old_key = diff_prefix
+                    .push(&OLD_DIFF_PREFIX.to_string().to_db_key())
+                    .unwrap()
+                    .join(key);
+                db.insert(old_key.to_string(), value.clone());
+
+                if !persist_diffs {
+                    if let Some(pruned_height) = height.0.checked_sub(1) {
+                        let pruned_key_prefix =
+                            Key::from(pruned_height.to_db_key());
+                        let old_val_key = pruned_key_prefix
+                            .push(&NEW_DIFF_PREFIX.to_string().to_db_key())
+                            .unwrap()
+                            .join(key)
+                            .to_string();
+                        db.remove(&old_val_key);
+                        let new_val_key = pruned_key_prefix
+                            .push(&NEW_DIFF_PREFIX.to_string().to_db_key())
+                            .unwrap()
+                            .join(key)
+                            .to_string();
+                        db.remove(&new_val_key);
+                    }
                 }
+                value.len() as i64
             }
             None => 0,
-        })
+        };
+
+        Ok(size_diff)
     }
 
     fn prune_merkle_tree_store(

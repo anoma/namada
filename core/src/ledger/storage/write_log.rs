@@ -579,6 +579,7 @@ impl WriteLog {
             }
         }
 
+        // Replay protections specifically
         for (hash, entry) in self.replay_protection.iter() {
             match entry {
                 ReProtStorageModification::Write => storage
