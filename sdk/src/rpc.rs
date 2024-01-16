@@ -12,12 +12,12 @@ use masp_primitives::sapling::Node;
 use namada_core::ledger::governance::parameters::GovernanceParameters;
 use namada_core::ledger::governance::storage::proposal::StorageProposal;
 use namada_core::ledger::governance::utils::{
-    compute_proposal_result, ProposalResult, ProposalVotes, TallyVote, Vote,
-    VotePower,
+    compute_proposal_result, ProposalResult, ProposalVotes, Vote,
 };
 use namada_core::ledger::ibc::storage::{
     ibc_denom_key, ibc_denom_key_prefix, is_ibc_denom_key,
 };
+use namada_core::ledger::pgf::parameters::PgfParameters;
 use namada_core::ledger::pgf::storage::steward::StewardDetail;
 use namada_core::ledger::storage::LastBlock;
 use namada_core::types::account::Account;
@@ -1094,14 +1094,21 @@ pub async fn query_unbond_with_slashing<C: crate::queries::Client + Sync>(
     )
 }
 
-/// Get the givernance parameters
+/// Get the governance parameters
 pub async fn query_governance_parameters<C: crate::queries::Client + Sync>(
     client: &C,
 ) -> GovernanceParameters {
     unwrap_client_response::<C, _>(RPC.vp().gov().parameters(client).await)
 }
 
-/// Get the givernance parameters
+/// Get the public good fundings parameters
+pub async fn query_pgf_parameters<C: crate::queries::Client + Sync>(
+    client: &C,
+) -> PgfParameters {
+    unwrap_client_response::<C, _>(RPC.vp().pgf().parameters(client).await)
+}
+
+/// Get all the votes of a proposal
 pub async fn query_proposal_votes<C: crate::queries::Client + Sync>(
     client: &C,
     proposal_id: u64,

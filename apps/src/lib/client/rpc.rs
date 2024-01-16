@@ -1167,8 +1167,7 @@ pub async fn query_proposal_result(
         )
         .await;
 
-        let proposal_result = if let Ok(Some(proposal_result)) = proposal_result
-        {
+        if let Ok(Some(proposal_result)) = proposal_result {
             display_line!(context.io(), "Proposal Id: {} ", proposal_id);
             display_line!(context.io(), "{:4}{}", "", proposal_result);
         } else {
