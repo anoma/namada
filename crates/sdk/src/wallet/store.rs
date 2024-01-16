@@ -366,6 +366,7 @@ impl Store {
         alias: Alias,
         spendkey: ExtendedSpendingKey,
         password: Option<Zeroizing<String>>,
+        path: Option<DerivationPath>,
         force: bool,
     ) -> Option<Alias> {
         // abort if the alias is reserved
@@ -373,17 +374,18 @@ impl Store {
             println!("The alias {} is reserved", alias);
             return None;
         }
-
+        // abort if the alias is empty
         if alias.is_empty() {
             eprintln!("Empty alias given.");
             return None;
         }
+
         if self.contains_alias(&alias) && !force {
             match U::show_overwrite_confirmation(&alias, "a spending key") {
                 ConfirmationResponse::Replace => {}
                 ConfirmationResponse::Reselect(new_alias) => {
                     return self.insert_spending_key::<U>(
-                        new_alias, spendkey, password, false,
+                        new_alias, spendkey, password, path, false,
                     );
                 }
                 ConfirmationResponse::Skip => return None,
@@ -397,6 +399,7 @@ impl Store {
         let viewkey =
             zip32::ExtendedFullViewingKey::from(&spendkey.into()).into();
         self.view_keys.insert(alias.clone(), viewkey);
+        path.map(|p| self.derivation_paths.insert(alias.clone(), p));
         Some(alias)
     }
 

@@ -338,7 +338,13 @@ fn shielded_key_address_add(
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             let alias = wallet
-                .insert_spending_key(alias, spending_key, password, alias_force)
+                .insert_spending_key(
+                    alias,
+                    alias_force,
+                    spending_key,
+                    password,
+                    None,
+                )
                 .unwrap_or_else(|| {
                     edisplay_line!(io, "Spending key not added");
                     cli::safe_exit(1);
