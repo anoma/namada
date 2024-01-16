@@ -61,7 +61,7 @@ integration = []
 
 
 [dependencies]
-namada = {path = "../shared", features = ["multicore", "http-client", "tendermint-rpc", "std"]}
+namada = {path = "../namada", features = ["multicore", "http-client", "tendermint-rpc", "std"]}
 namada_sdk = {path = "../sdk", default-features = false, features = ["wasm-runtime", "download-params", "std", "rand"]}
 namada_test_utils = {path = "../test_utils", optional = true}
 
@@ -149,7 +149,7 @@ rocksdb = { workspace = true }
 
 [dev-dependencies]
 assert_matches = "1.5.0"
-namada = {path = "../shared", default-features = false, features = ["testing", "wasm-runtime"]}
+namada = {path = "../namada", default-features = false, features = ["testing", "wasm-runtime"]}
 namada_test_utils = {path = "../test_utils"}
 bit-set.workspace = true
 proptest.workspace = true

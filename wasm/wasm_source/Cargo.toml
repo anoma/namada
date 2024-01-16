@@ -47,7 +47,7 @@ wee_alloc = "0.4.5"
 getrandom = { version = "0.2", features = ["custom"] }
 
 [dev-dependencies]
-namada = {path = "../../crates/shared"}
+namada = {path = "../../crates/namada"}
 namada_tests = {path = "../../crates/tests"}
 namada_test_utils = {path = "../../crates/test_utils"}
 namada_tx_prelude = {path = "../../crates/tx_prelude"}

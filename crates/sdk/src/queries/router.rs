@@ -372,7 +372,7 @@ macro_rules! pattern_to_prefix {
 /// dynamic pattern is turned into a parameter for the method.
 macro_rules! pattern_and_handler_to_method {
     // Special terminal rule for `storage_value` handle from
-    // `shared/src/ledger/queries/shell.rs` that returns `Vec<u8>` which should
+    // `namada/src/ledger/queries/shell.rs` that returns `Vec<u8>` which should
     // not be decoded from response.data, but instead return as is
     (
         ( $( $param:tt: $param_ty:ty ),* )

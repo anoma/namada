@@ -33,11 +33,11 @@ endif
 audit-ignores += RUSTSEC-2021-0076
 
 # Workspace crates
-crates := namada_core
-crates += namada
+crates := namada
 crates += namada_account
 crates += namada_apps
 crates += namada_benchmarks
+crates += namada_core
 crates += namada_encoding_spec
 crates += namada_ethereum_bridge
 crates += namada_gas
@@ -94,7 +94,7 @@ check:
 check-mainnet:
 	$(cargo) check --workspace --features "mainnet"
 
-# Check that every crate can be built with default features and that shared crate
+# Check that every crate can be built with default features and that namada crate
 # can be built for wasm
 check-crates:
 	$(foreach p,$(crates), echo "Checking $(p)" && cargo +$(nightly) check -Z unstable-options --tests -p $(p) && ) \

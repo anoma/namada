@@ -18,7 +18,7 @@ members = [
   "crates/parameters",
   "crates/proof_of_stake",
   "crates/sdk",
-  "crates/shared",
+  "crates/namada",
   "crates/shielded_token",
   "crates/state",
   "crates/storage",

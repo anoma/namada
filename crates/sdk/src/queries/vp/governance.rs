@@ -1,4 +1,4 @@
-// cd shared && cargo expand ledger::queries::vp::governance
+// cd namada && cargo expand ledger::queries::vp::governance
 
 use namada_governance::parameters::GovernanceParameters;
 use namada_governance::storage::proposal::StorageProposal;

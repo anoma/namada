@@ -856,7 +856,7 @@ where
                                 // avoid crashing the ledger (required
                                 // `UnwindSafe`
                                 // and `RefUnwindSafe` in
-                                // shared/src/ledger/pos/vp.rs)
+                                // namada/src/ledger/pos/vp.rs)
                                 let keys_changed_ref = &keys_changed;
                                 let result = pos_ref
                                     .validate_tx(
