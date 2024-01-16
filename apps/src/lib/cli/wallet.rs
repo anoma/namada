@@ -169,6 +169,58 @@ fn payment_addresses_list(
     }
 }
 
+/// Derives a masp spending key from the mnemonic code in the wallet.
+fn shielded_key_derive(
+    ctx: Context,
+    io: &impl Io,
+    args::KeyDerive {
+        alias,
+        alias_force,
+        unsafe_dont_encrypt,
+        derivation_path,
+        use_device,
+        ..
+    }: args::KeyDerive,
+) {
+    let mut wallet = load_wallet(ctx);
+    let derivation_path = decode_shielded_derivation_path(derivation_path)
+        .unwrap_or_else(|err| {
+            edisplay_line!(io, "{}", err);
+            cli::safe_exit(1)
+        });
+    let alias = alias.to_lowercase();
+    let alias = if !use_device {
+        let encryption_password =
+            read_and_confirm_encryption_password(unsafe_dont_encrypt);
+        wallet
+            .derive_store_spending_key_from_mnemonic_code(
+                alias,
+                alias_force,
+                derivation_path,
+                None,
+                encryption_password,
+            )
+            .unwrap_or_else(|| {
+                edisplay_line!(io, "Failed to derive a key.");
+                display_line!(io, "No changes are persisted. Exiting.");
+                cli::safe_exit(1)
+            })
+            .0
+    } else {
+        display_line!(io, "Not implemented.");
+        display_line!(io, "No changes are persisted. Exiting.");
+        cli::safe_exit(1)
+    };
+    wallet
+        .save()
+        .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
+    display_line!(
+        io,
+        "Successfully added a key and an address with alias: \"{}\"",
+        alias
+    );
+}
+
 /// Generate a spending key.
 fn shielded_key_gen(
     ctx: Context,
@@ -531,7 +583,7 @@ async fn key_derive(
     if !args_key_derive.shielded {
         transparent_key_and_address_derive(ctx, io, args_key_derive).await
     } else {
-        todo!()
+        shielded_key_derive(ctx, io, args_key_derive)
     }
 }
 
