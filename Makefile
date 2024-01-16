@@ -55,7 +55,9 @@ build-test:
 	$(cargo) +$(nightly) build --tests $(jobs)
 
 build-release:
-	$(cargo) build $(jobs) --release --timings --package namada_apps --manifest-path Cargo.toml
+	$(cargo) build $(jobs) --release --timings --package namada_apps \
+		--manifest-path Cargo.toml \
+		--features jemalloc
 
 build-debug:
 	$(cargo) build --package namada_apps --manifest-path Cargo.toml

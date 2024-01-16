@@ -60,6 +60,12 @@ testing = ["namada_test_utils"]
 benches = ["testing", "namada_test_utils"]
 integration = []
 
+# RocksDB's "jemalloc" disabled by default as it takes a long time to build.
+# Enabled in `make build-release`.
+[target.'cfg(not(windows))'.features]
+jemalloc = ["rocksdb/jemalloc"]
+[target.'cfg(windows)'.features]
+jemalloc = [] # jemalloc is not supported on windows
 
 [dependencies]
 namada = {path = "../shared", features = ["multicore", "http-client", "tendermint-rpc"]}
@@ -116,6 +122,7 @@ regex.workspace = true
 reqwest.workspace = true
 ripemd.workspace = true
 rlimit.workspace = true
+rocksdb = { workspace = true }
 rpassword.workspace = true
 serde_bytes.workspace = true
 serde_json = {workspace = true, features = ["raw_value"]}
@@ -140,12 +147,6 @@ winapi.workspace = true
 zeroize.workspace = true
 warp = "0.3.2"
 bytes = "1.1.0"
-
-[target.'cfg(not(windows))'.dependencies]
-rocksdb = { workspace = true, features = ['jemalloc'] } # jemalloc is not supported on windows
-
-[target.'cfg(windows)'.dependencies]
-rocksdb = { workspace = true }
 
 [dev-dependencies]
 assert_matches = "1.5.0"
