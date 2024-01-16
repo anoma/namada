@@ -142,20 +142,13 @@ where
     fn mint_nft_validate(
         &self,
         _account: &Self::AccountId,
-        class_id: &PrefixedClassId,
-        token_id: &TokenId,
+        _class_id: &PrefixedClassId,
+        _token_id: &TokenId,
         _token_uri: Option<&TokenUri>,
         _token_data: Option<&TokenData>,
     ) -> Result<(), NftTransferError> {
-        match self.get_nft(class_id, token_id) {
-            Err(NftTransferError::NftNotFound) => Ok(()),
-            Err(e) => Err(e),
-            Ok(_) => Err(NftTransferError::Other(format!(
-                "Metadata should not exist for this NFT: class_id {class_id}, \
-                 token_id {token_id}"
-            ))),
-        }
         // Balance changes will be validated by Multitoken VP
+        Ok(())
     }
 
     fn burn_nft_validate(
@@ -320,10 +313,6 @@ where
         _memo: &Memo,
     ) -> Result<(), NftTransferError> {
         let ibc_token = storage::ibc_token_for_nft(class_id, token_id);
-
-        self.inner
-            .borrow_mut()
-            .delete_nft_metadata(class_id, token_id)?;
 
         self.inner
             .borrow_mut()

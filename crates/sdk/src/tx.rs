@@ -28,7 +28,7 @@ use namada_core::ibc::apps::transfer::types::PrefixedCoin;
 use namada_core::ibc::core::channel::types::timeout::TimeoutHeight;
 use namada_core::ibc::core::client::types::Height as IbcHeight;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
-use namada_core::ibc::primitives::{Timestamp as IbcTimestamp, ToProto};
+use namada_core::ibc::primitives::Timestamp as IbcTimestamp;
 use namada_core::types::address::{Address, InternalAddress, MASP};
 use namada_core::types::dec::Dec;
 use namada_core::types::hash::Hash;
