@@ -246,11 +246,7 @@ fn shielded_key_gen(
                 cli::safe_exit(1)
             });
         let (_mnemonic, seed) =
-            Wallet::<CliWalletUtils>::gen_hd_seed(None, &mut OsRng)
-                .unwrap_or_else(|err| {
-                    edisplay_line!(io, "{}", err);
-                    cli::safe_exit(1)
-                });
+            Wallet::<CliWalletUtils>::gen_hd_seed(None, &mut OsRng);
         wallet.derive_store_hd_spendind_key(
             alias,
             alias_force,
@@ -443,8 +439,8 @@ async fn transparent_key_and_address_derive(
                 None,
                 encryption_password,
             )
-            .unwrap_or_else(|err| {
-                edisplay_line!(io, "{}", err);
+            .unwrap_or_else(|| {
+                edisplay_line!(io, "Failed to derive a keypair.");
                 display_line!(io, "No changes are persisted. Exiting.");
                 cli::safe_exit(1)
             })
@@ -541,11 +537,7 @@ fn transparent_key_and_address_gen(
                     cli::safe_exit(1)
                 });
         let (_mnemonic, seed) =
-            Wallet::<CliWalletUtils>::gen_hd_seed(None, &mut OsRng)
-                .unwrap_or_else(|err| {
-                    edisplay_line!(io, "{}", err);
-                    cli::safe_exit(1)
-                });
+            Wallet::<CliWalletUtils>::gen_hd_seed(None, &mut OsRng);
         wallet.derive_store_hd_secret_key(
             scheme,
             Some(alias),
@@ -556,8 +548,8 @@ fn transparent_key_and_address_gen(
         )
     }
     .map(|x| x.0)
-    .unwrap_or_else(|err| {
-        eprintln!("{}", err);
+    .unwrap_or_else(|| {
+        edisplay_line!(io, "Failed to generate a keypair.");
         println!("No changes are persisted. Exiting.");
         cli::safe_exit(0);
     });
@@ -1266,8 +1258,8 @@ fn transparent_secret_key_add(
         read_and_confirm_encryption_password(unsafe_dont_encrypt);
     let alias = wallet
         .insert_keypair(alias, alias_force, sk, encryption_password, None, None)
-        .unwrap_or_else(|err| {
-            edisplay_line!(io, "{}", err);
+        .unwrap_or_else(|| {
+            edisplay_line!(io, "Failed to add a keypair.");
             display_line!(io, "No changes are persisted. Exiting.");
             cli::safe_exit(1);
         });
