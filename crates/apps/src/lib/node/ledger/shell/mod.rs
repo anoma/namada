@@ -60,7 +60,7 @@ use namada::state::{
 };
 use namada::token;
 pub use namada::tx::data::ResultCode;
-use namada::tx::data::{DecryptedTx, TxType, WrapperTx};
+use namada::tx::data::{DecryptedTx, TxType, WrapperTx, WrapperTxErr};
 use namada::tx::{Section, Tx};
 use namada::types::address;
 use namada::types::address::Address;
@@ -1422,11 +1422,11 @@ where
     H: StorageHasher + Sync + 'static,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    match wrapper
-        .fee
-        .amount_per_gas_unit
-        .to_amount(&wrapper.fee.token, temp_wl_storage)
-    {
+    match token::denom_to_amount(
+        wrapper.fee.amount_per_gas_unit,
+        &wrapper.fee.token,
+        temp_wl_storage,
+    ) {
         Ok(amount_per_gas_unit) if amount_per_gas_unit < minimum_gas_price => {
             // The fees do not match the minimum required
             return Err(Error::TxApply(protocol::Error::FeeError(format!(
@@ -1496,7 +1496,7 @@ where
         )
         .map_err(|e| Error::TxApply(protocol::Error::FeeUnshieldingError(e)))?;
 
-    let fee_unshielding_gas_limit = temp_wl_storage
+    let fee_unshielding_gas_limit: GasLimit = temp_wl_storage
         .read(&parameters::storage::get_fee_unshielding_gas_limit_key())
         .expect("Error reading from storage")
         .expect("Missing fee unshielding gas limit in storage");
@@ -1523,10 +1523,7 @@ where
     )
     .map_err(|e| {
         Error::TxApply(protocol::Error::FeeUnshieldingError(
-            namada::types::transaction::WrapperTxErr::InvalidUnshield(format!(
-                "Wasm run failed: {}",
-                e
-            )),
+            WrapperTxErr::InvalidUnshield(format!("Wasm run failed: {}", e)),
         ))
     })?;
 
@@ -1534,7 +1531,7 @@ where
         Ok(())
     } else {
         Err(Error::TxApply(protocol::Error::FeeUnshieldingError(
-            namada::types::transaction::WrapperTxErr::InvalidUnshield(format!(
+            WrapperTxErr::InvalidUnshield(format!(
                 "Some VPs rejected fee unshielding: {:#?}",
                 result.vps_result.rejected_vps
             )),
