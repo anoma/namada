@@ -687,7 +687,9 @@ pub async fn submit_become_validator(
             None,
             None,
         )
-        .map_err(|err| error::Error::Other(err.to_string()))?;
+        .ok_or(error::Error::Other(String::from(
+            "Failed to store the keypair.",
+        )))?;
 
     let tx_code_hash =
         query_wasm_code_hash(namada, tx_code_path.to_string_lossy())
