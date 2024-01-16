@@ -18,9 +18,10 @@ use crate::types::address::{Address, InternalAddress, HASH_LEN, SHA_HASH_LEN};
 use crate::types::ibc::IbcTokenHash;
 use crate::types::storage::{self, DbKeySeg, Key, KeySeg};
 
-const CLIENTS_COUNTER: &str = "clients/counter";
-const CONNECTIONS_COUNTER: &str = "connections/counter";
-const CHANNELS_COUNTER: &str = "channelEnds/counter";
+const CLIENTS_COUNTER_PREFIX: &str = "clients";
+const CONNECTIONS_COUNTER_PREFIX: &str = "connections";
+const CHANNELS_COUNTER_PREFIX: &str = "channelEnds";
+const COUNTER_SEG: &str = "counter";
 const DENOM: &str = "ibc_denom";
 
 #[allow(missing_docs)]
@@ -51,20 +52,20 @@ pub fn ibc_key(path: impl AsRef<str>) -> Result<Key> {
 
 /// Returns a key of the IBC client counter
 pub fn client_counter_key() -> Key {
-    let path = CLIENTS_COUNTER.to_owned();
+    let path = format!("{}/{}", CLIENTS_COUNTER_PREFIX, COUNTER_SEG);
     ibc_key(path).expect("Creating a key for the client counter shouldn't fail")
 }
 
 /// Returns a key of the IBC connection counter
 pub fn connection_counter_key() -> Key {
-    let path = CONNECTIONS_COUNTER.to_owned();
+    let path = format!("{}/{}", CONNECTIONS_COUNTER_PREFIX, COUNTER_SEG);
     ibc_key(path)
         .expect("Creating a key for the connection counter shouldn't fail")
 }
 
 /// Returns a key of the IBC channel counter
 pub fn channel_counter_key() -> Key {
-    let path = CHANNELS_COUNTER.to_owned();
+    let path = format!("{}/{}", CHANNELS_COUNTER_PREFIX, COUNTER_SEG);
     ibc_key(path)
         .expect("Creating a key for the channel counter shouldn't fail")
 }
@@ -447,4 +448,16 @@ pub fn is_ibc_denom_key(key: &Key) -> Option<(String, String)> {
         }
         _ => None,
     }
+}
+
+/// Returns true if the given key is for an IBC counter for clients,
+/// connections, or channelEnds
+pub fn is_ibc_counter_key(key: &Key) -> bool {
+    matches!(&key.segments[..],
+    [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix), DbKeySeg::StringSeg(counter)]
+        if addr == &Address::Internal(InternalAddress::Ibc)
+            && (prefix == CLIENTS_COUNTER_PREFIX
+                || prefix == CONNECTIONS_COUNTER_PREFIX
+                || prefix == CHANNELS_COUNTER_PREFIX) && counter == COUNTER_SEG
+            )
 }

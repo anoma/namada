@@ -24,6 +24,7 @@ pub use wl_storage::{
 };
 
 use super::gas::MEMORY_ACCESS_GAS_PER_BYTE;
+use super::ibc::storage::is_ibc_counter_key;
 use super::storage_api::WriteOpts;
 use crate::ledger::eth_bridge::storage::bridge_pool::is_pending_transfer_key;
 use crate::ledger::gas::{
@@ -57,6 +58,11 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// We delay epoch change 2 blocks to keep it in sync with Tendermint, because
 /// it has 2 blocks delay on validator set update.
 pub const EPOCH_SWITCH_BLOCKS_DELAY: u32 = 2;
+
+/// Returns true if the given key is one whose data is not merklized
+pub fn is_key_not_merklized(key: &Key) -> bool {
+    is_masp_key(key) || is_ibc_counter_key(key)
+}
 
 /// The storage data
 #[derive(Debug)]
@@ -601,7 +607,7 @@ where
     /// gas cost.
     pub fn has_key(&self, key: &Key) -> Result<(bool, u64)> {
         Ok((
-            if is_masp_key(key) {
+            if is_key_not_merklized(key) {
                 self.db.read_subspace_val(key)?.is_some()
             } else {
                 self.block.tree.has_key(key)?
@@ -613,7 +619,7 @@ where
     /// Returns a value from the specified subspace and the gas cost
     pub fn read(&self, key: &Key) -> Result<(Option<Vec<u8>>, u64)> {
         tracing::debug!("storage read key {}", key);
-        if !is_masp_key(key) {
+        if !is_key_not_merklized(key) {
             let (present, gas) = self.has_key(key)?;
             if !present {
                 return Ok((None, gas));
@@ -1450,6 +1456,9 @@ mod tests {
 
     use super::testing::*;
     use super::*;
+    use crate::ledger::ibc::storage::{
+        channel_counter_key, client_counter_key, connection_counter_key,
+    };
     use crate::ledger::parameters::{self, Parameters};
     use crate::ledger::storage_api::{StorageRead, StorageWrite};
     use crate::types::dec::Dec;
@@ -1829,5 +1838,16 @@ mod tests {
             .read_diffs_val(&key2, BlockHeight(1), false)
             .unwrap();
         assert!(res2.is_none());
+    }
+
+    #[test]
+    fn test_non_merklized_keys() {
+        let channel_counter_key = channel_counter_key();
+        let connections_counter_key = connection_counter_key();
+        let client_counter_key = client_counter_key();
+
+        assert!(is_key_not_merklized(&channel_counter_key));
+        assert!(is_key_not_merklized(&client_counter_key));
+        assert!(is_key_not_merklized(&connections_counter_key));
     }
 }
