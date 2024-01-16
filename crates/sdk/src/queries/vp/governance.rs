@@ -2,7 +2,7 @@
 
 use namada_governance::parameters::GovernanceParameters;
 use namada_governance::storage::proposal::StorageProposal;
-use namada_governance::utils::Vote;
+use namada_governance::utils::{ProposalResult, Vote};
 use namada_state::{DBIter, StorageHasher, DB};
 
 use crate::queries::types::RequestCtx;
@@ -12,6 +12,7 @@ router! {GOV,
     ( "proposal" / [id: u64 ] ) -> Option<StorageProposal> = proposal_id,
     ( "proposal" / [id: u64 ] / "votes" ) -> Vec<Vote> = proposal_id_votes,
     ( "parameters" ) -> GovernanceParameters = parameters,
+    ( "stored_proposal_result" / [id: u64] ) -> Option<ProposalResult> = proposal_result,
 }
 
 /// Query the provided proposal id
@@ -47,4 +48,16 @@ where
     H: 'static + StorageHasher + Sync,
 {
     namada_governance::storage::get_parameters(ctx.wl_storage)
+}
+
+/// Get the governance proposal result stored in storage
+fn proposal_result<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+    id: u64,
+) -> storage_api::Result<Option<ProposalResult>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    storage_api::governance::get_proposal_result(ctx.wl_storage, id)
 }
