@@ -23,7 +23,7 @@ use crate::types::storage::{
 };
 
 bitflags! {
-    /// Write actions to help commit_block determine what parts of the storage to
+    /// Write options to help commit_block determine what parts of the storage to
     /// update
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct WriteOpts: u8 {
@@ -37,18 +37,6 @@ bitflags! {
         const ALL = Self::MERKLIZE.bits() | Self::WRITE_DIFFS.bits();
     }
 }
-
-// /// Write actions to help commit_block determine what parts of the storage to
-// /// update
-// #[derive(Clone, Debug, PartialEq, Eq)]
-// pub enum WriteOpts {
-//     /// All
-//     All,
-//     /// Don't add to merkle tree
-//     NoMerkl,
-//     /// Don't add to diffs or merkle tree
-//     NoDiffsOrMerkl,
-// }
 
 /// Common storage read interface
 ///

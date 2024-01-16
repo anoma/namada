@@ -1197,13 +1197,13 @@ impl DB for RocksDB {
         } else {
             NEW_DIFF_PREFIX
         };
-        let prefix = Key::from(height.to_db_key())
+        let key = Key::from(height.to_db_key())
             .push(&old_new_seg.to_string().to_db_key())
             .unwrap()
             .join(key);
 
         self.0
-            .get_cf(diffs_cf, prefix.to_string())
+            .get_cf(diffs_cf, key.to_string())
             .map_err(|e| Error::DBError(e.into_string()))
     }
 
