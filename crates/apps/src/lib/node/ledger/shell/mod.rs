@@ -82,7 +82,6 @@ use crate::config::{self, genesis, TendermintMode, ValidatorLocalConfig};
 use crate::facade::tendermint::abci::types::{Misbehavior, MisbehaviorKind};
 use crate::facade::tendermint::v0_37::abci::{request, response};
 use crate::facade::tendermint::{self, validator};
-use crate::facade::tendermint_proto::google::protobuf::Timestamp;
 use crate::facade::tendermint_proto::v0_37::crypto::public_key;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
@@ -585,25 +584,6 @@ where
         response
     }
 
-    /// Takes the optional tendermint timestamp of the block: if it's Some than
-    /// converts it to a [`DateTimeUtc`], otherwise retrieve from self the
-    /// time of the last block committed
-    pub fn get_block_timestamp(
-        &self,
-        tendermint_block_time: Option<Timestamp>,
-    ) -> DateTimeUtc {
-        if let Some(t) = tendermint_block_time {
-            if let Ok(t) = t.try_into() {
-                return t;
-            }
-        }
-        // Default to last committed block time
-        self.wl_storage
-            .storage
-            .get_last_block_timestamp()
-            .expect("Failed to retrieve last block timestamp")
-    }
-
     /// Read the value for a storage key dropping any error
     pub fn read_storage_key<T>(&self, key: &Key) -> Option<T>
     where
@@ -1099,7 +1079,11 @@ where
 
         // Tx expiration
         if let Some(exp) = tx.header.expiration {
-            let last_block_timestamp = self.get_block_timestamp(None);
+            let last_block_timestamp = self
+                .wl_storage
+                .storage
+                .get_last_block_timestamp()
+                .expect("Failed to retrieve last block timestamp");
 
             if last_block_timestamp > exp {
                 response.code = ResultCode::ExpiredTx.into();
@@ -1799,6 +1783,7 @@ mod test_utils {
             &self,
             req: ProcessProposal,
         ) -> std::result::Result<Vec<ProcessedTx>, TestError> {
+            let time = DateTimeUtc::now();
             let (resp, tx_results) =
                 self.shell.process_proposal(RequestProcessProposal {
                     txs: req
@@ -1816,6 +1801,11 @@ mod test_utils {
                         )
                         .unwrap()
                         .into(),
+                    time: Some(Timestamp {
+                        seconds: time.0.timestamp(),
+                        nanos: time.0.timestamp_subsec_nanos() as i32,
+                    }),
+
                     ..Default::default()
                 });
             let results = tx_results

@@ -104,7 +104,10 @@ where
 
         let (tx_results, meta) = self.process_txs(
             &req.txs,
-            self.get_block_timestamp(req.time),
+            req.time
+                .expect("Missing timestamp in proposed block")
+                .try_into()
+                .expect("Failed conversion of Comet timestamp"),
             &native_block_proposer_address,
         );
 
