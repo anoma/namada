@@ -529,7 +529,7 @@ impl<U: WalletIo> Wallet<U> {
     /// provided, will prompt for password from stdin.
     /// Stores the key in decrypted key cache and returns the alias of the key
     /// and a reference-counting pointer to the key.
-    pub fn derive_key_from_mnemonic_code(
+    pub fn derive_store_key_from_mnemonic_code(
         &mut self,
         scheme: SchemeType,
         alias: Option<String>,
