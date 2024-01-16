@@ -2133,48 +2133,6 @@ mod test_utils {
             .init_storage(&mut shell.wl_storage)
             .expect("Test failed");
         // make wl_storage to update conversion for a new epoch
-        let token_params = token::Parameters {
-            max_reward_rate: Default::default(),
-            kd_gain_nom: Default::default(),
-            kp_gain_nom: Default::default(),
-            locked_ratio_target: Default::default(),
-        };
-        // Insert a map assigning random addresses to each token alias.
-        // Needed for storage but not for this test.
-        for (token, _) in address::tokens() {
-            let addr = address::gen_deterministic_established_address(token);
-            token_params.init_storage(&addr, &mut shell.wl_storage);
-            shell
-                .wl_storage
-                .write(&token::minted_balance_key(&addr), token::Amount::zero())
-                .unwrap();
-            shell
-                .wl_storage
-                .storage
-                .conversion_state
-                .tokens
-                .insert(token.to_string(), addr);
-        }
-        shell.wl_storage.storage.conversion_state.tokens.insert(
-            "nam".to_string(),
-            shell.wl_storage.storage.native_token.clone(),
-        );
-        token_params.init_storage(
-            &shell.wl_storage.storage.native_token.clone(),
-            &mut shell.wl_storage,
-        );
-        // final adjustments so that updating allowed conversions doesn't panic
-        // with divide by zero
-        shell
-            .wl_storage
-            .write(
-                &token::minted_balance_key(
-                    &shell.wl_storage.storage.native_token.clone(),
-                ),
-                token::Amount::zero(),
-            )
-            .unwrap();
-        shell.wl_storage.storage.conversion_state.normed_inflation = Some(1);
         update_allowed_conversions(&mut shell.wl_storage)
             .expect("update conversions failed");
         shell.wl_storage.commit_block().expect("commit failed");

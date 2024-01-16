@@ -209,7 +209,7 @@ pub struct Tokens {
 )]
 pub struct TokenConfig {
     pub denom: Denomination,
-    pub parameters: token::Parameters,
+    pub masp_params: Option<token::MaspParams>,
 }
 
 #[derive(

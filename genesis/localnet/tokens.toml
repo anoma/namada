@@ -3,7 +3,7 @@
 [token.NAM]
 denom = 6
 
-[token.NAM.parameters]
+[token.NAM.masp_params]
 max_reward_rate = "0.1"
 kd_gain_nom = "0.1"
 kp_gain_nom = "0.1"
@@ -12,7 +12,7 @@ locked_ratio_target = "0.6667"
 [token.BTC]
 denom = 8
 
-[token.BTC.parameters]
+[token.BTC.masp_params]
 max_reward_rate = "0.1"
 kd_gain_nom = "0.1"
 kp_gain_nom = "0.1"
@@ -21,7 +21,7 @@ locked_ratio_target = "0.6667"
 [token.ETH]
 denom = 18
 
-[token.ETH.parameters]
+[token.ETH.masp_params]
 max_reward_rate = "0.1"
 kd_gain_nom = "0.1"
 kp_gain_nom = "0.1"
@@ -30,7 +30,7 @@ locked_ratio_target = "0.6667"
 [token.DOT]
 denom = 10
 
-[token.DOT.parameters]
+[token.DOT.masp_params]
 max_reward_rate = "0.1"
 kd_gain_nom = "0.1"
 kp_gain_nom = "0.1"
@@ -39,7 +39,7 @@ locked_ratio_target = "0.6667"
 [token.Schnitzel]
 denom = 6
 
-[token.Schnitzel.parameters]
+[token.Schnitzel.masp_params]
 max_reward_rate = "0.1"
 kd_gain_nom = "0.1"
 kp_gain_nom = "0.1"
@@ -48,7 +48,7 @@ locked_ratio_target = "0.6667"
 [token.Apfel]
 denom = 6
 
-[token.Apfel.parameters]
+[token.Apfel.masp_params]
 max_reward_rate = "0.1"
 kd_gain_nom = "0.1"
 kp_gain_nom = "0.1"
@@ -57,7 +57,7 @@ locked_ratio_target = "0.6667"
 [token.Kartoffel]
 denom = 6
 
-[token.Kartoffel.parameters]
+[token.Kartoffel.masp_params]
 max_reward_rate = "0.1"
 kd_gain_nom = "0.1"
 kp_gain_nom = "0.1"

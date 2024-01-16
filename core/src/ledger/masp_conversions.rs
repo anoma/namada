@@ -411,7 +411,7 @@ where
         .enumerate()
         .collect();
     // ceil(assets.len() / num_threads)
-    let notes_per_thread_max = (assets.len() - 1) / num_threads + 1;
+    let notes_per_thread_max = (assets.len() + num_threads - 1) / num_threads;
     // floor(assets.len() / num_threads)
     let notes_per_thread_min = assets.len() / num_threads;
     // Now on each core, add the latest conversion to each conversion
@@ -561,7 +561,7 @@ mod tests {
             params.init_storage(&mut s).unwrap();
 
             // Tokens
-            let token_params = token::Parameters {
+            let token_params = token::MaspParams {
                 max_reward_rate: Dec::from_str("0.1").unwrap(),
                 kp_gain_nom: Dec::from_str("0.1").unwrap(),
                 kd_gain_nom: Dec::from_str("0.1").unwrap(),

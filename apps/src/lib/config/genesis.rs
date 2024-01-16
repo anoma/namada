@@ -228,7 +228,7 @@ pub struct TokenAccount {
     #[derivative(PartialOrd = "ignore", Ord = "ignore")]
     pub balances: HashMap<Address, token::Amount>,
     /// Token parameters
-    pub parameters: token::Parameters,
+    pub masp_params: Option<token::MaspParams>,
     /// Token inflation from the last epoch (read + write for every epoch)
     pub last_inflation: token::Amount,
     /// Token shielded ratio from the last epoch (read + write for every epoch)

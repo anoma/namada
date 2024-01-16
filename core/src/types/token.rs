@@ -1112,7 +1112,7 @@ pub fn masp_locked_ratio_target_key(token_addr: &Address) -> Key {
     Deserialize,
     Serialize,
 )]
-pub struct Parameters {
+pub struct MaspParams {
     /// Maximum reward rate
     pub max_reward_rate: Dec,
     /// Shielded Pool nominal derivative gain
@@ -1123,7 +1123,7 @@ pub struct Parameters {
     pub locked_ratio_target: Dec,
 }
 
-impl Parameters {
+impl MaspParams {
     /// Initialize parameters for the token in storage during the genesis block.
     pub fn init_storage<DB, H>(
         &self,
@@ -1161,13 +1161,10 @@ impl Parameters {
         wl_storage
             .write(&masp_kd_gain_key(address), kd_gain_nom)
             .expect("The nominal derivative gain must be initialized");
-        wl_storage
-            .write(&minted_balance_key(address), Amount::zero())
-            .expect("The total minted balance key must initialized");
     }
 }
 
-impl Default for Parameters {
+impl Default for MaspParams {
     fn default() -> Self {
         Self {
             max_reward_rate: Dec::from_str("0.1").unwrap(),
