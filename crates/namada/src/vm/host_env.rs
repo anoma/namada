@@ -2699,6 +2699,8 @@ where
     // if we run out of gas, we need to stop the execution
     let result = gas_meter.consume(used_gas).into_storage_result();
     if let Err(err) = &result {
+        let sentinel = unsafe { ctx.sentinel.get() };
+        sentinel.set_out_of_gas();
         tracing::info!(
             "Stopping transaction execution because of gas error: {}",
             err
