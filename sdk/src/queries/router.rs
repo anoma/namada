@@ -759,7 +759,7 @@ macro_rules! router_type {
 /// Handler functions used in the patterns should have the expected signature:
 /// ```rust,ignore
 /// fn handler<D, H>(ctx: RequestCtx<'_, D, H>, args ...)
-///   -> storage_api::Result<ReturnType>
+///   -> namada_storage::Result<ReturnType>
 /// where
 ///     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
 ///     H: 'static + StorageHasher + Sync;
@@ -769,7 +769,7 @@ macro_rules! router_type {
 /// `(with_options $handler)` and then the expected signature is:
 /// ```rust,ignore
 /// fn handler<D, H>(ctx: RequestCtx<'_, D, H>, request: &RequestQuery, args
-/// ...)   -> storage_api::Result<ResponseQuery<ReturnType>>
+/// ...)   -> namada_storage::Result<ResponseQuery<ReturnType>>
 /// where
 ///     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
 ///     H: 'static + StorageHasher + Sync;
@@ -791,14 +791,14 @@ macro_rules! router {
                 ctx: $crate::queries::RequestCtx<'_, D, H, V, T>,
                 request: &$crate::queries::RequestQuery,
                 start: usize
-            ) -> namada_core::ledger::storage_api::Result<$crate::queries::EncodedResponseQuery>
+            ) -> namada_storage::Result<$crate::queries::EncodedResponseQuery>
             where
-                D: 'static + namada_core::ledger::storage::DB + for<'iter> namada_core::ledger::storage::DBIter<'iter> + Sync,
-                H: 'static + namada_core::ledger::storage::StorageHasher + Sync,
+                D: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter> + Sync,
+                H: 'static + namada_state::StorageHasher + Sync,
             {
 
                 // Import for `.into_storage_result()`
-                use namada_core::ledger::storage_api::ResultExt;
+                use namada_storage::ResultExt;
 
                 // Import helper from this crate used inside the macros
                 use $crate::queries::router::find_next_slash_index;
@@ -835,10 +835,9 @@ macro_rules! router {
 #[cfg(test)]
 mod test_rpc_handlers {
     use borsh_ext::BorshSerializeExt;
-    use namada_core::ledger::storage::{DBIter, StorageHasher, DB};
-    use namada_core::ledger::storage_api;
     use namada_core::types::storage::Epoch;
     use namada_core::types::token;
+    use namada_state::{DBIter, StorageHasher, DB};
 
     use crate::queries::{
         EncodedResponseQuery, RequestCtx, RequestQuery, ResponseQuery,
@@ -857,7 +856,7 @@ mod test_rpc_handlers {
                 pub fn $name<D, H, V, T>(
                     _ctx: RequestCtx<'_, D, H, V, T>,
                     $( $( $param: $param_ty ),* )?
-                ) -> storage_api::Result<String>
+                ) -> namada_storage::Result<String>
                 where
                     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
                     H: 'static + StorageHasher + Sync,
@@ -906,7 +905,7 @@ mod test_rpc_handlers {
         a1: token::DenominatedAmount,
         a2: token::DenominatedAmount,
         a3: Option<token::DenominatedAmount>,
-    ) -> storage_api::Result<String>
+    ) -> namada_storage::Result<String>
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
@@ -926,7 +925,7 @@ mod test_rpc_handlers {
         a2: token::DenominatedAmount,
         a3: Option<token::DenominatedAmount>,
         a4: Option<Epoch>,
-    ) -> storage_api::Result<String>
+    ) -> namada_storage::Result<String>
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
@@ -944,7 +943,7 @@ mod test_rpc_handlers {
     pub fn c<D, H, V, T>(
         _ctx: RequestCtx<'_, D, H, V, T>,
         _request: &RequestQuery,
-    ) -> storage_api::Result<EncodedResponseQuery>
+    ) -> namada_storage::Result<EncodedResponseQuery>
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
@@ -1001,7 +1000,6 @@ mod test_rpc {
 
 #[cfg(test)]
 mod test {
-    use namada_core::ledger::storage_api;
     use namada_core::tendermint::block;
     use namada_core::types::storage::Epoch;
     use namada_core::types::token;
@@ -1013,7 +1011,7 @@ mod test {
 
     /// Test all the possible paths in `TEST_RPC` router.
     #[tokio::test]
-    async fn test_router_macro() -> storage_api::Result<()> {
+    async fn test_router_macro() -> namada_storage::Result<()> {
         let client = TestClient::new(TEST_RPC);
 
         // Test request with an invalid path

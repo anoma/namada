@@ -7,11 +7,11 @@ pub mod eth_events {
         ValidatorSetUpdateFilter,
     };
     use ethbridge_events::{DynEventCodec, Events as RawEvents};
-    use namada::core::types::ethereum_structs;
     use namada::types::address::Address;
     use namada::types::ethereum_events::{
         EthAddress, EthereumEvent, TransferToEthereum, TransferToNamada, Uint,
     };
+    use namada::types::ethereum_structs;
     use namada::types::hash::Hash;
     use namada::types::keccak::KeccakHash;
     use namada::types::token::Amount;
@@ -176,7 +176,7 @@ pub mod eth_events {
     impl Parse for ethabi::Uint {
         fn parse_amount(self) -> Result<Amount> {
             let uint = {
-                use namada::core::types::uint::Uint as NamadaUint;
+                use namada::types::uint::Uint as NamadaUint;
                 let mut num_buf = [0; 32];
                 self.to_little_endian(&mut num_buf);
                 NamadaUint::from_little_endian(&num_buf)

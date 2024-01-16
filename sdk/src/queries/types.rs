@@ -1,8 +1,7 @@
 use std::fmt::Debug;
 
-use namada_core::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
-use namada_core::ledger::storage_api;
 use namada_core::types::storage::BlockHeight;
+use namada_state::{DBIter, StorageHasher, WlStorage, DB};
 use thiserror::Error;
 
 use crate::events::log::EventLog;
@@ -39,7 +38,7 @@ pub trait Router {
         &self,
         ctx: RequestCtx<'_, D, H, V, T>,
         request: &RequestQuery,
-    ) -> storage_api::Result<EncodedResponseQuery>
+    ) -> namada_storage::Result<EncodedResponseQuery>
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
@@ -58,7 +57,7 @@ pub trait Router {
         ctx: RequestCtx<'_, D, H, V, T>,
         request: &RequestQuery,
         start: usize,
-    ) -> storage_api::Result<EncodedResponseQuery>
+    ) -> namada_storage::Result<EncodedResponseQuery>
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync;

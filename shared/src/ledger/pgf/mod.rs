@@ -5,11 +5,9 @@ pub mod utils;
 
 use std::collections::BTreeSet;
 
-use namada_core::ledger::pgf::storage::keys as pgf_storage;
-use namada_core::ledger::storage;
-use namada_core::ledger::storage_api::governance::is_proposal_accepted;
-use namada_core::ledger::storage_api::pgf as pgf_api;
-use namada_core::proto::Tx;
+use namada_governance::pgf::storage::keys as pgf_storage;
+use namada_governance::{is_proposal_accepted, pgf};
+use namada_tx::Tx;
 use thiserror::Error;
 
 use crate::ledger::native_vp;
@@ -34,8 +32,8 @@ pub enum Error {
 /// Pgf VP
 pub struct PgfVp<'a, DB, H, CA>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: storage::StorageHasher,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    H: namada_state::StorageHasher,
     CA: WasmCacheAccess,
 {
     /// Context to interact with the host structures.
@@ -44,8 +42,8 @@ where
 
 impl<'a, DB, H, CA> NativeVp for PgfVp<'a, DB, H, CA>
 where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: 'static + storage::StorageHasher,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    H: 'static + namada_state::StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
     type Error = Error;
@@ -76,8 +74,10 @@ where
                         // for signature authorization
                         let steward_address = pgf_storage::is_stewards_key(key);
                         if let Some(address) = steward_address {
-                            let steward_post =
-                                pgf_api::get_steward(&self.ctx.post(), address);
+                            let steward_post = pgf::storage::get_steward(
+                                &self.ctx.post(),
+                                address,
+                            );
                             match steward_post {
                                 Ok(Some(steward)) => {
                                     steward.is_valid_reward_distribution()
@@ -108,8 +108,8 @@ where
 
 impl<'a, DB, H, CA> PgfVp<'a, DB, H, CA>
 where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: 'static + storage::StorageHasher,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    H: 'static + namada_state::StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
     /// Validate a governance parameter

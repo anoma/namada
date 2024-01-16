@@ -1,11 +1,12 @@
 extern crate alloc;
 
-pub use namada_core::{ibc, proto, tendermint, tendermint_proto};
+pub use namada_core::{borsh, ibc, tendermint, tendermint_proto, types};
 #[cfg(feature = "tendermint-rpc")]
 pub use tendermint_rpc;
 pub use {
-    bip39, borsh, masp_primitives, masp_proofs, namada_core as core,
-    namada_proof_of_stake as proof_of_stake, zeroize,
+    bip39, masp_primitives, masp_proofs, namada_account as account,
+    namada_governance as governance, namada_proof_of_stake as proof_of_stake,
+    namada_state as state, namada_storage as storage, zeroize,
 };
 
 pub mod eth_bridge;
@@ -42,12 +43,12 @@ use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::key::*;
 use namada_core::types::masp::{TransferSource, TransferTarget};
 use namada_core::types::token;
-use namada_core::types::transaction::GasLimit;
+use namada_tx::data::wrapper::GasLimit;
+use namada_tx::Tx;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use crate::io::Io;
 use crate::masp::{ShieldedContext, ShieldedUtils};
-use crate::proto::Tx;
 use crate::rpc::{
     denominate_amount, format_denominated_amount, query_native_token,
 };
@@ -758,9 +759,9 @@ where
 #[cfg(any(test, feature = "testing"))]
 /// Tests and strategies for transactions
 pub mod testing {
+    use governance::ProposalType;
     use ibc::primitives::proto::Any;
-    use namada_core::ledger::governance::storage::proposal::ProposalType;
-    use namada_core::ledger::ibc::testing::arb_ibc_any;
+    use namada_account::{InitAccount, UpdateAccount};
     use namada_core::types::address::testing::{
         arb_established_address, arb_non_internal_address,
     };
@@ -771,42 +772,34 @@ pub mod testing {
         arb_denominated_amount, arb_transfer,
     };
     use namada_core::types::token::Transfer;
-    use namada_core::types::transaction::account::{
-        InitAccount, UpdateAccount,
+    use namada_governance::storage::proposal::testing::{
+        arb_init_proposal, arb_vote_proposal,
     };
-    use namada_core::types::transaction::governance::{
-        InitProposalData, VoteProposalData,
-    };
-    use namada_core::types::transaction::pgf::UpdateStewardCommission;
-    use namada_core::types::transaction::pos::{
+    use namada_governance::{InitProposalData, VoteProposalData};
+    use namada_ibc::testing::arb_ibc_any;
+    use namada_tx::data::pgf::UpdateStewardCommission;
+    use namada_tx::data::pos::{
         BecomeValidator, Bond, CommissionChange, ConsensusKeyChange,
         MetaDataChange, Redelegation, Unbond, Withdraw,
     };
+    use namada_tx::data::{DecryptedTx, Fee, TxType, WrapperTx};
     use proptest::prelude::{Just, Strategy};
     use proptest::{option, prop_compose};
     use prost::Message;
 
     use super::*;
-    use crate::core::types::chain::ChainId;
-    use crate::core::types::eth_bridge_pool::testing::arb_pending_transfer;
-    use crate::core::types::key::testing::arb_common_pk;
-    use crate::core::types::time::{DateTime, DateTimeUtc, Utc};
-    use crate::core::types::transaction::account::tests::{
-        arb_init_account, arb_update_account,
-    };
-    use crate::core::types::transaction::governance::tests::{
-        arb_init_proposal, arb_vote_proposal,
-    };
-    use crate::core::types::transaction::pgf::tests::arb_update_steward_commission;
-    use crate::core::types::transaction::pos::tests::{
+    use crate::account::tests::{arb_init_account, arb_update_account};
+    use crate::tx::data::pgf::tests::arb_update_steward_commission;
+    use crate::tx::data::pos::tests::{
         arb_become_validator, arb_bond, arb_commission_change,
         arb_consensus_key_change, arb_metadata_change, arb_redelegation,
         arb_withdraw,
     };
-    use crate::core::types::transaction::{
-        DecryptedTx, Fee, TxType, WrapperTx,
-    };
-    use crate::proto::{Code, Commitment, Header, Section};
+    use crate::tx::{Code, Commitment, Header, Section};
+    use crate::types::chain::ChainId;
+    use crate::types::eth_bridge_pool::testing::arb_pending_transfer;
+    use crate::types::key::testing::arb_common_pk;
+    use crate::types::time::{DateTime, DateTimeUtc, Utc};
 
     #[derive(Debug)]
     #[allow(clippy::large_enum_variant)]

@@ -1,9 +1,9 @@
 use borsh_ext::BorshSerializeExt;
-use namada_core::proto::Tx;
-use namada_core::types::address::Address;
-use namada_core::types::hash::Hash;
-use namada_core::types::key::common;
-use namada_core::types::token::DenominatedAmount;
+use namada_sdk::tx::Tx;
+use namada_sdk::types::address::Address;
+use namada_sdk::types::hash::Hash;
+use namada_sdk::types::key::common;
+use namada_sdk::types::token::DenominatedAmount;
 
 use super::GlobalArgs;
 use crate::transaction;
@@ -25,7 +25,7 @@ impl Transfer {
         shielded: Option<Hash>,
         args: GlobalArgs,
     ) -> Self {
-        let init_proposal = namada_core::types::token::Transfer {
+        let init_proposal = namada_sdk::types::token::Transfer {
             source,
             target,
             token,

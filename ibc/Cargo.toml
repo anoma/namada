@@ -1,0 +1,39 @@
+[package]
+name = "namada_ibc"
+description = "Namada IBC"
+resolver = "2"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[features]
+default = []
+testing = ["namada_core/testing", "ibc-testkit", "proptest"]
+
+[dependencies]
+namada_core = { path = "../core" }
+namada_parameters = { path = "../parameters" }
+namada_storage = { path = "../storage" }
+namada_trans_token = { path = "../trans_token" }
+
+borsh.workspace = true
+ibc.workspace = true
+ibc-derive.workspace = true
+ibc-testkit = {workspace = true, optional = true}
+ics23.workspace = true
+primitive-types.workspace = true
+proptest = { workspace = true, optional = true }
+prost.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+ibc-testkit.workspace = true
+proptest.workspace = true

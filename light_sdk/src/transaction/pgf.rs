@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
-use namada_core::proto::Tx;
-use namada_core::types::address::Address;
-use namada_core::types::dec::Dec;
-use namada_core::types::hash::Hash;
-use namada_core::types::key::common;
+use namada_sdk::tx::Tx;
+use namada_sdk::types::address::Address;
+use namada_sdk::types::dec::Dec;
+use namada_sdk::types::hash::Hash;
+use namada_sdk::types::key::common;
 
 use super::GlobalArgs;
 use crate::transaction;
@@ -59,7 +59,7 @@ impl UpdateStewardCommission {
         args: GlobalArgs,
     ) -> Self {
         let update_commission =
-            namada_core::types::transaction::pgf::UpdateStewardCommission {
+            namada_sdk::tx::data::pgf::UpdateStewardCommission {
                 steward,
                 commission,
             };

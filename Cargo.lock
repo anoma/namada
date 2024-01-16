@@ -4139,7 +4139,6 @@ dependencies = [
  "ethbridge-bridge-contract",
  "ethers",
  "eyre",
- "fd-lock",
  "futures",
  "ibc-testkit",
  "itertools 0.10.5",
@@ -4147,11 +4146,22 @@ dependencies = [
  "loupe",
  "masp_primitives",
  "masp_proofs",
+ "namada_account",
  "namada_core",
  "namada_ethereum_bridge",
+ "namada_gas",
+ "namada_governance",
+ "namada_ibc",
+ "namada_parameters",
  "namada_proof_of_stake",
  "namada_sdk",
+ "namada_state",
  "namada_test_utils",
+ "namada_token",
+ "namada_tx",
+ "namada_tx_env",
+ "namada_vote_ext",
+ "namada_vp_env",
  "num256",
  "orion",
  "owo-colors",
@@ -4190,6 +4200,18 @@ dependencies = [
  "wasmtimer",
  "wat",
  "zeroize",
+]
+
+[[package]]
+name = "namada_account"
+version = "0.29.0"
+dependencies = [
+ "borsh",
+ "namada_core",
+ "namada_macros",
+ "namada_storage",
+ "proptest",
+ "serde 1.0.193",
 ]
 
 [[package]]
@@ -4302,26 +4324,19 @@ dependencies = [
 name = "namada_core"
 version = "0.30.0"
 dependencies = [
- "ark-bls12-381",
- "ark-serialize",
- "assert_matches",
  "bech32 0.8.1",
  "borsh",
  "borsh-ext",
  "chrono",
  "data-encoding",
- "derivative",
  "ed25519-consensus 1.2.1",
  "ethabi",
  "ethbridge-structs",
  "eyre",
  "ibc",
- "ibc-derive",
- "ibc-testkit",
  "ics23",
  "impl-num-traits",
  "index-set",
- "itertools 0.10.5",
  "k256",
  "masp_primitives",
  "namada_macros",
@@ -4349,7 +4364,6 @@ dependencies = [
  "thiserror",
  "tiny-keccak",
  "toml 0.5.11",
- "tonic-build",
  "tracing",
  "tracing-subscriber",
  "uint",
@@ -4373,15 +4387,21 @@ version = "0.30.0"
 dependencies = [
  "assert_matches",
  "borsh",
- "borsh-ext",
  "data-encoding",
  "ethabi",
  "ethers",
  "eyre",
  "itertools 0.10.5",
+ "namada_account",
  "namada_core",
  "namada_macros",
+ "namada_parameters",
  "namada_proof_of_stake",
+ "namada_state",
+ "namada_storage",
+ "namada_trans_token",
+ "namada_tx",
+ "namada_vote_ext",
  "rand 0.8.5",
  "serde 1.0.193",
  "serde_json",
@@ -4405,12 +4425,61 @@ dependencies = [
 ]
 
 [[package]]
+name = "namada_gas"
+version = "0.29.0"
+dependencies = [
+ "assert_matches",
+ "borsh",
+ "namada_core",
+ "proptest",
+ "serde 1.0.193",
+ "thiserror",
+]
+
+[[package]]
+name = "namada_governance"
+version = "0.29.0"
+dependencies = [
+ "borsh",
+ "namada_core",
+ "namada_macros",
+ "namada_parameters",
+ "namada_storage",
+ "namada_trans_token",
+ "proptest",
+ "serde 1.0.193",
+ "serde_json",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
+name = "namada_ibc"
+version = "0.29.0"
+dependencies = [
+ "borsh",
+ "ibc",
+ "ibc-derive",
+ "ibc-testkit",
+ "ics23",
+ "namada_core",
+ "namada_parameters",
+ "namada_storage",
+ "namada_trans_token",
+ "primitive-types",
+ "proptest",
+ "prost 0.12.3",
+ "sha2 0.9.9",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
 name = "namada_light_sdk"
 version = "0.30.0"
 dependencies = [
  "borsh",
  "borsh-ext",
- "namada_core",
  "namada_sdk",
  "prost 0.12.3",
  "tendermint-config",
@@ -4422,9 +4491,37 @@ dependencies = [
 name = "namada_macros"
 version = "0.30.0"
 dependencies = [
+ "pretty_assertions",
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "namada_merkle_tree"
+version = "0.29.0"
+dependencies = [
+ "assert_matches",
+ "borsh",
+ "eyre",
+ "ics23",
+ "itertools 0.10.5",
+ "namada_core",
+ "proptest",
+ "prost 0.12.3",
+ "sparse-merkle-tree",
+ "thiserror",
+]
+
+[[package]]
+name = "namada_parameters"
+version = "0.29.0"
+dependencies = [
+ "borsh",
+ "namada_core",
+ "namada_macros",
+ "namada_storage",
+ "thiserror",
 ]
 
 [[package]]
@@ -4436,7 +4533,13 @@ dependencies = [
  "data-encoding",
  "derivative",
  "itertools 0.10.5",
+ "namada_account",
  "namada_core",
+ "namada_governance",
+ "namada_parameters",
+ "namada_state",
+ "namada_storage",
+ "namada_trans_token",
  "num-traits 0.2.17",
  "once_cell",
  "pretty_assertions",
@@ -4471,10 +4574,19 @@ dependencies = [
  "lazy_static",
  "masp_primitives",
  "masp_proofs",
+ "namada_account",
  "namada_core",
  "namada_ethereum_bridge",
+ "namada_governance",
+ "namada_ibc",
+ "namada_parameters",
  "namada_proof_of_stake",
+ "namada_state",
+ "namada_storage",
  "namada_test_utils",
+ "namada_token",
+ "namada_tx",
+ "namada_vote_ext",
  "num-traits 0.2.17",
  "num256",
  "orion",
@@ -4500,6 +4612,62 @@ dependencies = [
  "tracing",
  "wasmtimer",
  "zeroize",
+]
+
+[[package]]
+name = "namada_shielded_token"
+version = "0.29.0"
+dependencies = [
+ "masp_primitives",
+ "namada_core",
+ "namada_parameters",
+ "namada_state",
+ "namada_storage",
+ "namada_trans_token",
+ "proptest",
+ "rayon",
+ "test-log",
+ "tracing",
+]
+
+[[package]]
+name = "namada_state"
+version = "0.29.0"
+dependencies = [
+ "assert_matches",
+ "borsh",
+ "chrono",
+ "ics23",
+ "itertools 0.10.5",
+ "namada_core",
+ "namada_gas",
+ "namada_merkle_tree",
+ "namada_parameters",
+ "namada_storage",
+ "namada_trans_token",
+ "namada_tx",
+ "pretty_assertions",
+ "proptest",
+ "sha2 0.9.9",
+ "sparse-merkle-tree",
+ "test-log",
+ "thiserror",
+ "tiny-keccak",
+ "tracing",
+]
+
+[[package]]
+name = "namada_storage"
+version = "0.29.0"
+dependencies = [
+ "borsh",
+ "itertools 0.10.5",
+ "namada_core",
+ "namada_gas",
+ "namada_merkle_tree",
+ "namada_tx",
+ "thiserror",
+ "tracing",
 ]
 
 [[package]]
@@ -4563,15 +4731,72 @@ dependencies = [
 ]
 
 [[package]]
+name = "namada_token"
+version = "0.29.0"
+dependencies = [
+ "namada_core",
+ "namada_shielded_token",
+ "namada_storage",
+ "namada_trans_token",
+]
+
+[[package]]
+name = "namada_trans_token"
+version = "0.29.0"
+dependencies = [
+ "namada_core",
+ "namada_storage",
+]
+
+[[package]]
+name = "namada_tx"
+version = "0.29.0"
+dependencies = [
+ "ark-bls12-381",
+ "assert_matches",
+ "borsh",
+ "data-encoding",
+ "masp_primitives",
+ "namada_core",
+ "namada_gas",
+ "num-derive",
+ "num-traits 0.2.17",
+ "proptest",
+ "prost 0.12.3",
+ "prost-types 0.12.3",
+ "rand 0.8.5",
+ "serde 1.0.193",
+ "serde_json",
+ "sha2 0.9.9",
+ "thiserror",
+ "tonic-build",
+]
+
+[[package]]
+name = "namada_tx_env"
+version = "0.29.0"
+dependencies = [
+ "namada_core",
+ "namada_storage",
+]
+
+[[package]]
 name = "namada_tx_prelude"
 version = "0.30.0"
 dependencies = [
  "borsh",
- "borsh-ext",
  "masp_primitives",
+ "namada_account",
  "namada_core",
+ "namada_governance",
+ "namada_ibc",
  "namada_macros",
+ "namada_parameters",
  "namada_proof_of_stake",
+ "namada_storage",
+ "namada_token",
+ "namada_tx",
+ "namada_tx_env",
  "namada_vm_env",
  "sha2 0.9.9",
  "thiserror",
@@ -4587,15 +4812,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "namada_vote_ext"
+version = "0.29.0"
+dependencies = [
+ "borsh",
+ "data-encoding",
+ "namada_core",
+ "namada_tx",
+ "serde 1.0.193",
+]
+
+[[package]]
+name = "namada_vp_env"
+version = "0.29.0"
+dependencies = [
+ "derivative",
+ "masp_primitives",
+ "namada_core",
+ "namada_storage",
+ "namada_tx",
+ "thiserror",
+]
+
+[[package]]
 name = "namada_vp_prelude"
 version = "0.30.0"
 dependencies = [
  "borsh",
- "borsh-ext",
+ "namada_account",
  "namada_core",
+ "namada_governance",
+ "namada_ibc",
  "namada_macros",
+ "namada_parameters",
  "namada_proof_of_stake",
+ "namada_storage",
+ "namada_token",
+ "namada_tx",
  "namada_vm_env",
+ "namada_vp_env",
  "sha2 0.9.9",
  "thiserror",
 ]

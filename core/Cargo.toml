@@ -13,7 +13,7 @@ repository.workspace = true
 version.workspace = true
 
 [features]
-default = ["rand"]
+default = []
 mainnet = []
 wasm-runtime = ["rayon"]
 rand = ["dep:rand", "rand_core"]
@@ -22,33 +22,27 @@ ethers-derive = [
 ]
 # for integration tests and test utilities
 testing = [
-  "ibc-testkit",
   "rand",
   "proptest",
 ]
 
 [dependencies]
 namada_macros = {path = "../macros"}
-ark-bls12-381.workspace = true
-ark-serialize.workspace = true
+
 arse-merkle-tree.workspace = true
 bech32.workspace = true
 borsh.workspace = true
 borsh-ext.workspace = true
 chrono.workspace = true
 data-encoding.workspace = true
-derivative.workspace = true
 ed25519-consensus.workspace = true
 ethabi.workspace = true
 ethbridge-structs.workspace = true
 eyre.workspace = true
 ibc.workspace = true
-ibc-derive.workspace = true
-ibc-testkit = {workspace = true, optional = true}
 ics23.workspace = true
 impl-num-traits = "0.1.2"
 index-set.workspace = true
-itertools.workspace = true
 k256.workspace = true
 masp_primitives.workspace = true
 num256.workspace = true
@@ -76,7 +70,6 @@ uint = "0.9.5"
 zeroize.workspace = true
 
 [dev-dependencies]
-assert_matches.workspace = true
 pretty_assertions.workspace = true
 proptest.workspace = true
 rand.workspace = true
@@ -85,6 +78,3 @@ rayon = {version = "=1.5.3"}
 test-log.workspace = true
 toml.workspace = true
 tracing-subscriber.workspace = true
-
-[build-dependencies]
-tonic-build.workspace = true

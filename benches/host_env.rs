@@ -5,7 +5,7 @@ use namada::core::types::account::AccountPublicKeysMap;
 use namada::core::types::address;
 use namada::core::types::token::{Amount, Transfer};
 use namada::ledger::storage::DB;
-use namada::proto::Signature;
+use namada::tx::Signature;
 use namada::vm::wasm::TxCache;
 use namada_apps::bench_utils::{
     BenchShell, TX_INIT_PROPOSAL_WASM, TX_REVEAL_PK_WASM, TX_TRANSFER_WASM,

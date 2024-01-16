@@ -14,8 +14,8 @@ use std::thread;
 
 use byte_unit::Byte;
 use futures::future::TryFutureExt;
-use namada::core::ledger::governance::storage::keys as governance_storage;
 use namada::eth_bridge::ethers::providers::{Http, Provider};
+use namada::governance::storage::keys as governance_storage;
 use namada::types::storage::Key;
 use namada::types::time::{DateTimeUtc, Utc};
 use namada_sdk::tendermint::abci::request::CheckTxKind;
@@ -215,7 +215,7 @@ pub fn dump_db(
         historic,
     }: args::LedgerDumpDb,
 ) {
-    use namada::ledger::storage::DB;
+    use namada::state::DB;
 
     let chain_id = config.chain_id;
     let db_path = config.shell.db_dir(&chain_id);
@@ -758,8 +758,8 @@ pub fn test_genesis_files(
     genesis: config::genesis::chain::Finalized,
     wasm_dir: PathBuf,
 ) {
-    use namada::ledger::storage::mockdb::MockDB;
-    use namada::ledger::storage::Sha256Hasher;
+    use namada::state::mockdb::MockDB;
+    use namada::types::hash::Sha256Hasher;
 
     // Channels for validators to send protocol txs to be broadcast to the
     // broadcaster service

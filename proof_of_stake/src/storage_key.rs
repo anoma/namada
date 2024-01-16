@@ -1,8 +1,8 @@
 //! Proof-of-Stake storage keys and storage integration.
 
-use namada_core::ledger::storage_api::collections::{lazy_map, lazy_vec};
 use namada_core::types::address::Address;
 use namada_core::types::storage::{DbKeySeg, Epoch, Key, KeySeg};
+use namada_storage::collections::{lazy_map, lazy_vec};
 
 use super::ADDRESS;
 use crate::epoched;

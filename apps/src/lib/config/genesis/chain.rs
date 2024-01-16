@@ -376,8 +376,7 @@ impl Finalized {
 
     pub fn get_gov_params(
         &self,
-    ) -> namada::core::ledger::governance::parameters::GovernanceParameters
-    {
+    ) -> namada::governance::parameters::GovernanceParameters {
         let templates::GovernanceParams {
             min_proposal_fund,
             max_proposal_code_size,
@@ -386,7 +385,7 @@ impl Finalized {
             max_proposal_content_size,
             min_proposal_grace_epochs,
         } = self.parameters.gov_params.clone();
-        namada::core::ledger::governance::parameters::GovernanceParameters {
+        namada::governance::parameters::GovernanceParameters {
             min_proposal_fund: Amount::native_whole(min_proposal_fund),
             max_proposal_code_size,
             max_proposal_period,
@@ -398,7 +397,7 @@ impl Finalized {
 
     pub fn get_pgf_params(
         &self,
-    ) -> namada::core::ledger::pgf::parameters::PgfParameters {
+    ) -> namada::governance::pgf::parameters::PgfParameters {
         self.parameters.pgf_params.clone()
     }
 
@@ -686,7 +685,7 @@ pub struct FinalizedParameters {
     pub parameters: templates::ChainParams<Validated>,
     pub pos_params: templates::PosParams,
     pub gov_params: templates::GovernanceParams,
-    pub pgf_params: namada::core::ledger::pgf::parameters::PgfParameters,
+    pub pgf_params: namada::governance::pgf::parameters::PgfParameters,
     pub eth_bridge_params: Option<templates::EthBridgeParams>,
 }
 
@@ -700,7 +699,7 @@ impl FinalizedParameters {
             eth_bridge_params,
         }: templates::Parameters<Validated>,
     ) -> Self {
-        use namada::core::ledger::pgf::parameters::PgfParameters;
+        use namada::governance::pgf::parameters::PgfParameters;
         let finalized_pgf_params = PgfParameters {
             stewards: pgf_params.stewards,
             pgf_inflation_rate: pgf_params.pgf_inflation_rate,

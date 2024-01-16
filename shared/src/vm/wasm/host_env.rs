@@ -3,20 +3,19 @@
 //! Here, we expose the host functions into wasm's
 //! imports, so they can be called from inside the wasm.
 
+use namada_core::types::hash::StorageHasher;
 use wasmer::{
     Function, HostEnvInitError, ImportObject, Instance, Memory, Store,
     WasmerEnv,
 };
 
-use crate::ledger::storage::traits::StorageHasher;
-use crate::ledger::storage::{self};
 use crate::vm::host_env::{TxVmEnv, VpEvaluator, VpVmEnv};
 use crate::vm::wasm::memory::WasmMemory;
 use crate::vm::{host_env, WasmCacheAccess};
 
 impl<DB, H, CA> WasmerEnv for TxVmEnv<'_, WasmMemory, DB, H, CA>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -30,7 +29,7 @@ where
 
 impl<DB, H, EVAL, CA> WasmerEnv for VpVmEnv<'_, WasmMemory, DB, H, EVAL, CA>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -52,7 +51,7 @@ pub fn tx_imports<DB, H, CA>(
     env: TxVmEnv<'static, WasmMemory, DB, H, CA>,
 ) -> ImportObject
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -83,6 +82,7 @@ where
             "namada_tx_get_block_header" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_block_header),
             "namada_tx_get_block_hash" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_block_hash),
             "namada_tx_get_block_epoch" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_block_epoch),
+            "namada_tx_get_pred_epochs" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_pred_epochs),
             "namada_tx_get_native_token" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_native_token),
             "namada_tx_log_string" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_log_string),
             "namada_tx_ibc_execute" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_ibc_execute),
@@ -101,7 +101,7 @@ pub fn vp_imports<DB, H, EVAL, CA>(
     env: VpVmEnv<'static, WasmMemory, DB, H, EVAL, CA>,
 ) -> ImportObject
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator<Db = DB, H = H, Eval = EVAL, CA = CA>,
     CA: WasmCacheAccess,
@@ -130,6 +130,7 @@ where
             "namada_vp_get_block_hash" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_get_block_hash),
             "namada_vp_get_tx_code_hash" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_get_tx_code_hash),
             "namada_vp_get_block_epoch" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_get_block_epoch),
+            "namada_vp_get_pred_epochs" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_get_pred_epochs),
             "namada_vp_get_ibc_events" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_get_ibc_events),
             "namada_vp_verify_tx_section_signature" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_verify_tx_section_signature),
             "namada_vp_eval" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_eval),

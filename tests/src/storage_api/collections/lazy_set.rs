@@ -5,10 +5,9 @@ mod tests {
 
     use namada::types::address::{self, Address};
     use namada::types::storage;
+    use namada_tx_prelude::collections::{LazyCollection, LazySet};
     use namada_tx_prelude::storage::KeySeg;
-    use namada_tx_prelude::storage_api::collections::{
-        lazy_set, LazyCollection, LazySet,
-    };
+    use namada_vp_prelude::collection_validation::{self, LazyCollectionExt};
     use proptest::prelude::*;
     use proptest::test_runner::Config;
     use proptest_state_machine::{
@@ -406,6 +405,7 @@ mod tests {
                 let current_transitions =
                     normalize_transitions(&self.current_transitions);
                 for transition in &current_transitions {
+                    use collection_validation::lazy_set::Action;
                     match transition {
                         Transition::CommitTx | Transition::CommitTxAndBlock => {
                         }
@@ -413,7 +413,7 @@ mod tests {
                             for (ix, action) in
                                 actions_to_check.iter().enumerate()
                             {
-                                if let lazy_set::Action::Insert(key) = action {
+                                if let Action::Insert(key) = action {
                                     if expected_key == key {
                                         actions_to_check.remove(ix);
                                         break;
@@ -429,9 +429,7 @@ mod tests {
                                 for (ix, action) in
                                     actions_to_check.iter().enumerate()
                                 {
-                                    if let lazy_set::Action::Insert(key) =
-                                        action
-                                    {
+                                    if let Action::Insert(key) = action {
                                         if expected_key == key {
                                             actions_to_check.remove(ix);
                                             break;
@@ -444,7 +442,7 @@ mod tests {
                             for (ix, action) in
                                 actions_to_check.iter().enumerate()
                             {
-                                if let lazy_set::Action::Remove(key) = action {
+                                if let Action::Remove(key) = action {
                                     if expected_key == key {
                                         actions_to_check.remove(ix);
                                         break;

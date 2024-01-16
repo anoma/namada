@@ -3,11 +3,11 @@
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::ledger::governance::parameters::GovernanceParameters;
 use namada_core::types::dec::Dec;
 use namada_core::types::storage::Epoch;
 use namada_core::types::token;
 use namada_core::types::uint::Uint;
+use namada_governance::parameters::GovernanceParameters;
 use thiserror::Error;
 
 /// Proof-of-Stake system parameters. This includes parameters that are used in

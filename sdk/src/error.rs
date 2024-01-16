@@ -1,11 +1,11 @@
 //! Generic Error Type for all of the Shared Crate
 
-use namada_core::proto::Tx;
 use namada_core::types::address::Address;
 use namada_core::types::dec::Dec;
 use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::storage;
 use namada_core::types::storage::Epoch;
+use namada_tx::Tx;
 use prost::EncodeError;
 use tendermint_rpc::Error as RpcError;
 use thiserror::Error;
@@ -29,7 +29,7 @@ pub enum Error {
     KeyRetrival(#[from] storage::Error),
     /// Transaction Errors
     #[error("{0}")]
-    Tx(#[from] TxError),
+    Tx(#[from] TxSubmitError),
     /// Event Errors
     #[error("{0}")]
     Event(#[from] EventError),
@@ -117,7 +117,7 @@ pub enum EncodingError {
 
 /// Errors to do with transaction events.
 #[derive(Error, Debug, Clone)]
-pub enum TxError {
+pub enum TxSubmitError {
     /// Accepted tx timeout
     #[error("Timed out waiting for tx to be accepted")]
     AcceptTimeout,

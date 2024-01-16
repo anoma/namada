@@ -1,9 +1,8 @@
 //! Extend Tendermint votes with signatures of the Ethereum
 //! bridge pool root and nonce seen by a quorum of validators.
 use itertools::Itertools;
-use namada::ledger::storage::traits::StorageHasher;
-use namada::ledger::storage::{DBIter, DB};
-use namada::proto::Signed;
+use namada::state::{DBIter, StorageHasher, DB};
+use namada::tx::Signed;
 
 use super::*;
 use crate::node::ledger::shell::Shell;
@@ -57,11 +56,10 @@ where
 
 #[cfg(test)]
 mod test_bp_vote_extensions {
-    use namada::core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
-    use namada::eth_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
-    use namada::eth_bridge::storage::eth_bridge_queries::EthBridgeQueries;
+    use namada::ethereum_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
+    use namada::ethereum_bridge::storage::bridge_pool::get_key_from_hash;
+    use namada::ethereum_bridge::storage::eth_bridge_queries::EthBridgeQueries;
     use namada::ledger::pos::PosQueries;
-    use namada::ledger::storage_api::StorageWrite;
     use namada::proof_of_stake::storage::{
         consensus_validator_set_handle,
         read_consensus_validator_set_addresses_with_stake,
@@ -70,14 +68,15 @@ mod test_bp_vote_extensions {
         Position as ValidatorPosition, WeightedValidator,
     };
     use namada::proof_of_stake::{become_validator, BecomeValidator, Epoch};
-    use namada::proto::{SignableEthMessage, Signed};
+    use namada::state::StorageWrite;
     use namada::tendermint::abci::types::VoteInfo;
+    use namada::tx::{SignableEthMessage, Signed};
     use namada::types::ethereum_events::Uint;
     use namada::types::keccak::{keccak_hash, KeccakHash};
     use namada::types::key::*;
     use namada::types::storage::BlockHeight;
     use namada::types::token;
-    use namada::types::vote_extensions::bridge_pool_roots;
+    use namada::vote_ext::bridge_pool_roots;
 
     use crate::node::ledger::shell::test_utils::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
@@ -171,7 +170,7 @@ mod test_bp_vote_extensions {
         assert!(
             validate_bp_roots_vext(
                 &shell.wl_storage,
-                &vote_ext,
+                &vote_ext.0,
                 shell.wl_storage.storage.get_last_block_height()
             )
             .is_ok()
@@ -206,13 +205,13 @@ mod test_bp_vote_extensions {
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         assert_eq!(
-            vote_ext,
+            vote_ext.0,
             shell.extend_vote_with_bp_roots().expect("Test failed")
         );
         assert!(
             validate_bp_roots_vext(
                 &shell.wl_storage,
-                &vote_ext,
+                &vote_ext.0,
                 shell.wl_storage.storage.get_last_block_height(),
             )
             .is_ok()
@@ -247,11 +246,11 @@ mod test_bp_vote_extensions {
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         let valid = shell
             .filter_invalid_bp_roots_vexts(vec![
-                vote_ext.clone(),
-                vote_ext.clone(),
+                vote_ext.0.clone(),
+                vote_ext.0.clone(),
             ])
             .collect::<Vec<_>>();
-        assert_eq!(valid, vec![vote_ext]);
+        assert_eq!(valid, vec![vote_ext.0]);
     }
 
     /// Test that Bridge pool roots signed by a non-validator are rejected
@@ -281,7 +280,7 @@ mod test_bp_vote_extensions {
         assert!(
             validate_bp_roots_vext(
                 &shell.wl_storage,
-                &bp_root,
+                &bp_root.0,
                 shell.wl_storage.pos_queries().get_current_decision_height(),
             )
             .is_err()
@@ -315,7 +314,7 @@ mod test_bp_vote_extensions {
         assert!(
             validate_bp_roots_vext(
                 &shell.wl_storage,
-                &bp_root,
+                &bp_root.0,
                 shell.wl_storage.storage.get_last_block_height()
             )
             .is_err()
@@ -340,7 +339,7 @@ mod test_bp_vote_extensions {
         assert!(
             validate_bp_roots_vext(
                 &shell.wl_storage,
-                &bp_root,
+                &bp_root.0,
                 shell.wl_storage.storage.get_last_block_height()
             )
             .is_err()
@@ -387,7 +386,7 @@ mod test_bp_vote_extensions {
         assert!(
             validate_bp_roots_vext(
                 &shell.wl_storage,
-                &bp_root,
+                &bp_root.0,
                 shell.wl_storage.storage.get_last_block_height()
             )
             .is_err()
@@ -415,7 +414,7 @@ mod test_bp_vote_extensions {
         assert!(
             validate_bp_roots_vext(
                 &shell.wl_storage,
-                &bp_root,
+                &bp_root.0,
                 shell.wl_storage.storage.get_last_block_height()
             )
             .is_err()
@@ -470,7 +469,7 @@ mod test_bp_vote_extensions {
         assert!(
             validate_bp_roots_vext(
                 &shell.wl_storage,
-                &bp_root,
+                &bp_root.0,
                 shell.wl_storage.pos_queries().get_current_decision_height()
             )
             .is_ok()
@@ -490,7 +489,7 @@ mod test_bp_vote_extensions {
         assert!(
             validate_bp_roots_vext(
                 &shell.wl_storage,
-                &bp_root,
+                &bp_root.0,
                 shell.wl_storage.pos_queries().get_current_decision_height()
             )
             .is_ok()
@@ -545,7 +544,7 @@ mod test_bp_vote_extensions {
         assert!(
             validate_bp_roots_vext(
                 &shell.wl_storage,
-                &bp_root,
+                &bp_root.0,
                 shell.wl_storage.pos_queries().get_current_decision_height()
             )
             .is_err()

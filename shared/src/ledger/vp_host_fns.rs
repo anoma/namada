@@ -2,20 +2,21 @@
 
 use std::num::TryFromIntError;
 
-use namada_core::ledger::gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use namada_core::types::address::{Address, ESTABLISHED_ADDRESS_BYTES_LEN};
 use namada_core::types::hash::{Hash, HASH_LENGTH};
 use namada_core::types::storage::{
-    BlockHash, BlockHeight, Epoch, Header, Key, TxIndex, TX_INDEX_LENGTH,
+    BlockHash, BlockHeight, Epoch, Epochs, Header, Key, TxIndex,
+    TX_INDEX_LENGTH,
 };
 use namada_core::types::validity_predicate::VpSentinel;
+use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
+use namada_state::write_log::WriteLog;
+use namada_state::{write_log, State, StorageHasher};
+use namada_tx::{Section, Tx};
 use thiserror::Error;
 
 use crate::ledger::gas;
 use crate::ledger::gas::{GasMetering, VpGasMeter};
-use crate::ledger::storage::write_log::WriteLog;
-use crate::ledger::storage::{self, write_log, Storage, StorageHasher};
-use crate::proto::{Section, Tx};
 use crate::types::ibc::IbcEvent;
 
 /// These runtime errors will abort VP execution immediately
@@ -25,7 +26,7 @@ pub enum RuntimeError {
     #[error("Out of gas: {0}")]
     OutOfGas(gas::Error),
     #[error("Storage error: {0}")]
-    StorageError(storage::Error),
+    StorageError(namada_state::Error),
     #[error("Storage data error: {0}")]
     StorageDataError(crate::types::storage::Error),
     #[error("Encoding error: {0}")]
@@ -62,13 +63,13 @@ pub fn add_gas(
 /// storage.
 pub fn read_pre<DB, H>(
     gas_meter: &mut VpGasMeter,
-    storage: &Storage<DB, H>,
+    storage: &State<DB, H>,
     write_log: &WriteLog,
     key: &Key,
     sentinel: &mut VpSentinel,
 ) -> EnvResult<Option<Vec<u8>>>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
 {
     let (log_val, gas) = write_log.read_pre(key);
@@ -104,13 +105,13 @@ where
 /// the write log first and if no entry found then from the storage.
 pub fn read_post<DB, H>(
     gas_meter: &mut VpGasMeter,
-    storage: &Storage<DB, H>,
+    storage: &State<DB, H>,
     write_log: &WriteLog,
     key: &Key,
     sentinel: &mut VpSentinel,
 ) -> EnvResult<Option<Vec<u8>>>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
 {
     // Try to read from the write log first
@@ -167,13 +168,13 @@ pub fn read_temp(
 /// from the storage.
 pub fn has_key_pre<DB, H>(
     gas_meter: &mut VpGasMeter,
-    storage: &Storage<DB, H>,
+    storage: &State<DB, H>,
     write_log: &WriteLog,
     key: &Key,
     sentinel: &mut VpSentinel,
 ) -> EnvResult<bool>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
 {
     // Try to read from the write log first
@@ -201,13 +202,13 @@ where
 /// check the write log first and if no entry found then the storage.
 pub fn has_key_post<DB, H>(
     gas_meter: &mut VpGasMeter,
-    storage: &Storage<DB, H>,
+    storage: &State<DB, H>,
     write_log: &WriteLog,
     key: &Key,
     sentinel: &mut VpSentinel,
 ) -> EnvResult<bool>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
 {
     // Try to read from the write log first
@@ -234,11 +235,11 @@ where
 /// Getting the chain ID.
 pub fn get_chain_id<DB, H>(
     gas_meter: &mut VpGasMeter,
-    storage: &Storage<DB, H>,
+    storage: &State<DB, H>,
     sentinel: &mut VpSentinel,
 ) -> EnvResult<String>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
 {
     let (chain_id, gas) = storage.get_chain_id();
@@ -250,11 +251,11 @@ where
 /// current transaction is being applied.
 pub fn get_block_height<DB, H>(
     gas_meter: &mut VpGasMeter,
-    storage: &Storage<DB, H>,
+    storage: &State<DB, H>,
     sentinel: &mut VpSentinel,
 ) -> EnvResult<BlockHeight>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
 {
     let (height, gas) = storage.get_block_height();
@@ -265,12 +266,12 @@ where
 /// Getting the block header.
 pub fn get_block_header<DB, H>(
     gas_meter: &mut VpGasMeter,
-    storage: &Storage<DB, H>,
+    storage: &State<DB, H>,
     height: BlockHeight,
     sentinel: &mut VpSentinel,
 ) -> EnvResult<Option<Header>>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
 {
     let (header, gas) = storage
@@ -284,11 +285,11 @@ where
 /// current transaction is being applied.
 pub fn get_block_hash<DB, H>(
     gas_meter: &mut VpGasMeter,
-    storage: &Storage<DB, H>,
+    storage: &State<DB, H>,
     sentinel: &mut VpSentinel,
 ) -> EnvResult<BlockHash>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
 {
     let (hash, gas) = storage.get_block_hash();
@@ -319,11 +320,11 @@ pub fn get_tx_code_hash(
 /// current transaction is being applied.
 pub fn get_block_epoch<DB, H>(
     gas_meter: &mut VpGasMeter,
-    storage: &Storage<DB, H>,
+    storage: &State<DB, H>,
     sentinel: &mut VpSentinel,
 ) -> EnvResult<Epoch>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
 {
     let (epoch, gas) = storage.get_current_epoch();
@@ -349,11 +350,11 @@ pub fn get_tx_index(
 /// Getting the native token's address.
 pub fn get_native_token<DB, H>(
     gas_meter: &mut VpGasMeter,
-    storage: &Storage<DB, H>,
+    storage: &State<DB, H>,
     sentinel: &mut VpSentinel,
 ) -> EnvResult<Address>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
 {
     add_gas(
@@ -362,6 +363,26 @@ where
         sentinel,
     )?;
     Ok(storage.native_token.clone())
+}
+
+/// Given the information about predecessor block epochs
+pub fn get_pred_epochs<DB, H>(
+    gas_meter: &mut VpGasMeter,
+    storage: &State<DB, H>,
+    sentinel: &mut VpSentinel,
+) -> EnvResult<Epochs>
+where
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    H: StorageHasher,
+{
+    add_gas(
+        gas_meter,
+        storage.block.pred_epochs.first_block_heights.len() as u64
+            * 8
+            * MEMORY_ACCESS_GAS_PER_BYTE,
+        sentinel,
+    )?;
+    Ok(storage.block.pred_epochs.clone())
 }
 
 /// Getting the IBC event.
@@ -383,15 +404,15 @@ pub fn get_ibc_events(
 pub fn iter_prefix_pre<'a, DB, H>(
     gas_meter: &mut VpGasMeter,
     write_log: &'a WriteLog,
-    storage: &'a Storage<DB, H>,
+    storage: &'a State<DB, H>,
     prefix: &Key,
     sentinel: &mut VpSentinel,
-) -> EnvResult<storage::PrefixIter<'a, DB>>
+) -> EnvResult<namada_state::PrefixIter<'a, DB>>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
 {
-    let (iter, gas) = storage::iter_prefix_pre(write_log, storage, prefix);
+    let (iter, gas) = namada_state::iter_prefix_pre(write_log, storage, prefix);
     add_gas(gas_meter, gas, sentinel)?;
     Ok(iter)
 }
@@ -401,15 +422,16 @@ where
 pub fn iter_prefix_post<'a, DB, H>(
     gas_meter: &mut VpGasMeter,
     write_log: &'a WriteLog,
-    storage: &'a Storage<DB, H>,
+    storage: &'a State<DB, H>,
     prefix: &Key,
     sentinel: &mut VpSentinel,
-) -> EnvResult<storage::PrefixIter<'a, DB>>
+) -> EnvResult<namada_state::PrefixIter<'a, DB>>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
 {
-    let (iter, gas) = storage::iter_prefix_post(write_log, storage, prefix);
+    let (iter, gas) =
+        namada_state::iter_prefix_post(write_log, storage, prefix);
     add_gas(gas_meter, gas, sentinel)?;
     Ok(iter)
 }
@@ -417,11 +439,11 @@ where
 /// Get the next item in a storage prefix iterator (pre or post).
 pub fn iter_next<DB>(
     gas_meter: &mut VpGasMeter,
-    iter: &mut storage::PrefixIter<DB>,
+    iter: &mut namada_state::PrefixIter<DB>,
     sentinel: &mut VpSentinel,
 ) -> EnvResult<Option<(String, Vec<u8>)>>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
 {
     if let Some((key, val, gas)) = iter.next() {
         add_gas(gas_meter, gas, sentinel)?;

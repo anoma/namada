@@ -2,12 +2,12 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use namada::core::types::address;
 use namada::core::types::token::{Amount, Transfer};
 use namada::ledger::storage::TempWlStorage;
-use namada::proto::Signature;
+use namada::token::DenominatedAmount;
+use namada::tx::data::{Fee, WrapperTx};
+use namada::tx::Signature;
 use namada::types::key::RefTo;
 use namada::types::storage::BlockHeight;
 use namada::types::time::DateTimeUtc;
-use namada::types::token::DenominatedAmount;
-use namada::types::transaction::{Fee, WrapperTx};
 use namada_apps::bench_utils::{BenchShell, TX_TRANSFER_WASM};
 use namada_apps::node::ledger::shell::process_proposal::ValidationMeta;
 use namada_apps::wallet::defaults;
@@ -34,7 +34,7 @@ fn process_tx(c: &mut Criterion) {
         vec![&defaults::albert_keypair()],
     );
 
-    tx.update_header(namada::types::transaction::TxType::Wrapper(Box::new(
+    tx.update_header(namada::tx::data::TxType::Wrapper(Box::new(
         WrapperTx::new(
             Fee {
                 token: address::nam(),
@@ -48,7 +48,7 @@ fn process_tx(c: &mut Criterion) {
             None,
         ),
     )));
-    tx.add_section(namada::proto::Section::Signature(Signature::new(
+    tx.add_section(namada::tx::Section::Signature(Signature::new(
         tx.sechashes(),
         [(0, defaults::albert_keypair())].into_iter().collect(),
         None,

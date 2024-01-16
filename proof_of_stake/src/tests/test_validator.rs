@@ -1,9 +1,5 @@
 use std::cmp::min;
 
-use namada_core::ledger::storage::testing::TestWlStorage;
-use namada_core::ledger::storage::WlStorage;
-use namada_core::ledger::storage_api::collections::lazy_map;
-use namada_core::ledger::storage_api::token::credit_tokens;
 use namada_core::types::address::testing::arb_established_address;
 use namada_core::types::address::{self, Address, EstablishedAddressGen};
 use namada_core::types::dec::Dec;
@@ -13,6 +9,8 @@ use namada_core::types::key::testing::{
 use namada_core::types::key::{self, common, RefTo};
 use namada_core::types::storage::Epoch;
 use namada_core::types::token;
+use namada_state::testing::TestWlStorage;
+use namada_storage::collections::lazy_map;
 use proptest::prelude::*;
 use proptest::test_runner::Config;
 // Use `RUST_LOG=info` (or another tracing level) and `--nocapture` to see
@@ -35,6 +33,7 @@ use crate::tests::helpers::{
     advance_epoch, arb_genesis_validators, arb_params_and_genesis_validators,
     get_tendermint_set_updates,
 };
+use crate::token::credit_tokens;
 use crate::types::{
     into_tm_voting_power, ConsensusValidator, GenesisValidator, Position,
     ReverseOrdTokenAmount, ValidatorSetUpdate, WeightedValidator,
@@ -1219,11 +1218,10 @@ fn test_purge_validator_information_aux(validators: Vec<GenesisValidator>) {
     let mut current_epoch = s.storage.block.epoch;
 
     // Genesis
-    let gov_params =
-        namada_core::ledger::governance::parameters::GovernanceParameters {
-            max_proposal_period: 5,
-            ..Default::default()
-        };
+    let gov_params = namada_governance::parameters::GovernanceParameters {
+        max_proposal_period: 5,
+        ..Default::default()
+    };
 
     gov_params.init_storage(&mut s).unwrap();
     let params = crate::read_non_pos_owned_params(&s, owned).unwrap();
@@ -1241,9 +1239,7 @@ fn test_purge_validator_information_aux(validators: Vec<GenesisValidator>) {
     let validator_positions = validator_set_positions_handle();
     let all_validator_addresses = validator_addresses_handle();
 
-    let check_is_data = |storage: &WlStorage<_, _>,
-                         start: Epoch,
-                         end: Epoch| {
+    let check_is_data = |storage: &TestWlStorage, start: Epoch, end: Epoch| {
         for ep in Epoch::iter_bounds_inclusive(start, end) {
             assert!(!consensus_val_set.at(&ep).is_empty(storage).unwrap());
             // assert!(!below_cap_val_set.at(&ep).is_empty(storage).

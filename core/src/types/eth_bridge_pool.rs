@@ -6,9 +6,13 @@ use std::borrow::Cow;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use ethabi::token::Token;
+use namada_macros::StorageKeys;
 use serde::{Deserialize, Serialize};
 
-use crate::ledger::eth_bridge::storage::wrapped_erc20s;
+use super::address::InternalAddress;
+use super::keccak::KeccakHash;
+use super::storage::{self, KeySeg};
+use crate as namada_core; // This is needed for `StorageKeys` macro
 use crate::types::address::Address;
 use crate::types::eth_abi::Encode;
 use crate::types::ethereum_events::{
@@ -17,6 +21,47 @@ use crate::types::ethereum_events::{
 use crate::types::hash::Hash as HashDigest;
 use crate::types::storage::{DbKeySeg, Key};
 use crate::types::token::Amount;
+
+/// The main address of the Ethereum bridge pool
+pub const BRIDGE_POOL_ADDRESS: Address =
+    Address::Internal(InternalAddress::EthBridgePool);
+
+/// Bridge pool key segments.
+#[derive(StorageKeys)]
+pub struct Segments {
+    /// Signed root storage key
+    pub signed_root: &'static str,
+    /// Bridge pool nonce storage key
+    pub bridge_pool_nonce: &'static str,
+}
+
+/// Check if a key is for a pending transfer
+pub fn is_pending_transfer_key(key: &storage::Key) -> bool {
+    let segment = match &key.segments[..] {
+        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(segment)]
+            if addr == &BRIDGE_POOL_ADDRESS =>
+        {
+            segment.as_str()
+        }
+        _ => return false,
+    };
+    !Segments::ALL.iter().any(|s| s == &segment)
+}
+
+/// Get the storage key for the transfers in the pool
+pub fn get_pending_key(transfer: &PendingTransfer) -> Key {
+    get_key_from_hash(&transfer.keccak256())
+}
+
+/// Get the storage key for the transfers using the hash
+pub fn get_key_from_hash(hash: &KeccakHash) -> Key {
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(BRIDGE_POOL_ADDRESS),
+            hash.to_db_key(),
+        ],
+    }
+}
 
 /// A version used in our Ethereuem smart contracts
 const VERSION: u8 = 1;
@@ -173,16 +218,26 @@ pub struct PendingTransfer {
     pub gas_fee: GasFee,
 }
 
+/// Construct a token address from an ERC20 address.
+pub fn erc20_token_address(address: &EthAddress) -> Address {
+    Address::Internal(InternalAddress::Erc20(*address))
+}
+
+/// Construct a NUT token address from an ERC20 address.
+pub fn erc20_nut_address(address: &EthAddress) -> Address {
+    Address::Internal(InternalAddress::Nut(*address))
+}
+
 impl PendingTransfer {
     /// Get a token [`Address`] from this [`PendingTransfer`].
     #[inline]
     pub fn token_address(&self) -> Address {
         match &self.transfer.kind {
             TransferToEthereumKind::Erc20 => {
-                wrapped_erc20s::token(&self.transfer.asset)
+                erc20_token_address(&self.transfer.asset)
             }
             TransferToEthereumKind::Nut => {
-                wrapped_erc20s::nut(&self.transfer.asset)
+                erc20_nut_address(&self.transfer.asset)
             }
         }
     }

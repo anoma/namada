@@ -1,0 +1,37 @@
+[package]
+name = "namada_shielded_token"
+description = "Namada shielded token"
+resolver = "2"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[features]
+default = []
+multicore = ["dep:rayon"]
+testing = ["multicore", "namada_core/testing"]
+
+[dependencies]
+namada_core = { path = "../core" }
+namada_parameters = { path = "../parameters" }
+namada_state = { path = "../state" }
+namada_storage = { path = "../storage" }
+namada_trans_token = { path = "../trans_token" }
+
+masp_primitives.workspace = true
+rayon = { workspace = true, optional = true }
+tracing.workspace = true
+
+[dev-dependencies]
+namada_core = { path = "../core", features = ["testing"] }
+namada_state = { path = "../state", features = ["testing"] }
+
+proptest.workspace = true
+rayon.workspace = true
+test-log.workspace = true

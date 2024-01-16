@@ -10,16 +10,14 @@ use std::hash::Hash;
 use std::ops::Sub;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use namada_core::ledger::storage_api::collections::lazy_map::NestedMap;
-use namada_core::ledger::storage_api::collections::{
-    LazyMap, LazySet, LazyVec,
-};
 use namada_core::types::address::Address;
 use namada_core::types::dec::Dec;
 use namada_core::types::key::common;
 use namada_core::types::storage::{Epoch, KeySeg};
 use namada_core::types::token;
 use namada_core::types::token::Amount;
+use namada_storage::collections::lazy_map::NestedMap;
+use namada_storage::collections::{LazyMap, LazySet, LazyVec};
 pub use rev_order::ReverseOrdTokenAmount;
 use serde::{Deserialize, Serialize};
 

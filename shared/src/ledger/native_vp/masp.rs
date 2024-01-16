@@ -9,25 +9,24 @@ use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::transaction::Transaction;
-use namada_core::ledger::gas::MASP_VERIFY_SHIELDED_TX_GAS;
-use namada_core::ledger::storage;
-use namada_core::ledger::storage_api::{OptionExt, ResultExt};
-use namada_core::ledger::vp_env::VpEnv;
-use namada_core::proto::Tx;
-use namada_core::types::address::Address;
 use namada_core::types::address::InternalAddress::Masp;
-use namada_core::types::storage::{IndexedTx, Key};
-use namada_core::types::token::{
-    self, is_masp_allowed_key, is_masp_key, is_masp_nullifier_key,
-    masp_pin_tx_key,
-};
+use namada_core::types::address::{Address, MASP};
+use namada_core::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
+use namada_gas::MASP_VERIFY_SHIELDED_TX_GAS;
 use namada_sdk::masp::verify_shielded_tx;
+use namada_state::OptionExt;
+use namada_tx::Tx;
+use namada_vp_env::VpEnv;
 use ripemd::Digest as RipemdDigest;
 use sha2::Digest as Sha2Digest;
 use thiserror::Error;
 
 use crate::ledger::native_vp;
 use crate::ledger::native_vp::{Ctx, NativeVp};
+use crate::token::storage_key::{
+    is_masp_allowed_key, is_masp_key, is_masp_nullifier_key,
+};
+use crate::token::{self as token, Transfer};
 use crate::types::masp::encode_asset_type;
 use crate::types::token::MaspDenom;
 use crate::vm::WasmCacheAccess;
@@ -45,8 +44,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// MASP VP
 pub struct MaspVp<'a, DB, H, CA>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: storage::StorageHasher,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    H: namada_state::StorageHasher,
     CA: WasmCacheAccess,
 {
     /// Context to interact with the host structures.
@@ -55,8 +54,8 @@ where
 
 impl<'a, DB, H, CA> MaspVp<'a, DB, H, CA>
 where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: 'static + storage::StorageHasher,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    H: 'static + namada_state::StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
     // Check that the transaction correctly revealed the nullifiers
@@ -277,8 +276,8 @@ fn unepoched_tokens(
 
 impl<'a, DB, H, CA> NativeVp for MaspVp<'a, DB, H, CA>
 where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: 'static + storage::StorageHasher,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    H: 'static + namada_state::StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
     type Error = Error;
@@ -300,9 +299,11 @@ where
             return Ok(false);
         }
 
-        let transfer_amount = transfer
-            .amount
-            .to_amount(&transfer.token, &self.ctx.pre())?;
+        let transfer_amount = crate::token::denom_to_amount(
+            transfer.amount,
+            &transfer.token,
+            &self.ctx.pre(),
+        )?;
         let mut transparent_tx_pool = I128Sum::zero();
         // The Sapling value balance adds to the transparent tx pool
         transparent_tx_pool += shielded_tx.sapling_value_balance();

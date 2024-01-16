@@ -1,10 +1,9 @@
 //! Token validity predicate queries
 
-use namada_core::ledger::storage::{DBIter, StorageHasher, DB};
-use namada_core::ledger::storage_api;
-use namada_core::ledger::storage_api::token::read_denom;
 use namada_core::types::address::Address;
 use namada_core::types::token;
+use namada_state::{DBIter, StorageHasher, DB};
+use namada_token::read_denom;
 
 use crate::queries::RequestCtx;
 
@@ -17,7 +16,7 @@ router! {TOKEN,
 fn denomination<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     addr: Address,
-) -> storage_api::Result<Option<token::Denomination>>
+) -> namada_storage::Result<Option<token::Denomination>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -30,6 +29,7 @@ pub mod client_only_methods {
     use borsh::BorshDeserialize;
     use namada_core::types::address::Address;
     use namada_core::types::token;
+    use namada_token::storage_key::balance_key;
 
     use super::Token;
     use crate::queries::{Client, RPC};
@@ -45,7 +45,7 @@ pub mod client_only_methods {
         where
             CLIENT: Client + Sync,
         {
-            let balance_key = token::balance_key(token, owner);
+            let balance_key = balance_key(token, owner);
             let response = RPC
                 .shell()
                 .storage_value(client, None, None, false, &balance_key)

@@ -7,12 +7,6 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use namada_core::hints;
-use namada_core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
-use namada_core::ledger::storage::merkle_tree::StoreRef;
-use namada_core::ledger::storage::{DBIter, StorageHasher, StoreType, DB};
-use namada_core::ledger::storage_api::{
-    self, CustomError, ResultExt, StorageRead,
-};
 use namada_core::types::address::Address;
 use namada_core::types::eth_abi::{Encode, EncodeCell};
 use namada_core::types::eth_bridge_pool::{
@@ -23,16 +17,13 @@ use namada_core::types::ethereum_events::{
 };
 use namada_core::types::ethereum_structs;
 use namada_core::types::keccak::KeccakHash;
-use namada_core::types::storage::MembershipProof::BridgePool;
 use namada_core::types::storage::{BlockHeight, DbKeySeg, Epoch, Key};
 use namada_core::types::token::Amount;
-use namada_core::types::vote_extensions::validator_set_update::{
-    ValidatorSetArgs, VotingPowersMap,
-};
 use namada_core::types::voting_power::FractionalVotingPower;
 use namada_ethereum_bridge::protocol::transactions::votes::{
     EpochedVotingPower, EpochedVotingPowerExt,
 };
+use namada_ethereum_bridge::storage::bridge_pool::get_key_from_hash;
 use namada_ethereum_bridge::storage::eth_bridge_queries::EthBridgeQueries;
 use namada_ethereum_bridge::storage::parameters::UpgradeableContract;
 use namada_ethereum_bridge::storage::proof::{sort_sigs, EthereumProof};
@@ -41,6 +32,12 @@ use namada_ethereum_bridge::storage::{
     bridge_contract_key, native_erc20_key, vote_tallies,
 };
 use namada_proof_of_stake::pos_queries::PosQueries;
+use namada_state::MembershipProof::BridgePool;
+use namada_state::{DBIter, StorageHasher, StoreRef, StoreType, DB};
+use namada_storage::{self, CustomError, ResultExt, StorageRead};
+use namada_vote_ext::validator_set_update::{
+    ValidatorSetArgs, VotingPowersMap,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::eth_bridge::ethers::abi::AbiDecode;
@@ -222,7 +219,7 @@ router! {ETH_BRIDGE,
 fn pending_eth_transfer_status<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     request: &RequestQuery,
-) -> storage_api::Result<EncodedResponseQuery>
+) -> namada_storage::Result<EncodedResponseQuery>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -339,7 +336,7 @@ where
 fn get_erc20_flow_control<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     asset: EthAddress,
-) -> storage_api::Result<Erc20FlowControl>
+) -> namada_storage::Result<Erc20FlowControl>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -363,14 +360,14 @@ where
 fn read_contract<T, D, H, V, U>(
     key: &Key,
     ctx: RequestCtx<'_, D, H, V, U>,
-) -> storage_api::Result<T>
+) -> namada_storage::Result<T>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
     T: BorshDeserialize,
 {
     let Some(contract) = StorageRead::read(ctx.wl_storage, key)? else {
-        return Err(storage_api::Error::SimpleMessage(
+        return Err(namada_storage::Error::SimpleMessage(
             "Failed to read contract: The Ethereum bridge \
              storage is not initialized",
         ));
@@ -383,7 +380,7 @@ where
 #[inline]
 fn read_bridge_contract<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
-) -> storage_api::Result<UpgradeableContract>
+) -> namada_storage::Result<UpgradeableContract>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -396,7 +393,7 @@ where
 #[inline]
 fn read_native_erc20_contract<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
-) -> storage_api::Result<EthAddress>
+) -> namada_storage::Result<EthAddress>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -408,7 +405,7 @@ where
 /// pool.
 fn read_ethereum_bridge_pool<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
-) -> storage_api::Result<Vec<PendingTransfer>>
+) -> namada_storage::Result<Vec<PendingTransfer>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -423,7 +420,7 @@ where
 /// pool covered by the latest signed root.
 fn read_signed_ethereum_bridge_pool<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
-) -> storage_api::Result<Vec<PendingTransfer>>
+) -> namada_storage::Result<Vec<PendingTransfer>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -433,7 +430,7 @@ where
         .wl_storage
         .ethbridge_queries()
         .get_signed_bridge_pool_root()
-        .ok_or(storage_api::Error::SimpleMessage(
+        .ok_or(namada_storage::Error::SimpleMessage(
             "No signed root for the Ethereum bridge pool exists in storage.",
         ))
         .into_storage_result()?;
@@ -483,7 +480,7 @@ where
 fn generate_bridge_pool_proof<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     request: &RequestQuery,
-) -> storage_api::Result<EncodedResponseQuery>
+) -> namada_storage::Result<EncodedResponseQuery>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -499,7 +496,7 @@ where
             .wl_storage
             .ethbridge_queries()
             .get_signed_bridge_pool_root()
-            .ok_or(storage_api::Error::SimpleMessage(
+            .ok_or(namada_storage::Error::SimpleMessage(
                 "No signed root for the Ethereum bridge pool exists in \
                  storage.",
             ))
@@ -510,7 +507,7 @@ where
         let latest_bp_nonce =
             ctx.wl_storage.ethbridge_queries().get_bridge_pool_nonce();
         if latest_bp_nonce != signed_root.data.1 {
-            return Err(storage_api::Error::Custom(CustomError(
+            return Err(namada_storage::Error::Custom(CustomError(
                 format!(
                     "Mismatch between the nonce in the Bridge pool root proof \
                      ({}) and the latest Bridge pool nonce in storage ({})",
@@ -528,7 +525,7 @@ where
             .into_storage_result()?;
         // from the hashes of the transfers, get the actual values.
         let mut missing_hashes = vec![];
-        let (keys, values): (Vec<_>, Vec<_>) = transfer_hashes
+        let (keys, values): (Vec<_>, Vec<Vec<u8>>) = transfer_hashes
             .iter()
             .filter_map(|hash| {
                 let key = get_key_from_hash(hash);
@@ -542,7 +539,7 @@ where
             })
             .unzip();
         if !missing_hashes.is_empty() {
-            return Err(storage_api::Error::Custom(CustomError(
+            return Err(namada_storage::Error::Custom(CustomError(
                 format!(
                     "One or more of the provided hashes had no corresponding \
                      transfer in storage: {:?}",
@@ -601,10 +598,10 @@ where
                 })
             }
             Ok(_) => unreachable!(),
-            Err(e) => Err(storage_api::Error::new(e)),
+            Err(e) => Err(namada_storage::Error::new(e)),
         }
     } else {
-        Err(storage_api::Error::SimpleMessage(
+        Err(namada_storage::Error::SimpleMessage(
             "Could not deserialize transfers",
         ))
     }
@@ -615,7 +612,7 @@ where
 /// backing each `TransferToEthereum` event.
 fn transfer_to_ethereum_progress<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
-) -> storage_api::Result<HashMap<PendingTransfer, FractionalVotingPower>>
+) -> namada_storage::Result<HashMap<PendingTransfer, FractionalVotingPower>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -690,13 +687,13 @@ where
 fn read_valset_upd_proof<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     epoch: Epoch,
-) -> storage_api::Result<EncodeCell<EthereumProof<(Epoch, VotingPowersMap)>>>
+) -> namada_storage::Result<EncodeCell<EthereumProof<(Epoch, VotingPowersMap)>>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
     if epoch.0 == 0 {
-        return Err(storage_api::Error::Custom(CustomError(
+        return Err(namada_storage::Error::Custom(CustomError(
             "Validator set update proofs should only be requested from epoch \
              1 onwards"
                 .into(),
@@ -704,7 +701,7 @@ where
     }
     let current_epoch = ctx.wl_storage.storage.last_epoch;
     if epoch > current_epoch.next() {
-        return Err(storage_api::Error::Custom(CustomError(
+        return Err(namada_storage::Error::Custom(CustomError(
             format!(
                 "Requesting validator set update proof for {epoch:?}, but the \
                  last installed epoch is still {current_epoch:?}"
@@ -714,7 +711,7 @@ where
     }
 
     if !ctx.wl_storage.ethbridge_queries().valset_upd_seen(epoch) {
-        return Err(storage_api::Error::Custom(CustomError(
+        return Err(namada_storage::Error::Custom(CustomError(
             format!(
                 "Validator set update proof is not yet available for the \
                  queried epoch: {epoch:?}"
@@ -740,14 +737,14 @@ where
 fn read_bridge_valset<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     epoch: Epoch,
-) -> storage_api::Result<ValidatorSetArgs>
+) -> namada_storage::Result<ValidatorSetArgs>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
     let current_epoch = ctx.wl_storage.storage.last_epoch;
     if epoch > current_epoch.next() {
-        Err(storage_api::Error::Custom(CustomError(
+        Err(namada_storage::Error::Custom(CustomError(
             format!(
                 "Requesting Bridge validator set at {epoch:?}, but the last \
                  installed epoch is still {current_epoch:?}"
@@ -770,14 +767,14 @@ where
 fn read_governance_valset<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     epoch: Epoch,
-) -> storage_api::Result<ValidatorSetArgs>
+) -> namada_storage::Result<ValidatorSetArgs>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
     let current_epoch = ctx.wl_storage.storage.last_epoch;
     if epoch > current_epoch.next() {
-        Err(storage_api::Error::Custom(CustomError(
+        Err(namada_storage::Error::Custom(CustomError(
             format!(
                 "Requesting Governance validator set at {epoch:?}, but the \
                  last installed epoch is still {current_epoch:?}"
@@ -798,14 +795,14 @@ where
 fn voting_powers_at_height<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     height: BlockHeight,
-) -> storage_api::Result<VotingPowersMap>
+) -> namada_storage::Result<VotingPowersMap>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
     let maybe_epoch = ctx.wl_storage.pos_queries().get_epoch(height);
     let Some(epoch) = maybe_epoch else {
-        return Err(storage_api::Error::SimpleMessage(
+        return Err(namada_storage::Error::SimpleMessage(
             "The epoch of the requested height does not exist",
         ));
     };
@@ -817,14 +814,14 @@ where
 fn voting_powers_at_epoch<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     epoch: Epoch,
-) -> storage_api::Result<VotingPowersMap>
+) -> namada_storage::Result<VotingPowersMap>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
     let current_epoch = ctx.wl_storage.storage.get_current_epoch().0;
     if epoch > current_epoch + 1u64 {
-        return Err(storage_api::Error::SimpleMessage(
+        return Err(namada_storage::Error::SimpleMessage(
             "The requested epoch cannot be queried",
         ));
     }
@@ -840,12 +837,6 @@ mod test_ethbridge_router {
     use std::collections::BTreeMap;
 
     use assert_matches::assert_matches;
-    use namada_core::ledger::eth_bridge::storage::bridge_pool::{
-        get_pending_key, get_signed_root_key, BridgePoolTree,
-    };
-    use namada_core::ledger::eth_bridge::storage::whitelist;
-    use namada_core::ledger::storage::mockdb::MockDBWriteBatch;
-    use namada_core::ledger::storage_api::StorageWrite;
     use namada_core::types::address::nam;
     use namada_core::types::address::testing::established_address_1;
     use namada_core::types::eth_abi::Encode;
@@ -854,16 +845,22 @@ mod test_ethbridge_router {
     };
     use namada_core::types::ethereum_events::EthAddress;
     use namada_core::types::storage::BlockHeight;
-    use namada_core::types::vote_extensions::validator_set_update;
-    use namada_core::types::vote_extensions::validator_set_update::{
-        EthAddrBook, VotingPowersMapExt,
-    };
     use namada_core::types::voting_power::{
         EthBridgeVotingPower, FractionalVotingPower,
     };
     use namada_ethereum_bridge::protocol::transactions::validator_set_update::aggregate_votes;
+    use namada_ethereum_bridge::storage::bridge_pool::{
+        get_pending_key, get_signed_root_key, BridgePoolTree,
+    };
     use namada_ethereum_bridge::storage::proof::BridgePoolRootProof;
+    use namada_ethereum_bridge::storage::whitelist;
     use namada_proof_of_stake::pos_queries::PosQueries;
+    use namada_state::mockdb::MockDBWriteBatch;
+    use namada_storage::StorageWrite;
+    use namada_vote_ext::validator_set_update;
+    use namada_vote_ext::validator_set_update::{
+        EthAddrBook, VotingPowersMapExt,
+    };
 
     use super::test_utils::bertha_address;
     use super::*;
@@ -1009,14 +1006,14 @@ mod test_ethbridge_router {
             .unwrap();
         let expected = {
             let mut proof =
-                EthereumProof::new((1.into(), vext.data.voting_powers));
+                EthereumProof::new((1.into(), vext.0.data.voting_powers));
             proof.attach_signature(
                 client
                     .wl_storage
                     .ethbridge_queries()
                     .get_eth_addr_book(&established_address_1(), Some(0.into()))
                     .expect("Test failed"),
-                vext.sig,
+                vext.0.sig,
             );
             proof.encode()
         };

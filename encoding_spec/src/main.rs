@@ -24,12 +24,13 @@ use borsh::{schema, schema_container_of};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use madato::types::TableRow;
+use namada::account;
 use namada::ledger::parameters::Parameters;
+use namada::tx::data::{pos, TxType, WrapperTx};
 use namada::types::address::Address;
 use namada::types::key::ed25519::{PublicKey, Signature};
 use namada::types::storage::{self, Epoch};
-use namada::types::transaction::pos;
-use namada::types::{token, transaction};
+use namada::types::token;
 
 /// This generator will write output into this `docs` file.
 const OUTPUT_PATH: &str =
@@ -79,19 +80,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let public_key_schema = schema_container_of::<PublicKey>();
     // TODO update after <https://github.com/anoma/namada/issues/225>
     let signature_schema = schema_container_of::<Signature>();
-    let init_account_schema =
-        schema_container_of::<transaction::account::InitAccount>();
-    let init_validator_schema =
-        schema_container_of::<transaction::pos::BecomeValidator>();
+    let init_account_schema = schema_container_of::<account::InitAccount>();
+    let init_validator_schema = schema_container_of::<pos::BecomeValidator>();
     let token_transfer_schema = schema_container_of::<token::Transfer>();
-    let update_account =
-        schema_container_of::<transaction::account::UpdateAccount>();
+    let update_account = schema_container_of::<account::UpdateAccount>();
     let pos_bond_schema = schema_container_of::<pos::Bond>();
     let pos_withdraw_schema = schema_container_of::<pos::Withdraw>();
-    let wrapper_tx_schema = schema_container_of::<transaction::WrapperTx>();
+    let wrapper_tx_schema = schema_container_of::<WrapperTx>();
     // TODO derive BorshSchema after <https://github.com/near/borsh-rs/issues/82>
     // let tx_result_schema = schema_container_of::<transaction::TxResult>();
-    let tx_type_schema = schema_container_of::<transaction::TxType>();
+    let tx_type_schema = schema_container_of::<TxType>();
     let prefix_value_schema = schema_container_of::<storage::PrefixValue>();
 
     // PoS

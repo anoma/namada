@@ -4,7 +4,7 @@ use std::path::Path;
 use eyre::Context;
 use ledger_namada_rs::NamadaApp;
 use ledger_transport_hid::TransportNativeHID;
-use namada::proto::Tx;
+use namada::tx::Tx;
 use namada::types::key::common;
 use namada_sdk::wallet::Wallet;
 use namada_sdk::{error, signing};

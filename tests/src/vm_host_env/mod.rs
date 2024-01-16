@@ -23,21 +23,22 @@ mod tests {
 
     use borsh_ext::BorshSerializeExt;
     use itertools::Itertools;
+    use namada::account::pks_handle;
+    use namada::ibc::context::transfer_mod::testing::DummyTransferModule;
     use namada::ibc::primitives::Msg;
+    use namada::ibc::Error as IbcActionError;
     use namada::ledger::ibc::storage as ibc_storage;
     use namada::ledger::native_vp::ibc::{
         get_dummy_header as tm_dummy_header, Error as IbcError,
     };
     use namada::ledger::tx_env::TxEnv;
-    use namada::proto::Tx;
+    use namada::token::{self, Amount};
+    use namada::tx::Tx;
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::{self, BlockHash, BlockHeight, Key, KeySeg};
     use namada::types::time::DateTimeUtc;
-    use namada::types::token::{self, Amount};
     use namada::types::{address, key};
-    use namada_core::ledger::ibc::context::transfer_mod::testing::DummyTransferModule;
-    use namada_core::ledger::ibc::Error as IbcActionError;
     use namada_test_utils::TestWasms;
     use namada_tx_prelude::address::InternalAddress;
     use namada_tx_prelude::chain::ChainId;
@@ -268,6 +269,16 @@ mod tests {
                 .native_token
                 .clone())
         );
+    }
+
+    #[test]
+    fn test_tx_get_pred_epochs() {
+        // The environment must be initialized first
+        tx_host_env::init();
+
+        let pred_epochs = tx::ctx().get_pred_epochs().unwrap();
+        let expected = tx_host_env::take().wl_storage.storage.block.pred_epochs;
+        assert_eq!(expected, pred_epochs);
     }
 
     /// An example how to write a VP host environment integration test
@@ -1145,7 +1156,7 @@ mod tests {
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
         // Check if the token was escrowed
-        let escrow = token::balance_key(
+        let escrow = token::storage_key::balance_key(
             &token,
             &address::Address::Internal(address::InternalAddress::Ibc),
         );
@@ -1193,7 +1204,7 @@ mod tests {
         assert!(result.expect("validation failed unexpectedly"));
         // Check the balance
         tx_host_env::set(env);
-        let balance_key = token::balance_key(&token, &sender);
+        let balance_key = token::storage_key::balance_key(&token, &sender);
         let balance: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&balance_key).expect("read error")
         });
@@ -1201,7 +1212,7 @@ mod tests {
             balance,
             Some(Amount::from_uint(0, ibc::ANY_DENOMINATION).unwrap())
         );
-        let escrow_key = token::balance_key(
+        let escrow_key = token::storage_key::balance_key(
             &token,
             &address::Address::Internal(address::InternalAddress::Ibc),
         );
@@ -1236,12 +1247,12 @@ mod tests {
         // the origin-specific token
         let denom = format!("{}/{}/{}", port_id, channel_id, token);
         let ibc_token = ibc_storage::ibc_token(&denom);
-        let balance_key = token::balance_key(&ibc_token, &sender);
+        let balance_key = token::storage_key::balance_key(&ibc_token, &sender);
         let init_bal = Amount::from_u64(100);
         writes.insert(balance_key.clone(), init_bal.serialize_to_vec());
-        let minted_key = token::minted_balance_key(&ibc_token);
+        let minted_key = token::storage_key::minted_balance_key(&ibc_token);
         writes.insert(minted_key.clone(), init_bal.serialize_to_vec());
-        let minter_key = token::minter_key(&ibc_token);
+        let minter_key = token::storage_key::minter_key(&ibc_token);
         writes.insert(
             minter_key,
             Address::Internal(InternalAddress::Ibc).serialize_to_vec(),
@@ -1351,7 +1362,7 @@ mod tests {
         // Check if the token was minted
         let denom = format!("{}/{}/{}", port_id, channel_id, token);
         let ibc_token = ibc::ibc_token(&denom);
-        let minted_key = token::minted_balance_key(&ibc_token);
+        let minted_key = token::storage_key::minted_balance_key(&ibc_token);
         let result =
             ibc::validate_multitoken_vp_from_tx(&env, &tx, &minted_key);
         assert!(result.expect("token validation failed unexpectedly"));
@@ -1481,7 +1492,7 @@ mod tests {
             });
         });
         // escrow in advance
-        let escrow_key = token::balance_key(
+        let escrow_key = token::storage_key::balance_key(
             &token,
             &address::Address::Internal(address::InternalAddress::Ibc),
         );
@@ -1536,7 +1547,7 @@ mod tests {
         assert!(result.expect("token validation failed unexpectedly"));
         // Check the balance
         tx_host_env::set(env);
-        let key = token::balance_key(&token, &receiver);
+        let key = token::storage_key::balance_key(&token, &receiver);
         let balance: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&key).expect("read error")
         });
@@ -1737,7 +1748,7 @@ mod tests {
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
         // Check if the token was refunded
-        let escrow = token::balance_key(
+        let escrow = token::storage_key::balance_key(
             &token,
             &address::Address::Internal(address::InternalAddress::Ibc),
         );
@@ -1826,7 +1837,7 @@ mod tests {
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
         assert!(result.expect("validation failed unexpectedly"));
         // Check if the token was refunded
-        let escrow = token::balance_key(
+        let escrow = token::storage_key::balance_key(
             &token,
             &address::Address::Internal(address::InternalAddress::Ibc),
         );

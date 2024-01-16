@@ -3,19 +3,17 @@
 
 use data_encoding::HEXUPPER;
 use namada::core::hints;
-use namada::core::ledger::storage::WlStorage;
-use namada::eth_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
-use namada::eth_bridge::protocol::validation::ethereum_events::validate_eth_events_vext;
-use namada::eth_bridge::protocol::validation::validator_set_update::validate_valset_upd_vext;
+use namada::ethereum_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
+use namada::ethereum_bridge::protocol::validation::ethereum_events::validate_eth_events_vext;
+use namada::ethereum_bridge::protocol::validation::validator_set_update::validate_valset_upd_vext;
 use namada::ledger::pos::PosQueries;
 use namada::ledger::protocol::get_fee_unshielding_transaction;
-use namada::ledger::storage::TempWlStorage;
-use namada::ledger::storage_api::tx::validate_tx_bytes;
+use namada::ledger::storage::tx_queue::TxInQueue;
+use namada::parameters::validate_tx_bytes;
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
-use namada::types::internal::TxInQueue;
-use namada::types::transaction::protocol::{
-    ethereum_tx_data_variants, ProtocolTxType,
-};
+use namada::state::{TempWlStorage, WlStorage};
+use namada::tx::data::protocol::ProtocolTxType;
+use namada::vote_ext::ethereum_tx_data_variants;
 
 use super::block_alloc::{BlockSpace, EncryptedTxsBins};
 use super::*;
@@ -52,7 +50,7 @@ where
         let max_proposal_bytes =
             wl_storage.pos_queries().get_max_proposal_bytes().get();
         let max_block_gas =
-            namada::core::ledger::gas::get_max_block_gas(wl_storage).unwrap();
+            namada::parameters::get_max_block_gas(wl_storage).unwrap();
         let encrypted_txs_bin =
             EncryptedTxsBins::new(max_proposal_bytes, max_block_gas);
         let txs_bin = TxBin::init(max_proposal_bytes);
@@ -350,7 +348,7 @@ where
                             .and_then(|ext| {
                                 validate_eth_events_vext(
                                     &self.wl_storage,
-                                    &ext,
+                                    &ext.0,
                                     self.wl_storage
                                         .storage
                                         .get_last_block_height(),
@@ -378,7 +376,7 @@ where
                             .and_then(|ext| {
                                 validate_bp_roots_vext(
                                     &self.wl_storage,
-                                    &ext,
+                                    &ext.0,
                                     self.wl_storage
                                         .storage
                                         .get_last_block_height(),
@@ -621,9 +619,8 @@ where
     /// Checks if it is not possible to include encrypted txs at the current
     /// block height.
     pub(super) fn encrypted_txs_not_allowed(&self) -> bool {
-        let pos_queries = self.wl_storage.pos_queries();
-        let is_2nd_height_off = pos_queries.is_deciding_offset_within_epoch(1);
-        let is_3rd_height_off = pos_queries.is_deciding_offset_within_epoch(2);
+        let is_2nd_height_off = self.is_deciding_offset_within_epoch(1);
+        let is_3rd_height_off = self.is_deciding_offset_within_epoch(2);
         is_2nd_height_off || is_3rd_height_off
     }
 }
@@ -633,20 +630,20 @@ where
 #[cfg(test)]
 mod test_process_proposal {
     use namada::ledger::replay_protection;
-    use namada::ledger::storage_api::token::read_denom;
-    use namada::ledger::storage_api::StorageWrite;
-    use namada::proto::{
+    use namada::state::StorageWrite;
+    use namada::token;
+    use namada::token::{read_denom, Amount, DenominatedAmount};
+    use namada::tx::data::{Fee, WrapperTx};
+    use namada::tx::{
         Code, Data, Section, SignableEthMessage, Signature, Signed,
     };
     use namada::types::ethereum_events::EthereumEvent;
     use namada::types::key::*;
     use namada::types::storage::Epoch;
     use namada::types::time::DateTimeUtc;
-    use namada::types::token;
-    use namada::types::token::{Amount, DenominatedAmount};
-    use namada::types::transaction::protocol::EthereumTxData;
-    use namada::types::transaction::{Fee, WrapperTx};
-    use namada::types::vote_extensions::{bridge_pool_roots, ethereum_events};
+    use namada::vote_ext::{
+        bridge_pool_roots, ethereum_events, EthereumTxData,
+    };
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{
@@ -675,7 +672,7 @@ mod test_process_proposal {
             ethereum_events: vec![event],
         }
         .sign(protocol_key);
-        let tx = EthereumTxData::EthEventsVext(ext)
+        let tx = EthereumTxData::EthEventsVext(ext.into())
             .sign(protocol_key, shell.chain_id.clone())
             .to_bytes();
         let request = ProcessProposal { txs: vec![tx] };
@@ -809,7 +806,7 @@ mod test_process_proposal {
             ext.sig = test_utils::invalidate_signature(ext.sig);
             ext
         };
-        check_rejected_eth_events(&mut shell, ext, protocol_key);
+        check_rejected_eth_events(&mut shell, ext.into(), protocol_key);
     }
 
     /// Test that if a proposal contains Ethereum events with
@@ -836,7 +833,7 @@ mod test_process_proposal {
             assert!(ext.verify(&protocol_key.ref_to()).is_ok());
             ext
         };
-        check_rejected_eth_events(&mut shell, ext, protocol_key);
+        check_rejected_eth_events(&mut shell, ext.into(), protocol_key);
     }
 
     /// Test that if a proposal contains Ethereum events with
@@ -865,7 +862,7 @@ mod test_process_proposal {
             assert!(ext.verify(&protocol_key.ref_to()).is_ok());
             ext
         };
-        check_rejected_eth_events(&mut shell, ext, protocol_key);
+        check_rejected_eth_events(&mut shell, ext.into(), protocol_key);
     }
 
     /// Test that if a wrapper tx is not signed, the block is rejected
@@ -992,7 +989,7 @@ mod test_process_proposal {
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
         let keypair = gen_keypair();
         // reduce address balance to match the 100 token min fee
-        let balance_key = token::balance_key(
+        let balance_key = token::storage_key::balance_key(
             &shell.wl_storage.storage.native_token,
             &Address::from(&keypair.ref_to()),
         );
@@ -1059,7 +1056,7 @@ mod test_process_proposal {
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
         let keypair = crate::wallet::defaults::daewon_keypair();
         // reduce address balance to match the 100 token min fee
-        let balance_key = token::balance_key(
+        let balance_key = token::storage_key::balance_key(
             &shell.wl_storage.storage.native_token,
             &Address::from(&keypair.ref_to()),
         );
@@ -1372,8 +1369,7 @@ mod test_process_proposal {
         )));
 
         // Write wrapper hash to storage
-        let mut batch =
-            namada::core::ledger::storage::testing::TestStorage::batch();
+        let mut batch = namada::state::testing::TestStorage::batch();
         let wrapper_unsigned_hash = wrapper.header_hash();
         let hash_key = replay_protection::last_key(&wrapper_unsigned_hash);
         shell
@@ -1414,7 +1410,7 @@ mod test_process_proposal {
         let keypair = crate::wallet::defaults::daewon_keypair();
 
         // Add unshielded balance for fee payment
-        let balance_key = token::balance_key(
+        let balance_key = token::storage_key::balance_key(
             &shell.wl_storage.storage.native_token,
             &Address::from(&keypair.ref_to()),
         );
@@ -1499,8 +1495,7 @@ mod test_process_proposal {
         )));
 
         // Write inner hash to storage
-        let mut batch =
-            namada::core::ledger::storage::testing::TestStorage::batch();
+        let mut batch = namada::state::testing::TestStorage::batch();
         let hash_key = replay_protection::last_key(&wrapper.raw_header_hash());
         shell
             .wl_storage
@@ -1623,6 +1618,7 @@ mod test_process_proposal {
             let bertha_addr = wallet::defaults::bertha_address();
             ethereum_events::Vext::empty(1234_u64.into(), bertha_addr)
                 .sign(&bertha_key)
+                .into()
         })
         .sign(protocol_key, wrong_chain_id.clone());
 
@@ -1749,8 +1745,7 @@ mod test_process_proposal {
         let (shell, _recv, _, _) = test_utils::setup();
 
         let block_gas_limit =
-            namada::core::ledger::gas::get_max_block_gas(&shell.wl_storage)
-                .unwrap();
+            namada::parameters::get_max_block_gas(&shell.wl_storage).unwrap();
         let keypair = super::test_utils::gen_keypair();
 
         let mut wrapper =
@@ -2175,7 +2170,7 @@ mod test_process_proposal {
                 assert!(ext.verify(&protocol_key.ref_to()).is_ok());
                 ext
             };
-            let tx = EthereumTxData::EthEventsVext(ext)
+            let tx = EthereumTxData::EthEventsVext(ext.into())
                 .sign(&protocol_key, shell.chain_id.clone())
                 .to_bytes();
             let req = ProcessProposal { txs: vec![tx] };
@@ -2203,7 +2198,7 @@ mod test_process_proposal {
                 assert!(ext.verify(&protocol_key.ref_to()).is_ok());
                 ext
             };
-            let tx = EthereumTxData::EthEventsVext(ext)
+            let tx = EthereumTxData::EthEventsVext(ext.into())
                 .sign(&protocol_key, shell.chain_id.clone())
                 .to_bytes();
             let req = ProcessProposal { txs: vec![tx] };

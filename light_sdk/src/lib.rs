@@ -3,8 +3,8 @@
 //! with ease-of-use and interoperability in mind so that it should be possible
 //! to wrap it for usage in an FFI context.
 //!
-//! The [`namada_core`] crate of Namada is also re-exported to allow access to
-//! its types.
+//! The [`namada_sdk`] crate of Namada is also re-exported to allow access
+//! to its types.
 //!
 //! # Structure
 //!
@@ -18,4 +18,4 @@
 pub mod reading;
 pub mod transaction;
 pub mod writing;
-pub use namada_core;
+pub use namada_sdk;

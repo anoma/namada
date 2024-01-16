@@ -32,12 +32,11 @@ mod tests {
     use namada_tests::native_vp::TestNativeVpEnv;
     use namada_tests::tx::*;
     use namada_tx_prelude::address::testing::arb_established_address;
-    use namada_tx_prelude::borsh_ext::BorshSerializeExt;
     use namada_tx_prelude::chain::ChainId;
     use namada_tx_prelude::key::testing::arb_common_keypair;
     use namada_tx_prelude::key::RefTo;
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
-    use namada_tx_prelude::token;
+    use namada_tx_prelude::{token, BorshSerializeExt};
     use proptest::prelude::*;
 
     use super::*;

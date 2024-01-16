@@ -6,9 +6,9 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use color_eyre::eyre::Result;
-use namada::core::types::chain::ChainId;
 use namada::ledger::ibc::storage::ibc_token;
 use namada::types::address::{Address, InternalAddress};
+use namada::types::chain::ChainId;
 use namada::types::ethereum_events::EthAddress;
 use namada::types::ibc::is_ibc_denom;
 use namada::types::io::Io;

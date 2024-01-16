@@ -1,0 +1,31 @@
+[package]
+name = "namada_account"
+description = "Namada user account"
+resolver = "2"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[features]
+default = []
+testing = ["namada_core/testing", "proptest"]
+
+[dependencies]
+namada_core = { path = "../core" }
+namada_macros = { path = "../macros" }
+namada_storage = { path = "../storage" }
+
+borsh.workspace = true
+proptest = { workspace = true, optional = true }
+serde.workspace = true
+
+[dev-dependencies]
+namada_core = { path = "../core", features = ["testing"] }
+
+proptest.workspace = true

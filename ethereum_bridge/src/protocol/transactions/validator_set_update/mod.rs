@@ -3,13 +3,13 @@
 use std::collections::{HashMap, HashSet};
 
 use eyre::Result;
-use namada_core::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
 use namada_core::types::address::Address;
 use namada_core::types::key::common;
 use namada_core::types::storage::{BlockHeight, Epoch};
 use namada_core::types::token::Amount;
-use namada_core::types::transaction::TxResult;
-use namada_core::types::vote_extensions::validator_set_update;
+use namada_state::{DBIter, StorageHasher, WlStorage, DB};
+use namada_tx::data::TxResult;
+use namada_vote_ext::validator_set_update;
 
 use super::ChangedKeys;
 use crate::protocol::transactions::utils;
@@ -234,9 +234,9 @@ where
 #[cfg(test)]
 mod test_valset_upd_state_changes {
     use namada_core::types::address;
-    use namada_core::types::vote_extensions::validator_set_update::VotingPowersMap;
     use namada_core::types::voting_power::FractionalVotingPower;
     use namada_proof_of_stake::pos_queries::PosQueries;
+    use namada_vote_ext::validator_set_update::VotingPowersMap;
 
     use super::*;
     use crate::test_utils;

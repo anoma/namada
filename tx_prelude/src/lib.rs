@@ -16,20 +16,11 @@ pub mod token;
 use core::slice;
 use std::marker::PhantomData;
 
-pub use borsh::{BorshDeserialize, BorshSerialize};
-pub use borsh_ext;
-use borsh_ext::BorshSerializeExt;
 use masp_primitives::transaction::Transaction;
-pub use namada_core::ledger::governance::storage as gov_storage;
-pub use namada_core::ledger::parameters::storage as parameters_storage;
-pub use namada_core::ledger::storage::types::encode;
-pub use namada_core::ledger::storage_api::{
-    self, governance, iter_prefix, iter_prefix_bytes, Error, OptionExt,
-    ResultExt, StorageRead, StorageWrite,
+pub use namada_core::borsh::{
+    BorshDeserialize, BorshSerialize, BorshSerializeExt,
 };
-pub use namada_core::ledger::tx_env::TxEnv;
-pub use namada_core::ledger::{eth_bridge, parameters};
-pub use namada_core::proto::{Section, Tx};
+pub use namada_core::ledger::eth_bridge;
 use namada_core::types::account::AccountPublicKeysMap;
 pub use namada_core::types::address::Address;
 use namada_core::types::chain::CHAIN_ID_LENGTH;
@@ -40,10 +31,19 @@ use namada_core::types::storage::TxIndex;
 pub use namada_core::types::storage::{
     self, BlockHash, BlockHeight, Epoch, Header, BLOCK_HASH_LENGTH,
 };
-pub use namada_core::types::{eth_bridge_pool, *};
+pub use namada_core::types::{encode, eth_bridge_pool, *};
+pub use namada_governance::storage as gov_storage;
 pub use namada_macros::transaction;
+pub use namada_parameters::storage as parameters_storage;
+pub use namada_storage::{
+    collections, iter_prefix, iter_prefix_bytes, Error, OptionExt, ResultExt,
+    StorageRead, StorageWrite,
+};
+pub use namada_tx::{data as transaction, Section, Tx};
+pub use namada_tx_env::TxEnv;
 use namada_vm_env::tx::*;
 use namada_vm_env::{read_from_buffer, read_key_val_bytes_from_buffer};
+pub use {namada_governance as governance, namada_parameters as parameters};
 
 /// Log a string. The message will be printed at the `tracing::Level::Info`.
 pub fn log_string<T: AsRef<str>>(msg: T) {
@@ -105,8 +105,8 @@ impl Ctx {
     }
 }
 
-/// Result of `TxEnv`, `storage_api::StorageRead` or `storage_api::StorageWrite`
-/// method call
+/// Result of `TxEnv`, `namada_storage::StorageRead` or
+/// `namada_storage::StorageWrite` method call
 pub type EnvResult<T> = Result<T, Error>;
 
 /// Transaction result
@@ -180,6 +180,18 @@ impl StorageRead for Ctx {
         Ok(Epoch(unsafe { namada_tx_get_block_epoch() }))
     }
 
+    fn get_pred_epochs(
+        &self,
+    ) -> Result<namada_core::types::storage::Epochs, Error> {
+        let read_result = unsafe { namada_tx_get_pred_epochs() };
+        let bytes = read_from_buffer(read_result, namada_tx_result_buffer)
+            .ok_or(Error::SimpleMessage(
+                "Missing result from `namada_tx_get_pred_epochs` call",
+            ))?;
+        Ok(namada_core::types::decode(bytes)
+            .expect("Cannot decode pred epochs"))
+    }
+
     /// Get the native token address
     fn get_native_token(&self) -> Result<Address, Error> {
         let result = Vec::with_capacity(address::ADDRESS_LEN);
@@ -216,7 +228,7 @@ impl StorageRead for Ctx {
         ))
     }
 
-    fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error> {
+    fn get_tx_index(&self) -> Result<TxIndex, namada_storage::Error> {
         let tx_index = unsafe { namada_tx_get_tx_index() };
         Ok(TxIndex(tx_index))
     }
@@ -227,7 +239,7 @@ impl StorageWrite for Ctx {
         &mut self,
         key: &storage::Key,
         val: impl AsRef<[u8]>,
-    ) -> storage_api::Result<()> {
+    ) -> namada_storage::Result<()> {
         let key = key.to_string();
         unsafe {
             namada_tx_write(
@@ -240,7 +252,7 @@ impl StorageWrite for Ctx {
         Ok(())
     }
 
-    fn delete(&mut self, key: &storage::Key) -> storage_api::Result<()> {
+    fn delete(&mut self, key: &storage::Key) -> namada_storage::Result<()> {
         let key = key.to_string();
         unsafe { namada_tx_delete(key.as_ptr() as _, key.len() as _) };
         Ok(())

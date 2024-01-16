@@ -5,15 +5,15 @@ use std::collections::BTreeSet;
 use namada_core::ledger::slash_fund;
 /// SlashFund storage
 pub use namada_core::ledger::slash_fund::storage;
+use namada_state::StorageRead;
+use namada_tx::Tx;
 use thiserror::Error;
 
 use crate::ledger::native_vp::{self, governance, Ctx, NativeVp};
-use crate::ledger::storage::{self as ledger_storage, StorageHasher};
-use crate::ledger::storage_api::StorageRead;
-use crate::proto::Tx;
+use crate::state::{self as ledger_storage, StorageHasher};
+use crate::token;
 use crate::types::address::Address;
 use crate::types::storage::Key;
-use crate::types::token;
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]
@@ -29,7 +29,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// SlashFund VP
 pub struct SlashFundVp<'a, DB, H, CA>
 where
-    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -39,7 +39,7 @@ where
 
 impl<'a, DB, H, CA> NativeVp for SlashFundVp<'a, DB, H, CA>
 where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {

@@ -1,0 +1,25 @@
+[package]
+name = "namada_vote_ext"
+description = "Namada vote extensions"
+resolver = "2"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[dependencies]
+namada_core = { path = "../core" }
+namada_tx = { path = "../tx" }
+
+borsh.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+namada_core = { path = "../core", features = ["testing"] }
+
+data-encoding.workspace = true

@@ -15,15 +15,25 @@ version.workspace = true
 [features]
 default = []
 testing = [
+    "namada_account",
     "namada_core/testing",
+    "namada_state/testing",
 ]
 
 [dependencies]
+namada_account = {path = "../account", optional = true}
 namada_core = {path = "../core", default-features = false, features = ["ethers-derive"]}
 namada_macros = {path = "../macros"}
+namada_parameters = {path = "../parameters"}
 namada_proof_of_stake = {path = "../proof_of_stake", default-features = false}
+namada_state = {path = "../state"}
+namada_storage = {path = "../storage"}
+namada_trans_token = {path = "../trans_token"}
+namada_tx = {path = "../tx"}
+namada_vote_ext = {path = "../vote_ext"}
+
 borsh.workspace = true
-borsh-ext.workspace = true
+ethabi.workspace = true
 ethers.workspace = true
 eyre.workspace = true
 itertools.workspace = true
@@ -31,15 +41,18 @@ serde.workspace = true
 serde_json.workspace = true
 rand.workspace = true
 tendermint = {workspace = true}
-tendermint-rpc = {workspace = true}
 tendermint-proto = {workspace = true}
+tendermint-rpc = {workspace = true}
 thiserror.workspace = true
 tracing = "0.1.30"
 
 [dev-dependencies]
 # Added "testing" feature.
+namada_account = {path = "../account"}
 namada_core = {path = "../core", default-features = false, features = ["ethers-derive", "testing"]}
 namada_proof_of_stake = {path = "../proof_of_stake", default-features = false, features = ["testing"]}
+namada_state = { path = "../state", features = ["testing"] }
+
 assert_matches.workspace = true
 data-encoding.workspace = true
 ethabi.workspace = true

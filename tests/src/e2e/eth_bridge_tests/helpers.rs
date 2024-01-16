@@ -11,11 +11,12 @@ use namada::ledger::eth_bridge::{
     wrapped_erc20s, ContractVersion, Contracts, EthereumBridgeParams,
     MinimumConfirmations, UpgradeableContract,
 };
+use namada::token;
 use namada::types::address::{wnam, Address};
-use namada::types::ethereum_events::{EthAddress, Uint};
+use namada::types::ethereum_events::{
+    EthAddress, EthereumEvent, TransferToNamada, Uint,
+};
 use namada_apps::config::ethereum_bridge;
-use namada_core::types::ethereum_events::{EthereumEvent, TransferToNamada};
-use namada_core::types::token;
 
 use crate::e2e::helpers::{
     get_actor_rpc, rpc_client_do, strip_trailing_newline,
@@ -206,7 +207,7 @@ pub fn find_wrapped_erc20_balance(
     let ledger_address = get_actor_rpc(test, node);
 
     let token = wrapped_erc20s::token(asset);
-    let balance_key = token::balance_key(&token, owner);
+    let balance_key = token::storage_key::balance_key(&token, owner);
     let mut bytes = run!(
         test,
         Bin::Client,

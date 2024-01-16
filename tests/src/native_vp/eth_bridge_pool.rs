@@ -4,9 +4,9 @@ mod test_bridge_pool_vp {
 
     use borsh::BorshDeserialize;
     use borsh_ext::BorshSerializeExt;
-    use namada::core::ledger::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
+    use namada::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
     use namada::ledger::native_vp::ethereum_bridge::bridge_pool_vp::BridgePoolVp;
-    use namada::proto::Tx;
+    use namada::tx::Tx;
     use namada::types::address::{nam, wnam};
     use namada::types::chain::ChainId;
     use namada::types::eth_bridge_pool::{

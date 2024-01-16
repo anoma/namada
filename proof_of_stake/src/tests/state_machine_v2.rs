@@ -7,19 +7,15 @@ use std::{cmp, mem};
 use assert_matches::assert_matches;
 use derivative::Derivative;
 use itertools::Itertools;
-use namada_core::ledger::governance::parameters::GovernanceParameters;
-use namada_core::ledger::storage::testing::TestWlStorage;
-use namada_core::ledger::storage_api::collections::lazy_map::{
-    NestedSubKey, SubKey,
-};
-use namada_core::ledger::storage_api::token::read_balance;
-use namada_core::ledger::storage_api::{token, StorageRead};
 use namada_core::types::address::{self, Address};
 use namada_core::types::dec::Dec;
 use namada_core::types::key;
 use namada_core::types::key::common::PublicKey;
 use namada_core::types::storage::Epoch;
 use namada_core::types::token::Change;
+use namada_state::testing::TestWlStorage;
+use namada_storage::collections::lazy_map::{NestedSubKey, SubKey};
+use namada_storage::StorageRead;
 use proptest::prelude::*;
 use proptest::test_runner::Config;
 use proptest_state_machine::{
@@ -45,6 +41,7 @@ use crate::storage::{
 };
 use crate::tests::helpers::arb_params_and_genesis_validators;
 use crate::tests::utils::pause_for_enter;
+use crate::token::read_balance;
 use crate::types::{
     BondId, GenesisValidator, ReverseOrdTokenAmount, Slash, SlashType,
     ValidatorState, WeightedValidator,
@@ -52,7 +49,7 @@ use crate::types::{
 use crate::{
     below_capacity_validator_set_handle, bond_handle,
     consensus_validator_set_handle, delegator_redelegated_bonds_handle,
-    read_pos_params, redelegate_tokens, validator_deltas_handle,
+    read_pos_params, redelegate_tokens, token, validator_deltas_handle,
     validator_slashes_handle, validator_state_handle, RedelegationError,
 };
 
