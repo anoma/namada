@@ -210,7 +210,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.09189"));
+    assert!(captured.contains("nam: 0.092966"));
 
     // Wait till epoch boundary
     node.next_epoch();
@@ -313,7 +313,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.02085"));
+    assert!(captured.contains("nam: 0.021504"));
 
     // Assert NAM balance at MASP pool is an accumulation of
     // rewards from both the shielded BTC and shielded ETH
@@ -333,7 +333,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.39198"));
+    assert!(captured.contains("nam: 0.395651"));
 
     // Wait till epoch boundary
     node.next_epoch();
@@ -399,7 +399,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.085834"));
+    assert!(captured.contains("nam: 0.09112"));
 
     node.next_epoch();
 
@@ -421,7 +421,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1.198717"));
+    assert!(captured.contains("nam: 1.210964"));
 
     // Wait till epoch boundary
     node.next_epoch();
@@ -484,7 +484,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1.428567"));
+    assert!(captured.contains("nam: 1.417948"));
 
     // Assert NAM balance at MASP pool is
     // the accumulation of rewards from the shielded assets (BTC and ETH)
@@ -504,7 +504,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1.541561"));
+    assert!(captured.contains("nam: 1.55888"));
 
     // Wait till epoch boundary
     node.next_epoch();
@@ -528,7 +528,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1.602735"));
+    assert!(captured.contains("nam: 1.587938"));
 
     // Assert NAM balance at VK(B) is the rewards dispensed earlier
     // (since VK(A) has no shielded assets, no further rewards should
@@ -549,7 +549,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.12677"));
+    assert!(captured.contains("nam: 0.13393"));
 
     // Assert NAM balance at MASP pool is
     // the accumulation of rewards from the shielded assets (BTC and ETH)
@@ -569,7 +569,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1.729505"));
+    assert!(captured.contains("nam: 1.745105"));
 
     // Wait till epoch boundary to prevent conversion expiry during transaction
     // construction
@@ -588,7 +588,7 @@ fn masp_incentives() -> Result<()> {
             "--token",
             NAM,
             "--amount",
-            "0.137354",
+            "0.14998",
             "--signing-keys",
             BERTHA_KEY,
             "--node",
@@ -613,7 +613,7 @@ fn masp_incentives() -> Result<()> {
             "--token",
             NAM,
             "--amount",
-            "1.916208",
+            "2.007662",
             "--signing-keys",
             ALBERT_KEY,
             "--node",
@@ -622,25 +622,24 @@ fn masp_incentives() -> Result<()> {
     )?;
     node.assert_success();
 
-    // TODO: Fix once we can unsheild less than 10^-3 tokens
-    // // Assert NAM balance at VK(A) is 0
-    // let captured = CapturedOutput::of(|| {
-    //     run(
-    //         &node,
-    //         Bin::Client,
-    //         vec![
-    //             "balance",
-    //             "--owner",
-    //             AA_VIEWING_KEY,
-    //             "--token",
-    //             NAM,
-    //             "--node",
-    //             validator_one_rpc,
-    //         ],
-    //     )
-    // });
-    // assert!(captured.result.is_ok());
-    // assert!(captured.contains("No shielded nam balance found"));
+    // Assert NAM balance at VK(A) is 0
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("No shielded nam balance found"));
 
     // Assert NAM balance at VK(B) is 0
     let captured = CapturedOutput::of(|| {
@@ -661,7 +660,7 @@ fn masp_incentives() -> Result<()> {
     assert!(captured.result.is_ok());
     assert!(captured.contains("No shielded nam balance found"));
 
-    // Assert NAM balance at MASP pool is 0
+    // Assert NAM balance at MASP pool is nearly 0
     let captured = CapturedOutput::of(|| {
         run(
             &node,
@@ -678,7 +677,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.115575"));
+    assert!(captured.contains("nam: 0.027953"));
 
     Ok(())
 }

@@ -22,6 +22,7 @@ namada_core = {path = "../core", default-features = false}
 borsh.workspace = true
 data-encoding.workspace = true
 derivative.workspace = true
+num-traits.workspace = true
 once_cell.workspace = true
 proptest = {workspace = true, optional = true}
 serde.workspace = true

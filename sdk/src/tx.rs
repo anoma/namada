@@ -1,6 +1,6 @@
 //! SDK functions to construct different types of transactions
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -55,7 +55,7 @@ use crate::control_flow::time;
 use crate::error::{EncodingError, Error, QueryError, Result, TxError};
 use crate::io::Io;
 use crate::masp::TransferErr::Build;
-use crate::masp::{make_asset_type, ShieldedContext, ShieldedTransfer};
+use crate::masp::{ShieldedContext, ShieldedTransfer};
 use crate::proto::{MaspBuilder, Tx};
 use crate::queries::Client;
 use crate::rpc::{
@@ -491,24 +491,6 @@ pub fn display_inner_resp(context: &impl Namada, resp: &TxResponse) {
         "Full result: {}",
         serde_json::to_string_pretty(&resp).unwrap()
     );
-}
-
-/// decode components of a masp note
-pub fn decode_component<K, F>(
-    (addr, denom, epoch): (Address, MaspDenom, Epoch),
-    val: i128,
-    res: &mut HashMap<K, token::Change>,
-    mk_key: F,
-) where
-    F: FnOnce(Address, Epoch) -> K,
-    K: Eq + std::hash::Hash,
-{
-    let decoded_change = token::Change::from_masp_denominated(val, denom)
-        .expect("expected this to fit");
-
-    res.entry(mk_key(addr, epoch))
-        .and_modify(|val| *val += decoded_change)
-        .or_insert(decoded_change);
 }
 
 /// Save accounts initialized from a tx into the wallet, if any.
@@ -2238,7 +2220,7 @@ where
 /// Try to decode the given asset type and add its decoding to the supplied set.
 /// Returns true only if a new decoding has been added to the given set.
 async fn add_asset_type(
-    asset_types: &mut HashSet<(Address, MaspDenom, Epoch)>,
+    asset_types: &mut HashSet<(Address, MaspDenom, Option<Epoch>)>,
     context: &impl Namada,
     asset_type: AssetType,
 ) -> bool {
@@ -2260,7 +2242,8 @@ async fn add_asset_type(
 async fn used_asset_types<P, R, K, N>(
     context: &impl Namada,
     builder: &Builder<P, R, K, N>,
-) -> std::result::Result<HashSet<(Address, MaspDenom, Epoch)>, RpcError> {
+) -> std::result::Result<HashSet<(Address, MaspDenom, Option<Epoch>)>, RpcError>
+{
     let mut asset_types = HashSet::new();
     // Collect all the asset types used in the Sapling inputs
     for input in builder.sapling_inputs() {
@@ -2425,7 +2408,12 @@ async fn construct_shielded_parts<N: Namada>(
     target: &TransferTarget,
     token: &Address,
     amount: token::DenominatedAmount,
-) -> Result<Option<(ShieldedTransfer, HashSet<(Address, MaspDenom, Epoch)>)>> {
+) -> Result<
+    Option<(
+        ShieldedTransfer,
+        HashSet<(Address, MaspDenom, Option<Epoch>)>,
+    )>,
+> {
     let stx_result =
         ShieldedContext::<N::ShieldedUtils>::gen_shielded_transfer(
             context, source, target, token, amount,
@@ -2703,14 +2691,14 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
     if let Some(shielded_transfer) = shielded_transfer {
         // TODO: Workaround for decoding the asset_type later
         let mut shielded = context.shielded_mut().await;
-        let mut asset_types = Vec::new();
         for denom in MaspDenom::iter() {
             let epoch = shielded_transfer.epoch;
-            let asset_type = make_asset_type(Some(epoch), &token, denom)?;
             shielded
-                .asset_types
-                .insert(asset_type, (token.clone(), denom, epoch));
-            asset_types.push(asset_type);
+                .get_asset_type(context.client(), epoch, token.clone(), denom)
+                .await
+                .map_err(|_| {
+                    Error::Other("unable to create asset type".to_string())
+                })?;
         }
         let _ = shielded.save().await;
 
