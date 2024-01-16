@@ -682,6 +682,115 @@ fn masp_incentives() -> Result<()> {
     Ok(())
 }
 
+/// In this test we ensure that a non-converted asset type (i.e. from an older
+/// epoch) can be correctly spent
+///
+/// 1. Shield some tokens to trigger rewards
+/// 2. Shield the minimum amount 10^-6 native tokens
+/// 3. Sleep for a few epochs
+/// 4. Check the minimum amount is still in the shielded balance
+/// 5. Spend this minimum amount succesfully
+#[test]
+fn spend_unconverted_asset_type() -> Result<()> {
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "127.0.0.1:26567";
+    // Download the shielded pool parameters before starting node
+    let _ = FsShieldedUtils::new(PathBuf::new());
+
+    let (mut node, _services) = setup::setup()?;
+    // Wait till epoch boundary
+    let _ep0 = node.next_epoch();
+
+    // 1. Shield some tokens
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            ALBERT,
+            "--target",
+            AA_PAYMENT_ADDRESS,
+            "--token",
+            BTC,
+            "--amount",
+            "20",
+            "--node",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+
+    // 2. Shield the minimum amount
+    node.next_epoch();
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            ALBERT,
+            "--target",
+            AB_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "0.000001",
+            "--node",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+
+    // 3. Sleep for a few epochs
+    for _ in 0..5 {
+        node.next_epoch();
+    }
+
+    // 4. Check the shielded balance
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AB_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 0.000001"));
+
+    // 5. Spend the shielded balance
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            B_SPENDING_KEY,
+            "--target",
+            AA_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "0.000001",
+            "--gas-payer",
+            CHRISTEL_KEY,
+            "--node",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+
+    Ok(())
+}
+
 /// In this test we:
 /// 1. Run the ledger node
 /// 2. Assert PPA(C) cannot be recognized by incorrect viewing key
