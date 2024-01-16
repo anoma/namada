@@ -3387,7 +3387,7 @@ dependencies = [
 
 [[package]]
 name = "namada_account"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "borsh",
  "namada_core",
@@ -3474,7 +3474,7 @@ dependencies = [
 
 [[package]]
 name = "namada_gas"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "borsh",
  "namada_core",
@@ -3484,13 +3484,13 @@ dependencies = [
 
 [[package]]
 name = "namada_governance"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "borsh",
  "namada_core",
  "namada_macros",
  "namada_parameters",
- "namada_storage",
+ "namada_state",
  "namada_trans_token",
  "proptest",
  "serde",
@@ -3501,15 +3501,18 @@ dependencies = [
 
 [[package]]
 name = "namada_ibc"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "borsh",
  "ibc",
  "ibc-derive",
  "ibc-testkit",
  "ics23",
+ "masp_primitives",
  "namada_core",
+ "namada_governance",
  "namada_parameters",
+ "namada_state",
  "namada_storage",
  "namada_trans_token",
  "primitive-types",
@@ -3531,7 +3534,7 @@ dependencies = [
 
 [[package]]
 name = "namada_merkle_tree"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "borsh",
  "eyre",
@@ -3544,7 +3547,7 @@ dependencies = [
 
 [[package]]
 name = "namada_parameters"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "borsh",
  "namada_core",
@@ -3566,6 +3569,7 @@ dependencies = [
  "namada_parameters",
  "namada_storage",
  "namada_trans_token",
+ "num-traits",
  "once_cell",
  "proptest",
  "serde",
@@ -3604,6 +3608,7 @@ dependencies = [
  "namada_token",
  "namada_tx",
  "namada_vote_ext",
+ "num-traits",
  "num256",
  "orion",
  "owo-colors",
@@ -3631,7 +3636,7 @@ dependencies = [
 
 [[package]]
 name = "namada_shielded_token"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "masp_primitives",
  "namada_core",
@@ -3644,7 +3649,7 @@ dependencies = [
 
 [[package]]
 name = "namada_state"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "borsh",
  "ics23",
@@ -3666,7 +3671,7 @@ dependencies = [
 
 [[package]]
 name = "namada_storage"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "borsh",
  "itertools 0.10.5",
@@ -3723,7 +3728,7 @@ dependencies = [
 
 [[package]]
 name = "namada_token"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "namada_core",
  "namada_shielded_token",
@@ -3733,7 +3738,7 @@ dependencies = [
 
 [[package]]
 name = "namada_trans_token"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "namada_core",
  "namada_storage",
@@ -3741,7 +3746,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "ark-bls12-381",
  "borsh",
@@ -3763,7 +3768,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_env"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "namada_core",
  "namada_storage",
@@ -3802,7 +3807,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vote_ext"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "borsh",
  "namada_core",
@@ -3812,7 +3817,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_env"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "derivative",
  "masp_primitives",

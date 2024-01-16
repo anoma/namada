@@ -9,26 +9,28 @@ use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::transaction::Transaction;
+use namada_core::types::address::Address;
 use namada_core::types::address::InternalAddress::Masp;
-use namada_core::types::address::{Address, MASP};
-use namada_core::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
+use namada_core::types::masp::encode_asset_type;
+use namada_core::types::storage::{IndexedTx, Key};
 use namada_gas::MASP_VERIFY_SHIELDED_TX_GAS;
 use namada_sdk::masp::verify_shielded_tx;
-use namada_state::OptionExt;
+use namada_state::{OptionExt, ResultExt};
 use namada_tx::Tx;
 use namada_vp_env::VpEnv;
 use ripemd::Digest as RipemdDigest;
 use sha2::Digest as Sha2Digest;
 use thiserror::Error;
+use token::storage_key::{
+    is_masp_allowed_key, is_masp_key, is_masp_nullifier_key,
+    masp_commitment_anchor_key, masp_commitment_tree_key,
+    masp_convert_anchor_key, masp_nullifier_key, masp_pin_tx_key,
+};
+use token::MaspDenom;
 
 use crate::ledger::native_vp;
 use crate::ledger::native_vp::{Ctx, NativeVp};
-use crate::token::storage_key::{
-    is_masp_allowed_key, is_masp_key, is_masp_nullifier_key,
-};
-use crate::token::{self as token, Transfer};
-use crate::types::masp::encode_asset_type;
-use crate::types::token::MaspDenom;
+use crate::token;
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]
@@ -79,9 +81,7 @@ where
         };
 
         for description in shielded_spends {
-            let nullifier_key = namada_core::types::token::masp_nullifier_key(
-                &description.nullifier,
-            );
+            let nullifier_key = masp_nullifier_key(&description.nullifier);
             if self.ctx.has_key_pre(&nullifier_key)?
                 || revealed_nullifiers.contains(&nullifier_key)
             {
@@ -128,7 +128,7 @@ where
     ) -> Result<bool> {
         // Check that the merkle tree in storage has been correctly updated with
         // the output descriptions cmu
-        let tree_key = namada_core::types::token::masp_commitment_tree_key();
+        let tree_key = masp_commitment_tree_key();
         let mut previous_tree: CommitmentTree<Node> =
             self.ctx.read_pre(&tree_key)?.ok_or(Error::NativeVpError(
                 native_vp::Error::SimpleMessage("Cannot read storage"),
@@ -182,10 +182,7 @@ where
         };
 
         for description in shielded_spends {
-            let anchor_key =
-                namada_core::types::token::masp_commitment_anchor_key(
-                    description.anchor,
-                );
+            let anchor_key = masp_commitment_anchor_key(description.anchor);
 
             // Check if the provided anchor was published before
             if !self.ctx.has_key_pre(&anchor_key)? {
@@ -206,8 +203,7 @@ where
     ) -> Result<bool> {
         if let Some(bundle) = transaction.sapling_bundle() {
             if !bundle.shielded_converts.is_empty() {
-                let anchor_key =
-                    namada_core::types::token::masp_convert_anchor_key();
+                let anchor_key = masp_convert_anchor_key();
                 let expected_anchor = self
                     .ctx
                     .read_pre::<namada_core::types::hash::Hash>(&anchor_key)?

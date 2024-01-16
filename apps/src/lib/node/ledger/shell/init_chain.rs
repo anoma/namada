@@ -11,9 +11,8 @@ use namada::ledger::{ibc, pos};
 use namada::proof_of_stake::BecomeValidator;
 use namada::state::{DBIter, StorageHasher, StorageWrite, DB};
 use namada::token::{credit_tokens, write_denom};
-use namada::types::address::{Address, MASP};
+use namada::types::address::Address;
 use namada::types::hash::Hash as CodeHash;
-use namada::types::storage::KeySeg;
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::vm::validate_untrusted_wasm;
 use namada_sdk::eth_bridge::EthBridgeStatus;
@@ -140,19 +139,18 @@ where
             CommitmentTree::empty();
         let anchor = empty_commitment_tree.root();
         let note_commitment_tree_key =
-            namada::core::types::token::masp_commitment_tree_key();
+            token::storage_key::masp_commitment_tree_key();
         self.wl_storage
             .write(&note_commitment_tree_key, empty_commitment_tree)
             .unwrap();
         let commitment_tree_anchor_key =
-            namada::core::types::token::masp_commitment_anchor_key(anchor);
+            token::storage_key::masp_commitment_anchor_key(anchor);
         self.wl_storage
             .write(&commitment_tree_anchor_key, ())
             .unwrap();
 
         // Init masp convert anchor
-        let convert_anchor_key =
-            namada::core::types::token::masp_convert_anchor_key();
+        let convert_anchor_key = token::storage_key::masp_convert_anchor_key();
         self.wl_storage.write(
             &convert_anchor_key,
             namada::types::hash::Hash(

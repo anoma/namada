@@ -429,6 +429,7 @@ where
     }
 }
 
+#[macro_export]
 macro_rules! impl_storage_traits {
     ($($type:ty)*) => {
         impl<D, H> StorageRead for $($type)*

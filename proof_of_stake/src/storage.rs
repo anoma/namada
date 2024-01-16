@@ -755,7 +755,7 @@ where
 pub fn read_validator_avatar<S>(
     storage: &S,
     validator: &Address,
-) -> storage_api::Result<Option<String>>
+) -> namada_storage::Result<Option<String>>
 where
     S: StorageRead,
 {
@@ -768,7 +768,7 @@ pub fn write_validator_avatar<S>(
     storage: &mut S,
     validator: &Address,
     avatar: &String,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -882,7 +882,7 @@ pub fn get_consensus_key<S>(
     storage: &S,
     addr: &Address,
     epoch: Epoch,
-) -> storage_api::Result<Option<common::PublicKey>>
+) -> namada_storage::Result<Option<common::PublicKey>>
 where
     S: StorageRead,
 {

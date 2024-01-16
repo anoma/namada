@@ -6,12 +6,9 @@ use namada::account::{InitAccount, UpdateAccount};
 use namada::core::types::key::{
     common, SecretKey as SecretKeyInterface, SigScheme,
 };
-use namada::core::types::token::Amount;
 use namada::governance::pgf::storage::steward::StewardDetail;
 use namada::governance::storage::proposal::ProposalType;
-use namada::governance::storage::vote::{
-    ProposalVote, StorageProposalVote, VoteType,
-};
+use namada::governance::storage::vote::ProposalVote;
 use namada::governance::{InitProposalData, VoteProposalData};
 use namada::ibc::core::channel::types::channel::Order;
 use namada::ibc::core::channel::types::msgs::MsgChannelOpenInit;
@@ -28,6 +25,7 @@ use namada::proof_of_stake::storage::read_pos_params;
 use namada::proof_of_stake::types::SlashType;
 use namada::proof_of_stake::{self, KeySeg};
 use namada::state::{StorageRead, StorageWrite};
+use namada::token::Amount;
 use namada::tx::data::pos::{
     BecomeValidator, Bond, CommissionChange, ConsensusKeyChange,
     MetaDataChange, Redelegation, Withdraw,

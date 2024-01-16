@@ -9,7 +9,6 @@ use namada::ethereum_bridge::protocol::transactions::ethereum_events::sign_ether
 use namada::ethereum_bridge::protocol::transactions::validator_set_update::sign_validator_set_update;
 pub use namada::ethereum_bridge::protocol::validation::VoteExtensionError;
 use namada::tx::Signed;
-use namada::types::keccak::keccak_hash;
 use namada::vote_ext::{
     bridge_pool_roots, ethereum_events, validator_set_update, EthereumTxData,
     VoteExtension,
@@ -70,6 +69,7 @@ where
             protocol_key,
             ethereum_events,
         )
+        .map(|ethereum_events::SignedVext(ext)| ext)
     }
 
     /// Extend PreCommit votes with [`bridge_pool_roots::Vext`] instances.
@@ -94,6 +94,7 @@ where
             eth_hot_key,
             protocol_key,
         )
+        .map(|bridge_pool_roots::SignedVext(ext)| ext)
     }
 
     /// Extend PreCommit votes with [`validator_set_update::Vext`]

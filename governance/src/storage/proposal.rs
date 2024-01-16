@@ -6,13 +6,14 @@ use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
 use namada_core::types::storage::Epoch;
+use namada_trans_token::Amount;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::vote::StorageProposalVote;
+use super::vote::ProposalVote;
 use crate::cli::onchain::{
-    DefaultProposal, PGFTarget, PgfAction, PgfContinous, PgfFundingProposal,
-    PgfRetro, PgfSteward, PgfStewardProposal, StewardsUpdate,
+    DefaultProposal, PgfAction, PgfContinous, PgfFundingProposal, PgfRetro,
+    PgfSteward, PgfStewardProposal, StewardsUpdate,
 };
 use crate::utils::{ProposalStatus, TallyType};
 
@@ -35,7 +36,7 @@ pub enum ProposalError {
 )]
 pub struct InitProposalData {
     /// The proposal id
-    pub id: Option<u64>,
+    pub id: u64,
     /// The proposal content
     pub content: Hash,
     /// The proposal author address
@@ -74,7 +75,7 @@ pub struct VoteProposalData {
     /// The proposal id
     pub id: u64,
     /// The proposal vote
-    pub vote: StorageProposalVote,
+    pub vote: ProposalVote,
     /// The proposal author address
     pub voter: Address,
     /// Delegator addreses
@@ -125,12 +126,8 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
             .continuous
             .iter()
             .cloned()
-            .map(|funding| {
-                let target = PGFTarget {
-                    target: funding.address,
-                    amount: funding.amount,
-                };
-                if funding.amount.is_zero() {
+            .map(|target| {
+                if target.amount().is_zero() {
                     PGFAction::Continuous(AddRemove::Remove(target))
                 } else {
                     PGFAction::Continuous(AddRemove::Add(target))
@@ -143,13 +140,7 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
             .retro
             .iter()
             .cloned()
-            .map(|funding| {
-                let target = PGFTarget {
-                    target: funding.address,
-                    amount: funding.amount,
-                };
-                PGFAction::Retro(target)
-            })
+            .map(PGFAction::Retro)
             .collect::<Vec<PGFAction>>();
 
         let extra_data = [continous_fundings, retro_fundings].concat();
@@ -636,7 +627,7 @@ pub mod testing {
     prop_compose! {
         /// Generate a proposal initialization
         pub fn arb_init_proposal()(
-            id: Option<u64>,
+            id: u64,
             content in arb_hash(),
             author in arb_non_internal_address(),
             r#type in arb_proposal_type(),

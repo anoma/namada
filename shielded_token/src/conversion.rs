@@ -1,17 +1,14 @@
 //! MASP rewards conversions
 
-use masp_primitives::asset_type::AssetType;
-use namada_core::borsh::BorshSerializeExt;
 use namada_core::ledger::inflation::{RewardsController, ValsToUpdate};
 use namada_core::types::address::{Address, MASP};
 use namada_core::types::dec::Dec;
-use namada_core::types::storage::Epoch;
 use namada_core::types::uint::Uint;
 use namada_parameters as parameters;
 use namada_state::{DBIter, StorageHasher, WlStorage, DB};
 use namada_storage::{StorageRead, StorageWrite};
 use namada_trans_token::storage_key::{balance_key, minted_balance_key};
-use namada_trans_token::{read_denom, Amount, DenominatedAmount, MaspDenom};
+use namada_trans_token::{read_denom, Amount, DenominatedAmount};
 
 use crate::storage_key::{
     masp_kd_gain_key, masp_kp_gain_key, masp_last_inflation_key,
@@ -193,8 +190,9 @@ where
     use masp_primitives::sapling::Node;
     use masp_primitives::transaction::components::I128Sum as MaspAmount;
     use namada_core::types::masp::encode_asset_type;
-    use namada_core::types::storage::{Key, KeySeg};
+    use namada_core::types::storage::Epoch;
     use namada_storage::ResultExt;
+    use namada_trans_token::MaspDenom;
     use rayon::iter::{
         IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
     };
@@ -324,7 +322,7 @@ where
                     total_reward += native_reward
                         .0
                         .checked_add(native_reward.1)
-                        .unwrap_or(token::Amount::max())
+                        .unwrap_or(Amount::max())
                         .checked_sub(addr_bal)
                         .unwrap_or_default();
                     // Save the new normed inflation

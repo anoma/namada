@@ -11,8 +11,9 @@ use namada::governance::cli::offline::{
     OfflineProposal, OfflineSignedProposal, OfflineVote,
 };
 use namada::governance::cli::onchain::{
-    DefaultProposal, PgfFundingProposal, PgfStewardProposal, ProposalVote,
+    DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
+use namada::governance::ProposalVote;
 use namada::ibc::apps::transfer::types::Memo;
 use namada::state::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::tx::data::pos::{BecomeValidator, ConsensusKeyChange};

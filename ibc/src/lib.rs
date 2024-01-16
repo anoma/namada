@@ -1,5 +1,6 @@
 //! IBC library code
 
+mod actions;
 pub mod context;
 pub mod storage;
 
@@ -8,6 +9,7 @@ use std::fmt::Debug;
 use std::rc::Rc;
 use std::str::FromStr;
 
+pub use actions::transfer_over_ibc;
 use borsh::BorshDeserialize;
 pub use context::common::IbcCommonContext;
 use context::router::IbcRouter;

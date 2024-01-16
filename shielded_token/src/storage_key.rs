@@ -1,13 +1,12 @@
 //! Shielded token storage keys
 
+use masp_primitives::bls12_381::Scalar;
+use masp_primitives::sapling::Nullifier;
 use namada_core::types::address::{self, Address};
-use namada_core::types::storage::{self, DbKeySeg};
+use namada_core::types::hash::Hash;
+use namada_core::types::storage::{self, DbKeySeg, KeySeg};
 use namada_trans_token::storage_key::key_of_token;
 
-/// Key segment for head shielded transaction pointer keys
-pub const HEAD_TX_KEY: &str = "head-tx";
-/// Key segment prefix for shielded transaction key
-pub const TX_KEY_PREFIX: &str = "tx-";
 /// Key segment prefix for pinned shielded transactions
 pub const PIN_KEY_PREFIX: &str = "pin-";
 /// Key segment prefix for the nullifiers
@@ -67,9 +66,7 @@ pub fn is_masp_allowed_key(key: &storage::Key) -> bool {
     match &key.segments[..] {
         [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
             if *addr == address::MASP
-                && (key == HEAD_TX_KEY
-                    || key.starts_with(TX_KEY_PREFIX)
-                    || key.starts_with(PIN_KEY_PREFIX)
+                && (key.starts_with(PIN_KEY_PREFIX)
                     || key == MASP_NOTE_COMMITMENT_TREE_KEY) =>
         {
             true
@@ -82,14 +79,6 @@ pub fn is_masp_allowed_key(key: &storage::Key) -> bool {
         ] if *addr == address::MASP && key == MASP_NULLIFIERS_KEY => true,
         _ => false,
     }
-}
-
-/// Check if the given storage key is a masp tx prefix key
-pub fn is_masp_tx_prefix_key(key: &storage::Key) -> bool {
-    matches!(&key.segments[..],
-        [DbKeySeg::AddressSeg(addr),
-             DbKeySeg::StringSeg(prefix),
-        ] if *addr == address::MASP && prefix.starts_with(TX_KEY_PREFIX))
 }
 
 /// Check if the given storage key is a masp tx pin key
@@ -125,4 +114,43 @@ pub fn masp_last_inflation_key(token_address: &Address) -> storage::Key {
         MASP_LAST_INFLATION_KEY,
         "cannot obtain storage key for the last inflation rate",
     )
+}
+
+/// Get a key for a masp pin
+pub fn masp_pin_tx_key(key: &str) -> storage::Key {
+    storage::Key::from(address::MASP.to_db_key())
+        .push(&(PIN_KEY_PREFIX.to_owned() + key))
+        .expect("Cannot obtain a storage key")
+}
+
+/// Get a key for a masp nullifier
+pub fn masp_nullifier_key(nullifier: &Nullifier) -> storage::Key {
+    storage::Key::from(address::MASP.to_db_key())
+        .push(&MASP_NULLIFIERS_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+        .push(&Hash(nullifier.0))
+        .expect("Cannot obtain a storage key")
+}
+
+/// Get the key for the masp commitment tree
+pub fn masp_commitment_tree_key() -> storage::Key {
+    storage::Key::from(address::MASP.to_db_key())
+        .push(&MASP_NOTE_COMMITMENT_TREE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Get a key for a masp commitment tree anchor
+pub fn masp_commitment_anchor_key(anchor: impl Into<Scalar>) -> storage::Key {
+    storage::Key::from(address::MASP.to_db_key())
+        .push(&MASP_NOTE_COMMITMENT_ANCHOR_PREFIX.to_owned())
+        .expect("Cannot obtain a storage key")
+        .push(&Hash(anchor.into().to_bytes()))
+        .expect("Cannot obtain a storage key")
+}
+
+/// Get the key for the masp convert tree anchor
+pub fn masp_convert_anchor_key() -> storage::Key {
+    storage::Key::from(address::MASP.to_db_key())
+        .push(&MASP_CONVERT_ANCHOR_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
 }

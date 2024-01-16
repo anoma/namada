@@ -1,12 +1,11 @@
 //! Bridge pool roots validation.
 
-use namada_core::ledger::storage;
-use namada_core::ledger::storage::WlStorage;
-use namada_core::proto::{SignableEthMessage, Signed};
 use namada_core::types::keccak::keccak_hash;
 use namada_core::types::storage::BlockHeight;
-use namada_core::types::vote_extensions::bridge_pool_roots;
 use namada_proof_of_stake::pos_queries::PosQueries;
+use namada_state::{DBIter, StorageHasher, WlStorage, DB};
+use namada_tx::{SignableEthMessage, Signed};
+use namada_vote_ext::bridge_pool_roots;
 
 use super::VoteExtensionError;
 use crate::storage::eth_bridge_queries::EthBridgeQueries;
@@ -27,8 +26,8 @@ pub fn validate_bp_roots_vext<D, H>(
     last_height: BlockHeight,
 ) -> Result<(), VoteExtensionError>
 where
-    D: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: 'static + storage::StorageHasher,
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
 {
     // NOTE: for ABCI++, we should pass
     // `last_height` here, instead of `ext.data.block_height`

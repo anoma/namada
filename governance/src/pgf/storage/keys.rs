@@ -1,7 +1,7 @@
 use namada_core::types::address::Address;
 use namada_core::types::storage::{DbKeySeg, Key, KeySeg};
 use namada_macros::StorageKeys;
-use namada_storage::collections::{lazy_map, LazyCollection, LazyMap};
+use namada_state::collections::{lazy_map, LazyCollection, LazyMap};
 
 use crate::pgf::storage::steward::StewardDetail;
 use crate::pgf::ADDRESS;

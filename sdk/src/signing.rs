@@ -27,7 +27,7 @@ use namada_core::types::token::{Amount, DenominatedAmount, MaspDenom};
 use namada_governance::storage::proposal::{
     InitProposalData, ProposalType, VoteProposalData,
 };
-use namada_governance::storage::vote::{ProposalVote, VoteType};
+use namada_governance::storage::vote::ProposalVote;
 use namada_parameters::storage as parameter_storage;
 use namada_token::storage_key::balance_key;
 use namada_tx::data::pgf::UpdateStewardCommission;

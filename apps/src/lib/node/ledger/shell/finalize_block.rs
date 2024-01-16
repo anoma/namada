@@ -3,12 +3,11 @@
 use data_encoding::HEXUPPER;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
-use masp_proofs::bls12_381;
 use namada::governance::pgf::inflation as pgf_inflation;
 use namada::ledger::events::EventType;
 use namada::ledger::gas::{GasMetering, TxGasMeter};
 use namada::ledger::pos::namada_proof_of_stake;
-use namada::ledger::protocol;
+use namada::ledger::protocol::{self, WrapperArgs};
 use namada::proof_of_stake::storage::{
     find_validator_by_raw_hash, read_last_block_proposer_address,
     write_last_block_proposer_address,
@@ -21,7 +20,7 @@ use namada::state::{
 use namada::token::conversion::update_allowed_conversions;
 use namada::tx::data::protocol::ProtocolTxType;
 use namada::types::key::tm_raw_hash_to_string;
-use namada::types::storage::{BlockHash, BlockResults, Epoch, Header, KeySeg};
+use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
 use namada::vote_ext::ethereum_events::MultiSignedEthEvent;
 use namada::vote_ext::ethereum_tx_data_variants;
 
@@ -598,16 +597,15 @@ where
         tracing::info!("{}", stats.format_tx_executed());
 
         // Update the MASP commitment tree anchor if the tree was updated
-        let tree_key = namada::core::types::token::masp_commitment_tree_key();
+        let tree_key = token::storage_key::masp_commitment_tree_key();
         if let Some(StorageModification::Write { value }) =
             self.wl_storage.write_log.read(&tree_key).0
         {
             let updated_tree = CommitmentTree::<Node>::try_from_slice(value)
                 .into_storage_result()?;
-            let anchor_key =
-                namada::core::types::token::masp_commitment_anchor_key(
-                    updated_tree.root(),
-                );
+            let anchor_key = token::storage_key::masp_commitment_anchor_key(
+                updated_tree.root(),
+            );
             self.wl_storage.write(&anchor_key, ())?;
         }
 
@@ -711,7 +709,10 @@ where
         )?;
 
         // Pgf inflation
-        pgf_inflation::apply_inflation(&mut self.wl_storage)?;
+        pgf_inflation::apply_inflation(
+            &mut self.wl_storage,
+            namada::ibc::transfer_over_ibc,
+        )?;
         for ibc_event in self.wl_storage.write_log_mut().take_ibc_events() {
             let mut event = Event::from(ibc_event.clone());
             // Add the height for IBC event query
@@ -859,7 +860,6 @@ mod test_finalize_block {
     use namada::ethereum_bridge::storage::wrapped_erc20s;
     use namada::governance::storage::keys::get_proposal_execution_key;
     use namada::governance::storage::proposal::ProposalType;
-    use namada::governance::storage::vote::VoteType;
     use namada::governance::{InitProposalData, VoteProposalData};
     use namada::ledger::gas::VpGasMeter;
     use namada::ledger::native_vp::parameters::ParametersVp;
@@ -894,6 +894,7 @@ mod test_finalize_block {
     use namada::types::uint::Uint;
     use namada::vote_ext::{ethereum_events, EthereumTxData};
     use namada_sdk::eth_bridge::MinimumConfirmations;
+    use namada_sdk::governance::ProposalVote;
     use namada_sdk::proof_of_stake::storage::{
         liveness_missed_votes_handle, liveness_sum_missed_votes_handle,
         read_consensus_validator_set_addresses,

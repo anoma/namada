@@ -1072,18 +1072,18 @@ impl Tx {
     }
 
     /// Set the transaction memo hash stored in the header
-    pub fn set_memo_sechash(&mut self, hash: crate::types::hash::Hash) {
+    pub fn set_memo_sechash(&mut self, hash: namada_core::types::hash::Hash) {
         self.header.memo_hash = hash;
     }
 
     /// Get the hash of this transaction's memo from the heeader
-    pub fn memo_sechash(&self) -> &crate::types::hash::Hash {
+    pub fn memo_sechash(&self) -> &namada_core::types::hash::Hash {
         &self.header.memo_hash
     }
 
     /// Get the memo designated by the memo hash in the header
     pub fn memo(&self) -> Option<Vec<u8>> {
-        if self.memo_sechash() == &crate::types::hash::Hash::default() {
+        if self.memo_sechash() == &namada_core::types::hash::Hash::default() {
             return None;
         }
         match self
@@ -1415,7 +1415,7 @@ impl Tx {
     pub fn add_memo(
         &mut self,
         memo: &[u8],
-    ) -> (&mut Self, crate::types::hash::Hash) {
+    ) -> (&mut Self, namada_core::types::hash::Hash) {
         let sechash = self
             .add_section(Section::ExtraData(Code::new(memo.to_vec(), None)))
             .get_hash();

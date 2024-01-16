@@ -9,6 +9,8 @@ use borsh::BorshDeserialize;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
+use namada_account::Account;
+use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::hash::Hash;
 use namada_core::types::key::common;
 use namada_core::types::storage::{

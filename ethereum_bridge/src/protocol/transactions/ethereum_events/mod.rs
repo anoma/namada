@@ -70,7 +70,7 @@ where
         tracing::debug!("New Ethereum events - {:#?}", ext.ethereum_events);
     }
 
-    Some(ext.sign(protocol_key))
+    Some(ext.sign(protocol_key).into())
 }
 
 /// Applies derived state changes to storage, based on Ethereum `events` which

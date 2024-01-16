@@ -1,6 +1,6 @@
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::types::token;
-use namada_storage::{Result, StorageRead, StorageWrite};
+use namada_state::{StorageRead, StorageResult, StorageWrite};
 
 use super::storage::keys as goverance_storage;
 
@@ -46,7 +46,7 @@ impl Default for GovernanceParameters {
 
 impl GovernanceParameters {
     /// Initialize governance parameters into storage
-    pub fn init_storage<S>(&self, storage: &mut S) -> Result<()>
+    pub fn init_storage<S>(&self, storage: &mut S) -> StorageResult<()>
     where
         S: StorageRead + StorageWrite,
     {

@@ -281,7 +281,7 @@ mod test_bp_vote_extensions {
             validate_bp_roots_vext(
                 &shell.wl_storage,
                 &bp_root.0,
-                shell.wl_storage.pos_queries().get_current_decision_height(),
+                shell.get_current_decision_height(),
             )
             .is_err()
         )
@@ -470,7 +470,7 @@ mod test_bp_vote_extensions {
             validate_bp_roots_vext(
                 &shell.wl_storage,
                 &bp_root.0,
-                shell.wl_storage.pos_queries().get_current_decision_height()
+                shell.get_current_decision_height()
             )
             .is_ok()
         );
@@ -490,7 +490,7 @@ mod test_bp_vote_extensions {
             validate_bp_roots_vext(
                 &shell.wl_storage,
                 &bp_root.0,
-                shell.wl_storage.pos_queries().get_current_decision_height()
+                shell.get_current_decision_height()
             )
             .is_ok()
         );
@@ -545,7 +545,7 @@ mod test_bp_vote_extensions {
             validate_bp_roots_vext(
                 &shell.wl_storage,
                 &bp_root.0,
-                shell.wl_storage.pos_queries().get_current_decision_height()
+                shell.get_current_decision_height()
             )
             .is_err()
         );

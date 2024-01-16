@@ -3,10 +3,7 @@
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::Transaction;
-use namada_core::types::address::MASP;
-use namada_core::types::hash::Hash;
-use namada_core::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
-use namada_core::types::token::Transfer;
+use namada_core::types::storage::IndexedTx;
 use namada_storage::{Error, Result, StorageRead, StorageWrite};
 
 use crate::storage_key::{

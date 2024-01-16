@@ -1,23 +1,32 @@
 //! PGF lib code.
 
+use namada_core::types::address::Address;
 use namada_core::types::dec::Dec;
 use namada_core::types::token;
-use namada_ibc::transfer_over_ibc;
 use namada_parameters::storage as params_storage;
-use namada_storage::{StorageRead, StorageWrite};
+use namada_state::{
+    DBIter, StorageHasher, StorageRead, StorageResult, WlStorage, DB,
+};
 use namada_trans_token::credit_tokens;
 use namada_trans_token::storage_key::minted_balance_key;
 
 use crate::pgf::storage::{get_parameters, get_payments, get_stewards};
-use crate::storage::proposal::PGFTarget;
+use crate::storage::proposal::{PGFIbcTarget, PGFTarget};
 
 /// Apply the PGF inflation.
-pub fn apply_inflation<D, H>(
+pub fn apply_inflation<D, H, F>(
     storage: &mut WlStorage<D, H>,
-) -> namada_storage::Result<()>
+    transfer_over_ibc: F,
+) -> StorageResult<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
+    F: Fn(
+        &mut WlStorage<D, H>,
+        &Address,
+        &Address,
+        &PGFIbcTarget,
+    ) -> StorageResult<()>,
 {
     let pgf_parameters = get_parameters(storage)?;
     let staking_token = storage.get_native_token()?;

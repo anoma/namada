@@ -199,7 +199,7 @@ where
 fn consensus_key<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     addr: Address,
-) -> storage_api::Result<Option<common::PublicKey>>
+) -> namada_storage::Result<Option<common::PublicKey>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,

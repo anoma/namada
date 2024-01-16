@@ -38,7 +38,6 @@ use namada::ledger::pos::types::{CommissionPair, Slash};
 use namada::ledger::pos::PosParams;
 use namada::ledger::queries::RPC;
 use namada::proof_of_stake::types::{ValidatorState, WeightedValidator};
-use namada::token;
 use namada::types::address::{Address, InternalAddress, MASP};
 use namada::types::hash::Hash;
 use namada::types::ibc::{is_ibc_denom, IbcTokenHash};
@@ -49,6 +48,7 @@ use namada::types::storage::{
     BlockHeight, BlockResults, Epoch, IndexedTx, Key, KeySeg,
 };
 use namada::types::token::{Change, MaspDenom};
+use namada::{state as storage, token};
 use namada_sdk::error::{
     is_pinned_error, Error, PinnedBalanceError, QueryError,
 };

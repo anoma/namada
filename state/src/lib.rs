@@ -16,7 +16,7 @@ use namada_core::types::chain::{ChainId, CHAIN_ID_LENGTH};
 use namada_core::types::eth_bridge_pool::is_pending_transfer_key;
 use namada_core::types::hash::{Error as HashError, Hash};
 pub use namada_core::types::hash::{Sha256Hasher, StorageHasher};
-use namada_core::types::storage::{
+pub use namada_core::types::storage::{
     BlockHash, BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue,
     Header, Key, KeySeg, TxIndex, BLOCK_HASH_LENGTH, BLOCK_HEIGHT_LENGTH,
     EPOCH_TYPE_LENGTH,
@@ -1067,7 +1067,7 @@ pub mod testing {
     /// Storage with a mock DB for testing.
     ///
     /// Prefer to use [`TestWlStorage`], which implements
-    /// `storage_api::StorageRead + StorageWrite` with properly working
+    /// `namada_storageStorageRead + StorageWrite` with properly working
     /// `prefix_iter`.
     pub type TestStorage = State<MockDB, Sha256Hasher>;
 

@@ -13,6 +13,7 @@ use namada_core::types::key;
 use namada_core::types::key::common::PublicKey;
 use namada_core::types::storage::Epoch;
 use namada_core::types::token::Change;
+use namada_governance::parameters::GovernanceParameters;
 use namada_state::testing::TestWlStorage;
 use namada_storage::collections::lazy_map::{NestedSubKey, SubKey};
 use namada_storage::StorageRead;

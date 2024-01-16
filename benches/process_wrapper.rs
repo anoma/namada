@@ -1,8 +1,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use namada::core::types::address;
-use namada::core::types::token::{Amount, Transfer};
 use namada::ledger::storage::TempWlStorage;
-use namada::token::DenominatedAmount;
+use namada::token::{Amount, DenominatedAmount, Transfer};
 use namada::tx::data::{Fee, WrapperTx};
 use namada::tx::Signature;
 use namada::types::key::RefTo;

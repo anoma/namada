@@ -6,12 +6,10 @@ use namada::core::types::address::{self, Address};
 use namada::core::types::key::{
     common, SecretKey as SecretKeyInterface, SigScheme,
 };
-use namada::core::types::token::{Amount, Transfer};
-use namada::governance::storage::vote::{
-    ProposalVote, StorageProposalVote, VoteType,
-};
+use namada::governance::storage::vote::ProposalVote;
 use namada::governance::VoteProposalData;
 use namada::ledger::gas::{TxGasMeter, VpGasMeter};
+use namada::token::{Amount, Transfer};
 use namada::tx::data::pos::{Bond, CommissionChange};
 use namada::tx::{Code, Section};
 use namada::types::hash::Hash;

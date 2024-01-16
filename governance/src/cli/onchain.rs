@@ -254,26 +254,6 @@ pub struct PgfSteward {
     pub address: Address,
 }
 
-/// The target of a PGF payment
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    BorshSerialize,
-    BorshDeserialize,
-    Serialize,
-    Deserialize,
-    Ord,
-    Eq,
-    PartialOrd,
-)]
-pub struct PGFTarget {
-    /// The target address
-    pub target: Address,
-    /// The amount of token to fund the target address
-    pub amount: token::Amount,
-}
-
 /// Pgf action
 #[derive(
     Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,

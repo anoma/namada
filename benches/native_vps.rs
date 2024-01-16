@@ -6,13 +6,10 @@ use std::str::FromStr;
 use criterion::{criterion_group, criterion_main, Criterion};
 use masp_primitives::sapling::Node;
 use namada::core::types::address::{self, Address};
-use namada::core::types::token::{Amount, Transfer};
 use namada::eth_bridge::storage::whitelist;
 use namada::governance::pgf::storage::steward::StewardDetail;
 use namada::governance::storage::proposal::ProposalType;
-use namada::governance::storage::vote::{
-    ProposalVote, StorageProposalVote, VoteType,
-};
+use namada::governance::storage::vote::ProposalVote;
 use namada::governance::{InitProposalData, VoteProposalData};
 use namada::ibc::core::channel::types::channel::Order;
 use namada::ibc::core::channel::types::msgs::MsgChannelOpenInit;
@@ -44,7 +41,8 @@ use namada::proof_of_stake::KeySeg;
 use namada::sdk::masp::verify_shielded_tx;
 use namada::sdk::masp_primitives::merkle_tree::CommitmentTree;
 use namada::sdk::masp_primitives::transaction::Transaction;
-use namada::state::{StorageRead, StorageWrite};
+use namada::state::{Epoch, StorageRead, StorageWrite, TxIndex};
+use namada::token::{Amount, Transfer};
 use namada::tx::{Code, Section, Tx};
 use namada::types::address::InternalAddress;
 use namada::types::eth_bridge_pool::{GasFee, PendingTransfer};
@@ -504,14 +502,14 @@ fn setup_storage_for_masp_verification(
     shielded_ctx.shell.wl_storage.commit_tx();
 
     // Update the anchor in storage
-    let tree_key = namada::core::types::token::masp_commitment_tree_key();
+    let tree_key = namada::token::storage_key::masp_commitment_tree_key();
     let updated_tree: CommitmentTree<Node> = shielded_ctx
         .shell
         .wl_storage
         .read(&tree_key)
         .unwrap()
         .unwrap();
-    let anchor_key = namada::core::types::token::masp_commitment_anchor_key(
+    let anchor_key = namada::token::storage_key::masp_commitment_anchor_key(
         updated_tree.root(),
     );
     shielded_ctx
