@@ -173,23 +173,28 @@ pub fn burn<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    let key = balance_key(token, source);
-    let balance = read_balance(storage, token, source)?;
+    let source_balance_key = token::balance_key(token, source);
+    let source_balance = read_balance(storage, token, source)?;
 
-    let amount_to_burn = match balance.checked_sub(amount) {
-        Some(new_balance) => {
-            storage.write(&key, new_balance)?;
+    let amount_to_burn =
+        if let Some(amount) = source_balance.checked_sub(amount) {
+            storage.write(&source_balance_key, amount)?;
             amount
-        }
-        None => {
-            storage.write(&key, token::Amount::zero())?;
-            balance
-        }
-    };
+        } else {
+            storage.write(&source_balance_key, token::Amount::zero())?;
+            source_balance
+        };
 
-    let total_supply = read_total_supply(&*storage, source)?;
-    let new_total_supply =
-        total_supply.checked_sub(amount_to_burn).unwrap_or_default();
+    let old_total_supply = read_total_supply(storage, token)?;
+    let new_total_supply = old_total_supply
+        .checked_sub(amount_to_burn)
+        .ok_or_else(|| {
+            tracing::error!(
+                "Burning more token than the total supply of {}",
+                token
+            );
+            storage_api::Error::new_const("Token total supply underflowed")
+        })?;
 
     let total_supply_key = minted_balance_key(token);
     storage.write(&total_supply_key, new_total_supply)
