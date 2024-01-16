@@ -546,10 +546,16 @@ impl<U: WalletIo> Wallet<U> {
             };
         let seed = Seed::new(&mnemonic, &passphrase);
         let spend_key =
-            derive_hd_spending_key(seed.as_bytes(), derivation_path);
+            derive_hd_spending_key(seed.as_bytes(), derivation_path.clone());
 
-        self.insert_spending_key(alias, spend_key, password, alias_force)
-            .map(|alias| (alias, spend_key))
+        self.insert_spending_key(
+            alias,
+            alias_force,
+            spend_key,
+            password,
+            Some(derivation_path),
+        )
+        .map(|alias| (alias, spend_key))
     }
 
     /// Restore a keypair from the user mnemonic code (read from stdin) using
@@ -603,7 +609,7 @@ impl<U: WalletIo> Wallet<U> {
         csprng: &mut (impl CryptoRng + RngCore),
     ) -> Option<(String, ExtendedSpendingKey)> {
         let spend_key = gen_spending_key(csprng);
-        self.insert_spending_key(alias, spend_key, password, force_alias)
+        self.insert_spending_key(alias, force_alias, spend_key, password, None)
             .map(|alias| (alias, spend_key))
     }
 
@@ -707,9 +713,15 @@ impl<U: WalletIo> Wallet<U> {
         password: Option<Zeroizing<String>>,
     ) -> Option<(String, ExtendedSpendingKey)> {
         let spend_key =
-            derive_hd_spending_key(seed.as_bytes(), derivation_path);
-        self.insert_spending_key(alias, spend_key, password, force_alias)
-            .map(|alias| (alias, spend_key))
+            derive_hd_spending_key(seed.as_bytes(), derivation_path.clone());
+        self.insert_spending_key(
+            alias,
+            force_alias,
+            spend_key,
+            password,
+            Some(derivation_path),
+        )
+        .map(|alias| (alias, spend_key))
     }
 
     /// Generate a disposable signing key for fee payment and store it under the
@@ -1003,15 +1015,17 @@ impl<U: WalletIo> Wallet<U> {
     pub fn insert_spending_key(
         &mut self,
         alias: String,
+        force_alias: bool,
         spend_key: ExtendedSpendingKey,
         password: Option<Zeroizing<String>>,
-        force_alias: bool,
+        path: Option<DerivationPath>,
     ) -> Option<String> {
         self.store
             .insert_spending_key::<U>(
                 alias.into(),
                 spend_key,
                 password,
+                path,
                 force_alias,
             )
             .map(|alias| {
