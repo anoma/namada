@@ -263,7 +263,7 @@ fn shielded_key_gen(
     .unwrap_or_else(|| {
         eprintln!("Failed to generate a key.");
         println!("No changes are persisted. Exiting.");
-        cli::safe_exit(0);
+        cli::safe_exit(1);
     });
 
     wallet
