@@ -524,32 +524,209 @@ mod native_tx_host_env {
 
 #[cfg(test)]
 mod tests {
+    use namada::ledger::storage::mockdb::MockDB;
     use namada::types::storage;
-    use namada::vm::host_env::*;
+    use namada::vm::host_env::{self, TxVmEnv};
+    use namada::vm::memory::VmMemory;
     use proptest::prelude::*;
     use test_log::test;
 
     use super::*;
 
-    proptest! {
-        #[test]
-        fn test_tx_read_cannot_panic(
-            key_ptr in arb_u64(),
-            key in namada::types::storage::testing::arb_key(),
-            read_buffer_ptr in arb_u64(),
-        ) {
-            test_tx_read_cannot_panic_aux(key_ptr, key, read_buffer_ptr)
+    #[derive(Debug)]
+    struct TestSetup {
+        write_to_memory: bool,
+        write_to_wl: bool,
+        write_to_storage: bool,
+        key: storage::Key,
+        key_memory_ptr: u64,
+        read_buffer_memory_ptr: u64,
+        val: Vec<u8>,
+        val_memory_ptr: u64,
+    }
+
+    impl TestSetup {
+        fn key_bytes(&self) -> Vec<u8> {
+            self.key.to_string().as_bytes().to_vec()
+        }
+
+        fn key_len(&self) -> u64 {
+            self.key_bytes().len() as _
+        }
+
+        fn val_len(&self) -> u64 {
+            self.val.len() as _
         }
     }
 
-    fn test_tx_read_cannot_panic_aux(
-        key_ptr: u64,
-        key: storage::Key,
-        read_buffer_ptr: u64,
-    ) {
-        use namada::vm::memory::VmMemory;
+    proptest! {
+        #[test]
+        fn test_tx_read_cannot_panic(
+            setup in arb_test_setup()
+        ) {
+            test_tx_read_cannot_panic_aux(setup)
+        }
+    }
+
+    fn test_tx_read_cannot_panic_aux(setup: TestSetup) {
+        // dbg!(&setup);
 
         let mut test_env = TestTxEnv::default();
+        let tx_env = setup_host_env(&setup, &mut test_env);
+
+        // Can fail, but must not panic
+        let _res =
+            host_env::tx_read(&tx_env, setup.key_memory_ptr, setup.key_len());
+        let _res =
+            host_env::tx_result_buffer(&tx_env, setup.read_buffer_memory_ptr);
+    }
+
+    proptest! {
+        #[test]
+        fn test_tx_charge_gas_cannot_panic(
+            setup in arb_test_setup(),
+            gas in arb_u64(),
+        ) {
+            test_tx_charge_gas_cannot_panic_aux(setup, gas)
+        }
+    }
+
+    fn test_tx_charge_gas_cannot_panic_aux(setup: TestSetup, gas: u64) {
+        let mut test_env = TestTxEnv::default();
+        let tx_env = setup_host_env(&setup, &mut test_env);
+
+        // Can fail, but must not panic
+        let _res = host_env::tx_charge_gas(&tx_env, gas);
+    }
+
+    proptest! {
+        #[test]
+        fn test_tx_has_key_cannot_panic(
+            setup in arb_test_setup(),
+        ) {
+            test_tx_has_key_cannot_panic_aux(setup)
+        }
+    }
+
+    fn test_tx_has_key_cannot_panic_aux(setup: TestSetup) {
+        // dbg!(&setup);
+
+        let mut test_env = TestTxEnv::default();
+        let tx_env = setup_host_env(&setup, &mut test_env);
+
+        // Can fail, but must not panic
+        let _res = host_env::tx_has_key(
+            &tx_env,
+            setup.key_memory_ptr,
+            setup.key_len(),
+        );
+    }
+
+    proptest! {
+        #[test]
+        fn test_tx_write_cannot_panic(
+            setup in arb_test_setup(),
+        ) {
+            test_tx_write_cannot_panic_aux(setup)
+        }
+    }
+
+    fn test_tx_write_cannot_panic_aux(setup: TestSetup) {
+        // dbg!(&setup);
+
+        let mut test_env = TestTxEnv::default();
+        let tx_env = setup_host_env(&setup, &mut test_env);
+
+        // Can fail, but must not panic
+        let _res = host_env::tx_write(
+            &tx_env,
+            setup.key_memory_ptr,
+            setup.key_len(),
+            setup.val_memory_ptr,
+            setup.val_len(),
+        );
+        let _res = host_env::tx_write_temp(
+            &tx_env,
+            setup.key_memory_ptr,
+            setup.key_len(),
+            setup.val_memory_ptr,
+            setup.val_len(),
+        );
+    }
+
+    proptest! {
+        #[test]
+        fn test_tx_delete_cannot_panic(
+            setup in arb_test_setup(),
+        ) {
+            test_tx_delete_cannot_panic_aux(setup)
+        }
+    }
+
+    fn test_tx_delete_cannot_panic_aux(setup: TestSetup) {
+        // dbg!(&setup);
+
+        let mut test_env = TestTxEnv::default();
+        let tx_env = setup_host_env(&setup, &mut test_env);
+
+        // Can fail, but must not panic
+        let _res =
+            host_env::tx_delete(&tx_env, setup.key_memory_ptr, setup.key_len());
+    }
+
+    proptest! {
+        #[test]
+        fn test_tx_iter_prefix_cannot_panic(
+            setup in arb_test_setup(),
+        ) {
+            test_tx_iter_prefix_cannot_panic_aux(setup)
+        }
+    }
+
+    fn test_tx_iter_prefix_cannot_panic_aux(setup: TestSetup) {
+        // dbg!(&setup);
+
+        let mut test_env = TestTxEnv::default();
+        let tx_env = setup_host_env(&setup, &mut test_env);
+
+        // Can fail, but must not panic
+        let _res = host_env::tx_iter_prefix(
+            &tx_env,
+            setup.key_memory_ptr,
+            setup.key_len(),
+        );
+        let _res = host_env::tx_iter_next(
+            &tx_env,
+            // This field is not used for anything else in this test
+            setup.val_memory_ptr,
+        );
+    }
+
+    fn setup_host_env(
+        setup: &TestSetup,
+        test_env: &mut TestTxEnv,
+    ) -> TxVmEnv<
+        'static,
+        wasm::memory::WasmMemory,
+        MockDB,
+        Sha256Hasher,
+        WasmCacheRwAccess,
+    > {
+        if setup.write_to_storage {
+            // Write the key-val to storage which may affect `tx_read` execution
+            // path
+            let _res =
+                test_env.wl_storage.storage.write(&setup.key, &setup.val);
+        }
+        if setup.write_to_wl {
+            // Write the key-val to write log which may affect `tx_read`
+            // execution path
+            let _res = test_env
+                .wl_storage
+                .write_log
+                .write(&setup.key, setup.val.clone());
+        }
+
         let TestTxEnv {
             wl_storage,
             iterators,
@@ -563,7 +740,8 @@ mod tests {
             tx_wasm_cache,
             tx_cache_dir: _,
             tx,
-        } = &mut test_env;
+        } = test_env;
+
         let tx_env = vm::host_env::testing::tx_env_with_wasm_memory(
             &wl_storage.storage,
             &mut wl_storage.write_log,
@@ -578,22 +756,49 @@ mod tests {
             tx_wasm_cache,
         );
 
-        println!("{key_ptr}, {read_buffer_ptr}");
-        // let _res = namada_tx_read(key_ptr, key_len);
-        let key_bytes = key.to_string().as_bytes().to_vec();
-        let len = key_bytes.len();
-        let res = tx_env.memory.write_bytes(key_ptr, &key_bytes);
-        dbg!(&res);
-        let res = tx_env.memory.read_bytes(key_ptr, len);
-        dbg!(&res);
-        let write_log = unsafe { tx_env.ctx.write_log.get() };
-        write_log.write(&key, vec![5_u8]).unwrap();
+        if setup.write_to_memory {
+            let key_bytes = setup.key_bytes();
+            // Write the key-val to memory which may affect `tx_read` execution
+            // path. Can fail, but must not panic
+            let _res =
+                tx_env.memory.write_bytes(setup.key_memory_ptr, key_bytes);
+        }
 
-        let res = tx_read(&tx_env, key_ptr, len as u64);
-        dbg!(&res);
+        tx_env
+    }
 
-        let res = tx_result_buffer(&tx_env, read_buffer_ptr);
-        dbg!(&res);
+    fn arb_test_setup() -> impl Strategy<Value = TestSetup> {
+        (
+            any::<bool>(),
+            any::<bool>(),
+            any::<bool>(),
+            namada::types::storage::testing::arb_key(),
+            arb_u64(),
+            arb_u64(),
+            any::<Vec<u8>>(),
+            arb_u64(),
+        )
+            .prop_map(
+                |(
+                    write_to_memory,
+                    write_to_wl,
+                    write_to_storage,
+                    key,
+                    key_memory_ptr,
+                    read_buffer_memory_ptr,
+                    val,
+                    val_memory_ptr,
+                )| TestSetup {
+                    write_to_memory,
+                    write_to_wl,
+                    write_to_storage,
+                    key,
+                    key_memory_ptr,
+                    read_buffer_memory_ptr,
+                    val,
+                    val_memory_ptr,
+                },
+            )
     }
 
     fn arb_u64() -> impl Strategy<Value = u64> {
