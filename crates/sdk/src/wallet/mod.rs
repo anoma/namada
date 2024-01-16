@@ -520,6 +520,38 @@ impl<U: WalletStorage> Wallet<U> {
 }
 
 impl<U: WalletIo> Wallet<U> {
+    /// Restore a spending key from the user mnemonic code (read from stdin)
+    /// using a given ZIP32 derivation path and insert it into the store with
+    /// the provided alias, converted to lower case.
+    /// The key is encrypted with the provided password. If no password
+    /// provided, will prompt for password from stdin.
+    /// Stores the key in decrypted key cache and returns the alias of the key
+    /// and a reference-counting pointer to the key.
+    pub fn derive_store_spending_key_from_mnemonic_code(
+        &mut self,
+        alias: String,
+        alias_force: bool,
+        derivation_path: DerivationPath,
+        mnemonic_passphrase: Option<(Mnemonic, Zeroizing<String>)>,
+        password: Option<Zeroizing<String>>,
+    ) -> Option<(String, ExtendedSpendingKey)> {
+        let (mnemonic, passphrase) =
+            if let Some(mnemonic_passphrase) = mnemonic_passphrase {
+                mnemonic_passphrase
+            } else {
+                (
+                    U::read_mnemonic_code().ok()?,
+                    U::read_mnemonic_passphrase(false),
+                )
+            };
+        let seed = Seed::new(&mnemonic, &passphrase);
+        let spend_key =
+            derive_hd_spending_key(seed.as_bytes(), derivation_path);
+
+        self.insert_spending_key(alias, spend_key, password, alias_force)
+            .map(|alias| (alias, spend_key))
+    }
+
     /// Restore a keypair from the user mnemonic code (read from stdin) using
     /// a given BIP44 derivation path and derive an implicit address from its
     /// public part and insert them into the store with the provided alias,
