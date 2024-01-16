@@ -29,7 +29,7 @@ where
 fn total_supply<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     addr: Address,
-) -> storage_api::Result<token::Amount>
+) -> namada_storage::Result<token::Amount>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,

@@ -21,6 +21,7 @@ use namada_core::types::token::{
 };
 use namada_core::types::{storage, token};
 use namada_governance::parameters::GovernanceParameters;
+use namada_governance::pgf::parameters::PgfParameters;
 use namada_governance::pgf::storage::steward::StewardDetail;
 use namada_governance::storage::proposal::StorageProposal;
 use namada_governance::utils::{

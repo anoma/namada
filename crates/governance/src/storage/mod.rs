@@ -272,9 +272,9 @@ where
 pub fn get_proposal_result<S>(
     storage: &S,
     proposal_id: u64,
-) -> storage_api::Result<Option<ProposalResult>>
+) -> StorageResult<Option<ProposalResult>>
 where
-    S: storage_api::StorageRead,
+    S: StorageRead,
 {
     let key = governance_keys::get_proposal_result_key(proposal_id);
     let proposal_result: Option<ProposalResult> = storage.read(&key)?;

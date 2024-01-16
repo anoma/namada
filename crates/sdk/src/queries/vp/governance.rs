@@ -54,10 +54,10 @@ where
 fn proposal_result<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     id: u64,
-) -> storage_api::Result<Option<ProposalResult>>
+) -> namada_storage::Result<Option<ProposalResult>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    storage_api::governance::get_proposal_result(ctx.wl_storage, id)
+    namada_governance::storage::get_proposal_result(ctx.wl_storage, id)
 }
