@@ -9,9 +9,8 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         ctx.set_commitment_sentinel();
         err
     })?;
-    let tx_data =
-        transaction::governance::VoteProposalData::try_from_slice(&data[..])
-            .wrap_err("failed to decode VoteProposalData")?;
+    let tx_data = governance::VoteProposalData::try_from_slice(&data[..])
+        .wrap_err("failed to decode VoteProposalData")?;
 
     debug_log!("apply_tx called to vote a governance proposal");
 

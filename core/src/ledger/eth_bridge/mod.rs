@@ -1,6 +1,4 @@
-//! Storage keys for the Ethereum bridge account
-
-pub mod storage;
+//! Ethereum bridge account
 
 use crate::types::address::{Address, InternalAddress};
 

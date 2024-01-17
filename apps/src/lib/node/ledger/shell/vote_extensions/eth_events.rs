@@ -2,13 +2,10 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use namada::ledger::storage::traits::StorageHasher;
-use namada::ledger::storage::{DBIter, DB};
-use namada::proto::Signed;
+use namada::state::{DBIter, StorageHasher, DB};
+use namada::tx::Signed;
 use namada::types::ethereum_events::EthereumEvent;
-use namada::types::vote_extensions::ethereum_events::{
-    self, MultiSignedEthEvent,
-};
+use namada::vote_ext::ethereum_events::{self, MultiSignedEthEvent};
 use namada_sdk::eth_bridge::EthBridgeQueries;
 
 use super::*;
@@ -146,9 +143,6 @@ mod test_vote_extensions {
     use std::convert::TryInto;
 
     use borsh_ext::BorshSerializeExt;
-    use namada::core::ledger::storage_api::collections::lazy_map::{
-        NestedSubKey, SubKey,
-    };
     use namada::eth_bridge::storage::bridge_pool;
     use namada::ledger::eth_bridge::EthBridgeQueries;
     use namada::ledger::pos::PosQueries;
@@ -157,6 +151,7 @@ mod test_vote_extensions {
         read_consensus_validator_set_addresses_with_stake,
     };
     use namada::proof_of_stake::types::WeightedValidator;
+    use namada::state::collections::lazy_map::{NestedSubKey, SubKey};
     use namada::tendermint::abci::types::VoteInfo;
     use namada::types::address::testing::gen_established_address;
     use namada::types::ethereum_events::{
@@ -165,7 +160,7 @@ mod test_vote_extensions {
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::{Epoch, InnerEthEventsQueue};
-    use namada::types::vote_extensions::ethereum_events;
+    use namada::vote_ext::ethereum_events;
 
     use super::validate_eth_events_vext;
     use crate::node::ledger::shell::test_utils::*;
@@ -371,10 +366,7 @@ mod test_vote_extensions {
                 }],
                 relayer: gen_established_address(),
             }],
-            block_height: shell
-                .wl_storage
-                .pos_queries()
-                .get_current_decision_height(),
+            block_height: shell.get_current_decision_height(),
             validator_addr: address.clone(),
         }
         .sign(&signing_key);
@@ -382,7 +374,7 @@ mod test_vote_extensions {
             validate_eth_events_vext(
                 &shell.wl_storage,
                 &ethereum_events,
-                shell.wl_storage.pos_queries().get_current_decision_height(),
+                shell.get_current_decision_height(),
             )
             .is_err()
         )
@@ -402,8 +394,7 @@ mod test_vote_extensions {
             .get_validator_address()
             .expect("Test failed")
             .clone();
-        let signed_height =
-            shell.wl_storage.pos_queries().get_current_decision_height();
+        let signed_height = shell.get_current_decision_height();
         let vote_ext = ethereum_events::Vext {
             ethereum_events: vec![EthereumEvent::TransfersToEthereum {
                 nonce: 0.into(),

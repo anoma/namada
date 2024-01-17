@@ -6,11 +6,11 @@ use std::task::{Context, Poll};
 
 use futures::future::FutureExt;
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
-use namada::proto::Tx;
+use namada::tx::data::hash_tx;
+use namada::tx::Tx;
 use namada::types::hash::Hash;
 use namada::types::key::tm_raw_hash_to_string;
 use namada::types::storage::{BlockHash, BlockHeight};
-use namada::types::transaction::hash_tx;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc::UnboundedSender;
 use tower::Service;

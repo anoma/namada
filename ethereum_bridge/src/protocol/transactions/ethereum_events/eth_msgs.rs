@@ -1,6 +1,6 @@
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::types::ethereum_events::EthereumEvent;
-use namada_core::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
+use namada_vote_ext::ethereum_events::MultiSignedEthEvent;
 
 use crate::protocol::transactions::votes::{dedupe, Tally, Votes};
 

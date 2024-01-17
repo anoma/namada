@@ -5,10 +5,9 @@ mod tests {
     use borsh::{BorshDeserialize, BorshSerialize};
     use namada::types::address::{self, Address};
     use namada::types::storage;
+    use namada_tx_prelude::collections::{lazy_vec, LazyCollection, LazyVec};
     use namada_tx_prelude::storage::KeySeg;
-    use namada_tx_prelude::storage_api::collections::{
-        lazy_vec, LazyCollection, LazyVec,
-    };
+    use namada_vp_prelude::collection_validation::{self, LazyCollectionExt};
     use proptest::prelude::*;
     use proptest::test_runner::Config;
     use proptest_state_machine::{
@@ -438,14 +437,14 @@ mod tests {
                     new_vec_len,
                 );
                 for transition in &current_transitions {
+                    use collection_validation::lazy_vec::Action;
                     match transition {
                         Transition::CommitTx | Transition::CommitTxAndBlock => {
                         }
                         Transition::Push(expected_val) => {
                             let mut ix = 0;
                             while ix < actions_to_check.len() {
-                                if let lazy_vec::Action::Push(val) =
-                                    &actions_to_check[ix]
+                                if let Action::Push(val) = &actions_to_check[ix]
                                 {
                                     if expected_val == val {
                                         actions_to_check.remove(ix);
@@ -458,8 +457,7 @@ mod tests {
                         Transition::Pop => {
                             let mut ix = 0;
                             while ix < actions_to_check.len() {
-                                if let lazy_vec::Action::Pop(_val) =
-                                    &actions_to_check[ix]
+                                if let Action::Pop(_val) = &actions_to_check[ix]
                                 {
                                     actions_to_check.remove(ix);
                                     break;
@@ -473,7 +471,7 @@ mod tests {
                         } => {
                             let mut ix = 0;
                             while ix < actions_to_check.len() {
-                                if let lazy_vec::Action::Update {
+                                if let Action::Update {
                                     index,
                                     pre: _,
                                     post,

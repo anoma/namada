@@ -3,16 +3,14 @@
 
 use std::collections::HashMap;
 
-use namada_core::ledger::storage::PrefixIter;
-
-use crate::ledger::storage;
+use namada_state::PrefixIter;
 
 /// A temporary iterators storage, used during a wasm run after which it's
 /// dropped. Each iterator is assigned a [`PrefixIteratorId`].
 #[derive(Debug)]
 pub struct PrefixIterators<'iter, DB>
 where
-    DB: storage::DB + storage::DBIter<'iter>,
+    DB: namada_state::DB + namada_state::DBIter<'iter>,
 {
     index: PrefixIteratorId,
     iterators: HashMap<PrefixIteratorId, PrefixIter<'iter, DB>>,
@@ -20,7 +18,7 @@ where
 
 impl<'iter, DB> PrefixIterators<'iter, DB>
 where
-    DB: storage::DB + storage::DBIter<'iter>,
+    DB: namada_state::DB + namada_state::DBIter<'iter>,
 {
     /// Insert a new prefix iterator to the temporary storage.
     pub fn insert(&mut self, iter: PrefixIter<'iter, DB>) -> PrefixIteratorId {
@@ -49,7 +47,7 @@ where
 
 impl<'iter, DB> Default for PrefixIterators<'iter, DB>
 where
-    DB: storage::DB + storage::DBIter<'iter>,
+    DB: namada_state::DB + namada_state::DBIter<'iter>,
 {
     fn default() -> Self {
         Self {

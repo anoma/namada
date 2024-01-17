@@ -5,16 +5,14 @@ use std::ops::ControlFlow;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use masp_proofs::bls12_381;
+use namada::account::protocol_pk_key;
 use namada::ledger::parameters::Parameters;
-use namada::ledger::storage::traits::StorageHasher;
-use namada::ledger::storage::{DBIter, DB};
-use namada::ledger::storage_api::token::{credit_tokens, write_denom};
-use namada::ledger::storage_api::StorageWrite;
 use namada::ledger::{ibc, pos};
 use namada::proof_of_stake::BecomeValidator;
+use namada::state::{DBIter, StorageHasher, StorageWrite, DB};
+use namada::token::{credit_tokens, write_denom};
 use namada::types::address::Address;
 use namada::types::hash::Hash as CodeHash;
-use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::vm::validate_untrusted_wasm;
 use namada_sdk::eth_bridge::EthBridgeStatus;
@@ -141,22 +139,21 @@ where
             CommitmentTree::empty();
         let anchor = empty_commitment_tree.root();
         let note_commitment_tree_key =
-            namada::core::types::token::masp_commitment_tree_key();
+            token::storage_key::masp_commitment_tree_key();
         self.wl_storage
             .write(&note_commitment_tree_key, empty_commitment_tree)
             .unwrap();
         let commitment_tree_anchor_key =
-            namada::core::types::token::masp_commitment_anchor_key(anchor);
+            token::storage_key::masp_commitment_anchor_key(anchor);
         self.wl_storage
             .write(&commitment_tree_anchor_key, ())
             .unwrap();
 
         // Init masp convert anchor
-        let convert_anchor_key =
-            namada::core::types::token::masp_convert_anchor_key();
+        let convert_anchor_key = token::storage_key::masp_convert_anchor_key();
         self.wl_storage.write(
             &convert_anchor_key,
-            namada::core::types::hash::Hash(
+            namada::types::hash::Hash(
                 bls12_381::Scalar::from(
                     self.wl_storage.storage.conversion_state.tree.root(),
                 )
@@ -205,7 +202,7 @@ where
         // Initialize protocol parameters
         let parameters = genesis.get_chain_parameters(&self.wasm_dir);
         self.store_wasms(&parameters)?;
-        parameters.init_storage(&mut self.wl_storage).unwrap();
+        parameters::init_storage(&parameters, &mut self.wl_storage).unwrap();
 
         // Initialize governance parameters
         let gov_params = genesis.get_gov_params();
@@ -435,7 +432,12 @@ where
             } = token;
             // associate a token with its denomination.
             write_denom(&mut self.wl_storage, address, *denom).unwrap();
-            parameters.init_storage(address, &mut self.wl_storage);
+            namada::token::write_params(
+                parameters,
+                &mut self.wl_storage,
+                address,
+            )
+            .unwrap();
             // add token addresses to the masp reward conversions lookup table.
             let alias = alias.to_string();
             if masp_rewards.contains_key(&alias.as_str()) {
@@ -470,7 +472,7 @@ where
             let mut total_token_balance = token::Amount::zero();
             for (owner, balance) in balances {
                 if let genesis::GenesisAddress::PublicKey(pk) = owner {
-                    storage_api::account::init_account_storage(
+                    namada::account::init_account_storage(
                         &mut self.wl_storage,
                         &owner.address(),
                         std::slice::from_ref(&pk.raw),
@@ -496,7 +498,7 @@ where
             // Write the total amount of tokens for the ratio
             self.wl_storage
                 .write(
-                    &token::minted_balance_key(token_address),
+                    &token::storage_key::minted_balance_key(token_address),
                     total_token_balance,
                 )
                 .unwrap();
@@ -533,7 +535,7 @@ where
 
                 let public_keys: Vec<_> =
                     public_keys.iter().map(|pk| pk.raw.clone()).collect();
-                storage_api::account::init_account_storage(
+                namada::account::init_account_storage(
                     &mut self.wl_storage,
                     address,
                     &public_keys,
@@ -936,8 +938,8 @@ mod test {
     use std::collections::BTreeMap;
     use std::str::FromStr;
 
-    use namada::core::types::string_encoding::StringEncoded;
-    use namada::ledger::storage::DBIter;
+    use namada::state::DBIter;
+    use namada::types::string_encoding::StringEncoded;
     use namada_sdk::wallet::alias::Alias;
 
     use super::*;

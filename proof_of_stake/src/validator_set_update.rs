@@ -2,14 +2,12 @@
 
 use std::collections::{HashMap, HashSet};
 
-use namada_core::ledger::storage_api::collections::lazy_map::{
-    NestedSubKey, SubKey,
-};
-use namada_core::ledger::storage_api::{self, StorageRead, StorageWrite};
 use namada_core::types::address::Address;
 use namada_core::types::key::PublicKeyTmRawHash;
 use namada_core::types::storage::Epoch;
 use namada_core::types::token;
+use namada_storage::collections::lazy_map::{NestedSubKey, SubKey};
+use namada_storage::{StorageRead, StorageWrite};
 use num_traits::ops::checked::CheckedAdd;
 use once_cell::unsync::Lazy;
 
@@ -35,7 +33,7 @@ pub fn update_validator_set<S>(
     token_change: token::Change,
     current_epoch: Epoch,
     offset: Option<u64>,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -363,7 +361,7 @@ pub fn insert_validator_into_validator_set<S>(
     stake: token::Amount,
     current_epoch: Epoch,
     offset: u64,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -465,7 +463,7 @@ pub fn remove_consensus_validator<S>(
     params: &PosParams,
     epoch: Epoch,
     validator: &Address,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -493,7 +491,7 @@ pub fn remove_below_capacity_validator<S>(
     params: &PosParams,
     epoch: Epoch,
     validator: &Address,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -524,7 +522,7 @@ where
 pub fn promote_next_below_capacity_validator_to_consensus<S>(
     storage: &mut S,
     epoch: Epoch,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -568,7 +566,7 @@ pub fn validator_set_update_tendermint<S, T>(
     params: &PosParams,
     current_epoch: Epoch,
     f: impl FnMut(ValidatorSetUpdate) -> T,
-) -> storage_api::Result<Vec<T>>
+) -> namada_storage::Result<Vec<T>>
 where
     S: StorageRead,
 {
@@ -771,7 +769,7 @@ pub fn copy_validator_sets_and_positions<S>(
     params: &PosParams,
     current_epoch: Epoch,
     target_epoch: Epoch,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -890,7 +888,7 @@ fn insert_into_consensus_and_demote_to_below_cap<S>(
     offset: u64,
     consensus_set: &ConsensusValidatorSet,
     below_capacity_set: &BelowCapacityValidatorSet,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -940,7 +938,7 @@ where
 fn find_first_position<S>(
     handle: &ValidatorPositionAddresses,
     storage: &S,
-) -> storage_api::Result<Option<Position>>
+) -> namada_storage::Result<Option<Position>>
 where
     S: StorageRead,
 {
@@ -956,7 +954,7 @@ where
 fn find_last_position<S>(
     handle: &ValidatorPositionAddresses,
     storage: &S,
-) -> storage_api::Result<Option<Position>>
+) -> namada_storage::Result<Option<Position>>
 where
     S: StorageRead,
 {
@@ -972,7 +970,7 @@ where
 fn find_next_position<S>(
     handle: &ValidatorPositionAddresses,
     storage: &S,
-) -> storage_api::Result<Position>
+) -> namada_storage::Result<Position>
 where
     S: StorageRead,
 {
@@ -988,7 +986,7 @@ where
 fn get_min_consensus_validator_amount<S>(
     handle: &ConsensusValidatorSet,
     storage: &S,
-) -> storage_api::Result<token::Amount>
+) -> namada_storage::Result<token::Amount>
 where
     S: StorageRead,
 {
@@ -1009,7 +1007,7 @@ where
 fn get_max_below_capacity_validator_amount<S>(
     handle: &BelowCapacityValidatorSet,
     storage: &S,
-) -> storage_api::Result<Option<token::Amount>>
+) -> namada_storage::Result<Option<token::Amount>>
 where
     S: StorageRead,
 {
@@ -1033,7 +1031,7 @@ fn insert_validator_into_set<S>(
     storage: &mut S,
     epoch: &Epoch,
     address: &Address,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -1061,7 +1059,7 @@ fn read_validator_set_position<S>(
     validator: &Address,
     epoch: Epoch,
     _params: &PosParams,
-) -> storage_api::Result<Option<Position>>
+) -> namada_storage::Result<Option<Position>>
 where
     S: StorageRead,
 {

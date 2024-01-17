@@ -2,7 +2,7 @@
 
 use namada::ledger::dry_run_tx;
 use namada::ledger::queries::{RequestCtx, ResponseQuery};
-use namada::ledger::storage_api::token;
+use namada::token;
 use namada::types::address::Address;
 
 use super::*;
@@ -66,12 +66,12 @@ where
 // access to the `Shell` there
 #[cfg(test)]
 mod test_queries {
-    use namada::core::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
     use namada::ledger::pos::PosQueries;
     use namada::proof_of_stake::storage::read_consensus_validator_set_addresses_with_stake;
     use namada::proof_of_stake::types::WeightedValidator;
+    use namada::state::EPOCH_SWITCH_BLOCKS_DELAY;
     use namada::tendermint::abci::types::VoteInfo;
-    use namada::types::storage::Epoch;
+    use namada::types::storage::{BlockHash, Epoch};
     use namada_sdk::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 
     use super::*;
@@ -99,6 +99,9 @@ mod test_queries {
                 for (curr_epoch, curr_block_height, can_send) in
                     epoch_assertions
                 {
+                    shell.wl_storage.storage.begin_block(
+                        BlockHash::default(), curr_block_height.into()).unwrap();
+
                     if prev_epoch != Some(curr_epoch) {
                         prev_epoch = Some(curr_epoch);
                         shell.start_new_epoch_in(EPOCH_NUM_BLOCKS);
@@ -111,8 +114,6 @@ mod test_queries {
                     assert_eq!(
                         curr_block_height,
                         shell
-                            .wl_storage
-                            .pos_queries()
                             .get_current_decision_height()
                             .0
                     );

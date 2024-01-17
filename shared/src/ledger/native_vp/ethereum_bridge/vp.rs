@@ -2,15 +2,17 @@
 use std::collections::{BTreeSet, HashSet};
 
 use eyre::{eyre, Result};
-use namada_core::ledger::eth_bridge::storage::{self, escrow_key};
-use namada_core::ledger::storage::traits::StorageHasher;
-use namada_core::ledger::{eth_bridge, storage as ledger_storage};
 use namada_core::types::address::Address;
+use namada_core::types::hash::StorageHasher;
 use namada_core::types::storage::Key;
-use namada_core::types::token::{balance_key, is_balance_key, Amount};
+use namada_ethereum_bridge;
+use namada_ethereum_bridge::storage;
+use namada_ethereum_bridge::storage::escrow_key;
+use namada_tx::Tx;
 
 use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
-use crate::proto::Tx;
+use crate::token::storage_key::{balance_key, is_balance_key};
+use crate::token::Amount;
 use crate::vm::WasmCacheAccess;
 
 /// Generic error that may be returned by the validity predicate
@@ -21,7 +23,7 @@ pub struct Error(#[from] eyre::Error);
 /// Validity predicate for the Ethereum bridge
 pub struct EthBridge<'ctx, DB, H, CA>
 where
-    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -31,7 +33,7 @@ where
 
 impl<'ctx, DB, H, CA> EthBridge<'ctx, DB, H, CA>
 where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -42,8 +44,10 @@ where
         &self,
         verifiers: &BTreeSet<Address>,
     ) -> Result<bool, Error> {
-        let escrow_key =
-            balance_key(&self.ctx.storage.native_token, &eth_bridge::ADDRESS);
+        let escrow_key = balance_key(
+            &self.ctx.storage.native_token,
+            &crate::ethereum_bridge::ADDRESS,
+        );
 
         let escrow_pre: Amount =
             if let Ok(Some(value)) = (&self.ctx).read_pre_value(&escrow_key) {
@@ -83,7 +87,7 @@ where
 
 impl<'a, DB, H, CA> NativeVp for EthBridge<'a, DB, H, CA>
 where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -164,31 +168,29 @@ mod tests {
     use std::default::Default;
     use std::env::temp_dir;
 
-    use borsh_ext::BorshSerializeExt;
-    use namada_core::ledger::eth_bridge;
-    use namada_core::ledger::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
-    use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
-    use namada_core::ledger::gas::TxGasMeter;
-    use namada_core::ledger::storage_api::StorageWrite;
-    use namada_ethereum_bridge::storage::parameters::{
-        Contracts, EthereumBridgeParams, UpgradeableContract,
-    };
+    use namada_core::borsh::BorshSerializeExt;
+    use namada_gas::TxGasMeter;
+    use namada_state::StorageWrite;
+    use namada_tx::data::TxType;
+    use namada_tx::Tx;
     use rand::Rng;
 
     use super::*;
+    use crate::ethereum_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
+    use crate::ethereum_bridge::storage::parameters::{
+        Contracts, EthereumBridgeParams, UpgradeableContract,
+    };
+    use crate::ethereum_bridge::storage::wrapped_erc20s;
     use crate::ledger::gas::VpGasMeter;
-    use crate::ledger::storage::mockdb::MockDB;
-    use crate::ledger::storage::traits::Sha256Hasher;
-    use crate::ledger::storage::write_log::WriteLog;
-    use crate::ledger::storage::{Storage, WlStorage};
-    use crate::proto::Tx;
+    use crate::state::mockdb::MockDB;
+    use crate::state::write_log::WriteLog;
+    use crate::state::{Sha256Hasher, State, WlStorage};
+    use crate::token::storage_key::minted_balance_key;
     use crate::types::address::testing::established_address_1;
     use crate::types::address::{nam, wnam};
     use crate::types::ethereum_events;
     use crate::types::ethereum_events::EthAddress;
     use crate::types::storage::TxIndex;
-    use crate::types::token::minted_balance_key;
-    use crate::types::transaction::TxType;
     use crate::vm::wasm::VpCache;
     use crate::vm::WasmCacheRwAccess;
 
@@ -245,13 +247,13 @@ mod tests {
     /// Setup a ctx for running native vps
     fn setup_ctx<'a>(
         tx: &'a Tx,
-        storage: &'a Storage<MockDB, Sha256Hasher>,
+        storage: &'a State<MockDB, Sha256Hasher>,
         write_log: &'a WriteLog,
         keys_changed: &'a BTreeSet<Key>,
         verifiers: &'a BTreeSet<Address>,
     ) -> Ctx<'a, MockDB, Sha256Hasher, WasmCacheRwAccess> {
         Ctx::new(
-            &eth_bridge::ADDRESS,
+            &crate::ethereum_bridge::ADDRESS,
             storage,
             write_log,
             tx,
@@ -269,7 +271,7 @@ mod tests {
     fn test_accepts_expected_keys_changed() {
         let keys_changed = BTreeSet::from([
             balance_key(&nam(), &established_address_1()),
-            balance_key(&nam(), &eth_bridge::ADDRESS),
+            balance_key(&nam(), &crate::ethereum_bridge::ADDRESS),
         ]);
 
         let result = validate_changed_keys(&nam(), &keys_changed);
@@ -369,7 +371,7 @@ mod tests {
             .expect("Test failed");
 
         // credit the balance to the escrow
-        let escrow_key = balance_key(&nam(), &eth_bridge::ADDRESS);
+        let escrow_key = balance_key(&nam(), &crate::ethereum_bridge::ADDRESS);
         wl_storage
             .write_log
             .write(
@@ -419,7 +421,7 @@ mod tests {
             .expect("Test failed");
 
         // do not credit the balance to the escrow
-        let escrow_key = balance_key(&nam(), &eth_bridge::ADDRESS);
+        let escrow_key = balance_key(&nam(), &crate::ethereum_bridge::ADDRESS);
         wl_storage
             .write_log
             .write(
@@ -468,7 +470,7 @@ mod tests {
             .expect("Test failed");
 
         // credit the balance to the escrow
-        let escrow_key = balance_key(&nam(), &eth_bridge::ADDRESS);
+        let escrow_key = balance_key(&nam(), &crate::ethereum_bridge::ADDRESS);
         wl_storage
             .write_log
             .write(

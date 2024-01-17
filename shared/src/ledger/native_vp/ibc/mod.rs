@@ -8,23 +8,22 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use context::{PseudoExecutionContext, VpValidationContext};
-use namada_core::ledger::gas::{
-    IBC_ACTION_EXECUTE_GAS, IBC_ACTION_VALIDATE_GAS,
-};
-use namada_core::ledger::ibc::{
-    Error as ActionError, IbcActions, TransferModule, ValidationParams,
-};
-use namada_core::ledger::storage::write_log::StorageModification;
-use namada_core::ledger::storage::{self as ledger_storage, StorageHasher};
-use namada_core::proto::Tx;
 use namada_core::types::address::Address;
 use namada_core::types::storage::Key;
+use namada_gas::{IBC_ACTION_EXECUTE_GAS, IBC_ACTION_VALIDATE_GAS};
+use namada_ibc::{
+    Error as ActionError, IbcActions, TransferModule, ValidationParams,
+};
 use namada_proof_of_stake::storage::read_pos_params;
+use namada_state::write_log::StorageModification;
+use namada_state::StorageHasher;
+use namada_tx::Tx;
+use namada_vp_env::VpEnv;
 use thiserror::Error;
 
 use crate::ibc::core::host::types::identifiers::ChainId as IbcChainId;
 use crate::ledger::ibc::storage::{calc_hash, is_ibc_denom_key, is_ibc_key};
-use crate::ledger::native_vp::{self, Ctx, NativeVp, VpEnv};
+use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::ledger::parameters::read_epoch_duration_parameter;
 use crate::vm::WasmCacheAccess;
 
@@ -51,7 +50,7 @@ pub type VpResult<T> = std::result::Result<T, Error>;
 /// IBC VP
 pub struct Ibc<'a, DB, H, CA>
 where
-    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -61,7 +60,7 @@ where
 
 impl<'a, DB, H, CA> NativeVp for Ibc<'a, DB, H, CA>
 where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -91,7 +90,7 @@ where
 
 impl<'a, DB, H, CA> Ibc<'a, DB, H, CA>
 where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -163,7 +162,7 @@ where
     pub fn validation_params(&self) -> VpResult<ValidationParams> {
         use std::str::FromStr;
         let chain_id = self.ctx.get_chain_id().map_err(Error::NativeVpError)?;
-        let proof_specs = ledger_storage::ics23_specs::ibc_proof_specs::<H>();
+        let proof_specs = namada_state::ics23_specs::ibc_proof_specs::<H>();
         let pos_params =
             read_pos_params(&self.ctx.post()).map_err(Error::NativeVpError)?;
         let pipeline_len = pos_params.pipeline_len;
@@ -264,8 +263,8 @@ pub fn get_dummy_genesis_validator()
     use crate::core::types::address::testing::established_address_1;
     use crate::core::types::dec::Dec;
     use crate::core::types::key::testing::common_sk_from_simple_seed;
+    use crate::token::Amount;
     use crate::types::key;
-    use crate::types::token::Amount;
 
     let address = established_address_1();
     let tokens = Amount::native_whole(1);
@@ -318,21 +317,16 @@ mod tests {
     };
     use ibc_testkit::testapp::ibc::clients::mock::consensus_state::MockConsensusState;
     use ibc_testkit::testapp::ibc::clients::mock::header::MockHeader;
-    use namada_core::ledger::gas::TxGasMeter;
-    use namada_core::ledger::governance::parameters::GovernanceParameters;
+    use namada_gas::TxGasMeter;
+    use namada_governance::parameters::GovernanceParameters;
+    use namada_state::testing::TestWlStorage;
+    use namada_state::StorageRead;
+    use namada_tx::data::TxType;
+    use namada_tx::{Code, Data, Section, Signature, Tx};
     use prost::Message;
     use sha2::Digest;
 
     use super::*;
-    use crate::core::ledger::ibc::storage::{
-        ack_key, calc_hash, channel_counter_key, channel_key,
-        client_connections_key, client_counter_key, client_state_key,
-        client_update_height_key, client_update_timestamp_key, commitment_key,
-        connection_counter_key, connection_key, consensus_state_key,
-        ibc_denom_key, next_sequence_ack_key, next_sequence_recv_key,
-        next_sequence_send_key, receipt_key,
-    };
-    use crate::core::ledger::storage::testing::TestWlStorage;
     use crate::core::types::address::testing::{
         established_address_1, established_address_2,
     };
@@ -396,20 +390,26 @@ mod tests {
     use crate::ibc::core::router::types::event::ModuleEvent;
     use crate::ibc::primitives::proto::{Any, Protobuf};
     use crate::ibc::primitives::{Msg, Timestamp};
+    use crate::ibc::storage::{
+        ack_key, calc_hash, channel_counter_key, channel_key,
+        client_connections_key, client_counter_key, client_state_key,
+        client_update_height_key, client_update_timestamp_key, commitment_key,
+        connection_counter_key, connection_key, consensus_state_key,
+        ibc_denom_key, next_sequence_ack_key, next_sequence_recv_key,
+        next_sequence_send_key, receipt_key,
+    };
     use crate::ledger::gas::VpGasMeter;
     use crate::ledger::parameters::storage::{
         get_epoch_duration_storage_key, get_max_expected_time_per_block_key,
     };
     use crate::ledger::parameters::EpochDuration;
-    use crate::ledger::storage_api::StorageRead;
     use crate::ledger::{ibc, pos};
-    use crate::proto::{Code, Data, Section, Signature, Tx};
     use crate::tendermint::time::Time as TmTime;
+    use crate::token::storage_key::balance_key;
+    use crate::token::Amount;
     use crate::types::key::testing::keypair_1;
     use crate::types::storage::{BlockHash, BlockHeight, TxIndex};
     use crate::types::time::DurationSecs;
-    use crate::types::token::{balance_key, Amount};
-    use crate::types::transaction::TxType;
     use crate::vm::wasm;
 
     const ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
@@ -450,7 +450,7 @@ mod tests {
         let time_key = get_max_expected_time_per_block_key();
         wl_storage
             .write_log
-            .write(&time_key, crate::ledger::storage::types::encode(&time))
+            .write(&time_key, namada_core::types::encode(&time))
             .expect("write failed");
         // set a dummy header
         wl_storage

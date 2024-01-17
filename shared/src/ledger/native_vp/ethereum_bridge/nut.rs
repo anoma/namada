@@ -3,15 +3,15 @@
 use std::collections::BTreeSet;
 
 use eyre::WrapErr;
-use namada_core::ledger::storage as ledger_storage;
-use namada_core::ledger::storage::traits::StorageHasher;
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::storage::Key;
-use namada_core::types::token::Amount;
+use namada_state::StorageHasher;
+use namada_tx::Tx;
+use namada_vp_env::VpEnv;
 
-use crate::ledger::native_vp::{Ctx, NativeVp, VpEnv};
-use crate::proto::Tx;
-use crate::types::token::is_any_token_balance_key;
+use crate::ledger::native_vp::{Ctx, NativeVp};
+use crate::token::storage_key::is_any_token_balance_key;
+use crate::token::Amount;
 use crate::vm::WasmCacheAccess;
 
 /// Generic error that may be returned by the validity predicate
@@ -25,7 +25,7 @@ pub struct Error(#[from] eyre::Report);
 /// address is not the Bridge pool escrow address.
 pub struct NonUsableTokens<'ctx, DB, H, CA>
 where
-    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -35,7 +35,7 @@ where
 
 impl<'a, DB, H, CA> NativeVp for NonUsableTokens<'a, DB, H, CA>
 where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -121,19 +121,19 @@ mod test_nuts {
     use std::env::temp_dir;
 
     use assert_matches::assert_matches;
-    use borsh_ext::BorshSerializeExt;
-    use namada_core::ledger::storage::testing::TestWlStorage;
-    use namada_core::ledger::storage_api::StorageWrite;
+    use namada_core::borsh::BorshSerializeExt;
     use namada_core::types::address::testing::arb_non_internal_address;
     use namada_core::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
     use namada_core::types::storage::TxIndex;
-    use namada_core::types::token::balance_key;
-    use namada_core::types::transaction::TxType;
     use namada_ethereum_bridge::storage::wrapped_erc20s;
+    use namada_state::testing::TestWlStorage;
+    use namada_state::StorageWrite;
+    use namada_tx::data::TxType;
     use proptest::prelude::*;
 
     use super::*;
     use crate::ledger::gas::{TxGasMeter, VpGasMeter};
+    use crate::token::storage_key::balance_key;
     use crate::vm::wasm::VpCache;
     use crate::vm::WasmCacheRwAccess;
 

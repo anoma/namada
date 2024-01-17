@@ -1,0 +1,22 @@
+[package]
+name = "namada_vp_env"
+description = "Namada validity predicate execution environment"
+resolver = "2"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[dependencies]
+namada_core = { path = "../core" }
+namada_storage = { path = "../storage" }
+namada_tx = { path = "../tx" }
+
+derivative.workspace = true
+masp_primitives.workspace = true
+thiserror.workspace = true

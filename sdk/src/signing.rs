@@ -10,9 +10,7 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::transaction::components::sapling::fees::{
     InputView, OutputView,
 };
-use namada_core::ledger::parameters::storage as parameter_storage;
-use namada_core::proto::SignatureIndex;
-use namada_core::types::account::AccountPublicKeysMap;
+use namada_account::{AccountPublicKeysMap, InitAccount, UpdateAccount};
 use namada_core::types::address::{
     Address, ImplicitAddress, InternalAddress, MASP,
 };
@@ -20,18 +18,22 @@ use namada_core::types::key::*;
 use namada_core::types::masp::{
     encode_asset_type, ExtendedViewingKey, PaymentAddress,
 };
+use namada_core::types::sign::SignatureIndex;
 use namada_core::types::storage::Epoch;
 use namada_core::types::token;
 use namada_core::types::token::Transfer;
 // use namada_core::types::storage::Key;
 use namada_core::types::token::{Amount, DenominatedAmount, MaspDenom};
-use namada_core::types::transaction::account::{InitAccount, UpdateAccount};
-use namada_core::types::transaction::governance::{
-    InitProposalData, VoteProposalData,
+use namada_governance::storage::proposal::{
+    InitProposalData, ProposalType, VoteProposalData,
 };
-use namada_core::types::transaction::pgf::UpdateStewardCommission;
-use namada_core::types::transaction::pos::BecomeValidator;
-use namada_core::types::transaction::{pos, Fee};
+use namada_governance::storage::vote::ProposalVote;
+use namada_parameters::storage as parameter_storage;
+use namada_token::storage_key::balance_key;
+use namada_tx::data::pgf::UpdateStewardCommission;
+use namada_tx::data::pos::BecomeValidator;
+use namada_tx::data::{pos, Fee};
+use namada_tx::{MaspBuilder, Section, Tx};
 use prost::Message;
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
@@ -40,14 +42,10 @@ use tokio::sync::RwLock;
 
 use super::masp::{ShieldedContext, ShieldedTransfer};
 use crate::args::SdkTypes;
-use crate::core::ledger::governance::storage::proposal::ProposalType;
-use crate::core::ledger::governance::storage::vote::ProposalVote;
-use crate::core::types::eth_bridge_pool::PendingTransfer;
-use crate::error::{EncodingError, Error, TxError};
+use crate::error::{EncodingError, Error, TxSubmitError};
 use crate::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
 use crate::ibc::primitives::proto::Any;
 use crate::io::*;
-use crate::proto::{MaspBuilder, Section, Tx};
 use crate::rpc::validate_amount;
 use crate::tx::{
     TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
@@ -60,6 +58,7 @@ use crate::tx::{
     TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
     VP_USER_WASM,
 };
+use crate::types::eth_bridge_pool::PendingTransfer;
 pub use crate::wallet::store::AddressVpType;
 use crate::wallet::{Wallet, WalletIo};
 use crate::{args, display_line, rpc, MaybeSend, Namada};
@@ -321,7 +320,7 @@ pub async fn aux_signing_data(
             if let Some(account) = account {
                 (Some(account.public_keys_map), account.threshold)
             } else {
-                return Err(Error::from(TxError::InvalidAccount(
+                return Err(Error::from(TxSubmitError::InvalidAccount(
                     owner.encode(),
                 )));
             }
@@ -333,7 +332,7 @@ pub async fn aux_signing_data(
         Some(owner @ Address::Internal(internal)) => match internal {
             InternalAddress::Masp => (None, 0u8),
             _ => {
-                return Err(Error::from(TxError::InvalidAccount(
+                return Err(Error::from(TxSubmitError::InvalidAccount(
                     owner.encode(),
                 )));
             }
@@ -350,7 +349,10 @@ pub async fn aux_signing_data(
     } else {
         match &args.wrapper_fee_payer {
             Some(keypair) => keypair.clone(),
-            None => public_keys.get(0).ok_or(TxError::InvalidFeePayer)?.clone(),
+            None => public_keys
+                .get(0)
+                .ok_or(TxSubmitError::InvalidFeePayer)?
+                .clone(),
         }
     };
 
@@ -387,7 +389,10 @@ pub async fn init_validator_signing_data(
     } else {
         match &args.wrapper_fee_payer {
             Some(keypair) => keypair.clone(),
-            None => public_keys.get(0).ok_or(TxError::InvalidFeePayer)?.clone(),
+            None => public_keys
+                .get(0)
+                .ok_or(TxSubmitError::InvalidFeePayer)?
+                .clone(),
         }
     };
 
@@ -486,8 +491,7 @@ pub async fn wrap_tx<N: Namada>(
             token,
         }) if token == args.fee_token && source == fee_payer_address => balance,
         _ => {
-            let balance_key =
-                token::balance_key(&args.fee_token, &fee_payer_address);
+            let balance_key = balance_key(&args.fee_token, &fee_payer_address);
 
             rpc::query_storage_value::<_, token::Amount>(
                 context.client(),
@@ -564,7 +568,7 @@ pub async fn wrap_tx<N: Namada>(
                             && !args.force
                         {
                             return Err(Error::from(
-                                TxError::FeeUnshieldingError(format!(
+                                TxSubmitError::FeeUnshieldingError(format!(
                                     "Descriptions exceed the limit: found \
                                      {descriptions}, limit \
                                      {descriptions_limit}"
@@ -578,7 +582,7 @@ pub async fn wrap_tx<N: Namada>(
                     Ok(None) => {
                         if !args.force {
                             return Err(Error::from(
-                                TxError::FeeUnshieldingError(
+                                TxSubmitError::FeeUnshieldingError(
                                     "Missing unshielding transaction"
                                         .to_string(),
                                 ),
@@ -590,7 +594,7 @@ pub async fn wrap_tx<N: Namada>(
                     Err(e) => {
                         if !args.force {
                             return Err(Error::from(
-                                TxError::FeeUnshieldingError(e.to_string()),
+                                TxSubmitError::FeeUnshieldingError(e.to_string()),
                             ));
                         }
 
@@ -606,12 +610,14 @@ pub async fn wrap_tx<N: Namada>(
                     let balance = context
                         .format_amount(&token_addr, updated_balance)
                         .await;
-                    return Err(Error::from(TxError::BalanceTooLowForFees(
-                        fee_payer_address,
-                        token_addr,
-                        fee_amount,
-                        balance,
-                    )));
+                    return Err(Error::from(
+                        TxSubmitError::BalanceTooLowForFees(
+                            fee_payer_address,
+                            token_addr,
+                            fee_amount,
+                            balance,
+                        ),
+                    ));
                 }
 
                 None

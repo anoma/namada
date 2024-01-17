@@ -1,24 +1,23 @@
 use std::collections::{HashMap, HashSet};
 
 use eyre::Result;
-use namada_core::ledger::eth_bridge::storage::bridge_pool::get_signed_root_key;
-use namada_core::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
-use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
-use namada_core::proto::{SignableEthMessage, Signed};
 use namada_core::types::address::Address;
 use namada_core::types::keccak::keccak_hash;
-use namada_core::types::key::common;
+use namada_core::types::key::{common, SignableEthMessage};
 use namada_core::types::storage::BlockHeight;
 use namada_core::types::token::Amount;
-use namada_core::types::transaction::TxResult;
-use namada_core::types::vote_extensions::bridge_pool_roots;
-use namada_core::types::vote_extensions::bridge_pool_roots::MultiSignedVext;
 use namada_proof_of_stake::pos_queries::PosQueries;
+use namada_state::{DBIter, StorageHasher, WlStorage, DB};
+use namada_storage::{StorageRead, StorageWrite};
+use namada_tx::data::TxResult;
+use namada_tx::Signed;
+use namada_vote_ext::bridge_pool_roots::{self, MultiSignedVext, SignedVext};
 
 use crate::protocol::transactions::utils::GetVoters;
 use crate::protocol::transactions::votes::update::NewVotes;
 use crate::protocol::transactions::votes::{calculate_new, Votes};
 use crate::protocol::transactions::{utils, votes, ChangedKeys};
+use crate::storage::bridge_pool::get_signed_root_key;
 use crate::storage::eth_bridge_queries::EthBridgeQueries;
 use crate::storage::proof::BridgePoolRootProof;
 use crate::storage::vote_tallies::{self, BridgePoolRoot};
@@ -180,7 +179,7 @@ where
         .get_bridge_pool_nonce_at_height(height);
     let mut partial_proof = BridgePoolRootProof::new((root, nonce));
     partial_proof.attach_signature_batch(multisigned.clone().into_iter().map(
-        |signed| {
+        |SignedVext(signed)| {
             (
                 wl_storage
                     .ethbridge_queries()
@@ -192,8 +191,11 @@ where
     ));
 
     let seen_by: Votes = multisigned
+        .0
         .into_iter()
-        .map(|signed| (signed.data.validator_addr, signed.data.block_height))
+        .map(|SignedVext(signed)| {
+            (signed.data.validator_addr, signed.data.block_height)
+        })
         .collect();
     (BridgePoolRoot(partial_proof), seen_by)
 }
@@ -257,11 +259,6 @@ mod test_apply_bp_roots_to_storage {
 
     use assert_matches::assert_matches;
     use borsh::BorshDeserialize;
-    use namada_core::ledger::eth_bridge::storage::bridge_pool::{
-        get_key_from_hash, get_nonce_key,
-    };
-    use namada_core::ledger::storage::testing::TestWlStorage;
-    use namada_core::ledger::storage_api::StorageRead;
     use namada_core::types::address;
     use namada_core::types::ethereum_events::Uint;
     use namada_core::types::keccak::{keccak_hash, KeccakHash};
@@ -269,11 +266,15 @@ mod test_apply_bp_roots_to_storage {
     use namada_core::types::voting_power::FractionalVotingPower;
     use namada_proof_of_stake::parameters::OwnedPosParams;
     use namada_proof_of_stake::storage::write_pos_params;
+    use namada_state::testing::TestWlStorage;
+    use namada_storage::StorageRead;
+    use namada_vote_ext::bridge_pool_roots;
 
     use super::*;
     use crate::protocol::transactions::votes::{
         EpochedVotingPower, EpochedVotingPowerExt,
     };
+    use crate::storage::bridge_pool::{get_key_from_hash, get_nonce_key};
     use crate::storage::vp;
     use crate::test_utils;
 

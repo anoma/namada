@@ -1,13 +1,10 @@
-use borsh::{BorshDeserialize, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
 use eyre::{Result, WrapErr};
+use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
 use namada_core::hints;
-use namada_core::ledger::storage::{
-    DBIter, PrefixIter, StorageHasher, WlStorage, DB,
-};
-use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::storage::Key;
 use namada_core::types::voting_power::FractionalVotingPower;
+use namada_state::{DBIter, PrefixIter, StorageHasher, WlStorage, DB};
+use namada_storage::{StorageRead, StorageWrite};
 
 use super::{EpochedVotingPower, EpochedVotingPowerExt, Tally, Votes};
 use crate::storage::vote_tallies;

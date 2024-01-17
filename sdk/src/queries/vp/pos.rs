@@ -3,10 +3,6 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use namada_core::ledger::storage::{DBIter, StorageHasher, DB};
-use namada_core::ledger::storage_api;
-use namada_core::ledger::storage_api::collections::lazy_map;
-use namada_core::ledger::storage_api::OptionExt;
 use namada_core::types::address::Address;
 use namada_core::types::key::common;
 use namada_core::types::storage::Epoch;
@@ -34,6 +30,9 @@ use namada_proof_of_stake::types::{
     Slash, ValidatorMetaData, ValidatorState, WeightedValidator,
 };
 use namada_proof_of_stake::{self, bond_amount, query_reward_tokens};
+use namada_state::{DBIter, StorageHasher, DB};
+use namada_storage::collections::lazy_map;
+use namada_storage::OptionExt;
 
 use crate::queries::types::RequestCtx;
 
@@ -176,7 +175,7 @@ impl<T> Enriched<T> {
 /// Get the PoS parameters
 fn pos_params<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
-) -> storage_api::Result<PosParams>
+) -> namada_storage::Result<PosParams>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -188,7 +187,7 @@ where
 fn is_validator<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     addr: Address,
-) -> storage_api::Result<bool>
+) -> namada_storage::Result<bool>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -200,7 +199,7 @@ where
 fn consensus_key<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     addr: Address,
-) -> storage_api::Result<Option<common::PublicKey>>
+) -> namada_storage::Result<Option<common::PublicKey>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -218,7 +217,7 @@ fn is_delegator<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     addr: Address,
     epoch: Option<Epoch>,
-) -> storage_api::Result<bool>
+) -> namada_storage::Result<bool>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -231,7 +230,7 @@ where
 fn validator_addresses<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     epoch: Option<Epoch>,
-) -> storage_api::Result<HashSet<Address>>
+) -> namada_storage::Result<HashSet<Address>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -245,7 +244,7 @@ fn validator_commission<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     validator: Address,
     epoch: Option<Epoch>,
-) -> storage_api::Result<Option<CommissionPair>>
+) -> namada_storage::Result<Option<CommissionPair>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -275,7 +274,7 @@ where
 fn validator_metadata<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     validator: Address,
-) -> storage_api::Result<Option<ValidatorMetaData>>
+) -> namada_storage::Result<Option<ValidatorMetaData>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -305,7 +304,7 @@ fn validator_state<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     validator: Address,
     epoch: Option<Epoch>,
-) -> storage_api::Result<Option<ValidatorState>>
+) -> namada_storage::Result<Option<ValidatorState>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -324,7 +323,7 @@ where
 fn validator_last_infraction_epoch<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     validator: Address,
-) -> storage_api::Result<Option<Epoch>>
+) -> namada_storage::Result<Option<Epoch>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -341,7 +340,7 @@ fn validator_stake<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     validator: Address,
     epoch: Option<Epoch>,
-) -> storage_api::Result<Option<token::Amount>>
+) -> namada_storage::Result<Option<token::Amount>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -363,7 +362,7 @@ fn validator_incoming_redelegation<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     src_validator: Address,
     delegator: Address,
-) -> storage_api::Result<Option<Epoch>>
+) -> namada_storage::Result<Option<Epoch>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -376,7 +375,7 @@ where
 fn consensus_validator_set<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     epoch: Option<Epoch>,
-) -> storage_api::Result<BTreeSet<WeightedValidator>>
+) -> namada_storage::Result<BTreeSet<WeightedValidator>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -389,7 +388,7 @@ where
 fn below_capacity_validator_set<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     epoch: Option<Epoch>,
-) -> storage_api::Result<BTreeSet<WeightedValidator>>
+) -> namada_storage::Result<BTreeSet<WeightedValidator>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -405,7 +404,7 @@ where
 fn total_stake<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     epoch: Option<Epoch>,
-) -> storage_api::Result<token::Amount>
+) -> namada_storage::Result<token::Amount>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -419,7 +418,7 @@ fn bond_deltas<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     source: Address,
     validator: Address,
-) -> storage_api::Result<HashMap<Epoch, token::Amount>>
+) -> namada_storage::Result<HashMap<Epoch, token::Amount>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -434,7 +433,7 @@ fn bond<D, H, V, T>(
     source: Address,
     validator: Address,
     epoch: Option<Epoch>,
-) -> storage_api::Result<token::Amount>
+) -> namada_storage::Result<token::Amount>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -454,7 +453,7 @@ fn bond_with_slashing<D, H, V, T>(
     source: Address,
     validator: Address,
     epoch: Option<Epoch>,
-) -> storage_api::Result<token::Amount>
+) -> namada_storage::Result<token::Amount>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -469,7 +468,7 @@ fn unbond<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     source: Address,
     validator: Address,
-) -> storage_api::Result<HashMap<(Epoch, Epoch), token::Amount>>
+) -> namada_storage::Result<HashMap<(Epoch, Epoch), token::Amount>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -494,7 +493,7 @@ fn unbond_with_slashing<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     source: Address,
     validator: Address,
-) -> storage_api::Result<HashMap<(Epoch, Epoch), token::Amount>>
+) -> namada_storage::Result<HashMap<(Epoch, Epoch), token::Amount>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -521,7 +520,7 @@ fn withdrawable_tokens<D, H, V, T>(
     source: Address,
     validator: Address,
     epoch: Option<Epoch>,
-) -> storage_api::Result<token::Amount>
+) -> namada_storage::Result<token::Amount>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -549,7 +548,7 @@ fn rewards<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     validator: Address,
     source: Option<Address>,
-) -> storage_api::Result<token::Amount>
+) -> namada_storage::Result<token::Amount>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -567,7 +566,7 @@ fn bonds_and_unbonds<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     source: Option<Address>,
     validator: Option<Address>,
-) -> storage_api::Result<BondsAndUnbondsDetails>
+) -> namada_storage::Result<BondsAndUnbondsDetails>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -584,7 +583,7 @@ where
 fn delegation_validators<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     owner: Address,
-) -> storage_api::Result<HashSet<Address>>
+) -> namada_storage::Result<HashSet<Address>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -598,7 +597,7 @@ fn delegations<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     owner: Address,
     epoch: Option<Epoch>,
-) -> storage_api::Result<HashMap<Address, token::Amount>>
+) -> namada_storage::Result<HashMap<Address, token::Amount>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -611,7 +610,7 @@ where
 fn validator_slashes<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     validator: Address,
-) -> storage_api::Result<Vec<Slash>>
+) -> namada_storage::Result<Vec<Slash>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -623,7 +622,7 @@ where
 /// All slashes
 fn slashes<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
-) -> storage_api::Result<HashMap<Address, Vec<Slash>>>
+) -> namada_storage::Result<HashMap<Address, Vec<Slash>>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -634,7 +633,7 @@ where
 /// Enqueued slashes
 fn enqueued_slashes<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
-) -> storage_api::Result<HashMap<Address, BTreeMap<Epoch, Vec<Slash>>>>
+) -> namada_storage::Result<HashMap<Address, BTreeMap<Epoch, Vec<Slash>>>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -647,7 +646,7 @@ where
 fn validator_by_tm_addr<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     tm_addr: String,
-) -> storage_api::Result<Option<Address>>
+) -> namada_storage::Result<Option<Address>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -661,7 +660,7 @@ where
 /// Native validator address by looking up the Tendermint address
 fn consensus_key_set<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
-) -> storage_api::Result<BTreeSet<common::PublicKey>>
+) -> namada_storage::Result<BTreeSet<common::PublicKey>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -673,7 +672,7 @@ where
 fn has_bonds<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     source: Address,
-) -> storage_api::Result<bool>
+) -> namada_storage::Result<bool>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,

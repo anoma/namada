@@ -1,0 +1,45 @@
+[package]
+name = "namada_tx"
+description = "Namada transaction construction types"
+resolver = "2"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[features]
+default = []
+testing = ["proptest", "namada_core/testing"]
+
+[dependencies]
+namada_core = { path = "../core" }
+namada_gas = { path = "../gas" }
+
+ark-bls12-381.workspace = true
+borsh.workspace = true
+data-encoding.workspace = true
+masp_primitives.workspace = true
+num-derive.workspace = true
+num-traits.workspace = true
+proptest = { workspace = true, optional = true }
+prost-types.workspace = true
+prost.workspace = true
+serde_json.workspace = true
+serde.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+namada_core = { path = "../core", features = ["testing"] }
+
+assert_matches.workspace = true
+proptest.workspace = true
+rand.workspace = true
+
+[build-dependencies]
+tonic-build.workspace = true

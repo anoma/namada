@@ -9,15 +9,7 @@ use borsh::BorshDeserialize;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
-use namada_core::ledger::governance::parameters::GovernanceParameters;
-use namada_core::ledger::governance::storage::proposal::StorageProposal;
-use namada_core::ledger::governance::utils::Vote;
-use namada_core::ledger::ibc::storage::{
-    ibc_denom_key, ibc_denom_key_prefix, is_ibc_denom_key,
-};
-use namada_core::ledger::pgf::storage::steward::StewardDetail;
-use namada_core::ledger::storage::LastBlock;
-use namada_core::types::account::Account;
+use namada_account::Account;
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::hash::Hash;
 use namada_core::types::key::common;
@@ -27,21 +19,28 @@ use namada_core::types::storage::{
 use namada_core::types::token::{
     Amount, DenominatedAmount, Denomination, MaspDenom,
 };
-use namada_core::types::transaction::{ResultCode, TxResult};
 use namada_core::types::{storage, token};
+use namada_governance::parameters::GovernanceParameters;
+use namada_governance::pgf::storage::steward::StewardDetail;
+use namada_governance::storage::proposal::StorageProposal;
+use namada_governance::utils::Vote;
+use namada_ibc::storage::{
+    ibc_denom_key, ibc_denom_key_prefix, is_ibc_denom_key,
+};
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{
     BondsAndUnbondsDetails, CommissionPair, ValidatorMetaData, ValidatorState,
 };
+use namada_state::LastBlock;
+use namada_tx::data::{ResultCode, TxResult};
 use serde::Serialize;
 
 use crate::args::InputAmount;
 use crate::control_flow::time;
-use crate::error::{EncodingError, Error, QueryError, TxError};
+use crate::error::{EncodingError, Error, QueryError, TxSubmitError};
 use crate::events::Event;
 use crate::internal_macros::echo_error;
 use crate::io::Io;
-use crate::proto::Tx;
 use crate::queries::vp::pos::EnrichedBondsAndUnbondsDetails;
 use crate::queries::{Client, RPC};
 use crate::tendermint::block::Height;
@@ -49,7 +48,7 @@ use crate::tendermint::merkle::proof::ProofOps;
 use crate::tendermint_rpc::error::Error as TError;
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
-use crate::{display_line, edisplay_line, error, Namada};
+use crate::{display_line, edisplay_line, error, Namada, Tx};
 
 /// Query the status of a given transaction.
 ///
@@ -99,8 +98,12 @@ pub async fn query_tx_status(
             "Transaction status query deadline of {deadline:?} exceeded"
         );
         match status {
-            TxEventQuery::Accepted(_) => Error::Tx(TxError::AcceptTimeout),
-            TxEventQuery::Applied(_) => Error::Tx(TxError::AppliedTimeout),
+            TxEventQuery::Accepted(_) => {
+                Error::Tx(TxSubmitError::AcceptTimeout)
+            }
+            TxEventQuery::Applied(_) => {
+                Error::Tx(TxSubmitError::AppliedTimeout)
+            }
         }
     })
 }
@@ -503,7 +506,7 @@ pub async fn query_tx_events<C: crate::queries::Client + Sync>(
 pub async fn dry_run_tx<N: Namada>(
     context: &N,
     tx_bytes: Vec<u8>,
-) -> Result<namada_core::types::transaction::TxResult, Error> {
+) -> Result<namada_tx::data::TxResult, Error> {
     let (data, height, prove) = (Some(tx_bytes), None, false);
     let result = convert_response::<N::Client, _>(
         RPC.shell()

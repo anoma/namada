@@ -67,8 +67,8 @@ pub mod mock_web3_client {
     use async_trait::async_trait;
     use ethabi::Address;
     use ethbridge_events::EventCodec;
-    use namada::core::types::ethereum_structs::BlockHeight;
     use namada::types::control_flow::time::{Duration, Instant};
+    use namada::types::ethereum_structs::BlockHeight;
     use num256::Uint256;
     use tokio::sync::mpsc::{
         unbounded_channel, UnboundedReceiver, UnboundedSender,

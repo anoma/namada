@@ -75,11 +75,10 @@ pub mod main {
 /// A tx that attempts to write arbitrary data to the given key
 #[cfg(feature = "tx_write")]
 pub mod main {
-    use borsh::BorshDeserialize;
     use namada_test_utils::tx_data::TxWriteData;
     use namada_tx_prelude::{
-        log_string, transaction, Ctx, StorageRead, StorageWrite, Tx, TxEnv,
-        TxResult,
+        log_string, transaction, BorshDeserialize, Ctx, StorageRead,
+        StorageWrite, Tx, TxEnv, TxResult,
     };
 
     const TX_NAME: &str = "tx_write";
@@ -187,7 +186,7 @@ pub mod main {
         _keys_changed: BTreeSet<storage::Key>,
         _verifiers: BTreeSet<Address>,
     ) -> VpResult {
-        use validity_predicate::EvalVp;
+        use namada_tx_prelude::transaction::eval_vp::EvalVp;
         let EvalVp {
             vp_code_hash,
             input,

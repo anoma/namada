@@ -10,16 +10,11 @@ use color_eyre::eyre::{Report, Result};
 use data_encoding::HEXUPPER;
 use itertools::Either;
 use lazy_static::lazy_static;
-use namada::core::types::ethereum_structs;
-use namada::core::types::transaction::ResultCode;
 use namada::eth_bridge::oracle::config::Config as OracleConfig;
 use namada::ledger::dry_run_tx;
 use namada::ledger::events::log::dumb_queries;
 use namada::ledger::queries::{
     EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
-};
-use namada::ledger::storage::{
-    LastBlock, Sha256Hasher, EPOCH_SWITCH_BLOCKS_DELAY,
 };
 use namada::proof_of_stake::pos_queries::PosQueries;
 use namada::proof_of_stake::storage::{
@@ -27,16 +22,19 @@ use namada::proof_of_stake::storage::{
     validator_consensus_key_handle,
 };
 use namada::proof_of_stake::types::WeightedValidator;
+use namada::state::{LastBlock, Sha256Hasher, EPOCH_SWITCH_BLOCKS_DELAY};
 use namada::tendermint::abci::response::Info;
 use namada::tendermint::abci::types::VoteInfo;
 use namada::tendermint_rpc::SimpleRequest;
 use namada::types::control_flow::time::Duration;
 use namada::types::ethereum_events::EthereumEvent;
+use namada::types::ethereum_structs;
 use namada::types::hash::Hash;
 use namada::types::key::tm_consensus_key_raw_hash;
 use namada::types::storage::{BlockHash, BlockHeight, Epoch, Header};
 use namada::types::time::DateTimeUtc;
 use namada_sdk::queries::Client;
+use namada_sdk::tx::data::ResultCode;
 use regex::Regex;
 use tendermint_rpc::endpoint::block;
 use tokio::sync::mpsc;

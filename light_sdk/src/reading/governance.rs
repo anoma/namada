@@ -1,6 +1,6 @@
-use namada_core::ledger::governance::parameters::GovernanceParameters;
-use namada_core::ledger::governance::storage::proposal::StorageProposal;
-use namada_core::ledger::governance::utils::Vote;
+use namada_sdk::governance::parameters::GovernanceParameters;
+use namada_sdk::governance::storage::proposal::StorageProposal;
+use namada_sdk::governance::utils::Vote;
 
 use super::*;
 

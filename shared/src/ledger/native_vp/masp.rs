@@ -9,27 +9,28 @@ use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::transaction::Transaction;
-use namada_core::ledger::gas::MASP_VERIFY_SHIELDED_TX_GAS;
-use namada_core::ledger::storage;
-use namada_core::ledger::storage_api::{OptionExt, ResultExt};
-use namada_core::ledger::vp_env::VpEnv;
-use namada_core::proto::Tx;
 use namada_core::types::address::Address;
 use namada_core::types::address::InternalAddress::Masp;
+use namada_core::types::masp::encode_asset_type;
 use namada_core::types::storage::{IndexedTx, Key};
-use namada_core::types::token::{
-    self, is_masp_allowed_key, is_masp_key, is_masp_nullifier_key,
-    masp_pin_tx_key,
-};
+use namada_gas::MASP_VERIFY_SHIELDED_TX_GAS;
 use namada_sdk::masp::verify_shielded_tx;
+use namada_state::{OptionExt, ResultExt};
+use namada_tx::Tx;
+use namada_vp_env::VpEnv;
 use ripemd::Digest as RipemdDigest;
 use sha2::Digest as Sha2Digest;
 use thiserror::Error;
+use token::storage_key::{
+    is_masp_allowed_key, is_masp_key, is_masp_nullifier_key,
+    masp_commitment_anchor_key, masp_commitment_tree_key,
+    masp_convert_anchor_key, masp_nullifier_key, masp_pin_tx_key,
+};
+use token::MaspDenom;
 
 use crate::ledger::native_vp;
 use crate::ledger::native_vp::{Ctx, NativeVp};
-use crate::types::masp::encode_asset_type;
-use crate::types::token::MaspDenom;
+use crate::token;
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]
@@ -45,8 +46,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// MASP VP
 pub struct MaspVp<'a, DB, H, CA>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: storage::StorageHasher,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    H: namada_state::StorageHasher,
     CA: WasmCacheAccess,
 {
     /// Context to interact with the host structures.
@@ -55,8 +56,8 @@ where
 
 impl<'a, DB, H, CA> MaspVp<'a, DB, H, CA>
 where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: 'static + storage::StorageHasher,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    H: 'static + namada_state::StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
     // Check that the transaction correctly revealed the nullifiers
@@ -80,9 +81,7 @@ where
         };
 
         for description in shielded_spends {
-            let nullifier_key = namada_core::types::token::masp_nullifier_key(
-                &description.nullifier,
-            );
+            let nullifier_key = masp_nullifier_key(&description.nullifier);
             if self.ctx.has_key_pre(&nullifier_key)?
                 || revealed_nullifiers.contains(&nullifier_key)
             {
@@ -129,7 +128,7 @@ where
     ) -> Result<bool> {
         // Check that the merkle tree in storage has been correctly updated with
         // the output descriptions cmu
-        let tree_key = namada_core::types::token::masp_commitment_tree_key();
+        let tree_key = masp_commitment_tree_key();
         let mut previous_tree: CommitmentTree<Node> =
             self.ctx.read_pre(&tree_key)?.ok_or(Error::NativeVpError(
                 native_vp::Error::SimpleMessage("Cannot read storage"),
@@ -183,10 +182,7 @@ where
         };
 
         for description in shielded_spends {
-            let anchor_key =
-                namada_core::types::token::masp_commitment_anchor_key(
-                    description.anchor,
-                );
+            let anchor_key = masp_commitment_anchor_key(description.anchor);
 
             // Check if the provided anchor was published before
             if !self.ctx.has_key_pre(&anchor_key)? {
@@ -207,8 +203,7 @@ where
     ) -> Result<bool> {
         if let Some(bundle) = transaction.sapling_bundle() {
             if !bundle.shielded_converts.is_empty() {
-                let anchor_key =
-                    namada_core::types::token::masp_convert_anchor_key();
+                let anchor_key = masp_convert_anchor_key();
                 let expected_anchor = self
                     .ctx
                     .read_pre::<namada_core::types::hash::Hash>(&anchor_key)?
@@ -277,8 +272,8 @@ fn unepoched_tokens(
 
 impl<'a, DB, H, CA> NativeVp for MaspVp<'a, DB, H, CA>
 where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: 'static + storage::StorageHasher,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    H: 'static + namada_state::StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
     type Error = Error;
@@ -300,9 +295,11 @@ where
             return Ok(false);
         }
 
-        let transfer_amount = transfer
-            .amount
-            .to_amount(&transfer.token, &self.ctx.pre())?;
+        let transfer_amount = crate::token::denom_to_amount(
+            transfer.amount,
+            &transfer.token,
+            &self.ctx.pre(),
+        )?;
         let mut transparent_tx_pool = I128Sum::zero();
         // The Sapling value balance adds to the transparent tx pool
         transparent_tx_pool += shielded_tx.sapling_value_balance();

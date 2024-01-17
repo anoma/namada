@@ -11,7 +11,6 @@ use arse_merkle_tree::InternalKey;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use data_encoding::{BASE32HEX_NOPAD, HEXUPPER};
-use ics23::CommitmentProof;
 use index_set::vec::VecIndexSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -19,7 +18,6 @@ use thiserror::Error;
 use super::key::common;
 use crate::bytes::ByteBuf;
 use crate::hints;
-use crate::ledger::eth_bridge::storage::bridge_pool::BridgePoolProof;
 use crate::types::address::{self, Address};
 use crate::types::ethereum_events::{GetEventNonce, TransfersToNamada, Uint};
 use crate::types::hash::Hash;
@@ -469,10 +467,49 @@ impl BorshDeserialize for StringKey {
     }
 }
 
+impl arse_merkle_tree::Key<IBC_KEY_LIMIT> for StringKey {
+    type Error = TreeKeyError;
+
+    fn as_slice(&self) -> &[u8] {
+        &self.original.as_slice()[..self.length]
+    }
+
+    fn try_from_bytes(bytes: &[u8]) -> std::result::Result<Self, Self::Error> {
+        let mut tree_key = [0u8; IBC_KEY_LIMIT];
+        let mut original = [0u8; IBC_KEY_LIMIT];
+        let mut length = 0;
+        for (i, byte) in bytes.iter().enumerate() {
+            if i >= IBC_KEY_LIMIT {
+                return Err(TreeKeyError::InvalidMerkleKey(
+                    "Input IBC key is too large".into(),
+                ));
+            }
+            original[i] = *byte;
+            tree_key[i] = byte.wrapping_add(1);
+            length += 1;
+        }
+        Ok(Self {
+            original,
+            tree_key: tree_key.into(),
+            length,
+        })
+    }
+}
+
 /// A wrapper around raw bytes to be stored as values
 /// in a merkle tree
 #[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub struct TreeBytes(pub Vec<u8>);
+
+impl arse_merkle_tree::traits::Value for TreeBytes {
+    fn as_slice(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+
+    fn zero() -> Self {
+        TreeBytes::zero()
+    }
+}
 
 impl TreeBytes {
     /// The value indicating that a leaf should be deleted
@@ -495,26 +532,6 @@ impl From<Vec<u8>> for TreeBytes {
 impl From<TreeBytes> for Vec<u8> {
     fn from(bytes: TreeBytes) -> Self {
         bytes.0
-    }
-}
-
-/// Type of membership proof from a merkle tree
-pub enum MembershipProof {
-    /// ICS23 compliant membership proof
-    ICS23(CommitmentProof),
-    /// Bespoke membership proof for the Ethereum bridge pool
-    BridgePool(BridgePoolProof),
-}
-
-impl From<CommitmentProof> for MembershipProof {
-    fn from(proof: CommitmentProof) -> Self {
-        Self::ICS23(proof)
-    }
-}
-
-impl From<BridgePoolProof> for MembershipProof {
-    fn from(proof: BridgePoolProof) -> Self {
-        Self::BridgePool(proof)
     }
 }
 

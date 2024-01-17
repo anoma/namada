@@ -6,10 +6,9 @@ mod tests {
     use borsh::{BorshDeserialize, BorshSerialize};
     use namada::types::address::{self, Address};
     use namada::types::storage;
+    use namada_tx_prelude::collections::{LazyCollection, LazyMap};
     use namada_tx_prelude::storage::KeySeg;
-    use namada_tx_prelude::storage_api::collections::{
-        lazy_map, LazyCollection, LazyMap,
-    };
+    use namada_vp_prelude::collection_validation::{self, LazyCollectionExt};
     use proptest::prelude::*;
     use proptest::test_runner::Config;
     use proptest_state_machine::{
@@ -443,6 +442,7 @@ mod tests {
                 let current_transitions =
                     normalize_transitions(&self.current_transitions);
                 for transition in &current_transitions {
+                    use collection_validation::lazy_map::Action;
                     match transition {
                         Transition::CommitTx | Transition::CommitTxAndBlock => {
                         }
@@ -450,9 +450,7 @@ mod tests {
                             for (ix, action) in
                                 actions_to_check.iter().enumerate()
                             {
-                                if let lazy_map::Action::Insert(key, val) =
-                                    action
-                                {
+                                if let Action::Insert(key, val) = action {
                                     if expected_key == key
                                         && expected_val == val
                                     {
@@ -466,9 +464,7 @@ mod tests {
                             for (ix, action) in
                                 actions_to_check.iter().enumerate()
                             {
-                                if let lazy_map::Action::Remove(key, _val) =
-                                    action
-                                {
+                                if let Action::Remove(key, _val) = action {
                                     if expected_key == key {
                                         actions_to_check.remove(ix);
                                         break;
@@ -480,11 +476,8 @@ mod tests {
                             for (ix, action) in
                                 actions_to_check.iter().enumerate()
                             {
-                                if let lazy_map::Action::Update {
-                                    key,
-                                    pre: _,
-                                    post,
-                                } = action
+                                if let Action::Update { key, pre: _, post } =
+                                    action
                                 {
                                     if expected_key == key && post == value {
                                         actions_to_check.remove(ix);

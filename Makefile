@@ -35,18 +35,33 @@ audit-ignores += RUSTSEC-2021-0076
 # Workspace crates
 crates := namada_core
 crates += namada
+crates += namada_account
 crates += namada_apps
 crates += namada_benchmarks
 crates += namada_encoding_spec
 crates += namada_ethereum_bridge
+crates += namada_gas
+crates += namada_governance
+crates += namada_ibc
 crates += namada_light_sdk
 crates += namada_macros
+crates += namada_merkle_tree
+crates += namada_parameters
 crates += namada_proof_of_stake
 crates += namada_sdk
+crates += namada_shielded_token
+crates += namada_state
+crates += namada_storage
 crates += namada_test_utils
 crates += namada_tests
+crates += namada_token
+crates += namada_trans_token
+crates += namada_tx
+crates += namada_tx_env
 crates += namada_tx_prelude
 crates += namada_vm_env
+crates += namada_vote_ext
+crates += namada_vp_env
 crates += namada_vp_prelude
 
 build:

@@ -1,11 +1,11 @@
-use namada_core::proto::Tx;
-use namada_core::types::address::Address;
-use namada_core::types::dec::Dec;
-use namada_core::types::hash::Hash;
-use namada_core::types::key::{common, secp256k1};
-use namada_core::types::token;
-use namada_core::types::token::Amount;
-use namada_core::types::transaction::pos::Redelegation;
+use namada_sdk::tx::data::pos::Redelegation;
+use namada_sdk::tx::Tx;
+use namada_sdk::types::address::Address;
+use namada_sdk::types::dec::Dec;
+use namada_sdk::types::hash::Hash;
+use namada_sdk::types::key::{common, secp256k1};
+use namada_sdk::types::token;
+use namada_sdk::types::token::Amount;
 
 use super::GlobalArgs;
 use crate::transaction;
@@ -34,7 +34,7 @@ impl Bond {
         source: Option<Address>,
         args: GlobalArgs,
     ) -> Self {
-        let unbond = namada_core::types::transaction::pos::Bond {
+        let unbond = namada_sdk::tx::data::pos::Bond {
             validator,
             amount,
             source,
@@ -80,7 +80,7 @@ impl Unbond {
         source: Option<Address>,
         args: GlobalArgs,
     ) -> Self {
-        let unbond = namada_core::types::transaction::pos::Unbond {
+        let unbond = namada_sdk::tx::data::pos::Unbond {
             validator,
             amount,
             source,
@@ -136,21 +136,20 @@ impl BecomeValidator {
         avatar: Option<String>,
         args: GlobalArgs,
     ) -> Self {
-        let update_account =
-            namada_core::types::transaction::pos::BecomeValidator {
-                address,
-                consensus_key,
-                eth_cold_key,
-                eth_hot_key,
-                protocol_key,
-                commission_rate,
-                max_commission_rate_change,
-                email,
-                description,
-                website,
-                discord_handle,
-                avatar,
-            };
+        let update_account = namada_sdk::tx::data::pos::BecomeValidator {
+            address,
+            consensus_key,
+            eth_cold_key,
+            eth_hot_key,
+            protocol_key,
+            commission_rate,
+            max_commission_rate_change,
+            email,
+            description,
+            website,
+            discord_handle,
+            avatar,
+        };
 
         Self(transaction::build_tx(
             args,
@@ -296,10 +295,8 @@ impl ClaimRewards {
         source: Option<Address>,
         args: GlobalArgs,
     ) -> Self {
-        let init_proposal = namada_core::types::transaction::pos::Withdraw {
-            validator,
-            source,
-        };
+        let init_proposal =
+            namada_sdk::tx::data::pos::Withdraw { validator, source };
 
         Self(transaction::build_tx(
             args,
@@ -346,16 +343,15 @@ impl ChangeMetaData {
         commission_rate: Option<Dec>,
         args: GlobalArgs,
     ) -> Self {
-        let init_proposal =
-            namada_core::types::transaction::pos::MetaDataChange {
-                validator,
-                email,
-                description,
-                website,
-                discord_handle,
-                avatar,
-                commission_rate,
-            };
+        let init_proposal = namada_sdk::tx::data::pos::MetaDataChange {
+            validator,
+            email,
+            description,
+            website,
+            discord_handle,
+            avatar,
+            commission_rate,
+        };
 
         Self(transaction::build_tx(
             args,
@@ -396,11 +392,10 @@ impl ChangeConsensusKey {
         consensus_key: common::PublicKey,
         args: GlobalArgs,
     ) -> Self {
-        let init_proposal =
-            namada_core::types::transaction::pos::ConsensusKeyChange {
-                validator,
-                consensus_key,
-            };
+        let init_proposal = namada_sdk::tx::data::pos::ConsensusKeyChange {
+            validator,
+            consensus_key,
+        };
 
         Self(transaction::build_tx(
             args,
@@ -437,11 +432,10 @@ pub struct ChangeCommission(Tx);
 impl ChangeCommission {
     /// Build a raw ChangeCommission transaction from the given parameters
     pub fn new(validator: Address, new_rate: Dec, args: GlobalArgs) -> Self {
-        let init_proposal =
-            namada_core::types::transaction::pos::CommissionChange {
-                validator,
-                new_rate,
-            };
+        let init_proposal = namada_sdk::tx::data::pos::CommissionChange {
+            validator,
+            new_rate,
+        };
 
         Self(transaction::build_tx(
             args,
@@ -482,10 +476,8 @@ impl Withdraw {
         source: Option<Address>,
         args: GlobalArgs,
     ) -> Self {
-        let init_proposal = namada_core::types::transaction::pos::Withdraw {
-            validator,
-            source,
-        };
+        let init_proposal =
+            namada_sdk::tx::data::pos::Withdraw { validator, source };
 
         Self(transaction::build_tx(
             args,

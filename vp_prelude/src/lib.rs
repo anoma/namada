@@ -6,6 +6,11 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
+pub mod ibc {
+    pub use namada_core::types::ibc::IbcEvent;
+    pub use namada_ibc::storage::is_ibc_key;
+}
+
 // used in the VP input
 use core::convert::AsRef;
 use core::slice;
@@ -13,30 +18,32 @@ pub use std::collections::{BTreeSet, HashSet};
 use std::convert::TryFrom;
 use std::marker::PhantomData;
 
-pub use borsh::{BorshDeserialize, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
-pub use namada_core::ledger::governance::storage as gov_storage;
-pub use namada_core::ledger::parameters;
-pub use namada_core::ledger::pgf::storage as pgf_storage;
-pub use namada_core::ledger::storage_api::{
-    self, iter_prefix, iter_prefix_bytes, Error, OptionExt, ResultExt,
-    StorageRead,
+pub use namada_core::borsh::{
+    BorshDeserialize, BorshSerialize, BorshSerializeExt,
 };
-pub use namada_core::ledger::vp_env::VpEnv;
-pub use namada_core::proto::{Section, Tx};
 pub use namada_core::types::address::Address;
 use namada_core::types::chain::CHAIN_ID_LENGTH;
 use namada_core::types::hash::{Hash, HASH_LENGTH};
 use namada_core::types::internal::HostEnvResult;
 use namada_core::types::storage::{
-    BlockHash, BlockHeight, Epoch, Header, TxIndex, BLOCK_HASH_LENGTH,
+    BlockHash, BlockHeight, Epoch, Epochs, Header, TxIndex, BLOCK_HASH_LENGTH,
 };
 pub use namada_core::types::*;
+pub use namada_governance::pgf::storage as pgf_storage;
+pub use namada_governance::storage as gov_storage;
 pub use namada_macros::validity_predicate;
+pub use namada_storage::{
+    iter_prefix, iter_prefix_bytes, Error, OptionExt, ResultExt, StorageRead,
+};
+pub use namada_tx::{Section, Tx};
 use namada_vm_env::vp::*;
 use namada_vm_env::{read_from_buffer, read_key_val_bytes_from_buffer};
+pub use namada_vp_env::{collection_validation, VpEnv};
 pub use sha2::{Digest, Sha256, Sha384, Sha512};
-pub use {borsh_ext, namada_proof_of_stake as proof_of_stake};
+pub use {
+    namada_account as account, namada_parameters as parameters,
+    namada_proof_of_stake as proof_of_stake, namada_token as token,
+};
 
 pub fn sha256(bytes: &[u8]) -> Hash {
     let digest = Sha256::digest(bytes);
@@ -85,9 +92,8 @@ pub fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
         parameters::max_signatures_per_transaction(&ctx.pre())?;
 
     let public_keys_index_map =
-        storage_api::account::public_keys_index_map(&ctx.pre(), owner)?;
-    let threshold =
-        storage_api::account::threshold(&ctx.pre(), owner)?.unwrap_or(1);
+        account::public_keys_index_map(&ctx.pre(), owner)?;
+    let threshold = account::threshold(&ctx.pre(), owner)?.unwrap_or(1);
 
     // Serialize parameters
     let max_signatures = max_signatures_per_transaction.serialize_to_vec();
@@ -206,7 +212,7 @@ pub struct CtxPostStorageRead<'a> {
     _ctx: &'a Ctx,
 }
 
-/// Result of `VpEnv` or `storage_api::StorageRead` method call
+/// Result of `VpEnv` or `namada_storage::StorageRead` method call
 pub type EnvResult<T> = Result<T, Error>;
 
 /// Validity predicate result
@@ -285,6 +291,11 @@ impl<'view> VpEnv<'view> for Ctx {
     fn get_block_epoch(&self) -> Result<Epoch, Error> {
         // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
         get_block_epoch()
+    }
+
+    fn get_pred_epochs(&self) -> namada_storage::Result<storage::Epochs> {
+        // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
+        get_pred_epochs()
     }
 
     fn get_tx_index(&self) -> Result<TxIndex, Error> {
@@ -417,7 +428,11 @@ impl StorageRead for CtxPreStorageRead<'_> {
         get_block_epoch()
     }
 
-    fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error> {
+    fn get_pred_epochs(&self) -> namada_storage::Result<storage::Epochs> {
+        get_pred_epochs()
+    }
+
+    fn get_tx_index(&self) -> Result<TxIndex, Error> {
         get_tx_index()
     }
 
@@ -487,7 +502,11 @@ impl StorageRead for CtxPostStorageRead<'_> {
         get_block_epoch()
     }
 
-    fn get_tx_index(&self) -> Result<TxIndex, storage_api::Error> {
+    fn get_pred_epochs(&self) -> namada_storage::Result<storage::Epochs> {
+        get_pred_epochs()
+    }
+
+    fn get_tx_index(&self) -> Result<TxIndex, Error> {
         get_tx_index()
     }
 
@@ -558,8 +577,18 @@ fn get_block_epoch() -> Result<Epoch, Error> {
     Ok(Epoch(unsafe { namada_vp_get_block_epoch() }))
 }
 
-fn get_tx_index() -> Result<TxIndex, storage_api::Error> {
+fn get_tx_index() -> Result<TxIndex, Error> {
     Ok(TxIndex(unsafe { namada_vp_get_tx_index() }))
+}
+
+fn get_pred_epochs() -> Result<Epochs, Error> {
+    let read_result = unsafe { namada_vp_get_pred_epochs() };
+    let bytes = read_from_buffer(read_result, namada_vp_result_buffer).ok_or(
+        Error::SimpleMessage(
+            "Missing result from `namada_vp_get_pred_epochs` call",
+        ),
+    )?;
+    Ok(namada_core::types::decode(bytes).expect("Cannot decode pred epochs"))
 }
 
 fn get_native_token() -> Result<Address, Error> {

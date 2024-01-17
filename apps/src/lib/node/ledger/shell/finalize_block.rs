@@ -3,26 +3,26 @@
 use data_encoding::HEXUPPER;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
-use namada::core::ledger::masp_conversions::update_allowed_conversions;
-use namada::core::ledger::pgf::inflation as pgf_inflation;
+use namada::governance::pgf::inflation as pgf_inflation;
 use namada::ledger::events::EventType;
 use namada::ledger::gas::{GasMetering, TxGasMeter};
 use namada::ledger::pos::namada_proof_of_stake;
 use namada::ledger::protocol::{self, WrapperArgs};
-use namada::ledger::storage::wl_storage::WriteLogAndStorage;
-use namada::ledger::storage::write_log::StorageModification;
-use namada::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
-use namada::ledger::storage_api::{ResultExt, StorageRead, StorageWrite};
 use namada::proof_of_stake::storage::{
     find_validator_by_raw_hash, read_last_block_proposer_address,
     write_last_block_proposer_address,
 };
+use namada::state::wl_storage::WriteLogAndStorage;
+use namada::state::write_log::StorageModification;
+use namada::state::{
+    ResultExt, StorageRead, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY,
+};
+use namada::token::conversion::update_allowed_conversions;
+use namada::tx::data::protocol::ProtocolTxType;
 use namada::types::key::tm_raw_hash_to_string;
 use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
-use namada::types::transaction::protocol::{
-    ethereum_tx_data_variants, ProtocolTxType,
-};
-use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
+use namada::vote_ext::ethereum_events::MultiSignedEthEvent;
+use namada::vote_ext::ethereum_tx_data_variants;
 
 use super::governance::execute_governance_proposals;
 use super::*;
@@ -597,16 +597,15 @@ where
         tracing::info!("{}", stats.format_tx_executed());
 
         // Update the MASP commitment tree anchor if the tree was updated
-        let tree_key = namada::core::types::token::masp_commitment_tree_key();
+        let tree_key = token::storage_key::masp_commitment_tree_key();
         if let Some(StorageModification::Write { value }) =
             self.wl_storage.write_log.read(&tree_key).0
         {
             let updated_tree = CommitmentTree::<Node>::try_from_slice(value)
                 .into_storage_result()?;
-            let anchor_key =
-                namada::core::types::token::masp_commitment_anchor_key(
-                    updated_tree.root(),
-                );
+            let anchor_key = token::storage_key::masp_commitment_anchor_key(
+                updated_tree.root(),
+            );
             self.wl_storage.write(&anchor_key, ())?;
         }
 
@@ -710,7 +709,10 @@ where
         )?;
 
         // Pgf inflation
-        pgf_inflation::apply_inflation(&mut self.wl_storage)?;
+        pgf_inflation::apply_inflation(
+            &mut self.wl_storage,
+            namada::ibc::transfer_over_ibc,
+        )?;
         for ibc_event in self.wl_storage.write_log_mut().take_ibc_events() {
             let mut event = Event::from(ibc_event.clone());
             // Add the height for IBC event query
@@ -850,23 +852,19 @@ mod test_finalize_block {
     use std::str::FromStr;
 
     use data_encoding::HEXUPPER;
-    use namada::core::ledger::eth_bridge::storage::wrapped_erc20s;
-    use namada::core::ledger::governance::storage::keys::get_proposal_execution_key;
-    use namada::core::ledger::governance::storage::proposal::ProposalType;
-    use namada::core::ledger::governance::storage::vote::ProposalVote;
     use namada::core::ledger::replay_protection;
-    use namada::core::types::storage::KeySeg;
     use namada::eth_bridge::storage::bridge_pool::{
         self, get_key_from_hash, get_nonce_key, get_signed_root_key,
     };
     use namada::eth_bridge::storage::min_confirmations_key;
+    use namada::ethereum_bridge::storage::wrapped_erc20s;
+    use namada::governance::storage::keys::get_proposal_execution_key;
+    use namada::governance::storage::proposal::ProposalType;
+    use namada::governance::{InitProposalData, VoteProposalData};
     use namada::ledger::gas::VpGasMeter;
     use namada::ledger::native_vp::parameters::ParametersVp;
     use namada::ledger::native_vp::NativeVp;
     use namada::ledger::parameters::EpochDuration;
-    use namada::ledger::pos::PosQueries;
-    use namada::ledger::storage_api;
-    use namada::ledger::storage_api::StorageWrite;
     use namada::proof_of_stake::storage::{
         enqueued_slashes_handle, get_num_consensus_validators,
         read_consensus_validator_set_addresses_with_stake, read_total_stake,
@@ -881,26 +879,22 @@ mod test_finalize_block {
         BondId, SlashType, ValidatorState, WeightedValidator,
     };
     use namada::proof_of_stake::{unjail_validator, ADDRESS as pos_address};
-    use namada::proto::{Code, Data, Section, Signature};
+    use namada::state::StorageWrite;
+    use namada::token::{Amount, DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
+    use namada::tx::data::{Fee, WrapperTx};
+    use namada::tx::{Code, Data, Section, Signature};
     use namada::types::dec::{Dec, POS_DECIMAL_PRECISION};
     use namada::types::ethereum_events::{EthAddress, Uint as ethUint};
     use namada::types::hash::Hash;
     use namada::types::keccak::KeccakHash;
     use namada::types::key::testing::common_sk_from_simple_seed;
     use namada::types::key::tm_consensus_key_raw_hash;
-    use namada::types::storage::Epoch;
+    use namada::types::storage::{Epoch, KeySeg};
     use namada::types::time::{DateTimeUtc, DurationSecs};
-    use namada::types::token::{
-        Amount, DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES,
-    };
-    use namada::types::transaction::governance::{
-        InitProposalData, VoteProposalData,
-    };
-    use namada::types::transaction::protocol::EthereumTxData;
-    use namada::types::transaction::{Fee, WrapperTx};
     use namada::types::uint::Uint;
-    use namada::types::vote_extensions::ethereum_events;
+    use namada::vote_ext::{ethereum_events, EthereumTxData};
     use namada_sdk::eth_bridge::MinimumConfirmations;
+    use namada_sdk::governance::ProposalVote;
     use namada_sdk::proof_of_stake::storage::{
         liveness_missed_votes_handle, liveness_sum_missed_votes_handle,
         read_consensus_validator_set_addresses,
@@ -1010,7 +1004,7 @@ mod test_finalize_block {
         let mut valid_wrappers = vec![];
 
         // Add unshielded balance for fee paymenty
-        let balance_key = token::balance_key(
+        let balance_key = token::storage_key::balance_key(
             &shell.wl_storage.storage.native_token,
             &Address::from(&keypair.ref_to()),
         );
@@ -1195,7 +1189,7 @@ mod test_finalize_block {
         let mut valid_txs = vec![];
 
         // Add unshielded balance for fee payment
-        let balance_key = token::balance_key(
+        let balance_key = token::storage_key::balance_key(
             &shell.wl_storage.storage.native_token,
             &Address::from(&keypair.ref_to()),
         );
@@ -1407,7 +1401,7 @@ mod test_finalize_block {
         }
         .sign(&protocol_key);
         let processed_tx = ProcessedTx {
-            tx: EthereumTxData::EthEventsVext(ext)
+            tx: EthereumTxData::EthEventsVext(ext.into())
                 .sign(&protocol_key, shell.chain_id.clone())
                 .to_bytes()
                 .into(),
@@ -1517,11 +1511,11 @@ mod test_finalize_block {
             // add bertha's escrowed `asset` to the pool
             {
                 let token = wrapped_erc20s::token(&asset);
-                let owner_key = token::balance_key(
+                let owner_key = token::storage_key::balance_key(
                     &token,
                     &bridge_pool::BRIDGE_POOL_ADDRESS,
                 );
-                let supply_key = token::minted_balance_key(&token);
+                let supply_key = token::storage_key::minted_balance_key(&token);
                 let amt: Amount = 999_999_u64.into();
                 shell
                     .wl_storage
@@ -1535,7 +1529,7 @@ mod test_finalize_block {
             // add bertha's gas fees the pool
             {
                 let amt: Amount = 999_999_u64.into();
-                let pool_balance_key = token::balance_key(
+                let pool_balance_key = token::storage_key::balance_key(
                     &shell.wl_storage.storage.native_token,
                     &bridge_pool::BRIDGE_POOL_ADDRESS,
                 );
@@ -1546,7 +1540,7 @@ mod test_finalize_block {
             }
             // write transfer to storage
             let transfer = {
-                use namada::core::types::eth_bridge_pool::{
+                use namada::types::eth_bridge_pool::{
                     GasFee, PendingTransfer, TransferToEthereum,
                     TransferToEthereumKind,
                 };
@@ -1591,7 +1585,7 @@ mod test_finalize_block {
                 assert!(ext.verify(&protocol_key.ref_to()).is_ok());
                 ext
             };
-            let tx = EthereumTxData::EthEventsVext(ext)
+            let tx = EthereumTxData::EthEventsVext(ext.into())
                 .sign(&protocol_key, shell.chain_id.clone());
             (tx, TestBpAction::CheckNonceIncremented)
         });
@@ -1603,7 +1597,7 @@ mod test_finalize_block {
     fn test_bp_roots_protocol_tx() {
         test_bp(|shell: &mut TestShell| {
             let vext = shell.extend_vote_with_bp_roots().expect("Test failed");
-            let tx = EthereumTxData::BridgePoolVext(vext).sign(
+            let tx = EthereumTxData::BridgePoolVext(vext.into()).sign(
                 shell.mode.get_protocol_key().expect("Test failed"),
                 shell.chain_id.clone(),
             );
@@ -1632,7 +1626,7 @@ mod test_finalize_block {
 
         let txs_key = gen_keypair();
         // Add unshielded balance for fee payment
-        let balance_key = token::balance_key(
+        let balance_key = token::storage_key::balance_key(
             &shell.wl_storage.storage.native_token,
             &Address::from(&txs_key.ref_to()),
         );
@@ -1657,7 +1651,7 @@ mod test_finalize_block {
                 r#type: ProposalType::Default(None),
             };
 
-            storage_api::governance::init_proposal(
+            namada::governance::init_proposal(
                 &mut shell.wl_storage,
                 proposal,
                 vec![],
@@ -1673,7 +1667,7 @@ mod test_finalize_block {
             };
             // Vote to accept the proposal (there's only one validator, so its
             // vote decides)
-            storage_api::governance::vote_proposal(&mut shell.wl_storage, vote)
+            namada::governance::vote_proposal(&mut shell.wl_storage, vote)
                 .unwrap();
         };
 
@@ -2417,7 +2411,7 @@ mod test_finalize_block {
         let delegator = address::testing::gen_implicit_address();
         let del_amount = init_stake;
         let staking_token = shell.wl_storage.storage.native_token.clone();
-        storage_api::token::credit_tokens(
+        namada::token::credit_tokens(
             &mut shell.wl_storage,
             &staking_token,
             &delegator,
@@ -2542,21 +2536,21 @@ mod test_finalize_block {
 
         // Give the validators some tokens for txs
         let staking_token = shell.wl_storage.storage.native_token.clone();
-        storage_api::token::credit_tokens(
+        namada::token::credit_tokens(
             &mut shell.wl_storage,
             &staking_token,
             &validator1.address,
             init_stake,
         )
         .unwrap();
-        storage_api::token::credit_tokens(
+        namada::token::credit_tokens(
             &mut shell.wl_storage,
             &staking_token,
             &validator2.address,
             init_stake,
         )
         .unwrap();
-        storage_api::token::credit_tokens(
+        namada::token::credit_tokens(
             &mut shell.wl_storage,
             &staking_token,
             &validator3.address,
@@ -2918,8 +2912,7 @@ mod test_finalize_block {
         let (mut shell, _, _, _) = setup();
         let keypair = gen_keypair();
         let keypair_2 = gen_keypair();
-        let mut batch =
-            namada::core::ledger::storage::testing::TestStorage::batch();
+        let mut batch = namada::state::testing::TestStorage::batch();
 
         let tx_code = TestWasms::TxNoOp.read_bytes();
         let mut wrapper =
@@ -3038,8 +3031,7 @@ mod test_finalize_block {
     fn test_tx_hash_handling() {
         let (mut shell, _, _, _) = setup();
         let keypair = gen_keypair();
-        let mut batch =
-            namada::core::ledger::storage::testing::TestStorage::batch();
+        let mut batch = namada::state::testing::TestStorage::batch();
 
         let (out_of_gas_wrapper, _) = mk_wrapper_tx(&shell, &keypair);
         let (undecryptable_wrapper, _) = mk_wrapper_tx(&shell, &keypair);
@@ -3344,7 +3336,7 @@ mod test_finalize_block {
         assert_eq!(event.event_type.to_string(), String::from("accepted"));
         let code = event.attributes.get("code").expect("Testfailed").as_str();
         assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
-        let balance_key = namada::core::types::token::balance_key(
+        let balance_key = token::storage_key::balance_key(
             &shell.wl_storage.storage.native_token,
             &Address::from(&keypair.to_public()),
         );
@@ -3378,7 +3370,7 @@ mod test_finalize_block {
             .decode(consensus_key.tm_raw_hash().as_bytes())
             .unwrap();
 
-        let proposer_balance = storage_api::token::read_balance(
+        let proposer_balance = namada::token::read_balance(
             &shell.wl_storage,
             &shell.wl_storage.storage.native_token,
             &validator,
@@ -3414,14 +3406,14 @@ mod test_finalize_block {
         )));
         let fee_amount =
             wrapper.header().wrapper().unwrap().get_tx_fee().unwrap();
-        let fee_amount = fee_amount
-            .to_amount(
-                &wrapper.header().wrapper().unwrap().fee.token,
-                &shell.wl_storage,
-            )
-            .unwrap();
+        let fee_amount = namada::token::denom_to_amount(
+            fee_amount,
+            &wrapper.header().wrapper().unwrap().fee.token,
+            &shell.wl_storage,
+        )
+        .unwrap();
 
-        let signer_balance = storage_api::token::read_balance(
+        let signer_balance = namada::token::read_balance(
             &shell.wl_storage,
             &shell.wl_storage.storage.native_token,
             &wrapper.header().wrapper().unwrap().fee_payer(),
@@ -3449,7 +3441,7 @@ mod test_finalize_block {
         let code = event.attributes.get("code").expect("Test failed").as_str();
         assert_eq!(code, String::from(ResultCode::Ok).as_str());
 
-        let new_proposer_balance = storage_api::token::read_balance(
+        let new_proposer_balance = namada::token::read_balance(
             &shell.wl_storage,
             &shell.wl_storage.storage.native_token,
             &validator,
@@ -3460,7 +3452,7 @@ mod test_finalize_block {
             proposer_balance.checked_add(fee_amount).unwrap()
         );
 
-        let new_signer_balance = storage_api::token::read_balance(
+        let new_signer_balance = namada::token::read_balance(
             &shell.wl_storage,
             &shell.wl_storage.storage.native_token,
             &wrapper.header().wrapper().unwrap().fee_payer(),
@@ -3473,7 +3465,7 @@ mod test_finalize_block {
     }
 
     #[test]
-    fn test_ledger_slashing() -> storage_api::Result<()> {
+    fn test_ledger_slashing() -> namada::state::StorageResult<()> {
         let num_validators = 7_u64;
         let (mut shell, _recv, _, _) = setup_with_cfg(SetupCfg {
             last_height: 0,
@@ -3679,7 +3671,7 @@ mod test_finalize_block {
             }
         }
 
-        let num_slashes = storage_api::iter_prefix_bytes(
+        let num_slashes = namada::state::iter_prefix_bytes(
             &shell.wl_storage,
             &slashes_prefix(),
         )?
@@ -3844,7 +3836,7 @@ mod test_finalize_block {
     /// NOTE: must call `get_default_true_votes` before every call to
     /// `next_block_for_inflation`
     #[test]
-    fn test_multiple_misbehaviors() -> storage_api::Result<()> {
+    fn test_multiple_misbehaviors() -> namada::state::StorageResult<()> {
         for num_validators in &[4_u64, 6_u64, 9_u64] {
             tracing::debug!("\nNUM VALIDATORS = {}", num_validators);
             test_multiple_misbehaviors_by_num_vals(*num_validators)?;
@@ -3864,7 +3856,7 @@ mod test_finalize_block {
     /// 7) Discover misbehavior in epoch 4
     fn test_multiple_misbehaviors_by_num_vals(
         num_validators: u64,
-    ) -> storage_api::Result<()> {
+    ) -> namada::state::StorageResult<()> {
         // Setup the network with pipeline_len = 2, unbonding_len = 4
         // let num_validators = 8_u64;
         let (mut shell, _recv, _, _) = setup_with_cfg(SetupCfg {
@@ -3879,7 +3871,7 @@ mod test_finalize_block {
 
         // Slash pool balance
         let nam_address = shell.wl_storage.storage.native_token.clone();
-        let slash_balance_key = token::balance_key(
+        let slash_balance_key = token::storage_key::balance_key(
             &nam_address,
             &namada_proof_of_stake::SLASH_POOL_ADDRESS,
         );
@@ -3926,7 +3918,7 @@ mod test_finalize_block {
         let delegator = address::testing::gen_implicit_address();
         let del_1_amount = token::Amount::native_whole(37_231);
         let staking_token = shell.wl_storage.storage.native_token.clone();
-        storage_api::token::credit_tokens(
+        namada::token::credit_tokens(
             &mut shell.wl_storage,
             &staking_token,
             &delegator,
@@ -4681,7 +4673,8 @@ mod test_finalize_block {
     }
 
     #[test]
-    fn test_jail_validator_for_inactivity() -> storage_api::Result<()> {
+    fn test_jail_validator_for_inactivity() -> namada::state::StorageResult<()>
+    {
         let num_validators = 5_u64;
         let (mut shell, _recv, _, _) = setup_with_cfg(SetupCfg {
             last_height: 0,
@@ -5033,7 +5026,7 @@ mod test_finalize_block {
         // due to slashing
         let pos_balance_pre = shell
             .wl_storage
-            .read::<token::Amount>(&token::balance_key(
+            .read::<token::Amount>(&token::storage_key::balance_key(
                 &staking_token,
                 &pos_address,
             ))
@@ -5052,7 +5045,7 @@ mod test_finalize_block {
         }
         let pos_balance_post = shell
             .wl_storage
-            .read::<token::Amount>(&token::balance_key(
+            .read::<token::Amount>(&token::storage_key::balance_key(
                 &staking_token,
                 &pos_address,
             ))
@@ -5109,8 +5102,7 @@ mod test_finalize_block {
         // we advance forward to the next epoch
         let mut req = FinalizeBlock::default();
         req.header.time = namada::types::time::DateTimeUtc::now();
-        let current_decision_height =
-            shell.wl_storage.pos_queries().get_current_decision_height();
+        let current_decision_height = shell.get_current_decision_height();
         if let Some(b) = shell.wl_storage.storage.last_block.as_mut() {
             b.height = current_decision_height + 11;
         }

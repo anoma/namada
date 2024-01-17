@@ -1,17 +1,16 @@
 //! Implementation of the [`RequestPrepareProposal`] ABCI++ method for the Shell
 
 use namada::core::hints;
-use namada::core::ledger::gas::TxGasMeter;
-use namada::ledger::pos::PosQueries;
+use namada::gas::TxGasMeter;
 use namada::ledger::protocol::get_fee_unshielding_transaction;
-use namada::ledger::storage::{DBIter, StorageHasher, TempWlStorage, DB};
+use namada::ledger::storage::tx_queue::TxInQueue;
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
-use namada::proto::Tx;
+use namada::state::{DBIter, StorageHasher, TempWlStorage, DB};
+use namada::tx::data::{DecryptedTx, TxType};
+use namada::tx::Tx;
 use namada::types::address::Address;
-use namada::types::internal::TxInQueue;
 use namada::types::key::tm_raw_hash_to_string;
 use namada::types::time::DateTimeUtc;
-use namada::types::transaction::{DecryptedTx, TxType};
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::WasmCacheAccess;
 
@@ -102,15 +101,13 @@ where
     /// [`EncryptedTxBatchAllocator::WithEncryptedTxs`] value.
     #[inline]
     fn get_encrypted_txs_allocator(&self) -> EncryptedTxBatchAllocator {
-        let pos_queries = self.wl_storage.pos_queries();
-
-        let is_2nd_height_off = pos_queries.is_deciding_offset_within_epoch(1);
-        let is_3rd_height_off = pos_queries.is_deciding_offset_within_epoch(2);
+        let is_2nd_height_off = self.is_deciding_offset_within_epoch(1);
+        let is_3rd_height_off = self.is_deciding_offset_within_epoch(2);
 
         if hints::unlikely(is_2nd_height_off || is_3rd_height_off) {
             tracing::warn!(
                 proposal_height =
-                    ?pos_queries.get_current_decision_height(),
+                    ?self.wl_storage.storage.block.height,
                 "No mempool txs are being included in the current proposal"
             );
             EncryptedTxBatchAllocator::WithoutEncryptedTxs(
@@ -132,7 +129,6 @@ where
         block_time: Option<Timestamp>,
         block_proposer: &Address,
     ) -> (Vec<TxBytes>, BlockAllocator<BuildingDecryptedTxBatch>) {
-        let pos_queries = self.wl_storage.pos_queries();
         let block_time = block_time.and_then(|block_time| {
             // If error in conversion, default to last block datetime, it's
             // valid because of mempool check
@@ -165,7 +161,7 @@ where
                                     ?tx_bytes,
                                     bin_resource_left,
                                     proposal_height =
-                                        ?pos_queries.get_current_decision_height(),
+                                        ?self.get_current_decision_height(),
                                     "Dropping encrypted tx from the current proposal",
                                 );
                                 false
@@ -177,7 +173,7 @@ where
                                     ?tx_bytes,
                                     bin_resource,
                                     proposal_height =
-                                        ?pos_queries.get_current_decision_height(),
+                                        ?self.get_current_decision_height(),
                                     "Dropping large encrypted tx from the current proposal",
                                 );
                                 true
@@ -259,7 +255,6 @@ where
         &self,
         mut alloc: BlockAllocator<BuildingDecryptedTxBatch>,
     ) -> (Vec<TxBytes>, BlockAllocator<BuildingProtocolTxBatch>) {
-        let pos_queries = self.wl_storage.pos_queries();
         let txs = self
             .wl_storage
             .storage
@@ -284,7 +279,7 @@ where
                                 ?tx_bytes,
                                 bin_space_left,
                                 proposal_height =
-                                    ?pos_queries.get_current_decision_height(),
+                                    ?self.get_current_decision_height(),
                                 "Dropping decrypted tx from the current proposal",
                             );
                             false
@@ -294,7 +289,7 @@ where
                                 ?tx_bytes,
                                 bin_size,
                                 proposal_height =
-                                    ?pos_queries.get_current_decision_height(),
+                                    ?self.get_current_decision_height(),
                                 "Dropping large decrypted tx from the current proposal",
                             );
                             true
@@ -325,7 +320,6 @@ where
         }
 
         let deserialized_iter = self.deserialize_vote_extensions(txs);
-        let pos_queries = self.wl_storage.pos_queries();
 
         deserialized_iter.take_while(|tx_bytes|
             alloc.try_alloc(&tx_bytes[..])
@@ -344,7 +338,7 @@ where
                                 ?tx_bytes,
                                 bin_resource_left,
                                 proposal_height =
-                                    ?pos_queries.get_current_decision_height(),
+                                    ?self.get_current_decision_height(),
                                 "Dropping protocol tx from the current proposal",
                             );
                             false
@@ -356,7 +350,7 @@ where
                                 ?tx_bytes,
                                 bin_resource,
                                 proposal_height =
-                                    ?pos_queries.get_current_decision_height(),
+                                    ?self.get_current_decision_height(),
                                 "Dropping large protocol tx from the current proposal",
                             );
                             true
@@ -376,10 +370,6 @@ mod test_prepare_proposal {
     use std::collections::BTreeSet;
 
     use borsh_ext::BorshSerializeExt;
-    use namada::core::ledger::storage_api::collections::lazy_map::{
-        NestedSubKey, SubKey,
-    };
-    use namada::core::ledger::storage_api::token::read_denom;
     use namada::ledger::gas::Gas;
     use namada::ledger::pos::PosQueries;
     use namada::ledger::replay_protection;
@@ -389,24 +379,23 @@ mod test_prepare_proposal {
     };
     use namada::proof_of_stake::types::WeightedValidator;
     use namada::proof_of_stake::Epoch;
-    use namada::proto::{Code, Data, Header, Section, Signature, Signed};
+    use namada::state::collections::lazy_map::{NestedSubKey, SubKey};
+    use namada::token;
+    use namada::token::{read_denom, Amount, DenominatedAmount};
+    use namada::tx::data::{Fee, TxType, WrapperTx};
+    use namada::tx::{Code, Data, Header, Section, Signature, Signed};
     use namada::types::address::{self, Address};
     use namada::types::ethereum_events::EthereumEvent;
     use namada::types::key::RefTo;
     use namada::types::storage::{BlockHeight, InnerEthEventsQueue};
-    use namada::types::token;
-    use namada::types::token::{Amount, DenominatedAmount};
-    use namada::types::transaction::protocol::{
-        ethereum_tx_data_variants, EthereumTxData,
-    };
-    use namada::types::transaction::{Fee, TxType, WrapperTx};
-    use namada::types::vote_extensions::ethereum_events;
+    use namada::vote_ext::{ethereum_events, ethereum_tx_data_variants};
 
     use super::*;
     use crate::config::ValidatorLocalConfig;
     use crate::node::ledger::shell::test_utils::{
         self, gen_keypair, get_pkh_from_address, TestShell,
     };
+    use crate::node::ledger::shell::EthereumTxData;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;
 
@@ -415,7 +404,7 @@ mod test_prepare_proposal {
         shell: &TestShell,
         vext: Signed<ethereum_events::Vext>,
     ) {
-        let tx = EthereumTxData::EthEventsVext(vext)
+        let tx = EthereumTxData::EthEventsVext(vext.into())
             .sign(
                 shell.mode.get_protocol_key().expect("Test failed"),
                 shell.chain_id.clone(),
@@ -676,9 +665,10 @@ mod test_prepare_proposal {
         };
         shell.start_new_epoch(Some(req));
         assert_eq!(
-            shell.wl_storage.pos_queries().get_epoch(
-                shell.wl_storage.pos_queries().get_current_decision_height()
-            ),
+            shell
+                .wl_storage
+                .pos_queries()
+                .get_epoch(shell.get_current_decision_height()),
             Some(Epoch(1))
         );
 
@@ -701,10 +691,11 @@ mod test_prepare_proposal {
             ext
         };
 
-        let vote =
-            EthereumTxData::EthEventsVext(signed_eth_ev_vote_extension.clone())
-                .sign(&protocol_key, shell.chain_id.clone())
-                .to_bytes();
+        let vote = EthereumTxData::EthEventsVext(
+            signed_eth_ev_vote_extension.clone().into(),
+        )
+        .sign(&protocol_key, shell.chain_id.clone())
+        .to_bytes();
         let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
             txs: vec![vote.into()],
             ..Default::default()
@@ -719,7 +710,7 @@ mod test_prepare_proposal {
             _ => panic!("Test failed"),
         };
 
-        assert_eq!(signed_eth_ev_vote_extension, rsp_ext);
+        assert_eq!(signed_eth_ev_vote_extension, rsp_ext.0);
     }
 
     /// Test that the decrypted txs are included
@@ -733,7 +724,7 @@ mod test_prepare_proposal {
         let mut expected_decrypted = vec![];
 
         // Load some tokens to tx signer to pay fees
-        let balance_key = token::balance_key(
+        let balance_key = token::storage_key::balance_key(
             &shell.wl_storage.storage.native_token,
             &Address::from(&keypair.ref_to()),
         );
@@ -1047,8 +1038,7 @@ mod test_prepare_proposal {
         let (shell, _recv, _, _) = test_utils::setup();
 
         let block_gas_limit =
-            namada::core::ledger::gas::get_max_block_gas(&shell.wl_storage)
-                .unwrap();
+            namada::parameters::get_max_block_gas(&shell.wl_storage).unwrap();
         let keypair = gen_keypair();
 
         let wrapper = WrapperTx::new(
@@ -1133,7 +1123,7 @@ mod test_prepare_proposal {
             // Remove the allowed btc
             *local_config = Some(ValidatorLocalConfig {
                 accepted_gas_tokens: std::collections::HashMap::from([(
-                    namada::core::types::address::nam(),
+                    namada::types::address::nam(),
                     Amount::from(1),
                 )]),
             });
@@ -1239,7 +1229,7 @@ mod test_prepare_proposal {
             // Remove btc and increase minimum for nam
             *local_config = Some(ValidatorLocalConfig {
                 accepted_gas_tokens: std::collections::HashMap::from([(
-                    namada::core::types::address::nam(),
+                    namada::types::address::nam(),
                     Amount::from(100),
                 )]),
             });
@@ -1436,7 +1426,7 @@ mod test_prepare_proposal {
                 assert!(ext.verify(&protocol_key.ref_to()).is_ok());
                 ext
             };
-            let tx = EthereumTxData::EthEventsVext(ext)
+            let tx = EthereumTxData::EthEventsVext(ext.into())
                 .sign(&protocol_key, shell.chain_id.clone())
                 .to_bytes();
             let req = RequestPrepareProposal {
@@ -1484,7 +1474,7 @@ mod test_prepare_proposal {
                 assert!(ext.verify(&protocol_key.ref_to()).is_ok());
                 ext
             };
-            let tx = EthereumTxData::EthEventsVext(ext)
+            let tx = EthereumTxData::EthEventsVext(ext.into())
                 .sign(&protocol_key, shell.chain_id.clone())
                 .to_bytes();
             let req = RequestPrepareProposal {
@@ -1507,7 +1497,7 @@ mod test_prepare_proposal {
                 panic!("No ethereum events found in proposal");
             };
             assert_eq!(ext.data.ethereum_events.len(), 2);
-            let found_event = ext.data.ethereum_events.remove(1);
+            let found_event = ext.0.data.ethereum_events.remove(1);
             assert_eq!(found_event, event2);
         }
     }

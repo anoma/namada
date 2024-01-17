@@ -4,15 +4,18 @@ use std::collections::BTreeSet;
 use borsh_ext::BorshSerializeExt;
 use eyre::{eyre, WrapErr};
 use masp_primitives::transaction::Transaction;
-use namada_core::ledger::gas::TxGasMeter;
-use namada_core::ledger::storage::wl_storage::WriteLogAndStorage;
-use namada_core::ledger::storage_api::StorageRead;
-use namada_core::proto::Section;
 use namada_core::types::hash::Hash;
 use namada_core::types::storage::Key;
-use namada_core::types::token::Amount;
-use namada_core::types::transaction::WrapperTx;
+use namada_gas::TxGasMeter;
 use namada_sdk::tx::TX_TRANSFER_WASM;
+use namada_state::wl_storage::WriteLogAndStorage;
+use namada_state::StorageRead;
+use namada_tx::data::protocol::ProtocolTxType;
+use namada_tx::data::{
+    DecryptedTx, GasLimit, TxResult, TxType, VpsResult, WrapperTx,
+};
+use namada_tx::{Section, Tx};
+use namada_vote_ext::EthereumTxData;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
@@ -28,15 +31,12 @@ use crate::ledger::native_vp::parameters::{self, ParametersVp};
 use crate::ledger::native_vp::{self, NativeVp};
 use crate::ledger::pgf::PgfVp;
 use crate::ledger::pos::{self, PosVP};
-use crate::ledger::storage::write_log::WriteLog;
-use crate::ledger::storage::{DBIter, Storage, StorageHasher, WlStorage, DB};
-use crate::ledger::storage_api;
-use crate::proto::{self, Tx};
+use crate::state::write_log::WriteLog;
+use crate::state::{DBIter, State, StorageHasher, WlStorage, DB};
+use crate::token::Amount;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage;
 use crate::types::storage::TxIndex;
-use crate::types::transaction::protocol::{EthereumTxData, ProtocolTxType};
-use crate::types::transaction::{DecryptedTx, TxResult, TxType, VpsResult};
 use crate::vm::wasm::{TxCache, VpCache};
 use crate::vm::{self, wasm, WasmCacheAccess};
 
@@ -46,9 +46,7 @@ pub enum Error {
     #[error("Missing tx section: {0}")]
     MissingSection(String),
     #[error("Storage error: {0}")]
-    StorageError(crate::ledger::storage::Error),
-    #[error("Error decoding a transaction from bytes: {0}")]
-    TxDecodingError(proto::Error),
+    StorageError(namada_state::Error),
     #[error("Transaction runner error: {0}")]
     TxRunnerError(vm::wasm::run::Error),
     #[error("{0:?}")]
@@ -56,7 +54,7 @@ pub enum Error {
     #[error("Txs must either be encrypted or a decryption of an encrypted tx")]
     TxTypeError,
     #[error("Fee ushielding error: {0}")]
-    FeeUnshieldingError(crate::types::transaction::WrapperTxErr),
+    FeeUnshieldingError(namada_tx::data::WrapperTxErr),
     #[error("Gas error: {0}")]
     GasError(String),
     #[error("Error while processing transaction's fees: {0}")]
@@ -245,7 +243,7 @@ where
     CA: 'static + WasmCacheAccess + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
-    WLS: WriteLogAndStorage<D = D, H = H>,
+    WLS: WriteLogAndStorage<D = D, H = H> + StorageRead,
 {
     let mut changed_keys = BTreeSet::default();
 
@@ -308,7 +306,7 @@ where
     CA: 'static + WasmCacheAccess + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
-    WLS: WriteLogAndStorage<D = D, H = H>,
+    WLS: WriteLogAndStorage<D = D, H = H> + StorageRead,
 {
     let ShellParams {
         tx_gas_meter: _,
@@ -322,14 +320,14 @@ where
         // The unshielding tx does not charge gas, instantiate a
         // custom gas meter for this step
         let mut tx_gas_meter =
-            TxGasMeter::new(
+            TxGasMeter::new(GasLimit::from(
                 wl_storage
                     .read::<u64>(
-                        &namada_core::ledger::parameters::storage::get_fee_unshielding_gas_limit_key(
+                        &namada_parameters::storage::get_fee_unshielding_gas_limit_key(
                         ),
                     )
                     .expect("Error reading the storage")
-                    .expect("Missing fee unshielding gas limit in storage").into(),
+                    .expect("Missing fee unshielding gas limit in storage")),
             );
 
         // If it fails, do not return early
@@ -416,7 +414,7 @@ pub fn transfer_fee<WLS>(
 where
     WLS: WriteLogAndStorage + StorageRead,
 {
-    let balance = storage_api::token::read_balance(
+    let balance = crate::token::read_balance(
         wl_storage,
         &wrapper.fee.token,
         &wrapper.fee_payer(),
@@ -425,9 +423,12 @@ where
 
     match wrapper.get_tx_fee() {
         Ok(fees) => {
-            let fees = fees
-                .to_amount(&wrapper.fee.token, wl_storage)
-                .map_err(|e| Error::FeeError(e.to_string()))?;
+            let fees = crate::token::denom_to_amount(
+                fees,
+                &wrapper.fee.token,
+                wl_storage,
+            )
+            .map_err(|e| Error::FeeError(e.to_string()))?;
             if balance.checked_sub(fees).is_some() {
                 token_transfer(
                     wl_storage,
@@ -481,7 +482,7 @@ where
 /// Transfer `token` from `src` to `dest`. Returns an `Err` if `src` has
 /// insufficient balance or if the transfer the `dest` would overflow (This can
 /// only happen if the total supply doesn't fit in `token::Amount`). Contrary to
-/// `storage_api::token::transfer` this function updates the tx write log and
+/// `crate::token::transfer` this function updates the tx write log and
 /// not the block write log.
 fn token_transfer<WLS>(
     wl_storage: &mut WLS,
@@ -493,22 +494,18 @@ fn token_transfer<WLS>(
 where
     WLS: WriteLogAndStorage + StorageRead,
 {
-    let src_key = namada_core::types::token::balance_key(token, src);
-    let src_balance = namada_core::ledger::storage_api::token::read_balance(
-        wl_storage, token, src,
-    )
-    .expect("Token balance read in protocol must not fail");
+    let src_key = crate::token::storage_key::balance_key(token, src);
+    let src_balance = crate::token::read_balance(wl_storage, token, src)
+        .expect("Token balance read in protocol must not fail");
     match src_balance.checked_sub(amount) {
         Some(new_src_balance) => {
             if src == dest {
                 return Ok(());
             }
-            let dest_key = namada_core::types::token::balance_key(token, dest);
+            let dest_key = crate::token::storage_key::balance_key(token, dest);
             let dest_balance =
-                namada_core::ledger::storage_api::token::read_balance(
-                    wl_storage, token, dest,
-                )
-                .expect("Token balance read in protocol must not fail");
+                crate::token::read_balance(wl_storage, token, dest)
+                    .expect("Token balance read in protocol must not fail");
             match dest_balance.checked_add(amount) {
                 Some(new_dest_balance) => {
                     wl_storage
@@ -538,7 +535,7 @@ pub fn check_fees<WLS>(wl_storage: &WLS, wrapper: &WrapperTx) -> Result<()>
 where
     WLS: WriteLogAndStorage + StorageRead,
 {
-    let balance = storage_api::token::read_balance(
+    let balance = crate::token::read_balance(
         wl_storage,
         &wrapper.fee.token,
         &wrapper.fee_payer(),
@@ -549,9 +546,9 @@ where
         .get_tx_fee()
         .map_err(|e| Error::FeeError(e.to_string()))?;
 
-    let fees = fees
-        .to_amount(&wrapper.fee.token, wl_storage)
-        .map_err(|e| Error::FeeError(e.to_string()))?;
+    let fees =
+        crate::token::denom_to_amount(fees, &wrapper.fee.token, wl_storage)
+            .map_err(|e| Error::FeeError(e.to_string()))?;
     if balance.checked_sub(fees).is_some() {
         Ok(())
     } else {
@@ -572,7 +569,7 @@ where
     CA: 'static + WasmCacheAccess + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
-    WLS: WriteLogAndStorage<D = D, H = H>,
+    WLS: WriteLogAndStorage<D = D, H = H> + StorageRead,
 {
     let ShellParams {
         tx_gas_meter,
@@ -650,10 +647,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     use namada_ethereum_bridge::protocol::transactions;
-
-    use crate::types::vote_extensions::{
-        ethereum_events, validator_set_update,
-    };
+    use namada_vote_ext::{ethereum_events, validator_set_update};
 
     let Some(data) = data else {
         return Err(Error::ProtocolTxError(
@@ -670,7 +664,9 @@ where
         .map_err(Error::ProtocolTxError)?;
 
     match ethereum_tx_data {
-        EthereumTxData::EthEventsVext(ext) => {
+        EthereumTxData::EthEventsVext(
+            namada_vote_ext::ethereum_events::SignedVext(ext),
+        ) => {
             let ethereum_events::VextDigest { events, .. } =
                 ethereum_events::VextDigest::singleton(ext);
             transactions::ethereum_events::apply_derived_tx(storage, events)
@@ -715,7 +711,7 @@ where
 fn execute_tx<D, H, CA>(
     tx: &Tx,
     tx_index: &TxIndex,
-    storage: &Storage<D, H>,
+    storage: &State<D, H>,
     tx_gas_meter: &mut TxGasMeter,
     write_log: &mut WriteLog,
     vp_wasm_cache: &mut VpCache<CA>,
@@ -751,7 +747,7 @@ where
 {
     tx: &'a Tx,
     tx_index: &'a TxIndex,
-    storage: &'a Storage<D, H>,
+    storage: &'a State<D, H>,
     tx_gas_meter: &'a mut TxGasMeter,
     write_log: &'a WriteLog,
     verifiers_from_tx: &'a BTreeSet<Address>,
@@ -804,7 +800,7 @@ fn execute_vps<D, H, CA>(
     keys_changed: BTreeSet<storage::Key>,
     tx: &Tx,
     tx_index: &TxIndex,
-    storage: &Storage<D, H>,
+    storage: &State<D, H>,
     write_log: &WriteLog,
     tx_gas_meter: &TxGasMeter,
     vp_wasm_cache: &mut VpCache<CA>,
@@ -1122,17 +1118,12 @@ mod tests {
 
     use borsh::BorshDeserialize;
     use eyre::Result;
-    use namada_core::ledger::storage_api::StorageRead;
-    use namada_core::proto::{SignableEthMessage, Signed};
     use namada_core::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
     use namada_core::types::ethereum_events::{
         EthereumEvent, TransferToNamada,
     };
     use namada_core::types::keccak::keccak_hash;
     use namada_core::types::storage::BlockHeight;
-    use namada_core::types::token::Amount;
-    use namada_core::types::vote_extensions::bridge_pool_roots::BridgePoolRootVext;
-    use namada_core::types::vote_extensions::ethereum_events::EthereumEventsVext;
     use namada_core::types::voting_power::FractionalVotingPower;
     use namada_core::types::{address, key};
     use namada_ethereum_bridge::protocol::transactions::votes::{
@@ -1142,6 +1133,11 @@ mod tests {
     use namada_ethereum_bridge::storage::proof::EthereumProof;
     use namada_ethereum_bridge::storage::{vote_tallies, vp};
     use namada_ethereum_bridge::test_utils;
+    use namada_state::StorageRead;
+    use namada_token::Amount;
+    use namada_tx::{SignableEthMessage, Signed};
+    use namada_vote_ext::bridge_pool_roots::BridgePoolRootVext;
+    use namada_vote_ext::ethereum_events::EthereumEventsVext;
 
     use super::*;
 
@@ -1189,7 +1185,9 @@ mod tests {
         };
         let signing_key = key::testing::keypair_1();
         let signed = vext.sign(&signing_key);
-        let tx = EthereumTxData::EthEventsVext(signed);
+        let tx = EthereumTxData::EthEventsVext(
+            namada_vote_ext::ethereum_events::SignedVext(signed),
+        );
 
         apply_eth_tx(tx.clone(), &mut wl_storage)?;
         apply_eth_tx(tx, &mut wl_storage)?;

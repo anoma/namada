@@ -6,6 +6,8 @@ use ibc_testkit::testapp::ibc::clients::mock::client_state::{
 };
 use ibc_testkit::testapp::ibc::clients::mock::consensus_state::MockConsensusState;
 use ibc_testkit::testapp::ibc::clients::mock::header::MockHeader;
+use namada::gas::TxGasMeter;
+use namada::governance::parameters::GovernanceParameters;
 use namada::ibc::apps::transfer::types::error::TokenTransferError;
 use namada::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
 use namada::ibc::apps::transfer::types::packet::PacketData;
@@ -66,24 +68,22 @@ use namada::ledger::parameters::storage::{
 };
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::storage::mockdb::MockDB;
-use namada::ledger::storage::traits::Sha256Hasher;
 use namada::ledger::tx_env::TxEnv;
 use namada::ledger::{ibc, pos};
 use namada::proof_of_stake::OwnedPosParams;
-use namada::proto::Tx;
+use namada::state::Sha256Hasher;
 use namada::tendermint::time::Time as TmTime;
+use namada::token::{self, Amount, DenominatedAmount};
+use namada::tx::Tx;
 use namada::types::address::{self, Address, InternalAddress};
 use namada::types::hash::Hash;
 use namada::types::storage::{
     self, BlockHash, BlockHeight, Epoch, Key, TxIndex,
 };
 use namada::types::time::DurationSecs;
-use namada::types::token::{self, Amount, DenominatedAmount};
 use namada::vm::{wasm, WasmCacheRwAccess};
-use namada_core::ledger::gas::TxGasMeter;
-use namada_core::ledger::governance::parameters::GovernanceParameters;
 use namada_test_utils::TestWasms;
-use namada_tx_prelude::borsh_ext::BorshSerializeExt;
+use namada_tx_prelude::BorshSerializeExt;
 
 use crate::tx::*;
 
@@ -235,11 +235,11 @@ pub fn init_storage() -> (Address, Address) {
 
     // initialize a token
     let token = tx_host_env::ctx().init_account(code_hash, &None).unwrap();
-    let denom_key = token::denom_key(&token);
+    let denom_key = token::storage_key::denom_key(&token);
     let token_denom = token::Denomination(ANY_DENOMINATION);
     // initialize an account
     let account = tx_host_env::ctx().init_account(code_hash, &None).unwrap();
-    let key = token::balance_key(&token, &account);
+    let key = token::storage_key::balance_key(&token, &account);
     let init_bal = Amount::from_uint(100, token_denom).unwrap();
     tx_host_env::with(|env| {
         env.wl_storage
@@ -266,7 +266,7 @@ pub fn init_storage() -> (Address, Address) {
     // max_expected_time_per_block
     let time = DurationSecs::from(Duration::new(60, 0));
     let key = get_max_expected_time_per_block_key();
-    let bytes = namada::ledger::storage::types::encode(&time);
+    let bytes = namada::types::encode(&time);
     tx_host_env::with(|env| {
         env.wl_storage.storage.write(&key, &bytes).unwrap();
     });
@@ -768,7 +768,7 @@ pub fn packet_from_message(
 
 pub fn balance_key_with_ibc_prefix(denom: String, owner: &Address) -> Key {
     let ibc_token = ibc_token(denom);
-    token::balance_key(&ibc_token, owner)
+    token::storage_key::balance_key(&ibc_token, owner)
 }
 
 pub fn transfer_ack_with_error() -> AcknowledgementStatus {

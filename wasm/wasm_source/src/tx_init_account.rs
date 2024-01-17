@@ -10,7 +10,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         ctx.set_commitment_sentinel();
         err
     })?;
-    let tx_data = transaction::account::InitAccount::try_from_slice(&data[..])
+    let tx_data = account::InitAccount::try_from_slice(&data[..])
         .wrap_err("failed to decode InitAccount")?;
     debug_log!("apply_tx called to init a new established account");
 

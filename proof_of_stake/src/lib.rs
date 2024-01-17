@@ -27,17 +27,14 @@ use std::cmp::{self};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 pub use error::*;
-use namada_core::ledger::storage_api::collections::lazy_map::{
-    Collectable, LazyMap, NestedSubKey, SubKey,
-};
-use namada_core::ledger::storage_api::{
-    self, token, StorageRead, StorageWrite,
-};
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::dec::Dec;
 use namada_core::types::key::common;
 use namada_core::types::storage::BlockHeight;
 pub use namada_core::types::storage::{Epoch, Key, KeySeg};
+use namada_storage::collections::lazy_map::{self, Collectable, LazyMap};
+use namada_storage::{StorageRead, StorageWrite};
+pub use namada_trans_token as token;
 pub use parameters::{OwnedPosParams, PosParams};
 
 use crate::queries::{find_bonds, has_bonds};
@@ -106,7 +103,7 @@ pub fn init_genesis<S>(
     storage: &mut S,
     params: &OwnedPosParams,
     current_epoch: Epoch,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -127,7 +124,7 @@ pub fn copy_genesis_validator_sets<S>(
     storage: &mut S,
     params: &OwnedPosParams,
     current_epoch: Epoch,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -149,7 +146,7 @@ where
 pub fn is_validator<S>(
     storage: &S,
     address: &Address,
-) -> storage_api::Result<bool>
+) -> namada_storage::Result<bool>
 where
     S: StorageRead,
 {
@@ -165,14 +162,14 @@ pub fn is_delegator<S>(
     storage: &S,
     address: &Address,
     epoch: Option<namada_core::types::storage::Epoch>,
-) -> storage_api::Result<bool>
+) -> namada_storage::Result<bool>
 where
     S: StorageRead,
 {
     let prefix = bonds_for_source_prefix(address);
     match epoch {
         Some(epoch) => {
-            let iter = storage_api::iter_prefix_bytes(storage, &prefix)?;
+            let iter = namada_storage::iter_prefix_bytes(storage, &prefix)?;
             for res in iter {
                 let (key, _) = res?;
                 if let Some((bond_id, bond_epoch)) = is_bond_key(&key) {
@@ -186,7 +183,7 @@ where
             Ok(false)
         }
         None => {
-            let iter = storage_api::iter_prefix_bytes(storage, &prefix)?;
+            let iter = namada_storage::iter_prefix_bytes(storage, &prefix)?;
             for res in iter {
                 let (key, _) = res?;
                 if let Some((bond_id, _epoch)) = is_bond_key(&key) {
@@ -210,7 +207,7 @@ pub fn bond_tokens<S>(
     amount: token::Amount,
     current_epoch: Epoch,
     offset_opt: Option<u64>,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -307,7 +304,7 @@ where
 fn compute_total_consensus_stake<S>(
     storage: &S,
     epoch: Epoch,
-) -> storage_api::Result<token::Amount>
+) -> namada_storage::Result<token::Amount>
 where
     S: StorageRead,
 {
@@ -317,7 +314,7 @@ where
         .fold(Ok(token::Amount::zero()), |acc, entry| {
             let acc = acc?;
             let (
-                NestedSubKey::Data {
+                lazy_map::NestedSubKey::Data {
                     key: amount,
                     nested_sub_key: _,
                 },
@@ -333,7 +330,7 @@ where
 pub fn compute_and_store_total_consensus_stake<S>(
     storage: &mut S,
     epoch: Epoch,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -366,7 +363,7 @@ pub fn unbond_tokens<S>(
     amount: token::Amount,
     current_epoch: Epoch,
     is_redelegation: bool,
-) -> storage_api::Result<ResultSlashing>
+) -> namada_storage::Result<ResultSlashing>
 where
     S: StorageRead + StorageWrite,
 {
@@ -826,7 +823,7 @@ fn find_bonds_to_remove<S>(
     storage: &S,
     bonds_handle: &LazyMap<Epoch, token::Amount>,
     amount: token::Amount,
-) -> storage_api::Result<BondsForRemovalRes>
+) -> namada_storage::Result<BondsForRemovalRes>
 where
     S: StorageRead,
 {
@@ -870,7 +867,7 @@ fn compute_modified_redelegation<S>(
     redelegated_bonds: &RedelegatedTokens,
     start_epoch: Epoch,
     amount_to_unbond: token::Amount,
-) -> storage_api::Result<ModifiedRedelegation>
+) -> namada_storage::Result<ModifiedRedelegation>
 where
     S: StorageRead,
 {
@@ -880,7 +877,7 @@ where
     let mut total_redelegated = token::Amount::zero();
     for rb in redelegated_bonds.iter(storage)? {
         let (
-            NestedSubKey::Data {
+            lazy_map::NestedSubKey::Data {
                 key: src_validator,
                 nested_sub_key: _,
             },
@@ -910,7 +907,7 @@ where
                 let (_, amount) = res?;
                 Ok(amount)
             })
-            .sum::<storage_api::Result<token::Amount>>()?;
+            .sum::<namada_storage::Result<token::Amount>>()?;
 
         // TODO: move this into the `if total_redelegated <= remaining` branch
         // below, then we don't have to remove it in `fn
@@ -965,7 +962,7 @@ fn update_redelegated_bonds<S>(
     storage: &mut S,
     redelegated_bonds: &RedelegatedTokens,
     modified_redelegation: &ModifiedRedelegation,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -1041,7 +1038,7 @@ fn compute_new_redelegated_unbonds<S>(
     redelegated_bonds: &RedelegatedBondsOrUnbonds,
     epochs_to_remove: &BTreeSet<Epoch>,
     modified: &ModifiedRedelegation,
-) -> storage_api::Result<EagerRedelegatedUnbonds>
+) -> namada_storage::Result<EagerRedelegatedUnbonds>
 where
     S: StorageRead + StorageWrite,
 {
@@ -1096,9 +1093,9 @@ where
             {
                 for res in redelegated_bonds.at(&start).iter(storage).unwrap() {
                     let (
-                        NestedSubKey::Data {
+                        lazy_map::NestedSubKey::Data {
                             key: validator,
-                            nested_sub_key: SubKey::Data(epoch),
+                            nested_sub_key: lazy_map::SubKey::Data(epoch),
                         },
                         amount,
                     ) = res.unwrap();
@@ -1197,7 +1194,7 @@ pub struct BecomeValidator<'a> {
 pub fn become_validator<S>(
     storage: &mut S,
     args: BecomeValidator<'_>,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -1217,14 +1214,14 @@ where
     let offset = offset_opt.unwrap_or(params.pipeline_len);
 
     if !address.is_established() {
-        return Err(storage_api::Error::new_const(
+        return Err(namada_storage::Error::new_const(
             "The given address {address} is not established. Only an \
              established address can become a validator.",
         ));
     }
 
     if is_validator(storage, address)? {
-        return Err(storage_api::Error::new_const(
+        return Err(namada_storage::Error::new_const(
             "The given address is already a validator",
         ));
     }
@@ -1232,7 +1229,7 @@ where
     // If the address is not yet a validator, it cannot have self-bonds, but it
     // may have delegations.
     if has_bonds(storage, address)? {
-        return Err(storage_api::Error::new_const(
+        return Err(namada_storage::Error::new_const(
             "The given address has delegations and therefore cannot become a \
              validator. Unbond first.",
         ));
@@ -1320,7 +1317,7 @@ pub fn change_consensus_key<S>(
     validator: &Address,
     consensus_key: &common::PublicKey,
     current_epoch: Epoch,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -1358,7 +1355,7 @@ pub fn withdraw_tokens<S>(
     source: Option<&Address>,
     validator: &Address,
     current_epoch: Epoch,
-) -> storage_api::Result<token::Amount>
+) -> namada_storage::Result<token::Amount>
 where
     S: StorageRead + StorageWrite,
 {
@@ -1388,9 +1385,9 @@ where
 
     for unbond in unbond_handle.iter(storage)? {
         let (
-            NestedSubKey::Data {
+            lazy_map::NestedSubKey::Data {
                 key: start_epoch,
-                nested_sub_key: SubKey::Data(withdraw_epoch),
+                nested_sub_key: lazy_map::SubKey::Data(withdraw_epoch),
             },
             amount,
         ) = unbond?;
@@ -1413,9 +1410,9 @@ where
             redelegated_unbonds.at(&start_epoch).at(&withdraw_epoch);
         for ub in matching_redelegated_unbonds.iter(storage)? {
             let (
-                NestedSubKey::Data {
+                lazy_map::NestedSubKey::Data {
                     key: address,
-                    nested_sub_key: SubKey::Data(epoch),
+                    nested_sub_key: lazy_map::SubKey::Data(epoch),
                 },
                 amount,
             ) = ub?;
@@ -1497,7 +1494,7 @@ pub fn change_validator_commission_rate<S>(
     validator: &Address,
     new_rate: Dec,
     current_epoch: Epoch,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -1559,7 +1556,7 @@ pub fn bond_amount<S>(
     storage: &S,
     bond_id: &BondId,
     epoch: Epoch,
-) -> storage_api::Result<token::Amount>
+) -> namada_storage::Result<token::Amount>
 where
     S: StorageRead,
 {
@@ -1582,9 +1579,9 @@ where
     let unbonds = unbond_handle(&bond_id.source, &bond_id.validator);
     for next in unbonds.iter(storage)? {
         let (
-            NestedSubKey::Data {
+            lazy_map::NestedSubKey::Data {
                 key: start,
-                nested_sub_key: SubKey::Data(withdrawable_epoch),
+                nested_sub_key: lazy_map::SubKey::Data(withdrawable_epoch),
             },
             delta,
         ) = next?;
@@ -1607,15 +1604,16 @@ where
             delegator_redelegated_bonds_handle(&bond_id.source);
         for res in redelegated_bonds.iter(storage)? {
             let (
-                NestedSubKey::Data {
+                lazy_map::NestedSubKey::Data {
                     key: _dest_validator,
                     nested_sub_key:
-                        NestedSubKey::Data {
+                        lazy_map::NestedSubKey::Data {
                             key: end,
                             nested_sub_key:
-                                NestedSubKey::Data {
+                                lazy_map::NestedSubKey::Data {
                                     key: src_validator,
-                                    nested_sub_key: SubKey::Data(start),
+                                    nested_sub_key:
+                                        lazy_map::SubKey::Data(start),
                                 },
                         },
                 },
@@ -1636,18 +1634,19 @@ where
             delegator_redelegated_unbonds_handle(&bond_id.source);
         for res in redelegated_unbonds.iter(storage)? {
             let (
-                NestedSubKey::Data {
+                lazy_map::NestedSubKey::Data {
                     key: _dest_validator,
                     nested_sub_key:
-                        NestedSubKey::Data {
+                        lazy_map::NestedSubKey::Data {
                             key: redelegation_epoch,
                             nested_sub_key:
-                                NestedSubKey::Data {
+                                lazy_map::NestedSubKey::Data {
                                     key: _withdraw_epoch,
                                     nested_sub_key:
-                                        NestedSubKey::Data {
+                                        lazy_map::NestedSubKey::Data {
                                             key: src_validator,
-                                            nested_sub_key: SubKey::Data(start),
+                                            nested_sub_key:
+                                                lazy_map::SubKey::Data(start),
                                         },
                                 },
                         },
@@ -1730,7 +1729,7 @@ pub fn bond_amounts_for_rewards<S>(
     bond_id: &BondId,
     claim_start: Epoch,
     claim_end: Epoch,
-) -> storage_api::Result<BTreeMap<Epoch, token::Amount>>
+) -> namada_storage::Result<BTreeMap<Epoch, token::Amount>>
 where
     S: StorageRead,
 {
@@ -1825,7 +1824,7 @@ pub fn genesis_validator_set_tendermint<S, T>(
     params: &PosParams,
     current_epoch: Epoch,
     mut f: impl FnMut(ValidatorSetUpdate) -> T,
-) -> storage_api::Result<Vec<T>>
+) -> namada_storage::Result<Vec<T>>
 where
     S: StorageRead,
 {
@@ -1835,7 +1834,7 @@ where
 
     iter.map(|validator| {
         let (
-            NestedSubKey::Data {
+            lazy_map::NestedSubKey::Data {
                 key: new_stake,
                 nested_sub_key: _,
             },
@@ -1858,7 +1857,7 @@ pub fn unjail_validator<S>(
     storage: &mut S,
     validator: &Address,
     current_epoch: Epoch,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -1923,7 +1922,7 @@ pub fn is_validator_frozen<S>(
     validator: &Address,
     current_epoch: Epoch,
     params: &PosParams,
-) -> storage_api::Result<bool>
+) -> namada_storage::Result<bool>
 where
     S: StorageRead,
 {
@@ -1944,7 +1943,7 @@ pub fn get_total_consensus_stake<S>(
     storage: &S,
     epoch: Epoch,
     params: &PosParams,
-) -> storage_api::Result<token::Amount>
+) -> namada_storage::Result<token::Amount>
 where
     S: StorageRead,
 {
@@ -1961,7 +1960,7 @@ pub fn redelegate_tokens<S>(
     dest_validator: &Address,
     current_epoch: Epoch,
     amount: token::Amount,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -2167,7 +2166,7 @@ pub fn deactivate_validator<S>(
     storage: &mut S,
     validator: &Address,
     current_epoch: Epoch,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -2247,7 +2246,7 @@ pub fn reactivate_validator<S>(
     storage: &mut S,
     validator: &Address,
     current_epoch: Epoch,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -2315,7 +2314,7 @@ where
 pub fn prune_liveness_data<S>(
     storage: &mut S,
     current_epoch: Epoch,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -2352,7 +2351,7 @@ pub fn record_liveness_data<S>(
     votes_epoch: Epoch,
     votes_height: BlockHeight,
     pos_params: &PosParams,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -2429,7 +2428,7 @@ pub fn jail_for_liveness<S>(
     params: &PosParams,
     current_epoch: Epoch,
     jail_epoch: Epoch,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -2438,7 +2437,7 @@ where
         * params.liveness_window_check)
         .to_uint()
         .ok_or_else(|| {
-            storage_api::Error::SimpleMessage(
+            namada_storage::Error::SimpleMessage(
                 "Found negative liveness threshold",
             )
         })?
@@ -2482,9 +2481,9 @@ where
 #[cfg(any(test, feature = "testing"))]
 /// PoS related utility functions to help set up tests.
 pub mod test_utils {
-    use namada_core::ledger::storage_api;
-    use namada_core::ledger::storage_api::token::credit_tokens;
-    use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
+    use namada_storage;
+    use namada_storage::{StorageRead, StorageWrite};
+    use namada_trans_token::credit_tokens;
 
     use super::*;
     use crate::parameters::PosParams;
@@ -2498,7 +2497,7 @@ pub mod test_utils {
         params: &PosParams,
         validators: impl Iterator<Item = GenesisValidator>,
         current_epoch: namada_core::types::storage::Epoch,
-    ) -> storage_api::Result<()>
+    ) -> namada_storage::Result<()>
     where
         S: StorageRead + StorageWrite,
     {
@@ -2561,11 +2560,12 @@ pub mod test_utils {
         owned: OwnedPosParams,
         validators: impl Iterator<Item = GenesisValidator> + Clone,
         current_epoch: namada_core::types::storage::Epoch,
-    ) -> storage_api::Result<PosParams>
+    ) -> namada_storage::Result<PosParams>
     where
         S: StorageRead + StorageWrite,
     {
-        let gov_params = namada_core::ledger::governance::parameters::GovernanceParameters::default();
+        let gov_params =
+            namada_governance::parameters::GovernanceParameters::default();
         gov_params.init_storage(storage)?;
         let params = read_non_pos_owned_params(storage, owned)?;
         init_genesis_helper(storage, &params, validators, current_epoch)?;
@@ -2587,7 +2587,7 @@ pub fn change_validator_metadata<S>(
     avatar: Option<String>,
     commission_rate: Option<Dec>,
     current_epoch: Epoch,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -2624,7 +2624,7 @@ pub fn claim_reward_tokens<S>(
     source: Option<&Address>,
     validator: &Address,
     current_epoch: Epoch,
-) -> storage_api::Result<token::Amount>
+) -> namada_storage::Result<token::Amount>
 where
     S: StorageRead + StorageWrite,
 {
@@ -2659,7 +2659,7 @@ pub fn query_reward_tokens<S>(
     source: Option<&Address>,
     validator: &Address,
     current_epoch: Epoch,
-) -> storage_api::Result<token::Amount>
+) -> namada_storage::Result<token::Amount>
 where
     S: StorageRead,
 {
@@ -2686,7 +2686,7 @@ fn jail_validator<S>(
     validator: &Address,
     current_epoch: Epoch,
     validator_set_update_epoch: Epoch,
-) -> storage_api::Result<()>
+) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {

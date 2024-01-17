@@ -137,7 +137,7 @@ pub struct Rfc3339String(pub String);
 #[serde(try_from = "Rfc3339String", into = "Rfc3339String")]
 pub struct DateTimeUtc(pub DateTime<Utc>);
 
-/// The minimum possible DateTime<Utc>.
+/// The minimum possible `DateTime<Utc>`.
 pub const MIN_UTC: DateTimeUtc = DateTimeUtc(chrono::DateTime::<Utc>::MIN_UTC);
 
 impl Display for DateTimeUtc {

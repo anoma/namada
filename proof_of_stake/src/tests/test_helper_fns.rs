@@ -1,14 +1,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use namada_core::ledger::storage::testing::TestWlStorage;
-use namada_core::ledger::storage_api::collections::lazy_map::NestedMap;
-use namada_core::ledger::storage_api::collections::LazyCollection;
 use namada_core::types::address::testing::{
     established_address_1, established_address_2, established_address_3,
 };
 use namada_core::types::dec::Dec;
 use namada_core::types::storage::{Epoch, Key};
 use namada_core::types::token;
+use namada_state::testing::TestWlStorage;
+use namada_storage::collections::lazy_map::NestedMap;
+use namada_storage::collections::LazyCollection;
 
 use crate::slashing::{
     apply_list_slashes, compute_amount_after_slashing_unbond,
@@ -36,7 +36,8 @@ use crate::{
 #[test]
 fn test_find_bonds_to_remove() {
     let mut storage = TestWlStorage::default();
-    let gov_params = namada_core::ledger::governance::parameters::GovernanceParameters::default();
+    let gov_params =
+        namada_governance::parameters::GovernanceParameters::default();
     gov_params.init_storage(&mut storage).unwrap();
     write_pos_params(&mut storage, &OwnedPosParams::default()).unwrap();
 
@@ -1102,7 +1103,8 @@ fn test_slash_validator_redelegation() {
         unbonding_len: 4,
         ..Default::default()
     };
-    let gov_params = namada_core::ledger::governance::parameters::GovernanceParameters::default();
+    let gov_params =
+        namada_governance::parameters::GovernanceParameters::default();
     gov_params.init_storage(&mut storage).unwrap();
     write_pos_params(&mut storage, &params).unwrap();
 
@@ -1283,7 +1285,8 @@ fn test_slash_validator() {
         unbonding_len: 4,
         ..Default::default()
     };
-    let gov_params = namada_core::ledger::governance::parameters::GovernanceParameters::default();
+    let gov_params =
+        namada_governance::parameters::GovernanceParameters::default();
     gov_params.init_storage(&mut storage).unwrap();
     write_pos_params(&mut storage, &params).unwrap();
 
@@ -1927,7 +1930,8 @@ fn test_from_sm_case_1() {
     use namada_core::types::address::testing::established_address_4;
 
     let mut storage = TestWlStorage::default();
-    let gov_params = namada_core::ledger::governance::parameters::GovernanceParameters::default();
+    let gov_params =
+        namada_governance::parameters::GovernanceParameters::default();
     gov_params.init_storage(&mut storage).unwrap();
     write_pos_params(&mut storage, &OwnedPosParams::default()).unwrap();
 

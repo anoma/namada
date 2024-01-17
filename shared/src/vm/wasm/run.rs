@@ -4,10 +4,12 @@ use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
-use namada_core::ledger::gas::{GasMetering, TxGasMeter, WASM_MEMORY_PAGE_GAS};
-use namada_core::ledger::storage::write_log::StorageModification;
-use namada_core::types::transaction::TxSentinel;
 use namada_core::types::validity_predicate::VpSentinel;
+use namada_gas::{GasMetering, TxGasMeter, WASM_MEMORY_PAGE_GAS};
+use namada_state::write_log::StorageModification;
+use namada_state::{State, StorageHasher};
+use namada_tx::data::TxSentinel;
+use namada_tx::{Commitment, Section, Tx};
 use parity_wasm::elements;
 use thiserror::Error;
 use wasmer::{BaseTunables, Module, Store};
@@ -15,9 +17,7 @@ use wasmer::{BaseTunables, Module, Store};
 use super::memory::{Limit, WasmMemory};
 use super::TxCache;
 use crate::ledger::gas::VpGasMeter;
-use crate::ledger::storage::write_log::WriteLog;
-use crate::ledger::storage::{self, Storage, StorageHasher};
-use crate::proto::{Commitment, Section, Tx};
+use crate::state::write_log::WriteLog;
 use crate::types::address::Address;
 use crate::types::hash::{Error as TxHashError, Hash};
 use crate::types::internal::HostEnvResult;
@@ -92,7 +92,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// the transaction.
 #[allow(clippy::too_many_arguments)]
 pub fn tx<DB, H, CA>(
-    storage: &Storage<DB, H>,
+    storage: &State<DB, H>,
     write_log: &mut WriteLog,
     gas_meter: &mut TxGasMeter,
     tx_index: &TxIndex,
@@ -101,7 +101,7 @@ pub fn tx<DB, H, CA>(
     tx_wasm_cache: &mut TxCache<CA>,
 ) -> Result<BTreeSet<Address>>
 where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -224,7 +224,7 @@ pub fn vp<DB, H, CA>(
     tx: &Tx,
     tx_index: &TxIndex,
     address: &Address,
-    storage: &Storage<DB, H>,
+    storage: &State<DB, H>,
     write_log: &WriteLog,
     gas_meter: &mut VpGasMeter,
     keys_changed: &BTreeSet<Key>,
@@ -232,7 +232,7 @@ pub fn vp<DB, H, CA>(
     mut vp_wasm_cache: VpCache<CA>,
 ) -> Result<bool>
 where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -383,7 +383,7 @@ fn run_vp(
 #[derive(Default, Debug)]
 pub struct VpEvalWasm<DB, H, CA>
 where
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -397,7 +397,7 @@ where
 
 impl<DB, H, CA> VpEvaluator for VpEvalWasm<DB, H, CA>
 where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -424,7 +424,7 @@ where
 
 impl<DB, H, CA> VpEvalWasm<DB, H, CA>
 where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -508,11 +508,11 @@ fn fetch_or_compile<DB, H, CN, CA>(
     wasm_cache: &mut Cache<CN, CA>,
     code_or_hash: &Commitment,
     write_log: &WriteLog,
-    storage: &Storage<DB, H>,
+    storage: &State<DB, H>,
     gas_meter: &mut dyn GasMetering,
 ) -> Result<(Module, Store)>
 where
-    DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CN: 'static + CacheName,
     CA: 'static + WasmCacheAccess,
@@ -635,15 +635,15 @@ mod tests {
     use borsh_ext::BorshSerializeExt;
     use itertools::Either;
     use namada_test_utils::TestWasms;
+    use namada_tx::data::TxType;
+    use namada_tx::{Code, Data};
     use test_log::test;
     use wasmer_vm::TrapCode;
 
     use super::*;
-    use crate::ledger::storage::testing::TestStorage;
-    use crate::proto::{Code, Data};
+    use crate::state::testing::TestStorage;
+    use crate::tx::data::eval_vp::EvalVp;
     use crate::types::hash::Hash;
-    use crate::types::transaction::TxType;
-    use crate::types::validity_predicate::EvalVp;
     use crate::vm::host_env::TxRuntimeError;
     use crate::vm::wasm;
 

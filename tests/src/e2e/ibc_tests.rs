@@ -17,10 +17,8 @@ use std::path::{Path, PathBuf};
 
 use color_eyre::eyre::Result;
 use eyre::eyre;
-use namada::core::ledger::governance::cli::onchain::PgfFunding;
-use namada::core::ledger::governance::storage::proposal::{
-    PGFIbcTarget, PGFTarget,
-};
+use namada::governance::cli::onchain::PgfFunding;
+use namada::governance::storage::proposal::{PGFIbcTarget, PGFTarget};
 use namada::ibc::apps::transfer::types::VERSION as ICS20_VERSION;
 use namada::ibc::clients::tendermint::client_state::ClientState as TmClientState;
 use namada::ibc::clients::tendermint::consensus_state::ConsensusState as TmConsensusState;
@@ -62,7 +60,7 @@ use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pgf::ADDRESS as PGF_ADDRESS;
 use namada::ledger::queries::RPC;
 use namada::ledger::storage::ics23_specs::ibc_proof_specs;
-use namada::ledger::storage::traits::Sha256Hasher;
+use namada::state::Sha256Hasher;
 use namada::tendermint::abci::Event as AbciEvent;
 use namada::tendermint::block::Height as TmHeight;
 use namada::types::address::{Address, InternalAddress};

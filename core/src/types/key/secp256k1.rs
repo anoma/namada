@@ -14,7 +14,7 @@ use data_encoding::HEXLOWER;
 use ethabi::Token;
 use k256::ecdsa::RecoveryId;
 use k256::elliptic_curve::sec1::ToEncodedPoint;
-#[cfg(feature = "rand")]
+#[cfg(any(test, feature = "rand"))]
 use rand::{CryptoRng, RngCore};
 use serde::de::{Error, SeqAccess, Visitor};
 use serde::ser::SerializeTuple;
@@ -548,7 +548,7 @@ impl super::SigScheme for SigScheme {
 
     const TYPE: SchemeType = SchemeType::Secp256k1;
 
-    #[cfg(feature = "rand")]
+    #[cfg(any(test, feature = "rand"))]
     fn generate<R>(csprng: &mut R) -> SecretKey
     where
         R: CryptoRng + RngCore,

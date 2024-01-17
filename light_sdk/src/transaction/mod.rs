@@ -1,11 +1,11 @@
 use std::str::FromStr;
 
 use borsh::BorshSerialize;
-use namada_core::proto::{Section, Signature, Signer, Tx};
-use namada_core::types::chain::ChainId;
-use namada_core::types::hash::Hash;
-use namada_core::types::key::common;
-use namada_core::types::time::DateTimeUtc;
+use namada_sdk::tx::{Section, Signature, Signer, Tx};
+use namada_sdk::types::chain::ChainId;
+use namada_sdk::types::hash::Hash;
+use namada_sdk::types::key::common;
+use namada_sdk::types::time::DateTimeUtc;
 
 pub mod account;
 pub mod bridge;

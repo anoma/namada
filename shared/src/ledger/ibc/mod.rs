@@ -1,18 +1,15 @@
 //! IBC integration
 
-pub use namada_core::ledger::ibc::storage;
-use namada_core::ledger::ibc::storage::{
+pub use namada_ibc::storage;
+use namada_ibc::storage::{
     channel_counter_key, client_counter_key, connection_counter_key,
 };
-use namada_core::ledger::storage::WlStorage;
-use namada_core::ledger::storage_api::StorageWrite;
-
-use crate::ledger::storage::{self as ledger_storage, StorageHasher};
+use namada_state::{StorageHasher, StorageWrite, WlStorage};
 
 /// Initialize storage in the genesis block.
 pub fn init_genesis_storage<DB, H>(storage: &mut WlStorage<DB, H>)
 where
-    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
 {
     // In ibc-go, u64 like a counter is encoded with big-endian:

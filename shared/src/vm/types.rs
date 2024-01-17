@@ -11,7 +11,8 @@
 
 use std::collections::BTreeSet;
 
-use crate::proto::Tx;
+use namada_tx::Tx;
+
 use crate::types::address::Address;
 use crate::types::storage;
 

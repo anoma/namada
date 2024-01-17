@@ -3,14 +3,15 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-pub use namada_core::ledger::ibc::{
-    IbcActions, IbcCommonContext, IbcStorageContext, ProofSpec, TransferModule,
-};
-use namada_core::ledger::masp_utils;
-use namada_core::ledger::tx_env::TxEnv;
 use namada_core::types::address::{Address, InternalAddress};
 pub use namada_core::types::ibc::{IbcEvent, IbcShieldedTransfer};
 use namada_core::types::token::DenominatedAmount;
+pub use namada_ibc::storage::is_ibc_key;
+pub use namada_ibc::{
+    IbcActions, IbcCommonContext, IbcStorageContext, ProofSpec, TransferModule,
+};
+use namada_token::denom_to_amount;
+use namada_tx_env::TxEnv;
 
 use crate::token::{burn, mint, transfer};
 use crate::{Ctx, Error};
@@ -54,8 +55,8 @@ impl IbcStorageContext for Ctx {
         shielded: &masp_primitives::transaction::Transaction,
         pin_key: Option<&str>,
     ) -> Result<(), Error> {
-        masp_utils::handle_masp_tx(self, shielded, pin_key)?;
-        masp_utils::update_note_commitment_tree(self, shielded)
+        namada_token::utils::handle_masp_tx(self, shielded, pin_key)?;
+        namada_token::utils::update_note_commitment_tree(self, shielded)
     }
 
     fn mint_token(
@@ -69,7 +70,7 @@ impl IbcStorageContext for Ctx {
             &Address::Internal(InternalAddress::Ibc),
             target,
             token,
-            amount.to_amount(token, self)?,
+            denom_to_amount(amount, token, self)?,
         )
     }
 
@@ -79,7 +80,7 @@ impl IbcStorageContext for Ctx {
         token: &Address,
         amount: DenominatedAmount,
     ) -> Result<(), Error> {
-        burn(self, target, token, amount.to_amount(token, self)?)
+        burn(self, target, token, denom_to_amount(amount, token, self)?)
     }
 
     fn log_string(&self, message: String) {

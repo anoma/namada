@@ -11,104 +11,15 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXUPPER;
-use lazy_map::LazyMap;
-use namada_macros::StorageKeys;
-#[cfg(feature = "rand")]
+#[cfg(any(test, feature = "rand"))]
 use rand::{CryptoRng, RngCore};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use super::address::Address;
-use super::storage::{self, DbKeySeg, Key};
-use crate::ledger::storage::{Sha256Hasher, StorageHasher};
-use crate::ledger::storage_api::collections::{lazy_map, LazyCollection};
 use crate::types::address;
-
-/// Storage keys for account.
-#[derive(StorageKeys)]
-struct Keys {
-    public_keys: &'static str,
-    threshold: &'static str,
-    protocol_public_keys: &'static str,
-}
-
-/// Obtain a storage key for user's public key.
-pub fn pks_key_prefix(owner: &Address) -> storage::Key {
-    Key {
-        segments: vec![
-            DbKeySeg::AddressSeg(owner.to_owned()),
-            DbKeySeg::StringSeg(Keys::VALUES.public_keys.to_string()),
-        ],
-    }
-}
-
-/// LazyMap handler for the user's public key subspace
-pub fn pks_handle(owner: &Address) -> LazyMap<u8, common::PublicKey> {
-    LazyMap::open(pks_key_prefix(owner))
-}
-
-/// Check if the given storage key is a public key. If it is, returns the owner.
-pub fn is_pks_key(key: &Key) -> Option<&Address> {
-    match &key.segments[..] {
-        [
-            DbKeySeg::AddressSeg(owner),
-            DbKeySeg::StringSeg(prefix),
-            DbKeySeg::StringSeg(data),
-            DbKeySeg::StringSeg(index),
-        ] if prefix.as_str() == Keys::VALUES.public_keys
-            && data.as_str() == lazy_map::DATA_SUBKEY
-            && index.parse::<u8>().is_ok() =>
-        {
-            Some(owner)
-        }
-        _ => None,
-    }
-}
-
-/// Check if the given storage key is a threshold key.
-pub fn is_threshold_key(key: &Key) -> Option<&Address> {
-    match &key.segments[..] {
-        [DbKeySeg::AddressSeg(owner), DbKeySeg::StringSeg(prefix)]
-            if prefix.as_str() == Keys::VALUES.threshold =>
-        {
-            Some(owner)
-        }
-        _ => None,
-    }
-}
-
-/// Obtain the storage key for a user threshold
-pub fn threshold_key(owner: &Address) -> storage::Key {
-    Key {
-        segments: vec![
-            DbKeySeg::AddressSeg(owner.to_owned()),
-            DbKeySeg::StringSeg(Keys::VALUES.threshold.to_string()),
-        ],
-    }
-}
-
-/// Obtain a storage key for user's protocol public key.
-pub fn protocol_pk_key(owner: &Address) -> storage::Key {
-    Key {
-        segments: vec![
-            DbKeySeg::AddressSeg(owner.to_owned()),
-            DbKeySeg::StringSeg(Keys::VALUES.protocol_public_keys.to_string()),
-        ],
-    }
-}
-
-/// Check if the given storage key is a public key. If it is, returns the owner.
-pub fn is_protocol_pk_key(key: &Key) -> Option<&Address> {
-    match &key.segments[..] {
-        [DbKeySeg::AddressSeg(owner), DbKeySeg::StringSeg(key)]
-            if key.as_str() == Keys::VALUES.protocol_public_keys =>
-        {
-            Some(owner)
-        }
-        _ => None,
-    }
-}
+use crate::types::hash::{KeccakHasher, Sha256Hasher, StorageHasher};
+use crate::types::keccak::{keccak_hash, KeccakHash};
 
 /// Represents an error in signature verification
 #[allow(missing_docs)]
@@ -122,8 +33,6 @@ pub enum VerifySigError {
     MissingData,
     #[error("Signature belongs to a different scheme from the public key.")]
     MismatchedScheme,
-    #[error("Signature verification went out of gas: {0}")]
-    OutOfGas(#[from] crate::ledger::gas::Error),
     #[error(
         "The number of valid signatures did not meet the required threshold, \
          required {0} got {1}"
@@ -165,7 +74,6 @@ pub enum ParseSecretKeyError {
 }
 
 /// A value-to-value conversion that consumes the input value.
-
 pub trait RefTo<T> {
     /// Performs the conversion.
     fn ref_to(&self) -> T;
@@ -317,7 +225,7 @@ pub trait SigScheme: Eq + Ord + Debug + Serialize + Default {
     const TYPE: SchemeType;
 
     /// Generate a keypair.
-    #[cfg(feature = "rand")]
+    #[cfg(any(test, feature = "rand"))]
     fn generate<R>(csprng: &mut R) -> Self::SecretKey
     where
         R: CryptoRng + RngCore;
@@ -480,6 +388,59 @@ pub fn tm_consensus_key_raw_hash(pk: &common::PublicKey) -> String {
 /// Convert Tendermint validator's raw hash bytes to Namada raw hash string
 pub fn tm_raw_hash_to_string(raw_hash: impl AsRef<[u8]>) -> String {
     HEXUPPER.encode(raw_hash.as_ref())
+}
+
+/// A serialization method to provide to `namada_tx::Signed`, such
+/// that we may sign serialized data.
+///
+/// This is a higher level version of [`SignableBytes`].
+pub trait Signable<T> {
+    /// A byte vector containing the serialized data.
+    type Output: SignableBytes;
+
+    /// The hashing algorithm to use to sign serialized
+    /// data with.
+    type Hasher: 'static + StorageHasher;
+
+    /// Encodes `data` as a byte vector, with some arbitrary serialization
+    /// method.
+    ///
+    /// The returned output *must* be deterministic based on
+    /// `data`, so that two callers signing the same `data` will be
+    /// signing the same `Self::Output`.
+    fn as_signable(data: &T) -> Self::Output;
+}
+
+/// Tag type that indicates we should use [`BorshSerialize`]
+/// to sign data in a [`Signable`] wrapper.
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+pub struct SerializeWithBorsh;
+
+/// Tag type that indicates we should use ABI serialization
+/// to sign data in a [`Signable`] wrapper.
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+pub struct SignableEthMessage;
+
+impl<T: BorshSerialize> Signable<T> for SerializeWithBorsh {
+    type Hasher = Sha256Hasher;
+    type Output = Vec<u8>;
+
+    fn as_signable(data: &T) -> Vec<u8> {
+        data.serialize_to_vec()
+    }
+}
+
+impl Signable<KeccakHash> for SignableEthMessage {
+    type Hasher = KeccakHasher;
+    type Output = KeccakHash;
+
+    fn as_signable(hash: &KeccakHash) -> KeccakHash {
+        keccak_hash({
+            let mut eth_message = Vec::from("\x19Ethereum Signed Message:\n32");
+            eth_message.extend_from_slice(hash.as_ref());
+            eth_message
+        })
+    }
 }
 
 /// Helper trait to compress arbitrary bytes to a hash value,

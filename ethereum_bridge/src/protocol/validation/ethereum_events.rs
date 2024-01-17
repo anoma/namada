@@ -1,11 +1,10 @@
 //! Ethereum events validation.
 
-use namada_core::ledger::storage;
-use namada_core::ledger::storage::WlStorage;
-use namada_core::proto::Signed;
 use namada_core::types::storage::BlockHeight;
-use namada_core::types::vote_extensions::ethereum_events;
 use namada_proof_of_stake::pos_queries::PosQueries;
+use namada_state::{DBIter, StorageHasher, WlStorage, DB};
+use namada_tx::Signed;
+use namada_vote_ext::ethereum_events;
 
 use super::VoteExtensionError;
 use crate::storage::eth_bridge_queries::EthBridgeQueries;
@@ -25,8 +24,8 @@ pub fn validate_eth_events_vext<D, H>(
     last_height: BlockHeight,
 ) -> Result<(), VoteExtensionError>
 where
-    D: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: 'static + storage::StorageHasher,
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
 {
     // NOTE: for ABCI++, we should pass
     // `last_height` here, instead of `ext.data.block_height`
@@ -107,8 +106,8 @@ fn validate_eth_events<D, H>(
     ext: &ethereum_events::Vext,
 ) -> Result<(), VoteExtensionError>
 where
-    D: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: 'static + storage::StorageHasher,
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
 {
     // verify if we have any duplicate Ethereum events,
     // and if these are sorted in ascending order

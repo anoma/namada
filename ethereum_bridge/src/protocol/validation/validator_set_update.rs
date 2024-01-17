@@ -1,10 +1,9 @@
 //! Validator set update validation.
 
-use namada_core::ledger::storage;
-use namada_core::ledger::storage::WlStorage;
 use namada_core::types::storage::Epoch;
-use namada_core::types::vote_extensions::validator_set_update;
 use namada_proof_of_stake::pos_queries::PosQueries;
+use namada_state::{DBIter, StorageHasher, WlStorage, DB};
+use namada_vote_ext::validator_set_update;
 
 use super::VoteExtensionError;
 use crate::storage::eth_bridge_queries::EthBridgeQueries;
@@ -33,8 +32,8 @@ pub fn validate_valset_upd_vext<D, H>(
     last_epoch: Epoch,
 ) -> Result<(), VoteExtensionError>
 where
-    D: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: 'static + storage::StorageHasher,
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
 {
     if wl_storage.storage.last_block.is_none() {
         tracing::debug!(

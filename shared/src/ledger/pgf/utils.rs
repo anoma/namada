@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
 use namada_core::types::address::Address;
-use namada_core::types::token;
 
 use crate::ledger::events::EventType;
+use crate::token;
 
 /// Proposal event definition
 pub struct ProposalEvent {

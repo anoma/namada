@@ -55,8 +55,8 @@ pub mod states;
 
 use std::marker::PhantomData;
 
-use namada::core::ledger::storage::{self, WlStorage};
 use namada::proof_of_stake::pos_queries::PosQueries;
+use namada::state::{self, WlStorage};
 
 #[allow(unused_imports)]
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
@@ -144,14 +144,14 @@ pub struct BlockAllocator<State> {
 impl<D, H, M> From<&WlStorage<D, H>>
     for BlockAllocator<states::BuildingEncryptedTxBatch<M>>
 where
-    D: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: 'static + storage::StorageHasher,
+    D: 'static + state::DB + for<'iter> state::DBIter<'iter>,
+    H: 'static + state::StorageHasher,
 {
     #[inline]
     fn from(storage: &WlStorage<D, H>) -> Self {
         Self::init(
             storage.pos_queries().get_max_proposal_bytes().get(),
-            namada::core::ledger::gas::get_max_block_gas(storage).unwrap(),
+            namada::parameters::get_max_block_gas(storage).unwrap(),
         )
     }
 }

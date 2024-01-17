@@ -10,7 +10,7 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::types::ethereum_structs::{BpTransferStatus, EthBridgeEvent};
 use namada_core::types::ibc::IbcEvent;
-use namada_core::types::transaction::TxType;
+use namada_tx::data::TxType;
 use serde_json::Value;
 
 // use crate::ledger::governance::utils::ProposalEvent;
@@ -126,7 +126,7 @@ impl FromStr for EventType {
 impl Event {
     /// Creates a new event with the hash and height of the transaction
     /// already filled in
-    pub fn new_tx_event(tx: &crate::proto::Tx, height: u64) -> Self {
+    pub fn new_tx_event(tx: &namada_tx::Tx, height: u64) -> Self {
         let mut event = match tx.header().tx_type {
             TxType::Wrapper(_) => {
                 let mut event = Event {

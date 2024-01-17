@@ -34,13 +34,16 @@ enum KeyType<'a> {
 
 impl<'a> From<&'a storage::Key> for KeyType<'a> {
     fn from(key: &'a storage::Key) -> KeyType<'a> {
-        if let Some(address) = key::is_pks_key(key) {
+        if let Some(address) = account::is_pks_key(key) {
             Self::Pk(address)
-        } else if let Some([_, owner]) = token::is_any_token_balance_key(key) {
+        } else if let Some([_, owner]) =
+            token::storage_key::is_any_token_balance_key(key)
+        {
             Self::TokenBalance { owner }
-        } else if token::is_any_minted_balance_key(key).is_some() {
+        } else if token::storage_key::is_any_minted_balance_key(key).is_some() {
             Self::TokenMinted
-        } else if let Some(minter) = token::is_any_minter_key(key) {
+        } else if let Some(minter) = token::storage_key::is_any_minter_key(key)
+        {
             Self::TokenMinter(minter)
         } else if proof_of_stake::storage_key::is_pos_key(key) {
             Self::PoS
@@ -53,7 +56,7 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
             } else {
                 Self::Unknown
             }
-        } else if token::is_masp_key(key) {
+        } else if token::storage_key::is_masp_key(key) {
             Self::Masp
         } else if ibc::is_ibc_key(key) {
             Self::Ibc
@@ -288,17 +291,17 @@ fn validate_pos_changes(
 mod tests {
     // Use this as `#[test]` annotation to enable logging
     use namada::ledger::pos::{GenesisValidator, PosParams};
-    use namada::proto::{Code, Data, Signature};
+    use namada::tx::data::TxType;
+    use namada::tx::{Code, Data, Signature};
     use namada::types::dec::Dec;
     use namada::types::storage::Epoch;
-    use namada::types::transaction::TxType;
     use namada_test_utils::TestWasms;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::tx::{self, tx_host_env, TestTxEnv};
     use namada_tests::vp::vp_host_env::storage::Key;
     use namada_tests::vp::*;
-    use namada_tx_prelude::{storage_api, StorageWrite, TxEnv};
+    use namada_tx_prelude::{StorageWrite, TxEnv};
     use namada_vp_prelude::account::AccountPublicKeysMap;
     use namada_vp_prelude::key::RefTo;
     use proptest::prelude::*;
@@ -402,7 +405,7 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(addr.clone(), tx_env, |_address| {
             // Do the same as reveal_pk, but with the wrong key
-            let _ = storage_api::account::set_public_key_at(
+            let _ = account::set_public_key_at(
                 tx_host_env::ctx(),
                 &addr,
                 &mismatched_pk,
@@ -439,7 +442,7 @@ mod tests {
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner, &source, &token]);
         // write the denomination of NAM into storage
-        storage_api::token::write_denom(
+        token::write_denom(
             &mut tx_env.wl_storage,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -531,7 +534,7 @@ mod tests {
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, amount);
         // write the denomination of NAM into storage
-        storage_api::token::write_denom(
+        token::write_denom(
             &mut tx_env.wl_storage,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -615,7 +618,7 @@ mod tests {
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, amount);
         // write the denomination of NAM into storage
-        storage_api::token::write_denom(
+        token::write_denom(
             &mut tx_env.wl_storage,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -678,7 +681,7 @@ mod tests {
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, amount);
         // write the denomination of NAM into storage
-        storage_api::token::write_denom(
+        token::write_denom(
             &mut tx_env.wl_storage,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -739,7 +742,7 @@ mod tests {
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, amount);
         // write the denomination of NAM into storage
-        storage_api::token::write_denom(
+        token::write_denom(
             &mut tx_env.wl_storage,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -810,7 +813,7 @@ mod tests {
         // be able to transfer from it
         tx_env.credit_tokens(&source, &token, amount);
         // write the denomination of NAM into storage
-        storage_api::token::write_denom(
+        token::write_denom(
             &mut tx_env.wl_storage,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -916,7 +919,7 @@ mod tests {
             tx_env.spawn_accounts(storage_key_addresses);
 
             let public_key = secret_key.ref_to();
-            let _ = storage_api::account::set_public_key_at(tx_host_env::ctx(), &vp_owner, &public_key, 0);
+            let _ = account::set_public_key_at(tx_host_env::ctx(), &vp_owner, &public_key, 0);
 
             // Initialize VP environment from a transaction
             vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {

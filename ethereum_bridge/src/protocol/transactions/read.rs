@@ -1,11 +1,10 @@
 //! Helpers for reading from storage
 use borsh::BorshDeserialize;
 use eyre::{eyre, Result};
-use namada_core::ledger::storage::traits::StorageHasher;
-use namada_core::ledger::storage::{DBIter, WlStorage, DB};
-use namada_core::ledger::storage_api::StorageRead;
 use namada_core::types::storage;
 use namada_core::types::token::Amount;
+use namada_state::{DBIter, StorageHasher, WlStorage, DB};
+use namada_storage::StorageRead;
 
 /// Returns the stored Amount, or 0 if not stored
 pub(super) fn amount_or_default<D, H>(
@@ -55,11 +54,11 @@ where
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
-    use borsh_ext::BorshSerializeExt;
-    use namada_core::ledger::storage::testing::TestWlStorage;
-    use namada_core::ledger::storage_api::StorageWrite;
+    use namada_core::borsh::BorshSerializeExt;
     use namada_core::types::storage;
     use namada_core::types::token::Amount;
+    use namada_state::testing::TestWlStorage;
+    use namada_storage::StorageWrite;
 
     use crate::protocol::transactions::read;
 

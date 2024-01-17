@@ -1,6 +1,7 @@
 //! A basic fungible token
 
 use std::cmp::Ordering;
+use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::iter::Sum;
 use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
@@ -9,24 +10,37 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::BASE32HEX_NOPAD;
 use ethabi::ethereum_types::U256;
-use masp_primitives::bls12_381::Scalar;
-use masp_primitives::sapling::Nullifier;
+use masp_primitives::asset_type::AssetType;
+use masp_primitives::convert::AllowedConversion;
+use masp_primitives::merkle_tree::FrozenCommitmentTree;
+use masp_primitives::sapling;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::dec::POS_DECIMAL_PRECISION;
 use crate::ibc::apps::transfer::types::Amount as IbcAmount;
-use crate::ledger::storage as ledger_storage;
-use crate::ledger::storage_api::token::read_denom;
-use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
-use crate::types::address::{
-    Address, DecodeError as AddressError, InternalAddress, MASP,
-};
-use crate::types::dec::Dec;
+use crate::types::address::{Address, DecodeError as AddressError};
+use crate::types::dec::{Dec, POS_DECIMAL_PRECISION};
 use crate::types::hash::Hash;
 use crate::types::storage;
-use crate::types::storage::{DbKeySeg, Key, KeySeg};
+use crate::types::storage::{DbKeySeg, Epoch, KeySeg};
 use crate::types::uint::{self, Uint, I256};
+
+/// A representation of the conversion state
+#[derive(Debug, Default, BorshSerialize, BorshDeserialize)]
+pub struct ConversionState {
+    /// The last amount of the native token distributed
+    pub normed_inflation: Option<u128>,
+    /// The tree currently containing all the conversions
+    pub tree: FrozenCommitmentTree<sapling::Node>,
+    /// A map from token alias to actual address.
+    pub tokens: BTreeMap<String, Address>,
+    /// Map assets to their latest conversion and position in Merkle tree
+    #[allow(clippy::type_complexity)]
+    pub assets: BTreeMap<
+        AssetType,
+        ((Address, MaspDenom), Epoch, AllowedConversion, usize),
+    >,
+}
 
 /// Amount in micro units. For different granularity another representation
 /// might be more appropriate.
@@ -248,23 +262,6 @@ impl Amount {
         .to_string_precise()
     }
 
-    /// Add denomination info if it exists in storage.
-    pub fn denominated(
-        &self,
-        token: &Address,
-        storage: &impl StorageRead,
-    ) -> storage_api::Result<DenominatedAmount> {
-        let denom = read_denom(storage, token)?.ok_or_else(|| {
-            storage_api::Error::SimpleMessage(
-                "No denomination found in storage for the given token",
-            )
-        })?;
-        Ok(DenominatedAmount {
-            amount: *self,
-            denom,
-        })
-    }
-
     /// Return a denominated native token amount.
     #[inline]
     pub const fn native_denominated(self) -> DenominatedAmount {
@@ -436,22 +433,6 @@ impl DenominatedAmount {
                 denom,
             })
             .ok_or(AmountParseError::PrecisionOverflow)
-    }
-
-    /// Convert this denominated amount into a plain amount by increasing its
-    /// precision to the given token's denomination and then taking the
-    /// significand.
-    pub fn to_amount(
-        self,
-        token: &Address,
-        storage: &impl StorageRead,
-    ) -> storage_api::Result<Amount> {
-        let denom = read_denom(storage, token)?.ok_or_else(|| {
-            storage_api::Error::SimpleMessage(
-                "No denomination found in storage for the given token",
-            )
-        })?;
-        self.scale(denom).map_err(storage_api::Error::new)
     }
 
     /// Multiply this number by 10^denom and return the computed integer if
@@ -1001,106 +982,6 @@ impl From<DenominatedAmount> for IbcAmount {
     }
 }
 
-/// Key segment for a balance key
-pub const BALANCE_STORAGE_KEY: &str = "balance";
-/// Key segment for a denomination key
-pub const DENOM_STORAGE_KEY: &str = "denomination";
-/// Key segment for multitoken minter
-pub const MINTER_STORAGE_KEY: &str = "minter";
-/// Key segment for minted balance
-pub const MINTED_STORAGE_KEY: &str = "minted";
-/// Key segment prefix for pinned shielded transactions
-pub const PIN_KEY_PREFIX: &str = "pin-";
-/// Key segment prefix for the nullifiers
-pub const MASP_NULLIFIERS_KEY: &str = "nullifiers";
-/// Key segment prefix for the note commitment merkle tree
-pub const MASP_NOTE_COMMITMENT_TREE_KEY: &str = "commitment_tree";
-/// Key segment prefix for the note commitment anchor
-pub const MASP_NOTE_COMMITMENT_ANCHOR_PREFIX: &str = "note_commitment_anchor";
-/// Key segment prefix for the convert anchor
-pub const MASP_CONVERT_ANCHOR_KEY: &str = "convert_anchor";
-/// Last calculated inflation value handed out
-pub const MASP_LAST_INFLATION_KEY: &str = "last_inflation";
-/// The last locked ratio
-pub const MASP_LAST_LOCKED_RATIO_KEY: &str = "last_locked_ratio";
-/// The key for the nominal proportional gain of a shielded pool for a given
-/// asset
-pub const MASP_KP_GAIN_KEY: &str = "proportional_gain";
-/// The key for the nominal derivative gain of a shielded pool for a given asset
-pub const MASP_KD_GAIN_KEY: &str = "derivative_gain";
-/// The key for the locked ratio target for a given asset
-pub const MASP_LOCKED_RATIO_TARGET_KEY: &str = "locked_ratio_target";
-/// The key for the max reward rate for a given asset
-pub const MASP_MAX_REWARD_RATE_KEY: &str = "max_reward_rate";
-
-/// Gets the key for the given token address, error with the given
-/// message to expect if the key is not in the address
-pub fn key_of_token(
-    token_addr: &Address,
-    specific_key: &str,
-    expect_message: &str,
-) -> Key {
-    Key::from(token_addr.to_db_key())
-        .push(&specific_key.to_owned())
-        .expect(expect_message)
-}
-
-/// Obtain a storage key for user's balance.
-pub fn balance_key(token_addr: &Address, owner: &Address) -> Key {
-    balance_prefix(token_addr)
-        .push(&owner.to_db_key())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Obtain a storage key prefix for all users' balances.
-pub fn balance_prefix(token_addr: &Address) -> Key {
-    Key::from(Address::Internal(InternalAddress::Multitoken).to_db_key())
-        .push(&token_addr.to_db_key())
-        .expect("Cannot obtain a storage key")
-        .push(&BALANCE_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Obtain a storage key for the multitoken minter.
-pub fn minter_key(token_addr: &Address) -> Key {
-    Key::from(Address::Internal(InternalAddress::Multitoken).to_db_key())
-        .push(&token_addr.to_db_key())
-        .expect("Cannot obtain a storage key")
-        .push(&MINTER_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Obtain a storage key for the minted multitoken balance.
-pub fn minted_balance_key(token_addr: &Address) -> Key {
-    balance_prefix(token_addr)
-        .push(&MINTED_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Obtain the nominal proportional key for the given token
-pub fn masp_kp_gain_key(token_addr: &Address) -> Key {
-    key_of_token(token_addr, MASP_KP_GAIN_KEY, "nominal proproitonal gains")
-}
-
-/// Obtain the nominal derivative key for the given token
-pub fn masp_kd_gain_key(token_addr: &Address) -> Key {
-    key_of_token(token_addr, MASP_KD_GAIN_KEY, "nominal proproitonal gains")
-}
-
-/// The max reward rate key for the given token
-pub fn masp_max_reward_rate_key(token_addr: &Address) -> Key {
-    key_of_token(token_addr, MASP_MAX_REWARD_RATE_KEY, "max reward rate")
-}
-
-/// Obtain the locked target ratio key for the given token
-pub fn masp_locked_ratio_target_key(token_addr: &Address) -> Key {
-    key_of_token(
-        token_addr,
-        MASP_LOCKED_RATIO_TARGET_KEY,
-        "nominal proproitonal gains",
-    )
-}
-
 /// Token parameters for each kind of asset held on chain
 #[derive(
     Clone,
@@ -1127,50 +1008,6 @@ pub struct Parameters {
     pub locked_ratio_target: Dec,
 }
 
-impl Parameters {
-    /// Initialize parameters for the token in storage during the genesis block.
-    pub fn init_storage<DB, H>(
-        &self,
-        address: &Address,
-        wl_storage: &mut ledger_storage::WlStorage<DB, H>,
-    ) where
-        DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
-        H: ledger_storage::StorageHasher,
-    {
-        let Self {
-            max_reward_rate: max_rate,
-            kd_gain_nom,
-            kp_gain_nom,
-            locked_ratio_target: locked_target,
-        } = self;
-        wl_storage
-            .write(&masp_last_inflation_key(address), Amount::zero())
-            .expect(
-                "last inflation key for the given asset must be initialized",
-            );
-        wl_storage
-            .write(&masp_last_locked_ratio_key(address), Dec::zero())
-            .expect(
-                "last locked ratio key for the given asset must be initialized",
-            );
-        wl_storage
-            .write(&masp_max_reward_rate_key(address), max_rate)
-            .expect("max reward rate for the given asset must be initialized");
-        wl_storage
-            .write(&masp_locked_ratio_target_key(address), locked_target)
-            .expect("locked ratio must be initialized");
-        wl_storage
-            .write(&masp_kp_gain_key(address), kp_gain_nom)
-            .expect("The nominal proportional gain must be initialized");
-        wl_storage
-            .write(&masp_kd_gain_key(address), kd_gain_nom)
-            .expect("The nominal derivative gain must be initialized");
-        wl_storage
-            .write(&minted_balance_key(address), Amount::zero())
-            .expect("The total minted balance key must initialized");
-    }
-}
-
 impl Default for Parameters {
     fn default() -> Self {
         Self {
@@ -1179,192 +1016,6 @@ impl Default for Parameters {
             kd_gain_nom: Dec::from_str("0.25").unwrap(),
             locked_ratio_target: Dec::from_str("0.6667").unwrap(),
         }
-    }
-}
-
-/// Check if the given storage key is balance key for the given token. If it is,
-/// returns the owner. For minted balances, use [`is_any_minted_balance_key()`].
-pub fn is_balance_key<'a>(
-    token_addr: &Address,
-    key: &'a Key,
-) -> Option<&'a Address> {
-    match &key.segments[..] {
-        [
-            DbKeySeg::AddressSeg(addr),
-            DbKeySeg::AddressSeg(token),
-            DbKeySeg::StringSeg(balance),
-            DbKeySeg::AddressSeg(owner),
-        ] if *addr == Address::Internal(InternalAddress::Multitoken)
-            && token == token_addr
-            && balance == BALANCE_STORAGE_KEY =>
-        {
-            Some(owner)
-        }
-        _ => None,
-    }
-}
-
-/// Check if the given storage key is balance key for unspecified token. If it
-/// is, returns the token and owner address.
-pub fn is_any_token_balance_key(key: &Key) -> Option<[&Address; 2]> {
-    match &key.segments[..] {
-        [
-            DbKeySeg::AddressSeg(addr),
-            DbKeySeg::AddressSeg(token),
-            DbKeySeg::StringSeg(balance),
-            DbKeySeg::AddressSeg(owner),
-        ] if *addr == Address::Internal(InternalAddress::Multitoken)
-            && balance == BALANCE_STORAGE_KEY =>
-        {
-            Some([token, owner])
-        }
-        _ => None,
-    }
-}
-
-/// Obtain a storage key denomination of a token.
-pub fn denom_key(token_addr: &Address) -> Key {
-    Key::from(token_addr.to_db_key())
-        .push(&DENOM_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Check if the given storage key is a denomination key for the given token.
-pub fn is_denom_key(token_addr: &Address, key: &Key) -> bool {
-    matches!(&key.segments[..],
-        [
-            DbKeySeg::AddressSeg(addr),
-            ..,
-            DbKeySeg::StringSeg(key),
-        ] if key == DENOM_STORAGE_KEY && addr == token_addr)
-}
-
-/// Check if the given storage key is a masp key
-pub fn is_masp_key(key: &Key) -> bool {
-    matches!(&key.segments[..],
-        [DbKeySeg::AddressSeg(addr), ..] if *addr == MASP
-    )
-}
-
-/// Check if the given storage key is allowed to be touched by a masp transfer
-pub fn is_masp_allowed_key(key: &Key) -> bool {
-    match &key.segments[..] {
-        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
-            if *addr == MASP
-                && (key.starts_with(PIN_KEY_PREFIX)
-                    || key == MASP_NOTE_COMMITMENT_TREE_KEY) =>
-        {
-            true
-        }
-
-        [
-            DbKeySeg::AddressSeg(addr),
-            DbKeySeg::StringSeg(key),
-            DbKeySeg::StringSeg(_nullifier),
-        ] if *addr == MASP && key == MASP_NULLIFIERS_KEY => true,
-        _ => false,
-    }
-}
-
-/// Check if the given storage key is a masp nullifier key
-pub fn is_masp_nullifier_key(key: &Key) -> bool {
-    matches!(&key.segments[..],
-        [DbKeySeg::AddressSeg(addr),
-             DbKeySeg::StringSeg(prefix),
-             DbKeySeg::StringSeg(_nullifier)
-        ] if *addr == MASP && prefix == MASP_NULLIFIERS_KEY)
-}
-
-/// Obtain the storage key for the last locked ratio of a token
-pub fn masp_last_locked_ratio_key(token_address: &Address) -> Key {
-    key_of_token(
-        token_address,
-        MASP_LAST_LOCKED_RATIO_KEY,
-        "cannot obtain storage key for the last locked ratio",
-    )
-}
-
-/// Obtain the storage key for the last inflation of a token
-pub fn masp_last_inflation_key(token_address: &Address) -> Key {
-    key_of_token(
-        token_address,
-        MASP_LAST_INFLATION_KEY,
-        "cannot obtain storage key for the last inflation rate",
-    )
-}
-
-/// Get a key for a masp pin
-pub fn masp_pin_tx_key(key: &str) -> Key {
-    Key::from(MASP.to_db_key())
-        .push(&(PIN_KEY_PREFIX.to_owned() + key))
-        .expect("Cannot obtain a storage key")
-}
-
-/// Get a key for a masp nullifier
-pub fn masp_nullifier_key(nullifier: &Nullifier) -> Key {
-    Key::from(MASP.to_db_key())
-        .push(&MASP_NULLIFIERS_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-        .push(&Hash(nullifier.0))
-        .expect("Cannot obtain a storage key")
-}
-
-/// Get the key for the masp commitment tree
-pub fn masp_commitment_tree_key() -> Key {
-    Key::from(MASP.to_db_key())
-        .push(&MASP_NOTE_COMMITMENT_TREE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Get a key for a masp commitment tree anchor
-pub fn masp_commitment_anchor_key(anchor: impl Into<Scalar>) -> Key {
-    Key::from(MASP.to_db_key())
-        .push(&MASP_NOTE_COMMITMENT_ANCHOR_PREFIX.to_owned())
-        .expect("Cannot obtain a storage key")
-        .push(&Hash(anchor.into().to_bytes()))
-        .expect("Cannot obtain a storage key")
-}
-
-/// Get the key for the masp convert tree anchor
-pub fn masp_convert_anchor_key() -> Key {
-    Key::from(MASP.to_db_key())
-        .push(&MASP_CONVERT_ANCHOR_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Check if the given storage key is for a minter of a unspecified token.
-/// If it is, returns the token.
-pub fn is_any_minter_key(key: &Key) -> Option<&Address> {
-    match &key.segments[..] {
-        [
-            DbKeySeg::AddressSeg(addr),
-            DbKeySeg::AddressSeg(token),
-            DbKeySeg::StringSeg(minter),
-        ] if *addr == Address::Internal(InternalAddress::Multitoken)
-            && minter == MINTER_STORAGE_KEY =>
-        {
-            Some(token)
-        }
-        _ => None,
-    }
-}
-
-/// Check if the given storage key is for total supply of a unspecified token.
-/// If it is, returns the token.
-pub fn is_any_minted_balance_key(key: &Key) -> Option<&Address> {
-    match &key.segments[..] {
-        [
-            DbKeySeg::AddressSeg(addr),
-            DbKeySeg::AddressSeg(token),
-            DbKeySeg::StringSeg(balance),
-            DbKeySeg::StringSeg(owner),
-        ] if *addr == Address::Internal(InternalAddress::Multitoken)
-            && balance == BALANCE_STORAGE_KEY
-            && owner == MINTED_STORAGE_KEY =>
-        {
-            Some(token)
-        }
-        _ => None,
     }
 }
 

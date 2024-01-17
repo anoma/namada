@@ -2,7 +2,6 @@
 
 use std::collections::BTreeSet;
 
-use namada_core::ledger::storage_api::governance;
 // use borsh::BorshDeserialize;
 pub use namada_proof_of_stake;
 pub use namada_proof_of_stake::parameters::PosParams;
@@ -10,16 +9,16 @@ pub use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::storage::read_pos_params;
 use namada_proof_of_stake::storage_key::is_params_key;
 pub use namada_proof_of_stake::types;
-use thiserror::Error;
-
-use crate::ledger::native_vp::{self, Ctx, NativeVp};
 // use crate::ledger::pos::{
 //     is_validator_address_raw_hash_key,
 //     is_validator_max_commission_rate_change_key,
 // };
-use crate::ledger::storage::{self as ledger_storage, StorageHasher};
-use crate::ledger::storage_api::StorageRead;
-use crate::proto::Tx;
+use namada_state::StorageHasher;
+use namada_state::StorageRead;
+use namada_tx::Tx;
+use thiserror::Error;
+
+use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{Key, KeySeg};
 use crate::vm::WasmCacheAccess;
@@ -37,7 +36,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Proof-of-Stake validity predicate
 pub struct PosVP<'a, DB, H, CA>
 where
-    DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -47,7 +46,7 @@ where
 
 impl<'a, DB, H, CA> PosVP<'a, DB, H, CA>
 where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -59,7 +58,7 @@ where
 
 impl<'a, DB, H, CA> NativeVp for PosVP<'a, DB, H, CA>
 where
-    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
@@ -88,8 +87,11 @@ where
                 } else {
                     return Ok(false);
                 };
-                if !governance::is_proposal_accepted(&self.ctx.pre(), &data)
-                    .map_err(Error::NativeVpError)?
+                if !namada_governance::is_proposal_accepted(
+                    &self.ctx.pre(),
+                    &data,
+                )
+                .map_err(Error::NativeVpError)?
                 {
                     return Ok(false);
                 }

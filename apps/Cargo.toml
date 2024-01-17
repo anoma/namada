@@ -50,11 +50,10 @@ name = "namadar"
 path = "src/bin/namada-relayer/main.rs"
 
 [features]
-default = ["std"]
+default = []
 mainnet = [
   "namada/mainnet",
 ]
-std = ["ed25519-consensus/std", "rand/std", "rand_core/std", "namada/std", "namada_sdk/std"]
 # for integration tests and test utilities
 testing = ["namada_test_utils"]
 benches = ["testing", "namada_test_utils"]
@@ -62,9 +61,10 @@ integration = []
 
 
 [dependencies]
-namada = {path = "../shared", features = ["multicore", "http-client", "tendermint-rpc"]}
-namada_sdk = {path = "../sdk", default-features = false, features = ["wasm-runtime", "download-params"]}
+namada = {path = "../shared", features = ["multicore", "http-client", "tendermint-rpc", "std"]}
+namada_sdk = {path = "../sdk", default-features = false, features = ["wasm-runtime", "download-params", "std", "rand"]}
 namada_test_utils = {path = "../test_utils", optional = true}
+
 ark-serialize.workspace = true
 ark-std.workspace = true
 arse-merkle-tree = { workspace = true, features = ["blake2b"] }
@@ -84,7 +84,7 @@ config.workspace = true
 data-encoding.workspace = true
 derivative.workspace = true
 directories.workspace = true
-ed25519-consensus.workspace = true
+ed25519-consensus = { workspace = true, features = ["std"] }
 ethabi.workspace = true
 ethbridge-bridge-events.workspace = true
 ethbridge-events.workspace = true
@@ -109,8 +109,8 @@ orion.workspace = true
 pretty_assertions.workspace = true
 prost-types.workspace = true
 prost.workspace = true
-rand_core.workspace = true
-rand.workspace = true
+rand_core = { workspace = true, features = ["std"] }
+rand = { workspace = true, features = ["std"] }
 rayon.workspace = true
 regex.workspace = true
 reqwest.workspace = true

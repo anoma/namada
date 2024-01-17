@@ -148,9 +148,10 @@ pub fn init_pos(
 mod tests {
 
     use namada::ledger::pos::{PosParams, PosVP};
+    use namada::token;
+    use namada::types::address;
     use namada::types::key::common::PublicKey;
     use namada::types::storage::Epoch;
-    use namada::types::{address, token};
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
     use namada_tx_prelude::Address;
     use proptest::prelude::*;
@@ -579,12 +580,13 @@ pub mod testing {
     };
     use namada::proof_of_stake::types::{BondId, ValidatorState};
     use namada::proof_of_stake::ADDRESS as POS_ADDRESS;
+    use namada::token;
+    use namada::token::{Amount, Change};
+    use namada::types::dec::Dec;
     use namada::types::key::common::PublicKey;
     use namada::types::key::RefTo;
     use namada::types::storage::Epoch;
-    use namada::types::{address, key, token};
-    use namada_core::types::dec::Dec;
-    use namada_core::types::token::{Amount, Change};
+    use namada::types::{address, key};
     use namada_tx_prelude::{Address, StorageRead, StorageWrite};
     use proptest::prelude::*;
 
@@ -1309,7 +1311,7 @@ pub mod testing {
                 // tx::ctx().write_validator_state(&validator, state).unwrap();
             }
             PosStorageChange::StakingTokenPosBalance { delta } => {
-                let balance_key = token::balance_key(
+                let balance_key = token::storage_key::balance_key(
                     &tx::ctx().get_native_token().unwrap(),
                     &POS_ADDRESS,
                 );

@@ -1,30 +1,29 @@
 use std::collections::HashMap;
 
-use namada::core::ledger::governance::storage::keys as gov_storage;
-use namada::core::ledger::governance::storage::proposal::{
+use namada::governance::pgf::storage::keys as pgf_storage;
+use namada::governance::pgf::storage::steward::StewardDetail;
+use namada::governance::pgf::{storage as pgf, ADDRESS};
+use namada::governance::storage::keys as gov_storage;
+use namada::governance::storage::proposal::{
     AddRemove, PGFAction, PGFTarget, ProposalType, StoragePgfFunding,
 };
-use namada::core::ledger::governance::utils::{
+use namada::governance::utils::{
     compute_proposal_result, ProposalVotes, TallyResult, TallyType, TallyVote,
     VotePower,
 };
-use namada::core::ledger::governance::ADDRESS as gov_address;
-use namada::core::ledger::pgf::storage::keys as pgf_storage;
-use namada::core::ledger::pgf::storage::steward::StewardDetail;
-use namada::core::ledger::pgf::ADDRESS;
-use namada::core::ledger::storage_api::governance as gov_api;
+use namada::governance::{storage as gov_api, ADDRESS as gov_address};
 use namada::ledger::governance::utils::ProposalEvent;
 use namada::ledger::pos::BondId;
 use namada::ledger::protocol;
-use namada::ledger::storage::types::encode;
-use namada::ledger::storage::{DBIter, StorageHasher, DB};
-use namada::ledger::storage_api::{ibc, pgf, token, StorageWrite};
 use namada::proof_of_stake::bond_amount;
 use namada::proof_of_stake::parameters::PosParams;
 use namada::proof_of_stake::storage::read_total_stake;
-use namada::proto::{Code, Data};
+use namada::state::{DBIter, StorageHasher, StorageWrite, DB};
+use namada::tx::{Code, Data};
 use namada::types::address::Address;
+use namada::types::encode;
 use namada::types::storage::Epoch;
+use namada::{ibc, token};
 
 use super::utils::force_read;
 use super::*;
@@ -219,7 +218,7 @@ fn compute_proposal_votes<S>(
     params: &PosParams,
     proposal_id: u64,
     epoch: Epoch,
-) -> storage_api::Result<ProposalVotes>
+) -> namada::state::StorageResult<ProposalVotes>
 where
     S: StorageRead,
 {
@@ -276,7 +275,7 @@ fn execute_default_proposal<D, H>(
     shell: &mut Shell<D, H>,
     id: u64,
     proposal_code: Option<Vec<u8>>,
-) -> storage_api::Result<bool>
+) -> namada::state::StorageResult<bool>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,

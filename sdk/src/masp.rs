@@ -51,7 +51,6 @@ use masp_proofs::bellman::groth16::PreparedVerifyingKey;
 use masp_proofs::bls12_381::Bls12;
 use masp_proofs::prover::LocalTxProver;
 use masp_proofs::sapling::SaplingVerificationContext;
-use namada_core::ledger::ibc::IbcMessage;
 use namada_core::types::address::{Address, MASP};
 use namada_core::types::ibc::IbcShieldedTransfer;
 use namada_core::types::masp::{
@@ -60,9 +59,10 @@ use namada_core::types::masp::{
 };
 use namada_core::types::storage::{BlockHeight, Epoch, IndexedTx, TxIndex};
 use namada_core::types::time::{DateTimeUtc, DurationSecs};
-use namada_core::types::token;
-use namada_core::types::token::{MaspDenom, Transfer};
-use namada_core::types::transaction::{TxResult, WrapperTx};
+use namada_ibc::IbcMessage;
+use namada_token::{self as token, MaspDenom, Transfer};
+use namada_tx::data::{TxResult, WrapperTx};
+use namada_tx::Tx;
 use rand_core::{CryptoRng, OsRng, RngCore};
 use ripemd::Digest as RipemdDigest;
 use sha2::Digest;
@@ -72,7 +72,6 @@ use thiserror::Error;
 use crate::error::EncodingError;
 use crate::error::{Error, PinnedBalanceError, QueryError};
 use crate::io::Io;
-use crate::proto::Tx;
 use crate::queries::Client;
 use crate::rpc::{query_block, query_conversion, query_epoch_at_height};
 use crate::tendermint_rpc::query::Query;
@@ -1404,7 +1403,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             }
         }
         // Construct the key for where the transaction ID would be stored
-        let pin_key = namada_core::types::token::masp_pin_tx_key(&owner.hash());
+        let pin_key = namada_token::storage_key::masp_pin_tx_key(&owner.hash());
         // Obtain the transaction pointer at the key
         // If we don't discard the error message then a test fails,
         // however the error underlying this will go undetected
@@ -1671,7 +1670,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     expiration.0.signed_duration_since(current_time.0);
 
                 let max_expected_time_per_block_key =
-                    namada_core::ledger::parameters::storage::get_max_expected_time_per_block_key();
+                    namada_parameters::storage::get_max_expected_time_per_block_key();
                 let max_block_time =
                     crate::rpc::query_storage_value::<_, DurationSecs>(
                         context.client(),
@@ -2287,7 +2286,7 @@ async fn extract_payload_from_shielded_action<'args, C: Client + Sync>(
     tx_data: &[u8],
     args: ExtractShieldedActionArg<'args, C>,
 ) -> Result<IbcShieldedTransfer, Error> {
-    let message = namada_core::ledger::ibc::decode_message(tx_data)
+    let message = namada_ibc::decode_message(tx_data)
         .map_err(|e| Error::Other(e.to_string()))?;
 
     let shielded_transfer = match message {
