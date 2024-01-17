@@ -79,16 +79,16 @@ if __name__ == "__main__":
     bigass_signed_toml = {"established_account": [], "validator_account": [], "bond": []}
     print(f"Writing to {BASE_DIR}/src/unsigned_transactions.toml")
     for file in os.listdir(TXS_DIR):
-        if file.endswith("signed.toml"):
-            tx_toml = toml.load(f"{TXS_DIR}/{file.split('/')[-1]}")
-            bigass_signed_toml["established_account"].extend(tx_toml["established_account"])
-            bigass_signed_toml["validator_account"].extend(tx_toml["validator_account"])
-            bigass_signed_toml["bond"].extend(tx_toml["bond"])
-        elif file.endswith("unsigned.toml"):
+        if file.endswith("-unsigned.toml"):
             tx_toml = toml.load(f"{TXS_DIR}/{file.split('/')[-1]}")
             bigass_unsigned_toml["established_account"].extend(tx_toml["established_account"])
             bigass_unsigned_toml["validator_account"].extend(tx_toml["validator_account"])
             bigass_unsigned_toml["bond"].extend(tx_toml["bond"])
+        elif file.endswith("-signed.toml"):
+            tx_toml = toml.load(f"{TXS_DIR}/{file.split('/')[-1]}")
+            bigass_signed_toml["established_account"].extend(tx_toml["established_account"])
+            bigass_signed_toml["validator_account"].extend(tx_toml["validator_account"])
+            bigass_signed_toml["bond"].extend(tx_toml["bond"])
     with open(f"{BASE_DIR}/pre-genesis/unsigned-transactions.toml", "w") as f:
         toml.dump(bigass_unsigned_toml, f)
     with open(f"{BASE_DIR}/pre-genesis/signed-transactions.toml", "w") as f:
