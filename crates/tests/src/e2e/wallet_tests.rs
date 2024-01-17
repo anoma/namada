@@ -136,6 +136,10 @@ fn wallet_unencrypted_key_cmds() -> Result<()> {
         &["gen", "--alias", key_alias, "--unsafe-dont-encrypt"],
         Some(20),
     )?;
+
+    cmd.exp_string("Enter BIP39 passphrase (empty for none): ")?;
+    cmd.send_line("")?;
+
     cmd.exp_string(&format!(
         "Successfully added a key and an address with alias: \"{}\"",
         key_alias.to_lowercase()
@@ -183,7 +187,13 @@ fn wallet_address_cmds() -> Result<()> {
     let mut cmd = run!(
         test,
         Bin::Wallet,
-        &["gen", "--alias", gen_address_alias, "--unsafe-dont-encrypt"],
+        &[
+            "gen",
+            "--alias",
+            gen_address_alias,
+            "--unsafe-dont-encrypt",
+            "--raw"
+        ],
         Some(20),
     )?;
     cmd.exp_string(&format!(
