@@ -2944,8 +2944,10 @@ pub mod args {
         arg("validator");
     pub const HALT_ACTION: ArgFlag = flag("halt");
     pub const HASH_LIST: Arg<String> = arg("hash-list");
-    pub const HD_WALLET_DERIVATION_PATH: ArgDefault<String> =
+    pub const HD_DERIVATION_PATH: ArgDefault<String> =
         arg_default("hd-path", DefaultFn(|| "default".to_string()));
+    pub const HD_ALLOW_NON_COMPLIANT_DERIVATION_PATH: ArgFlag =
+        flag("allow-non-compliant");
     pub const HISTORIC: ArgFlag = flag("historic");
     pub const IBC_TRANSFER_MEMO_PATH: ArgOpt<PathBuf> = arg_opt("memo-path");
     pub const INPUT_OPT: ArgOpt<PathBuf> = arg_opt("input");
@@ -6096,7 +6098,9 @@ pub mod args {
             let alias_force = ALIAS_FORCE.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let use_device = USE_DEVICE.parse(matches);
-            let derivation_path = HD_WALLET_DERIVATION_PATH.parse(matches);
+            let derivation_path = HD_DERIVATION_PATH.parse(matches);
+            let allow_non_compliant =
+                HD_ALLOW_NON_COMPLIANT_DERIVATION_PATH.parse(matches);
             Self {
                 scheme,
                 shielded,
@@ -6105,6 +6109,7 @@ pub mod args {
                 unsafe_dont_encrypt,
                 use_device,
                 derivation_path,
+                allow_non_compliant,
             }
         }
 
@@ -6134,14 +6139,29 @@ pub mod args {
                 "Derive an address and public key from the seed stored on the \
                  connected hardware wallet.",
             ))
-            .arg(HD_WALLET_DERIVATION_PATH.def().help(
+            .arg(HD_DERIVATION_PATH.def().help(
                 "HD key derivation path. Use keyword `default` to refer to a \
-                 scheme default path:\n- m/44'/60'/0'/0/0 for secp256k1 \
-                 scheme\n- m/44'/877'/0'/0'/0' for ed25519 scheme.\nFor \
-                 ed25519, all path indices will be promoted to hardened \
-                 indexes. If none is specified, the scheme default path is \
-                 used.",
+                 scheme default path:\n- m/44'/60'/0'/0/0 for the transparent \
+                 secp256k1 scheme\n- m/44'/877'/0'/0'/0' for the transparent \
+                 ed25519 scheme\n- m/32'/877'/0' for the shielded \
+                 setting\nFor ed25519 scheme, all path indices will be \
+                 promoted to hardened indexes. If none is specified, the \
+                 scheme default path is used.",
             ))
+            .arg(HD_ALLOW_NON_COMPLIANT_DERIVATION_PATH.def().help(
+                "Allow non-compliant HD derivation path. The compliant \
+                 derivation path schemes include:\n- \
+                 m/44'/60'/account'/change/address_index for the transparent \
+                 secp256k1 scheme\n- \
+                 m/44'/877'/account'/change'/address_index' for the \
+                 transparent ed25519 scheme\n- m/32'/877'/account' and\n- \
+                 m/32'/877'/account'/address_index for the shielded setting",
+            ))
+            .group(
+                ArgGroup::new("requires_group")
+                    .args([HD_ALLOW_NON_COMPLIANT_DERIVATION_PATH.name])
+                    .requires(HD_DERIVATION_PATH.name),
+            )
         }
     }
 
@@ -6153,7 +6173,9 @@ pub mod args {
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
-            let derivation_path = HD_WALLET_DERIVATION_PATH.parse(matches);
+            let derivation_path = HD_DERIVATION_PATH.parse(matches);
+            let allow_non_compliant =
+                HD_ALLOW_NON_COMPLIANT_DERIVATION_PATH.parse(matches);
             Self {
                 scheme,
                 shielded,
@@ -6162,6 +6184,7 @@ pub mod args {
                 alias_force,
                 unsafe_dont_encrypt,
                 derivation_path,
+                allow_non_compliant,
             }
         }
 
@@ -6180,7 +6203,7 @@ pub mod args {
             .arg(
                 RAW_KEY_GEN
                     .def()
-                    .conflicts_with(HD_WALLET_DERIVATION_PATH.name)
+                    .conflicts_with(HD_DERIVATION_PATH.name)
                     .help(
                         "Generate a random non-HD secret / spending key. No \
                          mnemonic code is generated.",
@@ -6194,14 +6217,29 @@ pub mod args {
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
                  used in a live network.",
             ))
-            .arg(HD_WALLET_DERIVATION_PATH.def().help(
+            .arg(HD_DERIVATION_PATH.def().help(
                 "HD key derivation path. Use keyword `default` to refer to a \
-                 scheme default path:\n- m/44'/60'/0'/0/0 for secp256k1 \
-                 scheme\n- m/44'/877'/0'/0'/0' for ed25519 scheme.\nFor \
-                 ed25519, all path indices will be promoted to hardened \
-                 indexes. If none is specified, the scheme default path is \
-                 used.",
+                 scheme default path:\n- m/44'/60'/0'/0/0 for the transparent \
+                 secp256k1 scheme\n- m/44'/877'/0'/0'/0' for the transparent \
+                 ed25519 scheme\n- m/32'/877'/0' for the shielded \
+                 setting\nFor ed25519 scheme, all path indices will be \
+                 promoted to hardened indexes. If none is specified, the \
+                 scheme default path is used.",
             ))
+            .arg(HD_ALLOW_NON_COMPLIANT_DERIVATION_PATH.def().help(
+                "Allow non-compliant HD derivation path. The compliant \
+                 derivation path schemes include:\n- \
+                 m/44'/60'/account'/change/address_index for the transparent \
+                 secp256k1 scheme\n- \
+                 m/44'/877'/account'/change'/address_index' for the \
+                 transparent ed25519 scheme\n- m/32'/877'/account' and\n- \
+                 m/32'/877'/account'/address_index for the shielded setting",
+            ))
+            .group(
+                ArgGroup::new("requires_group")
+                    .args([HD_ALLOW_NON_COMPLIANT_DERIVATION_PATH.name])
+                    .requires(HD_DERIVATION_PATH.name),
+            )
         }
     }
 

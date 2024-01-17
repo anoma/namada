@@ -2042,6 +2042,8 @@ pub struct KeyGen {
     pub unsafe_dont_encrypt: bool,
     /// BIP44 / ZIP32 derivation path
     pub derivation_path: String,
+    /// Allow non-compliant derivation path
+    pub allow_non_compliant: bool,
 }
 
 /// Wallet restore key and implicit address arguments
@@ -2059,6 +2061,8 @@ pub struct KeyDerive {
     pub unsafe_dont_encrypt: bool,
     /// BIP44 / ZIP32 derivation path
     pub derivation_path: String,
+    /// Allow non-compliant derivation path
+    pub allow_non_compliant: bool,
     /// Use device to generate key and address
     pub use_device: bool,
 }

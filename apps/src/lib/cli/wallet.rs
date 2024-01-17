@@ -178,6 +178,7 @@ fn shielded_key_derive(
         alias_force,
         unsafe_dont_encrypt,
         derivation_path,
+        allow_non_compliant,
         use_device,
         ..
     }: args::KeyDerive,
@@ -189,7 +190,7 @@ fn shielded_key_derive(
             cli::safe_exit(1)
         });
     println!("Using HD derivation path {}", derivation_path);
-    if !derivation_path.is_namada_shielded_compliant() {
+    if !allow_non_compliant && !derivation_path.is_namada_shielded_compliant() {
         display_line!(io, "Path {} is not compliant.", derivation_path);
         display_line!(io, "No changes are persisted. Exiting.");
         cli::safe_exit(1)
@@ -237,6 +238,7 @@ fn shielded_key_gen(
         alias_force,
         unsafe_dont_encrypt,
         derivation_path,
+        allow_non_compliant,
         ..
     }: args::KeyGen,
 ) {
@@ -252,7 +254,9 @@ fn shielded_key_gen(
                 cli::safe_exit(1)
             });
         println!("Using HD derivation path {}", derivation_path);
-        if !derivation_path.is_namada_shielded_compliant() {
+        if !allow_non_compliant
+            && !derivation_path.is_namada_shielded_compliant()
+        {
             display_line!(io, "Path {} is not compliant.", derivation_path);
             display_line!(io, "No changes are persisted. Exiting.");
             cli::safe_exit(1)
@@ -422,6 +426,7 @@ async fn transparent_key_and_address_derive(
         alias_force,
         unsafe_dont_encrypt,
         derivation_path,
+        allow_non_compliant,
         use_device,
         ..
     }: args::KeyDerive,
@@ -434,7 +439,9 @@ async fn transparent_key_and_address_derive(
                 cli::safe_exit(1)
             });
     println!("Using HD derivation path {}", derivation_path);
-    if !derivation_path.is_namada_transparent_compliant(scheme) {
+    if !allow_non_compliant
+        && !derivation_path.is_namada_transparent_compliant(scheme)
+    {
         display_line!(io, "Path {} is not compliant.", derivation_path);
         display_line!(io, "No changes are persisted. Exiting.");
         cli::safe_exit(1)
@@ -527,6 +534,7 @@ fn transparent_key_and_address_gen(
         alias_force,
         unsafe_dont_encrypt,
         derivation_path,
+        allow_non_compliant,
         ..
     }: args::KeyGen,
 ) {
@@ -550,7 +558,9 @@ fn transparent_key_and_address_gen(
                     cli::safe_exit(1)
                 });
         println!("Using HD derivation path {}", derivation_path);
-        if !derivation_path.is_namada_transparent_compliant(scheme) {
+        if !allow_non_compliant
+            && !derivation_path.is_namada_transparent_compliant(scheme)
+        {
             display_line!(io, "Path {} is not compliant.", derivation_path);
             display_line!(io, "No changes are persisted. Exiting.");
             cli::safe_exit(1)
