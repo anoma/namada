@@ -2051,10 +2051,7 @@ mod test_utils {
         use namada::eth_bridge::storage::eth_bridge_queries::EthBridgeStatus;
         shell
             .wl_storage
-            .write_bytes(
-                &active_key(),
-                EthBridgeStatus::Disabled.serialize_to_vec(),
-            )
+            .write(&active_key(), EthBridgeStatus::Disabled)
             .expect("Test failed");
     }
 

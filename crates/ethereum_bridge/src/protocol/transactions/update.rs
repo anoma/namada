@@ -19,7 +19,7 @@ where
 {
     let mut amount = super::read::amount_or_default(wl_storage, key)?;
     update(&mut amount);
-    wl_storage.write_bytes(key, borsh::to_vec(&amount)?)?;
+    wl_storage.write(key, amount)?;
     Ok(amount)
 }
 
@@ -36,14 +36,13 @@ where
 {
     let mut value = super::read::value(wl_storage, key)?;
     update(&mut value);
-    wl_storage.write_bytes(key, borsh::to_vec(&value)?)?;
+    wl_storage.write(key, &value)?;
     Ok(value)
 }
 
 #[cfg(test)]
 mod tests {
     use eyre::{eyre, Result};
-    use namada_core::borsh::BorshSerializeExt;
     use namada_core::types::storage;
     use namada_state::testing::TestWlStorage;
     use namada_storage::{StorageRead, StorageWrite};
@@ -57,9 +56,8 @@ mod tests {
             .expect("could not set up test");
         let value = 21i32;
         let mut wl_storage = TestWlStorage::default();
-        let serialized = value.serialize_to_vec();
         wl_storage
-            .write_bytes(&key, serialized)
+            .write(&key, value)
             .expect("could not set up test");
 
         super::value(&mut wl_storage, &key, |v: &mut i32| *v *= 2)?;
