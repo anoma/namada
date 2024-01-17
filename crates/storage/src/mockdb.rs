@@ -28,6 +28,11 @@ use crate::db::{
 use crate::tx_queue::TxQueue;
 use crate::types::{KVBytes, PrefixIterator};
 
+const SUBSPACE_CF: &str = "subspace";
+
+const OLD_DIFF_PREFIX: &str = "old";
+const NEW_DIFF_PREFIX: &str = "new";
+
 /// An in-memory DB for testing.
 #[derive(Debug, Default)]
 pub struct MockDB(
@@ -460,7 +465,7 @@ impl DB for MockDB {
     }
 
     fn read_subspace_val(&self, key: &Key) -> Result<Option<Vec<u8>>> {
-        let key = Key::parse("subspace").map_err(Error::KeyError)?.join(key);
+        let key = Key::parse(SUBSPACE_CF).map_err(Error::KeyError)?.join(key);
         Ok(self.0.borrow().get(&key.to_string()).cloned())
     }
 
@@ -523,12 +528,12 @@ impl DB for MockDB {
             match db.insert(subspace_key.to_string(), value.to_owned()) {
                 Some(prev_value) => {
                     let old_key = diff_prefix
-                        .push(&"old".to_string().to_db_key())
+                        .push(&OLD_DIFF_PREFIX.to_string().to_db_key())
                         .unwrap()
                         .join(key);
                     db.insert(old_key.to_string(), prev_value.clone());
                     let new_key = diff_prefix
-                        .push(&"new".to_string().to_db_key())
+                        .push(&NEW_DIFF_PREFIX.to_string().to_db_key())
                         .unwrap()
                         .join(key);
                     db.insert(new_key.to_string(), value.to_owned());
@@ -536,7 +541,7 @@ impl DB for MockDB {
                 }
                 None => {
                     let new_key = diff_prefix
-                        .push(&"new".to_string().to_db_key())
+                        .push(&NEW_DIFF_PREFIX.to_string().to_db_key())
                         .unwrap()
                         .join(key);
                     db.insert(new_key.to_string(), value.to_owned());
@@ -553,7 +558,7 @@ impl DB for MockDB {
         key: &Key,
     ) -> Result<i64> {
         let subspace_key =
-            Key::parse("subspace").map_err(Error::KeyError)?.join(key);
+            Key::parse(SUBSPACE_CF).map_err(Error::KeyError)?.join(key);
         let diff_prefix = Key::from(height.to_db_key());
         let mut db = self.0.borrow_mut();
         Ok(match db.remove(&subspace_key.to_string()) {

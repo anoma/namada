@@ -87,6 +87,9 @@ const STATE_CF: &str = "state";
 const BLOCK_CF: &str = "block";
 const REPLAY_PROTECTION_CF: &str = "replay_protection";
 
+const OLD_DIFF_PREFIX: &str = "old";
+const NEW_DIFF_PREFIX: &str = "new";
+
 /// RocksDB handle
 #[derive(Debug)]
 pub struct RocksDB(rocksdb::DB);
@@ -220,7 +223,7 @@ impl RocksDB {
 
         if let Some(old_value) = old_value {
             let old_val_key = key_prefix
-                .push(&"old".to_owned())
+                .push(&OLD_DIFF_PREFIX.to_owned())
                 .map_err(Error::KeyError)?
                 .join(key)
                 .to_string();
@@ -231,7 +234,7 @@ impl RocksDB {
 
         if let Some(new_value) = new_value {
             let new_val_key = key_prefix
-                .push(&"new".to_owned())
+                .push(&NEW_DIFF_PREFIX.to_owned())
                 .map_err(Error::KeyError)?
                 .join(key)
                 .to_string();
@@ -257,7 +260,7 @@ impl RocksDB {
 
         if let Some(old_value) = old_value {
             let old_val_key = key_prefix
-                .push(&"old".to_owned())
+                .push(&OLD_DIFF_PREFIX.to_owned())
                 .map_err(Error::KeyError)?
                 .join(key)
                 .to_string();
@@ -266,7 +269,7 @@ impl RocksDB {
 
         if let Some(new_value) = new_value {
             let new_val_key = key_prefix
-                .push(&"new".to_owned())
+                .push(&NEW_DIFF_PREFIX.to_owned())
                 .map_err(Error::KeyError)?
                 .join(key)
                 .to_string();
@@ -541,7 +544,7 @@ impl RocksDB {
         let diff_new_key_prefix = Key {
             segments: vec![
                 last_block.height.to_db_key(),
-                "new".to_string().to_db_key(),
+                NEW_DIFF_PREFIX.to_string().to_db_key(),
             ],
         };
         {
@@ -1196,7 +1199,7 @@ impl DB for RocksDB {
         let diffs_cf = self.get_column_family(DIFFS_CF)?;
         let key_prefix = Key::from(height.to_db_key());
         let new_val_key = key_prefix
-            .push(&"new".to_owned())
+            .push(&NEW_DIFF_PREFIX.to_owned())
             .map_err(Error::KeyError)?
             .join(key)
             .to_string();
@@ -1212,7 +1215,7 @@ impl DB for RocksDB {
             }
             None => {
                 let old_val_key = key_prefix
-                    .push(&"old".to_owned())
+                    .push(&OLD_DIFF_PREFIX.to_owned())
                     .map_err(Error::KeyError)?
                     .join(key)
                     .to_string();
@@ -1238,7 +1241,7 @@ impl DB for RocksDB {
             // Try to find the next diff on this key
             let key_prefix = Key::from(BlockHeight(raw_height).to_db_key());
             let old_val_key = key_prefix
-                .push(&"old".to_owned())
+                .push(&OLD_DIFF_PREFIX.to_owned())
                 .map_err(Error::KeyError)?
                 .join(key)
                 .to_string();
@@ -1253,7 +1256,7 @@ impl DB for RocksDB {
                     // Check if the value was created at this height instead,
                     // which would mean that it wasn't present before
                     let new_val_key = key_prefix
-                        .push(&"new".to_owned())
+                        .push(&NEW_DIFF_PREFIX.to_owned())
                         .map_err(Error::KeyError)?
                         .join(key)
                         .to_string();
@@ -1570,7 +1573,11 @@ fn iter_diffs_prefix<'a>(
     let diffs_cf = db
         .get_column_family(DIFFS_CF)
         .expect("{DIFFS_CF} column family should exist");
-    let kind = if is_old { "old" } else { "new" };
+    let kind = if is_old {
+        OLD_DIFF_PREFIX
+    } else {
+        NEW_DIFF_PREFIX
+    };
     let stripped_prefix = Some(
         Key::from(height.to_db_key())
             .push(&kind.to_string())
