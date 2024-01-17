@@ -1,6 +1,6 @@
 //! A tx for token transfer.
 //! This tx uses `token::Transfer` wrapped inside `SignedTxData`
-//! as its input as declared in `shared` crate.
+//! as its input as declared in `namada` crate.
 
 use namada_tx_prelude::*;
 

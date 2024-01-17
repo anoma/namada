@@ -27,4 +27,7 @@ target/
 wasm/*.wasm
 
 # app version string file
-/apps/version.rs
+/crates/apps/version.rs
+
+# Hidden to stop from re-appearing. Moved to `tx/src/proto/generated/types.rs`.
+core/src/proto/generated/types.rs

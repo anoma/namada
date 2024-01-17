@@ -1,0 +1,23 @@
+[package]
+name = "namada_encoding_spec"
+description = "Namada encoding spec generator"
+resolver = "2"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[features]
+default = []
+
+[dependencies]
+namada = { path = "../namada", features = ["rand", "tendermint-rpc", "download-params"] }
+borsh.workspace = true
+itertools.workspace = true
+lazy_static.workspace = true
+madato = "0.5.3"
