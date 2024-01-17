@@ -1,4 +1,3 @@
-use namada_core::borsh::BorshSerializeExt;
 use namada_core::ledger::eth_bridge::ADDRESS;
 use namada_core::types::hash::StorageHasher;
 use namada_state::{DBIter, WlStorage, DB};
@@ -16,10 +15,8 @@ where
     H: StorageHasher,
 {
     let escrow_key = balance_key(&wl_storage.storage.native_token, &ADDRESS);
-    wl_storage
-        .write_bytes(&escrow_key, Amount::default().serialize_to_vec())
-        .expect(
-            "Initializing the escrow balance of the Ethereum Bridge VP \
-             shouldn't fail.",
-        );
+    wl_storage.write(&escrow_key, Amount::default()).expect(
+        "Initializing the escrow balance of the Ethereum Bridge VP shouldn't \
+         fail.",
+    );
 }

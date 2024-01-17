@@ -218,9 +218,9 @@ where
             self.update_eth_oracle(&Default::default());
         } else {
             self.wl_storage
-                .write_bytes(
+                .write(
                     &namada::eth_bridge::storage::active_key(),
-                    EthBridgeStatus::Disabled.serialize_to_vec(),
+                    EthBridgeStatus::Disabled,
                 )
                 .unwrap();
         }
