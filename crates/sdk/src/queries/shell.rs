@@ -83,7 +83,6 @@ router! {SHELL,
     // Conversion state access - read conversion
     ( "conversions" ) -> BTreeMap<AssetType, ConversionWithoutPath> = read_conversions,
 
-
     // Conversion state access - read conversion
     ( "masp_reward_tokens" ) -> BTreeMap<String, Address> = masp_reward_tokens,
 

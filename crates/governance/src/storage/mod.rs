@@ -23,7 +23,7 @@ use crate::storage::proposal::{
     InitProposalData, ProposalType, StorageProposal, VoteProposalData,
 };
 use crate::storage::vote::ProposalVote;
-use crate::utils::Vote;
+use crate::utils::{ProposalResult, Vote};
 use crate::ADDRESS as governance_address;
 
 /// A proposal creation transaction.
@@ -266,4 +266,17 @@ where
     let max_proposal_period: u64 =
         storage.read(&key)?.expect("Parameter should be defined.");
     Ok(max_proposal_period)
+}
+
+/// Get governance proposal result stored in storage if proposal ended
+pub fn get_proposal_result<S>(
+    storage: &S,
+    proposal_id: u64,
+) -> StorageResult<Option<ProposalResult>>
+where
+    S: StorageRead,
+{
+    let key = governance_keys::get_proposal_result_key(proposal_id);
+    let proposal_result: Option<ProposalResult> = storage.read(&key)?;
+    Ok(proposal_result)
 }

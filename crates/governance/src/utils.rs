@@ -292,6 +292,50 @@ pub struct ProposalVotes {
     pub delegator_voting_power: HashMap<Address, HashMap<Address, VotePower>>,
 }
 
+impl ProposalVotes {
+    /// Add vote correspoding to a validator
+    pub fn add_validator(
+        &mut self,
+        address: &Address,
+        voting_power: VotePower,
+        vote: TallyVote,
+    ) {
+        match self.validators_vote.insert(address.clone(), vote) {
+            // the value was update, this should never happen
+            None => {
+                self.validator_voting_power
+                    .insert(address.clone(), voting_power);
+            }
+            _ => tracing::error!(
+                "Duplicate vote for validator {}",
+                address.clone()
+            ),
+        };
+    }
+
+    /// Add vote corresponding to a delegator
+    pub fn add_delegator(
+        &mut self,
+        address: &Address,
+        validator_address: &Address,
+        voting_power: VotePower,
+        vote: TallyVote,
+    ) {
+        match self.delegators_vote.insert(address.clone(), vote) {
+            None => {
+                self.delegator_voting_power
+                    .entry(address.clone())
+                    .or_default()
+                    .insert(validator_address.clone(), voting_power);
+            }
+            _ => tracing::error!(
+                "Duplicate vote for delegator {}",
+                address.clone()
+            ),
+        }
+    }
+}
+
 /// Compute the result of a proposal
 pub fn compute_proposal_result(
     votes: ProposalVotes,
