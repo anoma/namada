@@ -130,7 +130,7 @@ impl TallyResult {
 
                 // At least half of non-abstained votes are yay
                 let at_last_half_voted_yay =
-                    yay_voting_power >= nay_voting_power;
+                    yay_voting_power.mul_ceil(Dec::two()) < abstain_voting_power;
                 at_least_one_third_voted && at_last_half_voted_yay
             }
             TallyType::LessOneHalfOverOneThirdNay => {
