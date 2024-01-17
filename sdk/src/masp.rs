@@ -1373,7 +1373,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         context: &impl Namada,
         owner: PaymentAddress,
         viewing_key: &ViewingKey,
-    ) -> Result<(ValueSum<Address, token::Change>, Epoch), Error> {
+    ) -> Result<(ValueSum<Address, token::Change>, I128Sum, Epoch), Error> {
         // Obtain the balance that will be exchanged
         let (amt, ep) =
             Self::compute_pinned_balance(context.client(), owner, viewing_key)
@@ -1391,15 +1391,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             .await?
             .0;
         display_line!(context.io(), "Exchanged amount: {:?}", computed_amount);
-        Ok((
-            self.decode_combine_sum_to_epoch(
-                context.client(),
-                computed_amount,
-                ep,
-            )
-            .await,
-            ep,
-        ))
+        let (decoded, undecoded) = self
+            .decode_combine_sum_to_epoch(context.client(), computed_amount, ep)
+            .await;
+        Ok((decoded, undecoded, ep))
     }
 
     /// Convert an amount whose units are AssetTypes to one whose units are
@@ -1410,8 +1405,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         client: &C,
         amt: I128Sum,
         target_epoch: Epoch,
-    ) -> ValueSum<Address, token::Change> {
+    ) -> (ValueSum<Address, token::Change>, I128Sum) {
         let mut res = ValueSum::zero();
+        let mut undecoded = ValueSum::zero();
         for (asset_type, val) in amt.components() {
             // Decode the asset type
             let decoded = self.decode_asset_type(client, *asset_type).await;
@@ -1426,10 +1422,14 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     res += ValueSum::from_pair(address, decoded_change)
                         .expect("expected this to fit");
                 }
+                None => {
+                    undecoded += ValueSum::from_pair(*asset_type, *val)
+                        .expect("expected this to fit");
+                }
                 _ => {}
             }
         }
-        res
+        (res, undecoded)
     }
 
     /// Convert an amount whose units are AssetTypes to one whose units are
@@ -1438,8 +1438,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         &mut self,
         client: &C,
         amt: I128Sum,
-    ) -> MaspAmount {
+    ) -> (MaspAmount, I128Sum) {
         let mut res = MaspAmount::zero();
+        let mut undecoded = ValueSum::zero();
         for (asset_type, val) in amt.components() {
             // Decode the asset type
             if let Some((addr, denom, epoch)) =
@@ -1450,9 +1451,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                         .expect("expected this to fit");
                 res += MaspAmount::from_pair((epoch, addr), decoded_change)
                     .expect("unable to construct decoded amount");
+            } else {
+                undecoded += ValueSum::from_pair(*asset_type, *val)
+                    .expect("expected this to fit");
             }
         }
-        res
+        (res, undecoded)
     }
 
     /// Convert an amount whose units are AssetTypes to one whose units are

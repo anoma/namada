@@ -190,7 +190,7 @@ pub async fn query_transfers(
                 ) || shielded_accounts
                     .values()
                     .cloned()
-                    .any(|x| !x.get(token).is_zero())
+                    .any(|x| !x.0.get(token).is_zero())
             }
             None => true,
         };
@@ -231,7 +231,7 @@ pub async fn query_transfers(
         for (account, masp_change) in shielded_accounts {
             if fvk_map.contains_key(&account) {
                 display!(context.io(), "  {}:", fvk_map[&account]);
-                for (token_addr, val) in masp_change.components() {
+                for (token_addr, val) in masp_change.0.components() {
                     let token_alias =
                         lookup_token_alias(context, token_addr, &MASP).await;
                     let sign = match val.cmp(&Change::zero()) {
@@ -246,6 +246,14 @@ pub async fn query_transfers(
                         context.format_amount(token_addr, (*val).into()).await,
                         token_alias,
                     );
+                }
+                for (asset_type, val) in masp_change.1.components() {
+                    let sign = match val.cmp(&0) {
+                        Ordering::Greater => "+",
+                        Ordering::Less => "-",
+                        Ordering::Equal => "",
+                    };
+                    display!(context.io(), " {}{} {}", sign, val, asset_type,);
                 }
                 display_line!(context.io(), "");
             }
@@ -475,7 +483,7 @@ pub async fn query_pinned_balance(
                     other
                 )
             }
-            (Ok((balance, epoch)), Some(base_token)) => {
+            (Ok((balance, _undecoded, epoch)), Some(base_token)) => {
                 let tokens =
                     query_tokens(context, Some(base_token), None).await;
                 for (token_alias, token) in &tokens {
@@ -510,10 +518,10 @@ pub async fn query_pinned_balance(
                     }
                 }
             }
-            (Ok((balance, epoch)), None) => {
+            (Ok((balance, undecoded, epoch)), None) => {
                 let mut found_any = false;
 
-                for (token_addr, value) in balance.0.iter() {
+                for (token_addr, value) in balance.components() {
                     if !found_any {
                         display_line!(
                             context.io(),
@@ -535,6 +543,19 @@ pub async fn query_pinned_balance(
                         token_alias,
                         formatted,
                     );
+                }
+                for (asset_type, value) in undecoded.components() {
+                    if !found_any {
+                        display_line!(
+                            context.io(),
+                            "Payment address {} was consumed during epoch {}. \
+                             Received:",
+                            owner,
+                            epoch
+                        );
+                        found_any = true;
+                    }
+                    display_line!(context.io(), " {}: {}", asset_type, value,);
                 }
                 if !found_any {
                     display_line!(
@@ -852,6 +873,7 @@ pub async fn query_shielded_balance(
                         epoch,
                     )
                     .await
+                    .0
                     .get(&token);
                 if total_balance.is_zero() {
                     display_line!(
@@ -904,7 +926,7 @@ pub async fn query_shielded_balance(
                         epoch,
                     )
                     .await;
-                for (key, value) in balance.components() {
+                for (key, value) in balance.0.components() {
                     balances
                         .entry(key.clone())
                         .or_insert(Vec::new())
@@ -979,6 +1001,7 @@ pub async fn query_shielded_balance(
                             epoch,
                         )
                         .await
+                        .0
                         .get(&token);
                     if !total_balance.is_zero() {
                         found_any = true;
@@ -1050,13 +1073,16 @@ pub async fn print_decoded_balance(
             .await
             .decode_combine_sum_to_epoch(context.client(), balance, epoch)
             .await;
-        for (token_addr, amount) in decoded_balance.components() {
+        for (token_addr, amount) in decoded_balance.0.components() {
             display_line!(
                 context.io(),
                 "{} : {}",
                 lookup_token_alias(context, token_addr, &MASP).await,
                 context.format_amount(token_addr, (*amount).into()).await,
             );
+        }
+        for (asset_type, amount) in decoded_balance.1.components() {
+            display_line!(context.io(), "{} : {}", asset_type, amount,);
         }
     }
 }
@@ -1077,10 +1103,10 @@ pub async fn print_decoded_balance_with_epoch(
         .await
         .decode_combine_sum(context.client(), balance)
         .await;
-    for ((epoch, token_addr), value) in decoded_balance.0 {
-        let asset_value = value.into();
+    for ((epoch, token_addr), value) in decoded_balance.0.components() {
+        let asset_value = (*value).into();
         let alias = tokens
-            .get(&token_addr)
+            .get(token_addr)
             .map(|a| a.to_string())
             .unwrap_or_else(|| token_addr.to_string());
         if let Some(epoch) = epoch {
@@ -1089,16 +1115,19 @@ pub async fn print_decoded_balance_with_epoch(
                 "{} | {} : {}",
                 alias,
                 epoch,
-                context.format_amount(&token_addr, asset_value).await,
+                context.format_amount(token_addr, asset_value).await,
             );
         } else {
             display_line!(
                 context.io(),
                 "{} : {}",
                 alias,
-                context.format_amount(&token_addr, asset_value).await,
+                context.format_amount(token_addr, asset_value).await,
             );
         }
+    }
+    for (asset_type, value) in decoded_balance.1.components() {
+        display_line!(context.io(), "{} : {}", asset_type, value,);
     }
 }
 
