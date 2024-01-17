@@ -75,6 +75,7 @@ namada_core = {path = "../core", default-features = false, features = ["rand"]}
 namada_ethereum_bridge = {path = "../ethereum_bridge", default-features = false}
 namada_proof_of_stake = {path = "../proof_of_stake", default-features = false}
 num256.workspace = true
+num-traits.workspace = true
 orion.workspace = true
 owo-colors = "3.5.0"
 parse_duration = "2.1.1"

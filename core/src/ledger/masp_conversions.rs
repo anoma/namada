@@ -3,7 +3,6 @@
 use std::collections::BTreeMap;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::convert::AllowedConversion;
 use masp_primitives::merkle_tree::FrozenCommitmentTree;
@@ -212,6 +211,9 @@ where
     };
     use rayon::prelude::ParallelSlice;
 
+    use crate::ledger::storage_api::ResultExt;
+    use crate::types::masp::encode_asset_type;
+
     // The derived conversions will be placed in MASP address space
     let masp_addr = MASP;
 
@@ -242,10 +244,14 @@ where
     // notes clients have to use. This trick works under the assumption that
     // reward tokens will then be reinflated back to the current epoch.
     let reward_assets = [
-        encode_asset_type(native_token.clone(), MaspDenom::Zero, Epoch(0)),
-        encode_asset_type(native_token.clone(), MaspDenom::One, Epoch(0)),
-        encode_asset_type(native_token.clone(), MaspDenom::Two, Epoch(0)),
-        encode_asset_type(native_token.clone(), MaspDenom::Three, Epoch(0)),
+        encode_asset_type(Some(Epoch(0)), &native_token, MaspDenom::Zero)
+            .into_storage_result()?,
+        encode_asset_type(Some(Epoch(0)), &native_token, MaspDenom::One)
+            .into_storage_result()?,
+        encode_asset_type(Some(Epoch(0)), &native_token, MaspDenom::Two)
+            .into_storage_result()?,
+        encode_asset_type(Some(Epoch(0)), &native_token, MaspDenom::Three)
+            .into_storage_result()?,
     ];
     // Conversions from the previous to current asset for each address
     let mut current_convs =
@@ -269,15 +275,17 @@ where
             // negative sign allows each instance of the old asset to be
             // cancelled out/replaced with the new asset
             let old_asset = encode_asset_type(
-                addr.clone(),
+                Some(wl_storage.storage.last_epoch),
+                addr,
                 denom,
-                wl_storage.storage.last_epoch,
-            );
+            )
+            .into_storage_result()?;
             let new_asset = encode_asset_type(
-                addr.clone(),
+                Some(wl_storage.storage.block.epoch),
+                addr,
                 denom,
-                wl_storage.storage.block.epoch,
-            );
+            )
+            .into_storage_result()?;
             // Get the last rewarded amount of the native token
             let normed_inflation = wl_storage
                 .storage
@@ -325,9 +333,12 @@ where
                 if denom == MaspDenom::Three {
                     // The reward for each reward.1 units of the current asset
                     // is reward.0 units of the reward token
-                    total_reward += (addr_bal
-                        * (new_normed_inflation, *normed_inflation))
+                    let native_reward =
+                        addr_bal * (new_normed_inflation, *normed_inflation);
+                    total_reward += native_reward
                         .0
+                        .checked_add(native_reward.1)
+                        .unwrap_or(token::Amount::max())
                         .checked_sub(addr_bal)
                         .unwrap_or_default();
                     // Save the new normed inflation
@@ -370,9 +381,7 @@ where
                 if denom == MaspDenom::Three {
                     // The reward for each reward.1 units of the current asset
                     // is reward.0 units of the reward token
-                    total_reward += ((addr_bal * (real_reward, reward.1)).0
-                        * (*normed_inflation, ref_inflation))
-                        .0;
+                    total_reward += (addr_bal * (reward.0, reward.1)).0;
                 }
             }
             // Add a conversion from the previous asset type
@@ -461,10 +470,11 @@ where
             // Add the decoding entry for the new asset type. An uncommitted
             // node position is used since this is not a conversion.
             let new_asset = encode_asset_type(
-                addr.clone(),
+                Some(wl_storage.storage.block.epoch),
+                &addr,
                 denom,
-                wl_storage.storage.block.epoch,
-            );
+            )
+            .into_storage_result()?;
             wl_storage.storage.conversion_state.assets.insert(
                 new_asset,
                 (
@@ -478,17 +488,6 @@ where
     }
 
     Ok(())
-}
-
-/// Construct MASP asset type with given epoch for given token
-pub fn encode_asset_type(
-    addr: Address,
-    denom: MaspDenom,
-    epoch: Epoch,
-) -> AssetType {
-    let new_asset_bytes = (addr, denom, epoch.0).serialize_to_vec();
-    AssetType::new(new_asset_bytes.as_ref())
-        .expect("unable to derive asset identifier")
 }
 
 #[cfg(test)]

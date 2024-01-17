@@ -79,7 +79,7 @@ router! {SHELL,
         -> bool = storage_has_key,
 
     // Conversion state access - read conversion
-    ( "conv" / [asset_type: AssetType] ) -> Conversion = read_conversion,
+    ( "conv" / [asset_type: AssetType] ) -> Option<Conversion> = read_conversion,
 
     // Conversion state access - read conversion
     ( "conversions" ) -> BTreeMap<AssetType, ConversionWithoutPath> = read_conversions,
@@ -184,7 +184,7 @@ where
 fn read_conversion<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     asset_type: AssetType,
-) -> storage_api::Result<Conversion>
+) -> storage_api::Result<Option<Conversion>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -197,7 +197,7 @@ where
         .assets
         .get(&asset_type)
     {
-        Ok((
+        Ok(Some((
             addr.clone(),
             *denom,
             *epoch,
@@ -205,12 +205,9 @@ where
                 conv.clone(),
             ),
             ctx.wl_storage.storage.conversion_state.tree.path(*pos),
-        ))
-    } else {
-        Err(storage_api::Error::new(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            format!("No conversion found for asset type: {}", asset_type),
         )))
+    } else {
+        Ok(None)
     }
 }
 

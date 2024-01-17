@@ -67,9 +67,10 @@ impl Dec {
     /// the division is impossible (e.g., division by zero or overflow), `None`
     /// is returned.
     ///
-    /// For instance:
+    /// Example:
+    /// ```
+    /// use namada_core::types::dec::Dec;
     ///
-    /// ```ignore
     /// let x = Dec::new(3, 1).unwrap(); // Represents 0.3
     /// let y = Dec::new(2, 1).unwrap(); // Represents 0.2
     /// let result = x.trunc_div(&y).unwrap();
