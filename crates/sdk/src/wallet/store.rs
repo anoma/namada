@@ -817,11 +817,12 @@ mod test_wallet {
         let seed = Seed::new(&mnemonic, PASSPHRASE);
         assert_eq!(format!("{:x}", seed), SEED_EXPECTED);
 
-        let derivation_path = DerivationPath::from_path_string_for_scheme(
-            SCHEME,
-            DERIVATION_PATH,
-        )
-        .expect("Derivation path construction cannot fail");
+        let derivation_path =
+            DerivationPath::from_path_string_for_transparent_scheme(
+                SCHEME,
+                DERIVATION_PATH,
+            )
+            .expect("Derivation path construction cannot fail");
 
         let sk = derive_hd_secret_key(SCHEME, seed.as_bytes(), derivation_path);
 
@@ -845,14 +846,15 @@ mod test_wallet {
         let seed = Seed::new(&mnemonic, PASSPHRASE);
         assert_eq!(format!("{:x}", seed), SEED_EXPECTED);
 
-        let derivation_path = DerivationPath::from_path_string_for_scheme(
-            SCHEME,
-            DERIVATION_PATH,
-        )
-        .expect("Derivation path construction cannot fail");
+        let derivation_path =
+            DerivationPath::from_path_string_for_transparent_scheme(
+                SCHEME,
+                DERIVATION_PATH,
+            )
+            .expect("Derivation path construction cannot fail");
 
         let derivation_path_hardened =
-            DerivationPath::from_path_string_for_scheme(
+            DerivationPath::from_path_string_for_transparent_scheme(
                 SCHEME,
                 DERIVATION_PATH_HARDENED,
             )
@@ -882,7 +884,7 @@ mod test_wallet {
                 .decode(seed.as_bytes())
                 .expect("Seed parsing cannot fail.")
                 .as_slice(),
-            DerivationPath::from_path_string_for_scheme(
+            DerivationPath::from_path_string_for_transparent_scheme(
                 scheme,
                 derivation_path,
             )

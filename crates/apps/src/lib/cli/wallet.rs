@@ -188,6 +188,12 @@ fn shielded_key_derive(
             edisplay_line!(io, "{}", err);
             cli::safe_exit(1)
         });
+    println!("Using HD derivation path {}", derivation_path);
+    if !derivation_path.is_namada_shielded_compliant() {
+        display_line!(io, "Path {} is not compliant.", derivation_path);
+        display_line!(io, "No changes are persisted. Exiting.");
+        cli::safe_exit(1)
+    }
     let alias = alias.to_lowercase();
     let alias = if !use_device {
         let encryption_password =
@@ -245,6 +251,12 @@ fn shielded_key_gen(
                 edisplay_line!(io, "{}", err);
                 cli::safe_exit(1)
             });
+        println!("Using HD derivation path {}", derivation_path);
+        if !derivation_path.is_namada_shielded_compliant() {
+            display_line!(io, "Path {} is not compliant.", derivation_path);
+            display_line!(io, "No changes are persisted. Exiting.");
+            cli::safe_exit(1)
+        }
         let (_mnemonic, seed) =
             Wallet::<CliWalletUtils>::gen_hd_seed(None, &mut OsRng);
         wallet.derive_store_hd_spendind_key(
@@ -377,15 +389,11 @@ pub fn decode_transparent_derivation_path(
     let parsed_derivation_path = if is_default {
         DerivationPath::default_for_transparent_scheme(scheme)
     } else {
-        DerivationPath::from_path_string_for_scheme(scheme, &derivation_path)?
+        DerivationPath::from_path_string_for_transparent_scheme(
+            scheme,
+            &derivation_path,
+        )?
     };
-    if !parsed_derivation_path.is_compatible(scheme) {
-        println!(
-            "WARNING: the specified derivation path may be incompatible with \
-             the chosen cryptography scheme."
-        )
-    }
-    println!("Using HD derivation path {}", parsed_derivation_path);
     Ok(parsed_derivation_path)
 }
 
@@ -400,7 +408,6 @@ pub fn decode_shielded_derivation_path(
     } else {
         DerivationPath::from_path_string(&derivation_path)?
     };
-    println!("Using HD derivation path {}", parsed_derivation_path);
     Ok(parsed_derivation_path)
 }
 
@@ -426,6 +433,12 @@ async fn transparent_key_and_address_derive(
                 edisplay_line!(io, "{}", err);
                 cli::safe_exit(1)
             });
+    println!("Using HD derivation path {}", derivation_path);
+    if !derivation_path.is_namada_transparent_compliant(scheme) {
+        display_line!(io, "Path {} is not compliant.", derivation_path);
+        display_line!(io, "No changes are persisted. Exiting.");
+        cli::safe_exit(1)
+    }
     let alias = alias.to_lowercase();
     let alias = if !use_device {
         let encryption_password =
@@ -536,6 +549,12 @@ fn transparent_key_and_address_gen(
                     edisplay_line!(io, "{}", err);
                     cli::safe_exit(1)
                 });
+        println!("Using HD derivation path {}", derivation_path);
+        if !derivation_path.is_namada_transparent_compliant(scheme) {
+            display_line!(io, "Path {} is not compliant.", derivation_path);
+            display_line!(io, "No changes are persisted. Exiting.");
+            cli::safe_exit(1)
+        }
         let (_mnemonic, seed) =
             Wallet::<CliWalletUtils>::gen_hd_seed(None, &mut OsRng);
         wallet.derive_store_hd_secret_key(
