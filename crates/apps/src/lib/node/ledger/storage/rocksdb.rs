@@ -56,7 +56,7 @@ use namada::state::merkle_tree::{base_tree_key_prefix, subtree_key_prefix};
 use namada::state::types::PrefixIterator;
 use namada::state::{
     BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, DbError as Error,
-    DbResult as Result, MerkleTreeStoresRead, StoreType, DB,
+    DbResult as Result, MerkleTreeStoresRead, StoreType, WriteOpts, DB,
 };
 use namada::types;
 use namada::types::storage::{
@@ -86,6 +86,9 @@ const DIFFS_CF: &str = "diffs";
 const STATE_CF: &str = "state";
 const BLOCK_CF: &str = "block";
 const REPLAY_PROTECTION_CF: &str = "replay_protection";
+
+const OLD_DIFF_PREFIX: &str = "old";
+const NEW_DIFF_PREFIX: &str = "new";
 
 /// RocksDB handle
 #[derive(Debug)]
@@ -214,13 +217,14 @@ impl RocksDB {
         key: &Key,
         old_value: Option<&[u8]>,
         new_value: Option<&[u8]>,
+        persist_diffs: bool,
     ) -> Result<()> {
         let cf = self.get_column_family(DIFFS_CF)?;
         let key_prefix = Key::from(height.to_db_key());
 
         if let Some(old_value) = old_value {
             let old_val_key = key_prefix
-                .push(&"old".to_owned())
+                .push(&OLD_DIFF_PREFIX.to_owned())
                 .map_err(Error::KeyError)?
                 .join(key)
                 .to_string();
@@ -231,13 +235,37 @@ impl RocksDB {
 
         if let Some(new_value) = new_value {
             let new_val_key = key_prefix
-                .push(&"new".to_owned())
+                .push(&NEW_DIFF_PREFIX.to_owned())
                 .map_err(Error::KeyError)?
                 .join(key)
                 .to_string();
             self.0
                 .put_cf(cf, new_val_key, new_value)
                 .map_err(|e| Error::DBError(e.into_string()))?;
+        }
+
+        // If not persisting the diffs, remove the existing diffs from two block
+        // heights earlier than `height`
+        if !persist_diffs {
+            if let Some(pruned_height) = height.0.checked_sub(1) {
+                let pruned_key_prefix = Key::from(pruned_height.to_db_key());
+                let old_val_key = pruned_key_prefix
+                    .push(&OLD_DIFF_PREFIX.to_owned())
+                    .map_err(Error::KeyError)?
+                    .join(key)
+                    .to_string();
+                self.0
+                    .delete_cf(cf, old_val_key)
+                    .map_err(|e| Error::DBError(e.into_string()))?;
+                let new_val_key = pruned_key_prefix
+                    .push(&NEW_DIFF_PREFIX.to_owned())
+                    .map_err(Error::KeyError)?
+                    .join(key)
+                    .to_string();
+                self.0
+                    .delete_cf(cf, new_val_key)
+                    .map_err(|e| Error::DBError(e.into_string()))?;
+            }
         }
         Ok(())
     }
@@ -251,13 +279,14 @@ impl RocksDB {
         key: &Key,
         old_value: Option<&[u8]>,
         new_value: Option<&[u8]>,
+        persist_diffs: bool,
     ) -> Result<()> {
         let cf = self.get_column_family(DIFFS_CF)?;
         let key_prefix = Key::from(height.to_db_key());
 
         if let Some(old_value) = old_value {
             let old_val_key = key_prefix
-                .push(&"old".to_owned())
+                .push(&OLD_DIFF_PREFIX.to_owned())
                 .map_err(Error::KeyError)?
                 .join(key)
                 .to_string();
@@ -266,11 +295,31 @@ impl RocksDB {
 
         if let Some(new_value) = new_value {
             let new_val_key = key_prefix
-                .push(&"new".to_owned())
+                .push(&NEW_DIFF_PREFIX.to_owned())
                 .map_err(Error::KeyError)?
                 .join(key)
                 .to_string();
             batch.0.put_cf(cf, new_val_key, new_value);
+        }
+
+        // If not persisting the diffs, remove the existing diffs from two block
+        // heights earlier than `height`
+        if !persist_diffs {
+            if let Some(pruned_height) = height.0.checked_sub(1) {
+                let pruned_key_prefix = Key::from(pruned_height.to_db_key());
+                let old_val_key = pruned_key_prefix
+                    .push(&OLD_DIFF_PREFIX.to_owned())
+                    .map_err(Error::KeyError)?
+                    .join(key)
+                    .to_string();
+                batch.0.delete_cf(cf, old_val_key);
+                let new_val_key = pruned_key_prefix
+                    .push(&NEW_DIFF_PREFIX.to_owned())
+                    .map_err(Error::KeyError)?
+                    .join(key)
+                    .to_string();
+                batch.0.delete_cf(cf, new_val_key);
+            }
         }
         Ok(())
     }
@@ -541,7 +590,7 @@ impl RocksDB {
         let diff_new_key_prefix = Key {
             segments: vec![
                 last_block.height.to_db_key(),
-                "new".to_string().to_db_key(),
+                NEW_DIFF_PREFIX.to_string().to_db_key(),
             ],
         };
         {
@@ -1179,6 +1228,28 @@ impl DB for RocksDB {
         Ok(false)
     }
 
+    fn read_diffs_val(
+        &self,
+        key: &Key,
+        height: BlockHeight,
+        is_old: bool,
+    ) -> Result<Option<Vec<u8>>> {
+        let diffs_cf = self.get_column_family(DIFFS_CF)?;
+        let old_new_seg = if is_old {
+            OLD_DIFF_PREFIX
+        } else {
+            NEW_DIFF_PREFIX
+        };
+        let key = Key::from(height.to_db_key())
+            .push(&old_new_seg.to_string().to_db_key())
+            .unwrap()
+            .join(key);
+
+        self.0
+            .get_cf(diffs_cf, key.to_string())
+            .map_err(|e| Error::DBError(e.into_string()))
+    }
+
     fn read_subspace_val(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
         self.0
@@ -1196,7 +1267,7 @@ impl DB for RocksDB {
         let diffs_cf = self.get_column_family(DIFFS_CF)?;
         let key_prefix = Key::from(height.to_db_key());
         let new_val_key = key_prefix
-            .push(&"new".to_owned())
+            .push(&NEW_DIFF_PREFIX.to_owned())
             .map_err(Error::KeyError)?
             .join(key)
             .to_string();
@@ -1212,7 +1283,7 @@ impl DB for RocksDB {
             }
             None => {
                 let old_val_key = key_prefix
-                    .push(&"old".to_owned())
+                    .push(&OLD_DIFF_PREFIX.to_owned())
                     .map_err(Error::KeyError)?
                     .join(key)
                     .to_string();
@@ -1238,7 +1309,7 @@ impl DB for RocksDB {
             // Try to find the next diff on this key
             let key_prefix = Key::from(BlockHeight(raw_height).to_db_key());
             let old_val_key = key_prefix
-                .push(&"old".to_owned())
+                .push(&OLD_DIFF_PREFIX.to_owned())
                 .map_err(Error::KeyError)?
                 .join(key)
                 .to_string();
@@ -1253,7 +1324,7 @@ impl DB for RocksDB {
                     // Check if the value was created at this height instead,
                     // which would mean that it wasn't present before
                     let new_val_key = key_prefix
-                        .push(&"new".to_owned())
+                        .push(&NEW_DIFF_PREFIX.to_owned())
                         .map_err(Error::KeyError)?
                         .join(key)
                         .to_string();
@@ -1285,9 +1356,13 @@ impl DB for RocksDB {
         height: BlockHeight,
         key: &Key,
         value: impl AsRef<[u8]>,
+        action: WriteOpts,
     ) -> Result<i64> {
         let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
         let value = value.as_ref();
+
+        let persist_diffs = action.contains(WriteOpts::WRITE_DIFFS);
+
         let size_diff = match self
             .0
             .get_cf(subspace_cf, key.to_string())
@@ -1300,11 +1375,18 @@ impl DB for RocksDB {
                     key,
                     Some(&prev_value),
                     Some(value),
+                    persist_diffs,
                 )?;
                 size_diff
             }
             None => {
-                self.write_subspace_diff(height, key, None, Some(value))?;
+                self.write_subspace_diff(
+                    height,
+                    key,
+                    None,
+                    Some(value),
+                    persist_diffs,
+                )?;
                 value.len() as i64
             }
         };
@@ -1321,8 +1403,11 @@ impl DB for RocksDB {
         &mut self,
         height: BlockHeight,
         key: &Key,
+        action: WriteOpts,
     ) -> Result<i64> {
         let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
+
+        let persists_diffs = action.contains(WriteOpts::WRITE_DIFFS);
 
         // Check the length of previous value, if any
         let prev_len = match self
@@ -1332,7 +1417,13 @@ impl DB for RocksDB {
         {
             Some(prev_value) => {
                 let prev_len = prev_value.len() as i64;
-                self.write_subspace_diff(height, key, Some(&prev_value), None)?;
+                self.write_subspace_diff(
+                    height,
+                    key,
+                    Some(&prev_value),
+                    None,
+                    persists_diffs,
+                )?;
                 prev_len
             }
             None => 0,
@@ -1360,9 +1451,14 @@ impl DB for RocksDB {
         height: BlockHeight,
         key: &Key,
         value: impl AsRef<[u8]>,
+        action: WriteOpts,
     ) -> Result<i64> {
         let value = value.as_ref();
         let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
+
+        let persist_diffs = action.contains(WriteOpts::WRITE_DIFFS);
+
+        // Diffs
         let size_diff = match self
             .0
             .get_cf(subspace_cf, key.to_string())
@@ -1377,6 +1473,7 @@ impl DB for RocksDB {
                     key,
                     Some(&old_value),
                     Some(value),
+                    persist_diffs,
                 )?;
                 size_diff
             }
@@ -1387,6 +1484,7 @@ impl DB for RocksDB {
                     key,
                     None,
                     Some(value),
+                    persist_diffs,
                 )?;
                 value.len() as i64
             }
@@ -1403,8 +1501,11 @@ impl DB for RocksDB {
         batch: &mut Self::WriteBatch,
         height: BlockHeight,
         key: &Key,
+        action: WriteOpts,
     ) -> Result<i64> {
         let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
+
+        let persist_diffs = action.contains(WriteOpts::WRITE_DIFFS);
 
         // Check the length of previous value, if any
         let prev_len = match self
@@ -1421,6 +1522,7 @@ impl DB for RocksDB {
                     key,
                     Some(&prev_value),
                     None,
+                    persist_diffs,
                 )?;
                 prev_len
             }
@@ -1570,7 +1672,11 @@ fn iter_diffs_prefix<'a>(
     let diffs_cf = db
         .get_column_family(DIFFS_CF)
         .expect("{DIFFS_CF} column family should exist");
-    let kind = if is_old { "old" } else { "new" };
+    let kind = if is_old {
+        OLD_DIFF_PREFIX
+    } else {
+        NEW_DIFF_PREFIX
+    };
     let stripped_prefix = Some(
         Key::from(height.to_db_key())
             .push(&kind.to_string())
@@ -1752,6 +1858,7 @@ mod test {
             last_height,
             &Key::parse("test").unwrap(),
             vec![1_u8, 1, 1, 1],
+            WriteOpts::ALL,
         )
         .unwrap();
 
@@ -1787,12 +1894,18 @@ mod test {
             last_height,
             &batch_key,
             vec![1_u8, 1, 1, 1],
+            WriteOpts::ALL,
         )
         .unwrap();
         db.exec_batch(batch.0).unwrap();
 
-        db.write_subspace_val(last_height, &key, vec![1_u8, 1, 1, 0])
-            .unwrap();
+        db.write_subspace_val(
+            last_height,
+            &key,
+            vec![1_u8, 1, 1, 0],
+            WriteOpts::ALL,
+        )
+        .unwrap();
 
         let mut batch = RocksDB::batch();
         let last_height = BlockHeight(111);
@@ -1801,12 +1914,18 @@ mod test {
             last_height,
             &batch_key,
             vec![2_u8, 2, 2, 2],
+            WriteOpts::ALL,
         )
         .unwrap();
         db.exec_batch(batch.0).unwrap();
 
-        db.write_subspace_val(last_height, &key, vec![2_u8, 2, 2, 0])
-            .unwrap();
+        db.write_subspace_val(
+            last_height,
+            &key,
+            vec![2_u8, 2, 2, 0],
+            WriteOpts::ALL,
+        )
+        .unwrap();
 
         let prev_value = db
             .read_subspace_val_with_height(
@@ -1844,11 +1963,17 @@ mod test {
 
         let mut batch = RocksDB::batch();
         let last_height = BlockHeight(222);
-        db.batch_delete_subspace_val(&mut batch, last_height, &batch_key)
-            .unwrap();
+        db.batch_delete_subspace_val(
+            &mut batch,
+            last_height,
+            &batch_key,
+            WriteOpts::ALL,
+        )
+        .unwrap();
         db.exec_batch(batch.0).unwrap();
 
-        db.delete_subspace_val(last_height, &key).unwrap();
+        db.delete_subspace_val(last_height, &key, WriteOpts::ALL)
+            .unwrap();
 
         let deleted_value = db
             .read_subspace_val_with_height(
@@ -1897,8 +2022,14 @@ mod test {
         let mut batch = RocksDB::batch();
         let height = BlockHeight(1);
         for key in &all_keys {
-            db.batch_write_subspace_val(&mut batch, height, key, [0_u8])
-                .unwrap();
+            db.batch_write_subspace_val(
+                &mut batch,
+                height,
+                key,
+                [0_u8],
+                WriteOpts::ALL,
+            )
+            .unwrap();
         }
         db.exec_batch(batch.0).unwrap();
 
@@ -1950,6 +2081,7 @@ mod test {
             height_0,
             &delete_key,
             &to_delete_val,
+            WriteOpts::ALL,
         )
         .unwrap();
         db.batch_write_subspace_val(
@@ -1957,6 +2089,7 @@ mod test {
             height_0,
             &overwrite_key,
             &to_overwrite_val,
+            WriteOpts::ALL,
         )
         .unwrap();
 
@@ -1981,17 +2114,29 @@ mod test {
             .insert("dummy2".to_string(), gen_established_address("test"));
         let add_val = vec![1_u8, 0, 0, 0];
         let overwrite_val = vec![1_u8, 1, 1, 1];
-        db.batch_write_subspace_val(&mut batch, height_1, &add_key, &add_val)
-            .unwrap();
+        db.batch_write_subspace_val(
+            &mut batch,
+            height_1,
+            &add_key,
+            &add_val,
+            WriteOpts::ALL,
+        )
+        .unwrap();
         db.batch_write_subspace_val(
             &mut batch,
             height_1,
             &overwrite_key,
             &overwrite_val,
+            WriteOpts::ALL,
         )
         .unwrap();
-        db.batch_delete_subspace_val(&mut batch, height_1, &delete_key)
-            .unwrap();
+        db.batch_delete_subspace_val(
+            &mut batch,
+            height_1,
+            &delete_key,
+            WriteOpts::ALL,
+        )
+        .unwrap();
 
         add_block_to_batch(
             &db,

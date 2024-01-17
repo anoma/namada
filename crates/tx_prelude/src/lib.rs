@@ -37,7 +37,7 @@ pub use namada_macros::transaction;
 pub use namada_parameters::storage as parameters_storage;
 pub use namada_storage::{
     collections, iter_prefix, iter_prefix_bytes, Error, OptionExt, ResultExt,
-    StorageRead, StorageWrite,
+    StorageRead, StorageWrite, WriteOpts,
 };
 pub use namada_tx::{data as transaction, Section, Tx};
 pub use namada_tx_env::TxEnv;
@@ -235,26 +235,43 @@ impl StorageRead for Ctx {
 }
 
 impl StorageWrite for Ctx {
-    fn write_bytes(
+    fn write_bytes_with_opts(
         &mut self,
         key: &storage::Key,
         val: impl AsRef<[u8]>,
+        action: WriteOpts,
     ) -> namada_storage::Result<()> {
         let key = key.to_string();
+        // TODO: do certain write actions need to be considered here??
         unsafe {
             namada_tx_write(
                 key.as_ptr() as _,
                 key.len() as _,
                 val.as_ref().as_ptr() as _,
                 val.as_ref().len() as _,
+                action.bits() as _,
             )
         };
         Ok(())
     }
 
     fn delete(&mut self, key: &storage::Key) -> namada_storage::Result<()> {
+        self.delete_with_opts(key, WriteOpts::ALL)
+    }
+
+    fn delete_with_opts(
+        &mut self,
+        key: &storage::Key,
+        action: WriteOpts,
+    ) -> namada_storage::Result<()> {
         let key = key.to_string();
-        unsafe { namada_tx_delete(key.as_ptr() as _, key.len() as _) };
+        unsafe {
+            namada_tx_delete(
+                key.as_ptr() as _,
+                key.len() as _,
+                action.bits() as _,
+            )
+        };
         Ok(())
     }
 }

@@ -11,7 +11,7 @@ use namada_storage::{ResultExt, StorageRead, StorageWrite};
 
 use super::EPOCH_SWITCH_BLOCKS_DELAY;
 use crate::write_log::{self, WriteLog};
-use crate::{DBIter, State, DB};
+use crate::{DBIter, State, WriteOpts, DB};
 
 /// Storage with write log that allows to implement prefix iterator that works
 /// with changes not yet committed to the DB.
@@ -402,7 +402,10 @@ where
                         self.write_log_iter.next()
                     {
                         match modification {
-                            write_log::StorageModification::Write { value }
+                            write_log::StorageModification::Write {
+                                value,
+                                action: _,
+                            }
                             | write_log::StorageModification::Temp { value } => {
                                 let gas = value.len() as u64;
                                 return Some((key, value, gas));
@@ -413,7 +416,9 @@ where
                                 let gas = vp_code_hash.len() as u64;
                                 return Some((key, vp_code_hash.to_vec(), gas));
                             }
-                            write_log::StorageModification::Delete => {
+                            write_log::StorageModification::Delete {
+                                action: _,
+                            } => {
                                 continue;
                             }
                         }
@@ -446,10 +451,10 @@ macro_rules! impl_storage_traits {
                 // try to read from the write log first
                 let (log_val, _gas) = self.write_log().read(key);
                 match log_val {
-                    Some(write_log::StorageModification::Write { ref value }) => {
+                    Some(write_log::StorageModification::Write { ref value, action: _ }) => {
                         Ok(Some(value.clone()))
                     }
-                    Some(write_log::StorageModification::Delete) => Ok(None),
+                    Some(write_log::StorageModification::Delete { action: _  }) => Ok(None),
                     Some(write_log::StorageModification::InitAccount {
                         ref vp_code_hash,
                     }) => Ok(Some(vp_code_hash.to_vec())),
@@ -473,7 +478,7 @@ macro_rules! impl_storage_traits {
                     Some(&write_log::StorageModification::Write { .. })
                     | Some(&write_log::StorageModification::InitAccount { .. })
                     | Some(&write_log::StorageModification::Temp { .. }) => Ok(true),
-                    Some(&write_log::StorageModification::Delete) => {
+                    Some(&write_log::StorageModification::Delete { .. }) => {
                         // the given key has been deleted
                         Ok(false)
                     }
@@ -557,22 +562,27 @@ macro_rules! impl_storage_traits {
         {
             // N.B. Calling this when testing pre- and post- reads in
             // regards to testing native vps is incorrect.
-            fn write_bytes(
+            fn write_bytes_with_opts(
                 &mut self,
                 key: &storage::Key,
                 val: impl AsRef<[u8]>,
+                action: WriteOpts,
             ) -> namada_storage::Result<()> {
                 let _ = self
                     .write_log_mut()
-                    .protocol_write(key, val.as_ref().to_vec())
+                    .protocol_write(key, val.as_ref().to_vec(), action)
                     .into_storage_result();
                 Ok(())
             }
 
-            fn delete(&mut self, key: &storage::Key) -> namada_storage::Result<()> {
+            fn delete_with_opts(
+                &mut self,
+                key: &storage::Key,
+                action: WriteOpts
+            ) -> namada_storage::Result<()> {
                 let _ = self
                     .write_log_mut()
-                    .protocol_delete(key)
+                    .protocol_delete(key, action)
                     .into_storage_result();
                 Ok(())
             }
@@ -720,12 +730,24 @@ mod tests {
                 | Level::BlockWriteLog(WlMod::Delete | WlMod::DeletePrefix) => {
                 }
                 Level::TxWriteLog(WlMod::Write(val)) => {
+                    // NOTE: dummy WriteActions used here because this is
+                    // only for testing
+                    // TODO: may want to use test these new features though
+                    // in here.
                     s.write_log.write(key, val.serialize_to_vec()).unwrap();
                 }
                 Level::BlockWriteLog(WlMod::Write(val)) => {
                     s.write_log
                         // protocol only writes at block level
-                        .protocol_write(key, val.serialize_to_vec())
+                        // NOTE: dummy WriteActions used here because this is
+                        // only for testing
+                        // TODO: may want to use test these new features though
+                        // in here.
+                        .protocol_write(
+                            key,
+                            val.serialize_to_vec(),
+                            WriteOpts::ALL,
+                        )
                         .unwrap();
                 }
                 Level::Storage(val) => {

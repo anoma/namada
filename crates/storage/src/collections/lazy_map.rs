@@ -408,6 +408,25 @@ where
         Ok(previous)
     }
 
+    /// Same as `LazyMap::insert` above but does not add the key-value to the
+    /// merkle tree or diffs
+    pub fn insert_storage_only<S>(
+        &self,
+        storage: &mut S,
+        key: K,
+        val: V,
+    ) -> Result<Option<V>>
+    where
+        S: StorageRead + StorageWrite,
+    {
+        let previous = self.get(storage, &key)?;
+
+        let data_key = self.get_data_key(&key);
+        Self::write_key_val_storage_only(storage, &data_key, val)?;
+
+        Ok(previous)
+    }
+
     /// Removes a key from the map if it's present, returning the value at the
     /// key if the key was previously in the map.
     pub fn remove<S>(&self, storage: &mut S, key: &K) -> Result<Option<V>>
@@ -534,6 +553,16 @@ where
         val: V,
     ) -> Result<()> {
         storage.write(storage_key, val)
+    }
+
+    /// Write a value into storage without merklizing or adding the value to the
+    /// diffs
+    fn write_key_val_storage_only(
+        storage: &mut impl StorageWrite,
+        storage_key: &storage::Key,
+        val: V,
+    ) -> Result<()> {
+        storage.write_without_merkldiffs(storage_key, val)
     }
 }
 

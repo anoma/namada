@@ -5,7 +5,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use borsh_ext::BorshSerializeExt;
 use namada_core::types::storage::Epochs;
 use namada_ibc::{IbcCommonContext, IbcStorageContext};
-use namada_state::{StorageRead, StorageWrite};
+use namada_state::{StorageRead, StorageWrite, WriteOpts};
 
 use crate::ledger::ibc::storage::is_ibc_key;
 use crate::ledger::native_vp::CtxPreStorageRead;
@@ -78,10 +78,11 @@ where
 
     fn read_bytes(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         match self.store.get(key) {
-            Some(StorageModification::Write { ref value }) => {
-                Ok(Some(value.clone()))
-            }
-            Some(StorageModification::Delete) => Ok(None),
+            Some(StorageModification::Write {
+                ref value,
+                action: _,
+            }) => Ok(Some(value.clone())),
+            Some(StorageModification::Delete { .. }) => Ok(None),
             Some(StorageModification::Temp { .. }) => {
                 unreachable!("Temp shouldn't be inserted")
             }
@@ -152,22 +153,25 @@ where
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    fn write_bytes(
+    fn write_bytes_with_opts(
         &mut self,
         key: &Key,
         value: impl AsRef<[u8]>,
+        action: WriteOpts,
     ) -> Result<()> {
         self.store.insert(
             key.clone(),
             StorageModification::Write {
                 value: value.as_ref().to_vec(),
+                action,
             },
         );
         Ok(())
     }
 
-    fn delete(&mut self, key: &Key) -> Result<()> {
-        self.store.insert(key.clone(), StorageModification::Delete);
+    fn delete_with_opts(&mut self, key: &Key, action: WriteOpts) -> Result<()> {
+        self.store
+            .insert(key.clone(), StorageModification::Delete { action });
         Ok(())
     }
 }
@@ -383,15 +387,20 @@ where
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    fn write_bytes(
+    fn write_bytes_with_opts(
         &mut self,
         _key: &Key,
         _val: impl AsRef<[u8]>,
+        _action: WriteOpts,
     ) -> Result<()> {
         unimplemented!("Validation doesn't write any data")
     }
 
-    fn delete(&mut self, _key: &Key) -> Result<()> {
+    fn delete_with_opts(
+        &mut self,
+        _key: &Key,
+        _action: WriteOpts,
+    ) -> Result<()> {
         unimplemented!("Validation doesn't delete any data")
     }
 }

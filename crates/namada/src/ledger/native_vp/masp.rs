@@ -137,6 +137,7 @@ where
             self.ctx.read_post(&tree_key)?.ok_or(Error::NativeVpError(
                 native_vp::Error::SimpleMessage("Cannot read storage"),
             ))?;
+        dbg!(&previous_tree, &post_tree);
 
         // Based on the output descriptions of the transaction, update the
         // previous tree in storage

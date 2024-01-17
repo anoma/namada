@@ -72,6 +72,8 @@ pub enum TxRuntimeError {
     MissingTxData,
     #[error("IBC: {0}")]
     Ibc(#[from] namada_ibc::Error),
+    #[error("Invalid Write Options")]
+    InvalidWriteOptions,
 }
 
 type TxResult<T> = std::result::Result<T, TxRuntimeError>;
@@ -552,7 +554,7 @@ where
         Some(&write_log::StorageModification::Write { .. }) => {
             HostEnvResult::Success.to_i64()
         }
-        Some(&write_log::StorageModification::Delete) => {
+        Some(&write_log::StorageModification::Delete { .. }) => {
             // the given key has been deleted
             HostEnvResult::Fail.to_i64()
         }
@@ -605,7 +607,10 @@ where
     let (log_val, gas) = write_log.read(&key);
     tx_charge_gas(env, gas)?;
     Ok(match log_val {
-        Some(write_log::StorageModification::Write { ref value }) => {
+        Some(write_log::StorageModification::Write {
+            ref value,
+            action: _,
+        }) => {
             let len: i64 = value
                 .len()
                 .try_into()
@@ -614,7 +619,7 @@ where
             result_buffer.replace(value.clone());
             len
         }
-        Some(&write_log::StorageModification::Delete) => {
+        Some(&write_log::StorageModification::Delete { .. }) => {
             // fail, given key has been deleted
             HostEnvResult::Fail.to_i64()
         }
@@ -751,7 +756,10 @@ where
         );
         tx_charge_gas(env, iter_gas + log_gas)?;
         match log_val {
-            Some(write_log::StorageModification::Write { ref value }) => {
+            Some(write_log::StorageModification::Write {
+                ref value,
+                action: _,
+            }) => {
                 let key_val = borsh::to_vec(&KeyVal {
                     key,
                     val: value.clone(),
@@ -765,7 +773,7 @@ where
                 result_buffer.replace(key_val);
                 return Ok(len);
             }
-            Some(&write_log::StorageModification::Delete) => {
+            Some(&write_log::StorageModification::Delete { .. }) => {
                 // check the next because the key has already deleted
                 continue;
             }
@@ -811,6 +819,7 @@ pub fn tx_write<MEM, DB, H, CA>(
     key_len: u64,
     val_ptr: u64,
     val_len: u64,
+    write_opts: u8,
 ) -> TxResult<()>
 where
     MEM: VmMemory,
@@ -838,9 +847,12 @@ where
 
     check_address_existence(env, &key)?;
 
+    let write_opts = WriteOpts::from_bits(write_opts)
+        .ok_or_else(|| TxRuntimeError::InvalidWriteOptions)?;
+
     let write_log = unsafe { env.ctx.write_log.get() };
     let (gas, _size_diff) = write_log
-        .write(&key, value)
+        .write_with_opts(&key, value, write_opts)
         .map_err(TxRuntimeError::StorageModificationError)?;
     tx_charge_gas(env, gas)
 }
@@ -944,6 +956,7 @@ pub fn tx_delete<MEM, DB, H, CA>(
     env: &TxVmEnv<MEM, DB, H, CA>,
     key_ptr: u64,
     key_len: u64,
+    write_opts: u8,
 ) -> TxResult<()>
 where
     MEM: VmMemory,
@@ -964,9 +977,12 @@ where
         return Err(TxRuntimeError::CannotDeleteVp);
     }
 
+    let write_opts = WriteOpts::from_bits(write_opts)
+        .ok_or_else(|| TxRuntimeError::InvalidWriteOptions)?;
+
     let write_log = unsafe { env.ctx.write_log.get() };
     let (gas, _size_diff) = write_log
-        .delete(&key)
+        .delete_with_opts(&key, write_opts)
         .map_err(TxRuntimeError::StorageModificationError)?;
     tx_charge_gas(env, gas)
 }
@@ -2344,7 +2360,7 @@ where
 }
 
 // Temp. workaround for <https://github.com/anoma/namada/issues/1831>
-use namada_state::StorageRead;
+use namada_state::{StorageRead, WriteOpts};
 
 use crate::types::storage::BlockHash;
 impl<'a, DB, H, CA> StorageRead for TxCtx<'a, DB, H, CA>
@@ -2364,10 +2380,11 @@ where
         let (log_val, gas) = write_log.read(key);
         ibc_tx_charge_gas(self, gas)?;
         Ok(match log_val {
-            Some(write_log::StorageModification::Write { ref value }) => {
-                Some(value.clone())
-            }
-            Some(&write_log::StorageModification::Delete) => None,
+            Some(write_log::StorageModification::Write {
+                ref value,
+                action: _,
+            }) => Some(value.clone()),
+            Some(&write_log::StorageModification::Delete { .. }) => None,
             Some(write_log::StorageModification::InitAccount {
                 ref vp_code_hash,
             }) => Some(vp_code_hash.to_vec()),
@@ -2391,7 +2408,7 @@ where
         ibc_tx_charge_gas(self, gas)?;
         Ok(match log_val {
             Some(&write_log::StorageModification::Write { .. }) => true,
-            Some(&write_log::StorageModification::Delete) => false,
+            Some(&write_log::StorageModification::Delete { .. }) => false,
             Some(&write_log::StorageModification::InitAccount { .. }) => true,
             Some(&write_log::StorageModification::Temp { .. }) => true,
             None => {
@@ -2431,10 +2448,13 @@ where
                 write_log.read(&Key::parse(key.clone()).into_storage_result()?);
             ibc_tx_charge_gas(self, iter_gas + log_gas)?;
             match log_val {
-                Some(write_log::StorageModification::Write { ref value }) => {
+                Some(write_log::StorageModification::Write {
+                    ref value,
+                    action: _,
+                }) => {
                     return Ok(Some((key, value.clone())));
                 }
-                Some(&write_log::StorageModification::Delete) => {
+                Some(&write_log::StorageModification::Delete { .. }) => {
                     // check the next because the key has already deleted
                     continue;
                 }
@@ -2537,10 +2557,14 @@ where
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
-    fn write_bytes(
+    // TODO: is it ok to not explicitly use the `_actions` and use the default
+    // behavior????
+
+    fn write_bytes_with_opts(
         &mut self,
         key: &Key,
         data: impl AsRef<[u8]>,
+        _action: WriteOpts,
     ) -> Result<(), namada_state::StorageError> {
         let write_log = unsafe { self.write_log.get() };
         let (gas, _size_diff) = write_log
@@ -2549,7 +2573,11 @@ where
         ibc_tx_charge_gas(self, gas)
     }
 
-    fn delete(&mut self, key: &Key) -> Result<(), namada_state::StorageError> {
+    fn delete_with_opts(
+        &mut self,
+        key: &Key,
+        _action: WriteOpts,
+    ) -> namada_state::StorageResult<()> {
         if key.is_validity_predicate().is_some() {
             return Err(TxRuntimeError::CannotDeleteVp).into_storage_result();
         }

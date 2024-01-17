@@ -4663,6 +4663,7 @@ dependencies = [
 name = "namada_storage"
 version = "0.30.1"
 dependencies = [
+ "bitflags 2.4.1",
  "borsh",
  "itertools 0.10.5",
  "namada_core",

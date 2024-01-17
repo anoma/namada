@@ -16,6 +16,7 @@ use namada_merkle_tree::{
 use thiserror::Error;
 
 use crate::tx_queue::TxQueue;
+use crate::WriteOpts;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -162,6 +163,15 @@ pub trait DB: Debug {
     /// Read the latest value for account subspace key from the DB
     fn read_subspace_val(&self, key: &Key) -> Result<Option<Vec<u8>>>;
 
+    /// Read the value for the account diffs at the corresponding height from
+    /// the DB
+    fn read_diffs_val(
+        &self,
+        key: &Key,
+        height: BlockHeight,
+        is_old: bool,
+    ) -> Result<Option<Vec<u8>>>;
+
     /// Read the value for account subspace key at the given height from the DB.
     /// In our `PersistentStorage` (rocksdb), to find a value from arbitrary
     /// height requires looking for diffs from the given `height`, possibly
@@ -181,6 +191,7 @@ pub trait DB: Debug {
         height: BlockHeight,
         key: &Key,
         value: impl AsRef<[u8]>,
+        action: WriteOpts,
     ) -> Result<i64>;
 
     /// Delete the value with the given height and account subspace key from the
@@ -190,6 +201,7 @@ pub trait DB: Debug {
         &mut self,
         height: BlockHeight,
         key: &Key,
+        action: WriteOpts,
     ) -> Result<i64>;
 
     /// Start write batch.
@@ -207,6 +219,7 @@ pub trait DB: Debug {
         height: BlockHeight,
         key: &Key,
         value: impl AsRef<[u8]>,
+        action: WriteOpts,
     ) -> Result<i64>;
 
     /// Batch delete the value with the given height and account subspace key
@@ -217,6 +230,7 @@ pub trait DB: Debug {
         batch: &mut Self::WriteBatch,
         height: BlockHeight,
         key: &Key,
+        action: WriteOpts,
     ) -> Result<i64>;
 
     /// Prune Merkle tree stores at the given epoch

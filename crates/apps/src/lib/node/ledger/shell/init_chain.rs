@@ -141,17 +141,20 @@ where
         let note_commitment_tree_key =
             token::storage_key::masp_commitment_tree_key();
         self.wl_storage
-            .write(&note_commitment_tree_key, empty_commitment_tree)
+            .write_without_merkldiffs(
+                &note_commitment_tree_key,
+                empty_commitment_tree,
+            )
             .unwrap();
         let commitment_tree_anchor_key =
             token::storage_key::masp_commitment_anchor_key(anchor);
         self.wl_storage
-            .write(&commitment_tree_anchor_key, ())
+            .write_without_merkldiffs(&commitment_tree_anchor_key, ())
             .unwrap();
 
         // Init masp convert anchor
         let convert_anchor_key = token::storage_key::masp_convert_anchor_key();
-        self.wl_storage.write(
+        self.wl_storage.write_without_merkldiffs(
             &convert_anchor_key,
             namada::types::hash::Hash(
                 bls12_381::Scalar::from(
@@ -215,9 +218,9 @@ where
             self.update_eth_oracle(&Default::default());
         } else {
             self.wl_storage
-                .write_bytes(
+                .write(
                     &namada::eth_bridge::storage::active_key(),
-                    EthBridgeStatus::Disabled.serialize_to_vec(),
+                    EthBridgeStatus::Disabled,
                 )
                 .unwrap();
         }

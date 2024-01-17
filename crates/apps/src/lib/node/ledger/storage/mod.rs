@@ -52,6 +52,7 @@ fn new_blake2b() -> Blake2b {
 mod tests {
     use std::collections::HashMap;
 
+    use borsh::BorshDeserialize;
     use itertools::Itertools;
     use namada::eth_bridge::storage::proof::BridgePoolRootProof;
     use namada::ledger::eth_bridge::storage::bridge_pool;
@@ -59,7 +60,7 @@ mod tests {
     use namada::ledger::ibc::storage::ibc_key;
     use namada::ledger::parameters::{EpochDuration, Parameters};
     use namada::state::write_log::WriteLog;
-    use namada::state::{self, StorageWrite, StoreType, WlStorage};
+    use namada::state::{self, StorageWrite, StoreType, WlStorage, WriteOpts};
     use namada::token::conversion::update_allowed_conversions;
     use namada::types::chain::ChainId;
     use namada::types::ethereum_events::Uint;
@@ -530,14 +531,20 @@ mod tests {
                     storage.write(&key, value_bytes)?;
                 }
                 3 => {
-                    storage.batch_delete_subspace_val(&mut batch, &key)?;
+                    storage.batch_delete_subspace_val(
+                        &mut batch,
+                        &key,
+                        WriteOpts::ALL,
+                    )?;
                 }
                 _ => {
                     let value_bytes = types::encode(&storage.block.height);
+                    // TODO: is it fine to have a dummy write action here?
                     storage.batch_write_subspace_val(
                         &mut batch,
                         &key,
                         value_bytes,
+                        storage_api::WriteOpts::ALL,
                     )?;
                 }
             }
@@ -782,5 +789,188 @@ mod tests {
             .unwrap()
             .map(Result::unwrap);
         itertools::assert_equal(iter, expected);
+    }
+
+    #[test]
+    fn test_persistent_storage_writing_without_merklizing_or_diffs() {
+        let db_path =
+            TempDir::new().expect("Unable to create a temporary DB directory");
+        let storage = PersistentStorage::open(
+            db_path.path(),
+            ChainId::default(),
+            address::nam(),
+            None,
+            None,
+        );
+        let mut wls = WlStorage {
+            storage,
+            write_log: Default::default(),
+        };
+
+        let key1 = Key::parse("testing1").unwrap();
+        let val1 = 1u64;
+        let key2 = Key::parse("testing2").unwrap();
+        let val2 = 2u64;
+
+        // Standard write of key-val-1
+        wls.write(&key1, val1).unwrap();
+
+        // Read from WlStorage should return val1
+        let res = wls.read::<u64>(&key1).unwrap().unwrap();
+        assert_eq!(res, val1);
+
+        // Read from Storage shouldn't return val1 because the block hasn't been
+        // committed
+        let (res, _) = wls.storage.read(&key1).unwrap();
+        assert!(res.is_none());
+
+        // Write key-val-2 without merklizing or diffs
+        wls.write_without_merkldiffs(&key2, val2).unwrap();
+
+        // Read from WlStorage should return val2
+        let res = wls.read::<u64>(&key2).unwrap().unwrap();
+        assert_eq!(res, val2);
+
+        // Commit block and storage changes
+        wls.commit_block().unwrap();
+        wls.storage.block.height = wls.storage.block.height.next_height();
+
+        // Read key1 from Storage should return val1
+        let (res1, _) = wls.storage.read(&key1).unwrap();
+        let res1 = u64::try_from_slice(&res1.unwrap()).unwrap();
+        assert_eq!(res1, val1);
+
+        // Check merkle tree inclusion of key-val-1 explicitly
+        let is_merklized1 = wls.storage.block.tree.has_key(&key1).unwrap();
+        assert!(is_merklized1);
+
+        // Key2 should be in storage. Confirm by reading from
+        // WlStorage and also by reading Storage subspace directly
+        let res2 = wls.read::<u64>(&key2).unwrap().unwrap();
+        assert_eq!(res2, val2);
+        let res2 = wls.storage.db.read_subspace_val(&key2).unwrap().unwrap();
+        let res2 = u64::try_from_slice(&res2).unwrap();
+        assert_eq!(res2, val2);
+
+        // Check explicitly that key-val-2 is not in merkle tree
+        let is_merklized2 = wls.storage.block.tree.has_key(&key2).unwrap();
+        assert!(!is_merklized2);
+
+        // Check that the proper diffs exist for key-val-1
+        let res1 = wls
+            .storage
+            .db
+            .read_diffs_val(&key1, BlockHeight(0), true)
+            .unwrap();
+        assert!(res1.is_none());
+
+        let res1 = wls
+            .storage
+            .db
+            .read_diffs_val(&key1, BlockHeight(0), false)
+            .unwrap()
+            .unwrap();
+        let res1 = u64::try_from_slice(&res1).unwrap();
+        assert_eq!(res1, val1);
+
+        // Check that there are diffs for key-val-2 in block 0, since all keys
+        // need to have diffs for at least 1 block for rollback purposes
+        let res2 = wls
+            .storage
+            .db
+            .read_diffs_val(&key2, BlockHeight(0), true)
+            .unwrap();
+        assert!(res2.is_none());
+        let res2 = wls
+            .storage
+            .db
+            .read_diffs_val(&key2, BlockHeight(0), false)
+            .unwrap()
+            .unwrap();
+        let res2 = u64::try_from_slice(&res2).unwrap();
+        assert_eq!(res2, val2);
+
+        // Delete the data then commit the block
+        wls.delete(&key1).unwrap();
+        wls.delete_without_diffs(&key2).unwrap();
+        wls.commit_block().unwrap();
+        wls.storage.block.height = wls.storage.block.height.next_height();
+
+        // Check the key-vals are removed from the storage subspace
+        let res1 = wls.read::<u64>(&key1).unwrap();
+        let res2 = wls.read::<u64>(&key2).unwrap();
+        assert!(res1.is_none() && res2.is_none());
+        let res1 = wls.storage.db.read_subspace_val(&key1).unwrap();
+        let res2 = wls.storage.db.read_subspace_val(&key2).unwrap();
+        assert!(res1.is_none() && res2.is_none());
+
+        // Check that the key-vals don't exist in the merkle tree anymore
+        let is_merklized1 = wls.storage.block.tree.has_key(&key1).unwrap();
+        let is_merklized2 = wls.storage.block.tree.has_key(&key2).unwrap();
+        assert!(!is_merklized1 && !is_merklized2);
+
+        // Check that key-val-1 diffs are properly updated for blocks 0 and 1
+        let res1 = wls
+            .storage
+            .db
+            .read_diffs_val(&key1, BlockHeight(0), true)
+            .unwrap();
+        assert!(res1.is_none());
+
+        let res1 = wls
+            .storage
+            .db
+            .read_diffs_val(&key1, BlockHeight(0), false)
+            .unwrap()
+            .unwrap();
+        let res1 = u64::try_from_slice(&res1).unwrap();
+        assert_eq!(res1, val1);
+
+        let res1 = wls
+            .storage
+            .db
+            .read_diffs_val(&key1, BlockHeight(1), true)
+            .unwrap()
+            .unwrap();
+        let res1 = u64::try_from_slice(&res1).unwrap();
+        assert_eq!(res1, val1);
+
+        let res1 = wls
+            .storage
+            .db
+            .read_diffs_val(&key1, BlockHeight(1), false)
+            .unwrap();
+        assert!(res1.is_none());
+
+        // Check that key-val-2 diffs don't exist for block 0 anymore
+        let res2 = wls
+            .storage
+            .db
+            .read_diffs_val(&key2, BlockHeight(0), true)
+            .unwrap();
+        assert!(res2.is_none());
+        let res2 = wls
+            .storage
+            .db
+            .read_diffs_val(&key2, BlockHeight(0), false)
+            .unwrap();
+        assert!(res2.is_none());
+
+        // Check that the block 1 diffs for key-val-2 include an "old" value of
+        // val2 and no "new" value
+        let res2 = wls
+            .storage
+            .db
+            .read_diffs_val(&key2, BlockHeight(1), true)
+            .unwrap()
+            .unwrap();
+        let res2 = u64::try_from_slice(&res2).unwrap();
+        assert_eq!(res2, val2);
+        let res2 = wls
+            .storage
+            .db
+            .read_diffs_val(&key2, BlockHeight(1), false)
+            .unwrap();
+        assert!(res2.is_none());
     }
 }
