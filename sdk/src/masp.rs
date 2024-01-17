@@ -76,7 +76,10 @@ use crate::queries::Client;
 use crate::rpc::{query_conversion, query_storage_value};
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
-use crate::{display_line, edisplay_line, rpc, MaybeSend, MaybeSync, Namada};
+use crate::{
+    display_line, edisplay_line, rpc, MaybeSend, MaybeSync, Namada, Wallet,
+    WalletIo,
+};
 
 /// Env var to point to a dir with MASP parameters. When not specified,
 /// the default OS specific path is used.
@@ -897,6 +900,26 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             }
         }
         Ok(Some(val_acc))
+    }
+
+    /// Use the addresses already stored in the wallet to precompute as many
+    /// asset types as possible.
+    pub fn precompute_asset_types(
+        &mut self,
+        wallet: &Wallet<impl WalletIo>,
+    ) -> Result<(), Error> {
+        // To facilitate lookups of human-readable token names
+        for token in wallet.get_addresses().values() {
+            for denom in MaspDenom::iter() {
+                let asset_type = encode_asset_type(None, token, denom)
+                    .map_err(|_| {
+                        Error::Other("unable to create asset type".to_string())
+                    })?;
+                self.asset_types
+                    .insert(asset_type, (token.clone(), denom, None));
+            }
+        }
+        Ok(())
     }
 
     /// Query the ledger for the decoding of the given asset type and cache it

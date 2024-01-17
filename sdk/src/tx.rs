@@ -2409,6 +2409,11 @@ async fn construct_shielded_parts<N: Namada>(
         HashSet<(Address, MaspDenom, Option<Epoch>)>,
     )>,
 > {
+    // Precompute asset types to increase chances of success in decoding
+    let _ = context
+        .shielded_mut()
+        .await
+        .precompute_asset_types(&*context.wallet().await);
     let stx_result =
         ShieldedContext::<N::ShieldedUtils>::gen_shielded_transfer(
             context, source, target, token, amount,
@@ -2658,6 +2663,12 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
     let validated_amount =
         validate_amount(context, args.amount, &token, false).await?;
 
+    // Precompute asset types to increase chances of success in decoding
+    let _ = context
+        .shielded_mut()
+        .await
+        .precompute_asset_types(&*context.wallet().await);
+
     let shielded_transfer =
         ShieldedContext::<N::ShieldedUtils>::gen_shielded_transfer(
             context,
@@ -2678,19 +2689,6 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
         shielded: None,
     };
     if let Some(shielded_transfer) = shielded_transfer {
-        // TODO: Workaround for decoding the asset_type later
-        let mut shielded = context.shielded_mut().await;
-        for denom in MaspDenom::iter() {
-            let epoch = shielded_transfer.epoch;
-            shielded
-                .get_asset_type(context.client(), epoch, token.clone(), denom)
-                .await
-                .map_err(|_| {
-                    Error::Other("unable to create asset type".to_string())
-                })?;
-        }
-        let _ = shielded.save().await;
-
         Ok(Some(IbcShieldedTransfer {
             transfer,
             masp_tx: shielded_transfer.masp_tx,
