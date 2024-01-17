@@ -1185,6 +1185,7 @@ mod tests {
     use namada_core::types::time::{self, Duration};
     use namada_core::types::token;
     use namada_parameters::Parameters;
+    use namada_storage::{StorageRead, StorageWrite};
     use proptest::prelude::*;
     use proptest::test_runner::Config;
 
@@ -1398,5 +1399,179 @@ mod tests {
             wl_storage.update_epoch(height_of_update, time_of_update).unwrap();
             assert_eq!(wl_storage.storage.block.epoch, epoch_before.next());
         }
+    }
+
+    #[test]
+    fn test_writing_without_merklizing_or_diffs() {
+        let mut wls = TestWlStorage::default();
+        assert_eq!(wls.storage.block.height.0, 0);
+
+        let key1 = Key::parse("testing1").unwrap();
+        let val1 = 1u64;
+        let key2 = Key::parse("testing2").unwrap();
+        let val2 = 2u64;
+
+        // Standard write of key-val-1
+        wls.write(&key1, val1).unwrap();
+
+        // Read from WlStorage should return val1
+        let res = wls.read::<u64>(&key1).unwrap().unwrap();
+        assert_eq!(res, val1);
+
+        // Read from Storage shouldn't return val1 bc the block hasn't been
+        // committed
+        let (res, _) = wls.storage.read(&key1).unwrap();
+        assert!(res.is_none());
+
+        // Write key-val-2 without merklizing or diffs
+        wls.write_without_merkldiffs(&key2, val2).unwrap();
+
+        // Read from WlStorage should return val2
+        let res = wls.read::<u64>(&key2).unwrap().unwrap();
+        assert_eq!(res, val2);
+
+        // Commit block and storage changes
+        wls.commit_block().unwrap();
+        wls.storage.block.height = wls.storage.block.height.next_height();
+
+        // Read key1 from Storage should return val1
+        let (res1, _) = wls.storage.read(&key1).unwrap();
+        let res1 = u64::try_from_slice(&res1.unwrap()).unwrap();
+        assert_eq!(res1, val1);
+
+        // Check merkle tree inclusion of key-val-1 explicitly
+        let is_merklized1 = wls.storage.block.tree.has_key(&key1).unwrap();
+        assert!(is_merklized1);
+
+        // Key2 should be in storage. Confirm by reading from
+        // WlStorage and also by reading Storage subspace directly
+        let res2 = wls.read::<u64>(&key2).unwrap().unwrap();
+        assert_eq!(res2, val2);
+        let res2 = wls.storage.db.read_subspace_val(&key2).unwrap().unwrap();
+        let res2 = u64::try_from_slice(&res2).unwrap();
+        assert_eq!(res2, val2);
+
+        // Check explicitly that key-val-2 is not in merkle tree
+        let is_merklized2 = wls.storage.block.tree.has_key(&key2).unwrap();
+        assert!(!is_merklized2);
+
+        // Check that the proper diffs exist for key-val-1
+        let res1 = wls
+            .storage
+            .db
+            .read_diffs_val(&key1, Default::default(), true)
+            .unwrap();
+        assert!(res1.is_none());
+
+        let res1 = wls
+            .storage
+            .db
+            .read_diffs_val(&key1, Default::default(), false)
+            .unwrap()
+            .unwrap();
+        let res1 = u64::try_from_slice(&res1).unwrap();
+        assert_eq!(res1, val1);
+
+        // Check that there are diffs for key-val-2 in block 0, since all keys
+        // need to have diffs for at least 1 block for rollback purposes
+        let res2 = wls
+            .storage
+            .db
+            .read_diffs_val(&key2, BlockHeight(0), true)
+            .unwrap();
+        assert!(res2.is_none());
+        let res2 = wls
+            .storage
+            .db
+            .read_diffs_val(&key2, BlockHeight(0), false)
+            .unwrap()
+            .unwrap();
+        let res2 = u64::try_from_slice(&res2).unwrap();
+        assert_eq!(res2, val2);
+
+        // Now delete the keys properly
+        wls.delete(&key1).unwrap();
+        wls.delete_without_diffs(&key2).unwrap();
+
+        // Commit the block again
+        wls.commit_block().unwrap();
+        wls.storage.block.height = wls.storage.block.height.next_height();
+
+        // Check the key-vals are removed from the storage subspace
+        let res1 = wls.read::<u64>(&key1).unwrap();
+        let res2 = wls.read::<u64>(&key2).unwrap();
+        assert!(res1.is_none() && res2.is_none());
+        let res1 = wls.storage.db.read_subspace_val(&key1).unwrap();
+        let res2 = wls.storage.db.read_subspace_val(&key2).unwrap();
+        assert!(res1.is_none() && res2.is_none());
+
+        // Check that the key-vals don't exist in the merkle tree anymore
+        let is_merklized1 = wls.storage.block.tree.has_key(&key1).unwrap();
+        let is_merklized2 = wls.storage.block.tree.has_key(&key2).unwrap();
+        assert!(!is_merklized1 && !is_merklized2);
+
+        // Check that key-val-1 diffs are properly updated for blocks 0 and 1
+        let res1 = wls
+            .storage
+            .db
+            .read_diffs_val(&key1, BlockHeight(0), true)
+            .unwrap();
+        assert!(res1.is_none());
+
+        let res1 = wls
+            .storage
+            .db
+            .read_diffs_val(&key1, BlockHeight(0), false)
+            .unwrap()
+            .unwrap();
+        let res1 = u64::try_from_slice(&res1).unwrap();
+        assert_eq!(res1, val1);
+
+        let res1 = wls
+            .storage
+            .db
+            .read_diffs_val(&key1, BlockHeight(1), true)
+            .unwrap()
+            .unwrap();
+        let res1 = u64::try_from_slice(&res1).unwrap();
+        assert_eq!(res1, val1);
+
+        let res1 = wls
+            .storage
+            .db
+            .read_diffs_val(&key1, BlockHeight(1), false)
+            .unwrap();
+        assert!(res1.is_none());
+
+        // Check that key-val-2 diffs don't exist for block 0 anymore
+        let res2 = wls
+            .storage
+            .db
+            .read_diffs_val(&key2, BlockHeight(0), true)
+            .unwrap();
+        assert!(res2.is_none());
+        let res2 = wls
+            .storage
+            .db
+            .read_diffs_val(&key2, BlockHeight(0), false)
+            .unwrap();
+        assert!(res2.is_none());
+
+        // Check that the block 1 diffs for key-val-2 include an "old" value of
+        // val2 and no "new" value
+        let res2 = wls
+            .storage
+            .db
+            .read_diffs_val(&key2, BlockHeight(1), true)
+            .unwrap()
+            .unwrap();
+        let res2 = u64::try_from_slice(&res2).unwrap();
+        assert_eq!(res2, val2);
+        let res2 = wls
+            .storage
+            .db
+            .read_diffs_val(&key2, BlockHeight(1), false)
+            .unwrap();
+        assert!(res2.is_none());
     }
 }

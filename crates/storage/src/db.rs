@@ -174,6 +174,15 @@ pub trait DB: Debug {
         last_height: BlockHeight,
     ) -> Result<Option<Vec<u8>>>;
 
+    /// Read the value for the account diffs at the corresponding height from
+    /// the DB
+    fn read_diffs_val(
+        &self,
+        key: &Key,
+        height: BlockHeight,
+        is_old: bool,
+    ) -> Result<Option<Vec<u8>>>;
+
     /// Write the value with the given height and account subspace key to the
     /// DB. Returns the size difference from previous value, if any, or the
     /// size of the value otherwise.
