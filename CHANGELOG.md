@@ -1,5 +1,35 @@
 # CHANGELOG
 
+## v0.30.1
+
+Namada 0.30.1 is a patch release that contains various bug fixes for MASP, IBC, the shell and crates refactor (the core has been subdivided into many smaller crates).
+
+### IMPROVEMENTS
+
+- Refactored the core crate into many smaller crates.
+  ([\#2312](https://github.com/anoma/namada/pull/2312))
+- Strengthened the checks in the MASP VP. Allow viewing and spending of
+  unconvertible MASP notes ([\#2371](https://github.com/anoma/namada/pull/2371))
+- Refactored the fee validation process.
+  ([\#2382](https://github.com/anoma/namada/pull/2382))
+- Updated block validation to require a valid timestamp.
+  ([\#2383](https://github.com/anoma/namada/pull/2383))
+- Moved Rust crates into a crates sub-dir.
+  ([\#2386](https://github.com/anoma/namada/pull/2386))
+- Ibc transactions can be rewrapped in case of a gas error.
+  ([\#2395](https://github.com/anoma/namada/pull/2395))
+
+### SDK
+
+- Added some more RPC methods for computing governance proposal
+  results, query pgf parameters and total supply of a token.
+  ([\#2400](https://github.com/anoma/namada/pull/2400))
+
+### TESTING
+
+- Fix E2E test for PGF over IBC by waiting before checking the balance
+  ([\#2398](https://github.com/anoma/namada/issues/2398))
+
 ## v0.30.0
 
 Namada 0.30.0 is a minor release that primarily upgrades the MASP and WASM VM memory functionality in addition to smaller upgrades to other Namada modules.
