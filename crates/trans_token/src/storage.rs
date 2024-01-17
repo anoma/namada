@@ -163,8 +163,10 @@ where
     storage.write(&total_supply_key, new_supply)
 }
 
-/// Burn an amount of token for a specific address.
-pub fn burn<S>(
+/// Burn a specified amount of tokens from some address. If the burn amount is
+/// larger than the total balance of the given address, then the remaining
+/// balance is burned. The total supply of the token is properly adjusted.
+pub fn burn_tokens<S>(
     storage: &mut S,
     token: &Address,
     source: &Address,
@@ -173,12 +175,12 @@ pub fn burn<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    let source_balance_key = token::balance_key(token, source);
+    let source_balance_key = balance_key(token, source);
     let source_balance = read_balance(storage, token, source)?;
 
     let amount_to_burn =
-        if let Some(amount) = source_balance.checked_sub(amount) {
-            storage.write(&source_balance_key, amount)?;
+        if let Some(new_amount) = source_balance.checked_sub(amount) {
+            storage.write(&source_balance_key, new_amount)?;
             amount
         } else {
             storage.write(&source_balance_key, token::Amount::zero())?;
@@ -189,11 +191,7 @@ where
     let new_total_supply = old_total_supply
         .checked_sub(amount_to_burn)
         .ok_or_else(|| {
-            tracing::error!(
-                "Burning more token than the total supply of {}",
-                token
-            );
-            storage_api::Error::new_const("Token total supply underflowed")
+            storage::Error::new_const("Total token supply underflowed")
         })?;
 
     let total_supply_key = minted_balance_key(token);
@@ -228,4 +226,69 @@ pub fn denom_to_amount(
         )
     })?;
     denom_amount.scale(denom).map_err(storage::Error::new)
+}
+
+#[cfg(test)]
+mod testing {
+    use namada_core::types::{address, token};
+    use namada_state::testing::TestWlStorage;
+
+    use super::{burn_tokens, credit_tokens, read_balance, read_total_supply};
+
+    #[test]
+    fn test_burn_native_tokens() {
+        let mut storage = TestWlStorage::default();
+        let native_token = storage.storage.native_token.clone();
+
+        // Get some addresses
+        let addr1 = address::testing::gen_implicit_address();
+        let addr2 = address::testing::gen_implicit_address();
+        let addr3 = address::testing::gen_implicit_address();
+
+        let balance1 = token::Amount::native_whole(1);
+        let balance2 = token::Amount::native_whole(2);
+        let balance3 = token::Amount::native_whole(3);
+        let tot_init_balance = balance1 + balance2 + balance3;
+
+        credit_tokens(&mut storage, &native_token, &addr1, balance1).unwrap();
+        credit_tokens(&mut storage, &native_token, &addr2, balance2).unwrap();
+        credit_tokens(&mut storage, &native_token, &addr3, balance3).unwrap();
+
+        // Check total initial supply
+        let total_supply = read_total_supply(&storage, &native_token).unwrap();
+        assert_eq!(total_supply, tot_init_balance);
+
+        // Burn some tokens
+        let burn1 = token::Amount::from(547_432);
+        burn_tokens(&mut storage, &native_token, &addr1, burn1).unwrap();
+
+        // Check new balances
+        let addr1_balance =
+            read_balance(&storage, &native_token, &addr1).unwrap();
+        assert_eq!(addr1_balance, balance1 - burn1);
+        let total_supply = read_total_supply(&storage, &native_token).unwrap();
+        assert_eq!(total_supply, tot_init_balance - burn1);
+
+        // Burn more tokens from addr1 than it has remaining
+        let burn2 = token::Amount::from(1_000_000);
+        burn_tokens(&mut storage, &native_token, &addr1, burn2).unwrap();
+
+        // Check new balances
+        let addr1_balance =
+            read_balance(&storage, &native_token, &addr1).unwrap();
+        assert_eq!(addr1_balance, token::Amount::zero());
+        let total_supply = read_total_supply(&storage, &native_token).unwrap();
+        assert_eq!(total_supply, tot_init_balance - balance1);
+
+        // Burn more tokens from addr2 than are in the total supply
+        let burn3 = tot_init_balance + token::Amount::native_whole(1);
+        burn_tokens(&mut storage, &native_token, &addr2, burn3).unwrap();
+
+        // Check balances again
+        let addr2_balance =
+            read_balance(&storage, &native_token, &addr2).unwrap();
+        assert_eq!(addr2_balance, token::Amount::zero());
+        let total_supply = read_total_supply(&storage, &native_token).unwrap();
+        assert_eq!(total_supply, balance3);
+    }
 }
