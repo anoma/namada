@@ -3,6 +3,7 @@ use std::fmt::Display;
 
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::types::address::Address;
+use namada_core::types::dec::Dec;
 use namada_core::types::storage::Epoch;
 use namada_core::types::token;
 
@@ -59,7 +60,7 @@ impl Vote {
 }
 
 /// Represent a tally type
-#[derive(Copy, Clone, BorshSerialize, BorshDeserialize)]
+#[derive(Copy, Debug, Clone, BorshSerialize, BorshDeserialize)]
 pub enum TallyType {
     /// Represent a tally type for proposal requiring 2/3 of the total voting
     /// power to be yay
@@ -117,14 +118,15 @@ impl TallyResult {
     ) -> Self {
         let passed = match tally_type {
             TallyType::TwoThirds => {
-                yay_voting_power >= total_voting_power * 2 / 3
+                yay_voting_power >= total_voting_power.mul_ceil(Dec::two() / 3)
             }
             TallyType::OneHalfOverOneThird => {
                 let at_least_one_third_voted = Self::get_total_voted_power(
                     yay_voting_power,
                     nay_voting_power,
                     abstain_voting_power,
-                ) >= total_voting_power / 3;
+                ) >= total_voting_power
+                    .mul_ceil(Dec::one() / 3);
 
                 // At least half of non-abstained votes are yay
                 let at_last_half_voted_yay =
@@ -132,16 +134,17 @@ impl TallyResult {
                 at_least_one_third_voted && at_last_half_voted_yay
             }
             TallyType::LessOneHalfOverOneThirdNay => {
-                let less_one_third_voted = Self::get_total_voted_power(
+                let at_least_one_third_voted = Self::get_total_voted_power(
                     yay_voting_power,
                     nay_voting_power,
                     abstain_voting_power,
-                ) < total_voting_power / 3;
+                ) > total_voting_power
+                    .mul_ceil(Dec::one() / 3);
 
                 // More than half of non-abstained votes are yay
                 let more_than_half_voted_yay =
-                    yay_voting_power > nay_voting_power;
-                less_one_third_voted || more_than_half_voted_yay
+                    nay_voting_power.mul_ceil(Dec::two()) < yay_voting_power;
+                at_least_one_third_voted && more_than_half_voted_yay
             }
         };
 
@@ -215,7 +218,7 @@ impl Display for ProposalResult {
 }
 
 /// General representation of a vote
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TallyVote {
     /// Represent a vote for a proposal onchain
     OnChain(ProposalVote),
@@ -280,7 +283,7 @@ impl TallyVote {
 
 /// Proposal structure holding votes information necessary to compute the
 /// outcome
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct ProposalVotes {
     /// Map from validator address to vote
     pub validators_vote: HashMap<Address, TallyVote>,
@@ -454,5 +457,498 @@ pub fn is_valid_validator_voting_period(
         let duration = voting_end_epoch - voting_start_epoch;
         let two_third_duration = (duration / 3) * 2;
         current_epoch <= voting_start_epoch + two_third_duration
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::ops::{Add, Sub};
+
+    use namada_core::types::address;
+
+    use super::*;
+
+    #[test]
+    fn test_proposal_result_no_votes_should_fail() {
+        let proposal_votes = ProposalVotes::default();
+
+        for tally_type in [
+            TallyType::OneHalfOverOneThird,
+            TallyType::LessOneHalfOverOneThirdNay,
+            TallyType::TwoThirds,
+        ] {
+            let proposal_result = compute_proposal_result(
+                proposal_votes.clone(),
+                token::Amount::from_u64(1),
+                tally_type,
+            );
+            assert!(
+                matches!(proposal_result.result, TallyResult::Rejected),
+                "{tally_type:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_proposal_result_one_validator_with_100_voting_power() {
+        let mut proposal_votes = ProposalVotes::default();
+
+        let validator_address = address::testing::established_address_1();
+        let validator_voting_power = token::Amount::from_u64(100);
+        proposal_votes.add_validator(
+            &validator_address,
+            validator_voting_power,
+            ProposalVote::Yay.into(),
+        );
+
+        for tally_type in [
+            TallyType::OneHalfOverOneThird,
+            TallyType::LessOneHalfOverOneThirdNay,
+            TallyType::TwoThirds,
+        ] {
+            let proposal_result = compute_proposal_result(
+                proposal_votes.clone(),
+                validator_voting_power,
+                tally_type,
+            );
+            assert!(
+                matches!(proposal_result.result, TallyResult::Passed),
+                "{tally_type:?}"
+            );
+            assert_eq!(
+                proposal_result.total_voting_power,
+                validator_voting_power
+            );
+            assert_eq!(proposal_result.total_yay_power, validator_voting_power);
+            assert_eq!(proposal_result.total_nay_power, token::Amount::zero());
+            assert_eq!(
+                proposal_result.total_abstain_power,
+                token::Amount::zero()
+            );
+        }
+    }
+
+    #[test]
+    fn test_proposal_one()
+     {
+        let mut proposal_votes = ProposalVotes::default();
+
+        let validator_address = address::testing::established_address_1();
+        let validator_voting_power = token::Amount::from_u64(100);
+        proposal_votes.add_validator(
+            &validator_address,
+            validator_voting_power,
+            ProposalVote::Yay.into(),
+        );
+
+        let delegator_address = address::testing::established_address_2();
+        let delegator_voting_power = token::Amount::from_u64(90);
+        proposal_votes.add_delegator(
+            &delegator_address,
+            &validator_address,
+            delegator_voting_power,
+            ProposalVote::Yay.into(),
+        );
+
+        for tally_type in [
+            TallyType::OneHalfOverOneThird,
+            TallyType::LessOneHalfOverOneThirdNay,
+            TallyType::TwoThirds,
+        ] {
+            let proposal_result = compute_proposal_result(
+                proposal_votes.clone(),
+                validator_voting_power,
+                tally_type,
+            );
+            assert!(
+                matches!(proposal_result.result, TallyResult::Passed),
+                "{tally_type:?}"
+            );
+            assert_eq!(
+                proposal_result.total_voting_power,
+                validator_voting_power
+            );
+            assert_eq!(proposal_result.total_yay_power, validator_voting_power);
+            assert_eq!(proposal_result.total_nay_power, token::Amount::zero());
+            assert_eq!(
+                proposal_result.total_abstain_power,
+                token::Amount::zero()
+            );
+        }
+    }
+
+    #[test]
+    fn test_proposal_two()
+     {
+        let mut proposal_votes = ProposalVotes::default();
+
+        let validator_address = address::testing::established_address_1();
+        let validator_voting_power = token::Amount::from_u64(100);
+        proposal_votes.add_validator(
+            &validator_address,
+            validator_voting_power,
+            ProposalVote::Yay.into(),
+        );
+
+        let delegator_address = address::testing::established_address_2();
+        let delegator_voting_power = token::Amount::from_u64(90);
+        proposal_votes.add_delegator(
+            &delegator_address,
+            &validator_address,
+            delegator_voting_power,
+            ProposalVote::Nay.into(),
+        );
+
+        for tally_type in [
+            TallyType::OneHalfOverOneThird,
+            TallyType::LessOneHalfOverOneThirdNay,
+            TallyType::TwoThirds,
+        ] {
+            let proposal_result = compute_proposal_result(
+                proposal_votes.clone(),
+                validator_voting_power,
+                tally_type,
+            );
+            assert!(
+                matches!(proposal_result.result, TallyResult::Rejected),
+                "{tally_type:?}"
+            );
+            assert_eq!(
+                proposal_result.total_voting_power,
+                validator_voting_power
+            );
+            assert_eq!(
+                proposal_result.total_yay_power,
+                validator_voting_power.sub(delegator_voting_power)
+            );
+            assert_eq!(proposal_result.total_nay_power, delegator_voting_power);
+            assert_eq!(
+                proposal_result.total_abstain_power,
+                token::Amount::zero()
+            );
+        }
+    }
+
+    #[test]
+    fn test_proposal_three()
+     {
+        let mut proposal_votes = ProposalVotes::default();
+
+        let validator_address = address::testing::established_address_1();
+        let validator_voting_power = token::Amount::from_u64(100);
+        proposal_votes.add_validator(
+            &validator_address,
+            validator_voting_power,
+            ProposalVote::Yay.into(),
+        );
+
+        let delegator_address = address::testing::established_address_2();
+        let delegator_voting_power = token::Amount::from_u64(90);
+        proposal_votes.add_delegator(
+            &delegator_address,
+            &validator_address,
+            delegator_voting_power,
+            ProposalVote::Nay.into(),
+        );
+
+        let delegator_address_two = address::testing::established_address_3();
+        let delegator_voting_power_two = token::Amount::from_u64(10);
+        proposal_votes.add_delegator(
+            &delegator_address_two,
+            &validator_address,
+            delegator_voting_power_two,
+            ProposalVote::Abstain.into(),
+        );
+
+        for tally_type in [
+            TallyType::OneHalfOverOneThird,
+            TallyType::LessOneHalfOverOneThirdNay,
+            TallyType::TwoThirds,
+        ] {
+            let proposal_result = compute_proposal_result(
+                proposal_votes.clone(),
+                validator_voting_power,
+                tally_type,
+            );
+            assert!(
+                matches!(proposal_result.result, TallyResult::Rejected),
+                "{tally_type:?}"
+            );
+            assert_eq!(
+                proposal_result.total_voting_power, validator_voting_power,
+                "total"
+            );
+            assert_eq!(
+                proposal_result.total_yay_power,
+                validator_voting_power
+                    .sub(delegator_voting_power)
+                    .sub(delegator_voting_power_two),
+                "yay"
+            );
+            assert_eq!(
+                proposal_result.total_nay_power, delegator_voting_power,
+                "nay"
+            );
+            assert_eq!(
+                proposal_result.total_abstain_power, delegator_voting_power_two,
+                "abstain"
+            );
+        }
+    }
+
+    // should pass
+    #[test]
+    fn test_proposal_four()
+     {
+        let mut proposal_votes = ProposalVotes::default();
+
+        let validator_address = address::testing::established_address_1();
+        let validator_voting_power = token::Amount::from_u64(100);
+        proposal_votes.add_validator(
+            &validator_address,
+            validator_voting_power,
+            ProposalVote::Yay.into(),
+        );
+
+        let delegator_address = address::testing::established_address_2();
+        let delegator_voting_power = token::Amount::from_u64(10);
+        proposal_votes.add_delegator(
+            &delegator_address,
+            &validator_address,
+            delegator_voting_power,
+            ProposalVote::Nay.into(),
+        );
+
+        let delegator_address_two = address::testing::established_address_3();
+        let delegator_voting_power_two = token::Amount::from_u64(20);
+        proposal_votes.add_delegator(
+            &delegator_address_two,
+            &validator_address,
+            delegator_voting_power_two,
+            ProposalVote::Abstain.into(),
+        );
+
+        for tally_type in [
+            TallyType::OneHalfOverOneThird,
+            TallyType::LessOneHalfOverOneThirdNay,
+            TallyType::TwoThirds,
+        ] {
+            let proposal_result = compute_proposal_result(
+                proposal_votes.clone(),
+                validator_voting_power,
+                tally_type,
+            );
+            assert!(
+                matches!(proposal_result.result, TallyResult::Passed),
+                "{tally_type:?}"
+            );
+            assert_eq!(
+                proposal_result.total_voting_power, validator_voting_power,
+                "total"
+            );
+            assert_eq!(
+                proposal_result.total_yay_power,
+                validator_voting_power
+                    .sub(delegator_voting_power)
+                    .sub(delegator_voting_power_two),
+                "yay"
+            );
+            assert_eq!(
+                proposal_result.total_nay_power, delegator_voting_power,
+                "nay"
+            );
+            assert_eq!(
+                proposal_result.total_abstain_power, delegator_voting_power_two,
+                "abstain"
+            );
+        }
+    }
+
+    // should pass
+    #[test]
+    fn test_proposal_five()
+     {
+        let mut proposal_votes = ProposalVotes::default();
+
+        let validator_address = address::testing::established_address_1();
+        let validator_voting_power = token::Amount::from_u64(100);
+        proposal_votes.add_validator(
+            &validator_address,
+            validator_voting_power,
+            ProposalVote::Yay.into(),
+        );
+
+        let delegator_address_two = address::testing::established_address_3();
+        let delegator_voting_power_two = token::Amount::from_u64(20);
+        proposal_votes.add_delegator(
+            &delegator_address_two,
+            &validator_address,
+            delegator_voting_power_two,
+            ProposalVote::Abstain.into(),
+        );
+
+        for tally_type in [
+            TallyType::OneHalfOverOneThird,
+            TallyType::LessOneHalfOverOneThirdNay,
+            TallyType::TwoThirds,
+        ] {
+            let proposal_result = compute_proposal_result(
+                proposal_votes.clone(),
+                validator_voting_power,
+                tally_type,
+            );
+            assert!(
+                matches!(proposal_result.result, TallyResult::Passed),
+                "{tally_type:?}"
+            );
+            assert_eq!(
+                proposal_result.total_voting_power, validator_voting_power,
+                "total"
+            );
+            assert_eq!(
+                proposal_result.total_yay_power,
+                validator_voting_power.sub(delegator_voting_power_two),
+                "yay"
+            );
+            assert_eq!(
+                proposal_result.total_nay_power,
+                token::Amount::zero(),
+                "nay"
+            );
+            assert_eq!(
+                proposal_result.total_abstain_power, delegator_voting_power_two,
+                "abstain"
+            );
+        }
+    }
+
+    // should pass
+    #[test]
+    fn test_proposal_six() {
+        let mut proposal_votes = ProposalVotes::default();
+
+        let validator_address = address::testing::established_address_1();
+        let validator_voting_power = token::Amount::from_u64(100);
+        proposal_votes.add_validator(
+            &validator_address,
+            validator_voting_power,
+            ProposalVote::Yay.into(),
+        );
+
+        let validator_address_two = address::testing::established_address_2();
+        let validator_voting_power_two = token::Amount::from_u64(100);
+        proposal_votes.add_validator(
+            &validator_address_two,
+            validator_voting_power_two,
+            ProposalVote::Nay.into(),
+        );
+
+        for tally_type in [
+            TallyType::OneHalfOverOneThird,
+            TallyType::LessOneHalfOverOneThirdNay,
+            TallyType::TwoThirds,
+        ] {
+            let proposal_result = compute_proposal_result(
+                proposal_votes.clone(),
+                validator_voting_power.add(validator_voting_power_two),
+                tally_type,
+            );
+            let _result = if matches!(
+                tally_type,
+                TallyType::LessOneHalfOverOneThirdNay
+            ) {
+                TallyResult::Rejected
+            } else {
+                TallyResult::Passed
+            };
+            assert!(matches!(proposal_result.result, _result), "{tally_type:?}");
+            assert_eq!(
+                proposal_result.total_voting_power,
+                validator_voting_power.add(validator_voting_power_two),
+                "total"
+            );
+            assert_eq!(
+                proposal_result.total_yay_power, validator_voting_power,
+                "yay"
+            );
+            assert_eq!(
+                proposal_result.total_nay_power, validator_voting_power_two,
+                "nay"
+            );
+            assert_eq!(
+                proposal_result.total_abstain_power,
+                token::Amount::zero(),
+                "abstain"
+            );
+        }
+    }
+
+    #[test]
+    fn test_proposal_seven() {
+        let mut proposal_votes = ProposalVotes::default();
+
+        let validator_address = address::testing::established_address_1();
+        let validator_voting_power = token::Amount::from_u64(100);
+        proposal_votes.add_validator(
+            &validator_address,
+            validator_voting_power,
+            ProposalVote::Yay.into(),
+        );
+
+        let validator_address_two = address::testing::established_address_2();
+        let validator_voting_power_two = token::Amount::from_u64(100);
+        proposal_votes.add_validator(
+            &validator_address_two,
+            validator_voting_power_two,
+            ProposalVote::Nay.into(),
+        );
+
+        let delegator_address_two = address::testing::established_address_3();
+        let delegator_voting_power_two = token::Amount::from_u64(50);
+        proposal_votes.add_delegator(
+            &delegator_address_two,
+            &validator_address_two,
+            delegator_voting_power_two,
+            ProposalVote::Abstain.into(),
+        );
+
+        for tally_type in [
+            TallyType::OneHalfOverOneThird,
+            TallyType::LessOneHalfOverOneThirdNay,
+            TallyType::TwoThirds,
+        ] {
+            let proposal_result = compute_proposal_result(
+                proposal_votes.clone(),
+                validator_voting_power.add(validator_voting_power_two),
+                tally_type,
+            );
+            let _result = if matches!(tally_type, TallyType::OneHalfOverOneThird)
+            {
+                TallyResult::Passed
+            } else {
+                TallyResult::Rejected
+            };
+            assert!(matches!(proposal_result.result, _result), "{tally_type:?}");
+            assert_eq!(
+                proposal_result.total_voting_power,
+                validator_voting_power
+                    .checked_add(validator_voting_power_two)
+                    .unwrap(),
+                "total"
+            );
+            assert_eq!(
+                proposal_result.total_yay_power, validator_voting_power,
+                "yay"
+            );
+            assert_eq!(
+                proposal_result.total_nay_power,
+                validator_voting_power_two.sub(delegator_voting_power_two),
+                "nay"
+            );
+            assert_eq!(
+                proposal_result.total_abstain_power, delegator_voting_power_two,
+                "abstain"
+            );
+        }
     }
 }
