@@ -16,6 +16,7 @@ use namada_merkle_tree::{
 use thiserror::Error;
 
 use crate::tx_queue::TxQueue;
+use crate::WriteOpts;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -181,6 +182,7 @@ pub trait DB: Debug {
         height: BlockHeight,
         key: &Key,
         value: impl AsRef<[u8]>,
+        action: WriteOpts,
     ) -> Result<i64>;
 
     /// Delete the value with the given height and account subspace key from the
@@ -190,6 +192,7 @@ pub trait DB: Debug {
         &mut self,
         height: BlockHeight,
         key: &Key,
+        action: WriteOpts,
     ) -> Result<i64>;
 
     /// Start write batch.
@@ -207,6 +210,7 @@ pub trait DB: Debug {
         height: BlockHeight,
         key: &Key,
         value: impl AsRef<[u8]>,
+        action: WriteOpts,
     ) -> Result<i64>;
 
     /// Batch delete the value with the given height and account subspace key
@@ -217,6 +221,7 @@ pub trait DB: Debug {
         batch: &mut Self::WriteBatch,
         height: BlockHeight,
         key: &Key,
+        action: WriteOpts,
     ) -> Result<i64>;
 
     /// Prune Merkle tree stores at the given epoch

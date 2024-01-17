@@ -59,7 +59,7 @@ mod tests {
     use namada::ledger::ibc::storage::ibc_key;
     use namada::ledger::parameters::{EpochDuration, Parameters};
     use namada::state::write_log::WriteLog;
-    use namada::state::{self, StorageWrite, StoreType, WlStorage};
+    use namada::state::{self, StorageWrite, StoreType, WlStorage, WriteOpts};
     use namada::token::conversion::update_allowed_conversions;
     use namada::types::chain::ChainId;
     use namada::types::ethereum_events::Uint;
@@ -530,7 +530,11 @@ mod tests {
                     storage.write(&key, value_bytes)?;
                 }
                 3 => {
-                    storage.batch_delete_subspace_val(&mut batch, &key)?;
+                    storage.batch_delete_subspace_val(
+                        &mut batch,
+                        &key,
+                        WriteOpts::ALL,
+                    )?;
                 }
                 _ => {
                     let value_bytes = types::encode(&storage.block.height);
@@ -538,6 +542,7 @@ mod tests {
                         &mut batch,
                         &key,
                         value_bytes,
+                        WriteOpts::ALL,
                     )?;
                 }
             }

@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use criterion::{criterion_group, criterion_main, Criterion};
 use namada::core::types::account::AccountPublicKeysMap;
 use namada::core::types::address;
-use namada::ledger::storage::DB;
+use namada::state::{WriteOpts, DB};
 use namada::token::{Amount, Transfer};
 use namada::tx::Signature;
 use namada::vm::wasm::TxCache;
@@ -318,7 +318,12 @@ fn storage_write(c: &mut Criterion) {
                             .wl_storage
                             .storage
                             .db
-                            .write_subspace_val(block_height, &key, value)
+                            .write_subspace_val(
+                                block_height,
+                                &key,
+                                value,
+                                WriteOpts::ALL,
+                            )
                             .unwrap();
                     },
                     criterion::BatchSize::SmallInput,

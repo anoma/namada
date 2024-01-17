@@ -17,7 +17,7 @@ use namada_trans_token::storage_key::{
 };
 use thiserror::Error;
 
-use crate::{DBIter, State, DB};
+use crate::{DBIter, State, WriteOpts, DB};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -49,9 +49,14 @@ pub enum StorageModification {
     Write {
         /// Value bytes
         value: Vec<u8>,
+        /// Action to determine what data to write
+        action: WriteOpts,
     },
     /// Delete an existing key-value
-    Delete,
+    Delete {
+        /// Action to determine what data to delet
+        action: WriteOpts,
+    },
     /// Initialize a new account with established address and a given validity
     /// predicate hash. The key for `InitAccount` inside the [`WriteLog`] must
     /// point to its validity predicate.
@@ -154,10 +159,11 @@ impl WriteLog {
             }) {
             Some(v) => {
                 let gas = match v {
-                    StorageModification::Write { ref value } => {
-                        key.len() + value.len()
-                    }
-                    StorageModification::Delete => key.len(),
+                    StorageModification::Write {
+                        ref value,
+                        action: _,
+                    } => key.len() + value.len(),
+                    StorageModification::Delete { action: _ } => key.len(),
                     StorageModification::InitAccount { ref vp_code_hash } => {
                         key.len() + vp_code_hash.len()
                     }
@@ -181,10 +187,11 @@ impl WriteLog {
         match self.block_write_log.get(key) {
             Some(v) => {
                 let gas = match v {
-                    StorageModification::Write { ref value } => {
-                        key.len() + value.len()
-                    }
-                    StorageModification::Delete => key.len(),
+                    StorageModification::Write {
+                        ref value,
+                        action: _,
+                    } => key.len() + value.len(),
+                    StorageModification::Delete { action: _ } => key.len(),
                     StorageModification::InitAccount { ref vp_code_hash } => {
                         key.len() + vp_code_hash.len()
                     }
@@ -198,27 +205,30 @@ impl WriteLog {
         }
     }
 
-    /// Write a key and a value and return the gas cost and the size difference
-    /// Fails with [`Error::UpdateVpOfNewAccount`] when attempting to update a
-    /// validity predicate of a new account that's not yet committed to storage.
-    /// Fails with [`Error::UpdateTemporaryValue`] when attempting to update a
+    /// Write a key and a value, with write options, and return the gas cost and
+    /// the size difference. Fails with [`Error::UpdateVpOfNewAccount`] when
+    /// attempting to update a validity predicate of a new account that's
+    /// not yet committed to storage. Fails with
+    /// [`Error::UpdateTemporaryValue`] when attempting to update a
     /// temporary value.
-    pub fn write(
+    pub fn write_with_opts(
         &mut self,
         key: &storage::Key,
         value: Vec<u8>,
+        action: WriteOpts,
     ) -> Result<(u64, i64)> {
         let len = value.len();
         let gas = key.len() + len;
         let size_diff = match self
             .tx_write_log
-            .insert(key.clone(), StorageModification::Write { value })
+            .insert(key.clone(), StorageModification::Write { value, action })
         {
             Some(prev) => match prev {
-                StorageModification::Write { ref value } => {
-                    len as i64 - value.len() as i64
-                }
-                StorageModification::Delete => len as i64,
+                StorageModification::Write {
+                    ref value,
+                    action: _,
+                } => len as i64 - value.len() as i64,
+                StorageModification::Delete { action: _ } => len as i64,
                 StorageModification::InitAccount { .. } => {
                     return Err(Error::UpdateVpOfNewAccount);
                 }
@@ -233,6 +243,16 @@ impl WriteLog {
         Ok((gas as u64 * STORAGE_WRITE_GAS_PER_BYTE, size_diff))
     }
 
+    /// Write a key and value using all write options, and return the gas cost
+    /// and size difference
+    pub fn write(
+        &mut self,
+        key: &storage::Key,
+        value: Vec<u8>,
+    ) -> Result<(u64, i64)> {
+        self.write_with_opts(key, value, WriteOpts::ALL)
+    }
+
     /// Write a key and a value.
     /// Fails with [`Error::UpdateVpOfNewAccount`] when attempting to update a
     /// validity predicate of a new account that's not yet committed to storage.
@@ -242,10 +262,11 @@ impl WriteLog {
         &mut self,
         key: &storage::Key,
         value: Vec<u8>,
+        action: WriteOpts,
     ) -> Result<()> {
         if let Some(prev) = self
             .block_write_log
-            .insert(key.clone(), StorageModification::Write { value })
+            .insert(key.clone(), StorageModification::Write { value, action })
         {
             match prev {
                 StorageModification::InitAccount { .. } => {
@@ -255,7 +276,7 @@ impl WriteLog {
                     return Err(Error::UpdateTemporaryValue);
                 }
                 StorageModification::Write { .. }
-                | StorageModification::Delete => {}
+                | StorageModification::Delete { .. } => {}
             }
         }
         Ok(())
@@ -278,10 +299,11 @@ impl WriteLog {
             .insert(key.clone(), StorageModification::Temp { value })
         {
             Some(prev) => match prev {
-                StorageModification::Write { ref value } => {
-                    len as i64 - value.len() as i64
-                }
-                StorageModification::Delete => {
+                StorageModification::Write {
+                    ref value,
+                    action: _,
+                } => len as i64 - value.len() as i64,
+                StorageModification::Delete { .. } => {
                     return Err(Error::WriteTempAfterDelete);
                 }
                 StorageModification::InitAccount { .. } => {
@@ -300,21 +322,28 @@ impl WriteLog {
         Ok((gas as u64 * MEMORY_ACCESS_GAS_PER_BYTE, size_diff))
     }
 
-    /// Delete a key and its value, and return the gas cost and the size
-    /// difference.
+    /// Delete a key and its value, with write options, and return the gas cost
+    /// and the size difference.
     /// Fails with [`Error::DeleteVp`] for a validity predicate key, which are
     /// not possible to delete.
-    pub fn delete(&mut self, key: &storage::Key) -> Result<(u64, i64)> {
+    pub fn delete_with_opts(
+        &mut self,
+        key: &storage::Key,
+        action: WriteOpts,
+    ) -> Result<(u64, i64)> {
         if key.is_validity_predicate().is_some() {
             return Err(Error::DeleteVp);
         }
         let size_diff = match self
             .tx_write_log
-            .insert(key.clone(), StorageModification::Delete)
+            .insert(key.clone(), StorageModification::Delete { action })
         {
             Some(prev) => match prev {
-                StorageModification::Write { ref value } => value.len() as i64,
-                StorageModification::Delete => 0,
+                StorageModification::Write {
+                    ref value,
+                    action: _,
+                } => value.len() as i64,
+                StorageModification::Delete { .. } => 0,
                 StorageModification::InitAccount { .. } => {
                     return Err(Error::DeleteVp);
                 }
@@ -328,23 +357,33 @@ impl WriteLog {
         Ok((gas as u64 * STORAGE_WRITE_GAS_PER_BYTE, -size_diff))
     }
 
+    /// Delete a key and its value, with all write options, and return the gas
+    /// cost and the size difference.
+    pub fn delete(&mut self, key: &storage::Key) -> Result<(u64, i64)> {
+        self.delete_with_opts(key, WriteOpts::ALL)
+    }
+
     /// Delete a key and its value.
     /// Fails with [`Error::DeleteVp`] for a validity predicate key, which are
     /// not possible to delete.
-    pub fn protocol_delete(&mut self, key: &storage::Key) -> Result<()> {
+    pub fn protocol_delete(
+        &mut self,
+        key: &storage::Key,
+        action: WriteOpts,
+    ) -> Result<()> {
         if key.is_validity_predicate().is_some() {
             return Err(Error::DeleteVp);
         }
         if let Some(prev) = self
             .block_write_log
-            .insert(key.clone(), StorageModification::Delete)
+            .insert(key.clone(), StorageModification::Delete { action })
         {
             match prev {
                 StorageModification::InitAccount { .. } => {
                     return Err(Error::DeleteVp);
                 }
                 StorageModification::Write { .. }
-                | StorageModification::Delete
+                | StorageModification::Delete { .. }
                 | StorageModification::Temp { .. } => {}
             }
         };
@@ -505,19 +544,29 @@ impl WriteLog {
     {
         for (key, entry) in self.block_write_log.iter() {
             match entry {
-                StorageModification::Write { value } => {
+                StorageModification::Write { value, action } => {
                     storage
-                        .batch_write_subspace_val(batch, key, value.clone())
+                        .batch_write_subspace_val(
+                            batch,
+                            key,
+                            value.clone(),
+                            action.clone(),
+                        )
                         .map_err(Error::StorageError)?;
                 }
-                StorageModification::Delete => {
+                StorageModification::Delete { action } => {
                     storage
-                        .batch_delete_subspace_val(batch, key)
+                        .batch_delete_subspace_val(batch, key, action.clone())
                         .map_err(Error::StorageError)?;
                 }
                 StorageModification::InitAccount { vp_code_hash } => {
                     storage
-                        .batch_write_subspace_val(batch, key, *vp_code_hash)
+                        .batch_write_subspace_val(
+                            batch,
+                            key,
+                            *vp_code_hash,
+                            WriteOpts::ALL,
+                        )
                         .map_err(Error::StorageError)?;
                 }
                 // temporary value isn't persisted
@@ -763,7 +812,7 @@ mod tests {
         // read the value
         let (value, gas) = write_log.read(&key);
         match value.expect("no read value") {
-            StorageModification::Write { value } => {
+            StorageModification::Write { value, action: _ } => {
                 assert_eq!(*value, inserted)
             }
             _ => panic!("unexpected read result"),
@@ -798,7 +847,7 @@ mod tests {
         // read the deleted key
         let (value, gas) = write_log.read(&key);
         match &value.expect("no read value") {
-            StorageModification::Delete => {}
+            StorageModification::Delete { .. } => {}
             _ => panic!("unexpected result"),
         }
         assert_eq!(gas, key.len() as u64 * MEMORY_ACCESS_GAS_PER_BYTE);
@@ -1139,15 +1188,42 @@ pub mod testing {
         collection::btree_set(arb_address(), 0..10)
     }
 
+    fn arb_write_actions() -> impl Strategy<Value = WriteOpts> {
+        prop_oneof![
+            Just(WriteOpts::ALL),
+            Just(WriteOpts::WRITE_DIFFS),
+            Just(WriteOpts::NONE),
+        ]
+    }
+
+    fn arb_write_data() -> impl Strategy<Value = (Vec<u8>, WriteOpts)> {
+        let arb_bytes = any::<Vec<u8>>();
+        arb_bytes.prop_flat_map(move |bytes| {
+            let arb_action = arb_write_actions();
+            (Just(bytes), arb_action)
+        })
+    }
+
     /// Generate an arbitrary [`StorageModification`].
+    ///
+    /// NOTE / TODO: not using the arb action here and defaulting to
+    /// `WriteActions::All`. Proper use of the arb action requires extra logic
+    /// to ensure that a `Delete` with a particular action only operates on a
+    /// key that was written with the same action.
     pub fn arb_storage_modification(
         can_init_account: bool,
     ) -> impl Strategy<Value = StorageModification> {
         if can_init_account {
             prop_oneof![
-                any::<Vec<u8>>()
-                    .prop_map(|value| StorageModification::Write { value }),
-                Just(StorageModification::Delete),
+                arb_write_data().prop_map(|(value, _action)| {
+                    StorageModification::Write {
+                        value,
+                        action: WriteOpts::ALL,
+                    }
+                }),
+                Just(StorageModification::Delete {
+                    action: WriteOpts::ALL
+                }),
                 any::<[u8; HASH_LENGTH]>().prop_map(|hash| {
                     StorageModification::InitAccount {
                         vp_code_hash: Hash(hash),
@@ -1159,9 +1235,15 @@ pub mod testing {
             .boxed()
         } else {
             prop_oneof![
-                any::<Vec<u8>>()
-                    .prop_map(|value| StorageModification::Write { value }),
-                Just(StorageModification::Delete),
+                arb_write_data().prop_map(|(value, _action)| {
+                    StorageModification::Write {
+                        value,
+                        action: WriteOpts::ALL,
+                    }
+                }),
+                Just(StorageModification::Delete {
+                    action: WriteOpts::ALL
+                }),
                 any::<Vec<u8>>()
                     .prop_map(|value| StorageModification::Temp { value }),
             ]

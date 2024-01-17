@@ -411,10 +411,11 @@ where
 
     /// Write a value to the specified subspace and returns the gas cost and the
     /// size difference
-    pub fn write(
+    pub fn write_with_opts(
         &mut self,
         key: &Key,
         value: impl AsRef<[u8]>,
+        action: WriteOpts,
     ) -> Result<(u64, i64)> {
         // Note that this method is the same as `StorageWrite::write_bytes`,
         // but with gas and storage bytes len diff accounting
@@ -427,30 +428,78 @@ where
             self.block.tree.update(key, height)?;
         } else {
             // Update the merkle tree
-            self.block.tree.update(key, value)?;
+            if action.contains(WriteOpts::MERKLIZE) {
+                self.block.tree.update(key, value)?;
+            }
         }
 
         let len = value.len();
         let gas = (key.len() + len) as u64 * STORAGE_WRITE_GAS_PER_BYTE;
-        let size_diff =
-            self.db.write_subspace_val(self.block.height, key, value)?;
+        let size_diff = self.db.write_subspace_val(
+            self.block.height,
+            key,
+            value,
+            action,
+        )?;
         Ok((gas, size_diff))
+    }
+
+    /// Write with merklization and diffs
+    pub fn write(
+        &mut self,
+        key: &Key,
+        value: impl AsRef<[u8]>,
+    ) -> Result<(u64, i64)> {
+        self.write_with_opts(key, value, WriteOpts::ALL)
+    }
+
+    /// Write with diffs but no merklization
+    pub fn write_without_merkl(
+        &mut self,
+        key: &Key,
+        value: impl AsRef<[u8]>,
+    ) -> Result<(u64, i64)> {
+        self.write_with_opts(key, value, WriteOpts::WRITE_DIFFS)
+    }
+
+    /// Write without diffs or merklization
+    pub fn write_without_merkldiffs(
+        &mut self,
+        key: &Key,
+        value: impl AsRef<[u8]>,
+    ) -> Result<(u64, i64)> {
+        self.write_with_opts(key, value, WriteOpts::NONE)
     }
 
     /// Delete the specified subspace and returns the gas cost and the size
     /// difference
-    pub fn delete(&mut self, key: &Key) -> Result<(u64, i64)> {
+    pub fn delete_with_opts(
+        &mut self,
+        key: &Key,
+        action: WriteOpts,
+    ) -> Result<(u64, i64)> {
         // Note that this method is the same as `StorageWrite::delete`,
         // but with gas and storage bytes len diff accounting
         let mut deleted_bytes_len = 0;
         if self.has_key(key)?.0 {
             self.block.tree.delete(key)?;
             deleted_bytes_len =
-                self.db.delete_subspace_val(self.block.height, key)?;
+                self.db
+                    .delete_subspace_val(self.block.height, key, action)?;
         }
         let gas = (key.len() + deleted_bytes_len as usize) as u64
             * STORAGE_WRITE_GAS_PER_BYTE;
         Ok((gas, deleted_bytes_len))
+    }
+
+    /// Delete including from the diffs storage
+    pub fn delete(&mut self, key: &Key) -> Result<(u64, i64)> {
+        self.delete_with_opts(key, WriteOpts::ALL)
+    }
+
+    /// Delete without manipulating the diffs storage
+    pub fn delete_without_diffs(&mut self, key: &Key) -> Result<(u64, i64)> {
+        self.delete_with_opts(key, WriteOpts::NONE)
     }
 
     /// Set the block header.
@@ -866,6 +915,7 @@ where
         batch: &mut D::WriteBatch,
         key: &Key,
         value: impl AsRef<[u8]>,
+        action: WriteOpts,
     ) -> Result<i64> {
         let value = value.as_ref();
         if is_pending_transfer_key(key) {
@@ -875,13 +925,16 @@ where
             self.block.tree.update(key, height)?;
         } else {
             // Update the merkle tree
-            self.block.tree.update(key, value)?;
+            if action.contains(WriteOpts::MERKLIZE) {
+                self.block.tree.update(key, value)?;
+            }
         }
         Ok(self.db.batch_write_subspace_val(
             batch,
             self.block.height,
             key,
             value,
+            action,
         )?)
     }
 
@@ -892,12 +945,16 @@ where
         &mut self,
         batch: &mut D::WriteBatch,
         key: &Key,
+        action: WriteOpts,
     ) -> Result<i64> {
         // Update the merkle tree
         self.block.tree.delete(key)?;
-        Ok(self
-            .db
-            .batch_delete_subspace_val(batch, self.block.height, key)?)
+        Ok(self.db.batch_delete_subspace_val(
+            batch,
+            self.block.height,
+            key,
+            action,
+        )?)
     }
 
     // Prune merkle tree stores. Use after updating self.block.height in the

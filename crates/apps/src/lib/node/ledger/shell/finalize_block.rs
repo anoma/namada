@@ -598,7 +598,7 @@ where
 
         // Update the MASP commitment tree anchor if the tree was updated
         let tree_key = token::storage_key::masp_commitment_tree_key();
-        if let Some(StorageModification::Write { value }) =
+        if let Some(StorageModification::Write { value, action: _ }) =
             self.wl_storage.write_log.read(&tree_key).0
         {
             let updated_tree = CommitmentTree::<Node>::try_from_slice(value)

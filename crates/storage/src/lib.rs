@@ -8,6 +8,7 @@ pub mod mockdb;
 pub mod tx_queue;
 pub mod types;
 
+use bitflags::bitflags;
 pub use db::{Error as DbError, Result as DbResult, *};
 pub use error::{CustomError, Error, OptionExt, Result, ResultExt};
 use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
@@ -16,6 +17,22 @@ pub use namada_core::types::hash::StorageHasher;
 use namada_core::types::storage::{
     self, BlockHash, BlockHeight, Epoch, Epochs, Header, TxIndex,
 };
+
+bitflags! {
+    /// Write options to help commit_block determine what parts of the storage to
+    /// update
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub struct WriteOpts: u8 {
+        /// Modify the merkle tree
+        const MERKLIZE = 0b01;
+        /// Write value to the diffs
+        const WRITE_DIFFS = 0b10;
+        /// Neither update the merkle tree nor write to the diffs
+        const NONE = Self::MERKLIZE.bits() & Self::WRITE_DIFFS.bits();
+        /// Both modify the merkle tree and write to diffs
+        const ALL = Self::MERKLIZE.bits() | Self::WRITE_DIFFS.bits();
+    }
+}
 
 /// Common storage read interface
 ///
@@ -134,6 +151,7 @@ pub trait StorageRead {
 /// Common storage write interface
 pub trait StorageWrite {
     /// Write a value to be encoded with Borsh at the given key to storage.
+    /// Additionally, write the data to the diffs and add it to the merkle tree.
     fn write<T: BorshSerialize>(
         &mut self,
         key: &storage::Key,
@@ -143,15 +161,74 @@ pub trait StorageWrite {
         self.write_bytes(key, bytes)
     }
 
+    /// Write a value to be encoded with Borsh at the given key to storage.
+    fn write_with_opts<T: BorshSerialize>(
+        &mut self,
+        key: &storage::Key,
+        val: T,
+        action: WriteOpts,
+    ) -> Result<()> {
+        let bytes = val.serialize_to_vec();
+        self.write_bytes_with_opts(key, bytes, action)
+    }
+    
+    /// Write a value to be encoded with Borsh at the given key to storage.
+    /// Additionally, write the data to the diffs. Do not add to the merkle
+    /// tree.
+    fn write_without_merkl<T: BorshSerialize>(
+        &mut self,
+        key: &storage::Key,
+        val: T,
+    ) -> Result<()> {
+        self.write_with_opts(key, val, WriteOpts::WRITE_DIFFS)
+    }
+
+    /// Write a value to be encoded with Borsh at the given key to storage.
+    /// Do not update the diffs or merkle tree.
+    fn write_without_merkldiffs<T: BorshSerialize>(
+        &mut self,
+        key: &storage::Key,
+        val: T,
+    ) -> Result<()> {
+        self.write_with_opts(key, val, WriteOpts::NONE)
+    }
+
     /// Write a value as bytes at the given key to storage.
     fn write_bytes(
         &mut self,
         key: &storage::Key,
         val: impl AsRef<[u8]>,
+    ) -> Result<()> {
+        self.write_bytes_with_opts(key, val, WriteOpts::ALL)
+    }
+
+    /// Write a value as bytes at the given key to storage, with provided
+    /// options.
+    fn write_bytes_with_opts(
+        &mut self,
+        key: &storage::Key,
+        val: impl AsRef<[u8]>,
+        action: WriteOpts,
     ) -> Result<()>;
 
-    /// Delete a value at the given key from storage.
-    fn delete(&mut self, key: &storage::Key) -> Result<()>;
+    /// Delete a value at the given key from storage
+    fn delete_with_opts(
+        &mut self,
+        key: &storage::Key,
+        action: WriteOpts,
+    ) -> Result<()>;
+
+    /// Delete a value at the given key from storage, including from the diffs
+    /// storage.
+    fn delete(&mut self, key: &storage::Key) -> Result<()> {
+        self.delete_with_opts(key, WriteOpts::ALL)
+    }
+
+    /// Delete a value at the given key from storage, excluding the diffs
+    /// storage.
+    fn delete_without_diffs(&mut self, key: &storage::Key) -> Result<()> {
+        self.delete_with_opts(key, WriteOpts::NONE)
+    }
 
     /// Delete all key-vals with a matching prefix.
     fn delete_prefix(&mut self, prefix: &storage::Key) -> Result<()>
@@ -400,20 +477,25 @@ pub mod testing {
     }
 
     impl StorageWrite for TestStorage {
-        fn write_bytes(
+        fn write_bytes_with_opts(
             &mut self,
             key: &storage::Key,
             val: impl AsRef<[u8]>,
+            action: WriteOpts,
         ) -> Result<()> {
             self.db
-                .write_subspace_val(self.height, key, val)
+                .write_subspace_val(self.height, key, val, action)
                 .into_storage_result()?;
             Ok(())
         }
 
-        fn delete(&mut self, key: &storage::Key) -> Result<()> {
+        fn delete_with_opts(
+            &mut self,
+            key: &storage::Key,
+            action: WriteOpts,
+        ) -> Result<()> {
             self.db
-                .delete_subspace_val(self.height, key)
+                .delete_subspace_val(self.height, key, action)
                 .into_storage_result()?;
             Ok(())
         }

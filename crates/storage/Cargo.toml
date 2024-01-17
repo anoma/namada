@@ -24,6 +24,7 @@ namada_gas = { path = "../gas" }
 namada_merkle_tree = { path = "../merkle_tree" }
 namada_tx = { path = "../tx" }
 
+bitflags.workspace = true
 borsh.workspace = true
 itertools.workspace = true
 thiserror.workspace = true

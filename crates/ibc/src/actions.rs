@@ -21,7 +21,7 @@ use namada_state::wl_storage::{PrefixIter, WriteLogAndStorage};
 use namada_state::write_log::{self, WriteLog};
 use namada_state::{
     self as storage, iter_prefix_post, DBIter, ResultExt, State, StorageError,
-    StorageHasher, StorageResult, StorageWrite, WlStorage, DB,
+    StorageHasher, StorageResult, StorageWrite, WlStorage, WriteOpts, DB,
 };
 use namada_storage::StorageRead;
 use namada_trans_token as token;
