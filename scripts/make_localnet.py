@@ -29,12 +29,12 @@ def system(cmd):
 def run(cmd):
     return subprocess.run(cmd, shell=True, capture_output=True, text=True).stdout
 
-def update_balances(dir, new_addresses):
-    balances_file = f"{dir}/balances.toml"
+def update_balances(localnet_dir, new_addresses):
+    balances_file = f"{localnet_dir}/balances.toml"
     balances_toml = toml.load(balances_file)
     for addr in new_addresses:
         balances_toml["token"]["NAM"][addr] = "1000000"
-    with open(balances_file, "w") as f:
+    with open(f"{localnet_dir}/tmp/balances.toml", "w") as f:
         toml.dump(balances_toml, f)
 
 def make_transactions(no_vals):
@@ -94,12 +94,12 @@ if __name__ == "__main__":
     with open(f"{BASE_DIR}/pre-genesis/signed-transactions.toml", "w") as f:
         toml.dump(bigass_signed_toml, f)
 
-    # shutil.rmtree(f"{TXS_DIR}")
+    shutil.rmtree(f"{TXS_DIR}")
 
     # Concatenate transactions.toml
     toml_old = toml.load(f"{LOCALNET_DIR}/transactions.toml")
     toml_old["established_account"].extend(bigass_signed_toml["established_account"])
     toml_old["validator_account"].extend(bigass_signed_toml["validator_account"])
     toml_old["bond"].extend(bigass_signed_toml["bond"])
-    with open(f"{LOCALNET_DIR}/transactions.toml", "w") as f:
+    with open(f"{LOCALNET_DIR}/tmp/transactions.toml", "w") as f:
         toml.dump(toml_old, f)

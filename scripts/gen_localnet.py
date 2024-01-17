@@ -52,7 +52,7 @@ parser.add_argument('--localnet-dir', type=str, help='The localnet directory con
 parser.add_argument('-m', '--mode', type=str, help='The mode to run the localnet in. Can be release or debug, defaults to debug.')
 parser.add_argument('--epoch-length', type=int, help='The epoch length in seconds, defaults to parameters.toml value.')
 parser.add_argument('--max-validator-slots', type=int, help='The maximum number of validators, defaults to parameters.toml value.')
-parser.add_argument('--no-chains', type=int, help='Number of chains to run, defaults to 1. If more than 1, base dirs will be under .namada-port. Number of chains must be less than 9.')
+parser.add_argument('--no-nodes', type=int, help='Number of nodes to run, defaults to 1. If more than 1, base dirs will be under .namada-port. Number of chains must be less than 9.')
 parser.add_argument('--no-vals', type=int, help='Number of validators to run, defaults to 1. If more than 1, base dirs will be under .namada-port. Number of validators must be less or equal to no-chains.')
 # Change any parameters in the parameters.toml file
 parser.add_argument('--params', type=str, help='A string representation of a dictionary of parameters to update in the parameters.toml. Must be of the same format.')
@@ -85,10 +85,29 @@ else:
 if mode.lower() != 'release':
     mode = 'debug'
 
+
+print('Running namadac utils init_network')
+CHAIN_PREFIX='local'
+GENESIS_TIME='2021-12-31T00:00:00Z'
+TEMPLATES_PATH=localnet_dir + '/tmp'
+WASM_CHECKSUMS_PATH=namada_dir + '/wasm/checksums.json'
+WASM_PATH=namada_dir + '/wasm/'
+BASE_DIR = args.base_dir
+
 BASE_DIRS=[]
-if args.no_chains and args.no_chains > 1:
-    base_dirs = [f'.namada-2{7+i % 10}657' for i in range(args.no_chains)]
+
+if args.no_nodes and args.no_nodes > 1:
+    base_dirs = [f'.namada-2{7+i % 10}657' for i in range(args.no_nodes)]
 if args.no_vals and args.no_vals > 1:
+    assert args.no_vals <= args.no_nodes, 'Number of validators must be less or equal to number of chains.'
+    if os.path.isdir(TEMPLATES_PATH):
+        shutil.rmtree(TEMPLATES_PATH)
+    os.mkdir(TEMPLATES_PATH)
+
+    shutil.copy(localnet_dir + '/parameters.toml', TEMPLATES_PATH + '/parameters.toml')
+    shutil.copy(localnet_dir + '/transactions.toml', TEMPLATES_PATH + '/transactions.toml')
+    shutil.copy(localnet_dir + '/validity-predicates.toml', TEMPLATES_PATH + '/validity-predicates.toml')
+    shutil.copy(localnet_dir + '/tokens.toml', TEMPLATES_PATH + '/tokens.toml')
     system(f"python3 {namada_dir}/scripts/make_localnet.py --no-vals {args.no_vals} --mode {mode}")
 
 params = {}
@@ -126,13 +145,6 @@ for bin in bins:
 print(f"Using {bins[0].split('/')[-1]} version: {os.popen(bin + ' --version').read()}")
 
 # Run namadac utils init_network with the correct arguments
-print('Running namadac utils init_network')
-CHAIN_PREFIX='local'
-GENESIS_TIME='2021-12-31T00:00:00Z'
-TEMPLATES_PATH=localnet_dir
-WASM_CHECKSUMS_PATH=namada_dir + '/wasm/checksums.json'
-WASM_PATH=namada_dir + '/wasm/'
-BASE_DIR = args.base_dir
 
 if not BASE_DIR:
     BASE_DIR = subprocess.check_output([namadac_bin, "utils", "default-base-dir"]).decode().strip()
@@ -141,6 +153,8 @@ if not BASE_DIR:
 if os.path.isdir(BASE_DIR):
     shutil.rmtree(BASE_DIR)
 os.mkdir(BASE_DIR)
+
+
 
 # Check that wasm checksums file exists
 if not os.path.isfile(WASM_CHECKSUMS_PATH):
@@ -202,7 +216,8 @@ if len(BASE_DIRS)> 0:
 
 # Move the genesis wallet to the base dir
 
-
+# Remove the temporary transaction folder
+shutil.rmtree(TEMPLATES_PATH)
 
 print("Run the ledger using the following command:")
 print(f"{namada_bin} --base-dir='{BASE_DIR}' --chain-id '{CHAIN_ID}' ledger run")
