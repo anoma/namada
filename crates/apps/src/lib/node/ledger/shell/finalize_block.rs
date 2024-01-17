@@ -606,7 +606,7 @@ where
             let anchor_key = token::storage_key::masp_commitment_anchor_key(
                 updated_tree.root(),
             );
-            self.wl_storage.write(&anchor_key, ())?;
+            self.wl_storage.write_without_merkldiffs(&anchor_key, ())?;
         }
 
         if update_for_tendermint {
