@@ -60,7 +60,7 @@ use namada::state::{
 };
 use namada::token;
 pub use namada::tx::data::ResultCode;
-use namada::tx::data::{DecryptedTx, TxType, WrapperTx};
+use namada::tx::data::{DecryptedTx, TxType, WrapperTx, WrapperTxErr};
 use namada::tx::{Section, Tx};
 use namada::types::address;
 use namada::types::address::Address;
@@ -886,44 +886,6 @@ where
         }
     }
 
-    /// Checks that neither the wrapper nor the inner transaction have already
-    /// been applied. Requires a [`TempWlStorage`] to perform the check during
-    /// block construction and validation
-    pub fn replay_protection_checks(
-        &self,
-        wrapper: &Tx,
-        temp_wl_storage: &mut TempWlStorage<D, H>,
-    ) -> Result<()> {
-        let inner_tx_hash = wrapper.raw_header_hash();
-        // Check the inner tx hash only against the storage, skip the write
-        // log
-        if temp_wl_storage
-            .has_committed_replay_protection_entry(&inner_tx_hash)
-            .expect("Error while checking inner tx hash key in storage")
-        {
-            return Err(Error::ReplayAttempt(format!(
-                "Inner transaction hash {} already in storage",
-                &inner_tx_hash,
-            )));
-        }
-
-        let wrapper_hash = wrapper.header_hash();
-        if temp_wl_storage
-            .has_replay_protection_entry(&wrapper_hash)
-            .expect("Error while checking wrapper tx hash key in storage")
-        {
-            return Err(Error::ReplayAttempt(format!(
-                "Wrapper transaction hash {} already in storage",
-                wrapper_hash
-            )));
-        }
-
-        // Write wrapper hash to WAL
-        temp_wl_storage
-            .write_tx_hash(wrapper_hash)
-            .map_err(|e| Error::ReplayAttempt(e.to_string()))
-    }
-
     /// If a handle to an Ethereum oracle was provided to the [`Shell`], attempt
     /// to send it an updated configuration, using a configuration
     /// based on Ethereum bridge parameters in blockchain storage.
@@ -1270,14 +1232,12 @@ where
                 }
 
                 // Validate wrapper fees
-                if let Err(e) = self.wrapper_fee_check(
+                if let Err(e) = mempool_fee_check(
                     &wrapper,
                     get_fee_unshielding_transaction(&tx, &wrapper),
                     &mut TempWlStorage::new(&self.wl_storage.storage),
                     &mut self.vp_wasm_cache.clone(),
                     &mut self.tx_wasm_cache.clone(),
-                    None,
-                    false,
                 ) {
                     response.code = ResultCode::FeeError.into();
                     response.log = format!("{INVALID_MSG}: {e}");
@@ -1303,176 +1263,6 @@ where
             response.log = VALID_MSG.into();
         }
         response
-    }
-
-    /// Check that the Wrapper's signer has enough funds to pay fees. If a block
-    /// proposer is provided, updates the balance of the fee payer
-    #[allow(clippy::too_many_arguments)]
-    pub fn wrapper_fee_check<CA>(
-        &self,
-        wrapper: &WrapperTx,
-        masp_transaction: Option<Transaction>,
-        temp_wl_storage: &mut TempWlStorage<D, H>,
-        vp_wasm_cache: &mut VpCache<CA>,
-        tx_wasm_cache: &mut TxCache<CA>,
-        block_proposer: Option<&Address>,
-        is_prepare_proposal: bool,
-    ) -> Result<()>
-    where
-        CA: 'static + WasmCacheAccess + Sync,
-    {
-        // Check that fee token is an allowed one
-        let minimum_gas_price = {
-            let proposer_local_config = if is_prepare_proposal {
-                if let ShellMode::Validator {
-                    ref local_config, ..
-                } = self.mode
-                {
-                    local_config.as_ref()
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
-
-            match proposer_local_config {
-                Some(config) => config
-                    .accepted_gas_tokens
-                    .get(&wrapper.fee.token)
-                    .ok_or(Error::TxApply(protocol::Error::FeeError(format!(
-                        "The provided {} token is not accepted by the block \
-                         proposer for fee payment",
-                        wrapper.fee.token
-                    ))))?
-                    .to_owned(),
-                None => namada::ledger::parameters::read_gas_cost(
-                    &self.wl_storage,
-                    &wrapper.fee.token,
-                )
-                .expect("Must be able to read gas cost parameter")
-                .ok_or(Error::TxApply(
-                    protocol::Error::FeeError(format!(
-                        "The provided {} token is not allowed for fee payment",
-                        wrapper.fee.token
-                    )),
-                ))?,
-            }
-        };
-
-        match namada::token::denom_to_amount(
-            wrapper.fee.amount_per_gas_unit,
-            &wrapper.fee.token,
-            &self.wl_storage,
-        ) {
-            Ok(amount_per_gas_unit)
-                if amount_per_gas_unit < minimum_gas_price =>
-            {
-                // The fees do not match the minimum required
-                return Err(Error::TxApply(protocol::Error::FeeError(
-                    format!(
-                        "Fee amount {:?} do not match the minimum required \
-                         amount {:?} for token {}",
-                        wrapper.fee.amount_per_gas_unit,
-                        minimum_gas_price,
-                        wrapper.fee.token
-                    ),
-                )));
-            }
-            Ok(_) => {}
-            Err(err) => {
-                return Err(Error::TxApply(protocol::Error::FeeError(
-                    format!(
-                        "The precision of the fee amount {:?} is higher than \
-                         the denomination for token {}: {}",
-                        wrapper.fee.amount_per_gas_unit, wrapper.fee.token, err,
-                    ),
-                )));
-            }
-        }
-
-        if let Some(transaction) = masp_transaction {
-            // Validation of the commitment to this section is done when
-            // checking the aggregated signature of the wrapper, no need for
-            // further validation
-
-            // Validate data and generate unshielding tx
-            let transfer_code_hash =
-                get_transfer_hash_from_storage(temp_wl_storage);
-
-            let descriptions_limit = self.wl_storage.read(&parameters::storage::get_fee_unshielding_descriptions_limit_key()).expect("Error reading the storage").expect("Missing fee unshielding descriptions limit param in storage");
-
-            let unshield = wrapper
-                .check_and_generate_fee_unshielding(
-                    transfer_code_hash,
-                    Some(namada_sdk::tx::TX_TRANSFER_WASM.to_string()),
-                    descriptions_limit,
-                    transaction,
-                )
-                .map_err(|e| {
-                    Error::TxApply(protocol::Error::FeeUnshieldingError(e))
-                })?;
-
-            let fee_unshielding_gas_limit: GasLimit = temp_wl_storage
-                .read(&parameters::storage::get_fee_unshielding_gas_limit_key())
-                .expect("Error reading from storage")
-                .expect("Missing fee unshielding gas limit in storage");
-
-            // Runtime check
-            // NOTE: A clean tx write log must be provided to this call for a
-            // correct vp validation. Block write log, instead, should contain
-            // any prior changes (if any). This is to simulate the
-            // unshielding tx (to prevent the already written keys
-            // from being passed/triggering VPs) but we cannot
-            // commit the tx write log yet cause the tx could still
-            // be invalid.
-            temp_wl_storage.write_log.precommit_tx();
-
-            match apply_wasm_tx(
-                unshield,
-                &TxIndex::default(),
-                ShellParams::new(
-                    &mut TxGasMeter::new(fee_unshielding_gas_limit),
-                    temp_wl_storage,
-                    vp_wasm_cache,
-                    tx_wasm_cache,
-                ),
-            ) {
-                Ok(result) => {
-                    if !result.is_accepted() {
-                        return Err(Error::TxApply(
-                            protocol::Error::FeeUnshieldingError(
-                                namada::tx::data::WrapperTxErr::InvalidUnshield(
-                                    format!(
-                                        "Some VPs rejected fee unshielding: \
-                                         {:#?}",
-                                        result.vps_result.rejected_vps
-                                    ),
-                                ),
-                            ),
-                        ));
-                    }
-                }
-                Err(e) => {
-                    return Err(Error::TxApply(
-                        protocol::Error::FeeUnshieldingError(
-                            namada::tx::data::WrapperTxErr::InvalidUnshield(
-                                format!("Wasm run failed: {}", e),
-                            ),
-                        ),
-                    ));
-                }
-            }
-        }
-
-        let result = match block_proposer {
-            Some(proposer) => {
-                protocol::transfer_fee(temp_wl_storage, proposer, wrapper)
-            }
-            None => protocol::check_fees(temp_wl_storage, wrapper),
-        };
-
-        result.map_err(Error::TxApply)
     }
 
     fn get_abci_validator_updates<F, V>(
@@ -1539,6 +1329,213 @@ where
     pub fn is_deciding_offset_within_epoch(&self, height_offset: u64) -> bool {
         self.wl_storage
             .is_deciding_offset_within_epoch(height_offset)
+    }
+}
+
+/// Checks that neither the wrapper nor the inner transaction have already
+/// been applied. Requires a [`TempWlStorage`] to perform the check during
+/// block construction and validation
+pub fn replay_protection_checks<D, H>(
+    wrapper: &Tx,
+    temp_wl_storage: &mut TempWlStorage<D, H>,
+) -> Result<()>
+where
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
+{
+    let inner_tx_hash = wrapper.raw_header_hash();
+    // Check the inner tx hash only against the storage, skip the write
+    // log
+    if temp_wl_storage
+        .has_committed_replay_protection_entry(&inner_tx_hash)
+        .expect("Error while checking inner tx hash key in storage")
+    {
+        return Err(Error::ReplayAttempt(format!(
+            "Inner transaction hash {} already in storage",
+            &inner_tx_hash,
+        )));
+    }
+
+    let wrapper_hash = wrapper.header_hash();
+    if temp_wl_storage
+        .has_replay_protection_entry(&wrapper_hash)
+        .expect("Error while checking wrapper tx hash key in storage")
+    {
+        return Err(Error::ReplayAttempt(format!(
+            "Wrapper transaction hash {} already in storage",
+            wrapper_hash
+        )));
+    }
+
+    // Write wrapper hash to WAL
+    temp_wl_storage
+        .write_tx_hash(wrapper_hash)
+        .map_err(|e| Error::ReplayAttempt(e.to_string()))
+}
+
+// Perform the fee check in mempool
+fn mempool_fee_check<D, H, CA>(
+    wrapper: &WrapperTx,
+    masp_transaction: Option<Transaction>,
+    temp_wl_storage: &mut TempWlStorage<D, H>,
+    vp_wasm_cache: &mut VpCache<CA>,
+    tx_wasm_cache: &mut TxCache<CA>,
+) -> Result<()>
+where
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
+    CA: 'static + WasmCacheAccess + Sync,
+{
+    let minimum_gas_price = namada::ledger::parameters::read_gas_cost(
+        temp_wl_storage,
+        &wrapper.fee.token,
+    )
+    .expect("Must be able to read gas cost parameter")
+    .ok_or(Error::TxApply(protocol::Error::FeeError(format!(
+        "The provided {} token is not allowed for fee payment",
+        wrapper.fee.token
+    ))))?;
+
+    wrapper_fee_check(
+        wrapper,
+        masp_transaction,
+        minimum_gas_price,
+        temp_wl_storage,
+        vp_wasm_cache,
+        tx_wasm_cache,
+    )?;
+    protocol::check_fees(temp_wl_storage, wrapper).map_err(Error::TxApply)
+}
+
+/// Check the validity of the fee payment, including the minimum amounts
+/// required and the optional unshield
+pub fn wrapper_fee_check<D, H, CA>(
+    wrapper: &WrapperTx,
+    masp_transaction: Option<Transaction>,
+    minimum_gas_price: token::Amount,
+    temp_wl_storage: &mut TempWlStorage<D, H>,
+    vp_wasm_cache: &mut VpCache<CA>,
+    tx_wasm_cache: &mut TxCache<CA>,
+) -> Result<()>
+where
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
+    CA: 'static + WasmCacheAccess + Sync,
+{
+    match token::denom_to_amount(
+        wrapper.fee.amount_per_gas_unit,
+        &wrapper.fee.token,
+        temp_wl_storage,
+    ) {
+        Ok(amount_per_gas_unit) if amount_per_gas_unit < minimum_gas_price => {
+            // The fees do not match the minimum required
+            return Err(Error::TxApply(protocol::Error::FeeError(format!(
+                "Fee amount {:?} do not match the minimum required amount \
+                 {:?} for token {}",
+                wrapper.fee.amount_per_gas_unit,
+                minimum_gas_price,
+                wrapper.fee.token
+            ))));
+        }
+        Ok(_) => {}
+        Err(err) => {
+            return Err(Error::TxApply(protocol::Error::FeeError(format!(
+                "The precision of the fee amount {:?} is higher than the \
+                 denomination for token {}: {}",
+                wrapper.fee.amount_per_gas_unit, wrapper.fee.token, err,
+            ))));
+        }
+    }
+
+    if let Some(transaction) = masp_transaction {
+        fee_unshielding_validation(
+            wrapper,
+            transaction,
+            temp_wl_storage,
+            vp_wasm_cache,
+            tx_wasm_cache,
+        )?;
+    }
+
+    Ok(())
+}
+
+// Verifies the correctness of the masp transaction for fee payment
+fn fee_unshielding_validation<D, H, CA>(
+    wrapper: &WrapperTx,
+    masp_transaction: Transaction,
+    temp_wl_storage: &mut TempWlStorage<D, H>,
+    vp_wasm_cache: &mut VpCache<CA>,
+    tx_wasm_cache: &mut TxCache<CA>,
+) -> Result<()>
+where
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
+    CA: 'static + WasmCacheAccess + Sync,
+{
+    // Validation of the commitment to this section is done when
+    // checking the aggregated signature of the wrapper, no need for
+    // further validation
+
+    // Validate data and generate unshielding tx
+    let transfer_code_hash = get_transfer_hash_from_storage(temp_wl_storage);
+
+    let descriptions_limit = temp_wl_storage
+        .read(
+            &parameters::storage::get_fee_unshielding_descriptions_limit_key(),
+        )
+        .expect("Error reading the storage")
+        .expect("Missing fee unshielding descriptions limit param in storage");
+
+    let unshield = wrapper
+        .check_and_generate_fee_unshielding(
+            transfer_code_hash,
+            Some(namada_sdk::tx::TX_TRANSFER_WASM.to_string()),
+            descriptions_limit,
+            masp_transaction,
+        )
+        .map_err(|e| Error::TxApply(protocol::Error::FeeUnshieldingError(e)))?;
+
+    let fee_unshielding_gas_limit: GasLimit = temp_wl_storage
+        .read(&parameters::storage::get_fee_unshielding_gas_limit_key())
+        .expect("Error reading from storage")
+        .expect("Missing fee unshielding gas limit in storage");
+
+    // Runtime check
+    // NOTE: A clean tx write log must be provided to this call for a
+    // correct vp validation. Block write log, instead, should contain
+    // any prior changes (if any). This is to simulate the
+    // unshielding tx (to prevent the already written keys
+    // from being passed/triggering VPs) but we cannot
+    // commit the tx write log yet cause the tx could still
+    // be invalid.
+    temp_wl_storage.write_log.precommit_tx();
+
+    let result = apply_wasm_tx(
+        unshield,
+        &TxIndex::default(),
+        ShellParams::new(
+            &mut TxGasMeter::new(fee_unshielding_gas_limit),
+            temp_wl_storage,
+            vp_wasm_cache,
+            tx_wasm_cache,
+        ),
+    )
+    .map_err(|e| {
+        Error::TxApply(protocol::Error::FeeUnshieldingError(
+            WrapperTxErr::InvalidUnshield(format!("Wasm run failed: {}", e)),
+        ))
+    })?;
+
+    if result.is_accepted() {
+        Ok(())
+    } else {
+        Err(Error::TxApply(protocol::Error::FeeUnshieldingError(
+            WrapperTxErr::InvalidUnshield(format!(
+                "Some VPs rejected fee unshielding: {:#?}",
+                result.vps_result.rejected_vps
+            )),
+        )))
     }
 }
 
