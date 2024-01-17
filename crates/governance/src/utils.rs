@@ -129,8 +129,9 @@ impl TallyResult {
                     .mul_ceil(Dec::one() / 3);
 
                 // At least half of non-abstained votes are yay
-                let at_last_half_voted_yay =
-                    yay_voting_power.mul_ceil(Dec::two()) < abstain_voting_power;
+                let at_last_half_voted_yay = abstain_voting_power
+                    .mul_ceil(Dec::two())
+                    < yay_voting_power;
                 at_least_one_third_voted && at_last_half_voted_yay
             }
             TallyType::LessOneHalfOverOneThirdNay => {
@@ -529,8 +530,7 @@ mod test {
     }
 
     #[test]
-    fn test_proposal_one()
-     {
+    fn test_proposal_one() {
         let mut proposal_votes = ProposalVotes::default();
 
         let validator_address = address::testing::established_address_1();
@@ -578,8 +578,7 @@ mod test {
     }
 
     #[test]
-    fn test_proposal_two()
-     {
+    fn test_proposal_two() {
         let mut proposal_votes = ProposalVotes::default();
 
         let validator_address = address::testing::established_address_1();
@@ -630,8 +629,7 @@ mod test {
     }
 
     #[test]
-    fn test_proposal_three()
-     {
+    fn test_proposal_three() {
         let mut proposal_votes = ProposalVotes::default();
 
         let validator_address = address::testing::established_address_1();
@@ -698,8 +696,7 @@ mod test {
 
     // should pass
     #[test]
-    fn test_proposal_four()
-     {
+    fn test_proposal_four() {
         let mut proposal_votes = ProposalVotes::default();
 
         let validator_address = address::testing::established_address_1();
@@ -766,8 +763,7 @@ mod test {
 
     // should pass
     #[test]
-    fn test_proposal_five()
-     {
+    fn test_proposal_five() {
         let mut proposal_votes = ProposalVotes::default();
 
         let validator_address = address::testing::established_address_1();
@@ -861,7 +857,10 @@ mod test {
             } else {
                 TallyResult::Passed
             };
-            assert!(matches!(proposal_result.result, _result), "{tally_type:?}");
+            assert!(
+                matches!(proposal_result.result, _result),
+                "{tally_type:?}"
+            );
             assert_eq!(
                 proposal_result.total_voting_power,
                 validator_voting_power.add(validator_voting_power_two),
@@ -922,13 +921,16 @@ mod test {
                 validator_voting_power.add(validator_voting_power_two),
                 tally_type,
             );
-            let _result = if matches!(tally_type, TallyType::OneHalfOverOneThird)
-            {
-                TallyResult::Passed
-            } else {
-                TallyResult::Rejected
-            };
-            assert!(matches!(proposal_result.result, _result), "{tally_type:?}");
+            let _result =
+                if matches!(tally_type, TallyType::OneHalfOverOneThird) {
+                    TallyResult::Passed
+                } else {
+                    TallyResult::Rejected
+                };
+            assert!(
+                matches!(proposal_result.result, _result),
+                "{tally_type:?}"
+            );
             assert_eq!(
                 proposal_result.total_voting_power,
                 validator_voting_power
