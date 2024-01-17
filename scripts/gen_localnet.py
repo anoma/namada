@@ -89,7 +89,7 @@ if args.params:
 if args.max_validator_slots:
     params['pos_params'] = {'max_validator_slots': args.max_validator_slots}
 if args.epoch_length:
-    epochs_per_year = 365 * 24 * 60 * 60 / args.epoch_length
+    epochs_per_year = round(365 * 24 * 60 * 60 / args.epoch_length)
     params['parameters'] = {'epochs_per_year': epochs_per_year }
 if len(params.keys())>0:
     edit_parameters(localnet_dir + '/parameters.toml', **params)
