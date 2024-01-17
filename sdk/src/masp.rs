@@ -1571,11 +1571,17 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         );
 
         // Convert transaction amount into MASP types
-        let (asset_types, masp_amount) = context
-            .shielded_mut()
-            .await
-            .convert_amount(context.client(), epoch, token, amount.amount())
-            .await?;
+        let (asset_types, masp_amount) = {
+            let mut shielded = context.shielded_mut().await;
+            // Do the actual conversion to an asset type
+            let amount = shielded
+                .convert_amount(context.client(), epoch, token, amount.amount())
+                .await?;
+            // Make sure to save any decodings of the asset types used so that
+            // balance queries involving them are successful
+            let _ = shielded.save().await;
+            amount
+        };
 
         // If there are shielded inputs
         if let Some(sk) = spending_key {

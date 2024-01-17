@@ -447,11 +447,15 @@ where
             // associate a token with its denomination.
             write_denom(&mut self.wl_storage, address, *denom).unwrap();
             self.wl_storage
-                .write(&token::minted_balance_key(address), token::Amount::zero())
+                .write(
+                    &token::minted_balance_key(address),
+                    token::Amount::zero(),
+                )
                 .expect("The total minted balance key must initialized");
             if let Some(masp_params) = masp_params {
                 masp_params.init_storage(address, &mut self.wl_storage);
-                // add token addresses to the masp reward conversions lookup table.
+                // add token addresses to the masp reward conversions lookup
+                // table.
                 let alias = alias.to_string();
                 self.wl_storage
                     .storage
