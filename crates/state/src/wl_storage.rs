@@ -730,11 +730,13 @@ mod tests {
                 | Level::BlockWriteLog(WlMod::Delete | WlMod::DeletePrefix) => {
                 }
                 Level::TxWriteLog(WlMod::Write(val)) => {
+                    // NOTE: Will write to merkle tree and DB diff
                     s.write_log.write(key, val.serialize_to_vec()).unwrap();
                 }
                 Level::BlockWriteLog(WlMod::Write(val)) => {
                     s.write_log
                         // protocol only writes at block level
+                        // NOTE: Will write to merkle tree and DB diff
                         .protocol_write(
                             key,
                             val.serialize_to_vec(),
