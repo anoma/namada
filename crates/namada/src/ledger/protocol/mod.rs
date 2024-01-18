@@ -1151,6 +1151,7 @@ mod tests {
 
     use borsh::BorshDeserialize;
     use eyre::Result;
+    use namada_core::types::chain::ChainId;
     use namada_core::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
     use namada_core::types::ethereum_events::{
         EthereumEvent, TransferToNamada,
@@ -1305,5 +1306,47 @@ mod tests {
         assert_eq!(voting_power, expected);
 
         Ok(())
+    }
+
+    #[test]
+    fn test_apply_wasm_tx_allowlist() {
+        let (mut wl_storage, _validators) = test_utils::setup_default_storage();
+
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
+        // pseudo-random code hash
+        let code = vec![1_u8, 2, 3];
+        let tx_hash = Hash::sha256(&code);
+        tx.set_code(namada_tx::Code::new(code, None));
+
+        // Check that using a disallowed tx leads to an error
+        {
+            let allowlist = vec![format!("{}-bad", tx_hash)];
+            crate::parameters::update_tx_allowlist_parameter(
+                &mut wl_storage,
+                allowlist,
+            )
+            .unwrap();
+            wl_storage.commit_tx();
+
+            let result = check_tx_allowed(&tx, &wl_storage);
+            assert_matches!(result.unwrap_err(), Error::DisallowedTx);
+        }
+
+        // Check that using an allowed tx doesn't lead to `Error::DisallowedTx`
+        {
+            let allowlist = vec![tx_hash.to_string()];
+            crate::parameters::update_tx_allowlist_parameter(
+                &mut wl_storage,
+                allowlist,
+            )
+            .unwrap();
+            wl_storage.commit_tx();
+
+            let result = check_tx_allowed(&tx, &wl_storage);
+            if let Err(result) = result {
+                assert!(!matches!(result, Error::DisallowedTx));
+            }
+        }
     }
 }
