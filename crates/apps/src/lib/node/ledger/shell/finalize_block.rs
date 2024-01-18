@@ -408,23 +408,26 @@ where
                 },
             };
 
-            match protocol::dispatch_tx(
-                tx,
-                processed_tx.tx.as_ref(),
-                TxIndex(
-                    tx_index
-                        .try_into()
-                        .expect("transaction index out of bounds"),
-                ),
-                &mut tx_gas_meter,
-                &mut self.wl_storage,
-                &mut self.vp_wasm_cache,
-                &mut self.tx_wasm_cache,
-                wrapper_args.as_mut(),
-            )
-            .map_err(Error::TxApply)
-            {
-                Ok(ref mut result) => {
+            let tx_result = protocol::check_tx_allowed(&tx, &self.wl_storage)
+                .and_then(|()| {
+                    protocol::dispatch_tx(
+                        tx,
+                        processed_tx.tx.as_ref(),
+                        TxIndex(
+                            tx_index
+                                .try_into()
+                                .expect("transaction index out of bounds"),
+                        ),
+                        &mut tx_gas_meter,
+                        &mut self.wl_storage,
+                        &mut self.vp_wasm_cache,
+                        &mut self.tx_wasm_cache,
+                        wrapper_args.as_mut(),
+                    )
+                })
+                .map_err(Error::TxApply);
+            match tx_result {
+                Ok(result) => {
                     if result.is_accepted() {
                         if let EventType::Accepted = tx_event.event_type {
                             // Wrapper transaction
@@ -3080,7 +3083,10 @@ mod test_finalize_block {
         let mut out_of_gas_inner = out_of_gas_wrapper.clone();
         let mut undecryptable_inner = undecryptable_wrapper.clone();
         let mut unsigned_inner = unsigned_wrapper.clone();
-        let mut wrong_commitment_inner = wrong_commitment_wrapper.clone();
+        let mut wrong_commitment_inner = failing_wrapper.clone();
+        // Add some extra data to avoid having the same Tx hash as the
+        // `failing_wrapper`
+        wrong_commitment_inner.add_memo(&[0_u8]);
         let mut failing_inner = failing_wrapper.clone();
 
         undecryptable_inner
