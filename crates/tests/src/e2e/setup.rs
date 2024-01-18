@@ -362,9 +362,9 @@ pub fn network(
     templates.transactions.bond = None;
 
     // Update the templates as needed
-    templates.parameters.parameters.vp_whitelist =
+    templates.parameters.parameters.vp_allowlist =
         Some(get_all_wasms_hashes(&working_dir, Some("vp_")));
-    templates.parameters.parameters.tx_whitelist =
+    templates.parameters.parameters.tx_allowlist =
         Some(get_all_wasms_hashes(&working_dir, Some("tx_")));
     // Copy the main wallet from templates dir into the base dir.
     {

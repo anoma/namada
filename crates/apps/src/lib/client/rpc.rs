@@ -1419,21 +1419,21 @@ pub async fn query_protocol_parameters(
         max_block_duration
     );
 
-    let key = param_storage::get_tx_whitelist_storage_key();
-    let vp_whitelist: Vec<String> = query_storage_value(context.client(), &key)
+    let key = param_storage::get_tx_allowlist_storage_key();
+    let vp_allowlist: Vec<String> = query_storage_value(context.client(), &key)
         .await
         .expect("Parameter should be defined.");
-    display_line!(context.io(), "{:4}VP whitelist: {:?}", "", vp_whitelist);
+    display_line!(context.io(), "{:4}VP allowlist: {:?}", "", vp_allowlist);
 
-    let key = param_storage::get_tx_whitelist_storage_key();
-    let tx_whitelist: Vec<String> = query_storage_value(context.client(), &key)
+    let key = param_storage::get_tx_allowlist_storage_key();
+    let tx_allowlist: Vec<String> = query_storage_value(context.client(), &key)
         .await
         .expect("Parameter should be defined.");
     display_line!(
         context.io(),
-        "{:4}Transactions whitelist: {:?}",
+        "{:4}Transactions allowlist: {:?}",
         "",
-        tx_whitelist
+        tx_allowlist
     );
 
     let key = param_storage::get_max_block_gas_key();

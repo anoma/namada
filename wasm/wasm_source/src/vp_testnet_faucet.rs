@@ -82,13 +82,13 @@ fn validate_tx(
             if owner == &addr {
                 if has_post {
                     let vp_hash: Vec<u8> = ctx.read_bytes_post(key)?.unwrap();
-                    return Ok(*valid_sig && is_vp_whitelisted(ctx, &vp_hash)?);
+                    return Ok(*valid_sig && is_vp_allowed(ctx, &vp_hash)?);
                 } else {
                     return reject();
                 }
             } else {
                 let vp_hash: Vec<u8> = ctx.read_bytes_post(key)?.unwrap();
-                return is_vp_whitelisted(ctx, &vp_hash);
+                return is_vp_allowed(ctx, &vp_hash);
             }
         } else {
             // Allow any other key change if authorized by a signature
