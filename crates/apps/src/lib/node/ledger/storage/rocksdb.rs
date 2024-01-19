@@ -220,51 +220,50 @@ impl RocksDB {
         persist_diffs: bool,
     ) -> Result<()> {
         let cf = self.get_column_family(DIFFS_CF)?;
-        let key_prefix = Key::from(height.to_db_key());
+        let (old_val_key, new_val_key) = old_and_new_diff_key(key, height)?;
 
         if let Some(old_value) = old_value {
-            let old_val_key = key_prefix
-                .push(&OLD_DIFF_PREFIX.to_owned())
-                .map_err(Error::KeyError)?
-                .join(key)
-                .to_string();
             self.0
                 .put_cf(cf, old_val_key, old_value)
                 .map_err(|e| Error::DBError(e.into_string()))?;
         }
 
         if let Some(new_value) = new_value {
-            let new_val_key = key_prefix
-                .push(&NEW_DIFF_PREFIX.to_owned())
-                .map_err(Error::KeyError)?
-                .join(key)
-                .to_string();
             self.0
                 .put_cf(cf, new_val_key, new_value)
                 .map_err(|e| Error::DBError(e.into_string()))?;
         }
 
-        // If not persisting the diffs, remove the existing diffs from two block
-        // heights earlier than `height`
-        if !persist_diffs {
-            if let Some(pruned_height) = height.0.checked_sub(1) {
-                let pruned_key_prefix = Key::from(pruned_height.to_db_key());
-                let old_val_key = pruned_key_prefix
-                    .push(&OLD_DIFF_PREFIX.to_owned())
-                    .map_err(Error::KeyError)?
-                    .join(key)
-                    .to_string();
-                self.0
-                    .delete_cf(cf, old_val_key)
-                    .map_err(|e| Error::DBError(e.into_string()))?;
-                let new_val_key = pruned_key_prefix
-                    .push(&NEW_DIFF_PREFIX.to_owned())
-                    .map_err(Error::KeyError)?
-                    .join(key)
-                    .to_string();
-                self.0
-                    .delete_cf(cf, new_val_key)
-                    .map_err(|e| Error::DBError(e.into_string()))?;
+        // If not persisting the diffs, remove the last diffs.
+        if !persist_diffs && height > BlockHeight::first() {
+            let mut height = height.prev_height();
+            while height >= BlockHeight::first() {
+                let (old_diff_key, new_diff_key) =
+                    old_and_new_diff_key(key, height)?;
+                let has_old_diff = self
+                    .0
+                    .get_cf(cf, &old_diff_key)
+                    .map_err(|e| Error::DBError(e.into_string()))?
+                    .is_some();
+                let has_new_diff = self
+                    .0
+                    .get_cf(cf, &new_diff_key)
+                    .map_err(|e| Error::DBError(e.into_string()))?
+                    .is_some();
+                if has_old_diff {
+                    self.0
+                        .delete_cf(cf, old_diff_key)
+                        .map_err(|e| Error::DBError(e.into_string()))?;
+                }
+                if has_new_diff {
+                    self.0
+                        .delete_cf(cf, new_diff_key)
+                        .map_err(|e| Error::DBError(e.into_string()))?;
+                }
+                if has_old_diff || has_new_diff {
+                    break;
+                }
+                height = height.prev_height();
             }
         }
         Ok(())
@@ -282,43 +281,42 @@ impl RocksDB {
         persist_diffs: bool,
     ) -> Result<()> {
         let cf = self.get_column_family(DIFFS_CF)?;
-        let key_prefix = Key::from(height.to_db_key());
+        let (old_val_key, new_val_key) = old_and_new_diff_key(key, height)?;
 
         if let Some(old_value) = old_value {
-            let old_val_key = key_prefix
-                .push(&OLD_DIFF_PREFIX.to_owned())
-                .map_err(Error::KeyError)?
-                .join(key)
-                .to_string();
             batch.0.put_cf(cf, old_val_key, old_value);
         }
 
         if let Some(new_value) = new_value {
-            let new_val_key = key_prefix
-                .push(&NEW_DIFF_PREFIX.to_owned())
-                .map_err(Error::KeyError)?
-                .join(key)
-                .to_string();
             batch.0.put_cf(cf, new_val_key, new_value);
         }
 
-        // If not persisting the diffs, remove the existing diffs from two block
-        // heights earlier than `height`
-        if !persist_diffs {
-            if let Some(pruned_height) = height.0.checked_sub(1) {
-                let pruned_key_prefix = Key::from(pruned_height.to_db_key());
-                let old_val_key = pruned_key_prefix
-                    .push(&OLD_DIFF_PREFIX.to_owned())
-                    .map_err(Error::KeyError)?
-                    .join(key)
-                    .to_string();
-                batch.0.delete_cf(cf, old_val_key);
-                let new_val_key = pruned_key_prefix
-                    .push(&NEW_DIFF_PREFIX.to_owned())
-                    .map_err(Error::KeyError)?
-                    .join(key)
-                    .to_string();
-                batch.0.delete_cf(cf, new_val_key);
+        // If not persisting the diffs, remove the last diffs.
+        if !persist_diffs && height > BlockHeight::first() {
+            let mut height = height.prev_height();
+            while height >= BlockHeight::first() {
+                let (old_diff_key, new_diff_key) =
+                    old_and_new_diff_key(key, height)?;
+                let has_old_diff = self
+                    .0
+                    .get_cf(cf, &old_diff_key)
+                    .map_err(|e| Error::DBError(e.into_string()))?
+                    .is_some();
+                let has_new_diff = self
+                    .0
+                    .get_cf(cf, &new_diff_key)
+                    .map_err(|e| Error::DBError(e.into_string()))?
+                    .is_some();
+                if has_old_diff {
+                    batch.0.delete_cf(cf, old_diff_key);
+                }
+                if has_new_diff {
+                    batch.0.delete_cf(cf, new_diff_key);
+                }
+                if has_old_diff || has_new_diff {
+                    break;
+                }
+                height = height.prev_height();
             }
         }
         Ok(())
@@ -1265,12 +1263,7 @@ impl DB for RocksDB {
     ) -> Result<Option<Vec<u8>>> {
         // Check if the value changed at this height
         let diffs_cf = self.get_column_family(DIFFS_CF)?;
-        let key_prefix = Key::from(height.to_db_key());
-        let new_val_key = key_prefix
-            .push(&NEW_DIFF_PREFIX.to_owned())
-            .map_err(Error::KeyError)?
-            .join(key)
-            .to_string();
+        let (old_val_key, new_val_key) = old_and_new_diff_key(key, height)?;
 
         // If it has a "new" val, it was written at this height
         match self
@@ -1282,13 +1275,8 @@ impl DB for RocksDB {
                 return Ok(Some(new_val));
             }
             None => {
-                let old_val_key = key_prefix
-                    .push(&OLD_DIFF_PREFIX.to_owned())
-                    .map_err(Error::KeyError)?
-                    .join(key)
-                    .to_string();
                 // If it has an "old" val, it was deleted at this height
-                if self.0.key_may_exist_cf(diffs_cf, old_val_key.clone()) {
+                if self.0.key_may_exist_cf(diffs_cf, &old_val_key) {
                     // check if it actually exists
                     if self
                         .0
@@ -1307,15 +1295,11 @@ impl DB for RocksDB {
         let mut raw_height = height.0 + 1;
         loop {
             // Try to find the next diff on this key
-            let key_prefix = Key::from(BlockHeight(raw_height).to_db_key());
-            let old_val_key = key_prefix
-                .push(&OLD_DIFF_PREFIX.to_owned())
-                .map_err(Error::KeyError)?
-                .join(key)
-                .to_string();
+            let (old_val_key, new_val_key) =
+                old_and_new_diff_key(key, BlockHeight(raw_height))?;
             let old_val = self
                 .0
-                .get_cf(diffs_cf, old_val_key)
+                .get_cf(diffs_cf, &old_val_key)
                 .map_err(|e| Error::DBError(e.into_string()))?;
             // If it has an "old" val, it's the one we're looking for
             match old_val {
@@ -1323,12 +1307,7 @@ impl DB for RocksDB {
                 None => {
                     // Check if the value was created at this height instead,
                     // which would mean that it wasn't present before
-                    let new_val_key = key_prefix
-                        .push(&NEW_DIFF_PREFIX.to_owned())
-                        .map_err(Error::KeyError)?
-                        .join(key)
-                        .to_string();
-                    if self.0.key_may_exist_cf(diffs_cf, new_val_key.clone()) {
+                    if self.0.key_may_exist_cf(diffs_cf, &new_val_key) {
                         // check if it actually exists
                         if self
                             .0
@@ -1768,6 +1747,22 @@ fn make_iter_read_opts(prefix: Option<String>) -> ReadOptions {
 
 impl DBWriteBatch for RocksDBWriteBatch {}
 
+fn old_and_new_diff_key(
+    key: &Key,
+    height: BlockHeight,
+) -> Result<(String, String)> {
+    let key_prefix = Key::from(height.to_db_key());
+    let old = key_prefix
+        .push(&OLD_DIFF_PREFIX.to_owned())
+        .map_err(Error::KeyError)?
+        .join(key);
+    let new = key_prefix
+        .push(&NEW_DIFF_PREFIX.to_owned())
+        .map_err(Error::KeyError)?
+        .join(key);
+    Ok((old.to_string(), new.to_string()))
+}
+
 fn unknown_key_error(key: &str) -> Result<()> {
     Err(Error::UnknownKey {
         key: key.to_owned(),
@@ -2174,6 +2169,153 @@ mod test {
                 .unwrap()
                 .unwrap();
         assert_eq!(conversion_state, types::encode(&conversion_state_0));
+    }
+
+    #[test]
+    fn test_diffs() {
+        let dir = tempdir().unwrap();
+        let mut db = open(dir.path(), None).unwrap();
+
+        let key_with_diffs = Key::parse("with_diffs").unwrap();
+        let key_without_diffs = Key::parse("without_diffs").unwrap();
+
+        let initial_val = vec![1_u8, 1, 0, 0];
+        let overwrite_val = vec![1_u8, 1, 1, 0];
+
+        // Write first block
+        let mut batch = RocksDB::batch();
+        let height_0 = BlockHeight::first();
+        db.batch_write_subspace_val(
+            &mut batch,
+            height_0,
+            &key_with_diffs,
+            &initial_val,
+            WriteOpts::ALL,
+        )
+        .unwrap();
+        db.batch_write_subspace_val(
+            &mut batch,
+            height_0,
+            &key_without_diffs,
+            &initial_val,
+            WriteOpts::NONE,
+        )
+        .unwrap();
+        db.exec_batch(batch.0).unwrap();
+
+        {
+            let diffs_cf = db.get_column_family(DIFFS_CF).unwrap();
+
+            // Diffs new key for `key_with_diffs` at height_0 must be present
+            let (old_with_h0, new_with_h0) =
+                old_and_new_diff_key(&key_with_diffs, height_0).unwrap();
+            assert!(db.0.get_cf(diffs_cf, old_with_h0).unwrap().is_none());
+            assert!(db.0.get_cf(diffs_cf, new_with_h0).unwrap().is_some());
+
+            // Diffs new key for `key_without_diffs` at height_0 must be present
+            let (old_wo_h0, new_wo_h0) =
+                old_and_new_diff_key(&key_without_diffs, height_0).unwrap();
+            assert!(db.0.get_cf(diffs_cf, old_wo_h0).unwrap().is_none());
+            assert!(db.0.get_cf(diffs_cf, new_wo_h0).unwrap().is_some());
+        }
+
+        // Write second block
+        let mut batch = RocksDB::batch();
+        let height_1 = height_0 + 10;
+        db.batch_write_subspace_val(
+            &mut batch,
+            height_1,
+            &key_with_diffs,
+            &overwrite_val,
+            WriteOpts::ALL,
+        )
+        .unwrap();
+        db.batch_write_subspace_val(
+            &mut batch,
+            height_1,
+            &key_without_diffs,
+            &overwrite_val,
+            WriteOpts::NONE,
+        )
+        .unwrap();
+        db.exec_batch(batch.0).unwrap();
+
+        {
+            let diffs_cf = db.get_column_family(DIFFS_CF).unwrap();
+
+            // Diffs keys for `key_with_diffs` at height_0 must be present
+            let (old_with_h0, new_with_h0) =
+                old_and_new_diff_key(&key_with_diffs, height_0).unwrap();
+            assert!(db.0.get_cf(diffs_cf, old_with_h0).unwrap().is_none());
+            assert!(db.0.get_cf(diffs_cf, new_with_h0).unwrap().is_some());
+
+            // Diffs keys for `key_without_diffs` at height_0 must be gone
+            let (old_wo_h0, new_wo_h0) =
+                old_and_new_diff_key(&key_without_diffs, height_0).unwrap();
+            assert!(db.0.get_cf(diffs_cf, old_wo_h0).unwrap().is_none());
+            assert!(db.0.get_cf(diffs_cf, new_wo_h0).unwrap().is_none());
+
+            // Diffs keys for `key_with_diffs` at height_1 must be present
+            let (old_with_h1, new_with_h1) =
+                old_and_new_diff_key(&key_with_diffs, height_1).unwrap();
+            assert!(db.0.get_cf(diffs_cf, old_with_h1).unwrap().is_some());
+            assert!(db.0.get_cf(diffs_cf, new_with_h1).unwrap().is_some());
+
+            // Diffs keys for `key_without_diffs` at height_1 must be present
+            let (old_wo_h1, new_wo_h1) =
+                old_and_new_diff_key(&key_without_diffs, height_1).unwrap();
+            assert!(db.0.get_cf(diffs_cf, old_wo_h1).unwrap().is_some());
+            assert!(db.0.get_cf(diffs_cf, new_wo_h1).unwrap().is_some());
+        }
+
+        // Write third block
+        let mut batch = RocksDB::batch();
+        let height_2 = height_1 + 10;
+        db.batch_write_subspace_val(
+            &mut batch,
+            height_2,
+            &key_with_diffs,
+            &initial_val,
+            WriteOpts::ALL,
+        )
+        .unwrap();
+        db.batch_write_subspace_val(
+            &mut batch,
+            height_2,
+            &key_without_diffs,
+            &initial_val,
+            WriteOpts::NONE,
+        )
+        .unwrap();
+        db.exec_batch(batch.0).unwrap();
+
+        {
+            let diffs_cf = db.get_column_family(DIFFS_CF).unwrap();
+
+            // Diffs keys for `key_with_diffs` at height_1 must be present
+            let (old_with_h1, new_with_h1) =
+                old_and_new_diff_key(&key_with_diffs, height_1).unwrap();
+            assert!(db.0.get_cf(diffs_cf, old_with_h1).unwrap().is_some());
+            assert!(db.0.get_cf(diffs_cf, new_with_h1).unwrap().is_some());
+
+            // Diffs keys for `key_without_diffs` at height_1 must be gone
+            let (old_wo_h1, new_wo_h1) =
+                old_and_new_diff_key(&key_without_diffs, height_1).unwrap();
+            assert!(db.0.get_cf(diffs_cf, old_wo_h1).unwrap().is_none());
+            assert!(db.0.get_cf(diffs_cf, new_wo_h1).unwrap().is_none());
+
+            // Diffs keys for `key_with_diffs` at height_2 must be present
+            let (old_with_h2, new_with_h2) =
+                old_and_new_diff_key(&key_with_diffs, height_2).unwrap();
+            assert!(db.0.get_cf(diffs_cf, old_with_h2).unwrap().is_some());
+            assert!(db.0.get_cf(diffs_cf, new_with_h2).unwrap().is_some());
+
+            // Diffs keys for `key_without_diffs` at height_2 must be present
+            let (old_wo_h2, new_wo_h2) =
+                old_and_new_diff_key(&key_without_diffs, height_2).unwrap();
+            assert!(db.0.get_cf(diffs_cf, old_wo_h2).unwrap().is_some());
+            assert!(db.0.get_cf(diffs_cf, new_wo_h2).unwrap().is_some());
+        }
     }
 
     /// A test helper to write a block

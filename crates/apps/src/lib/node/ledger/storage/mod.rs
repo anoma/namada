@@ -807,6 +807,9 @@ mod tests {
             storage,
             write_log: Default::default(),
         };
+        // Start the first block
+        let first_height = BlockHeight::first();
+        wls.storage.block.height = first_height;
 
         let key1 = Key::parse("testing1").unwrap();
         let val1 = 1u64;
@@ -835,6 +838,7 @@ mod tests {
         // Commit block and storage changes
         wls.commit_block().unwrap();
         wls.storage.block.height = wls.storage.block.height.next_height();
+        let second_height = wls.storage.block.height;
 
         // Read key1 from Storage should return val1
         let (res1, _) = wls.storage.read(&key1).unwrap();
@@ -861,14 +865,14 @@ mod tests {
         let res1 = wls
             .storage
             .db
-            .read_diffs_val(&key1, BlockHeight(0), true)
+            .read_diffs_val(&key1, first_height, true)
             .unwrap();
         assert!(res1.is_none());
 
         let res1 = wls
             .storage
             .db
-            .read_diffs_val(&key1, BlockHeight(0), false)
+            .read_diffs_val(&key1, first_height, false)
             .unwrap()
             .unwrap();
         let res1 = u64::try_from_slice(&res1).unwrap();
@@ -879,13 +883,13 @@ mod tests {
         let res2 = wls
             .storage
             .db
-            .read_diffs_val(&key2, BlockHeight(0), true)
+            .read_diffs_val(&key2, first_height, true)
             .unwrap();
         assert!(res2.is_none());
         let res2 = wls
             .storage
             .db
-            .read_diffs_val(&key2, BlockHeight(0), false)
+            .read_diffs_val(&key2, first_height, false)
             .unwrap()
             .unwrap();
         let res2 = u64::try_from_slice(&res2).unwrap();
@@ -914,14 +918,14 @@ mod tests {
         let res1 = wls
             .storage
             .db
-            .read_diffs_val(&key1, BlockHeight(0), true)
+            .read_diffs_val(&key1, first_height, true)
             .unwrap();
         assert!(res1.is_none());
 
         let res1 = wls
             .storage
             .db
-            .read_diffs_val(&key1, BlockHeight(0), false)
+            .read_diffs_val(&key1, first_height, false)
             .unwrap()
             .unwrap();
         let res1 = u64::try_from_slice(&res1).unwrap();
@@ -930,7 +934,7 @@ mod tests {
         let res1 = wls
             .storage
             .db
-            .read_diffs_val(&key1, BlockHeight(1), true)
+            .read_diffs_val(&key1, second_height, true)
             .unwrap()
             .unwrap();
         let res1 = u64::try_from_slice(&res1).unwrap();
@@ -939,7 +943,7 @@ mod tests {
         let res1 = wls
             .storage
             .db
-            .read_diffs_val(&key1, BlockHeight(1), false)
+            .read_diffs_val(&key1, second_height, false)
             .unwrap();
         assert!(res1.is_none());
 
@@ -947,13 +951,13 @@ mod tests {
         let res2 = wls
             .storage
             .db
-            .read_diffs_val(&key2, BlockHeight(0), true)
+            .read_diffs_val(&key2, first_height, true)
             .unwrap();
         assert!(res2.is_none());
         let res2 = wls
             .storage
             .db
-            .read_diffs_val(&key2, BlockHeight(0), false)
+            .read_diffs_val(&key2, first_height, false)
             .unwrap();
         assert!(res2.is_none());
 
@@ -962,7 +966,7 @@ mod tests {
         let res2 = wls
             .storage
             .db
-            .read_diffs_val(&key2, BlockHeight(1), true)
+            .read_diffs_val(&key2, second_height, true)
             .unwrap()
             .unwrap();
         let res2 = u64::try_from_slice(&res2).unwrap();
@@ -970,7 +974,7 @@ mod tests {
         let res2 = wls
             .storage
             .db
-            .read_diffs_val(&key2, BlockHeight(1), false)
+            .read_diffs_val(&key2, second_height, false)
             .unwrap();
         assert!(res2.is_none());
     }
