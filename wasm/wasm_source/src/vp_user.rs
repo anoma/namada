@@ -137,16 +137,9 @@ fn validate_tx(
             KeyType::Vp(owner) => {
                 let has_post: bool = ctx.has_key_post(key)?;
                 if owner == &addr {
-                    if has_post {
-                        let vp_hash: Vec<u8> =
-                            ctx.read_bytes_post(key)?.unwrap();
-                        *valid_sig && is_vp_allowed(ctx, &vp_hash)?
-                    } else {
-                        false
-                    }
+                    has_post && *valid_sig
                 } else {
-                    let vp_hash: Vec<u8> = ctx.read_bytes_post(key)?.unwrap();
-                    is_vp_allowed(ctx, &vp_hash)?
+                    true
                 }
             }
             KeyType::Masp | KeyType::Ibc => true,
