@@ -316,7 +316,7 @@ impl Display for StorageProposal {
 /// Testing helpers and and strategies for governance proposals
 pub mod testing {
     use proptest::prelude::Strategy;
-    use proptest::{collection, option, prop_compose};
+    use proptest::{collection, option, prop_compose, prop_oneof};
 
     use super::*;
     use crate::types::address::testing::arb_non_internal_address;
@@ -348,29 +348,28 @@ pub mod testing {
         }
     }
 
-    /// Generate an arbitrary PGF action
-    pub fn arb_pgf_action() -> impl Strategy<Value = PGFAction> {
-        arb_add_remove(arb_pgf_target())
-            .prop_map(PGFAction::Continuous)
-            .boxed()
-            .prop_union(arb_pgf_target().prop_map(PGFAction::Retro).boxed())
+    prop_compose! {
+        /// Generate an arbitrary PGF action
+        pub fn arb_pgf_action()(pgf_action in prop_oneof![
+            arb_add_remove(arb_pgf_target()).prop_map(PGFAction::Continuous),
+            arb_pgf_target().prop_map(PGFAction::Retro),
+        ]) -> PGFAction {
+            pgf_action
+        }
     }
 
-    /// Generate an arbitrary proposal type
-    pub fn arb_proposal_type() -> impl Strategy<Value = ProposalType> {
-        option::of(arb_hash())
-            .prop_map(ProposalType::Default)
-            .boxed()
-            .prop_union(
-                collection::hash_set(
-                    arb_add_remove(arb_non_internal_address()),
-                    0..10,
-                )
-                .prop_map(ProposalType::PGFSteward)
-                .boxed(),
+    prop_compose! {
+        /// Generate an arbitrary proposal type
+        pub fn arb_proposal_type()(proposal_type in prop_oneof![
+            option::of(arb_hash()).prop_map(ProposalType::Default),
+            collection::hash_set(
+                arb_add_remove(arb_non_internal_address()),
+                0..10,
             )
-            .or(collection::vec(arb_pgf_action(), 0..10)
-                .prop_map(ProposalType::PGFPayment)
-                .boxed())
+                .prop_map(ProposalType::PGFSteward),
+            collection::vec(arb_pgf_action(), 0..10).prop_map(ProposalType::PGFPayment)
+        ]) -> ProposalType {
+            proposal_type
+        }
     }
 }

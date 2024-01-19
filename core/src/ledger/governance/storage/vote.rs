@@ -149,28 +149,29 @@ impl PartialEq<VoteType> for ProposalType {
 /// Testing helpers and strategies for governance votes
 pub mod testing {
     use proptest::prelude::{Just, Strategy};
-    use proptest::prop_compose;
+    use proptest::{prop_compose, prop_oneof};
 
     use super::*;
 
     prop_compose! {
         /// Geerate an arbitrary vote type
-        pub fn arb_vote_type()(discriminant in 0..3) -> VoteType {
-            match discriminant {
-                0 => VoteType::Default,
-                1 => VoteType::PGFSteward,
-                2 => VoteType::PGFPayment,
-                _ => unreachable!(),
-            }
+        pub fn arb_vote_type()(vote_type in prop_oneof![
+            Just(VoteType::Default),
+            Just(VoteType::PGFSteward),
+            Just(VoteType::PGFPayment),
+        ]) -> VoteType {
+            vote_type
         }
     }
 
-    /// Generate an arbitrary proposal vote
-    pub fn arb_proposal_vote() -> impl Strategy<Value = StorageProposalVote> {
-        arb_vote_type()
-            .prop_map(StorageProposalVote::Yay)
-            .boxed()
-            .prop_union(Just(StorageProposalVote::Nay).boxed())
-            .or(Just(StorageProposalVote::Abstain).boxed())
+    prop_compose! {
+        /// Generate an arbitrary proposal vote
+        pub fn arb_proposal_vote()(proposal_vote in prop_oneof![
+            arb_vote_type().prop_map(StorageProposalVote::Yay),
+            Just(StorageProposalVote::Nay),
+            Just(StorageProposalVote::Abstain),
+        ]) -> StorageProposalVote {
+            proposal_vote
+        }
     }
 }
