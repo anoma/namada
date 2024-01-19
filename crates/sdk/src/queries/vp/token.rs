@@ -9,7 +9,7 @@ use crate::queries::RequestCtx;
 
 router! {TOKEN,
     ( "denomination" / [addr: Address] ) -> Option<token::Denomination> = denomination,
-    ( "total_supply" / [addr: Address] ) -> Option<token::Amount> = total_supply,
+    ( "total_supply" / [addr: Address] ) -> token::Amount = total_supply,
 }
 
 /// Get the number of decimal places (in base 10) for a
