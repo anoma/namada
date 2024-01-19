@@ -759,11 +759,11 @@ where
 #[cfg(any(test, feature = "testing"))]
 /// Tests and strategies for transactions
 pub mod testing {
+    use borsh_ext::BorshSerializeExt;
     use governance::ProposalType;
     use ibc::primitives::proto::Any;
-    use namada_account::{InitAccount, UpdateAccount};
-    use borsh_ext::BorshSerializeExt;
     use masp_primitives::transaction::TransparentAddress;
+    use namada_account::{InitAccount, UpdateAccount};
     use namada_core::types::address::testing::{
         arb_established_address, arb_non_internal_address,
     };
@@ -786,13 +786,14 @@ pub mod testing {
     };
     use namada_tx::data::{DecryptedTx, Fee, TxType, WrapperTx};
     use proptest::prelude::{Just, Strategy};
-    use proptest::{option, prop_compose};
+    use proptest::{option, prop_compose, prop_oneof};
     use prost::Message;
     use ripemd::Digest as RipemdDigest;
     use sha2::Digest;
 
     use super::*;
     use crate::account::tests::{arb_init_account, arb_update_account};
+    use crate::masp::testing::arb_masp_transfer;
     use crate::tx::data::pgf::tests::arb_update_steward_commission;
     use crate::tx::data::pos::tests::{
         arb_become_validator, arb_bond, arb_commission_change,
@@ -804,7 +805,6 @@ pub mod testing {
     use crate::types::eth_bridge_pool::testing::arb_pending_transfer;
     use crate::types::key::testing::arb_common_pk;
     use crate::types::time::{DateTime, DateTimeUtc, Utc};
-    use crate::masp::testing::arb_masp_transfer;
 
     #[derive(Debug)]
     #[allow(clippy::large_enum_variant)]
@@ -917,24 +917,23 @@ pub mod testing {
 
     prop_compose! {
         // Generate an arbitrary decrypted transaction
-        pub fn arb_decrypted_tx()(discriminant in 0..2) -> DecryptedTx {
-            match discriminant {
-                0 => DecryptedTx::Decrypted,
-                1 => DecryptedTx::Undecryptable,
-                _ => unreachable!(),
-            }
+        pub fn arb_decrypted_tx()(decrypted_tx in prop_oneof![
+            Just(DecryptedTx::Decrypted),
+            Just(DecryptedTx::Undecryptable),
+        ]) -> DecryptedTx {
+            decrypted_tx
         }
     }
 
-    // Generate an arbitrary transaction type
-    pub fn arb_tx_type() -> impl Strategy<Value = TxType> {
-        let raw_tx = Just(TxType::Raw).boxed();
-        let decrypted_tx =
-            arb_decrypted_tx().prop_map(TxType::Decrypted).boxed();
-        let wrapper_tx = arb_wrapper_tx()
-            .prop_map(|x| TxType::Wrapper(Box::new(x)))
-            .boxed();
-        raw_tx.prop_union(decrypted_tx).or(wrapper_tx)
+    prop_compose! {
+        // Generate an arbitrary transaction type
+        pub fn arb_tx_type()(tx_type in prop_oneof![
+            Just(TxType::Raw),
+            arb_decrypted_tx().prop_map(TxType::Decrypted),
+            arb_wrapper_tx().prop_map(|x| TxType::Wrapper(Box::new(x))),
+        ]) -> TxType {
+            tx_type
+        }
     }
 
     prop_compose! {
@@ -1371,28 +1370,30 @@ pub mod testing {
 
     // Generate an arbitrary tx
     pub fn arb_tx() -> impl Strategy<Value = (Tx, TxData)> {
-        arb_transfer_tx()
-            .boxed()
-            .prop_union(arb_bond_tx().boxed())
-            .or(arb_unbond_tx().boxed())
-            .or(arb_init_account_tx().boxed())
-            .or(arb_become_validator_tx().boxed())
-            .or(arb_init_proposal_tx().boxed())
-            .or(arb_vote_proposal_tx().boxed())
-            .or(arb_reveal_pk_tx().boxed())
-            .or(arb_update_account_tx().boxed())
-            .or(arb_withdraw_tx().boxed())
-            .or(arb_claim_rewards_tx().boxed())
-            .or(arb_commission_change_tx().boxed())
-            .or(arb_metadata_change_tx().boxed())
-            .or(arb_unjail_validator_tx().boxed())
-            .or(arb_deactivate_validator_tx().boxed())
-            .or(arb_reactivate_validator_tx().boxed())
-            .or(arb_consensus_key_change_tx().boxed())
-            .or(arb_redelegation_tx().boxed())
-            .or(arb_update_steward_commission_tx().boxed())
-            .or(arb_resign_steward_tx().boxed())
-            .or(arb_pending_transfer_tx().boxed())
-            .or(arb_ibc_any_tx().boxed())
+        prop_oneof![
+            arb_transfer_tx(),
+            arb_masp_transfer_tx(),
+            arb_bond_tx(),
+            arb_unbond_tx(),
+            arb_init_account_tx(),
+            arb_become_validator_tx(),
+            arb_init_proposal_tx(),
+            arb_vote_proposal_tx(),
+            arb_reveal_pk_tx(),
+            arb_update_account_tx(),
+            arb_withdraw_tx(),
+            arb_claim_rewards_tx(),
+            arb_commission_change_tx(),
+            arb_metadata_change_tx(),
+            arb_unjail_validator_tx(),
+            arb_deactivate_validator_tx(),
+            arb_reactivate_validator_tx(),
+            arb_consensus_key_change_tx(),
+            arb_redelegation_tx(),
+            arb_update_steward_commission_tx(),
+            arb_resign_steward_tx(),
+            arb_pending_transfer_tx(),
+            arb_ibc_any_tx(),
+        ]
     }
 }

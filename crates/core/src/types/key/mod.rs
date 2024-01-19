@@ -499,15 +499,14 @@ pub mod testing {
         arb_keypair::<S>().prop_map(|x| x.ref_to())
     }
 
-    /// Generate an arbitrary common key
-    pub fn arb_common_pk() -> impl Strategy<Value = common::PublicKey> {
-        let ed25519 = arb_pk::<ed25519::SigScheme>()
-            .prop_map(common::PublicKey::Ed25519)
-            .sboxed();
-        let secp256k1 = arb_pk::<secp256k1::SigScheme>()
-            .prop_map(common::PublicKey::Secp256k1)
-            .sboxed();
-        ed25519.prop_union(secp256k1)
+    prop_compose! {
+        /// Generate an arbitrary common key
+        pub fn arb_common_pk()(pk in prop_oneof![
+            arb_pk::<ed25519::SigScheme>().prop_map(common::PublicKey::Ed25519),
+            arb_pk::<secp256k1::SigScheme>().prop_map(common::PublicKey::Secp256k1),
+        ]) -> common::PublicKey {
+            pk
+        }
     }
 
     /// A keypair for tests

@@ -2475,12 +2475,12 @@ pub mod testing {
     use proptest::{collection, option, prop_compose};
 
     use super::*;
-    use crate::types::storage::testing::arb_epoch;
-    use crate::types::address::testing::arb_address;
     use crate::masp_primitives::consensus::BranchId;
     use crate::masp_primitives::merkle_tree::FrozenCommitmentTree;
     use crate::masp_primitives::sapling::keys::OutgoingViewingKey;
     use crate::masp_primitives::transaction::components::transparent::testing::arb_transparent_address;
+    use crate::types::address::testing::arb_address;
+    use crate::types::storage::testing::arb_epoch;
 
     #[derive(Debug, Clone)]
     // Adapts a CSPRNG from a PRNG for proptesting
