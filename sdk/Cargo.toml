@@ -51,6 +51,8 @@ testing = [
   "namada_proof_of_stake/testing",
   "async-client",
   "proptest",
+  "jubjub",
+  "bls12_381",
 ]
 
 # Download MASP params if they're not present
@@ -59,6 +61,7 @@ download-params = ["masp_proofs/download-params"]
 [dependencies]
 async-trait = {version = "0.1.51", optional = true}
 bimap.workspace = true
+bls12_381 = { workspace = true, optional = true }
 borsh.workspace = true
 borsh-ext.workspace = true
 circular-queue.workspace = true
@@ -69,6 +72,7 @@ ethers.workspace = true
 fd-lock = { workspace = true, optional = true }
 futures.workspace = true
 itertools.workspace = true
+jubjub = { workspace = true, optional = true }
 lazy_static.workspace= true
 masp_primitives.workspace = true
 masp_proofs.workspace = true
