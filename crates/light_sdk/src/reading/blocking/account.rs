@@ -1,5 +1,4 @@
 use namada_sdk::account::Account;
-use namada_sdk::types::address::Address;
 use namada_sdk::types::key::common;
 
 use super::*;

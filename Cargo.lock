@@ -4485,6 +4485,7 @@ dependencies = [
  "borsh-ext",
  "namada_sdk",
  "prost 0.12.3",
+ "serde_json",
  "tendermint-config",
  "tendermint-rpc",
  "tokio",

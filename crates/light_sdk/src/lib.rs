@@ -10,10 +10,13 @@
 //!
 //! This SDK is divided into three modules:
 //!
-//! - transaction: contains functions to construct all the transactions
+//! - [`transaction`]: contains functions to construct all the transactions
 //!   currently supported by the protocol
-//! - reading: exposes queries to retrieve data from a Namada node
-//! - writing: TO BE DONE
+//! - [`reading`]: exposes queries to retrieve data from a Namada node
+//! - [`writing`]: exposes functions to send data to a Namada node
+//!
+//! Both the [`reading`] and [`writing`] modules are further divided into a
+//! blocking and asynchronous submodules.
 
 pub mod reading;
 pub mod transaction;

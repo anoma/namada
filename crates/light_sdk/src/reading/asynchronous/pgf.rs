@@ -10,6 +10,5 @@ pub async fn is_steward(
             .map_err(|e| Error::Other(e.to_string()))?,
     )
     .map_err(|e| Error::Other(e.to_string()))?;
-    let rt = Runtime::new().unwrap();
-    Ok(rt.block_on(rpc::is_steward(&client, address)))
+    Ok(rpc::is_steward(&client, address).await)
 }
