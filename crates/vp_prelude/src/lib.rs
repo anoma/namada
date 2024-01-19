@@ -50,11 +50,6 @@ pub fn sha256(bytes: &[u8]) -> Hash {
     Hash(*digest.as_ref())
 }
 
-pub fn is_vp_allowed(ctx: &Ctx, vp_hash: &[u8]) -> VpResult {
-    let vp_hash = Hash::try_from(vp_hash).unwrap();
-    parameters::is_vp_allowed(&ctx.pre(), &vp_hash)
-}
-
 /// Log a string. The message will be printed at the `tracing::Level::Info`.
 pub fn log_string<T: AsRef<str>>(msg: T) {
     let msg = msg.as_ref();
