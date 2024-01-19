@@ -171,7 +171,7 @@ pub trait StorageWrite {
         let bytes = val.serialize_to_vec();
         self.write_bytes_with_opts(key, bytes, action)
     }
-    
+
     /// Write a value to be encoded with Borsh at the given key to storage.
     /// Additionally, write the data to the diffs. Do not add to the merkle
     /// tree.

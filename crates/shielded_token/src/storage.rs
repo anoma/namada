@@ -22,11 +22,25 @@ where
         kp_gain_nom,
         locked_ratio_target: locked_target,
     } = params;
-    storage.write(&masp_last_inflation_key(address), Amount::zero())?;
-    storage.write(&masp_last_locked_ratio_key(address), Dec::zero())?;
-    storage.write(&masp_max_reward_rate_key(address), max_rate)?;
-    storage.write(&masp_locked_ratio_target_key(address), locked_target)?;
-    storage.write(&masp_kp_gain_key(address), kp_gain_nom)?;
-    storage.write(&masp_kd_gain_key(address), kd_gain_nom)?;
+    storage.write_without_merkldiffs(
+        &masp_last_inflation_key(address),
+        Amount::zero(),
+    )?;
+    storage.write_without_merkldiffs(
+        &masp_last_locked_ratio_key(address),
+        Dec::zero(),
+    )?;
+    storage.write_without_merkldiffs(
+        &masp_max_reward_rate_key(address),
+        max_rate,
+    )?;
+    storage.write_without_merkldiffs(
+        &masp_locked_ratio_target_key(address),
+        locked_target,
+    )?;
+    storage
+        .write_without_merkldiffs(&masp_kp_gain_key(address), kp_gain_nom)?;
+    storage
+        .write_without_merkldiffs(&masp_kd_gain_key(address), kd_gain_nom)?;
     Ok(())
 }
