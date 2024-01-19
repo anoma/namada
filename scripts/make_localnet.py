@@ -37,13 +37,38 @@ def update_balances(localnet_dir, new_addresses):
     with open(f"{localnet_dir}/tmp/balances.toml", "w") as f:
         toml.dump(balances_toml, f)
 
+def make_val_wallet(cmd):
+    # Start the subprocess
+    process = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True)
+
+    # Send 'p' followed by newline and then close stdin
+    # If your command expects just 'p' without a newline, remove '\n'
+    try:
+    # Send 'p' followed by newline
+    # If your command expects just 'p' without a newline, remove '\n'
+        out, err = process.communicate(input='p\n')        
+    
+    finally:
+        # Ensure that resources are freed and pipes are closed
+        process.stdin.close()
+        process.stdout.close()
+        process.stderr.close()
+
+    # Check return code (0 usually means success)
+    if process.returncode == 0:
+        print("Command executed successfully")
+    else:
+        print("Command failed")
+
 def make_transactions(no_vals):
     new_addresses = []
     for i in range(1, no_vals):
         val_alias = f"validator-{i}"
         unsigned_tx_file_path = f"{TXS_DIR}/{val_alias}-unsigned.toml"
         signed_tx_file_path = f"{TXS_DIR}/{val_alias}-signed.toml"
-        system(f"{namada_bin}w --base-dir='{BASE_DIR}' --pre-genesis gen --alias {val_alias} --unsafe-dont-encrypt")
+        # I get prompted to enter the letter p, I want to do that automatically
+        make_val_wallet(f"{namada_bin}w --base-dir='{BASE_DIR}' --pre-genesis gen --alias {val_alias} --unsafe-dont-encrypt")
+
         output = run(f"{namada_bin}c --base-dir='{BASE_DIR}' utils init-genesis-established-account --path {unsigned_tx_file_path} --aliases {val_alias}")
         established_address = output[output.find('tnam'):].strip()[:45]
         assert len(established_address) == len('tnam1q9874ezwewthnq7yku6xgwve0fyh6cvd85j5dxee'), len('tnam1q9874ezwewthnq7yku6xgwve0fyh6cvd85j5dxee')
@@ -67,6 +92,14 @@ if __name__ == "__main__":
     # Create txs directory
     TXS_DIR=f"{BASE_DIR}/pre-genesis/txs"
     system(f"mkdir -p {TXS_DIR}")
+
+    # Clean up old validator dirs
+    system(f"rm -rf {LOCALNET_DIR}/validator-1")
+    system(f"rm -rf {LOCALNET_DIR}/validator-2")
+    system(f"rm -rf {LOCALNET_DIR}/validator-3")
+    system(f"rm -rf {LOCALNET_DIR}/validator-4")
+    system(f"rm -rf {LOCALNET_DIR}/validator-5")
+    system(f"rm -rf {LOCALNET_DIR}/validator-6")
 
     make_transactions(no_vals)
         

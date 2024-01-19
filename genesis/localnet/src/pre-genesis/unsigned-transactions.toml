@@ -1,48 +1,48 @@
 [[established_account]]
 vp = "vp_user"
 threshold = 1
-public_keys = [ "tpknam1qphc07ccm0043eyd2jsjq83985vuhm6k8j5wlndrg2lnla5rkr605qquv6l",]
+public_keys = [ "tpknam1qzlgemrrn3y385av6fccqd680jxvzxmaqlfp60vhteqqlfznc7sxz4lf6w0",]
 
 [[established_account]]
 vp = "vp_user"
 threshold = 1
-public_keys = [ "tpknam1qpwjvh7td87q44cs78c0uluwl7tq2ljxkeyudunc4uqq3tj38gx8jms4kws",]
+public_keys = [ "tpknam1qq2u0jtkn2vyvnfzg4xva5m5a22m37gph26puqef5szu9fmu83ppkmd0e7h",]
 
 [[validator_account]]
-address = "tnam1qyqxdjexcs8lpr24r6u96e4387rfa4zzsu7vvymm"
+address = "tnam1qxkvz9k38ay9av947auh0mrg7q7kr985gur07h73"
 vp = "vp_user"
 commission_rate = "0.05"
 max_commission_rate_change = "0.01"
 net_address = "127.0.0.1:29657"
-consensus_key = "tpknam1qqx2w0e0rasplx0tpdhg4ssmfn4y8h78czjk6wg0dsmc8s38rxz360xeau7"
-protocol_key = "tpknam1qq0lajrdkc2vw0vcnzq4zg0jv82gw7jmqmhc805p32wa49tf8rx4700hfrd"
-tendermint_node_key = "tpknam1qrkys8zgzas5nfwghchay6gv2kqjcgwhdm324p9wz66cj7dgx4rkxt0ej7a"
-eth_hot_key = "tpknam1qyp0hn4345844py3jr2nauu525gns780rm4jfx9wmhfq20w7qu7u5wsag84dw"
-eth_cold_key = "tpknam1qyp99zaaza25j6yq9yrxu657ayy5qfwma3qat4gdemnrwhj0mdegkgq4fa4yn"
+consensus_key = "tpknam1qzavyfea6lrn50cdt8umv74yy5eaj60efvpp5u4srjw04fs7prwecgvz0f9"
+protocol_key = "tpknam1qrry30avjmu4rgjsg6j7f344l7w8aaqxzd7vwmhmswtarljcdehwy4gmr3y"
+tendermint_node_key = "tpknam1qqwyjvrgfa6u07f44mhesft209dhaem0mfs76n4tmyykulurp2mpsvwz6h3"
+eth_hot_key = "tpknam1qypvu5004awnrlq06pfdffj8sfyqcyx7dkhd4r9nfpudsqxrltttajq9yran6"
+eth_cold_key = "tpknam1qypp7sctufg2xkpjrh8ce9tcxw5tv8gmy4eqvk86e4exrnadnmlfnxsj5tafa"
 
 [validator_account.metadata]
 email = "validator2@gmail.com"
 [[validator_account]]
-address = "tnam1q8378h06dkpdzq9krsrs3sw7lcxfmery4y6g8udy"
+address = "tnam1qxx7e820zrulmmzex9lldz5nn9x9edp93cyfpz5k"
 vp = "vp_user"
 commission_rate = "0.05"
 max_commission_rate_change = "0.01"
 net_address = "127.0.0.1:28657"
-consensus_key = "tpknam1qpggrw92cey8rtwcm59zpe557t2n9wzzxwn4fd9hz4fpsqt65lrggmpk2qm"
-protocol_key = "tpknam1qzv7x635yhfrvp339j30myxz8vsvrn4qg0zpdg0280z4uuqmvc85jgfu2kf"
-tendermint_node_key = "tpknam1qqttqvf6ruaf5zeelvc7cltgyzcjm2yamtlxcedp7vumxugmsnmhv2f9e0j"
-eth_hot_key = "tpknam1qyp06r4hq40qs0ashkw9qpq23kfkcdc6nulwwuh8cwfumht2syzy6eqrujn75"
-eth_cold_key = "tpknam1qyp3r6dpwtw8emker7u979ks556w9rdmyc337lkur0kah2nru8zud9gpr9prr"
+consensus_key = "tpknam1qrkuyzmc2p34pr6s6efqexzz6zr6vu08m32g4wla7kdaylfw5j88clg0nfq"
+protocol_key = "tpknam1qr0hu60njx7577vcpwahl9v5vlfve8mh2n20e758w76qc79qa7hhgz8xxmp"
+tendermint_node_key = "tpknam1qz5n5rga6l7g9gznsv48p5hf9swqcqgmqr3kyh3cuk5vk6wf74u8cld5c4a"
+eth_hot_key = "tpknam1qypn600cl0tkdwf094k6m0e2zpsxskhmt05pg3cjmxg7e8a9zdy7z9qjpj57j"
+eth_cold_key = "tpknam1qyptdu9r0d047xl5r5h7t282ergjzm8ecq4qtp4z5awd243tlhwezjcd39m4s"
 
 [validator_account.metadata]
 email = "validator1@gmail.com"
 [[bond]]
-source = "tnam1qyqxdjexcs8lpr24r6u96e4387rfa4zzsu7vvymm"
-validator = "tnam1qyqxdjexcs8lpr24r6u96e4387rfa4zzsu7vvymm"
+source = "tnam1qxkvz9k38ay9av947auh0mrg7q7kr985gur07h73"
+validator = "tnam1qxkvz9k38ay9av947auh0mrg7q7kr985gur07h73"
 amount = "1000"
 
 [[bond]]
-source = "tnam1q8378h06dkpdzq9krsrs3sw7lcxfmery4y6g8udy"
-validator = "tnam1q8378h06dkpdzq9krsrs3sw7lcxfmery4y6g8udy"
+source = "tnam1qxx7e820zrulmmzex9lldz5nn9x9edp93cyfpz5k"
+validator = "tnam1qxx7e820zrulmmzex9lldz5nn9x9edp93cyfpz5k"
 amount = "1000"
 
