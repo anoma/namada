@@ -957,9 +957,11 @@ impl BenchShieldedCtx {
             .wallet
             .find_spending_key(ALBERT_SPENDING_KEY, None)
             .unwrap();
-        async_runtime
-            .block_on(self.shielded.fetch(
+        self.shielded = async_runtime
+            .block_on(self.shielded.syncing(
                 &self.shell,
+                &StdIo,
+                None,
                 &[spending_key.into()],
                 &[],
             ))

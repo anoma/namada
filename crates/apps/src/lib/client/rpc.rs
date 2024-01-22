@@ -137,7 +137,6 @@ pub async fn query_transfers(
             context.client(),
             &query_owner,
             &query_token,
-            &wallet.get_viewing_keys(),
         )
         .await
         .unwrap();
