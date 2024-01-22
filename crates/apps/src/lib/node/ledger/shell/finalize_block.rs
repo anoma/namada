@@ -4744,7 +4744,7 @@ mod test_finalize_block {
         next_block_for_inflation(
             &mut shell,
             pkh1.to_vec(),
-            default_all_votes,
+            default_all_votes.clone(),
             None,
         );
         assert!(missed_votes.is_empty(&shell.wl_storage)?);
@@ -4778,6 +4778,13 @@ mod test_finalize_block {
             .unwrap();
         assert_eq!(val5_pipeline_state, ValidatorState::BelowThreshold);
 
+        next_block_for_inflation(
+            &mut shell,
+            pkh1.to_vec(),
+            default_all_votes,
+            None,
+        );
+
         // Advance to the next epoch with no votes from validator 2
         // NOTE: assume the minimum blocks for jailing is larger than remaining
         // blocks to next epoch!
@@ -4787,7 +4794,7 @@ mod test_finalize_block {
         );
         votes_no2.retain(|vote| vote.validator.address != pkh2);
 
-        let first_height_without_vote = 2;
+        let first_height_without_vote = 3;
         let mut val2_num_missed_blocks = 0u64;
         while current_epoch == Epoch::default() {
             next_block_for_inflation(
@@ -4841,7 +4848,10 @@ mod test_finalize_block {
             liveness_sum_missed_votes_handle().get(&shell.wl_storage, &val2)?;
         assert_eq!(
             val2_sum_missed_votes,
-            Some(shell.wl_storage.storage.block.height.0 - 2)
+            Some(
+                shell.wl_storage.storage.block.height.0
+                    - first_height_without_vote
+            )
         );
         for val in &initial_consensus_set {
             if val == &val2 {
@@ -4908,7 +4918,10 @@ mod test_finalize_block {
             if val == &val2 {
                 assert_eq!(
                     sum,
-                    Some(shell.wl_storage.storage.block.height.0 - 2)
+                    Some(
+                        shell.wl_storage.storage.block.height.0
+                            - first_height_without_vote
+                    )
                 );
                 for height in first_height_without_vote
                     ..shell.wl_storage.storage.block.height.0
