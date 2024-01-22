@@ -298,6 +298,32 @@ impl CliApi {
                         tx::submit_validator_metadata_change(&namada, args)
                             .await?;
                     }
+                    Sub::ShieldedSync(ShieldedSync(mut args)) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.ledger_address,
+                            )
+                        });
+                        client.wait_until_node_is_synced(&io).await?;
+                        let args = args.to_sdk(&mut ctx);
+                        let mut chain_ctx = ctx.take_chain_or_exit();
+                        let sks = args.spending_keys
+                            .into_iter()
+                            .map(|sk| sk.into())
+                            .collect::<Vec<_>>();
+                        let vks = args.viewing_keys
+                            .into_iter()
+                            .map(|vk| vk.into())
+                            .collect::<Vec<_>>();
+                        _ = chain_ctx.shielded.load().await;
+                        chain_ctx.shielded.syncing(
+                            &client,
+                            &io,
+                            args.last_query_height,
+                            &sks,
+                            &vks,
+                        ).await?;
+                    }
                     // Eth bridge
                     Sub::AddToEthBridgePool(args) => {
                         let mut args = args.0;
