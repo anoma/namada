@@ -19,7 +19,10 @@ fn reveal_nullifiers(
         .sapling_bundle()
         .map_or(&vec![], |description| &description.shielded_spends)
     {
-        ctx.write(&masp_nullifier_key(&description.nullifier), ())?;
+        ctx.write_without_merkle_diffs(
+            &masp_nullifier_key(&description.nullifier),
+            (),
+        )?;
     }
 
     Ok(())
@@ -50,7 +53,7 @@ pub fn update_note_commitment_tree(
                     })?;
             }
 
-            ctx.write(&tree_key, commitment_tree)?;
+            ctx.write_without_merkle_diffs(&tree_key, commitment_tree)?;
         }
     }
 
@@ -71,7 +74,7 @@ pub fn handle_masp_tx(
 
     // If storage key has been supplied, then pin this transaction to it
     if let Some(key) = pin_key {
-        ctx.write(
+        ctx.write_without_merkle_diffs(
             &masp_pin_tx_key(key),
             IndexedTx {
                 height: ctx.get_block_height()?,

@@ -4,9 +4,9 @@ use std::num::NonZeroU64;
 use eyre::{eyre, Result};
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::types::ethereum_events::EthAddress;
+use namada_core::types::ethereum_structs;
 use namada_core::types::storage::Key;
 use namada_core::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
-use namada_core::types::{encode, ethereum_structs};
 use namada_state::{DBIter, StorageHasher, WlStorage, DB};
 use namada_storage::{StorageRead, StorageWrite};
 use serde::{Deserialize, Serialize};
@@ -188,22 +188,18 @@ impl EthereumBridgeParams {
         let bridge_contract_key = bridge_storage::bridge_contract_key();
         let eth_start_height_key = bridge_storage::eth_start_height_key();
         wl_storage
-            .write_bytes(
+            .write(
                 &active_key,
-                encode(&EthBridgeStatus::Enabled(EthBridgeEnabled::AtGenesis)),
+                EthBridgeStatus::Enabled(EthBridgeEnabled::AtGenesis),
             )
             .unwrap();
         wl_storage
-            .write_bytes(&min_confirmations_key, encode(min_confirmations))
+            .write(&min_confirmations_key, min_confirmations)
             .unwrap();
+        wl_storage.write(&native_erc20_key, native_erc20).unwrap();
+        wl_storage.write(&bridge_contract_key, bridge).unwrap();
         wl_storage
-            .write_bytes(&native_erc20_key, encode(native_erc20))
-            .unwrap();
-        wl_storage
-            .write_bytes(&bridge_contract_key, encode(bridge))
-            .unwrap();
-        wl_storage
-            .write_bytes(&eth_start_height_key, encode(eth_start_height))
+            .write(&eth_start_height_key, eth_start_height)
             .unwrap();
         for Erc20WhitelistEntry {
             token_address: addr,
@@ -225,21 +221,21 @@ impl EthereumBridgeParams {
                 suffix: whitelist::KeyType::Whitelisted,
             }
             .into();
-            wl_storage.write_bytes(&key, encode(&true)).unwrap();
+            wl_storage.write(&key, true).unwrap();
 
             let key = whitelist::Key {
                 asset: *addr,
                 suffix: whitelist::KeyType::Cap,
             }
             .into();
-            wl_storage.write_bytes(&key, encode(&cap)).unwrap();
+            wl_storage.write(&key, cap).unwrap();
 
             let key = whitelist::Key {
                 asset: *addr,
                 suffix: whitelist::KeyType::Denomination,
             }
             .into();
-            wl_storage.write_bytes(&key, encode(&denom)).unwrap();
+            wl_storage.write(&key, denom).unwrap();
         }
         // Initialize the storage for the Ethereum Bridge VP.
         vp::ethereum_bridge::init_storage(wl_storage);
@@ -368,7 +364,6 @@ where
 #[cfg(test)]
 mod tests {
     use eyre::Result;
-    use namada_core::borsh::BorshSerializeExt;
     use namada_core::types::ethereum_events::EthAddress;
     use namada_state::testing::TestWlStorage;
 
@@ -462,16 +457,16 @@ mod tests {
     fn test_ethereum_bridge_config_storage_partially_configured() {
         let mut wl_storage = TestWlStorage::default();
         wl_storage
-            .write_bytes(
+            .write(
                 &bridge_storage::active_key(),
-                encode(&EthBridgeStatus::Enabled(EthBridgeEnabled::AtGenesis)),
+                EthBridgeStatus::Enabled(EthBridgeEnabled::AtGenesis),
             )
             .unwrap();
         // Write a valid min_confirmations value
         wl_storage
-            .write_bytes(
+            .write(
                 &bridge_storage::min_confirmations_key(),
-                MinimumConfirmations::default().serialize_to_vec(),
+                MinimumConfirmations::default(),
             )
             .unwrap();
 
