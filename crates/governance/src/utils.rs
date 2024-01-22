@@ -316,11 +316,11 @@ impl ProposalVotes {
         vote: TallyVote,
     ) {
         match self.validators_vote.insert(address.clone(), vote) {
-            // the value was update, this should never happen
             None => {
                 self.validator_voting_power
                     .insert(address.clone(), voting_power);
             }
+            // the value was update, this should never happen
             _ => tracing::error!(
                 "Duplicate vote for validator {}",
                 address.clone()
@@ -343,6 +343,7 @@ impl ProposalVotes {
                     .or_default()
                     .insert(validator_address.clone(), voting_power);
             }
+            // the value was update, this should never happen
             _ => tracing::error!(
                 "Duplicate vote for delegator {}",
                 address.clone()
@@ -494,7 +495,7 @@ mod test {
                 token::Amount::from_u64(1),
                 tally_type,
             );
-            let result = if matches!(
+            let _result = if matches!(
                 tally_type,
                 TallyType::LessOneHalfOverOneThirdNay
             ) {
@@ -502,7 +503,10 @@ mod test {
             } else {
                 TallyResult::Rejected
             };
-            assert!(matches!(proposal_result.result, result), "{tally_type:?}");
+            assert!(
+                matches!(proposal_result.result, _result),
+                "{tally_type:?}"
+            );
         }
     }
 
