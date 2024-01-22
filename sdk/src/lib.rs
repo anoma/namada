@@ -795,6 +795,7 @@ pub mod testing {
     use sha2::Digest;
 
     use super::*;
+    use crate::core::types::address::MASP;
     use crate::core::types::chain::ChainId;
     use crate::core::types::eth_bridge_pool::testing::arb_pending_transfer;
     use crate::core::types::key::testing::arb_common_pk;
@@ -814,7 +815,9 @@ pub mod testing {
     use crate::core::types::transaction::{
         DecryptedTx, Fee, TxType, WrapperTx,
     };
-    use crate::masp::testing::arb_masp_transfer;
+    use crate::masp::testing::{
+        arb_deshielding_transfer, arb_shielded_transfer, arb_shielding_transfer,
+    };
     use crate::proto::{Code, Commitment, Header, MaspBuilder, Section};
 
     #[derive(Debug)]
@@ -992,26 +995,62 @@ pub mod testing {
         TransparentAddress(hash.into())
     }
 
+    // Maximum number of notes to include in a transaction
+    const MAX_ASSETS: usize = 10;
+
+    // Type of MASP transaction
+    #[derive(Debug, Clone)]
+    enum MaspTxType {
+        // Shielded transaction
+        Shielded,
+        // Shielding transaction
+        Shielding,
+        // Deshielding transaction
+        Deshielding,
+    }
+
     prop_compose! {
         // Generate an arbitrary transfer transaction
         pub fn arb_masp_transfer_tx()(transfer in arb_transfer())(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
             code_hash in arb_hash(),
-            (shielded_transfer, asset_types) in arb_masp_transfer(
-                encode_address(&transfer.source),
-                encode_address(&transfer.target),
-            ),
+            (masp_tx_type, (shielded_transfer, asset_types)) in prop_oneof![
+                (Just(MaspTxType::Shielded), arb_shielded_transfer(0..MAX_ASSETS)),
+                (Just(MaspTxType::Shielding), arb_shielding_transfer(encode_address(&transfer.source), 1)),
+                (Just(MaspTxType::Deshielding), arb_deshielding_transfer(encode_address(&transfer.target), 1)),
+            ],
             mut transfer in Just(transfer),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
-            tx.add_data(transfer.clone());
-            tx.add_code_from_hash(code_hash, Some(TX_TRANSFER_WASM.to_owned()));
+            match masp_tx_type {
+                MaspTxType::Shielded => {
+                    transfer.source = MASP;
+                    transfer.target = MASP;
+                    transfer.amount = token::Amount::zero().into();
+                },
+                MaspTxType::Shielding => {
+                    transfer.target = MASP;
+                    // Set the transparent amount and token
+                    let ((addr, denom, _epoch), value) = asset_types.iter().next().unwrap();
+                    transfer.amount = DenominatedAmount::native(token::Amount::from_masp_denominated(*value, *denom));
+                    transfer.token = addr.clone();
+                },
+                MaspTxType::Deshielding => {
+                    transfer.source = MASP;
+                    // Set the transparent amount and token
+                    let ((addr, denom, _epoch), value) = asset_types.iter().next().unwrap();
+                    transfer.amount = DenominatedAmount::native(token::Amount::from_masp_denominated(*value, *denom));
+                    transfer.token = addr.clone();
+                },
+            }
             let masp_tx_hash = tx.add_masp_tx_section(shielded_transfer.masp_tx).1;
             transfer.shielded = Some(masp_tx_hash);
+            tx.add_data(transfer.clone());
+            tx.add_code_from_hash(code_hash, Some(TX_TRANSFER_WASM.to_owned()));
             tx.add_masp_builder(MaspBuilder {
-                asset_types,
+                asset_types: asset_types.into_keys().collect(),
                 // Store how the Info objects map to Descriptors/Outputs
                 metadata: shielded_transfer.metadata,
                 // Store the data that was used to construct the Transaction

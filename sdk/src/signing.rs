@@ -729,19 +729,23 @@ async fn make_ledger_amount_asset(
     assets: &HashMap<AssetType, (Address, MaspDenom, Option<Epoch>)>,
     prefix: &str,
 ) {
-    if let Some((token, _, _epoch)) = assets.get(token) {
+    if let Some((token, denom, _epoch)) = assets.get(token) {
         // If the AssetType can be decoded, then at least display Addressees
         if let Some(token) = tokens.get(token) {
             output.push(format!(
                 "{}Amount : {} {}",
                 prefix,
                 token.to_uppercase(),
-                amount,
+                token::Amount::from_masp_denominated(amount, *denom),
             ));
         } else {
             output.extend(vec![
                 format!("{}Token : {}", prefix, token),
-                format!("{}Amount : {}", prefix, amount,),
+                format!(
+                    "{}Amount : {}",
+                    prefix,
+                    token::Amount::from_masp_denominated(amount, *denom)
+                ),
             ]);
         }
     } else {
