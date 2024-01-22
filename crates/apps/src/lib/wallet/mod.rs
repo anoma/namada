@@ -12,7 +12,7 @@ pub use namada_sdk::wallet::alias::Alias;
 use namada_sdk::wallet::fs::FsWalletStorage;
 use namada_sdk::wallet::store::Store;
 use namada_sdk::wallet::{
-    ConfirmationResponse, FindKeyError, GenRestoreKeyError, Wallet, WalletIo,
+    ConfirmationResponse, FindKeyError, Wallet, WalletIo,
 };
 pub use namada_sdk::wallet::{ValidatorData, ValidatorKeys};
 use rand_core::OsRng;
@@ -85,11 +85,14 @@ impl WalletIo for CliWalletUtils {
         alias.trim().to_owned()
     }
 
-    fn read_mnemonic_code() -> Result<Mnemonic, GenRestoreKeyError> {
+    fn read_mnemonic_code() -> Option<Mnemonic> {
         let phrase = get_secure_user_input("Input mnemonic code: ")
-            .map_err(|_| GenRestoreKeyError::MnemonicInputError)?;
-        Mnemonic::from_phrase(phrase.as_ref(), Language::English)
-            .map_err(|_| GenRestoreKeyError::MnemonicInputError)
+            .unwrap_or_else(|e| {
+                eprintln!("{}", e);
+                eprintln!("Action cancelled, no changes persisted.");
+                cli::safe_exit(1)
+            });
+        Mnemonic::from_phrase(phrase.as_ref(), Language::English).ok()
     }
 
     fn read_mnemonic_passphrase(confirm: bool) -> Zeroizing<String> {
@@ -295,11 +298,9 @@ mod tests {
 
         let mut rng = rand_core::OsRng;
         let mnemonic1 =
-            CliWalletUtils::generate_mnemonic_code(MNEMONIC_TYPE, &mut rng)
-                .unwrap();
+            CliWalletUtils::generate_mnemonic_code(MNEMONIC_TYPE, &mut rng);
         let mnemonic2 =
-            CliWalletUtils::generate_mnemonic_code(MNEMONIC_TYPE, &mut rng)
-                .unwrap();
+            CliWalletUtils::generate_mnemonic_code(MNEMONIC_TYPE, &mut rng);
         assert_ne!(mnemonic1.into_phrase(), mnemonic2.into_phrase());
     }
 }

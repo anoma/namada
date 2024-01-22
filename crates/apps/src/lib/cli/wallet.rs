@@ -169,22 +169,115 @@ fn payment_addresses_list(
     }
 }
 
-/// Generate a spending key.
-fn spending_key_gen(
+/// Derives a masp spending key from the mnemonic code in the wallet.
+fn shielded_key_derive(
     ctx: Context,
     io: &impl Io,
-    args::KeyGen {
+    args::KeyDerive {
         alias,
         alias_force,
         unsafe_dont_encrypt,
+        derivation_path,
+        allow_non_compliant,
+        use_device,
+        ..
+    }: args::KeyDerive,
+) {
+    let mut wallet = load_wallet(ctx);
+    let derivation_path = decode_shielded_derivation_path(derivation_path)
+        .unwrap_or_else(|err| {
+            edisplay_line!(io, "{}", err);
+            cli::safe_exit(1)
+        });
+    println!("Using HD derivation path {}", derivation_path);
+    if !allow_non_compliant && !derivation_path.is_namada_shielded_compliant() {
+        display_line!(io, "Path {} is not compliant.", derivation_path);
+        display_line!(io, "No changes are persisted. Exiting.");
+        cli::safe_exit(1)
+    }
+    let alias = alias.to_lowercase();
+    let alias = if !use_device {
+        let encryption_password =
+            read_and_confirm_encryption_password(unsafe_dont_encrypt);
+        wallet
+            .derive_store_spending_key_from_mnemonic_code(
+                alias,
+                alias_force,
+                derivation_path,
+                None,
+                encryption_password,
+            )
+            .unwrap_or_else(|| {
+                edisplay_line!(io, "Failed to derive a key.");
+                display_line!(io, "No changes are persisted. Exiting.");
+                cli::safe_exit(1)
+            })
+            .0
+    } else {
+        display_line!(io, "Not implemented.");
+        display_line!(io, "No changes are persisted. Exiting.");
+        cli::safe_exit(1)
+    };
+    wallet
+        .save()
+        .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
+    display_line!(
+        io,
+        "Successfully added a key and an address with alias: \"{}\"",
+        alias
+    );
+}
+
+/// Generate a spending key.
+fn shielded_key_gen(
+    ctx: Context,
+    io: &impl Io,
+    args::KeyGen {
+        raw,
+        alias,
+        alias_force,
+        unsafe_dont_encrypt,
+        derivation_path,
+        allow_non_compliant,
         ..
     }: args::KeyGen,
 ) {
     let mut wallet = load_wallet(ctx);
     let alias = alias.to_lowercase();
     let password = read_and_confirm_encryption_password(unsafe_dont_encrypt);
-    let (alias, _key) =
-        wallet.gen_store_spending_key(alias, password, alias_force, &mut OsRng);
+    let alias = if raw {
+        wallet.gen_store_spending_key(alias, password, alias_force, &mut OsRng)
+    } else {
+        let derivation_path = decode_shielded_derivation_path(derivation_path)
+            .unwrap_or_else(|err| {
+                edisplay_line!(io, "{}", err);
+                cli::safe_exit(1)
+            });
+        println!("Using HD derivation path {}", derivation_path);
+        if !allow_non_compliant
+            && !derivation_path.is_namada_shielded_compliant()
+        {
+            display_line!(io, "Path {} is not compliant.", derivation_path);
+            display_line!(io, "No changes are persisted. Exiting.");
+            cli::safe_exit(1)
+        }
+        let (_mnemonic, seed) =
+            Wallet::<CliWalletUtils>::gen_hd_seed(None, &mut OsRng);
+        wallet.derive_store_hd_spendind_key(
+            alias,
+            alias_force,
+            seed,
+            derivation_path,
+            password,
+        )
+    }
+    .map(|x| x.0)
+    .unwrap_or_else(|| {
+        eprintln!("Failed to generate a key.");
+        println!("No changes are persisted. Exiting.");
+        cli::safe_exit(1);
+    });
+
     wallet
         .save()
         .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
@@ -257,7 +350,13 @@ fn shielded_key_address_add(
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             let alias = wallet
-                .insert_spending_key(alias, spending_key, password, alias_force)
+                .insert_spending_key(
+                    alias,
+                    alias_force,
+                    spending_key,
+                    password,
+                    None,
+                )
                 .unwrap_or_else(|| {
                     edisplay_line!(io, "Spending key not added");
                     cli::safe_exit(1);
@@ -284,24 +383,35 @@ fn shielded_key_address_add(
 }
 
 /// Decode the derivation path from the given string unless it is "default",
-/// in which case use the default derivation path for the given scheme.
-pub fn decode_derivation_path(
+/// in which case use the default derivation path for the given transparent
+/// scheme.
+pub fn decode_transparent_derivation_path(
     scheme: SchemeType,
     derivation_path: String,
 ) -> Result<DerivationPath, DerivationPathError> {
     let is_default = derivation_path.eq_ignore_ascii_case("DEFAULT");
     let parsed_derivation_path = if is_default {
-        DerivationPath::default_for_scheme(scheme)
+        DerivationPath::default_for_transparent_scheme(scheme)
     } else {
-        DerivationPath::from_path_str(scheme, &derivation_path)?
+        DerivationPath::from_path_string_for_transparent_scheme(
+            scheme,
+            &derivation_path,
+        )?
     };
-    if !parsed_derivation_path.is_compatible(scheme) {
-        println!(
-            "WARNING: the specified derivation path may be incompatible with \
-             the chosen cryptography scheme."
-        )
-    }
-    println!("Using HD derivation path {}", parsed_derivation_path);
+    Ok(parsed_derivation_path)
+}
+
+/// Decode the derivation path from the given string unless it is "default",
+/// in which case use the default derivation path for the shielded setting.
+pub fn decode_shielded_derivation_path(
+    derivation_path: String,
+) -> Result<DerivationPath, DerivationPathError> {
+    let is_default = derivation_path.eq_ignore_ascii_case("DEFAULT");
+    let parsed_derivation_path = if is_default {
+        DerivationPath::default_for_shielded()
+    } else {
+        DerivationPath::from_path_string(&derivation_path)?
+    };
     Ok(parsed_derivation_path)
 }
 
@@ -316,22 +426,32 @@ async fn transparent_key_and_address_derive(
         alias_force,
         unsafe_dont_encrypt,
         derivation_path,
+        allow_non_compliant,
         use_device,
         ..
     }: args::KeyDerive,
 ) {
     let mut wallet = load_wallet(ctx);
-    let derivation_path = decode_derivation_path(scheme, derivation_path)
-        .unwrap_or_else(|err| {
-            edisplay_line!(io, "{}", err);
-            cli::safe_exit(1)
-        });
+    let derivation_path =
+        decode_transparent_derivation_path(scheme, derivation_path)
+            .unwrap_or_else(|err| {
+                edisplay_line!(io, "{}", err);
+                cli::safe_exit(1)
+            });
+    println!("Using HD derivation path {}", derivation_path);
+    if !allow_non_compliant
+        && !derivation_path.is_namada_transparent_compliant(scheme)
+    {
+        display_line!(io, "Path {} is not compliant.", derivation_path);
+        display_line!(io, "No changes are persisted. Exiting.");
+        cli::safe_exit(1)
+    }
     let alias = alias.to_lowercase();
     let alias = if !use_device {
         let encryption_password =
             read_and_confirm_encryption_password(unsafe_dont_encrypt);
         wallet
-            .derive_key_from_mnemonic_code(
+            .derive_store_key_from_mnemonic_code(
                 scheme,
                 Some(alias),
                 alias_force,
@@ -339,8 +459,8 @@ async fn transparent_key_and_address_derive(
                 None,
                 encryption_password,
             )
-            .unwrap_or_else(|err| {
-                edisplay_line!(io, "{}", err);
+            .unwrap_or_else(|| {
+                edisplay_line!(io, "Failed to derive a keypair.");
                 display_line!(io, "No changes are persisted. Exiting.");
                 cli::safe_exit(1)
             })
@@ -414,6 +534,7 @@ fn transparent_key_and_address_gen(
         alias_force,
         unsafe_dont_encrypt,
         derivation_path,
+        allow_non_compliant,
         ..
     }: args::KeyGen,
 ) {
@@ -430,20 +551,22 @@ fn transparent_key_and_address_gen(
             &mut OsRng,
         )
     } else {
-        let derivation_path = decode_derivation_path(scheme, derivation_path)
-            .unwrap_or_else(|err| {
-                edisplay_line!(io, "{}", err);
-                cli::safe_exit(1)
-            });
-        let (_mnemonic, seed) = Wallet::<CliWalletUtils>::gen_hd_seed(
-            None,
-            &mut OsRng,
-            unsafe_dont_encrypt,
-        )
-        .unwrap_or_else(|err| {
-            edisplay_line!(io, "{}", err);
+        let derivation_path =
+            decode_transparent_derivation_path(scheme, derivation_path)
+                .unwrap_or_else(|err| {
+                    edisplay_line!(io, "{}", err);
+                    cli::safe_exit(1)
+                });
+        println!("Using HD derivation path {}", derivation_path);
+        if !allow_non_compliant
+            && !derivation_path.is_namada_transparent_compliant(scheme)
+        {
+            display_line!(io, "Path {} is not compliant.", derivation_path);
+            display_line!(io, "No changes are persisted. Exiting.");
             cli::safe_exit(1)
-        });
+        }
+        let (_mnemonic, seed) =
+            Wallet::<CliWalletUtils>::gen_hd_seed(None, &mut OsRng);
         wallet.derive_store_hd_secret_key(
             scheme,
             Some(alias),
@@ -454,8 +577,8 @@ fn transparent_key_and_address_gen(
         )
     }
     .map(|x| x.0)
-    .unwrap_or_else(|err| {
-        eprintln!("{}", err);
+    .unwrap_or_else(|| {
+        edisplay_line!(io, "Failed to generate a keypair.");
         println!("No changes are persisted. Exiting.");
         cli::safe_exit(0);
     });
@@ -474,7 +597,7 @@ fn key_gen(ctx: Context, io: &impl Io, args_key_gen: args::KeyGen) {
     if !args_key_gen.shielded {
         transparent_key_and_address_gen(ctx, io, args_key_gen)
     } else {
-        spending_key_gen(ctx, io, args_key_gen)
+        shielded_key_gen(ctx, io, args_key_gen)
     }
 }
 
@@ -487,7 +610,7 @@ async fn key_derive(
     if !args_key_derive.shielded {
         transparent_key_and_address_derive(ctx, io, args_key_derive).await
     } else {
-        todo!()
+        shielded_key_derive(ctx, io, args_key_derive)
     }
 }
 
@@ -1164,8 +1287,8 @@ fn transparent_secret_key_add(
         read_and_confirm_encryption_password(unsafe_dont_encrypt);
     let alias = wallet
         .insert_keypair(alias, alias_force, sk, encryption_password, None, None)
-        .unwrap_or_else(|err| {
-            edisplay_line!(io, "{}", err);
+        .unwrap_or_else(|| {
+            edisplay_line!(io, "Failed to add a keypair.");
             display_line!(io, "No changes are persisted. Exiting.");
             cli::safe_exit(1);
         });

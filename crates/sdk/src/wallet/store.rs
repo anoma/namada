@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 use bimap::BiBTreeMap;
 use itertools::Itertools;
-use masp_primitives::zip32::ExtendedFullViewingKey;
+use masp_primitives::zip32;
 use namada_core::types::address::{Address, ImplicitAddress};
 use namada_core::types::key::*;
 use namada_core::types::masp::{
@@ -366,6 +366,7 @@ impl Store {
         alias: Alias,
         spendkey: ExtendedSpendingKey,
         password: Option<Zeroizing<String>>,
+        path: Option<DerivationPath>,
         force: bool,
     ) -> Option<Alias> {
         // abort if the alias is reserved
@@ -373,17 +374,18 @@ impl Store {
             println!("The alias {} is reserved", alias);
             return None;
         }
-
+        // abort if the alias is empty
         if alias.is_empty() {
             eprintln!("Empty alias given.");
             return None;
         }
+
         if self.contains_alias(&alias) && !force {
             match U::show_overwrite_confirmation(&alias, "a spending key") {
                 ConfirmationResponse::Replace => {}
                 ConfirmationResponse::Reselect(new_alias) => {
                     return self.insert_spending_key::<U>(
-                        new_alias, spendkey, password, false,
+                        new_alias, spendkey, password, path, false,
                     );
                 }
                 ConfirmationResponse::Skip => return None,
@@ -394,8 +396,10 @@ impl Store {
             StoredKeypair::new(spendkey, password);
         self.spend_keys.insert(alias.clone(), spendkey_to_store);
         // Simultaneously add the derived viewing key to ease balance viewing
-        let viewkey = ExtendedFullViewingKey::from(&spendkey.into()).into();
+        let viewkey =
+            zip32::ExtendedFullViewingKey::from(&spendkey.into()).into();
         self.view_keys.insert(alias.clone(), viewkey);
+        path.map(|p| self.derivation_paths.insert(alias.clone(), p));
         Some(alias)
     }
 
@@ -732,6 +736,20 @@ pub fn derive_hd_secret_key(
     }
 }
 
+/// Generate a new spending key from the seed.
+pub fn derive_hd_spending_key(
+    seed: &[u8],
+    derivation_path: DerivationPath,
+) -> ExtendedSpendingKey {
+    let master_spend_key = zip32::sapling::ExtendedSpendingKey::master(seed);
+    let zip32_path: Vec<zip32::ChildIndex> = derivation_path.into();
+    zip32::sapling::ExtendedSpendingKey::from_path(
+        &master_spend_key,
+        &zip32_path,
+    )
+    .into()
+}
+
 impl Display for AddressVpType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -800,8 +818,11 @@ mod test_wallet {
         assert_eq!(format!("{:x}", seed), SEED_EXPECTED);
 
         let derivation_path =
-            DerivationPath::from_path_str(SCHEME, DERIVATION_PATH)
-                .expect("Derivation path construction cannot fail");
+            DerivationPath::from_path_string_for_transparent_scheme(
+                SCHEME,
+                DERIVATION_PATH,
+            )
+            .expect("Derivation path construction cannot fail");
 
         let sk = derive_hd_secret_key(SCHEME, seed.as_bytes(), derivation_path);
 
@@ -826,12 +847,18 @@ mod test_wallet {
         assert_eq!(format!("{:x}", seed), SEED_EXPECTED);
 
         let derivation_path =
-            DerivationPath::from_path_str(SCHEME, DERIVATION_PATH)
-                .expect("Derivation path construction cannot fail");
+            DerivationPath::from_path_string_for_transparent_scheme(
+                SCHEME,
+                DERIVATION_PATH,
+            )
+            .expect("Derivation path construction cannot fail");
 
         let derivation_path_hardened =
-            DerivationPath::from_path_str(SCHEME, DERIVATION_PATH_HARDENED)
-                .expect("Derivation path construction cannot fail");
+            DerivationPath::from_path_string_for_transparent_scheme(
+                SCHEME,
+                DERIVATION_PATH_HARDENED,
+            )
+            .expect("Derivation path construction cannot fail");
 
         let sk = derive_hd_secret_key(SCHEME, seed.as_bytes(), derivation_path);
 
@@ -857,8 +884,11 @@ mod test_wallet {
                 .decode(seed.as_bytes())
                 .expect("Seed parsing cannot fail.")
                 .as_slice(),
-            DerivationPath::from_path_str(scheme, derivation_path)
-                .expect("Derivation path construction cannot fail"),
+            DerivationPath::from_path_string_for_transparent_scheme(
+                scheme,
+                derivation_path,
+            )
+            .expect("Derivation path construction cannot fail"),
         );
         let sk_expected = if priv_key.starts_with("xprv") {
             // this is an extended private key encoded in base58
