@@ -277,18 +277,15 @@ impl TallyVote {
 
     /// Check if two votes are equal, returns an error if the variants of the
     /// two instances are different
-    pub fn is_same_side(
-        &self,
-        other: &TallyVote,
-    ) -> Result<bool, &'static str> {
+    pub fn is_same_side(&self, other: &TallyVote) -> bool {
         match (self, other) {
             (TallyVote::OnChain(vote), TallyVote::OnChain(other_vote)) => {
-                Ok(vote == other_vote)
+                vote == other_vote
             }
             (TallyVote::Offline(vote), TallyVote::Offline(other_vote)) => {
-                Ok(vote.vote == other_vote.vote)
+                vote.vote == other_vote.vote
             }
-            _ => Err("Cannot compare different variants of governance votes"),
+            _ => false,
         }
     }
 }
@@ -384,27 +381,8 @@ pub fn compute_proposal_result(
             let validator_vote = votes.validators_vote.get(&validator);
             if let Some(validator_vote) = validator_vote {
                 let validator_vote_is_same_side =
-                    match validator_vote.is_same_side(delegator_vote) {
-                        Ok(result) => result,
-                        Err(_) => {
-                            // Unexpected path, all the votes should be
-                            // validated by the VP and only online votes should
-                            // be allowed in storage
-                            tracing::warn!(
-                                "Found unexpected offline vote type: forcing \
-                                 the proposal to fail."
-                            );
-                            // Force failure of the proposal
-                            return ProposalResult {
-                                result: TallyResult::Rejected,
-                                tally_type,
-                                total_voting_power: VotePower::default(),
-                                total_yay_power: VotePower::default(),
-                                total_nay_power: VotePower::default(),
-                                total_abstain_power: VotePower::default(),
-                            };
-                        }
-                    };
+                    validator_vote.is_same_side(delegator_vote);
+
                 if !validator_vote_is_same_side {
                     if delegator_vote.is_yay() {
                         yay_voting_power += voting_power;
@@ -1306,6 +1284,114 @@ mod test {
         assert_eq!(
             proposal_result.total_nay_power,
             token::Amount::zero(),
+            "nay"
+        );
+        assert_eq!(
+            proposal_result.total_abstain_power,
+            token::Amount::zero(),
+            "abstain"
+        );
+    }
+
+    #[test]
+    fn test_proposal_fourteen() {
+        let mut proposal_votes = ProposalVotes::default();
+
+        let validator_address = address::testing::established_address_1();
+        let validator_address_two = address::testing::established_address_2();
+
+        let delegator_address_two = address::testing::established_address_3();
+        let delegator_voting_power_two = token::Amount::from_u64(30);
+        proposal_votes.add_delegator(
+            &delegator_address_two,
+            &validator_address_two,
+            delegator_voting_power_two,
+            ProposalVote::Nay.into(),
+        );
+
+        let delegator_address = address::testing::established_address_4();
+        let delegator_voting_power = token::Amount::from_u64(60);
+        proposal_votes.add_delegator(
+            &delegator_address,
+            &validator_address,
+            delegator_voting_power,
+            ProposalVote::Nay.into(),
+        );
+
+        let proposal_result = compute_proposal_result(
+            proposal_votes.clone(),
+            token::Amount::from(100),
+            TallyType::LessOneHalfOverOneThirdNay,
+        );
+
+        assert!(matches!(proposal_result.result, TallyResult::Rejected));
+        assert_eq!(
+            proposal_result.total_voting_power,
+            token::Amount::from(100),
+            "total"
+        );
+        assert_eq!(
+            proposal_result.total_yay_power,
+            token::Amount::from(0),
+            "yay"
+        );
+        assert_eq!(
+            proposal_result.total_nay_power,
+            token::Amount::from(90),
+            "nay"
+        );
+        assert_eq!(
+            proposal_result.total_abstain_power,
+            token::Amount::zero(),
+            "abstain"
+        );
+    }
+
+    #[test]
+    fn test_proposal_fifthteen() {
+        let mut proposal_votes = ProposalVotes::default();
+
+        let validator_address = address::testing::established_address_1();
+        let validator_address_two = address::testing::established_address_2();
+
+        let delegator_address_two = address::testing::established_address_3();
+        let delegator_voting_power_two = token::Amount::from_u64(30);
+        proposal_votes.add_delegator(
+            &delegator_address_two,
+            &validator_address_two,
+            delegator_voting_power_two,
+            ProposalVote::Nay.into(),
+        );
+
+        let delegator_address = address::testing::established_address_4();
+        let delegator_voting_power = token::Amount::from_u64(60);
+        proposal_votes.add_delegator(
+            &delegator_address,
+            &validator_address,
+            delegator_voting_power,
+            ProposalVote::Nay.into(),
+        );
+
+        let proposal_result = compute_proposal_result(
+            proposal_votes.clone(),
+            token::Amount::from(271),
+            TallyType::LessOneHalfOverOneThirdNay,
+        );
+
+        assert!(matches!(proposal_result.result, TallyResult::Passed));
+        assert_eq!(
+            proposal_result.total_voting_power,
+            token::Amount::from(271),
+            "total"
+        );
+        assert_eq!(
+            proposal_result.total_yay_power,
+            token::Amount::from(0),
+            "yay"
+        );
+        assert_eq!(
+            proposal_result.total_nay_power,
+            token::Amount::from(90),
             "nay"
         );
         assert_eq!(
