@@ -198,9 +198,9 @@ impl ProposalResult {
             + self.total_abstain_power
             >= self.total_voting_power.mul_ceil(Dec::two() / 3);
 
-        let at_least_two_thirds_voted_nay =
-            self.total_nay_power.mul_ceil(Dec::two() / 3)
-                >= (self.total_yay_power + self.total_nay_power);
+        let at_least_two_thirds_voted_nay = self.total_nay_power
+            >= (self.total_yay_power + self.total_nay_power)
+                .mul_ceil(Dec::two() / 3);
 
         at_least_two_third_voted && at_least_two_thirds_voted_nay
     }
@@ -1345,6 +1345,8 @@ mod test {
             token::Amount::zero(),
             "abstain"
         );
+
+        assert!(proposal_result.two_thirds_nay_over_two_thirds_total())
     }
 
     #[test]
@@ -1399,5 +1401,7 @@ mod test {
             token::Amount::zero(),
             "abstain"
         );
+
+        assert!(!proposal_result.two_thirds_nay_over_two_thirds_total())
     }
 }
