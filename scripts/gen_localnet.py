@@ -186,6 +186,11 @@ os.mkdir(temp_dir)
 shutil.move(BASE_DIR + '/' + CHAIN_ID, BASE_DIR + '/tmp/' + CHAIN_ID)
 shutil.move(namada_dir + '/' + CHAIN_ID + '.tar.gz', temp_dir + CHAIN_ID + '.tar.gz')
 
+def allow_duplicate_ips(config_toml):
+    config = toml.load(config_toml)
+    config['ledger']['cometbft']['p2p']['allow_duplicate_ip'] = True
+    toml.dump(config, open(config_toml, 'w'))
+
 def join_network(base_dir, genesis_validator):
     
     if genesis_validator:
@@ -207,6 +212,7 @@ def join_network(base_dir, genesis_validator):
     genesis_wallet_toml = localnet_dir + '/src/pre-genesis' + '/wallet.toml'
     wallet = base_dir + '/' + CHAIN_ID + '/wallet.toml'
     move_genesis_wallet(genesis_wallet_toml, wallet)
+    allow_duplicate_ips(base_dir + '/' + CHAIN_ID + '/config.toml')
 
 
 
