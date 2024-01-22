@@ -100,7 +100,7 @@ BASE_DIRS=[]
 system(f"rm -rf '{BASE_DIR}'")
 
 if args.no_nodes and args.no_nodes > 1:
-    BASE_DIRS = [f'.namada-2{(7+i) % 10}657' for i in range(1, args.no_nodes)]
+    BASE_DIRS = [f'.namada-2{(7+i) % 10}657' for i in range(args.no_nodes)]
     # if the base_dir exists, delete it
     system(f"rm -rf .namada-*")
 if args.no_vals and args.no_vals > 1:
@@ -189,7 +189,7 @@ shutil.move(namada_dir + '/' + CHAIN_ID + '.tar.gz', temp_dir + CHAIN_ID + '.tar
 def join_network(base_dir, genesis_validator):
     
     if genesis_validator:
-        PRE_GENESIS_PATH=localnet_dir + '/src/pre-genesis/' + genesis_validator
+        PRE_GENESIS_PATH = '.localnet' + '/src/pre-genesis/' + genesis_validator
         if not os.path.isdir(PRE_GENESIS_PATH) or not os.listdir(PRE_GENESIS_PATH):
             print(f"Cannot find pre-genesis directory that is not empty at {PRE_GENESIS_PATH}")
             sys.exit(1)
@@ -209,13 +209,12 @@ def join_network(base_dir, genesis_validator):
     move_genesis_wallet(genesis_wallet_toml, wallet)
 
 
-GENESIS_VALIDATOR='validator-0'
-join_network(BASE_DIR, GENESIS_VALIDATOR)
+
 
 if len(BASE_DIRS)> 0:
     print("Joining the network with the following base directories:")
     print(BASE_DIRS)
-    val_count = 1
+    val_count = 0
     for base_dir in BASE_DIRS:
         genesis_validator=None
         if val_count < args.no_vals:
@@ -223,6 +222,9 @@ if len(BASE_DIRS)> 0:
             val_count += 1
         join_network(base_dir, genesis_validator)
 
+else:
+    GENESIS_VALIDATOR='validator-0'
+    join_network(BASE_DIR, GENESIS_VALIDATOR)
 # Delete the temp dir
 shutil.rmtree(temp_dir)
 
@@ -231,15 +233,17 @@ shutil.rmtree(temp_dir)
 # Remove the temporary transaction folder
 shutil.rmtree(TEMPLATES_PATH)
 
-
-print("Run the ledger using the following commands:")
-print("---------------------------------------------------------------------------")
-print(f"{namada_bin} --base-dir='{BASE_DIR}' --chain-id '{CHAIN_ID}' ledger run")
-
-for base_dir in BASE_DIRS:
-    full_base_dir = namada_dir + '/' + base_dir
+if len(BASE_DIRS)> 0:
+    for base_dir in BASE_DIRS:
+        full_base_dir = namada_dir + '/' + base_dir
+        print("---------------------------------------------------------------------------")
+        print(f"{namada_bin} --base-dir='{full_base_dir}' --chain-id '{CHAIN_ID}' ledger run")
     print("---------------------------------------------------------------------------")
-    print(f"{namada_bin} --base-dir='{full_base_dir}' --chain-id '{CHAIN_ID}' ledger run")
-print("---------------------------------------------------------------------------")
-print("Clean up everything by running:")
-print(f"rm -rf .namada-*")
+    print("Clean up everything by running:")
+    print(f"rm -rf .namada-*")
+    system(f"rm -rf .localnet")
+else:
+    print("Run the ledger using the following commands:")
+    print("---------------------------------------------------------------------------")
+    print(f"{namada_bin} --base-dir='{BASE_DIR}' --chain-id '{CHAIN_ID}' ledger run")
+

@@ -78,6 +78,10 @@ def make_transactions(no_vals):
     update_balances(LOCALNET_DIR, new_addresses)
 
 if __name__ == "__main__":
+
+    # Temp_dir
+    TMP_LOCAL = ".localnet"
+    system(f"mkdir -p {TMP_LOCAL}")
     # Get the localnet directory
     LOCALNET_DIR = f'{namada_dir}/genesis/localnet'
     # Parse the arguments
@@ -88,18 +92,22 @@ if __name__ == "__main__":
         exit(0)
     
     BASE_DIR = f"{LOCALNET_DIR}/src"
-
+    system(f"cp -r {BASE_DIR} {TMP_LOCAL}")
+    BASE_DIR = TMP_LOCAL + "/src"
     # Create txs directory
-    TXS_DIR=f"{BASE_DIR}/pre-genesis/txs"
+    TXS_DIR=f"{TMP_LOCAL}/pre-genesis/txs"
     system(f"mkdir -p {TXS_DIR}")
 
-    # Clean up old validator dirs
-    system(f"rm -rf {LOCALNET_DIR}/validator-1")
-    system(f"rm -rf {LOCALNET_DIR}/validator-2")
-    system(f"rm -rf {LOCALNET_DIR}/validator-3")
-    system(f"rm -rf {LOCALNET_DIR}/validator-4")
-    system(f"rm -rf {LOCALNET_DIR}/validator-5")
-    system(f"rm -rf {LOCALNET_DIR}/validator-6")
+    # Copy over validator-0
+
+
+    ## Clean up old validator dirs
+    # system(f"rm -rf {LOCALNET_DIR}/validator-1")
+    # system(f"rm -rf {LOCALNET_DIR}/validator-2")
+    # system(f"rm -rf {LOCALNET_DIR}/validator-3")
+    # system(f"rm -rf {LOCALNET_DIR}/validator-4")
+    # system(f"rm -rf {LOCALNET_DIR}/validator-5")
+    # system(f"rm -rf {LOCALNET_DIR}/validator-6")
 
     make_transactions(no_vals)
         
@@ -110,7 +118,7 @@ if __name__ == "__main__":
     # Concatenate tx_tomls
     bigass_unsigned_toml = {"established_account": [], "validator_account": [], "bond": []}
     bigass_signed_toml = {"established_account": [], "validator_account": [], "bond": []}
-    print(f"Writing to {BASE_DIR}/src/unsigned_transactions.toml")
+    print(f"Writing to {TXS_DIR}/unsigned_transactions.toml")
     for file in os.listdir(TXS_DIR):
         if file.endswith("-unsigned.toml"):
             tx_toml = toml.load(f"{TXS_DIR}/{file.split('/')[-1]}")
@@ -122,9 +130,9 @@ if __name__ == "__main__":
             bigass_signed_toml["established_account"].extend(tx_toml["established_account"])
             bigass_signed_toml["validator_account"].extend(tx_toml["validator_account"])
             bigass_signed_toml["bond"].extend(tx_toml["bond"])
-    with open(f"{BASE_DIR}/pre-genesis/unsigned-transactions.toml", "w") as f:
+    with open(f"{TXS_DIR}/unsigned-transactions.toml", "w") as f:
         toml.dump(bigass_unsigned_toml, f)
-    with open(f"{BASE_DIR}/pre-genesis/signed-transactions.toml", "w") as f:
+    with open(f"{TXS_DIR}/signed-transactions.toml", "w") as f:
         toml.dump(bigass_signed_toml, f)
 
     shutil.rmtree(f"{TXS_DIR}")
