@@ -997,7 +997,7 @@ impl From<DenominatedAmount> for IbcAmount {
     Deserialize,
     Serialize,
 )]
-pub struct Parameters {
+pub struct MaspParams {
     /// Maximum reward rate
     pub max_reward_rate: Dec,
     /// Shielded Pool nominal derivative gain
@@ -1008,7 +1008,7 @@ pub struct Parameters {
     pub locked_ratio_target: Dec,
 }
 
-impl Default for Parameters {
+impl Default for MaspParams {
     fn default() -> Self {
         Self {
             max_reward_rate: Dec::from_str("0.1").unwrap(),

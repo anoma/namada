@@ -16,12 +16,12 @@ use crate::storage_key::{
     masp_max_reward_rate_key,
 };
 
-/// Compute the MASP rewards by applying the PD-controller to the genesis
-/// parameters and the last inflation and last locked rewards ratio values.
-pub fn calculate_masp_rewards<D, H>(
+/// Compute the precision of MASP rewards for the given token. This function
+/// must be a non-zero constant for a given token.
+pub fn calculate_masp_rewards_precision<D, H>(
     wl_storage: &mut WlStorage<D, H>,
     addr: &Address,
-) -> namada_storage::Result<(u128, u128)>
+) -> namada_storage::Result<(u128, token::Denomination)>
 where
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
@@ -35,7 +35,24 @@ where
     // the threshold of holdings required in order to receive non-zero rewards.
     // This value should be fixed constant for each asset type. Here we choose
     // a thousandth of the given asset.
-    let precision = 10u128.pow(std::cmp::max(u32::from(denomination.0), 3) - 3);
+    Ok((
+        10u128.pow(std::cmp::max(u32::from(denomination.0), 3) - 3),
+        denomination,
+    ))
+}
+
+/// Compute the MASP rewards by applying the PD-controller to the genesis
+/// parameters and the last inflation and last locked rewards ratio values.
+pub fn calculate_masp_rewards<D, H>(
+    wl_storage: &mut WlStorage<D, H>,
+    addr: &Address,
+) -> crate::ledger::storage_api::Result<(u128, u128)>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
+{
+    let (precision, denomination) =
+        calculate_masp_rewards_precision(wl_storage, addr)?;
 
     let masp_addr = MASP;
     // Query the storage for information
@@ -247,19 +264,21 @@ where
     let mut current_convs =
         BTreeMap::<(Address, MaspDenom), AllowedConversion>::new();
     // Native token inflation values are always with respect to this
-    let mut ref_inflation = 0;
+    let ref_inflation =
+        calculate_masp_rewards_precision(wl_storage, &native_token)?.0;
     // Reward all tokens according to above reward rates
     for addr in &masp_reward_keys {
         let reward = calculate_masp_rewards(wl_storage, addr)?;
-        if *addr == native_token {
-            // The reference inflation is the denominator of the native token
-            // inflation, which is always a constant
-            ref_inflation = reward.1;
-        }
         // Dispense a transparent reward in parallel to the shielded rewards
         let addr_bal: Amount = wl_storage
             .read(&balance_key(addr, &masp_addr))?
             .unwrap_or_default();
+        // Get the last rewarded amount of the native token
+        let normed_inflation = wl_storage
+            .storage
+            .conversion_state
+            .normed_inflation
+            .get_or_insert(ref_inflation);
         for denom in MaspDenom::iter() {
             // Provide an allowed conversion from previous timestamp. The
             // negative sign allows each instance of the old asset to be
@@ -276,12 +295,6 @@ where
                 denom,
             )
             .into_storage_result()?;
-            // Get the last rewarded amount of the native token
-            let normed_inflation = wl_storage
-                .storage
-                .conversion_state
-                .normed_inflation
-                .get_or_insert(ref_inflation);
             if *addr == native_token {
                 // The amount that will be given of the new native token for
                 // every amount of the native token given in the
@@ -399,7 +412,7 @@ where
         .enumerate()
         .collect();
     // ceil(assets.len() / num_threads)
-    let notes_per_thread_max = (assets.len() - 1) / num_threads + 1;
+    let notes_per_thread_max = (assets.len() + num_threads - 1) / num_threads;
     // floor(assets.len() / num_threads)
     let notes_per_thread_min = assets.len() / num_threads;
     // Now on each core, add the latest conversion to each conversion
@@ -408,8 +421,10 @@ where
         .with_min_len(notes_per_thread_min)
         .with_max_len(notes_per_thread_max)
         .map(|(idx, (asset, _epoch, conv, pos))| {
-            // Use transitivity to update conversion
-            *conv += current_convs[asset].clone();
+            if let Some(current_conv) = current_convs.get(asset) {
+                // Use transitivity to update conversion
+                *conv += current_conv.clone();
+            }
             // Update conversion position to leaf we are about to create
             *pos = idx;
             // The merkle tree need only provide the conversion commitment,
@@ -452,6 +467,11 @@ where
         ),
     )?;
 
+    if !masp_reward_keys.contains(&native_token) {
+        // Since MASP rewards are denominated in NAM tokens, ensure that clients
+        // are able to decode them.
+        masp_reward_keys.push(native_token);
+    }
     // Add purely decoding entries to the assets map. These will be
     // overwritten before the creation of the next commitment tree
     for addr in masp_reward_keys {
@@ -545,7 +565,7 @@ mod tests {
             namada_parameters::init_storage(&params, &mut s).unwrap();
 
             // Tokens
-            let token_params = namada_trans_token::Parameters {
+            let token_params = token::MaspParams {
                 max_reward_rate: Dec::from_str("0.1").unwrap(),
                 kp_gain_nom: Dec::from_str("0.1").unwrap(),
                 kd_gain_nom: Dec::from_str("0.1").unwrap(),
