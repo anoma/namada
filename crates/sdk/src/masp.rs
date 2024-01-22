@@ -54,12 +54,11 @@ use masp_proofs::bellman::groth16::PreparedVerifyingKey;
 use masp_proofs::bls12_381::Bls12;
 use masp_proofs::prover::LocalTxProver;
 use masp_proofs::sapling::SaplingVerificationContext;
-use owo_colors::OwoColorize;
 use namada_core::types::address::{Address, MASP};
 use namada_core::types::ibc::IbcShieldedTransfer;
 use namada_core::types::masp::{
-    encode_asset_type, BalanceOwner, PaymentAddress,
-    TransferSource, TransferTarget,
+    encode_asset_type, BalanceOwner, PaymentAddress, TransferSource,
+    TransferTarget,
 };
 use namada_core::types::storage::{BlockHeight, Epoch, IndexedTx, TxIndex};
 use namada_core::types::time::{DateTimeUtc, DurationSecs};
@@ -67,6 +66,7 @@ use namada_ibc::IbcMessage;
 use namada_token::{self as token, MaspDenom, Transfer};
 use namada_tx::data::{TxResult, WrapperTx};
 use namada_tx::Tx;
+use owo_colors::OwoColorize;
 use rand_core::{CryptoRng, OsRng, RngCore};
 use ripemd::Digest as RipemdDigest;
 use sha2::Digest;
@@ -80,7 +80,9 @@ use crate::queries::Client;
 use crate::rpc::{query_block, query_conversion, query_epoch_at_height};
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
-use crate::{display_line, edisplay_line, rpc, MaybeSend, MaybeSync, Namada, display};
+use crate::{
+    display, display_line, edisplay_line, rpc, MaybeSend, MaybeSync, Namada,
+};
 
 /// Env var to point to a dir with MASP parameters. When not specified,
 /// the default OS specific path is used.
@@ -596,8 +598,9 @@ impl<U: ShieldedUtils + Default> Default for ShieldedContext<U> {
     }
 }
 
-impl<U: ShieldedUtils + MaybeSend + MaybeSync, S: SyncStatus> ShieldedContext<U, S> {
-
+impl<U: ShieldedUtils + MaybeSend + MaybeSync, S: SyncStatus>
+    ShieldedContext<U, S>
+{
     /// If we have unscanned txs in the local cache, get the index of the
     /// latest one.
     pub fn latest_unscanned(&self) -> Option<IndexedTx> {
@@ -1448,7 +1451,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, NotSyncing> {
                         let should_process = !transfers
                             .contains_key(&IndexedTx { height, index: idx })
                             && block_results[u64::from(height) as usize]
-                            .is_accepted(idx.0 as usize);
+                                .is_accepted(idx.0 as usize);
                         if !should_process {
                             continue;
                         }
@@ -1939,7 +1942,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, NotSyncing> {
         }
     }
 
-    fn into_syncing(self, channel: &tokio::sync::watch::Receiver<bool>) -> ShieldedContext<U, Syncing> {
+    fn into_syncing(
+        self,
+        channel: &tokio::sync::watch::Receiver<bool>,
+    ) -> ShieldedContext<U, Syncing> {
         ShieldedContext {
             utils: self.utils,
             last_fetched: self.last_fetched,
@@ -1977,19 +1983,33 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, NotSyncing> {
 
         display_line!(io, "{}", "==== Shielded sync started ====".on_white());
         if let Some(indexed) = self.last_fetched.as_ref() {
-            display_line!(io, "  -> last fetched tx: block height {}, index {}", indexed.height, indexed.index);
+            display_line!(
+                io,
+                "  -> last fetched tx: block height {}, index {}",
+                indexed.height,
+                indexed.index
+            );
         }
         if !self.unscanned.vks.is_empty() {
-            display_line!(io, "  -> viewing keys still to be synced: {}", self.unscanned.vks.len());
+            display_line!(
+                io,
+                "  -> viewing keys still to be synced: {}",
+                self.unscanned.vks.len()
+            );
         }
         if !self.unscanned.txs.is_empty() {
-            display_line!(io, "  -> fetched txs to scan: {}", self.unscanned.txs.len());
+            display_line!(
+                io,
+                "  -> fetched txs to scan: {}",
+                self.unscanned.txs.len()
+            );
         }
         display_line!(io, "\n\n");
 
         let mut syncing = self.into_syncing(&signal_rx);
         let sync = async move {
-            syncing.fetch(client, io, last_query_height, sks, fvks)
+            syncing
+                .fetch(client, io, last_query_height, sks, fvks)
                 .await
                 .map(|_| syncing.stop_sync())
         };
@@ -1997,18 +2017,21 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, NotSyncing> {
             sync: Box::pin(sync),
             signal: Box::pin(shutdown_signal),
             watch: signal_sx,
-        }.await?;
+        }
+        .await?;
         display_line!(io, "Saving shielded ctx... ");
-        shielded.save().await.map_err(|e| Error::Other(e.to_string()))?;
+        shielded
+            .save()
+            .await
+            .map_err(|e| Error::Other(e.to_string()))?;
         Ok(shielded)
     }
 }
 
 impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, Syncing> {
-
     /// Check if a signal to stop syncing has been received.
     fn interrupted(&self) -> bool {
-       *self.interrupt.borrow()
+        *self.interrupt.borrow()
     }
 
     /// Transition back into a non-syncing context
@@ -2095,10 +2118,20 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, Syncing> {
         // If unknown keys are being used, we need to scan older transactions
         // for any unspent notes
         if !unknown_keys.is_empty() || !self.unscanned.vks.is_empty() {
-            display_line!(io, "Scanning historical notes to synchronize new viewing key(s).");
+            display_line!(
+                io,
+                "Scanning historical notes to synchronize new viewing key(s)."
+            );
             self.unscanned.vks.extend(unknown_keys.clone());
             // Load all transactions accepted until this point
-            let fetched = self.fetch_shielded_transfers(client, io, self.latest_unscanned(), last_query_height).await?;
+            let fetched = self
+                .fetch_shielded_transfers(
+                    client,
+                    io,
+                    self.latest_unscanned(),
+                    last_query_height,
+                )
+                .await?;
             self.unscanned.txs.extend(fetched);
             if self.interrupted() {
                 display_line!(io, "");
@@ -2108,26 +2141,42 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, Syncing> {
             let mut tx_ctx = ShieldedContext {
                 utils: self.utils.clone(),
                 ..Default::default()
-            }.into_syncing(&self.interrupt);
+            }
+            .into_syncing(&self.interrupt);
             for vk in unknown_keys {
                 tx_ctx.pos_map.entry(vk).or_insert_with(BTreeSet::new);
             }
             // Update this unknown shielded context until it is level with self
-            let txs = ProgressLogging::new(self.unscanned.txs.clone(), io, ProgressType::Scan);
+            let txs = ProgressLogging::new(
+                self.unscanned.txs.clone(),
+                io,
+                ProgressType::Scan,
+            );
             for (indexed_tx, (epoch, tx, stx)) in txs.iter() {
-                if self.interrupted() || self.last_fetched.is_none() || indexed_tx >= self.last_fetched.as_ref().unwrap() {
+                if self.interrupted()
+                    || self.last_fetched.is_none()
+                    || indexed_tx >= self.last_fetched.as_ref().unwrap()
+                {
                     break;
                 }
-                tx_ctx.scan_tx(client, *indexed_tx, *epoch, tx, stx)?;
+                tx_ctx.scan_tx(*indexed_tx, *epoch, tx, stx)?;
                 self.unscanned.txs.remove(indexed_tx);
             }
             // Merge the context data originating from the unknown keys into the
             // current context
             self.merge(tx_ctx);
         } else {
-            let resume_point = std::cmp::max(self.latest_unscanned(), self.last_fetched);
+            let resume_point =
+                std::cmp::max(self.latest_unscanned(), self.last_fetched);
             // fetch only new transactions
-            let fetched = self.fetch_shielded_transfers(client, io, resume_point, last_query_height).await?;
+            let fetched = self
+                .fetch_shielded_transfers(
+                    client,
+                    io,
+                    resume_point,
+                    last_query_height,
+                )
+                .await?;
             self.unscanned.txs.extend(fetched);
             display_line!(io, "");
         }
@@ -2140,7 +2189,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, Syncing> {
             if self.interrupted() {
                 self.unscanned.txs.insert(indexed_tx, (epoch, tx, stx));
             } else {
-                self.scan_tx(client, indexed_tx, epoch, &tx, &stx)?;
+                self.scan_tx(indexed_tx, epoch, &tx, &stx)?;
             }
         }
         Ok(())
@@ -2168,18 +2217,25 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, Syncing> {
             last_indexed_tx.map_or_else(|| 1, |last| last.height.0);
         let first_idx_to_query =
             last_indexed_tx.map_or_else(|| 0, |last| last.index.0 + 1);
-        let heights = ProgressLogging::new(first_height_to_query..=last_query_height.0, io, ProgressType::Fetch);
+        let heights = ProgressLogging::new(
+            first_height_to_query..=last_query_height.0,
+            io,
+            ProgressType::Fetch,
+        );
         for height in heights {
             if self.interrupted() {
-               return Ok(shielded_txs)
+                return Ok(shielded_txs);
             }
             // Get the valid masp transactions at the specified height
             let epoch = query_epoch_at_height(client, height.into())
                 .await?
-                .ok_or_else(|| Error::from(QueryError::General(
-                    "Queried height is greater than the last committed \
-                         block height".to_string(),
-                )))?;
+                .ok_or_else(|| {
+                    Error::from(QueryError::General(
+                        "Queried height is greater than the last committed \
+                         block height"
+                            .to_string(),
+                    ))
+                })?;
 
             let first_index_to_query = if height == first_height_to_query {
                 Some(TxIndex(first_idx_to_query))
@@ -2191,7 +2247,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, Syncing> {
                 client,
                 height.into(),
                 first_index_to_query,
-            ).await?
+            )
+            .await?
             {
                 Some(events) => events,
                 None => continue,
@@ -2202,7 +2259,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, Syncing> {
             // reduce the amount of data sent over the network, but this is a
             // minimal improvement and it's even hard to tell how many times
             // we'd need a single masp tx to make this worth it
-            let block = client.block(height as u32)
+            let block = client
+                .block(height as u32)
                 .await
                 .map_err(|e| Error::from(QueryError::General(e.to_string())))?
                 .block
@@ -2210,8 +2268,16 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, Syncing> {
 
             self.last_fetched = txs_results
                 .last()
-                .map(|(idx, _)| IndexedTx{height: height.into(), index: *idx})
-                .or_else(|| Some(IndexedTx{height: height.into(), index: Default::default()}));
+                .map(|(idx, _)| IndexedTx {
+                    height: height.into(),
+                    index: *idx,
+                })
+                .or_else(|| {
+                    Some(IndexedTx {
+                        height: height.into(),
+                        index: Default::default(),
+                    })
+                });
             for (idx, tx_event) in txs_results {
                 let tx = Tx::try_from(block[idx.0 as usize].as_ref())
                     .map_err(|e| Error::Other(e.to_string()))?;
@@ -2306,17 +2372,17 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, Syncing> {
                     // Note the account changes
                     let balance = transaction_delta
                         .entry(*vk)
-                        .or_insert_with(MaspAmount::default);
+                        .or_insert_with(I128Sum::zero);
                     *balance += I128Sum::from_nonnegative(
                         note.asset_type,
                         note.value as i128,
                     )
-                        .map_err(|()| {
-                            Error::Other(
-                                "found note with invalid value or asset type"
-                                    .to_string(),
-                            )
-                        })?;
+                    .map_err(|()| {
+                        Error::Other(
+                            "found note with invalid value or asset type"
+                                .to_string(),
+                        )
+                    })?;
                     self.vk_map.insert(note_pos, *vk);
                     break;
                 }
@@ -2335,18 +2401,18 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, Syncing> {
                 // Note the account changes
                 let balance = transaction_delta
                     .entry(self.vk_map[note_pos])
-                    .or_insert_with(MaspAmount::default);
+                    .or_insert_with(I128Sum::zero);
                 let note = self.note_map[note_pos];
                 *balance -= I128Sum::from_nonnegative(
                     note.asset_type,
                     note.value as i128,
                 )
-                    .map_err(|()| {
-                        Error::Other(
-                            "found note with invalid value or asset type"
-                                .to_string(),
-                        )
-                    })?;
+                .map_err(|()| {
+                    Error::Other(
+                        "found note with invalid value or asset type"
+                            .to_string(),
+                    )
+                })?;
             }
         }
         // Record the changes to the transparent accounts
@@ -2731,10 +2797,7 @@ pub mod fs {
             // Atomically update the old shielded context file with new data.
             // Atomicity is required to prevent other client instances from
             // reading corrupt data.
-            std::fs::rename(
-                tmp_path,
-                self.context_dir.join(FILE_NAME),
-            )
+            std::fs::rename(tmp_path, self.context_dir.join(FILE_NAME))
         }
     }
 }
@@ -2743,8 +2806,8 @@ pub mod fs {
 struct ShieldedSync<F, A, B>
 where
     F: ShieldedUtils,
-    A: Future<Output=Result<ShieldedContext<F>, Error>>,
-    B: Future<Output=Result<(), tokio::sync::oneshot::error::RecvError>>,
+    A: Future<Output = Result<ShieldedContext<F>, Error>>,
+    B: Future<Output = Result<(), tokio::sync::oneshot::error::RecvError>>,
 {
     sync: Pin<Box<A>>,
     signal: Pin<Box<B>>,
@@ -2754,23 +2817,27 @@ where
 impl<F, A, B> Future for ShieldedSync<F, A, B>
 where
     F: ShieldedUtils,
-    A: Future<Output=Result<ShieldedContext<F>, Error>>,
-    B: Future<Output=Result<(), tokio::sync::oneshot::error::RecvError>>,
+    A: Future<Output = Result<ShieldedContext<F>, Error>>,
+    B: Future<Output = Result<(), tokio::sync::oneshot::error::RecvError>>,
 {
     type Output = Result<ShieldedContext<F>, Error>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Self::Output> {
         if let Poll::Ready(res) = self.sync.as_mut().poll(cx) {
             Poll::Ready(res)
         } else {
-            if !(*self.watch.borrow()) && self.signal.as_mut().poll(cx).is_ready() {
+            if !(*self.watch.borrow())
+                && self.signal.as_mut().poll(cx).is_ready()
+            {
                 self.watch.send(true).unwrap();
             }
             Poll::Pending
         }
     }
 }
-
 
 #[derive(Debug, Copy, Clone)]
 enum ProgressType {
@@ -2788,8 +2855,8 @@ struct ProgressLogging<'io, T, U: Io> {
 
 impl<'io, T, U: Io> ProgressLogging<'io, T, U> {
     fn new<I>(items: I, io: &'io U, r#type: ProgressType) -> Self
-        where
-            I: IntoIterator<Item=T>
+    where
+        I: IntoIterator<Item = T>,
     {
         let items: Vec<_> = items.into_iter().collect();
         Self {
@@ -2811,8 +2878,7 @@ impl<'io, T, U: Io> ProgressLogging<'io, T, U> {
     }
 }
 
-impl<'io, T: Debug, U: Io> Iterator for ProgressLogging<'io, T, U>
-{
+impl<'io, T: Debug, U: Io> Iterator for ProgressLogging<'io, T, U> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -2832,8 +2898,18 @@ impl<'io, T: Debug, U: Io> Iterator for ProgressLogging<'io, T, U>
         let incomplete: String = vec!['.'; 100 - percent].iter().collect();
         display_line!(self.io, "\x1b[2A\x1b[J");
         match self.r#type {
-            ProgressType::Fetch => display_line!(self.io, "Fetched block {:?} of {:?}", self.items.last().unwrap(), self.items[0]),
-            ProgressType::Scan => display_line!(self.io, "Scanning {} of {}", self.index, self.length),
+            ProgressType::Fetch => display_line!(
+                self.io,
+                "Fetched block {:?} of {:?}",
+                self.items.last().unwrap(),
+                self.items[0]
+            ),
+            ProgressType::Scan => display_line!(
+                self.io,
+                "Scanning {} of {}",
+                self.index,
+                self.length
+            ),
         }
         display!(self.io, "[{}{}] ~~ {} %", completed, incomplete, percent);
         self.io.flush();
@@ -2845,10 +2921,12 @@ struct ProgressLoggingIterator<'iter, 'io, T, U: Io> {
     items: &'iter [T],
     index: usize,
     io: &'io U,
-    r#type: ProgressType
+    r#type: ProgressType,
 }
 
-impl<'iter, 'io, T: Debug, U: Io> Iterator for ProgressLoggingIterator<'iter, 'io, T, U> {
+impl<'iter, 'io, T: Debug, U: Io> Iterator
+    for ProgressLoggingIterator<'iter, 'io, T, U>
+{
     type Item = &'iter T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -2861,13 +2939,21 @@ impl<'iter, 'io, T: Debug, U: Io> Iterator for ProgressLoggingIterator<'iter, 'i
         let incomplete: String = vec!['.'; 100 - percent].iter().collect();
         display_line!(self.io, "\x1b[2A\x1b[J");
         match self.r#type {
-            ProgressType::Fetch => display_line!(self.io, "Fetched block {:?} of {:?}", self.items.last().unwrap(), self.items[0]),
-            ProgressType::Scan => display_line!(self.io, "Scanning {} of {}", self.index, self.items.len()),
+            ProgressType::Fetch => display_line!(
+                self.io,
+                "Fetched block {:?} of {:?}",
+                self.items.last().unwrap(),
+                self.items[0]
+            ),
+            ProgressType::Scan => display_line!(
+                self.io,
+                "Scanning {} of {}",
+                self.index,
+                self.items.len()
+            ),
         }
         display!(self.io, "[{}{}] ~~ {} %", completed, incomplete, percent);
         self.io.flush();
         self.items.get(self.index - 1)
     }
 }
-
-

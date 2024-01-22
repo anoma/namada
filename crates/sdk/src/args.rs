@@ -96,11 +96,11 @@ impl NamadaTypes for SdkTypes {
     type Keypair = namada_core::types::key::common::SecretKey;
     type NativeAddress = Address;
     type PublicKey = namada_core::types::key::common::PublicKey;
+    type SpendingKey = namada_core::types::masp::ExtendedSpendingKey;
     type TendermintAddress = ();
     type TransferSource = namada_core::types::masp::TransferSource;
     type TransferTarget = namada_core::types::masp::TransferTarget;
     type ViewingKey = namada_core::types::masp::ExtendedViewingKey;
-    type SpendingKey = namada_core::types::masp::ExtendedSpendingKey;
 }
 
 /// Common query arguments
