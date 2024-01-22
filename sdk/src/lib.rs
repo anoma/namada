@@ -1033,15 +1033,21 @@ pub mod testing {
                 MaspTxType::Shielding => {
                     transfer.target = MASP;
                     // Set the transparent amount and token
-                    let ((addr, denom, _epoch), value) = asset_types.iter().next().unwrap();
-                    transfer.amount = DenominatedAmount::native(token::Amount::from_masp_denominated(*value, *denom));
+                    let ((addr, denom, digit, _epoch), value) = asset_types.iter().next().unwrap();
+                    transfer.amount = DenominatedAmount::new(
+                        token::Amount::from_masp_denominated(*value, *digit),
+                        *denom,
+                    );
                     transfer.token = addr.clone();
                 },
                 MaspTxType::Deshielding => {
                     transfer.source = MASP;
                     // Set the transparent amount and token
-                    let ((addr, denom, _epoch), value) = asset_types.iter().next().unwrap();
-                    transfer.amount = DenominatedAmount::native(token::Amount::from_masp_denominated(*value, *denom));
+                    let ((addr, denom, digit, _epoch), value) = asset_types.iter().next().unwrap();
+                    transfer.amount = DenominatedAmount::new(
+                        token::Amount::from_masp_denominated(*value, *digit),
+                        *denom,
+                    );
                     transfer.token = addr.clone();
                 },
             }

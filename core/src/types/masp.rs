@@ -15,16 +15,17 @@ use crate::types::string_encoding::{
     self, MASP_EXT_FULL_VIEWING_KEY_HRP, MASP_EXT_SPENDING_KEY_HRP,
     MASP_PAYMENT_ADDRESS_HRP,
 };
-use crate::types::token::MaspDenom;
+use crate::types::token::{Denomination, MaspDenom};
 
 /// Make asset type corresponding to given address and epoch
 pub fn encode_asset_type(
     epoch: Option<Epoch>,
     token: &Address,
-    denom: MaspDenom,
+    denom: Denomination,
+    digit: MaspDenom,
 ) -> Result<AssetType, std::io::Error> {
     // Timestamp the chosen token with the current epoch
-    let token_bytes = (token, denom, epoch).serialize_to_vec();
+    let token_bytes = (token, denom, digit, epoch).serialize_to_vec();
     // Generate the unique asset identifier from the unique token address
     AssetType::new(token_bytes.as_ref()).map_err(|_| {
         std::io::Error::new(

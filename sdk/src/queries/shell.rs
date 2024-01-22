@@ -17,7 +17,7 @@ use namada_core::types::hash::Hash;
 use namada_core::types::storage::{
     self, BlockHeight, BlockResults, Epoch, KeySeg, PrefixValue,
 };
-use namada_core::types::token::MaspDenom;
+use namada_core::types::token::{Denomination, MaspDenom};
 #[cfg(any(test, feature = "async-client"))]
 use namada_core::types::transaction::TxResult;
 
@@ -33,12 +33,15 @@ use crate::tendermint::merkle::proof::ProofOps;
 
 type ConversionWithoutPath = (
     Address,
+    Denomination,
+    MaspDenom,
     Epoch,
     masp_primitives::transaction::components::I128Sum,
 );
 
 type Conversion = (
     Address,
+    Denomination,
     MaspDenom,
     Epoch,
     masp_primitives::transaction::components::I128Sum,
@@ -174,9 +177,14 @@ where
         .conversion_state
         .assets
         .iter()
-        .map(|(&asset_type, ((ref addr, _), epoch, ref conv, _))| {
-            (asset_type, (addr.clone(), *epoch, conv.clone().into()))
-        })
+        .map(
+            |(&asset_type, ((ref addr, denom, digit), epoch, ref conv, _))| {
+                (
+                    asset_type,
+                    (addr.clone(), *denom, *digit, *epoch, conv.clone().into()),
+                )
+            },
+        )
         .collect())
 }
 
@@ -190,7 +198,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     // Conversion values are constructed on request
-    if let Some(((addr, denom), epoch, conv, pos)) = ctx
+    if let Some(((addr, denom, digit), epoch, conv, pos)) = ctx
         .wl_storage
         .storage
         .conversion_state
@@ -200,6 +208,7 @@ where
         Ok(Some((
             addr.clone(),
             *denom,
+            *digit,
             *epoch,
             Into::<masp_primitives::transaction::components::I128Sum>::into(
                 conv.clone(),
