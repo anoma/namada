@@ -849,13 +849,6 @@ pub async fn query_shielded_balance(
     {
         let mut shielded = context.shielded_mut().await;
         let _ = shielded.load().await;
-        let fvks: Vec<_> = viewing_keys
-            .iter()
-            .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
-            .collect();
-        shielded.fetch(context.client(), &[], &fvks).await.unwrap();
-        // Save the update state so that future fetches can be short-circuited
-        let _ = shielded.save().await;
     }
     // The epoch is required to identify timestamped tokens
     let epoch = query_and_print_epoch(context).await;
