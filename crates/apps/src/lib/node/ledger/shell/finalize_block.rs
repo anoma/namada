@@ -3084,7 +3084,10 @@ mod test_finalize_block {
         let mut out_of_gas_inner = out_of_gas_wrapper.clone();
         let mut undecryptable_inner = undecryptable_wrapper.clone();
         let mut unsigned_inner = unsigned_wrapper.clone();
-        let mut wrong_commitment_inner = wrong_commitment_wrapper.clone();
+        let mut wrong_commitment_inner = failing_wrapper.clone();
+        // Add some extra data to avoid having the same Tx hash as the
+        // `failing_wrapper`
+        wrong_commitment_inner.add_memo(&[0_u8]);
         let mut failing_inner = failing_wrapper.clone();
 
         undecryptable_inner
