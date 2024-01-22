@@ -175,7 +175,7 @@ pub trait StorageWrite {
     /// Write a value to be encoded with Borsh at the given key to storage.
     /// Additionally, write the data to the diffs. Do not add to the merkle
     /// tree.
-    fn write_without_merkl<T: BorshSerialize>(
+    fn write_without_merkle<T: BorshSerialize>(
         &mut self,
         key: &storage::Key,
         val: T,
@@ -185,7 +185,7 @@ pub trait StorageWrite {
 
     /// Write a value to be encoded with Borsh at the given key to storage.
     /// Do not update the diffs or merkle tree.
-    fn write_without_merkldiffs<T: BorshSerialize>(
+    fn write_without_merkle_diffs<T: BorshSerialize>(
         &mut self,
         key: &storage::Key,
         val: T,

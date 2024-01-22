@@ -450,7 +450,7 @@ where
     }
 
     /// Write with diffs but no merklization
-    pub fn write_without_merkl(
+    pub fn write_without_merkle(
         &mut self,
         key: &Key,
         value: impl AsRef<[u8]>,
@@ -459,7 +459,7 @@ where
     }
 
     /// Write without diffs or merklization
-    pub fn write_without_merkldiffs(
+    pub fn write_without_merkle_diffs(
         &mut self,
         key: &Key,
         value: impl AsRef<[u8]>,
@@ -1420,7 +1420,7 @@ mod tests {
         assert!(res.is_none());
 
         // Write key-val-2 without merklizing or diffs
-        wls.write_without_merkldiffs(&key2, val2).unwrap();
+        wls.write_without_merkle_diffs(&key2, val2).unwrap();
 
         // Read from WlStorage should return val2
         let res = wls.read::<u64>(&key2).unwrap().unwrap();

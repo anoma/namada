@@ -141,7 +141,7 @@ where
         let note_commitment_tree_key =
             token::storage_key::masp_commitment_tree_key();
         self.wl_storage
-            .write_without_merkldiffs(
+            .write_without_merkle_diffs(
                 &note_commitment_tree_key,
                 empty_commitment_tree,
             )
@@ -149,12 +149,12 @@ where
         let commitment_tree_anchor_key =
             token::storage_key::masp_commitment_anchor_key(anchor);
         self.wl_storage
-            .write_without_merkldiffs(&commitment_tree_anchor_key, ())
+            .write_without_merkle_diffs(&commitment_tree_anchor_key, ())
             .unwrap();
 
         // Init masp convert anchor
         let convert_anchor_key = token::storage_key::masp_convert_anchor_key();
-        self.wl_storage.write_without_merkldiffs(
+        self.wl_storage.write_without_merkle_diffs(
             &convert_anchor_key,
             namada::types::hash::Hash(
                 bls12_381::Scalar::from(

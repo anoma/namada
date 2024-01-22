@@ -163,12 +163,12 @@ where
     // but we should make sure the return value's ratio matches
     // this new inflation rate in 'update_allowed_conversions',
     // otherwise we will have an inaccurate view of inflation
-    wl_storage.write_without_merkldiffs(
+    wl_storage.write_without_merkle_diffs(
         &masp_last_inflation_key(addr),
         inflation_amount,
     )?;
 
-    wl_storage.write_without_merkldiffs(
+    wl_storage.write_without_merkle_diffs(
         &masp_last_locked_ratio_key(addr),
         locked_ratio,
     )?;
@@ -442,7 +442,7 @@ where
     wl_storage.storage.conversion_state.tree =
         FrozenCommitmentTree::merge(&tree_parts);
     // Update the anchor in storage
-    wl_storage.write_without_merkldiffs(
+    wl_storage.write_without_merkle_diffs(
         &crate::storage_key::masp_convert_anchor_key(),
         namada_core::types::hash::Hash(
             bls12_381::Scalar::from(

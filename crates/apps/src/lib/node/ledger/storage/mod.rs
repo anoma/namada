@@ -829,7 +829,7 @@ mod tests {
         assert!(res.is_none());
 
         // Write key-val-2 without merklizing or diffs
-        wls.write_without_merkldiffs(&key2, val2).unwrap();
+        wls.write_without_merkle_diffs(&key2, val2).unwrap();
 
         // Read from WlStorage should return val2
         let res = wls.read::<u64>(&key2).unwrap().unwrap();

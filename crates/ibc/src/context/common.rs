@@ -643,7 +643,7 @@ pub trait IbcCommonContext: IbcStorageContext {
             u64::checked_add(count, 1).ok_or_else(|| ClientError::Other {
                 description: format!("The counter overflow: Key {key}"),
             })?;
-        self.write_without_merkldiffs(key, count)
+        self.write_without_merkle_diffs(key, count)
             .map_err(ContextError::from)
     }
 

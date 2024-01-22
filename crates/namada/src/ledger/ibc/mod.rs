@@ -20,18 +20,18 @@ where
     // the client counter
     let key = client_counter_key();
     storage
-        .write_without_merkldiffs(&key, init_value)
+        .write_without_merkle_diffs(&key, init_value)
         .expect("Unable to write the initial client counter");
 
     // the connection counter
     let key = connection_counter_key();
     storage
-        .write_without_merkldiffs(&key, init_value)
+        .write_without_merkle_diffs(&key, init_value)
         .expect("Unable to write the initial connection counter");
 
     // the channel counter
     let key = channel_counter_key();
     storage
-        .write_without_merkldiffs(&key, init_value)
+        .write_without_merkle_diffs(&key, init_value)
         .expect("Unable to write the initial channel counter");
 }
