@@ -41,6 +41,8 @@ pub enum RuntimeError {
     ReadPermanentValueError,
     #[error("Invalid transaction code hash")]
     InvalidCodeHash,
+    #[error("No value found in result buffer")]
+    NoValueInResultBuffer,
 }
 
 /// VP environment function result

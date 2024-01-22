@@ -485,7 +485,7 @@ fn file_ext() -> &'static str {
     universal::FILE_EXT
 }
 
-fn store() -> Store {
+pub(crate) fn store() -> Store {
     // This has to be using the store matching the compilation method in the
     // `fn compile`
     universal::store()
