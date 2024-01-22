@@ -645,6 +645,7 @@ mod tests {
             setup.key_len(),
             setup.val_memory_ptr,
             setup.val_len(),
+            0,
         );
         let _res = host_env::tx_write_temp(
             &tx_env,
@@ -671,8 +672,12 @@ mod tests {
         let tx_env = setup_host_env(&setup, &mut test_env);
 
         // Can fail, but must not panic
-        let _res =
-            host_env::tx_delete(&tx_env, setup.key_memory_ptr, setup.key_len());
+        let _res = host_env::tx_delete(
+            &tx_env,
+            setup.key_memory_ptr,
+            setup.key_len(),
+            0,
+        );
     }
 
     proptest! {
