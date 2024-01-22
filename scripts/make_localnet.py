@@ -69,12 +69,12 @@ def make_transactions(no_vals):
         # I get prompted to enter the letter p, I want to do that automatically
         make_val_wallet(f"{namada_bin}w --base-dir='{BASE_DIR}' --pre-genesis gen --alias {val_alias} --unsafe-dont-encrypt")
 
-        output = run(f"{namada_bin}c --base-dir='{BASE_DIR}' utils init-genesis-established-account --path {unsigned_tx_file_path} --aliases {val_alias}")
+        output = run(f"{namada_bin}c --base-dir '{BASE_DIR}' utils init-genesis-established-account --path {unsigned_tx_file_path} --aliases {val_alias}")
         established_address = output[output.find('tnam'):].strip()[:45]
         assert len(established_address) == len('tnam1q9874ezwewthnq7yku6xgwve0fyh6cvd85j5dxee'), len('tnam1q9874ezwewthnq7yku6xgwve0fyh6cvd85j5dxee')
         new_addresses.append(established_address)
-        system(f"{namada_bin}c --base-dir='{BASE_DIR}' utils init-genesis-validator --address {str(established_address).strip()} --alias {val_alias} --net-address 127.0.0.1:2{7+i % 10}657 --commission-rate 0.05 --max-commission-rate-change 0.01 --self-bond-amount 1000 --email validator{i}@gmail.com --path {unsigned_tx_file_path} --unsafe-dont-encrypt")
-        system(f"{namada_bin}c --base-dir='{BASE_DIR}' utils sign-genesis-txs --path {unsigned_tx_file_path} --output {signed_tx_file_path} --alias {val_alias}")
+        system(f"{namada_bin}c --base-dir '{BASE_DIR}' utils init-genesis-validator --address {str(established_address).strip()} --alias {val_alias} --net-address 127.0.0.1:2{7+i % 10}657 --commission-rate 0.05 --max-commission-rate-change 0.01 --self-bond-amount 1000 --email validator{i}@gmail.com --path {unsigned_tx_file_path} --unsafe-dont-encrypt")
+        system(f"{namada_bin}c --base-dir '{BASE_DIR}' utils sign-genesis-txs --path {unsigned_tx_file_path} --output {signed_tx_file_path} --alias {val_alias}")
     update_balances(LOCALNET_DIR, new_addresses)
 
 if __name__ == "__main__":
@@ -98,23 +98,8 @@ if __name__ == "__main__":
     TXS_DIR=f"{TMP_LOCAL}/pre-genesis/txs"
     system(f"mkdir -p {TXS_DIR}")
 
-    # Copy over validator-0
-
-
-    ## Clean up old validator dirs
-    # system(f"rm -rf {LOCALNET_DIR}/validator-1")
-    # system(f"rm -rf {LOCALNET_DIR}/validator-2")
-    # system(f"rm -rf {LOCALNET_DIR}/validator-3")
-    # system(f"rm -rf {LOCALNET_DIR}/validator-4")
-    # system(f"rm -rf {LOCALNET_DIR}/validator-5")
-    # system(f"rm -rf {LOCALNET_DIR}/validator-6")
-
     make_transactions(no_vals)
         
-    # Copy over validator-0's txs
-    # shutil.copy(f"{BASE_DIR}/pre-genesis/validator-0/unsigned-transactions.toml", f"{TXS_DIR}/validator-0-unsigned.toml")
-    # shutil.copy(f"{BASE_DIR}/pre-genesis/validator-0/unsigned-transactions.toml", f"{TXS_DIR}/validator-0-unsigned.toml")    
-    
     # Concatenate tx_tomls
     bigass_unsigned_toml = {"established_account": [], "validator_account": [], "bond": []}
     bigass_signed_toml = {"established_account": [], "validator_account": [], "bond": []}
