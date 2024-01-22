@@ -71,7 +71,7 @@ mod tests {
     use namada::types::storage::{BlockHash, BlockHeight, Key};
     use namada::types::time::DurationSecs;
     use namada::types::{address, storage};
-    use namada::{parameters, token, types};
+    use namada::{parameters, types};
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::test_runner::Config;

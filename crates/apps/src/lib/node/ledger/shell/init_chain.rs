@@ -440,7 +440,7 @@ where
                 address,
             )
             .unwrap();
-            if let Some(masp_params) = masp_params {
+            if masp_params.is_some() {
                 // add token addresses to the masp reward conversions lookup
                 // table.
                 let alias = alias.to_string();

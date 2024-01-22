@@ -3,11 +3,11 @@ use std::str::FromStr;
 
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
+use namada::state::StorageWrite;
+use namada::token;
 use namada_apps::node::ledger::shell::testing::client::run;
 use namada_apps::node::ledger::shell::testing::utils::{Bin, CapturedOutput};
-use namada_core::ledger::storage_api::StorageWrite;
 use namada_core::types::dec::Dec;
-use namada_core::types::token;
 use namada_sdk::masp::fs::FsShieldedUtils;
 use test_log::test;
 
@@ -1577,7 +1577,10 @@ fn dynamic_assets() -> Result<()> {
         // Stop distributing shielded rewards for NAM in next epoch
         let storage = &mut node.shell.lock().unwrap().wl_storage;
         storage
-            .write(&token::masp_max_reward_rate_key(&tokens[&nam]), Dec::zero())
+            .write(
+                &token::storage_key::masp_max_reward_rate_key(&tokens[&nam]),
+                Dec::zero(),
+            )
             .unwrap();
     }
 
@@ -1715,7 +1718,7 @@ fn dynamic_assets() -> Result<()> {
         let storage = &mut node.shell.lock().unwrap().wl_storage;
         storage
             .write(
-                &token::masp_max_reward_rate_key(&tokens[&nam]),
+                &token::storage_key::masp_max_reward_rate_key(&tokens[&nam]),
                 Dec::from_str("0.1").unwrap(),
             )
             .unwrap();

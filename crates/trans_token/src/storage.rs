@@ -8,7 +8,6 @@ use crate::storage_key::*;
 
 /// Initialize parameters for the token in storage during the genesis block.
 pub fn write_params<S>(
-    _params: &token::Parameters,
     storage: &mut S,
     address: &Address,
 ) -> storage::Result<()>

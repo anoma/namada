@@ -21,7 +21,7 @@ use crate::storage_key::{
 pub fn calculate_masp_rewards_precision<D, H>(
     wl_storage: &mut WlStorage<D, H>,
     addr: &Address,
-) -> namada_storage::Result<(u128, token::Denomination)>
+) -> namada_storage::Result<(u128, namada_trans_token::Denomination)>
 where
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
@@ -46,7 +46,7 @@ where
 pub fn calculate_masp_rewards<D, H>(
     wl_storage: &mut WlStorage<D, H>,
     addr: &Address,
-) -> crate::ledger::storage_api::Result<(u128, u128)>
+) -> namada_storage::Result<(u128, u128)>
 where
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
@@ -510,7 +510,7 @@ mod tests {
     use namada_core::types::token::testing::arb_amount;
     use namada_parameters::{EpochDuration, Parameters};
     use namada_state::testing::TestWlStorage;
-    use namada_trans_token::{write_denom, Denomination};
+    use namada_trans_token::{write_denom, Denomination, MaspParams};
     use proptest::prelude::*;
     use proptest::test_runner::Config;
     use test_log::test;
@@ -565,7 +565,7 @@ mod tests {
             namada_parameters::init_storage(&params, &mut s).unwrap();
 
             // Tokens
-            let token_params = token::MaspParams {
+            let token_params = MaspParams {
                 max_reward_rate: Dec::from_str("0.1").unwrap(),
                 kp_gain_nom: Dec::from_str("0.1").unwrap(),
                 kd_gain_nom: Dec::from_str("0.1").unwrap(),
@@ -573,12 +573,7 @@ mod tests {
             };
 
             for (token_addr, (alias, denom)) in tokens() {
-                namada_trans_token::write_params(
-                    &token_params,
-                    &mut s,
-                    &token_addr,
-                )
-                .unwrap();
+                namada_trans_token::write_params(&mut s, &token_addr).unwrap();
                 crate::write_params(&token_params, &mut s, &token_addr)
                     .unwrap();
 
