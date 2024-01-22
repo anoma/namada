@@ -878,11 +878,6 @@ pub async fn query_shielded_balance(
     {
         let mut shielded = context.shielded_mut().await;
         let _ = shielded.load().await;
-        let fvks: Vec<_> = viewing_keys
-            .iter()
-            .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
-            .collect();
-        shielded.fetch(context.client(), &[], &fvks).await.unwrap();
         // Precompute asset types to increase chances of success in decoding
         let _ = shielded.precompute_asset_types(context).await;
         // Save the update state so that future fetches can be short-circuited
