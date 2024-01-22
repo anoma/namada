@@ -114,11 +114,7 @@ fn masp_incentives() -> Result<()> {
     run(
         &node,
         Bin::Client,
-        vec![
-            "shielded-sync",
-            "--node",
-            validator_one_rpc,
-        ],
+        vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
     node.assert_success();
 
@@ -188,11 +184,7 @@ fn masp_incentives() -> Result<()> {
     run(
         &node,
         Bin::Client,
-        vec![
-            "shielded-sync",
-            "--node",
-            validator_one_rpc,
-        ],
+        vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
     node.assert_success();
 
@@ -282,11 +274,7 @@ fn masp_incentives() -> Result<()> {
     run(
         &node,
         Bin::Client,
-        vec![
-            "shielded-sync",
-            "--node",
-            validator_one_rpc,
-        ],
+        vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
     node.assert_success();
 
@@ -335,11 +323,7 @@ fn masp_incentives() -> Result<()> {
     run(
         &node,
         Bin::Client,
-        vec![
-            "shielded-sync",
-            "--node",
-            validator_one_rpc,
-        ],
+        vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
     node.assert_success();
 
@@ -430,14 +414,9 @@ fn masp_incentives() -> Result<()> {
     run(
         &node,
         Bin::Client,
-        vec![
-            "shielded-sync",
-            "--node",
-            validator_one_rpc,
-        ],
+        vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
     node.assert_success();
-
 
     // Assert ETH balance at VK(B) is 0
     let captured = CapturedOutput::of(|| {
@@ -463,11 +442,7 @@ fn masp_incentives() -> Result<()> {
     run(
         &node,
         Bin::Client,
-        vec![
-            "shielded-sync",
-            "--node",
-            validator_one_rpc,
-        ],
+        vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
     node.assert_success();
 
@@ -496,11 +471,7 @@ fn masp_incentives() -> Result<()> {
     run(
         &node,
         Bin::Client,
-        vec![
-            "shielded-sync",
-            "--node",
-            validator_one_rpc,
-        ],
+        vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
     node.assert_success();
 
@@ -553,11 +524,7 @@ fn masp_incentives() -> Result<()> {
     run(
         &node,
         Bin::Client,
-        vec![
-            "shielded-sync",
-            "--node",
-            validator_one_rpc,
-        ],
+        vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
     node.assert_success();
 
@@ -625,11 +592,7 @@ fn masp_incentives() -> Result<()> {
     run(
         &node,
         Bin::Client,
-        vec![
-            "shielded-sync",
-            "--node",
-            validator_one_rpc,
-        ],
+        vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
     node.assert_success();
 
@@ -702,11 +665,7 @@ fn masp_incentives() -> Result<()> {
     run(
         &node,
         Bin::Client,
-        vec![
-            "shielded-sync",
-            "--node",
-            validator_one_rpc,
-        ],
+        vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
     node.assert_success();
     // Send all NAM rewards from SK(B) to Christel
@@ -737,11 +696,7 @@ fn masp_incentives() -> Result<()> {
     run(
         &node,
         Bin::Client,
-        vec![
-            "shielded-sync",
-            "--node",
-            validator_one_rpc,
-        ],
+        vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
     node.assert_success();
     // Send all NAM rewards from SK(A) to Bertha
@@ -785,16 +740,11 @@ fn masp_incentives() -> Result<()> {
     assert!(captured.result.is_ok());
     assert!(captured.contains("No shielded nam balance found"));
 
-
     // sync the shielded context
     run(
         &node,
         Bin::Client,
-        vec![
-            "shielded-sync",
-            "--node",
-            validator_one_rpc,
-        ],
+        vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
     node.assert_success();
     // Assert NAM balance at VK(B) is 0
@@ -974,7 +924,7 @@ fn masp_pinned_txs() -> Result<()> {
             AC_VIEWING_KEY,
             "--node",
             validator_one_rpc,
-        ]
+        ],
     )?;
     node.assert_success();
 
@@ -1051,11 +1001,7 @@ fn masp_pinned_txs() -> Result<()> {
     run(
         &node,
         Bin::Client,
-        vec![
-            "shielded-sync",
-            "--node",
-            validator_one_rpc,
-        ]
+        vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
     node.assert_success();
 
@@ -1106,11 +1052,7 @@ fn masp_pinned_txs() -> Result<()> {
     run(
         &node,
         Bin::Client,
-        vec![
-            "shielded-sync",
-            "--node",
-            validator_one_rpc,
-        ]
+        vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
     node.assert_success();
 
@@ -1180,7 +1122,7 @@ fn masp_txs_and_queries() -> Result<()> {
             AB_VIEWING_KEY,
             "--node",
             validator_one_rpc,
-        ]
+        ],
     )?;
     node.assert_success();
 
@@ -1398,11 +1340,7 @@ fn masp_txs_and_queries() -> Result<()> {
         run(
             &node,
             Bin::Client,
-            vec![
-                "shielded-sync",
-                "--node",
-                validator_one_rpc,
-            ]
+            vec!["shielded-sync", "--node", validator_one_rpc],
         )?;
         node.assert_success();
         // there is no need to dry run balance queries
@@ -1536,7 +1474,7 @@ fn wrapper_fee_unshielding() -> Result<()> {
             AB_VIEWING_KEY,
             "--node",
             validator_one_rpc,
-        ]
+        ],
     )?;
     node.assert_success();
 
@@ -1568,11 +1506,7 @@ fn wrapper_fee_unshielding() -> Result<()> {
     run(
         &node,
         Bin::Client,
-        vec![
-            "shielded-sync",
-            "--node",
-            validator_one_rpc,
-        ]
+        vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
     node.assert_success();
 
@@ -1651,7 +1585,7 @@ fn cross_epoch_tx() -> Result<()> {
             AA_VIEWING_KEY,
             "--node",
             validator_one_rpc,
-        ]
+        ],
     )?;
     node.assert_success();
 

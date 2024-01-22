@@ -1349,24 +1349,23 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct ShieldedSync(
-        pub args::ShieldedSync<args::CliTypes>
-    );
+    pub struct ShieldedSync(pub args::ShieldedSync<args::CliTypes>);
 
     impl SubCmd for ShieldedSync {
         const CMD: &'static str = "shielded-sync";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches.subcommand_matches(Self::CMD).map(|matches| {
-                ShieldedSync(args::ShieldedSync::parse(matches))
-            })
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| ShieldedSync(args::ShieldedSync::parse(matches)))
         }
 
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "Sync the local shielded context with MASP notes owned by the provided \
-                    viewing / spending keys up to an optional specified block height."
+                    "Sync the local shielded context with MASP notes owned by \
+                     the provided viewing / spending keys up to an optional \
+                     specified block height.",
                 )
                 .add_args::<args::ShieldedSync<args::CliTypes>>()
         }
@@ -3087,7 +3086,8 @@ pub mod args {
     pub const SIGNATURES: ArgMulti<PathBuf, GlobStar> = arg_multi("signatures");
     pub const SOURCE: Arg<WalletAddress> = arg("source");
     pub const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
-    pub const SPENDING_KEYS: ArgMulti<WalletSpendingKey, GlobStar> = arg_multi("spending-keys");
+    pub const SPENDING_KEYS: ArgMulti<WalletSpendingKey, GlobStar> =
+        arg_multi("spending-keys");
     pub const STEWARD: Arg<WalletAddress> = arg("steward");
     pub const SOURCE_VALIDATOR: Arg<WalletAddress> = arg("source-validator");
     pub const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
@@ -3124,7 +3124,8 @@ pub mod args {
     pub const VALUE: Arg<String> = arg("value");
     pub const VOTER_OPT: ArgOpt<WalletAddress> = arg_opt("voter");
     pub const VIEWING_KEY: Arg<WalletViewingKey> = arg("key");
-    pub const VIEWING_KEYS: ArgMulti<WalletViewingKey, GlobStar> = arg_multi("viewing-keys");
+    pub const VIEWING_KEYS: ArgMulti<WalletViewingKey, GlobStar> =
+        arg_multi("viewing-keys");
     pub const VP: ArgOpt<String> = arg_opt("vp");
     pub const WALLET_ALIAS_FORCE: ArgFlag = flag("wallet-alias-force");
     pub const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
@@ -5646,26 +5647,18 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(
-                LEDGER_ADDRESS_DEFAULT.def().help(LEDGER_ADDRESS_ABOUT),
-            )
-            .arg(
-                BLOCK_HEIGHT_OPT.def().help(
-                    "Option block height to sync up to. Default is latest."
-                )
-            )
-            .arg(
-                SPENDING_KEYS.def().help(
-                    "List of new spending keys with which to check note ownership. \
-                    These will be added to the shielded context."
-                )
-            )
-            .arg(
-                VIEWING_KEYS.def().help(
-                    "List of new viewing keys with which to check note ownership. \
-                    These will be added to the shielded context."
-                )
-            )
+            app.arg(LEDGER_ADDRESS_DEFAULT.def().help(LEDGER_ADDRESS_ABOUT))
+                .arg(BLOCK_HEIGHT_OPT.def().help(
+                    "Option block height to sync up to. Default is latest.",
+                ))
+                .arg(SPENDING_KEYS.def().help(
+                    "List of new spending keys with which to check note \
+                     ownership. These will be added to the shielded context.",
+                ))
+                .arg(VIEWING_KEYS.def().help(
+                    "List of new viewing keys with which to check note \
+                     ownership. These will be added to the shielded context.",
+                ))
         }
     }
 
@@ -5675,11 +5668,13 @@ pub mod args {
             ShieldedSync {
                 ledger_address: (),
                 last_query_height: self.last_query_height,
-                spending_keys: self.spending_keys
+                spending_keys: self
+                    .spending_keys
                     .iter()
                     .map(|sk| chain_ctx.get_cached(sk))
                     .collect(),
-                viewing_keys: self.viewing_keys
+                viewing_keys: self
+                    .viewing_keys
                     .iter()
                     .map(|vk| chain_ctx.get_cached(vk))
                     .collect(),
@@ -5970,11 +5965,11 @@ pub mod args {
         type Keypair = WalletKeypair;
         type NativeAddress = ();
         type PublicKey = WalletPublicKey;
+        type SpendingKey = WalletSpendingKey;
         type TendermintAddress = TendermintAddress;
         type TransferSource = WalletTransferSource;
         type TransferTarget = WalletTransferTarget;
         type ViewingKey = WalletViewingKey;
-        type SpendingKey = WalletSpendingKey;
     }
 
     impl CliToSdk<Tx<SdkTypes>> for Tx<CliTypes> {

@@ -135,11 +135,7 @@ pub async fn query_transfers(
     let _ = shielded.precompute_asset_types(context).await;
     // Obtain the effects of all shielded and transparent transactions
     let transfers = shielded
-        .query_tx_deltas(
-            context.client(),
-            &query_owner,
-            &query_token,
-        )
+        .query_tx_deltas(context.client(), &query_owner, &query_token)
         .await
         .unwrap();
     // To facilitate lookups of human-readable token names
