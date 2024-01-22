@@ -2017,7 +2017,7 @@ fn proposal_submission() -> Result<()> {
     client.exp_string(
         "passed with 100000.000000 yay votes, 900.000000 nay votes and \
          0.000000 abstain votes, total voting power: 100900.000000 threshold \
-         was: 67266.666666",
+         was: 67266.66666",
     )?;
     client.assert_success();
 

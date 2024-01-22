@@ -127,6 +127,20 @@ where
     Ok(())
 }
 
+/// Write the proposal result to storage.
+pub fn write_proposal_result<S>(
+    storage: &mut S,
+    proposal_id: u64,
+    proposal_result: ProposalResult,
+) -> StorageResult<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let proposal_result_key =
+        governance_keys::get_proposal_result_key(proposal_id);
+    storage.write(&proposal_result_key, proposal_result)
+}
+
 /// Read a proposal by id from storage
 pub fn get_proposal_by_id<S>(
     storage: &S,
@@ -209,15 +223,38 @@ pub fn is_proposal_accepted<S>(
 where
     S: StorageRead,
 {
-    let proposal_id = u64::try_from_slice(tx_data).ok();
-    match proposal_id {
-        Some(id) => {
-            let proposal_execution_key =
-                governance_keys::get_proposal_execution_key(id);
-            storage.has_key(&proposal_execution_key)
-        }
-        None => Ok(false),
+    let proposal_id = u64::try_from_slice(tx_data);
+    if let Ok(id) = proposal_id {
+        let proposal_execution_key =
+            governance_keys::get_proposal_execution_key(id);
+        storage.has_key(&proposal_execution_key)
+    } else {
+        Ok(false)
     }
+}
+
+/// Get the code associated with a proposal
+pub fn get_proposal_code<S>(
+    storage: &S,
+    proposal_id: u64,
+) -> StorageResult<Option<Vec<u8>>>
+where
+    S: StorageRead,
+{
+    let proposal_code_key = governance_keys::get_proposal_code_key(proposal_id);
+    storage.read_bytes(&proposal_code_key)
+}
+
+/// Get the code associated with a proposal
+pub fn get_proposal_author<S>(
+    storage: &S,
+    proposal_id: u64,
+) -> StorageResult<Option<Address>>
+where
+    S: StorageRead,
+{
+    let proposal_author_key = governance_keys::get_author_key(proposal_id);
+    storage.read::<Address>(&proposal_author_key)
 }
 
 /// Get governance parameters

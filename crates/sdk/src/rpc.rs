@@ -180,11 +180,11 @@ pub async fn get_token_balance<C: crate::queries::Client + Sync>(
     )
 }
 
-/// Query token total supply;
+/// Query token total supply.
 pub async fn get_token_total_supply<C: crate::queries::Client + Sync>(
     client: &C,
     token: &Address,
-) -> Result<Option<token::Amount>, error::Error> {
+) -> Result<token::Amount, error::Error> {
     convert_response::<C, _>(RPC.vp().token().total_supply(client, token).await)
 }
 

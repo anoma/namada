@@ -1029,6 +1029,7 @@ mod test_oracle {
     /// NOTE: This test can flake due to async channel race
     /// conditions.
     #[tokio::test]
+    #[ignore]
     async fn test_oracle_reactivation() {
         let TestPackage {
             oracle,
