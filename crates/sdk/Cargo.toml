@@ -138,5 +138,6 @@ assert_matches.workspace = true
 base58.workspace = true
 bls12_381.workspace = true
 jubjub.workspace = true
+masp_primitives = { workspace = true, features = ["test-dependencies"] }
 proptest.workspace = true
 tempfile.workspace = true
