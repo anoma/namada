@@ -56,8 +56,10 @@ pub enum TxRuntimeError {
     CannotDeleteVp,
     #[error("Storage modification error: {0}")]
     StorageModificationError(write_log::Error),
+    #[error("State error: {0}")]
+    StateError(#[from] namada_state::Error),
     #[error("Storage error: {0}")]
-    StorageError(#[from] namada_state::Error),
+    StorageError(#[from] namada_state::StorageError),
     #[error("Storage data error: {0}")]
     StorageDataError(crate::types::storage::Error),
     #[error("Encoding error: {0}")]
@@ -76,6 +78,8 @@ pub enum TxRuntimeError {
     InvalidWriteOptions,
     #[error("No value found in result buffer")]
     NoValueInResultBuffer,
+    #[error("VP code is not allowed in allowlist parameter.")]
+    DisallowedVp,
 }
 
 /// Result of a tx host env fn call
@@ -570,9 +574,8 @@ where
         None => {
             // when not found in write log, try to check the storage
             let storage = unsafe { env.ctx.storage.get() };
-            let (present, gas) = storage
-                .has_key(&key)
-                .map_err(TxRuntimeError::StorageError)?;
+            let (present, gas) =
+                storage.has_key(&key).map_err(TxRuntimeError::StateError)?;
             tx_charge_gas(env, gas)?;
             HostEnvResult::from(present).to_i64()
         }
@@ -651,7 +654,7 @@ where
             // when not found in write log, try to read from the storage
             let storage = unsafe { env.ctx.storage.get() };
             let (value, gas) =
-                storage.read(&key).map_err(TxRuntimeError::StorageError)?;
+                storage.read(&key).map_err(TxRuntimeError::StateError)?;
             tx_charge_gas(env, gas)?;
             match value {
                 Some(value) => {
@@ -938,7 +941,7 @@ where
         if vp.is_none() {
             let (is_present, gas) = storage
                 .has_key(&vp_key)
-                .map_err(TxRuntimeError::StorageError)?;
+                .map_err(TxRuntimeError::StateError)?;
             tx_charge_gas(env, gas)?;
             if !is_present {
                 tracing::info!(
@@ -1723,7 +1726,7 @@ where
     let storage = unsafe { env.ctx.storage.get() };
     let (header, gas) = storage
         .get_block_header(Some(BlockHeight(height)))
-        .map_err(TxRuntimeError::StorageError)?;
+        .map_err(TxRuntimeError::StateError)?;
     tx_charge_gas(env, gas)?;
     Ok(match header {
         Some(h) => {
@@ -2111,7 +2114,7 @@ where
         let hash_key = Key::wasm_hash(tag);
         let (result, gas) = storage
             .read(&hash_key)
-            .map_err(TxRuntimeError::StorageError)?;
+            .map_err(TxRuntimeError::StateError)?;
         tx_charge_gas(env, gas)?;
         if let Some(tag_hash) = result {
             let tag_hash = Hash::try_from(&tag_hash[..]).map_err(|e| {
@@ -2131,6 +2134,13 @@ where
         }
     }
 
+    // Then check that VP code hash is in the allowlist.
+    if !crate::parameters::is_vp_allowed(&env.ctx, &code_hash)
+        .map_err(TxRuntimeError::StorageError)?
+    {
+        return Err(TxRuntimeError::DisallowedVp);
+    }
+
     // Then check that the corresponding VP code does indeed exist
     let code_key = Key::wasm_code(&code_hash);
     let write_log = unsafe { env.ctx.write_log.get() };
@@ -2140,7 +2150,7 @@ where
         let storage = unsafe { env.ctx.storage.get() };
         let (is_present, gas) = storage
             .has_key(&code_key)
-            .map_err(TxRuntimeError::StorageError)?;
+            .map_err(TxRuntimeError::StateError)?;
         tx_charge_gas(env, gas)?;
         if !is_present {
             return Err(TxRuntimeError::InvalidVpCodeHash(

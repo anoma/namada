@@ -408,23 +408,26 @@ where
                 },
             };
 
-            match protocol::dispatch_tx(
-                tx,
-                processed_tx.tx.as_ref(),
-                TxIndex(
-                    tx_index
-                        .try_into()
-                        .expect("transaction index out of bounds"),
-                ),
-                &mut tx_gas_meter,
-                &mut self.wl_storage,
-                &mut self.vp_wasm_cache,
-                &mut self.tx_wasm_cache,
-                wrapper_args.as_mut(),
-            )
-            .map_err(Error::TxApply)
-            {
-                Ok(ref mut result) => {
+            let tx_result = protocol::check_tx_allowed(&tx, &self.wl_storage)
+                .and_then(|()| {
+                    protocol::dispatch_tx(
+                        tx,
+                        processed_tx.tx.as_ref(),
+                        TxIndex(
+                            tx_index
+                                .try_into()
+                                .expect("transaction index out of bounds"),
+                        ),
+                        &mut tx_gas_meter,
+                        &mut self.wl_storage,
+                        &mut self.vp_wasm_cache,
+                        &mut self.tx_wasm_cache,
+                        wrapper_args.as_mut(),
+                    )
+                })
+                .map_err(Error::TxApply);
+            match tx_result {
+                Ok(result) => {
                     if result.is_accepted() {
                         if let EventType::Accepted = tx_event.event_type {
                             // Wrapper transaction

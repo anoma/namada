@@ -2396,11 +2396,11 @@ fn proposal_offline() -> Result<()> {
                 Default::default();
             genesis.parameters.parameters.min_num_of_blocks = 4;
             genesis.parameters.parameters.max_expected_time_per_block = 1;
-            genesis.parameters.parameters.vp_whitelist =
+            genesis.parameters.parameters.vp_allowlist =
                 Some(get_all_wasms_hashes(&working_dir, Some("vp_")));
-            // Enable tx whitelist to test the execution of a
-            // non-whitelisted tx by governance
-            genesis.parameters.parameters.tx_whitelist =
+            // Enable tx allowlist to test the execution of a
+            // non-allowed tx by governance
+            genesis.parameters.parameters.tx_allowlist =
                 Some(get_all_wasms_hashes(&working_dir, Some("tx_")));
             setup::set_validators(1, genesis, base_dir, |_| 0)
         },

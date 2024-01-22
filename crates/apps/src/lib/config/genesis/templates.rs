@@ -266,12 +266,14 @@ pub struct ChainParams<T: TemplateValidation> {
     /// room for header data, evidence and protobuf
     /// serialization overhead in Tendermint blocks.
     pub max_proposal_bytes: ProposalBytes,
-    /// Hashes of whitelisted vps array. `None` value or an empty array
-    /// disables whitelisting.
-    pub vp_whitelist: Option<Vec<String>>,
-    /// Hashes of whitelisted txs array. `None` value or an empty array
-    /// disables whitelisting.
-    pub tx_whitelist: Option<Vec<String>>,
+    /// Hashes of allowed vps array. `None` value or an empty array
+    /// disables allowlisting.
+    #[serde(alias = "vp_whitelist")] // old name for compat
+    pub vp_allowlist: Option<Vec<String>>,
+    /// Hashes of allowed txs array. `None` value or an empty array
+    /// disables allowlisting.
+    #[serde(alias = "tx_whitelist")] // old name for compat
+    pub tx_allowlist: Option<Vec<String>>,
     /// Filename of implicit accounts validity predicate WASM code
     pub implicit_vp: String,
     /// Expected number of epochs per year
@@ -299,8 +301,8 @@ impl ChainParams<Unvalidated> {
             min_num_of_blocks,
             max_expected_time_per_block,
             max_proposal_bytes,
-            vp_whitelist,
-            tx_whitelist,
+            vp_allowlist,
+            tx_allowlist,
             implicit_vp,
             epochs_per_year,
             max_signatures_per_transaction,
@@ -344,8 +346,8 @@ impl ChainParams<Unvalidated> {
             min_num_of_blocks,
             max_expected_time_per_block,
             max_proposal_bytes,
-            vp_whitelist,
-            tx_whitelist,
+            vp_allowlist,
+            tx_allowlist,
             implicit_vp,
             epochs_per_year,
             max_signatures_per_transaction,

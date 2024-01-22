@@ -468,5 +468,5 @@ fn vp_validator(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(whitelisted_vps, vp_user, vp_implicit, vp_validator,);
-criterion_main!(whitelisted_vps);
+criterion_group!(allowed_vps, vp_user, vp_implicit, vp_validator,);
+criterion_main!(allowed_vps);

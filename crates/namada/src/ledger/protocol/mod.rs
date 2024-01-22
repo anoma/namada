@@ -45,8 +45,10 @@ use crate::vm::{self, wasm, WasmCacheAccess};
 pub enum Error {
     #[error("Missing tx section: {0}")]
     MissingSection(String),
+    #[error("State error: {0}")]
+    StateError(namada_state::Error),
     #[error("Storage error: {0}")]
-    StorageError(namada_state::Error),
+    StorageError(namada_state::StorageError),
     #[error("Transaction runner error: {0}")]
     TxRunnerError(vm::wasm::run::Error),
     #[error("{0:?}")]
@@ -93,6 +95,8 @@ pub enum Error {
     MaspNativeVpError(native_vp::masp::Error),
     #[error("Access to an internal address {0:?} is forbidden")]
     AccessForbidden(InternalAddress),
+    #[error("Tx is not allowed in allowlist parameter.")]
+    DisallowedTx,
 }
 
 /// Shell parameters for running wasm transactions.
@@ -631,6 +635,35 @@ where
     })
 }
 
+/// Returns [`Error::DisallowedTx`] when the given tx is inner (decrypted) tx
+/// and its code `Hash` is not included in the `tx_allowlist` parameter.
+pub fn check_tx_allowed<D, H>(
+    tx: &Tx,
+    wl_storage: &WlStorage<D, H>,
+) -> Result<()>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    if let TxType::Decrypted(DecryptedTx::Decrypted) = tx.header().tx_type {
+        if let Some(code_sec) = tx
+            .get_section(tx.code_sechash())
+            .and_then(|x| Section::code_sec(&x))
+        {
+            if crate::parameters::is_tx_allowed(
+                wl_storage,
+                &code_sec.code.hash(),
+            )
+            .map_err(Error::StorageError)?
+            {
+                return Ok(());
+            }
+        }
+        return Err(Error::DisallowedTx);
+    }
+    Ok(())
+}
+
 /// Apply a derived transaction to storage based on some protocol transaction.
 /// The logic here must be completely deterministic and will be executed by all
 /// full nodes every time a protocol transaction is included in a block. Storage
@@ -818,7 +851,7 @@ where
                 Address::Implicit(_) | Address::Established(_) => {
                     let (vp_hash, gas) = storage
                         .validity_predicate(addr)
-                        .map_err(Error::StorageError)?;
+                        .map_err(Error::StateError)?;
                     gas_meter
                         .consume(gas)
                         .map_err(|err| Error::GasError(err.to_string()))?;
@@ -1118,6 +1151,7 @@ mod tests {
 
     use borsh::BorshDeserialize;
     use eyre::Result;
+    use namada_core::types::chain::ChainId;
     use namada_core::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
     use namada_core::types::ethereum_events::{
         EthereumEvent, TransferToNamada,
@@ -1272,5 +1306,47 @@ mod tests {
         assert_eq!(voting_power, expected);
 
         Ok(())
+    }
+
+    #[test]
+    fn test_apply_wasm_tx_allowlist() {
+        let (mut wl_storage, _validators) = test_utils::setup_default_storage();
+
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
+        // pseudo-random code hash
+        let code = vec![1_u8, 2, 3];
+        let tx_hash = Hash::sha256(&code);
+        tx.set_code(namada_tx::Code::new(code, None));
+
+        // Check that using a disallowed tx leads to an error
+        {
+            let allowlist = vec![format!("{}-bad", tx_hash)];
+            crate::parameters::update_tx_allowlist_parameter(
+                &mut wl_storage,
+                allowlist,
+            )
+            .unwrap();
+            wl_storage.commit_tx();
+
+            let result = check_tx_allowed(&tx, &wl_storage);
+            assert_matches!(result.unwrap_err(), Error::DisallowedTx);
+        }
+
+        // Check that using an allowed tx doesn't lead to `Error::DisallowedTx`
+        {
+            let allowlist = vec![tx_hash.to_string()];
+            crate::parameters::update_tx_allowlist_parameter(
+                &mut wl_storage,
+                allowlist,
+            )
+            .unwrap();
+            wl_storage.commit_tx();
+
+            let result = check_tx_allowed(&tx, &wl_storage);
+            if let Err(result) = result {
+                assert!(!matches!(result, Error::DisallowedTx));
+            }
+        }
     }
 }

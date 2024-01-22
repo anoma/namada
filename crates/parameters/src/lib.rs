@@ -1,6 +1,6 @@
 //! Protocol parameters
 pub mod storage;
-
+mod wasm_allowlist;
 use std::collections::BTreeMap;
 
 use namada_core::types::address::{Address, InternalAddress};
@@ -14,6 +14,7 @@ use namada_core::types::token;
 use namada_storage::{self, ResultExt, StorageRead, StorageWrite};
 pub use storage::get_max_block_gas;
 use thiserror::Error;
+pub use wasm_allowlist::{is_tx_allowed, is_vp_allowed};
 
 /// The internal address for storage keys representing parameters than
 /// can be changed via governance.
@@ -53,8 +54,8 @@ where
         max_expected_time_per_block,
         max_proposal_bytes,
         max_block_gas,
-        vp_whitelist,
-        tx_whitelist,
+        vp_allowlist,
+        tx_allowlist,
         implicit_vp_code_hash,
         epochs_per_year,
         max_signatures_per_transaction,
@@ -94,21 +95,21 @@ where
         fee_unshielding_descriptions_limit,
     )?;
 
-    // write vp whitelist parameter
-    let vp_whitelist_key = storage::get_vp_whitelist_storage_key();
-    let vp_whitelist = vp_whitelist
+    // write vp allowlist parameter
+    let vp_allowlist_key = storage::get_vp_allowlist_storage_key();
+    let vp_allowlist = vp_allowlist
         .iter()
         .map(|id| id.to_lowercase())
         .collect::<Vec<String>>();
-    storage.write(&vp_whitelist_key, vp_whitelist)?;
+    storage.write(&vp_allowlist_key, vp_allowlist)?;
 
-    // write tx whitelist parameter
-    let tx_whitelist_key = storage::get_tx_whitelist_storage_key();
-    let tx_whitelist = tx_whitelist
+    // write tx allowlist parameter
+    let tx_allowlist_key = storage::get_tx_allowlist_storage_key();
+    let tx_allowlist = tx_allowlist
         .iter()
         .map(|id| id.to_lowercase())
         .collect::<Vec<String>>();
-    storage.write(&tx_whitelist_key, tx_whitelist)?;
+    storage.write(&tx_allowlist_key, tx_allowlist)?;
 
     // write max expected time per block
     let max_expected_time_per_block_key =
@@ -173,16 +174,16 @@ where
     storage.write(&key, value)
 }
 
-/// Update the vp whitelist parameter in storage. Returns the parameters and gas
+/// Update the vp allowlist parameter in storage. Returns the parameters and gas
 /// cost.
-pub fn update_vp_whitelist_parameter<S>(
+pub fn update_vp_allowlist_parameter<S>(
     storage: &mut S,
     value: Vec<String>,
 ) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
-    let key = storage::get_vp_whitelist_storage_key();
+    let key = storage::get_vp_allowlist_storage_key();
     storage.write(
         &key,
         value
@@ -192,16 +193,16 @@ where
     )
 }
 
-/// Update the tx whitelist parameter in storage. Returns the parameters and gas
+/// Update the tx allowlist parameter in storage. Returns the parameters and gas
 /// cost.
-pub fn update_tx_whitelist_parameter<S>(
+pub fn update_tx_allowlist_parameter<S>(
     storage: &mut S,
     value: Vec<String>,
 ) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
-    let key = storage::get_tx_whitelist_storage_key();
+    let key = storage::get_tx_allowlist_storage_key();
     storage.write(
         &key,
         value
@@ -346,17 +347,17 @@ where
     // read epoch duration
     let epoch_duration = read_epoch_duration_parameter(storage)?;
 
-    // read vp whitelist
-    let vp_whitelist_key = storage::get_vp_whitelist_storage_key();
-    let value = storage.read(&vp_whitelist_key)?;
-    let vp_whitelist: Vec<String> = value
+    // read vp allowlist
+    let vp_allowlist_key = storage::get_vp_allowlist_storage_key();
+    let value = storage.read(&vp_allowlist_key)?;
+    let vp_allowlist: Vec<String> = value
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 
-    // read tx whitelist
-    let tx_whitelist_key = storage::get_tx_whitelist_storage_key();
-    let value = storage.read(&tx_whitelist_key)?;
-    let tx_whitelist: Vec<String> = value
+    // read tx allowlist
+    let tx_allowlist_key = storage::get_tx_allowlist_storage_key();
+    let value = storage.read(&tx_allowlist_key)?;
+    let tx_allowlist: Vec<String> = value
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 
@@ -442,8 +443,8 @@ where
         max_expected_time_per_block,
         max_proposal_bytes,
         max_block_gas,
-        vp_whitelist,
-        tx_whitelist,
+        vp_allowlist,
+        tx_allowlist,
         implicit_vp_code_hash: Some(implicit_vp_code_hash),
         epochs_per_year,
         max_signatures_per_transaction,

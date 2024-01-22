@@ -104,8 +104,8 @@ impl TestTxEnv {
     pub fn init_parameters(
         &mut self,
         epoch_duration: Option<EpochDuration>,
-        vp_whitelist: Option<Vec<String>>,
-        tx_whitelist: Option<Vec<String>>,
+        vp_allowlist: Option<Vec<String>>,
+        tx_allowlist: Option<Vec<String>>,
         max_signatures_per_transaction: Option<u8>,
     ) {
         parameters::update_epoch_parameter(
@@ -116,14 +116,14 @@ impl TestTxEnv {
             }),
         )
         .unwrap();
-        parameters::update_tx_whitelist_parameter(
+        parameters::update_tx_allowlist_parameter(
             &mut self.wl_storage,
-            tx_whitelist.unwrap_or_default(),
+            tx_allowlist.unwrap_or_default(),
         )
         .unwrap();
-        parameters::update_vp_whitelist_parameter(
+        parameters::update_vp_allowlist_parameter(
             &mut self.wl_storage,
-            vp_whitelist.unwrap_or_default(),
+            vp_allowlist.unwrap_or_default(),
         )
         .unwrap();
         parameters::update_max_signature_per_tx(
