@@ -291,6 +291,7 @@ pub async fn query_conversion<C: crate::queries::Client + Sync>(
     asset_type: AssetType,
 ) -> Option<(
     Address,
+    Denomination,
     MaspDenom,
     Epoch,
     masp_primitives::transaction::components::I128Sum,
@@ -309,6 +310,8 @@ pub async fn query_conversions<C: crate::queries::Client + Sync>(
         AssetType,
         (
             Address,
+            Denomination,
+            MaspDenom,
             Epoch,
             masp_primitives::transaction::components::I128Sum,
         ),
@@ -1168,6 +1171,16 @@ pub async fn enriched_bonds_and_unbonds<C: crate::queries::Client + Sync>(
                 validator,
             )
             .await,
+    )
+}
+
+/// Query the denomination of the given token
+pub async fn query_denom<C: crate::queries::Client + Sync>(
+    client: &C,
+    token: &Address,
+) -> Option<Denomination> {
+    unwrap_client_response::<C, Option<Denomination>>(
+        RPC.vp().token().denomination(client, token).await,
     )
 }
 

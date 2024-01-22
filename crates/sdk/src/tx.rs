@@ -60,7 +60,7 @@ use crate::masp::TransferErr::Build;
 use crate::masp::{ShieldedContext, ShieldedTransfer};
 use crate::queries::Client;
 use crate::rpc::{
-    self, query_wasm_code_hash, validate_amount, InnerTxResult,
+    self, query_denom, query_wasm_code_hash, validate_amount, InnerTxResult,
     TxBroadcastData, TxResponse,
 };
 use crate::signing::{self, SigningTxData, TxSourcePostBalance};
@@ -2239,7 +2239,12 @@ where
 /// Try to decode the given asset type and add its decoding to the supplied set.
 /// Returns true only if a new decoding has been added to the given set.
 async fn add_asset_type(
-    asset_types: &mut HashSet<(Address, MaspDenom, Option<Epoch>)>,
+    asset_types: &mut HashSet<(
+        Address,
+        token::Denomination,
+        MaspDenom,
+        Option<Epoch>,
+    )>,
     context: &impl Namada,
     asset_type: AssetType,
 ) -> bool {
@@ -2261,8 +2266,10 @@ async fn add_asset_type(
 async fn used_asset_types<P, R, K, N>(
     context: &impl Namada,
     builder: &Builder<P, R, K, N>,
-) -> std::result::Result<HashSet<(Address, MaspDenom, Option<Epoch>)>, RpcError>
-{
+) -> std::result::Result<
+    HashSet<(Address, token::Denomination, MaspDenom, Option<Epoch>)>,
+    RpcError,
+> {
     let mut asset_types = HashSet::new();
     // Collect all the asset types used in the Sapling inputs
     for input in builder.sapling_inputs() {
@@ -2430,7 +2437,7 @@ async fn construct_shielded_parts<N: Namada>(
 ) -> Result<
     Option<(
         ShieldedTransfer,
-        HashSet<(Address, MaspDenom, Option<Epoch>)>,
+        HashSet<(Address, token::Denomination, MaspDenom, Option<Epoch>)>,
     )>,
 > {
     let stx_result =
@@ -2714,12 +2721,24 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
         shielded: None,
     };
     if let Some(shielded_transfer) = shielded_transfer {
+        let denom =
+            query_denom(context.client(), &token).await.ok_or_else(|| {
+                Error::Other(
+                    "unable to determine token denomination".to_string(),
+                )
+            })?;
         // TODO: Workaround for decoding the asset_type later
         let mut shielded = context.shielded_mut().await;
-        for denom in MaspDenom::iter() {
+        for digit in MaspDenom::iter() {
             let epoch = shielded_transfer.epoch;
             shielded
-                .get_asset_type(context.client(), epoch, token.clone(), denom)
+                .get_asset_type(
+                    context.client(),
+                    epoch,
+                    token.clone(),
+                    denom,
+                    digit,
+                )
                 .await
                 .map_err(|_| {
                     Error::Other("unable to create asset type".to_string())

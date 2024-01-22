@@ -2409,7 +2409,7 @@ pub async fn query_conversions(
         .expect("Conversions should be defined");
     // Track whether any non-sentinel conversions are found
     let mut conversions_found = false;
-    for (addr, epoch, amt) in conversions.values() {
+    for (addr, _denom, digit, epoch, amt) in conversions.values() {
         // If the user has specified any targets, then meet them
         // If we have a sentinel conversion, then skip printing
         if matches!(&target_token, Some(target) if target != addr)
@@ -2422,8 +2422,9 @@ pub async fn query_conversions(
         // Print the asset to which the conversion applies
         display!(
             context.io(),
-            "{}[{}]: ",
+            "{}*2^{}[{}]: ",
             tokens.get(addr).cloned().unwrap_or_else(|| addr.clone()),
+            *digit as u8 * 64,
             epoch,
         );
         // Now print out the components of the allowed conversion
@@ -2431,14 +2432,15 @@ pub async fn query_conversions(
         for (asset_type, val) in amt.components() {
             // Look up the address and epoch of asset to facilitate pretty
             // printing
-            let (addr, epoch, _) = &conversions[asset_type];
+            let (addr, _denom, digit, epoch, _) = &conversions[asset_type];
             // Now print out this component of the conversion
             display!(
                 context.io(),
-                "{}{} {}[{}]",
+                "{}{} {}*2^{}[{}]",
                 prefix,
                 val,
                 tokens.get(addr).cloned().unwrap_or_else(|| addr.clone()),
+                *digit as u8 * 64,
                 epoch
             );
             // Future iterations need to be prefixed with +
@@ -2461,6 +2463,7 @@ pub async fn query_conversion<C: namada::ledger::queries::Client + Sync>(
     asset_type: AssetType,
 ) -> Option<(
     Address,
+    token::Denomination,
     MaspDenom,
     Epoch,
     masp_primitives::transaction::components::I128Sum,

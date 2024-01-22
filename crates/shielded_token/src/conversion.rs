@@ -8,7 +8,7 @@ use namada_parameters as parameters;
 use namada_state::{DBIter, StorageHasher, WlStorage, DB};
 use namada_storage::{StorageRead, StorageWrite};
 use namada_trans_token::storage_key::{balance_key, minted_balance_key};
-use namada_trans_token::{read_denom, Amount, DenominatedAmount};
+use namada_trans_token::{read_denom, Amount, DenominatedAmount, Denomination};
 
 use crate::storage_key::{
     masp_kd_gain_key, masp_kp_gain_key, masp_last_inflation_key,
@@ -21,7 +21,7 @@ use crate::storage_key::{
 pub fn calculate_masp_rewards<D, H>(
     wl_storage: &mut WlStorage<D, H>,
     addr: &Address,
-) -> namada_storage::Result<(u128, u128)>
+) -> namada_storage::Result<((u128, u128), Denomination)>
 where
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
@@ -167,7 +167,7 @@ where
 
     wl_storage.write(&masp_last_locked_ratio_key(addr), locked_ratio)?;
 
-    Ok((noterized_inflation, precision))
+    Ok(((noterized_inflation, precision), denomination))
 }
 
 // This is only enabled when "wasm-runtime" is on, because we're using rayon
@@ -192,7 +192,7 @@ where
     use namada_core::types::masp::encode_asset_type;
     use namada_core::types::storage::Epoch;
     use namada_storage::ResultExt;
-    use namada_trans_token::MaspDenom;
+    use namada_trans_token::{NATIVE_MAX_DECIMAL_PLACES, MaspDenom};
     use rayon::iter::{
         IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
     };
@@ -208,6 +208,7 @@ where
         .values()
         .cloned()
         .collect();
+    let mut masp_reward_denoms = BTreeMap::new();
     // Put the native rewards first because other inflation computations depend
     // on it
     let native_token = wl_storage.storage.native_token.clone();
@@ -228,23 +229,45 @@ where
     // notes clients have to use. This trick works under the assumption that
     // reward tokens will then be reinflated back to the current epoch.
     let reward_assets = [
-        encode_asset_type(Some(Epoch(0)), &native_token, MaspDenom::Zero)
-            .into_storage_result()?,
-        encode_asset_type(Some(Epoch(0)), &native_token, MaspDenom::One)
-            .into_storage_result()?,
-        encode_asset_type(Some(Epoch(0)), &native_token, MaspDenom::Two)
-            .into_storage_result()?,
-        encode_asset_type(Some(Epoch(0)), &native_token, MaspDenom::Three)
-            .into_storage_result()?,
+        encode_asset_type(
+            Some(Epoch(0)),
+            &native_token,
+            NATIVE_MAX_DECIMAL_PLACES.into(),
+            MaspDenom::Zero,
+        )
+        .into_storage_result()?,
+        encode_asset_type(
+            Some(Epoch(0)),
+            &native_token,
+            NATIVE_MAX_DECIMAL_PLACES.into(),
+            MaspDenom::One,
+        )
+        .into_storage_result()?,
+        encode_asset_type(
+            Some(Epoch(0)),
+            &native_token,
+            NATIVE_MAX_DECIMAL_PLACES.into(),
+            MaspDenom::Two,
+        )
+        .into_storage_result()?,
+        encode_asset_type(
+            Some(Epoch(0)),
+            &native_token,
+            NATIVE_MAX_DECIMAL_PLACES.into(),
+            MaspDenom::Three,
+        )
+        .into_storage_result()?,
     ];
     // Conversions from the previous to current asset for each address
     let mut current_convs =
-        BTreeMap::<(Address, MaspDenom), AllowedConversion>::new();
+        BTreeMap::<(Address, Denomination, MaspDenom), AllowedConversion>::new(
+        );
     // Native token inflation values are always with respect to this
     let mut ref_inflation = 0;
     // Reward all tokens according to above reward rates
     for addr in &masp_reward_keys {
-        let reward = calculate_masp_rewards(wl_storage, addr)?;
+        let (reward, denom) = calculate_masp_rewards(wl_storage, addr)?;
+        masp_reward_denoms.insert(addr, denom);
         if *addr == native_token {
             // The reference inflation is the denominator of the native token
             // inflation, which is always a constant
@@ -254,7 +277,8 @@ where
         let addr_bal: Amount = wl_storage
             .read(&balance_key(addr, &masp_addr))?
             .unwrap_or_default();
-        for denom in MaspDenom::iter() {
+
+        for digit in MaspDenom::iter() {
             // Provide an allowed conversion from previous timestamp. The
             // negative sign allows each instance of the old asset to be
             // cancelled out/replaced with the new asset
@@ -262,12 +286,14 @@ where
                 Some(wl_storage.storage.last_epoch),
                 addr,
                 denom,
+                digit,
             )
             .into_storage_result()?;
             let new_asset = encode_asset_type(
                 Some(wl_storage.storage.block.epoch),
                 addr,
                 denom,
+                digit,
             )
             .into_storage_result()?;
             // Get the last rewarded amount of the native token
@@ -300,7 +326,7 @@ where
                 // intermediate native tokens cancel/
                 // telescope out
                 current_convs.insert(
-                    (addr.clone(), denom),
+                    (addr.clone(), denom, digit),
                     (MaspAmount::from_pair(
                         old_asset,
                         -(*normed_inflation as i128),
@@ -314,7 +340,7 @@ where
                     .into(),
                 );
                 // Operations that happen exactly once for each token
-                if denom == MaspDenom::Three {
+                if digit == MaspDenom::Three {
                     // The reward for each reward.1 units of the current asset
                     // is reward.0 units of the reward token
                     let native_reward =
@@ -349,20 +375,20 @@ where
                 // conversions are added together, the
                 // intermediate tokens cancel/ telescope out
                 current_convs.insert(
-                    (addr.clone(), denom),
+                    (addr.clone(), denom, digit),
                     (MaspAmount::from_pair(old_asset, -(reward.1 as i128))
                         .unwrap()
                         + MaspAmount::from_pair(new_asset, reward.1 as i128)
                             .unwrap()
                         + MaspAmount::from_pair(
-                            reward_assets[denom as usize],
+                            reward_assets[digit as usize],
                             real_reward as i128,
                         )
                         .unwrap())
                     .into(),
                 );
                 // Operations that happen exactly once for each token
-                if denom == MaspDenom::Three {
+                if digit == MaspDenom::Three {
                     // The reward for each reward.1 units of the current asset
                     // is reward.0 units of the reward token
                     total_reward += (addr_bal * (reward.0, reward.1)).0;
@@ -372,7 +398,7 @@ where
             wl_storage.storage.conversion_state.assets.insert(
                 old_asset,
                 (
-                    (addr.clone(), denom),
+                    (addr.clone(), denom, digit),
                     wl_storage.storage.last_epoch,
                     MaspAmount::zero().into(),
                     0,
@@ -448,20 +474,21 @@ where
 
     // Add purely decoding entries to the assets map. These will be
     // overwritten before the creation of the next commitment tree
-    for addr in masp_reward_keys {
-        for denom in MaspDenom::iter() {
+    for (addr, denom) in masp_reward_denoms {
+        for digit in MaspDenom::iter() {
             // Add the decoding entry for the new asset type. An uncommitted
             // node position is used since this is not a conversion.
             let new_asset = encode_asset_type(
                 Some(wl_storage.storage.block.epoch),
-                &addr,
+                addr,
                 denom,
+                digit,
             )
             .into_storage_result()?;
             wl_storage.storage.conversion_state.assets.insert(
                 new_asset,
                 (
-                    (addr.clone(), denom),
+                    (addr.clone(), denom, digit),
                     wl_storage.storage.block.epoch,
                     MaspAmount::zero().into(),
                     wl_storage.storage.conversion_state.tree.size(),

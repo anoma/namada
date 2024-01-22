@@ -38,7 +38,7 @@ pub struct ConversionState {
     #[allow(clippy::type_complexity)]
     pub assets: BTreeMap<
         AssetType,
-        ((Address, MaspDenom), Epoch, AllowedConversion, usize),
+        ((Address, Denomination, MaspDenom), Epoch, AllowedConversion, usize),
     >,
 }
 
