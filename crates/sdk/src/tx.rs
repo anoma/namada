@@ -2163,11 +2163,11 @@ pub async fn build_ibc_transfer(
             class_uri: None,
             class_data: None,
             token_ids,
-            token_uris: Vec::new(),
-            token_data: Vec::new(),
+            token_uris: None,
+            token_data: None,
             sender: source.to_string().into(),
             receiver: args.receiver.clone().into(),
-            memo: args.memo.clone().unwrap_or_default().into(),
+            memo: args.memo.clone().map(|m| m.into()),
         };
         let message = IbcMsgNftTransfer {
             port_id_on_a: args.port_id.clone(),
