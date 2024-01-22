@@ -1,4 +1,5 @@
 //! Storage types
+use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
@@ -1461,14 +1462,28 @@ impl<E> GetEventNonce for InnerEthEventsQueue<E> {
     BorshDeserialize,
     Eq,
     PartialEq,
-    Ord,
-    PartialOrd,
 )]
 pub struct IndexedTx {
     /// The block height of the indexed tx
     pub height: BlockHeight,
     /// The index in the block of the tx
     pub index: TxIndex,
+}
+
+impl PartialOrd for IndexedTx {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for IndexedTx {
+    fn cmp(&self, other: &Self) -> Ordering {
+        if self.height == other.height {
+            self.index.cmp(&other.index)
+        } else {
+            self.height.cmp(&other.height)
+        }
+    }
 }
 
 #[cfg(test)]
