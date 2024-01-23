@@ -52,7 +52,7 @@ use namada::{state as storage, token};
 use namada_sdk::error::{
     is_pinned_error, Error, PinnedBalanceError, QueryError,
 };
-use namada_sdk::masp::{Conversions, MaspChange};
+use namada_sdk::masp::{Conversions, MaspChange, MaspTokenRewardData};
 use namada_sdk::proof_of_stake::types::ValidatorMetaData;
 use namada_sdk::rpc::{
     self, enriched_bonds_and_unbonds, query_epoch, TxResponse,
@@ -2474,9 +2474,25 @@ pub async fn query_masp_reward_tokens(context: &impl Namada) {
     let tokens = namada_sdk::rpc::query_masp_reward_tokens(context.client())
         .await
         .expect("The tokens that may earn MASP rewards should be defined");
-    display_line!(context.io(), "The following tokens may ear MASP rewards:");
-    for (alias, address) in tokens {
-        display_line!(context.io(), "{}: {}", alias, address);
+    display_line!(context.io(), "The following tokens may earn MASP rewards:");
+    for MaspTokenRewardData {
+        name,
+        address,
+        max_reward_rate,
+        kp_gain,
+        kd_gain,
+        locked_ratio_target,
+    } in tokens
+    {
+        display_line!(context.io(), "{}: {}", name, address);
+        display_line!(context.io(), "  Max reward rate: {}", max_reward_rate);
+        display_line!(context.io(), "  Kp gain: {}", kp_gain);
+        display_line!(context.io(), "  Kd gain: {}", kd_gain);
+        display_line!(
+            context.io(),
+            "  Locked ratio target: {}",
+            locked_ratio_target
+        );
     }
 }
 

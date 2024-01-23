@@ -44,6 +44,7 @@ use crate::error::{EncodingError, Error, QueryError, TxSubmitError};
 use crate::events::Event;
 use crate::internal_macros::echo_error;
 use crate::io::Io;
+use crate::masp::MaspTokenRewardData;
 use crate::queries::vp::pos::EnrichedBondsAndUnbondsDetails;
 use crate::queries::{Client, RPC};
 use crate::tendermint::block::Height;
@@ -321,7 +322,7 @@ pub async fn query_conversions<C: crate::queries::Client + Sync>(
 /// Query to read the tokens that earn masp rewards.
 pub async fn query_masp_reward_tokens<C: crate::queries::Client + Sync>(
     client: &C,
-) -> Result<BTreeMap<String, Address>, Error> {
+) -> Result<Vec<MaspTokenRewardData>, Error> {
     convert_response::<C, _>(RPC.shell().masp_reward_tokens(client).await)
 }
 

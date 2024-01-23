@@ -10,6 +10,7 @@ use masp_primitives::sapling::Node;
 use namada_account::{Account, AccountPublicKeysMap};
 use namada_core::hints;
 use namada_core::types::address::Address;
+use namada_core::types::dec::Dec;
 use namada_core::types::hash::Hash;
 use namada_core::types::storage::{
     self, BlockHeight, BlockResults, Epoch, KeySeg, PrefixValue,
@@ -26,6 +27,7 @@ use crate::events::{Event, EventType};
 use crate::ibc::core::host::types::identifiers::{
     ChannelId, ClientId, PortId, Sequence,
 };
+use crate::masp::MaspTokenRewardData;
 use crate::queries::types::{RequestCtx, RequestQuery};
 use crate::queries::{require_latest_height, EncodedResponseQuery};
 use crate::tendermint::merkle::proof::ProofOps;
@@ -84,7 +86,7 @@ router! {SHELL,
     ( "conversions" ) -> BTreeMap<AssetType, ConversionWithoutPath> = read_conversions,
 
     // Conversion state access - read conversion
-    ( "masp_reward_tokens" ) -> BTreeMap<String, Address> = masp_reward_tokens,
+    ( "masp_reward_tokens" ) -> Vec<MaspTokenRewardData> = masp_reward_tokens,
 
     // Block results access - read bit-vec
     ( "results" ) -> Vec<BlockResults> = read_results,
@@ -212,12 +214,47 @@ where
 /// Query to read the tokens that earn masp rewards.
 fn masp_reward_tokens<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
-) -> namada_storage::Result<BTreeMap<String, Address>>
+) -> namada_storage::Result<Vec<MaspTokenRewardData>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    Ok(ctx.wl_storage.storage.conversion_state.tokens.clone())
+    let tokens = ctx.wl_storage.storage.conversion_state.tokens.clone();
+    let mut data = Vec::<MaspTokenRewardData>::new();
+    for (name, token) in tokens {
+        let max_reward_rate = ctx
+            .wl_storage
+            .read::<Dec>(&namada_token::storage_key::masp_max_reward_rate_key(
+                &token,
+            ))?
+            .unwrap();
+        let kd_gain = ctx
+            .wl_storage
+            .read::<Dec>(&namada_token::storage_key::masp_kd_gain_key(&token))?
+            .unwrap();
+        let kp_gain = ctx
+            .wl_storage
+            .read::<Dec>(&namada_token::storage_key::masp_kp_gain_key(&token))?
+            .unwrap();
+        let locked_ratio_target = ctx
+            .wl_storage
+            .read::<Dec>(
+                &namada_token::storage_key::masp_locked_ratio_target_key(
+                    &token,
+                ),
+            )?
+            .unwrap();
+
+        data.push(MaspTokenRewardData {
+            name,
+            address: token,
+            max_reward_rate,
+            kp_gain,
+            kd_gain,
+            locked_ratio_target,
+        });
+    }
+    Ok(data)
 }
 
 fn epoch<D, H, V, T>(
