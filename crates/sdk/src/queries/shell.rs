@@ -227,15 +227,39 @@ where
             .read::<Dec>(&namada_token::storage_key::masp_max_reward_rate_key(
                 &token,
             ))?
-            .unwrap();
+            .ok_or_else(|| {
+                namada_storage::Error::new(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!(
+                        "Did not find max reward rate set for token {} ({})",
+                        &name, &token
+                    ),
+                ))
+            })?;
         let kd_gain = ctx
             .wl_storage
             .read::<Dec>(&namada_token::storage_key::masp_kd_gain_key(&token))?
-            .unwrap();
+            .ok_or_else(|| {
+                namada_storage::Error::new(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!(
+                        "Did not find kd gain set for token {} ({})",
+                        &name, &token
+                    ),
+                ))
+            })?;
         let kp_gain = ctx
             .wl_storage
             .read::<Dec>(&namada_token::storage_key::masp_kp_gain_key(&token))?
-            .unwrap();
+            .ok_or_else(|| {
+                namada_storage::Error::new(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!(
+                        "Did not find kp gain set for token {} ({})",
+                        &name, &token
+                    ),
+                ))
+            })?;
         let locked_ratio_target = ctx
             .wl_storage
             .read::<Dec>(
@@ -243,7 +267,16 @@ where
                     &token,
                 ),
             )?
-            .unwrap();
+            .ok_or_else(|| {
+                namada_storage::Error::new(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!(
+                        "Did not find target locked ratio set for token {} \
+                         ({})",
+                        &name, &token
+                    ),
+                ))
+            })?;
 
         data.push(MaspTokenRewardData {
             name,
