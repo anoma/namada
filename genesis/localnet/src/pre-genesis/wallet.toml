@@ -12,6 +12,8 @@ daewon = "unencrypted:00d19e226c0e7d123d79f5908b5948d4c461b66a5f8aa95600c28b55ab
 ester = "unencrypted:01369093e2035d84f72a7e5a17c89b7a938b5d08cc87b2289805e3afcc66ef9a42"
 faucet-key = "unencrypted:00548aa8393422b88dce5f4be8ee0320638061c3e0649ada1b0dacbec4c0c75bb2"
 validator-0-account-key = "unencrypted:0024204e13c51b26ed9b42c05647bc46b3821bb453e53d194962ede57ce5ec66ac"
+validator-1 = "unencrypted:004f5d2f8d6b974c88e6cfc64daaeff734c2fc391c9a4e1e9bafab6338d6e4b5b6"
+validator-2 = "unencrypted:00cc1527bd3c5aa3c841ba9d75fff916ed94a32f93ba99c97adf86c13a6a288007"
 
 [public_keys]
 albert-key = "ED25519_PK_PREFIXtpknam1qrnw8mxyqlj60mykgevnldcj5mg2fya7fs5a8xqdkd2gwtxhef0zy8a2wha"
@@ -21,28 +23,36 @@ daewon = "ED25519_PK_PREFIXtpknam1qzz4x4fammhdcfa0g8xw4udkq8s4n6kjhzlxh00ul3da05
 ester = "SECP256K1_PK_PREFIXtpknam1qypvqpzu74nafjahlwyq272dj76qq9rz30dulyc94883tmj893mquqs74gxv4"
 faucet-key = "ED25519_PK_PREFIXtpknam1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgyq0vra4"
 validator-0-account-key = "ED25519_PK_PREFIXtpknam1qpg2tsrplvhu3fd7z7tq5ztc2ne3s7e2ahjl2a2cddufrzdyr752g666ytj"
+validator-1 = "ED25519_PK_PREFIXtpknam1qq2u0jtkn2vyvnfzg4xva5m5a22m37gph26puqef5szu9fmu83ppkmd0e7h"
+validator-2 = "ED25519_PK_PREFIXtpknam1qzlgemrrn3y385av6fccqd680jxvzxmaqlfp60vhteqqlfznc7sxz4lf6w0"
 
 [derivation_paths]
+validator-1 = "m/44'/877'/0'/0'/0'"
+validator-2 = "m/44'/877'/0'/0'/0'"
 
 [addresses]
 albert = "tnam1qxfj3sf6a0meahdu9t6znp05g8zx4dkjtgyn9gfu"
-bertha = "tnam1q9rhgyv3ydq0zu3whnftvllqnvhvhm270qxay5tn"
-christel = "tnam1q9sx4ekzqaq3xdxtruxkm764nhl00cvcsc7df5jf"
 albert-key = "tnam1qrr8r00nrf6490ff9zgfz52xrnfhdja7rqvldl46"
+bertha = "tnam1q9rhgyv3ydq0zu3whnftvllqnvhvhm270qxay5tn"
 bertha-key = "tnam1qqc2ge6tg7s03nlshjr5d79dqyjr33aa8g2mxyzm"
+christel = "tnam1q9sx4ekzqaq3xdxtruxkm764nhl00cvcsc7df5jf"
 christel-key = "tnam1qz0nvec686e9pks8ynhm5ddq8ke7j2eey50uagtr"
 daewon = "tnam1qpca48f45pdtpcz06rue7k4kfdcjrvrux5cr3pwn"
 ester = "tnam1qpm3dpsv76ttu382vfggtr7m8n00na3sfyzm2g2q"
 faucet-key = "tnam1qzgcl2znamndmku7ujw6e79dmvd4v7rfd5c89dfz"
 validator-0 = "tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx"
+validator-1 = "tnam1qzcn9kgj0s286enqvf26wrj8pryflug4tuuem48f"
+validator-2 = "tnam1qqk6ayamjxn2h5nr7lfvd27v5gfm40ry4qjn9pc0"
 
 [pkhs]
+2DAE93BB91A6ABD263F7D2C6ABCCA213BABC64A8 = "validator-2"
 30A4674B47A0F8CFF0BC8746F8AD012438C7BD3A = "bertha-key"
-C671BDF31A7552BD2928909151461CD376CBBE18 = "albert-key"
 71DA9D35A05AB0E04FD0F99F5AB64B7121B07C35 = "daewon"
-918FA853EEE6DDDB9EE49DACF8ADDB1B5678696D = "faucet-key"
-9F36671A3EB250DA0724EFBA35A03DB3E92B3925 = "christel-key"
 7716860CF696BE44EA6250858FDB3CDEF9F63049 = "ester"
+918FA853EEE6DDDB9EE49DACF8ADDB1B5678696D = "faucet-key"
 9D371C6D220F8A4C6D70F0D3F828698881AB2447 = "validator-0-account-key"
+9F36671A3EB250DA0724EFBA35A03DB3E92B3925 = "christel-key"
+B132D9127C147D66606255A70E4708C89FF1155F = "validator-1"
+C671BDF31A7552BD2928909151461CD376CBBE18 = "albert-key"
 
 [address_vp_types]
