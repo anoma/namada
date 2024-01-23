@@ -16,6 +16,7 @@ use namada_core::types::storage::{IndexedTx, Key};
 use namada_gas::MASP_VERIFY_SHIELDED_TX_GAS;
 use namada_sdk::masp::verify_shielded_tx;
 use namada_state::{OptionExt, ResultExt};
+use namada_token::read_denom;
 use namada_tx::Tx;
 use namada_vp_env::VpEnv;
 use ripemd::Digest as RipemdDigest;
@@ -26,13 +27,12 @@ use token::storage_key::{
     masp_commitment_anchor_key, masp_commitment_tree_key,
     masp_convert_anchor_key, masp_nullifier_key, masp_pin_tx_key,
 };
-use token::MaspDenom;
 
 use crate::ledger::native_vp;
 use crate::ledger::native_vp::{Ctx, NativeVp};
 use crate::token;
+use crate::types::token::MaspDigitPos;
 use crate::vm::WasmCacheAccess;
-use namada_token::read_denom;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -262,10 +262,10 @@ where
 fn unepoched_tokens(
     token: &Address,
     denom: token::Denomination,
-) -> Result<HashMap<AssetType, (Address, token::Denomination, MaspDenom)>> {
+) -> Result<HashMap<AssetType, (Address, token::Denomination, MaspDigitPos)>> {
     let mut unepoched_tokens = HashMap::new();
-    for digit in MaspDenom::iter() {
-        let asset_type = encode_asset_type(None, token, denom, digit)
+    for digit in MaspDigitPos::iter() {
+        let asset_type = encode_asset_type(token.clone(), denom, digit, None)
             .wrap_err("unable to create asset type")?;
         unepoched_tokens.insert(asset_type, (token.clone(), denom, digit));
     }
@@ -297,7 +297,7 @@ where
             return Ok(false);
         }
 
-      let denom = read_denom(&self.ctx.pre(), &transfer.token)?
+        let denom = read_denom(&self.ctx.pre(), &transfer.token)?
             .ok_or_err_msg(
                 "No denomination found in storage for the given token",
             )?;
@@ -389,10 +389,10 @@ where
                         // Determine what the asset type would be if it were
                         // epoched
                         let epoched_asset_type = encode_asset_type(
-                            Some(epoch),
-                            token,
+                            token.clone(),
                             *denom,
                             *digit,
+                            Some(epoch),
                         )
                         .wrap_err("unable to create asset type")?;
                         if conversion_state

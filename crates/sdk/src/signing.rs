@@ -15,19 +15,16 @@ use namada_core::types::address::{
     Address, ImplicitAddress, InternalAddress, MASP,
 };
 use namada_core::types::key::*;
-use namada_core::types::masp::{
-    encode_asset_type, ExtendedViewingKey, PaymentAddress,
-};
+use namada_core::types::masp::{AssetData, ExtendedViewingKey, PaymentAddress};
 use namada_core::types::sign::SignatureIndex;
 use namada_core::types::storage::Epoch;
 use namada_core::types::token;
 use namada_core::types::token::Transfer;
 // use namada_core::types::storage::Key;
-use namada_core::types::token::{Amount, DenominatedAmount, Denomination, MaspDenom};
+use namada_core::types::token::{Amount, DenominatedAmount};
 use namada_governance::storage::proposal::{
     InitProposalData, ProposalType, VoteProposalData,
 };
-
 use namada_governance::storage::vote::ProposalVote;
 use namada_parameters::storage as parameter_storage;
 use namada_token::storage_key::balance_key;
@@ -709,22 +706,22 @@ async fn make_ledger_amount_asset(
     output: &mut Vec<String>,
     amount: u64,
     token: &AssetType,
-    assets: &HashMap<
-        AssetType,
-        (Address, Denomination, MaspDenom, Option<Epoch>),
-    >,
+    assets: &HashMap<AssetType, AssetData>,
     prefix: &str,
 ) {
-    if let Some((token, denom, digit, _epoch)) = assets.get(token) {
+    if let Some(decoded) = assets.get(token) {
         // If the AssetType can be decoded, then at least display Addressees
-        if let Some(token) = tokens.get(token) {
+        if let Some(token) = tokens.get(&decoded.token) {
             output.push(format!(
                 "{}Amount : {} {}",
                 prefix,
                 token.to_uppercase(),
                 DenominatedAmount::new(
-                    token::Amount::from_masp_denominated(amount, *digit),
-                    *denom
+                    token::Amount::from_masp_denominated(
+                        amount,
+                        decoded.position
+                    ),
+                    decoded.denom,
                 ),
             ));
         } else {
@@ -734,8 +731,11 @@ async fn make_ledger_amount_asset(
                     "{}Amount : {}",
                     prefix,
                     DenominatedAmount::new(
-                        token::Amount::from_masp_denominated(amount, *digit),
-                        *denom
+                        token::Amount::from_masp_denominated(
+                            amount,
+                            decoded.position
+                        ),
+                        decoded.denom,
                     ),
                 ),
             ]);
@@ -811,10 +811,7 @@ pub async fn make_ledger_masp_endpoints(
     output: &mut Vec<String>,
     transfer: &Transfer,
     builder: Option<&MaspBuilder>,
-    assets: &HashMap<
-        AssetType,
-        (Address, Denomination, MaspDenom, Option<Epoch>),
-    >,
+    assets: &HashMap<AssetType, AssetData>,
 ) {
     if transfer.source != MASP {
         output.push(format!("Sender : {}", transfer.source));
@@ -1254,14 +1251,11 @@ pub async fn to_ledger_vector(
                 Section::MaspBuilder(builder)
                     if builder.target == shielded_hash =>
                 {
-                    for (addr, denom, digit, epoch) in &builder.asset_types {
-                        match encode_asset_type(*epoch, addr, *denom, *digit) {
+                    for decoded in &builder.asset_types {
+                        match decoded.encode() {
                             Err(_) => None,
                             Ok(asset) => {
-                                asset_types.insert(
-                                    asset,
-                                    (addr.clone(), *denom, *digit, *epoch),
-                                );
+                                asset_types.insert(asset, decoded.clone());
                                 Some(builder)
                             }
                         }?;

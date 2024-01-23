@@ -13,7 +13,7 @@ use uint::construct_uint;
 
 use super::dec::{Dec, POS_DECIMAL_PRECISION};
 use crate::types::token;
-use crate::types::token::{Amount, AmountParseError, MaspDenom};
+use crate::types::token::{Amount, AmountParseError, MaspDigitPos};
 
 /// The value zero.
 pub const ZERO: Uint = Uint::from_u64(0);
@@ -569,7 +569,7 @@ impl I256 {
     /// using the given denomination.
     pub fn from_masp_denominated(
         value: impl Into<i128>,
-        denom: MaspDenom,
+        denom: MaspDigitPos,
     ) -> Result<Self, AmountParseError> {
         let value = value.into();
         let is_negative = value < 0;

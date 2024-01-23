@@ -1024,22 +1024,22 @@ pub mod testing {
                 MaspTxType::Shielding => {
                     transfer.target = MASP;
                     // Set the transparent amount and token
-                    let ((addr, denom, digit, _epoch), value) = asset_types.iter().next().unwrap();
+                    let (decoded, value) = asset_types.iter().next().unwrap();
                     transfer.amount = DenominatedAmount::new(
-                        token::Amount::from_masp_denominated(*value, *digit),
-                        *denom,
+                        token::Amount::from_masp_denominated(*value, decoded.position),
+                        decoded.denom,
                     );
-                    transfer.token = addr.clone();
+                    transfer.token = decoded.token.clone();
                 },
                 MaspTxType::Deshielding => {
                     transfer.source = MASP;
                     // Set the transparent amount and token
-                    let ((addr, denom, digit, _epoch), value) = asset_types.iter().next().unwrap();
+                    let (decoded, value) = asset_types.iter().next().unwrap();
                     transfer.amount = DenominatedAmount::new(
-                        token::Amount::from_masp_denominated(*value, *digit),
-                        *denom,
+                        token::Amount::from_masp_denominated(*value, decoded.position),
+                        decoded.denom,
                     );
-                    transfer.token = addr.clone();
+                    transfer.token = decoded.token.clone();
                 },
             }
             let masp_tx_hash = tx.add_masp_tx_section(shielded_transfer.masp_tx).1;

@@ -17,7 +17,7 @@ use namada_core::types::storage::{
     BlockHeight, BlockResults, Epoch, Key, PrefixValue,
 };
 use namada_core::types::token::{
-    Amount, DenominatedAmount, Denomination, MaspDenom,
+    Amount, DenominatedAmount, Denomination, MaspDigitPos,
 };
 use namada_core::types::{storage, token};
 use namada_governance::parameters::GovernanceParameters;
@@ -292,7 +292,7 @@ pub async fn query_conversion<C: crate::queries::Client + Sync>(
 ) -> Option<(
     Address,
     Denomination,
-    MaspDenom,
+    MaspDigitPos,
     Epoch,
     masp_primitives::transaction::components::I128Sum,
     MerklePath<Node>,
@@ -311,7 +311,7 @@ pub async fn query_conversions<C: crate::queries::Client + Sync>(
         (
             Address,
             Denomination,
-            MaspDenom,
+            MaspDigitPos,
             Epoch,
             masp_primitives::transaction::components::I128Sum,
         ),

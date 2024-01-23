@@ -38,7 +38,12 @@ pub struct ConversionState {
     #[allow(clippy::type_complexity)]
     pub assets: BTreeMap<
         AssetType,
-        ((Address, Denomination, MaspDenom), Epoch, AllowedConversion, usize),
+        (
+            (Address, Denomination, MaspDigitPos),
+            Epoch,
+            AllowedConversion,
+            usize,
+        ),
     >,
 }
 
@@ -225,19 +230,19 @@ impl Amount {
         }
     }
 
-    /// Given a u64 and [`MaspDenom`], construct the corresponding
+    /// Given a u64 and [`MaspDigitPos`], construct the corresponding
     /// amount.
-    pub fn from_masp_denominated(val: u64, denom: MaspDenom) -> Self {
+    pub fn from_masp_denominated(val: u64, denom: MaspDigitPos) -> Self {
         let mut raw = [0u64; 4];
         raw[denom as usize] = val;
         Self { raw: Uint(raw) }
     }
 
-    /// Given a u128 and [`MaspDenom`], construct the corresponding
+    /// Given a u128 and [`MaspDigitPos`], construct the corresponding
     /// amount.
     pub fn from_masp_denominated_u128(
         val: u128,
-        denom: MaspDenom,
+        denom: MaspDigitPos,
     ) -> Option<Self> {
         let lo = val as u64;
         let hi = (val >> 64) as u64;
@@ -927,14 +932,14 @@ impl From<Amount> for Uint {
 #[repr(u8)]
 #[allow(missing_docs)]
 #[borsh(use_discriminant = true)]
-pub enum MaspDenom {
+pub enum MaspDigitPos {
     Zero = 0,
     One,
     Two,
     Three,
 }
 
-impl From<u8> for MaspDenom {
+impl From<u8> for MaspDigitPos {
     fn from(denom: u8) -> Self {
         match denom {
             0 => Self::Zero,
@@ -946,9 +951,9 @@ impl From<u8> for MaspDenom {
     }
 }
 
-impl MaspDenom {
+impl MaspDigitPos {
     /// Iterator over the possible denominations
-    pub fn iter() -> impl Iterator<Item = MaspDenom> {
+    pub fn iter() -> impl Iterator<Item = MaspDigitPos> {
         // 0, 1, 2, 3
         (0u8..4).map(Self::from)
     }
@@ -1275,7 +1280,7 @@ mod tests {
     fn test_from_masp_denominated() {
         let uint = Uint([15u64, 16, 17, 18]);
         let original = Amount::from_uint(uint, 0).expect("Test failed");
-        for denom in MaspDenom::iter() {
+        for denom in MaspDigitPos::iter() {
             let word = denom.denominate(&original);
             assert_eq!(word, denom as u64 + 15u64);
             let amount = Amount::from_masp_denominated(word, denom);
