@@ -187,7 +187,7 @@ fn run_ledger_ibc() -> Result<()> {
 }
 
 #[test]
-fn run_ledger_ibc_with_hermes() -> Result<()> {
+fn drun_ledger_ibc_with_hermes() -> Result<()> {
     let update_genesis =
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
             genesis.parameters.parameters.epochs_per_year = 31536;
@@ -1913,7 +1913,7 @@ fn check_shielded_balances(
         "--node",
         &rpc_b,
     ];
-    let mut client = run!(test_a, Bin::Client, tx_args, Some(120))?;
+    let mut client = run!(test_b, Bin::Client, tx_args, Some(120))?;
     client.assert_success();
     // PA(B) on Chain B has received BTC on chain A
     let token_addr = find_address(test_a, BTC)?.to_string();

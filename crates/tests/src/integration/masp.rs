@@ -717,6 +717,14 @@ fn masp_incentives() -> Result<()> {
     )?;
     node.assert_success();
 
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+    node.assert_success();
+
     // Assert NAM balance at VK(A) is 0
     let captured = CapturedOutput::of(|| {
         run(
