@@ -685,12 +685,9 @@ impl ShieldedUtils for BenchShieldedUtils {
         // Atomicity is required to prevent other client instances from reading
         // corrupt data.
         std::fs::rename(
-            tmp_path.clone(),
+            tmp_path,
             self.context_dir.0.path().to_path_buf().join(FILE_NAME),
         )?;
-        // Finally, remove our temporary file to allow future saving of shielded
-        // contexts.
-        std::fs::remove_file(tmp_path)?;
         Ok(())
     }
 }
@@ -957,9 +954,11 @@ impl BenchShieldedCtx {
             .wallet
             .find_spending_key(ALBERT_SPENDING_KEY, None)
             .unwrap();
-        async_runtime
-            .block_on(self.shielded.fetch(
+        self.shielded = async_runtime
+            .block_on(self.shielded.syncing(
                 &self.shell,
+                &StdIo,
+                None,
                 &[spending_key.into()],
                 &[],
             ))

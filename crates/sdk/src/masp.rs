@@ -4,9 +4,12 @@ use std::cmp::Ordering;
 use std::collections::{btree_map, BTreeMap, BTreeSet, HashMap, HashSet};
 use std::env;
 use std::fmt::Debug;
+use std::future::Future;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::str::FromStr;
+use std::task::{Context, Poll};
 
 // use async_std::io::prelude::WriteExt;
 // use async_std::io::{self};
@@ -54,8 +57,8 @@ use masp_proofs::sapling::SaplingVerificationContext;
 use namada_core::types::address::{Address, MASP};
 use namada_core::types::ibc::IbcShieldedTransfer;
 use namada_core::types::masp::{
-    encode_asset_type, BalanceOwner, ExtendedViewingKey, PaymentAddress,
-    TransferSource, TransferTarget,
+    encode_asset_type, BalanceOwner, PaymentAddress, TransferSource,
+    TransferTarget,
 };
 use namada_core::types::storage::{BlockHeight, Epoch, IndexedTx, TxIndex};
 use namada_core::types::time::{DateTimeUtc, DurationSecs};
@@ -63,6 +66,7 @@ use namada_ibc::IbcMessage;
 use namada_token::{self as token, MaspDenom, Transfer};
 use namada_tx::data::{TxResult, WrapperTx};
 use namada_tx::Tx;
+use owo_colors::OwoColorize;
 use rand_core::{CryptoRng, OsRng, RngCore};
 use ripemd::Digest as RipemdDigest;
 use sha2::Digest;
@@ -76,7 +80,9 @@ use crate::queries::Client;
 use crate::rpc::{query_block, query_conversion, query_epoch_at_height};
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
-use crate::{display_line, edisplay_line, rpc, MaybeSend, MaybeSync, Namada};
+use crate::{
+    display, display_line, edisplay_line, rpc, MaybeSend, MaybeSync, Namada,
+};
 
 /// Env var to point to a dir with MASP parameters. When not specified,
 /// the default OS specific path is used.
@@ -501,15 +507,43 @@ pub type TransferDelta = HashMap<Address, MaspChange>;
 /// Represents the changes that were made to a list of shielded accounts
 pub type TransactionDelta = HashMap<ViewingKey, I128Sum>;
 
+#[derive(Debug, Clone)]
+/// A marker type indicating that the shielded context is currently
+/// syncing.
+pub struct Syncing;
+
+#[derive(Debug, Clone)]
+/// A marker type indicating that the shielded context is not currently
+/// syncing.
+pub struct NotSyncing;
+
+pub trait SyncStatus {
+    type InterruptHandler;
+}
+
+impl SyncStatus for NotSyncing {
+    type InterruptHandler = ();
+}
+
+impl SyncStatus for Syncing {
+    type InterruptHandler = tokio::sync::watch::Receiver<bool>;
+}
+
+#[derive(BorshSerialize, BorshDeserialize, Debug, Default)]
+pub struct Unscanned {
+    txs: BTreeMap<IndexedTx, (Epoch, Transfer, Transaction)>,
+    vks: BTreeSet<ViewingKey>,
+}
+
 /// Represents the current state of the shielded pool from the perspective of
 /// the chosen viewing keys.
 #[derive(BorshSerialize, BorshDeserialize, Debug)]
-pub struct ShieldedContext<U: ShieldedUtils> {
+pub struct ShieldedContext<U: ShieldedUtils, S: SyncStatus = NotSyncing> {
     /// Location where this shielded context is saved
     #[borsh(skip)]
     pub utils: U,
-    /// The last indexed transaction to be processed in this context
-    pub last_indexed: Option<IndexedTx>,
+    /// The last indexed transaction fetched by the context
+    pub last_fetched: Option<IndexedTx>,
     /// The commitment tree produced by scanning all transactions up to tx_pos
     pub tree: CommitmentTree<Node>,
     /// Maps viewing keys to applicable note positions
@@ -533,6 +567,11 @@ pub struct ShieldedContext<U: ShieldedUtils> {
     pub asset_types: HashMap<AssetType, (Address, MaspDenom, Option<Epoch>)>,
     /// Maps note positions to their corresponding viewing keys
     pub vk_map: HashMap<usize, ViewingKey>,
+    /// A type that informs the shielded context that whatever operation is
+    /// being performed should be interrupted.
+    pub interrupt: S::InterruptHandler,
+    /// Fetched data that we did not scan because syncing was interrupted
+    pub unscanned: Unscanned,
 }
 
 /// Default implementation to ease construction of TxContexts. Derive cannot be
@@ -541,7 +580,7 @@ impl<U: ShieldedUtils + Default> Default for ShieldedContext<U> {
     fn default() -> ShieldedContext<U> {
         ShieldedContext::<U> {
             utils: U::default(),
-            last_indexed: None,
+            last_fetched: None,
             tree: CommitmentTree::empty(),
             pos_map: HashMap::default(),
             nf_map: HashMap::default(),
@@ -553,196 +592,19 @@ impl<U: ShieldedUtils + Default> Default for ShieldedContext<U> {
             delta_map: BTreeMap::default(),
             asset_types: HashMap::default(),
             vk_map: HashMap::default(),
+            interrupt: <NotSyncing as SyncStatus>::InterruptHandler::default(),
+            unscanned: Default::default(),
         }
     }
 }
 
-impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
-    /// Try to load the last saved shielded context from the given context
-    /// directory. If this fails, then leave the current context unchanged.
-    pub async fn load(&mut self) -> std::io::Result<()> {
-        self.utils.clone().load(self).await
-    }
-
-    /// Save this shielded context into its associated context directory
-    pub async fn save(&self) -> std::io::Result<()> {
-        self.utils.save(self).await
-    }
-
-    /// Merge data from the given shielded context into the current shielded
-    /// context. It must be the case that the two shielded contexts share the
-    /// same last transaction ID and share identical commitment trees.
-    pub fn merge(&mut self, new_ctx: ShieldedContext<U>) {
-        debug_assert_eq!(self.last_indexed, new_ctx.last_indexed);
-        // Merge by simply extending maps. Identical keys should contain
-        // identical values, so overwriting should not be problematic.
-        self.pos_map.extend(new_ctx.pos_map);
-        self.nf_map.extend(new_ctx.nf_map);
-        self.note_map.extend(new_ctx.note_map);
-        self.memo_map.extend(new_ctx.memo_map);
-        self.div_map.extend(new_ctx.div_map);
-        self.witness_map.extend(new_ctx.witness_map);
-        self.spents.extend(new_ctx.spents);
-        self.asset_types.extend(new_ctx.asset_types);
-        self.vk_map.extend(new_ctx.vk_map);
-        // The deltas are the exception because different keys can reveal
-        // different parts of the same transaction. Hence each delta needs to be
-        // merged separately.
-        for (height, (ep, ntfer_delta, ntx_delta)) in new_ctx.delta_map {
-            let (_ep, tfer_delta, tx_delta) = self
-                .delta_map
-                .entry(height)
-                .or_insert((ep, TransferDelta::new(), TransactionDelta::new()));
-            tfer_delta.extend(ntfer_delta);
-            tx_delta.extend(ntx_delta);
-        }
-    }
-
-    /// Fetch the current state of the multi-asset shielded pool into a
-    /// ShieldedContext
-    pub async fn fetch<C: Client + Sync>(
-        &mut self,
-        client: &C,
-        sks: &[ExtendedSpendingKey],
-        fvks: &[ViewingKey],
-    ) -> Result<(), Error> {
-        // First determine which of the keys requested to be fetched are new.
-        // Necessary because old transactions will need to be scanned for new
-        // keys.
-        let mut unknown_keys = Vec::new();
-        for esk in sks {
-            let vk = to_viewing_key(esk).vk;
-            if !self.pos_map.contains_key(&vk) {
-                unknown_keys.push(vk);
-            }
-        }
-        for vk in fvks {
-            if !self.pos_map.contains_key(vk) {
-                unknown_keys.push(*vk);
-            }
-        }
-
-        // If unknown keys are being used, we need to scan older transactions
-        // for any unspent notes
-        let (txs, mut tx_iter);
-        if !unknown_keys.is_empty() {
-            // Load all transactions accepted until this point
-            txs = Self::fetch_shielded_transfers(client, None).await?;
-            tx_iter = txs.iter();
-            // Do this by constructing a shielding context only for unknown keys
-            let mut tx_ctx = Self {
-                utils: self.utils.clone(),
-                ..Default::default()
-            };
-            for vk in unknown_keys {
-                tx_ctx.pos_map.entry(vk).or_insert_with(BTreeSet::new);
-            }
-            // Update this unknown shielded context until it is level with self
-            while tx_ctx.last_indexed != self.last_indexed {
-                if let Some((indexed_tx, (epoch, tx, stx))) = tx_iter.next() {
-                    tx_ctx.scan_tx(*indexed_tx, *epoch, tx, stx)?;
-                } else {
-                    break;
-                }
-            }
-            // Merge the context data originating from the unknown keys into the
-            // current context
-            self.merge(tx_ctx);
-        } else {
-            // Load only transactions accepted from last_txid until this point
-            txs = Self::fetch_shielded_transfers(client, self.last_indexed)
-                .await?;
-            tx_iter = txs.iter();
-        }
-        // Now that we possess the unspent notes corresponding to both old and
-        // new keys up until tx_pos, proceed to scan the new transactions.
-        for (indexed_tx, (epoch, tx, stx)) in &mut tx_iter {
-            self.scan_tx(*indexed_tx, *epoch, tx, stx)?;
-        }
-        Ok(())
-    }
-
-    /// Obtain a chronologically-ordered list of all accepted shielded
-    /// transactions from a node.
-    pub async fn fetch_shielded_transfers<C: Client + Sync>(
-        client: &C,
-        last_indexed_tx: Option<IndexedTx>,
-    ) -> Result<BTreeMap<IndexedTx, (Epoch, Transfer, Transaction)>, Error>
-    {
-        // Query for the last produced block height
-        let last_block_height = query_block(client)
-            .await?
-            .map_or_else(BlockHeight::first, |block| block.height);
-
-        let mut shielded_txs = BTreeMap::new();
-        // Fetch all the transactions we do not have yet
-        let first_height_to_query =
-            last_indexed_tx.map_or_else(|| 1, |last| last.height.0);
-        let first_idx_to_query =
-            last_indexed_tx.map_or_else(|| 0, |last| last.index.0 + 1);
-        for height in first_height_to_query..=last_block_height.0 {
-            // Get the valid masp transactions at the specified height
-            let epoch = query_epoch_at_height(client, height.into())
-                .await?
-                .ok_or_else(|| {
-                    Error::from(QueryError::General(
-                        "Queried height is greater than the last committed \
-                         block height"
-                            .to_string(),
-                    ))
-                })?;
-
-            let first_index_to_query = if height == first_height_to_query {
-                Some(TxIndex(first_idx_to_query))
-            } else {
-                None
-            };
-
-            let txs_results = match get_indexed_masp_events_at_height(
-                client,
-                height.into(),
-                first_index_to_query,
-            )
-            .await?
-            {
-                Some(events) => events,
-                None => continue,
-            };
-
-            // Query the actual block to get the txs bytes. If we only need one
-            // tx it might be slightly better to query the /tx endpoint to
-            // reduce the amount of data sent over the network, but this is a
-            // minimal improvement and it's even hard to tell how many times
-            // we'd need a single masp tx to make this worth it
-            let block = client
-                .block(height as u32)
-                .await
-                .map_err(|e| Error::from(QueryError::General(e.to_string())))?
-                .block
-                .data;
-
-            for (idx, tx_event) in txs_results {
-                let tx = Tx::try_from(block[idx.0 as usize].as_ref())
-                    .map_err(|e| Error::Other(e.to_string()))?;
-                let (transfer, masp_transaction) = Self::extract_masp_tx(
-                    &tx,
-                    ExtractShieldedActionArg::Event::<C>(tx_event),
-                    true,
-                )
-                .await?;
-
-                // Collect the current transaction
-                shielded_txs.insert(
-                    IndexedTx {
-                        height: height.into(),
-                        index: idx,
-                    },
-                    (epoch, transfer, masp_transaction),
-                );
-            }
-        }
-
-        Ok(shielded_txs)
+impl<U: ShieldedUtils + MaybeSend + MaybeSync, S: SyncStatus>
+    ShieldedContext<U, S>
+{
+    /// If we have unscanned txs in the local cache, get the index of the
+    /// latest one.
+    pub fn latest_unscanned(&self) -> Option<IndexedTx> {
+        self.unscanned.txs.keys().max().cloned()
     }
 
     /// Extract the relevant shield portions of a [`Tx`], if any.
@@ -843,138 +705,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             }
         };
         Ok(tx)
-    }
-
-    /// Applies the given transaction to the supplied context. More precisely,
-    /// the shielded transaction's outputs are added to the commitment tree.
-    /// Newly discovered notes are associated to the supplied viewing keys. Note
-    /// nullifiers are mapped to their originating notes. Note positions are
-    /// associated to notes, memos, and diversifiers. And the set of notes that
-    /// we have spent are updated. The witness map is maintained to make it
-    /// easier to construct note merkle paths in other code. See
-    /// <https://zips.z.cash/protocol/protocol.pdf#scan>
-    pub fn scan_tx(
-        &mut self,
-        indexed_tx: IndexedTx,
-        epoch: Epoch,
-        tx: &Transfer,
-        shielded: &Transaction,
-    ) -> Result<(), Error> {
-        // For tracking the account changes caused by this Transaction
-        let mut transaction_delta = TransactionDelta::new();
-        // Listen for notes sent to our viewing keys
-        for so in shielded
-            .sapling_bundle()
-            .map_or(&vec![], |x| &x.shielded_outputs)
-        {
-            // Create merkle tree leaf node from note commitment
-            let node = Node::new(so.cmu.to_repr());
-            // Update each merkle tree in the witness map with the latest
-            // addition
-            for (_, witness) in self.witness_map.iter_mut() {
-                witness.append(node).map_err(|()| {
-                    Error::Other("note commitment tree is full".to_string())
-                })?;
-            }
-            let note_pos = self.tree.size();
-            self.tree.append(node).map_err(|()| {
-                Error::Other("note commitment tree is full".to_string())
-            })?;
-            // Finally, make it easier to construct merkle paths to this new
-            // note
-            let witness = IncrementalWitness::<Node>::from_tree(&self.tree);
-            self.witness_map.insert(note_pos, witness);
-            // Let's try to see if any of our viewing keys can decrypt latest
-            // note
-            let mut pos_map = HashMap::new();
-            std::mem::swap(&mut pos_map, &mut self.pos_map);
-            for (vk, notes) in pos_map.iter_mut() {
-                let decres = try_sapling_note_decryption::<_, OutputDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>>(
-                    &NETWORK,
-                    1.into(),
-                    &PreparedIncomingViewingKey::new(&vk.ivk()),
-                    so,
-                );
-                // So this current viewing key does decrypt this current note...
-                if let Some((note, pa, memo)) = decres {
-                    // Add this note to list of notes decrypted by this viewing
-                    // key
-                    notes.insert(note_pos);
-                    // Compute the nullifier now to quickly recognize when spent
-                    let nf = note.nf(
-                        &vk.nk,
-                        note_pos.try_into().map_err(|_| {
-                            Error::Other("Can not get nullifier".to_string())
-                        })?,
-                    );
-                    self.note_map.insert(note_pos, note);
-                    self.memo_map.insert(note_pos, memo);
-                    // The payment address' diversifier is required to spend
-                    // note
-                    self.div_map.insert(note_pos, *pa.diversifier());
-                    self.nf_map.insert(nf, note_pos);
-                    // Note the account changes
-                    let balance = transaction_delta
-                        .entry(*vk)
-                        .or_insert_with(I128Sum::zero);
-                    *balance += I128Sum::from_nonnegative(
-                        note.asset_type,
-                        note.value as i128,
-                    )
-                    .map_err(|()| {
-                        Error::Other(
-                            "found note with invalid value or asset type"
-                                .to_string(),
-                        )
-                    })?;
-
-                    self.vk_map.insert(note_pos, *vk);
-                    break;
-                }
-            }
-            std::mem::swap(&mut pos_map, &mut self.pos_map);
-        }
-        // Cancel out those of our notes that have been spent
-        for ss in shielded
-            .sapling_bundle()
-            .map_or(&vec![], |x| &x.shielded_spends)
-        {
-            // If the shielded spend's nullifier is in our map, then target note
-            // is rendered unusable
-            if let Some(note_pos) = self.nf_map.get(&ss.nullifier) {
-                self.spents.insert(*note_pos);
-                // Note the account changes
-                let balance = transaction_delta
-                    .entry(self.vk_map[note_pos])
-                    .or_insert_with(I128Sum::zero);
-                let note = self.note_map[note_pos];
-                *balance -= I128Sum::from_nonnegative(
-                    note.asset_type,
-                    note.value as i128,
-                )
-                .map_err(|()| {
-                    Error::Other(
-                        "found note with invalid value or asset type"
-                            .to_string(),
-                    )
-                })?;
-            }
-        }
-        // Record the changes to the transparent accounts
-        let mut transfer_delta = TransferDelta::new();
-        let token_addr = tx.token.clone();
-        transfer_delta.insert(
-            tx.source.clone(),
-            MaspChange {
-                asset: token_addr,
-                change: -tx.amount.amount().change(),
-            },
-        );
-        self.last_indexed = Some(indexed_tx);
-
-        self.delta_map
-            .insert(indexed_tx, (epoch, transfer_delta, transaction_delta));
-        Ok(())
     }
 
     /// Summarize the effects on shielded and transparent accounts of each
@@ -1589,6 +1319,187 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         res
     }
 
+    /// Get the asset type with the given epoch, token, and denomination. If it
+    /// does not exist in the protocol, then remove the timestamp. Make sure to
+    /// store the derived AssetType so that future decoding is possible.
+    pub async fn get_asset_type<C: Client + Sync>(
+        &mut self,
+        client: &C,
+        epoch: Epoch,
+        token: Address,
+        denom: MaspDenom,
+    ) -> Result<AssetType, Error> {
+        let mut asset_type = encode_asset_type(Some(epoch), &token, denom)
+            .map_err(|_| {
+                Error::Other("unable to create asset type".to_string())
+            })?;
+        if self.decode_asset_type(client, asset_type).await.is_none() {
+            // If we fail to decode the epoched asset type, then remove the
+            // epoch
+            asset_type =
+                encode_asset_type(None, &token, denom).map_err(|_| {
+                    Error::Other("unable to create asset type".to_string())
+                })?;
+            self.asset_types.insert(asset_type, (token, denom, None));
+        }
+        Ok(asset_type)
+    }
+
+    /// Convert Anoma amount and token type to MASP equivalents
+    async fn convert_amount<C: Client + Sync>(
+        &mut self,
+        client: &C,
+        epoch: Epoch,
+        token: &Address,
+        val: token::Amount,
+    ) -> Result<([AssetType; 4], U64Sum), Error> {
+        let mut amount = U64Sum::zero();
+        let mut asset_types = Vec::new();
+        for denom in MaspDenom::iter() {
+            let asset_type = self
+                .get_asset_type(client, epoch, token.clone(), denom)
+                .await?;
+            // Combine the value and unit into one amount
+            amount +=
+                U64Sum::from_nonnegative(asset_type, denom.denominate(&val))
+                    .map_err(|_| {
+                        Error::Other("invalid value for amount".to_string())
+                    })?;
+            asset_types.push(asset_type);
+        }
+        Ok((
+            asset_types
+                .try_into()
+                .expect("there must be exactly 4 denominations"),
+            amount,
+        ))
+    }
+}
+
+impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, NotSyncing> {
+    /// Try to load the last saved shielded context from the given context
+    /// directory. If this fails, then leave the current context unchanged.
+    pub async fn load(&mut self) -> std::io::Result<()> {
+        self.utils.clone().load(self).await
+    }
+
+    /// Save this shielded context into its associated context directory
+    pub async fn save(&self) -> std::io::Result<()> {
+        self.utils.save(self).await
+    }
+
+    /// Obtain the known effects of all accepted shielded and transparent
+    /// transactions. If an owner is specified, then restrict the set to only
+    /// transactions crediting/debiting the given owner. If token is specified,
+    /// then restrict set to only transactions involving the given token.
+    pub async fn query_tx_deltas<C: Client + Sync>(
+        &mut self,
+        client: &C,
+        query_owner: &Either<BalanceOwner, Vec<Address>>,
+        query_token: &Option<Address>,
+    ) -> Result<
+        BTreeMap<IndexedTx, (Epoch, TransferDelta, TransactionDelta)>,
+        Error,
+    > {
+        const TXS_PER_PAGE: u8 = 100;
+        let _ = self.load().await;
+        // Required for filtering out rejected transactions from Tendermint
+        // responses
+        let block_results = rpc::query_results(client).await?;
+        let mut transfers = self.get_tx_deltas().clone();
+        // Construct the set of addresses relevant to user's query
+        let relevant_addrs = match &query_owner {
+            Either::Left(BalanceOwner::Address(owner)) => vec![owner.clone()],
+            // MASP objects are dealt with outside of tx_search
+            Either::Left(BalanceOwner::FullViewingKey(_viewing_key)) => vec![],
+            Either::Left(BalanceOwner::PaymentAddress(_owner)) => vec![],
+            // Unspecified owner means all known addresses are considered
+            // relevant
+            Either::Right(addrs) => addrs.clone(),
+        };
+        // Find all transactions to or from the relevant address set
+        for addr in relevant_addrs {
+            for prop in ["transfer.source", "transfer.target"] {
+                // Query transactions involving the current address
+                let mut tx_query = Query::eq(prop, addr.encode());
+                // Elaborate the query if requested by the user
+                if let Some(token) = &query_token {
+                    tx_query =
+                        tx_query.and_eq("transfer.token", token.encode());
+                }
+                for page in 1.. {
+                    let txs = &client
+                        .tx_search(
+                            tx_query.clone(),
+                            true,
+                            page,
+                            TXS_PER_PAGE,
+                            Order::Ascending,
+                        )
+                        .await
+                        .map_err(|e| {
+                            Error::from(QueryError::General(format!(
+                                "for transaction: {e}"
+                            )))
+                        })?
+                        .txs;
+                    for response_tx in txs {
+                        let height = BlockHeight(response_tx.height.value());
+                        let idx = TxIndex(response_tx.index);
+                        // Only process yet unprocessed transactions which have
+                        // been accepted by node VPs
+                        let should_process = !transfers
+                            .contains_key(&IndexedTx { height, index: idx })
+                            && block_results[u64::from(height) as usize]
+                                .is_accepted(idx.0 as usize);
+                        if !should_process {
+                            continue;
+                        }
+                        let tx = Tx::try_from(response_tx.tx.as_ref())
+                            .map_err(|e| Error::Other(e.to_string()))?;
+                        let mut wrapper = None;
+                        let mut transfer = None;
+                        extract_payload(tx, &mut wrapper, &mut transfer)?;
+                        // Epoch data is not needed for transparent transactions
+                        let epoch =
+                            wrapper.map(|x| x.epoch).unwrap_or_default();
+                        if let Some(transfer) = transfer {
+                            // Skip MASP addresses as they are already handled
+                            // by ShieldedContext
+                            if transfer.source == MASP
+                                || transfer.target == MASP
+                            {
+                                continue;
+                            }
+                            // Describe how a Transfer simply subtracts from one
+                            // account and adds the same to another
+
+                            let delta = TransferDelta::from([(
+                                transfer.source.clone(),
+                                MaspChange {
+                                    asset: transfer.token.clone(),
+                                    change: -transfer.amount.amount().change(),
+                                },
+                            )]);
+
+                            // No shielded accounts are affected by this
+                            // Transfer
+                            transfers.insert(
+                                IndexedTx { height, index: idx },
+                                (epoch, delta, TransactionDelta::new()),
+                            );
+                        }
+                    }
+                    // An incomplete page signifies no more transactions
+                    if (txs.len() as u8) < TXS_PER_PAGE {
+                        break;
+                    }
+                }
+            }
+        }
+        Ok(transfers)
+    }
+
     /// Make shielded components to embed within a Transfer object. If no
     /// shielded payment address nor spending key is specified, then no
     /// shielded components are produced. Otherwise a transaction containing
@@ -1618,18 +1529,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         }
         // We want to fund our transaction solely from supplied spending key
         let spending_key = spending_key.map(|x| x.into());
-        let spending_keys: Vec<_> = spending_key.into_iter().collect();
         {
             // Load the current shielded context given the spending key we
             // possess
             let mut shielded = context.shielded_mut().await;
             let _ = shielded.load().await;
-            shielded
-                .fetch(context.client(), &spending_keys, &[])
-                .await?;
-            // Save the update state so that future fetches can be
-            // short-circuited
-            let _ = shielded.save().await;
         }
         // Determine epoch in which to submit potential shielded transaction
         let epoch = rpc::query_epoch(context.client()).await?;
@@ -2038,181 +1942,493 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         }
     }
 
-    /// Obtain the known effects of all accepted shielded and transparent
-    /// transactions. If an owner is specified, then restrict the set to only
-    /// transactions crediting/debiting the given owner. If token is specified,
-    /// then restrict set to only transactions involving the given token.
-    pub async fn query_tx_deltas<C: Client + Sync>(
+    fn into_syncing(
+        self,
+        channel: &tokio::sync::watch::Receiver<bool>,
+    ) -> ShieldedContext<U, Syncing> {
+        ShieldedContext {
+            utils: self.utils,
+            last_fetched: self.last_fetched,
+            tree: self.tree,
+            pos_map: self.pos_map,
+            nf_map: self.nf_map,
+            note_map: self.note_map,
+            memo_map: self.memo_map,
+            div_map: self.div_map,
+            witness_map: self.witness_map,
+            delta_map: self.delta_map,
+            spents: self.spents,
+            asset_types: self.asset_types,
+            vk_map: self.vk_map,
+            interrupt: channel.clone(),
+            unscanned: self.unscanned,
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub async fn syncing<C: Client + Sync>(
+        self,
+        client: &C,
+        io: &impl Io,
+        last_query_height: Option<BlockHeight>,
+        sks: &[ExtendedSpendingKey],
+        fvks: &[ViewingKey],
+    ) -> Result<Self, Error> {
+        let shutdown_signal = async {
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            crate::control_flow::shutdown_send(tx).await;
+            rx.await
+        };
+
+        let (signal_sx, signal_rx) = tokio::sync::watch::channel(false);
+
+        display_line!(io, "{}", "==== Shielded sync started ====".on_white());
+        if let Some(indexed) = self.last_fetched.as_ref() {
+            display_line!(
+                io,
+                "  -> last fetched tx: block height {}, index {}",
+                indexed.height,
+                indexed.index
+            );
+        }
+        if !self.unscanned.vks.is_empty() {
+            display_line!(
+                io,
+                "  -> viewing keys still to be synced: {}",
+                self.unscanned.vks.len()
+            );
+        }
+        if !self.unscanned.txs.is_empty() {
+            display_line!(
+                io,
+                "  -> fetched txs to scan: {}",
+                self.unscanned.txs.len()
+            );
+        }
+        display_line!(io, "\n\n");
+
+        let mut syncing = self.into_syncing(&signal_rx);
+        let sync = async move {
+            syncing
+                .fetch(client, io, last_query_height, sks, fvks)
+                .await
+                .map(|_| syncing.stop_sync())
+        };
+        let shielded = ShieldedSync {
+            sync: Box::pin(sync),
+            signal: Box::pin(shutdown_signal),
+            watch: signal_sx,
+        }
+        .await?;
+        display_line!(io, "Saving shielded ctx... ");
+        shielded
+            .save()
+            .await
+            .map_err(|e| Error::Other(e.to_string()))?;
+        Ok(shielded)
+    }
+}
+
+impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, Syncing> {
+    /// Check if a signal to stop syncing has been received.
+    fn interrupted(&self) -> bool {
+        *self.interrupt.borrow()
+    }
+
+    /// Transition back into a non-syncing context
+    fn stop_sync(self) -> ShieldedContext<U> {
+        ShieldedContext {
+            utils: self.utils,
+            last_fetched: self.last_fetched,
+            tree: self.tree,
+            pos_map: self.pos_map,
+            nf_map: self.nf_map,
+            note_map: self.note_map,
+            memo_map: self.memo_map,
+            div_map: self.div_map,
+            witness_map: self.witness_map,
+            delta_map: self.delta_map,
+            spents: self.spents,
+            asset_types: self.asset_types,
+            vk_map: self.vk_map,
+            interrupt: (),
+            unscanned: self.unscanned,
+        }
+    }
+
+    /// Merge data from the given shielded context into the current shielded
+    /// context. It must be the case that the two shielded contexts share the
+    /// same last transaction ID and share identical commitment trees.
+    pub fn merge(&mut self, new_ctx: ShieldedContext<U, Syncing>) {
+        // Merge by simply extending maps. Identical keys should contain
+        // identical values, so overwriting should not be problematic.
+        self.nf_map.extend(new_ctx.nf_map);
+        self.note_map.extend(new_ctx.note_map);
+        self.memo_map.extend(new_ctx.memo_map);
+        self.div_map.extend(new_ctx.div_map);
+        self.witness_map.extend(new_ctx.witness_map);
+        self.spents.extend(new_ctx.spents);
+        self.asset_types.extend(new_ctx.asset_types);
+        self.vk_map.extend(new_ctx.vk_map);
+        // if we successfully finished scanning, we can clear
+        // out viewing keys from our unscanned data and add them to the
+        // pos map.
+        if !self.interrupted() {
+            self.pos_map.extend(new_ctx.pos_map);
+            self.unscanned.vks.clear();
+        }
+        // The deltas are the exception because different keys can reveal
+        // different parts of the same transaction. Hence each delta needs to be
+        // merged separately.
+        for (height, (ep, ntfer_delta, ntx_delta)) in new_ctx.delta_map {
+            let (_ep, tfer_delta, tx_delta) = self
+                .delta_map
+                .entry(height)
+                .or_insert((ep, TransferDelta::new(), TransactionDelta::new()));
+            tfer_delta.extend(ntfer_delta);
+            tx_delta.extend(ntx_delta);
+        }
+    }
+
+    /// Fetch the current state of the multi-asset shielded pool into a
+    /// ShieldedContext
+    pub async fn fetch<C: Client + Sync>(
         &mut self,
         client: &C,
-        query_owner: &Either<BalanceOwner, Vec<Address>>,
-        query_token: &Option<Address>,
-        viewing_keys: &HashMap<String, ExtendedViewingKey>,
-    ) -> Result<
-        BTreeMap<IndexedTx, (Epoch, TransferDelta, TransactionDelta)>,
-        Error,
-    > {
-        const TXS_PER_PAGE: u8 = 100;
-        let _ = self.load().await;
-        let vks = viewing_keys;
-        let fvks: Vec<_> = vks
-            .values()
-            .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
-            .collect();
-        self.fetch(client, &[], &fvks).await?;
-        // Save the update state so that future fetches can be short-circuited
-        let _ = self.save().await;
-        // Required for filtering out rejected transactions from Tendermint
-        // responses
-        let block_results = rpc::query_results(client).await?;
-        let mut transfers = self.get_tx_deltas().clone();
-        // Construct the set of addresses relevant to user's query
-        let relevant_addrs = match &query_owner {
-            Either::Left(BalanceOwner::Address(owner)) => vec![owner.clone()],
-            // MASP objects are dealt with outside of tx_search
-            Either::Left(BalanceOwner::FullViewingKey(_viewing_key)) => vec![],
-            Either::Left(BalanceOwner::PaymentAddress(_owner)) => vec![],
-            // Unspecified owner means all known addresses are considered
-            // relevant
-            Either::Right(addrs) => addrs.clone(),
-        };
-        // Find all transactions to or from the relevant address set
-        for addr in relevant_addrs {
-            for prop in ["transfer.source", "transfer.target"] {
-                // Query transactions involving the current address
-                let mut tx_query = Query::eq(prop, addr.encode());
-                // Elaborate the query if requested by the user
-                if let Some(token) = &query_token {
-                    tx_query =
-                        tx_query.and_eq("transfer.token", token.encode());
-                }
-                for page in 1.. {
-                    let txs = &client
-                        .tx_search(
-                            tx_query.clone(),
-                            true,
-                            page,
-                            TXS_PER_PAGE,
-                            Order::Ascending,
-                        )
-                        .await
-                        .map_err(|e| {
-                            Error::from(QueryError::General(format!(
-                                "for transaction: {e}"
-                            )))
-                        })?
-                        .txs;
-                    for response_tx in txs {
-                        let height = BlockHeight(response_tx.height.value());
-                        let idx = TxIndex(response_tx.index);
-                        // Only process yet unprocessed transactions which have
-                        // been accepted by node VPs
-                        let should_process = !transfers
-                            .contains_key(&IndexedTx { height, index: idx })
-                            && block_results[u64::from(height) as usize]
-                                .is_accepted(idx.0 as usize);
-                        if !should_process {
-                            continue;
-                        }
-                        let tx = Tx::try_from(response_tx.tx.as_ref())
-                            .map_err(|e| Error::Other(e.to_string()))?;
-                        let mut wrapper = None;
-                        let mut transfer = None;
-                        extract_payload(tx, &mut wrapper, &mut transfer)?;
-                        // Epoch data is not needed for transparent transactions
-                        let epoch =
-                            wrapper.map(|x| x.epoch).unwrap_or_default();
-                        if let Some(transfer) = transfer {
-                            // Skip MASP addresses as they are already handled
-                            // by ShieldedContext
-                            if transfer.source == MASP
-                                || transfer.target == MASP
-                            {
-                                continue;
-                            }
-                            // Describe how a Transfer simply subtracts from one
-                            // account and adds the same to another
-
-                            let delta = TransferDelta::from([(
-                                transfer.source.clone(),
-                                MaspChange {
-                                    asset: transfer.token.clone(),
-                                    change: -transfer.amount.amount().change(),
-                                },
-                            )]);
-
-                            // No shielded accounts are affected by this
-                            // Transfer
-                            transfers.insert(
-                                IndexedTx { height, index: idx },
-                                (epoch, delta, TransactionDelta::new()),
-                            );
-                        }
-                    }
-                    // An incomplete page signifies no more transactions
-                    if (txs.len() as u8) < TXS_PER_PAGE {
-                        break;
-                    }
-                }
+        io: &impl Io,
+        last_query_height: Option<BlockHeight>,
+        sks: &[ExtendedSpendingKey],
+        fvks: &[ViewingKey],
+    ) -> Result<(), Error> {
+        // First determine which of the keys requested to be fetched are new.
+        // Necessary because old transactions will need to be scanned for new
+        // keys.
+        let mut unknown_keys = Vec::new();
+        for esk in sks {
+            let vk = to_viewing_key(esk).vk;
+            if !self.pos_map.contains_key(&vk) {
+                unknown_keys.push(vk);
             }
         }
-        Ok(transfers)
-    }
-
-    /// Get the asset type with the given epoch, token, and denomination. If it
-    /// does not exist in the protocol, then remove the timestamp. Make sure to
-    /// store the derived AssetType so that future decoding is possible.
-    pub async fn get_asset_type<C: Client + Sync>(
-        &mut self,
-        client: &C,
-        epoch: Epoch,
-        token: Address,
-        denom: MaspDenom,
-    ) -> Result<AssetType, Error> {
-        let mut asset_type = encode_asset_type(Some(epoch), &token, denom)
-            .map_err(|_| {
-                Error::Other("unable to create asset type".to_string())
-            })?;
-        if self.decode_asset_type(client, asset_type).await.is_none() {
-            // If we fail to decode the epoched asset type, then remove the
-            // epoch
-            asset_type =
-                encode_asset_type(None, &token, denom).map_err(|_| {
-                    Error::Other("unable to create asset type".to_string())
-                })?;
-            self.asset_types.insert(asset_type, (token, denom, None));
+        for vk in fvks {
+            if !self.pos_map.contains_key(vk) {
+                unknown_keys.push(*vk);
+            }
         }
-        Ok(asset_type)
-    }
 
-    /// Convert Anoma amount and token type to MASP equivalents
-    async fn convert_amount<C: Client + Sync>(
-        &mut self,
-        client: &C,
-        epoch: Epoch,
-        token: &Address,
-        val: token::Amount,
-    ) -> Result<([AssetType; 4], U64Sum), Error> {
-        let mut amount = U64Sum::zero();
-        let mut asset_types = Vec::new();
-        for denom in MaspDenom::iter() {
-            let asset_type = self
-                .get_asset_type(client, epoch, token.clone(), denom)
+        // If unknown keys are being used, we need to scan older transactions
+        // for any unspent notes
+        if !unknown_keys.is_empty() || !self.unscanned.vks.is_empty() {
+            display_line!(
+                io,
+                "Scanning historical notes to synchronize new viewing key(s)."
+            );
+            self.unscanned.vks.extend(unknown_keys.clone());
+            // Load all transactions accepted until this point
+            let fetched = self
+                .fetch_shielded_transfers(
+                    client,
+                    io,
+                    self.latest_unscanned(),
+                    last_query_height,
+                )
                 .await?;
-            // Combine the value and unit into one amount
-            amount +=
-                U64Sum::from_nonnegative(asset_type, denom.denominate(&val))
-                    .map_err(|_| {
-                        Error::Other("invalid value for amount".to_string())
-                    })?;
-            asset_types.push(asset_type);
+            self.unscanned.txs.extend(fetched);
+            if self.interrupted() {
+                display_line!(io, "");
+                return Ok(());
+            };
+            // Do this by constructing a shielding context only for unknown keys
+            let mut tx_ctx = ShieldedContext {
+                utils: self.utils.clone(),
+                ..Default::default()
+            }
+            .into_syncing(&self.interrupt);
+            for vk in unknown_keys {
+                tx_ctx.pos_map.entry(vk).or_insert_with(BTreeSet::new);
+            }
+            // Update this unknown shielded context until it is level with self
+            let txs = ProgressLogging::new(
+                self.unscanned.txs.clone(),
+                io,
+                ProgressType::Scan,
+            );
+            for (indexed_tx, (epoch, tx, stx)) in txs.iter() {
+                if self.interrupted()
+                    || self.last_fetched.is_none()
+                    || indexed_tx >= self.last_fetched.as_ref().unwrap()
+                {
+                    break;
+                }
+                tx_ctx.scan_tx(*indexed_tx, *epoch, tx, stx)?;
+                self.unscanned.txs.remove(indexed_tx);
+            }
+            // Merge the context data originating from the unknown keys into the
+            // current context
+            self.merge(tx_ctx);
+        } else {
+            let resume_point =
+                std::cmp::max(self.latest_unscanned(), self.last_fetched);
+            // fetch only new transactions
+            let fetched = self
+                .fetch_shielded_transfers(
+                    client,
+                    io,
+                    resume_point,
+                    last_query_height,
+                )
+                .await?;
+            self.unscanned.txs.extend(fetched);
+            display_line!(io, "");
         }
-        Ok((
-            asset_types
-                .try_into()
-                .expect("there must be exactly 4 denominations"),
-            amount,
-        ))
+        // Now that we possess the unspent notes corresponding to both old and
+        // new keys up until tx_pos, proceed to scan the new transactions.
+        let mut txs = BTreeMap::new();
+        std::mem::swap(&mut self.unscanned.txs, &mut txs);
+        let txs = ProgressLogging::new(txs, io, ProgressType::Scan);
+        for (indexed_tx, (epoch, tx, stx)) in txs {
+            if self.interrupted() {
+                self.unscanned.txs.insert(indexed_tx, (epoch, tx, stx));
+            } else {
+                self.scan_tx(indexed_tx, epoch, &tx, &stx)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Obtain a chronologically-ordered list of all accepted shielded
+    /// transactions from a node.
+    pub async fn fetch_shielded_transfers<C: Client + Sync>(
+        &mut self,
+        client: &C,
+        io: &impl Io,
+        last_indexed_tx: Option<IndexedTx>,
+        last_query_height: Option<BlockHeight>,
+    ) -> Result<BTreeMap<IndexedTx, (Epoch, Transfer, Transaction)>, Error>
+    {
+        // Query for the last produced block height
+        let last_block_height = query_block(client)
+            .await?
+            .map_or_else(BlockHeight::first, |block| block.height);
+        let last_query_height = last_query_height.unwrap_or(last_block_height);
+
+        let mut shielded_txs = BTreeMap::new();
+        // Fetch all the transactions we do not have yet
+        let first_height_to_query =
+            last_indexed_tx.map_or_else(|| 1, |last| last.height.0);
+        let first_idx_to_query =
+            last_indexed_tx.map_or_else(|| 0, |last| last.index.0 + 1);
+        let heights = ProgressLogging::new(
+            first_height_to_query..=last_query_height.0,
+            io,
+            ProgressType::Fetch,
+        );
+        for height in heights {
+            if self.interrupted() {
+                return Ok(shielded_txs);
+            }
+            // Get the valid masp transactions at the specified height
+            let epoch = query_epoch_at_height(client, height.into())
+                .await?
+                .ok_or_else(|| {
+                    Error::from(QueryError::General(
+                        "Queried height is greater than the last committed \
+                         block height"
+                            .to_string(),
+                    ))
+                })?;
+
+            let first_index_to_query = if height == first_height_to_query {
+                Some(TxIndex(first_idx_to_query))
+            } else {
+                None
+            };
+
+            let txs_results = match get_indexed_masp_events_at_height(
+                client,
+                height.into(),
+                first_index_to_query,
+            )
+            .await?
+            {
+                Some(events) => events,
+                None => continue,
+            };
+
+            // Query the actual block to get the txs bytes. If we only need one
+            // tx it might be slightly better to query the /tx endpoint to
+            // reduce the amount of data sent over the network, but this is a
+            // minimal improvement and it's even hard to tell how many times
+            // we'd need a single masp tx to make this worth it
+            let block = client
+                .block(height as u32)
+                .await
+                .map_err(|e| Error::from(QueryError::General(e.to_string())))?
+                .block
+                .data;
+
+            self.last_fetched = txs_results
+                .last()
+                .map(|(idx, _)| IndexedTx {
+                    height: height.into(),
+                    index: *idx,
+                })
+                .or_else(|| {
+                    Some(IndexedTx {
+                        height: height.into(),
+                        index: Default::default(),
+                    })
+                });
+            for (idx, tx_event) in txs_results {
+                let tx = Tx::try_from(block[idx.0 as usize].as_ref())
+                    .map_err(|e| Error::Other(e.to_string()))?;
+                let (transfer, masp_transaction) = Self::extract_masp_tx(
+                    &tx,
+                    ExtractShieldedActionArg::Event::<C>(tx_event),
+                    true,
+                )
+                .await?;
+
+                // Collect the current transaction
+                shielded_txs.insert(
+                    IndexedTx {
+                        height: height.into(),
+                        index: idx,
+                    },
+                    (epoch, transfer, masp_transaction),
+                );
+            }
+        }
+        Ok(shielded_txs)
+    }
+
+    /// Applies the given transaction to the supplied context. More precisely,
+    /// the shielded transaction's outputs are added to the commitment tree.
+    /// Newly discovered notes are associated to the supplied viewing keys. Note
+    /// nullifiers are mapped to their originating notes. Note positions are
+    /// associated to notes, memos, and diversifiers. And the set of notes that
+    /// we have spent are updated. The witness map is maintained to make it
+    /// easier to construct note merkle paths in other code. See
+    /// <https://zips.z.cash/protocol/protocol.pdf#scan>
+    pub fn scan_tx(
+        &mut self,
+        indexed_tx: IndexedTx,
+        epoch: Epoch,
+        tx: &Transfer,
+        shielded: &Transaction,
+    ) -> Result<(), Error> {
+        // For tracking the account changes caused by this Transaction
+        let mut transaction_delta = TransactionDelta::new();
+        // Listen for notes sent to our viewing keys
+        for so in shielded
+            .sapling_bundle()
+            .map_or(&vec![], |x| &x.shielded_outputs)
+        {
+            // Create merkle tree leaf node from note commitment
+            let node = Node::new(so.cmu.to_repr());
+            // Update each merkle tree in the witness map with the latest
+            // addition
+            for (_, witness) in self.witness_map.iter_mut() {
+                witness.append(node).map_err(|()| {
+                    Error::Other("note commitment tree is full".to_string())
+                })?;
+            }
+            let note_pos = self.tree.size();
+            self.tree.append(node).map_err(|()| {
+                Error::Other("note commitment tree is full".to_string())
+            })?;
+            // Finally, make it easier to construct merkle paths to this new
+            // note
+            let witness = IncrementalWitness::<Node>::from_tree(&self.tree);
+            self.witness_map.insert(note_pos, witness);
+            // Let's try to see if any of our viewing keys can decrypt latest
+            // note
+            let mut pos_map = HashMap::new();
+            std::mem::swap(&mut pos_map, &mut self.pos_map);
+            for (vk, notes) in pos_map.iter_mut() {
+                let decres = try_sapling_note_decryption::<_, OutputDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>>(
+                    &NETWORK,
+                    1.into(),
+                    &PreparedIncomingViewingKey::new(&vk.ivk()),
+                    so,
+                );
+                // So this current viewing key does decrypt this current note...
+                if let Some((note, pa, memo)) = decres {
+                    // Add this note to list of notes decrypted by this viewing
+                    // key
+                    notes.insert(note_pos);
+                    // Compute the nullifier now to quickly recognize when spent
+                    let nf = note.nf(
+                        &vk.nk,
+                        note_pos.try_into().map_err(|_| {
+                            Error::Other("Can not get nullifier".to_string())
+                        })?,
+                    );
+                    self.note_map.insert(note_pos, note);
+                    self.memo_map.insert(note_pos, memo);
+                    // The payment address' diversifier is required to spend
+                    // note
+                    self.div_map.insert(note_pos, *pa.diversifier());
+                    self.nf_map.insert(nf, note_pos);
+                    // Note the account changes
+                    let balance = transaction_delta
+                        .entry(*vk)
+                        .or_insert_with(I128Sum::zero);
+                    *balance += I128Sum::from_nonnegative(
+                        note.asset_type,
+                        note.value as i128,
+                    )
+                    .map_err(|()| {
+                        Error::Other(
+                            "found note with invalid value or asset type"
+                                .to_string(),
+                        )
+                    })?;
+                    self.vk_map.insert(note_pos, *vk);
+                    break;
+                }
+            }
+            std::mem::swap(&mut pos_map, &mut self.pos_map);
+        }
+        // Cancel out those of our notes that have been spent
+        for ss in shielded
+            .sapling_bundle()
+            .map_or(&vec![], |x| &x.shielded_spends)
+        {
+            // If the shielded spend's nullifier is in our map, then target note
+            // is rendered unusable
+            if let Some(note_pos) = self.nf_map.get(&ss.nullifier) {
+                self.spents.insert(*note_pos);
+                // Note the account changes
+                let balance = transaction_delta
+                    .entry(self.vk_map[note_pos])
+                    .or_insert_with(I128Sum::zero);
+                let note = self.note_map[note_pos];
+                *balance -= I128Sum::from_nonnegative(
+                    note.asset_type,
+                    note.value as i128,
+                )
+                .map_err(|()| {
+                    Error::Other(
+                        "found note with invalid value or asset type"
+                            .to_string(),
+                    )
+                })?;
+            }
+        }
+        // Record the changes to the transparent accounts
+        let mut transfer_delta = TransferDelta::new();
+        let token_addr = tx.token.clone();
+        transfer_delta.insert(
+            tx.source.clone(),
+            MaspChange {
+                asset: token_addr,
+                change: -tx.amount.amount().change(),
+            },
+        );
+        self.delta_map
+            .insert(indexed_tx, (epoch, transfer_delta, transaction_delta));
+        Ok(())
     }
 }
 
@@ -2582,14 +2798,163 @@ pub mod fs {
             // Atomically update the old shielded context file with new data.
             // Atomicity is required to prevent other client instances from
             // reading corrupt data.
-            std::fs::rename(
-                tmp_path.clone(),
-                self.context_dir.join(FILE_NAME),
-            )?;
-            // Finally, remove our temporary file to allow future saving of
-            // shielded contexts.
-            std::fs::remove_file(tmp_path)?;
-            Ok(())
+            std::fs::rename(tmp_path, self.context_dir.join(FILE_NAME))
         }
+    }
+}
+
+/// A future where one future must finish but the other is optional
+struct ShieldedSync<F, A, B>
+where
+    F: ShieldedUtils,
+    A: Future<Output = Result<ShieldedContext<F>, Error>>,
+    B: Future<Output = Result<(), tokio::sync::oneshot::error::RecvError>>,
+{
+    sync: Pin<Box<A>>,
+    signal: Pin<Box<B>>,
+    watch: tokio::sync::watch::Sender<bool>,
+}
+
+impl<F, A, B> Future for ShieldedSync<F, A, B>
+where
+    F: ShieldedUtils,
+    A: Future<Output = Result<ShieldedContext<F>, Error>>,
+    B: Future<Output = Result<(), tokio::sync::oneshot::error::RecvError>>,
+{
+    type Output = Result<ShieldedContext<F>, Error>;
+
+    fn poll(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Self::Output> {
+        if let Poll::Ready(res) = self.sync.as_mut().poll(cx) {
+            Poll::Ready(res)
+        } else {
+            if !(*self.watch.borrow())
+                && self.signal.as_mut().poll(cx).is_ready()
+            {
+                self.watch.send(true).unwrap();
+            }
+            Poll::Pending
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+enum ProgressType {
+    Fetch,
+    Scan,
+}
+
+struct ProgressLogging<'io, T, U: Io> {
+    items: Vec<T>,
+    index: usize,
+    length: usize,
+    io: &'io U,
+    r#type: ProgressType,
+}
+
+impl<'io, T, U: Io> ProgressLogging<'io, T, U> {
+    fn new<I>(items: I, io: &'io U, r#type: ProgressType) -> Self
+    where
+        I: IntoIterator<Item = T>,
+    {
+        let items: Vec<_> = items.into_iter().collect();
+        Self {
+            length: items.len(),
+            items,
+            index: 0,
+            io,
+            r#type,
+        }
+    }
+
+    fn iter(&self) -> ProgressLoggingIterator<'_, 'io, T, U> {
+        ProgressLoggingIterator {
+            items: &self.items,
+            index: 0,
+            io: self.io,
+            r#type: self.r#type,
+        }
+    }
+}
+
+impl<'io, T: Debug, U: Io> Iterator for ProgressLogging<'io, T, U> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index == 0 {
+            self.items = {
+                let mut new_items = vec![];
+                std::mem::swap(&mut new_items, &mut self.items);
+                new_items.into_iter().rev().collect()
+            };
+        }
+        if self.items.is_empty() {
+            return None;
+        }
+        self.index += 1;
+        let percent = (100 * self.index) / self.length;
+        let completed: String = vec!['#'; percent].iter().collect();
+        let incomplete: String = vec!['.'; 100 - percent].iter().collect();
+        display_line!(self.io, "\x1b[2A\x1b[J");
+        match self.r#type {
+            ProgressType::Fetch => display_line!(
+                self.io,
+                "Fetched block {:?} of {:?}",
+                self.items.last().unwrap(),
+                self.items[0]
+            ),
+            ProgressType::Scan => display_line!(
+                self.io,
+                "Scanning {} of {}",
+                self.index,
+                self.length
+            ),
+        }
+        display!(self.io, "[{}{}] ~~ {} %", completed, incomplete, percent);
+        self.io.flush();
+        self.items.pop()
+    }
+}
+
+struct ProgressLoggingIterator<'iter, 'io, T, U: Io> {
+    items: &'iter [T],
+    index: usize,
+    io: &'io U,
+    r#type: ProgressType,
+}
+
+impl<'iter, 'io, T: Debug, U: Io> Iterator
+    for ProgressLoggingIterator<'iter, 'io, T, U>
+{
+    type Item = &'iter T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.items.len() {
+            return None;
+        }
+        self.index += 1;
+        let percent = (100 * self.index) / self.items.len();
+        let completed: String = vec!['#'; percent].iter().collect();
+        let incomplete: String = vec!['.'; 100 - percent].iter().collect();
+        display_line!(self.io, "\x1b[2A\x1b[J");
+        match self.r#type {
+            ProgressType::Fetch => display_line!(
+                self.io,
+                "Fetched block {:?} of {:?}",
+                self.items.last().unwrap(),
+                self.items[0]
+            ),
+            ProgressType::Scan => display_line!(
+                self.io,
+                "Scanning {} of {}",
+                self.index,
+                self.items.len()
+            ),
+        }
+        display!(self.io, "[{}{}] ~~ {} %", completed, incomplete, percent);
+        self.io.flush();
+        self.items.get(self.index - 1)
     }
 }
