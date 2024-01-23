@@ -289,6 +289,13 @@ where
     // Native token inflation values are always with respect to this
     let ref_inflation =
         calculate_masp_rewards_precision(wl_storage, &native_token)?.0;
+
+    if !masp_reward_keys.contains(&native_token) {
+        // Since MASP rewards are denominated in NAM tokens, ensure that clients
+        // are able to decode them.
+        masp_reward_keys.push(native_token.clone());
+    }
+
     // Reward all tokens according to above reward rates
     for addr in &masp_reward_keys {
         let (reward, denom) = calculate_masp_rewards(wl_storage, addr)?;
@@ -494,11 +501,6 @@ where
         ),
     )?;
 
-    if !masp_reward_keys.contains(&native_token) {
-        // Since MASP rewards are denominated in NAM tokens, ensure that clients
-        // are able to decode them.
-        masp_reward_keys.push(native_token);
-    }
     // Add purely decoding entries to the assets map. These will be
     // overwritten before the creation of the next commitment tree
     for (addr, denom) in masp_reward_denoms {

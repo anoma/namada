@@ -132,7 +132,7 @@ pub async fn query_transfers(
     let mut shielded = context.shielded_mut().await;
     let _ = shielded.load().await;
     // Precompute asset types to increase chances of success in decoding
-    let _ = shielded.precompute_asset_types(&wallet);
+    let _ = shielded.precompute_asset_types(context).await;
     // Obtain the effects of all shielded and transparent transactions
     let transfers = shielded
         .query_tx_deltas(
@@ -431,7 +431,11 @@ pub async fn query_pinned_balance(
         .collect();
     let _ = context.shielded_mut().await.load().await;
     // Precompute asset types to increase chances of success in decoding
-    let _ = context.shielded_mut().await.precompute_asset_types(&wallet);
+    let _ = context
+        .shielded_mut()
+        .await
+        .precompute_asset_types(context)
+        .await;
     // Print the token balances by payment address
     for owner in owners {
         let mut balance =
@@ -880,7 +884,7 @@ pub async fn query_shielded_balance(
             .collect();
         shielded.fetch(context.client(), &[], &fvks).await.unwrap();
         // Precompute asset types to increase chances of success in decoding
-        let _ = shielded.precompute_asset_types(&*context.wallet().await);
+        let _ = shielded.precompute_asset_types(context).await;
         // Save the update state so that future fetches can be short-circuited
         let _ = shielded.save().await;
     }
