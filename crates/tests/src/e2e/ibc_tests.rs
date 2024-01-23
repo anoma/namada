@@ -1905,6 +1905,9 @@ fn check_shielded_balances(
 ) -> Result<()> {
     // Check the balance on Chain B
     std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
+    // PA(B) on Chain B has received BTC on chain A
+    let token_addr = find_address(test_a, BTC)?.to_string();
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
     let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
     let tx_args = vec![
         "shielded-sync",
@@ -1915,10 +1918,6 @@ fn check_shielded_balances(
     ];
     let mut client = run!(test_b, Bin::Client, tx_args, Some(120))?;
     client.assert_success();
-    // PA(B) on Chain B has received BTC on chain A
-    let token_addr = find_address(test_a, BTC)?.to_string();
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
-    let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
     let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/btc");
     let query_args = vec![
         "balance",
