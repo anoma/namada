@@ -97,6 +97,7 @@ impl DerivationPath {
                 // all indices must be hardened
                 self.0.as_ref().iter().all(|idx| idx.is_hardened())
             }
+            // no restriction for secp256k1 scheme
             _ => true,
         }
     }
