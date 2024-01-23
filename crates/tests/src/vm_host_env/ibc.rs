@@ -9,7 +9,7 @@ use ibc_testkit::testapp::ibc::clients::mock::header::MockHeader;
 use namada::gas::TxGasMeter;
 use namada::governance::parameters::GovernanceParameters;
 use namada::ibc::apps::transfer::types::error::TokenTransferError;
-use namada::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
+use namada::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use namada::ibc::apps::transfer::types::packet::PacketData;
 use namada::ibc::apps::transfer::types::{
     ack_success_b64, PrefixedCoin, VERSION,
@@ -77,6 +77,7 @@ use namada::token::{self, Amount, DenominatedAmount};
 use namada::tx::Tx;
 use namada::types::address::{self, Address, InternalAddress};
 use namada::types::hash::Hash;
+use namada::types::ibc::MsgTransfer;
 use namada::types::storage::{
     self, BlockHash, BlockHeight, Epoch, Key, TxIndex,
 };
@@ -636,7 +637,7 @@ pub fn msg_transfer(
 ) -> MsgTransfer {
     let amount = DenominatedAmount::native(Amount::native_whole(100));
     let timestamp = (Timestamp::now() + Duration::from_secs(100)).unwrap();
-    MsgTransfer {
+    let message = IbcMsgTransfer {
         port_id_on_a: port_id,
         chan_id_on_a: channel_id,
         packet_data: PacketData {
@@ -652,10 +653,14 @@ pub fn msg_transfer(
         },
         timeout_height_on_b: TimeoutHeight::Never,
         timeout_timestamp_on_b: timestamp,
+    };
+    MsgTransfer {
+        message,
+        shielded_transfer: None,
     }
 }
 
-pub fn set_timeout_timestamp(msg: &mut MsgTransfer) {
+pub fn set_timeout_timestamp(msg: &mut IbcMsgTransfer) {
     msg.timeout_timestamp_on_b =
         (msg.timeout_timestamp_on_b - Duration::from_secs(201)).unwrap();
 }
@@ -738,7 +743,7 @@ pub fn msg_timeout_on_close(
 }
 
 pub fn packet_from_message(
-    msg: &MsgTransfer,
+    msg: &IbcMsgTransfer,
     sequence: Sequence,
     counterparty: &ChanCounterparty,
 ) -> Packet {

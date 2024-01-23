@@ -336,12 +336,13 @@ mod tests {
         established_address_1, established_address_2,
     };
     use crate::core::types::address::{nam, InternalAddress};
+    use crate::core::types::ibc::{MsgNftTransfer, MsgTransfer};
     use crate::core::types::storage::Epoch;
     use crate::ibc::apps::nft_transfer::types::events::{
         RecvEvent as NftRecvEvent, TokenTraceEvent,
         TransferEvent as NftTransferEvent,
     };
-    use crate::ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as MsgNftTransfer;
+    use crate::ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as IbcMsgNftTransfer;
     use crate::ibc::apps::nft_transfer::types::packet::PacketData as NftPacketData;
     use crate::ibc::apps::nft_transfer::types::{
         self as nft_types, PrefixedClassId, TokenId, TokenIds,
@@ -350,7 +351,7 @@ mod tests {
     use crate::ibc::apps::transfer::types::events::{
         AckEvent, DenomTraceEvent, RecvEvent, TimeoutEvent, TransferEvent,
     };
-    use crate::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
+    use crate::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
     use crate::ibc::apps::transfer::types::packet::PacketData;
     use crate::ibc::apps::transfer::types::{
         ack_success_b64, PrefixedCoin, TracePrefix, VERSION,
@@ -656,7 +657,7 @@ mod tests {
     }
 
     fn packet_from_message(
-        msg: &MsgTransfer,
+        msg: &IbcMsgTransfer,
         sequence: Sequence,
         counterparty: &ChanCounterparty,
     ) -> Packet {
@@ -679,7 +680,7 @@ mod tests {
     }
 
     fn nft_packet_from_message(
-        msg: &MsgNftTransfer,
+        msg: &IbcMsgNftTransfer,
         sequence: Sequence,
         counterparty: &ChanCounterparty,
     ) -> Packet {
@@ -687,8 +688,8 @@ mod tests {
         let mut packet_data = msg.packet_data.clone();
         packet_data.class_uri = Some(DUMMY_URI.parse().unwrap());
         packet_data.class_data = Some(DUMMY_DATA.parse().unwrap());
-        packet_data.token_uris = vec![DUMMY_URI.parse().unwrap()];
-        packet_data.token_data = vec![DUMMY_DATA.parse().unwrap()];
+        packet_data.token_uris = Some(vec![DUMMY_URI.parse().unwrap()]);
+        packet_data.token_data = Some(vec![DUMMY_DATA.parse().unwrap()]);
         let data = serde_json::to_vec(&packet_data)
             .expect("Encoding NftPacketData failed");
 
@@ -2097,7 +2098,7 @@ mod tests {
             .unwrap();
 
         // prepare data
-        let msg = MsgTransfer {
+        let msg = IbcMsgTransfer {
             port_id_on_a: get_port_id(),
             chan_id_on_a: get_channel_id(),
             packet_data: PacketData {
@@ -2160,8 +2161,11 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx_data = MsgTransfer {
+            message: msg,
+            shielded_transfer: None,
+        }
+        .serialize_to_vec();
 
         let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
         tx.add_code(tx_code, None)
@@ -2230,7 +2234,7 @@ mod tests {
         // prepare data
         let sender = established_address_1();
         let receiver = established_address_2();
-        let transfer_msg = MsgTransfer {
+        let transfer_msg = IbcMsgTransfer {
             port_id_on_a: get_port_id(),
             chan_id_on_a: get_channel_id(),
             packet_data: PacketData {
@@ -2408,7 +2412,7 @@ mod tests {
             .expect("write failed");
         // commitment
         let sender = established_address_1();
-        let transfer_msg = MsgTransfer {
+        let transfer_msg = IbcMsgTransfer {
             port_id_on_a: get_port_id(),
             chan_id_on_a: get_channel_id(),
             packet_data: PacketData {
@@ -2562,7 +2566,7 @@ mod tests {
             .write(&balance_key, amount.serialize_to_vec())
             .expect("write failed");
         // commitment
-        let transfer_msg = MsgTransfer {
+        let transfer_msg = IbcMsgTransfer {
             port_id_on_a: get_port_id(),
             chan_id_on_a: get_channel_id(),
             packet_data: PacketData {
@@ -2714,7 +2718,7 @@ mod tests {
             .expect("write failed");
         // commitment
         let sender = established_address_1();
-        let transfer_msg = MsgTransfer {
+        let transfer_msg = IbcMsgTransfer {
             port_id_on_a: get_port_id(),
             chan_id_on_a: get_channel_id(),
             packet_data: PacketData {
@@ -2895,7 +2899,7 @@ mod tests {
             .unwrap();
 
         // prepare data
-        let msg = MsgNftTransfer {
+        let msg = IbcMsgNftTransfer {
             port_id_on_a: get_nft_port_id(),
             chan_id_on_a: get_channel_id(),
             packet_data: NftPacketData {
@@ -2903,11 +2907,11 @@ mod tests {
                 class_uri: None,
                 class_data: None,
                 token_ids: TokenIds(vec![token_id]),
-                token_uris: vec![],
-                token_data: vec![],
+                token_uris: None,
+                token_data: None,
                 sender: sender.to_string().into(),
                 receiver: "receiver".to_string().into(),
-                memo: "memo".to_string().into(),
+                memo: Some("memo".to_string().into()),
             },
             timeout_height_on_b: TimeoutHeight::At(Height::new(0, 10).unwrap()),
             timeout_timestamp_on_b: Timestamp::none(),
@@ -2943,7 +2947,7 @@ mod tests {
             receiver: msg.packet_data.receiver.clone(),
             class: msg.packet_data.class_id.clone(),
             tokens: msg.packet_data.token_ids.clone(),
-            memo: msg.packet_data.memo.clone(),
+            memo: msg.packet_data.memo.clone().unwrap_or_default(),
         };
         let event = RawIbcEvent::Module(ModuleEvent::from(transfer_event));
         wl_storage
@@ -2964,8 +2968,11 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx_data = MsgNftTransfer {
+            message: msg,
+            shielded_transfer: None,
+        }
+        .serialize_to_vec();
 
         let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
         tx.add_code(tx_code, None)
@@ -3036,7 +3043,7 @@ mod tests {
         let receiver = established_address_2();
         let class = dummy_nft_class();
         let metadata = dummy_nft_metadata();
-        let transfer_msg = MsgNftTransfer {
+        let transfer_msg = IbcMsgNftTransfer {
             port_id_on_a: get_nft_port_id(),
             chan_id_on_a: get_channel_id(),
             packet_data: NftPacketData {
@@ -3044,11 +3051,11 @@ mod tests {
                 class_uri: class.class_uri.clone(),
                 class_data: class.class_data,
                 token_ids: TokenIds(vec![metadata.token_id.clone()]),
-                token_uris: vec![metadata.token_uri.unwrap().clone()],
-                token_data: vec![metadata.token_data.unwrap()],
+                token_uris: Some(vec![metadata.token_uri.unwrap()]),
+                token_data: Some(vec![metadata.token_data.unwrap()]),
                 sender: sender.to_string().into(),
                 receiver: receiver.to_string().into(),
-                memo: "memo".to_string().into(),
+                memo: Some("memo".to_string().into()),
             },
             timeout_height_on_b: TimeoutHeight::At(Height::new(0, 10).unwrap()),
             timeout_timestamp_on_b: Timestamp::none(),

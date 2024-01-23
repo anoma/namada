@@ -309,9 +309,9 @@ checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
 
 [[package]]
 name = "base64"
-version = "0.21.5"
+version = "0.21.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "35636a1494ede3b646cc98f74f8e62c773a38a659ebc777a2cf26b9b74171df9"
+checksum = "9d297deb1925b89f2ccc13d7635fa0714f12c87adce1c75356b39ca9b7178567"
 
 [[package]]
 name = "base64ct"
@@ -832,7 +832,7 @@ version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5286a0843c21f8367f7be734f89df9b822e0321d8bcce8d6e735aadff7d74979"
 dependencies = [
- "base64 0.21.5",
+ "base64 0.21.7",
  "bech32 0.9.1",
  "bs58",
  "digest 0.10.7",
@@ -1424,7 +1424,7 @@ version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fe81b5c06ecfdbc71dd845216f225f53b62a10cb8a16c946836a3467f701d05b"
 dependencies = [
- "base64 0.21.5",
+ "base64 0.21.7",
  "bytes",
  "hex",
  "k256",
@@ -1759,7 +1759,7 @@ checksum = "25d6c0c9455d93d4990c06e049abf9b30daf148cf461ee939c11d88907c60816"
 dependencies = [
  "async-trait",
  "auto_impl",
- "base64 0.21.5",
+ "base64 0.21.7",
  "bytes",
  "const-hex",
  "enr",
@@ -1833,6 +1833,17 @@ name = "fastrand"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "25cbce373ec4653f1a01a31e8a5e5ec0c622dc27ff9c4e6606eefef5cbbed4a5"
+
+[[package]]
+name = "fd-lock"
+version = "3.0.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef033ed5e9bad94e55838ca0ca906db0e043f517adda0c8b79c7a8c66c93c1b5"
+dependencies = [
+ "cfg-if 1.0.0",
+ "rustix",
+ "windows-sys 0.48.0",
+]
 
 [[package]]
 name = "ff"
@@ -2373,20 +2384,20 @@ dependencies = [
 [[package]]
 name = "ibc"
 version = "0.49.1"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
+source = "git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl#1376d5775651c9c7fa07cefc33c70aee94fbdb4e"
 dependencies = [
  "ibc-apps",
  "ibc-clients",
  "ibc-core",
  "ibc-core-host-cosmos",
- "ibc-derive 0.5.0",
+ "ibc-derive 0.5.0 (git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl)",
  "ibc-primitives",
 ]
 
 [[package]]
 name = "ibc-app-nft-transfer"
 version = "0.49.1"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
+source = "git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl#1376d5775651c9c7fa07cefc33c70aee94fbdb4e"
 dependencies = [
  "ibc-app-nft-transfer-types",
  "ibc-core",
@@ -2396,8 +2407,9 @@ dependencies = [
 [[package]]
 name = "ibc-app-nft-transfer-types"
 version = "0.49.1"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
+source = "git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl#1376d5775651c9c7fa07cefc33c70aee94fbdb4e"
 dependencies = [
+ "base64 0.21.7",
  "borsh 0.10.3",
  "derive_more",
  "displaydoc",
@@ -2415,7 +2427,7 @@ dependencies = [
 [[package]]
 name = "ibc-app-transfer"
 version = "0.49.1"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
+source = "git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl#1376d5775651c9c7fa07cefc33c70aee94fbdb4e"
 dependencies = [
  "ibc-app-transfer-types",
  "ibc-core",
@@ -2425,7 +2437,7 @@ dependencies = [
 [[package]]
 name = "ibc-app-transfer-types"
 version = "0.49.1"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
+source = "git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl#1376d5775651c9c7fa07cefc33c70aee94fbdb4e"
 dependencies = [
  "derive_more",
  "displaydoc",
@@ -2439,7 +2451,7 @@ dependencies = [
 [[package]]
 name = "ibc-apps"
 version = "0.49.1"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
+source = "git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl#1376d5775651c9c7fa07cefc33c70aee94fbdb4e"
 dependencies = [
  "ibc-app-nft-transfer",
  "ibc-app-transfer",
@@ -2448,7 +2460,7 @@ dependencies = [
 [[package]]
 name = "ibc-client-tendermint"
 version = "0.49.1"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
+source = "git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl#1376d5775651c9c7fa07cefc33c70aee94fbdb4e"
 dependencies = [
  "ibc-client-tendermint-types",
  "ibc-core-client",
@@ -2464,7 +2476,7 @@ dependencies = [
 [[package]]
 name = "ibc-client-tendermint-types"
 version = "0.49.1"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
+source = "git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl#1376d5775651c9c7fa07cefc33c70aee94fbdb4e"
 dependencies = [
  "displaydoc",
  "ibc-core-client-types",
@@ -2479,17 +2491,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "ibc-client-wasm-types"
+version = "0.49.1"
+source = "git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl#1376d5775651c9c7fa07cefc33c70aee94fbdb4e"
+dependencies = [
+ "base64 0.21.7",
+ "displaydoc",
+ "ibc-core-client",
+ "ibc-core-host-types",
+ "ibc-primitives",
+ "ibc-proto",
+ "serde",
+]
+
+[[package]]
 name = "ibc-clients"
 version = "0.49.1"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
+source = "git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl#1376d5775651c9c7fa07cefc33c70aee94fbdb4e"
 dependencies = [
  "ibc-client-tendermint",
+ "ibc-client-wasm-types",
 ]
 
 [[package]]
 name = "ibc-core"
 version = "0.49.1"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
+source = "git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl#1376d5775651c9c7fa07cefc33c70aee94fbdb4e"
 dependencies = [
  "ibc-core-channel",
  "ibc-core-client",
@@ -2498,13 +2525,14 @@ dependencies = [
  "ibc-core-handler",
  "ibc-core-host",
  "ibc-core-router",
+ "ibc-derive 0.5.0 (git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl)",
  "ibc-primitives",
 ]
 
 [[package]]
 name = "ibc-core-channel"
 version = "0.49.1"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
+source = "git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl#1376d5775651c9c7fa07cefc33c70aee94fbdb4e"
 dependencies = [
  "ibc-core-channel-types",
  "ibc-core-client",
@@ -2519,7 +2547,7 @@ dependencies = [
 [[package]]
 name = "ibc-core-channel-types"
 version = "0.49.1"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
+source = "git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl#1376d5775651c9c7fa07cefc33c70aee94fbdb4e"
 dependencies = [
  "borsh 0.10.3",
  "derive_more",
@@ -2542,7 +2570,7 @@ dependencies = [
 [[package]]
 name = "ibc-core-client"
 version = "0.49.1"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
+source = "git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl#1376d5775651c9c7fa07cefc33c70aee94fbdb4e"
 dependencies = [
  "ibc-core-client-context",
  "ibc-core-client-types",
@@ -2555,7 +2583,7 @@ dependencies = [
 [[package]]
 name = "ibc-core-client-context"
 version = "0.49.1"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
+source = "git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl#1376d5775651c9c7fa07cefc33c70aee94fbdb4e"
 dependencies = [
  "derive_more",
  "displaydoc",
@@ -2563,7 +2591,6 @@ dependencies = [
  "ibc-core-commitment-types",
  "ibc-core-handler-types",
  "ibc-core-host-types",
- "ibc-derive 0.5.0",
  "ibc-primitives",
  "subtle-encoding",
  "tendermint",
@@ -2572,7 +2599,7 @@ dependencies = [
 [[package]]
 name = "ibc-core-client-types"
 version = "0.49.1"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
+source = "git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl#1376d5775651c9c7fa07cefc33c70aee94fbdb4e"
 dependencies = [
  "borsh 0.10.3",
  "derive_more",
@@ -2592,7 +2619,7 @@ dependencies = [
 [[package]]
 name = "ibc-core-commitment-types"
 version = "0.49.1"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
+source = "git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl#1376d5775651c9c7fa07cefc33c70aee94fbdb4e"
 dependencies = [
  "borsh 0.10.3",
  "derive_more",
@@ -2610,7 +2637,7 @@ dependencies = [
 [[package]]
 name = "ibc-core-connection"
 version = "0.49.1"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
+source = "git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl#1376d5775651c9c7fa07cefc33c70aee94fbdb4e"
 dependencies = [
  "ibc-core-client",
  "ibc-core-connection-types",
@@ -2622,7 +2649,7 @@ dependencies = [
 [[package]]
 name = "ibc-core-connection-types"
 version = "0.49.1"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
+source = "git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl#1376d5775651c9c7fa07cefc33c70aee94fbdb4e"
 dependencies = [
  "borsh 0.10.3",
  "derive_more",
@@ -2643,7 +2670,7 @@ dependencies = [
 [[package]]
 name = "ibc-core-handler"
 version = "0.49.1"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
+source = "git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl#1376d5775651c9c7fa07cefc33c70aee94fbdb4e"
 dependencies = [
  "ibc-core-channel",
  "ibc-core-client",
@@ -2658,7 +2685,7 @@ dependencies = [
 [[package]]
 name = "ibc-core-handler-types"
 version = "0.49.1"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
+source = "git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl#1376d5775651c9c7fa07cefc33c70aee94fbdb4e"
 dependencies = [
  "borsh 0.10.3",
  "derive_more",
@@ -2682,7 +2709,7 @@ dependencies = [
 [[package]]
 name = "ibc-core-host"
 version = "0.49.1"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
+source = "git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl#1376d5775651c9c7fa07cefc33c70aee94fbdb4e"
 dependencies = [
  "derive_more",
  "displaydoc",
@@ -2700,7 +2727,7 @@ dependencies = [
 [[package]]
 name = "ibc-core-host-cosmos"
 version = "0.49.1"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
+source = "git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl#1376d5775651c9c7fa07cefc33c70aee94fbdb4e"
 dependencies = [
  "derive_more",
  "displaydoc",
@@ -2723,7 +2750,7 @@ dependencies = [
 [[package]]
 name = "ibc-core-host-types"
 version = "0.49.1"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
+source = "git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl#1376d5775651c9c7fa07cefc33c70aee94fbdb4e"
 dependencies = [
  "borsh 0.10.3",
  "derive_more",
@@ -2738,7 +2765,7 @@ dependencies = [
 [[package]]
 name = "ibc-core-router"
 version = "0.49.1"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
+source = "git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl#1376d5775651c9c7fa07cefc33c70aee94fbdb4e"
 dependencies = [
  "derive_more",
  "displaydoc",
@@ -2752,7 +2779,7 @@ dependencies = [
 [[package]]
 name = "ibc-core-router-types"
 version = "0.49.1"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
+source = "git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl#1376d5775651c9c7fa07cefc33c70aee94fbdb4e"
 dependencies = [
  "borsh 0.10.3",
  "derive_more",
@@ -2770,9 +2797,9 @@ dependencies = [
 
 [[package]]
 name = "ibc-derive"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df07bf5bc1e65e291506b7497633e07967e49b36a8db10cda77a8fd686eb4548"
+checksum = "8cac1e3c7ab92abf785bb86675bdc02e3d67e9e4624c1d513e83ff3098f9c461"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -2783,9 +2810,8 @@ dependencies = [
 [[package]]
 name = "ibc-derive"
 version = "0.5.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
+source = "git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl#1376d5775651c9c7fa07cefc33c70aee94fbdb4e"
 dependencies = [
- "darling",
  "proc-macro2",
  "quote",
  "syn 2.0.39",
@@ -2794,7 +2820,7 @@ dependencies = [
 [[package]]
 name = "ibc-primitives"
 version = "0.49.1"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
+source = "git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl#1376d5775651c9c7fa07cefc33c70aee94fbdb4e"
 dependencies = [
  "borsh 0.10.3",
  "derive_more",
@@ -2811,14 +2837,16 @@ dependencies = [
 
 [[package]]
 name = "ibc-proto"
-version = "0.39.1"
-source = "git+https://github.com/heliaxdev/ibc-proto-rs?branch=yuji/feat/ics721-impl#b60972f15585c417c2745344c2844444824524fa"
+version = "0.41.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd4ee32b22d3b06f31529b956f4928e5c9a068d71e46cf6abfa19c31ca550553"
 dependencies = [
- "base64 0.21.5",
+ "base64 0.21.7",
  "borsh 0.10.3",
  "bytes",
  "flex-error",
  "ics23",
+ "informalsystems-pbjson 0.7.0",
  "parity-scale-codec",
  "prost 0.12.3",
  "scale-info",
@@ -2831,7 +2859,7 @@ dependencies = [
 [[package]]
 name = "ibc-testkit"
 version = "0.49.1"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?branch=yuji/fix-token-trace#87ce97a6bca6f56eebc27f27e3a1934a80f62143"
+source = "git+https://github.com/cosmos/ibc-rs?branch=feat/ics721-impl#1376d5775651c9c7fa07cefc33c70aee94fbdb4e"
 dependencies = [
  "derive_more",
  "displaydoc",
@@ -2854,7 +2882,7 @@ dependencies = [
  "anyhow",
  "bytes",
  "hex",
- "informalsystems-pbjson",
+ "informalsystems-pbjson 0.6.0",
  "prost 0.12.3",
  "ripemd",
  "serde",
@@ -2983,6 +3011,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "informalsystems-pbjson"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9aa4a0980c8379295100d70854354e78df2ee1c6ca0f96ffe89afeb3140e3a3d"
+dependencies = [
+ "base64 0.21.7",
+ "serde",
+]
+
+[[package]]
 name = "inout"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3054,7 +3092,7 @@ version = "8.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6971da4d9c3aa03c3d8f3ff0f4155b534aad021292003895a469716b2a230378"
 dependencies = [
- "base64 0.21.5",
+ "base64 0.21.7",
  "pem",
  "ring 0.16.20",
  "serde",
@@ -3397,7 +3435,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "namada"
-version = "0.30.0"
+version = "0.30.1"
 dependencies = [
  "async-trait",
  "bimap",
@@ -3416,10 +3454,21 @@ dependencies = [
  "loupe",
  "masp_primitives",
  "masp_proofs",
+ "namada_account",
  "namada_core",
  "namada_ethereum_bridge",
+ "namada_gas",
+ "namada_governance",
+ "namada_ibc",
+ "namada_parameters",
  "namada_proof_of_stake",
  "namada_sdk",
+ "namada_state",
+ "namada_token",
+ "namada_tx",
+ "namada_tx_env",
+ "namada_vote_ext",
+ "namada_vp_env",
  "num256",
  "orion",
  "owo-colors",
@@ -3437,7 +3486,6 @@ dependencies = [
  "sha2 0.9.9",
  "slip10_ed25519",
  "tempfile",
- "tendermint-rpc",
  "thiserror",
  "tiny-bip39",
  "tiny-hderive",
@@ -3458,28 +3506,34 @@ dependencies = [
 ]
 
 [[package]]
-name = "namada_core"
-version = "0.30.0"
+name = "namada_account"
+version = "0.30.1"
 dependencies = [
- "ark-bls12-381",
- "ark-serialize",
+ "borsh 1.2.1",
+ "namada_core",
+ "namada_macros",
+ "namada_storage",
+ "proptest",
+ "serde",
+]
+
+[[package]]
+name = "namada_core"
+version = "0.30.1"
+dependencies = [
  "bech32 0.8.1",
  "borsh 1.2.1",
  "borsh-ext",
  "chrono",
  "data-encoding",
- "derivative",
  "ed25519-consensus 1.2.1",
  "ethabi",
  "ethbridge-structs",
  "eyre",
  "ibc",
- "ibc-derive 0.4.0",
- "ibc-testkit",
  "ics23",
  "impl-num-traits",
  "index-set",
- "itertools 0.10.5",
  "k256",
  "masp_primitives",
  "namada_macros",
@@ -3504,7 +3558,6 @@ dependencies = [
  "tendermint-proto",
  "thiserror",
  "tiny-keccak",
- "tonic-build",
  "tracing",
  "uint",
  "zeroize",
@@ -3512,16 +3565,23 @@ dependencies = [
 
 [[package]]
 name = "namada_ethereum_bridge"
-version = "0.30.0"
+version = "0.30.1"
 dependencies = [
  "borsh 1.2.1",
- "borsh-ext",
+ "ethabi",
  "ethers",
  "eyre",
  "itertools 0.10.5",
+ "namada_account",
  "namada_core",
  "namada_macros",
+ "namada_parameters",
  "namada_proof_of_stake",
+ "namada_state",
+ "namada_storage",
+ "namada_trans_token",
+ "namada_tx",
+ "namada_vote_ext",
  "rand 0.8.5",
  "serde",
  "serde_json",
@@ -3533,8 +3593,59 @@ dependencies = [
 ]
 
 [[package]]
+name = "namada_gas"
+version = "0.30.1"
+dependencies = [
+ "borsh 1.2.1",
+ "namada_core",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "namada_governance"
+version = "0.30.1"
+dependencies = [
+ "borsh 1.2.1",
+ "namada_core",
+ "namada_macros",
+ "namada_parameters",
+ "namada_state",
+ "namada_trans_token",
+ "proptest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
+name = "namada_ibc"
+version = "0.30.1"
+dependencies = [
+ "borsh 1.2.1",
+ "ibc",
+ "ibc-derive 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ibc-testkit",
+ "ics23",
+ "masp_primitives",
+ "namada_core",
+ "namada_governance",
+ "namada_parameters",
+ "namada_state",
+ "namada_storage",
+ "namada_trans_token",
+ "primitive-types",
+ "proptest",
+ "prost 0.12.3",
+ "sha2 0.9.9",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
 name = "namada_macros"
-version = "0.30.0"
+version = "0.30.1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3542,13 +3653,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "namada_merkle_tree"
+version = "0.30.1"
+dependencies = [
+ "borsh 1.2.1",
+ "eyre",
+ "ics23",
+ "namada_core",
+ "prost 0.12.3",
+ "sparse-merkle-tree",
+ "thiserror",
+]
+
+[[package]]
+name = "namada_parameters"
+version = "0.30.1"
+dependencies = [
+ "borsh 1.2.1",
+ "namada_core",
+ "namada_macros",
+ "namada_storage",
+ "thiserror",
+]
+
+[[package]]
 name = "namada_proof_of_stake"
-version = "0.30.0"
+version = "0.30.1"
 dependencies = [
  "borsh 1.2.1",
  "data-encoding",
  "derivative",
+ "namada_account",
  "namada_core",
+ "namada_governance",
+ "namada_parameters",
+ "namada_storage",
+ "namada_trans_token",
+ "num-traits",
  "once_cell",
  "proptest",
  "serde",
@@ -3558,7 +3699,7 @@ dependencies = [
 
 [[package]]
 name = "namada_sdk"
-version = "0.30.0"
+version = "0.30.1"
 dependencies = [
  "async-trait",
  "bimap",
@@ -3569,14 +3710,25 @@ dependencies = [
  "derivation-path",
  "ethbridge-bridge-contract",
  "ethers",
+ "fd-lock",
  "futures",
  "itertools 0.10.5",
  "lazy_static",
  "masp_primitives",
  "masp_proofs",
+ "namada_account",
  "namada_core",
  "namada_ethereum_bridge",
+ "namada_governance",
+ "namada_ibc",
+ "namada_parameters",
  "namada_proof_of_stake",
+ "namada_state",
+ "namada_storage",
+ "namada_token",
+ "namada_tx",
+ "namada_vote_ext",
+ "num-traits",
  "num256",
  "orion",
  "owo-colors",
@@ -3603,8 +3755,57 @@ dependencies = [
 ]
 
 [[package]]
+name = "namada_shielded_token"
+version = "0.30.1"
+dependencies = [
+ "masp_primitives",
+ "namada_core",
+ "namada_parameters",
+ "namada_state",
+ "namada_storage",
+ "namada_trans_token",
+ "tracing",
+]
+
+[[package]]
+name = "namada_state"
+version = "0.30.1"
+dependencies = [
+ "borsh 1.2.1",
+ "ics23",
+ "itertools 0.10.5",
+ "namada_core",
+ "namada_gas",
+ "namada_merkle_tree",
+ "namada_parameters",
+ "namada_storage",
+ "namada_trans_token",
+ "namada_tx",
+ "proptest",
+ "sha2 0.9.9",
+ "sparse-merkle-tree",
+ "thiserror",
+ "tiny-keccak",
+ "tracing",
+]
+
+[[package]]
+name = "namada_storage"
+version = "0.30.1"
+dependencies = [
+ "borsh 1.2.1",
+ "itertools 0.10.5",
+ "namada_core",
+ "namada_gas",
+ "namada_merkle_tree",
+ "namada_tx",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
 name = "namada_test_utils"
-version = "0.30.0"
+version = "0.30.1"
 dependencies = [
  "borsh 1.2.1",
  "namada_core",
@@ -3613,7 +3814,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tests"
-version = "0.30.0"
+version = "0.30.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3646,15 +3847,70 @@ dependencies = [
 ]
 
 [[package]]
-name = "namada_tx_prelude"
-version = "0.30.0"
+name = "namada_token"
+version = "0.30.1"
 dependencies = [
+ "namada_core",
+ "namada_shielded_token",
+ "namada_storage",
+ "namada_trans_token",
+]
+
+[[package]]
+name = "namada_trans_token"
+version = "0.30.1"
+dependencies = [
+ "namada_core",
+ "namada_storage",
+]
+
+[[package]]
+name = "namada_tx"
+version = "0.30.1"
+dependencies = [
+ "ark-bls12-381",
  "borsh 1.2.1",
- "borsh-ext",
+ "data-encoding",
  "masp_primitives",
  "namada_core",
+ "namada_gas",
+ "num-derive",
+ "num-traits",
+ "proptest",
+ "prost 0.12.3",
+ "prost-types 0.12.3",
+ "serde",
+ "serde_json",
+ "sha2 0.9.9",
+ "thiserror",
+ "tonic-build",
+]
+
+[[package]]
+name = "namada_tx_env"
+version = "0.30.1"
+dependencies = [
+ "namada_core",
+ "namada_storage",
+]
+
+[[package]]
+name = "namada_tx_prelude"
+version = "0.30.1"
+dependencies = [
+ "borsh 1.2.1",
+ "masp_primitives",
+ "namada_account",
+ "namada_core",
+ "namada_governance",
+ "namada_ibc",
  "namada_macros",
+ "namada_parameters",
  "namada_proof_of_stake",
+ "namada_storage",
+ "namada_token",
+ "namada_tx",
+ "namada_tx_env",
  "namada_vm_env",
  "sha2 0.9.9",
  "thiserror",
@@ -3662,7 +3918,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.30.0"
+version = "0.30.1"
 dependencies = [
  "borsh 1.2.1",
  "masp_primitives",
@@ -3670,24 +3926,52 @@ dependencies = [
 ]
 
 [[package]]
-name = "namada_vp_prelude"
-version = "0.30.0"
+name = "namada_vote_ext"
+version = "0.30.1"
 dependencies = [
  "borsh 1.2.1",
- "borsh-ext",
  "namada_core",
+ "namada_tx",
+ "serde",
+]
+
+[[package]]
+name = "namada_vp_env"
+version = "0.30.1"
+dependencies = [
+ "derivative",
+ "masp_primitives",
+ "namada_core",
+ "namada_storage",
+ "namada_tx",
+ "thiserror",
+]
+
+[[package]]
+name = "namada_vp_prelude"
+version = "0.30.1"
+dependencies = [
+ "borsh 1.2.1",
+ "namada_account",
+ "namada_core",
+ "namada_governance",
+ "namada_ibc",
  "namada_macros",
+ "namada_parameters",
  "namada_proof_of_stake",
+ "namada_storage",
+ "namada_token",
+ "namada_tx",
  "namada_vm_env",
+ "namada_vp_env",
  "sha2 0.9.9",
  "thiserror",
 ]
 
 [[package]]
 name = "namada_wasm_for_tests"
-version = "0.30.0"
+version = "0.30.1"
 dependencies = [
- "borsh 1.2.1",
  "getrandom 0.2.11",
  "namada_test_utils",
  "namada_tests",
@@ -4729,7 +5013,7 @@ version = "0.11.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "046cd98826c46c2ac8ddecae268eb5c2e58628688a5fc7a2643704a73faba95b"
 dependencies = [
- "base64 0.21.5",
+ "base64 0.21.7",
  "bytes",
  "encoding_rs",
  "futures-core",
@@ -4940,7 +5224,7 @@ version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c74cae0a4cf6ccbbf5f359f08efdf8ee7e1dc532573bf0db71968cb56b1448c"
 dependencies = [
- "base64 0.21.5",
+ "base64 0.21.7",
 ]
 
 [[package]]

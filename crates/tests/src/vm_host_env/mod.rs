@@ -1138,11 +1138,7 @@ mod tests {
         // Start a transaction to send a packet
         let msg =
             ibc::msg_transfer(port_id, channel_id, token.to_string(), &sender);
-        let mut tx_data = vec![];
-        msg.clone()
-            .to_any()
-            .encode(&mut tx_data)
-            .expect("encoding failed");
+        let tx_data = msg.serialize_to_vec();
 
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
@@ -1183,7 +1179,7 @@ mod tests {
         // Start the next transaction for receiving an ack
         let counterparty = ibc::dummy_channel_counterparty();
         let packet = ibc::packet_from_message(
-            &msg,
+            &msg.message,
             ibc::Sequence::from(1),
             &counterparty,
         );
@@ -1272,8 +1268,7 @@ mod tests {
         // Start a transaction to send a packet
         // Set this chain is the sink zone
         let msg = ibc::msg_transfer(port_id, channel_id, denom, &sender);
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx_data = msg.serialize_to_vec();
 
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
@@ -1700,12 +1695,8 @@ mod tests {
         // Start a transaction to send a packet
         let mut msg =
             ibc::msg_transfer(port_id, channel_id, token.to_string(), &sender);
-        ibc::set_timeout_timestamp(&mut msg);
-        let mut tx_data = vec![];
-        msg.clone()
-            .to_any()
-            .encode(&mut tx_data)
-            .expect("encoding failed");
+        ibc::set_timeout_timestamp(&mut msg.message);
+        let tx_data = msg.serialize_to_vec();
         // send a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -1728,7 +1719,7 @@ mod tests {
         // Start a transaction to notify the timeout
         let counterparty = ibc::dummy_channel_counterparty();
         let packet = ibc::packet_from_message(
-            &msg,
+            &msg.message,
             ibc::Sequence::from(1),
             &counterparty,
         );
@@ -1790,11 +1781,7 @@ mod tests {
         // Start a transaction to send a packet
         let msg =
             ibc::msg_transfer(port_id, channel_id, token.to_string(), &sender);
-        let mut tx_data = vec![];
-        msg.clone()
-            .to_any()
-            .encode(&mut tx_data)
-            .expect("encoding failed");
+        let tx_data = msg.serialize_to_vec();
         // send a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -1817,7 +1804,7 @@ mod tests {
         // Start a transaction to notify the timing-out on closed
         let counterparty = ibc::dummy_channel_counterparty();
         let packet = ibc::packet_from_message(
-            &msg,
+            &msg.message,
             ibc::Sequence::from(1),
             &counterparty,
         );

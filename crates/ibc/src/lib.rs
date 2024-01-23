@@ -132,7 +132,7 @@ where
                 self.handle_masp_tx(message)
             }
             IbcMessage::Envelope(envelope) => {
-                execute(&mut self.ctx, &mut self.router, envelope.clone())
+                execute(&mut self.ctx, &mut self.router, *envelope.clone())
                     .map_err(|e| Error::Context(Box::new(e)))?;
                 // the current ibc-rs execution doesn't store the denom for the
                 // token hash when transfer with MsgRecvPacket
@@ -288,7 +288,7 @@ where
                 .map_err(Error::NftTransfer)
             }
             IbcMessage::Envelope(envelope) => {
-                validate(&self.ctx, &self.router, envelope)
+                validate(&self.ctx, &self.router, *envelope)
                     .map_err(|e| Error::Context(Box::new(e)))
             }
         }
@@ -297,28 +297,30 @@ where
     /// Handle the MASP transaction if needed
     fn handle_masp_tx(&mut self, message: IbcMessage) -> Result<(), Error> {
         let shielded_transfer = match message {
-            IbcMessage::Envelope(MsgEnvelope::Packet(PacketMsg::Recv(_))) => {
-                let event = self
-                    .ctx
-                    .inner
-                    .borrow()
-                    .get_ibc_events(EVENT_TYPE_PACKET)
-                    .map_err(|_| {
-                        Error::MaspTx(
-                            "Reading the IBC event failed".to_string(),
-                        )
-                    })?;
-                // The receiving event should be only one in the single IBC
-                // transaction
-                match event.first() {
-                    Some(event) => get_shielded_transfer(event)
-                        .map_err(|e| Error::MaspTx(e.to_string()))?,
-                    None => return Ok(()),
+            IbcMessage::Envelope(boxed_envelope) => match *boxed_envelope {
+                MsgEnvelope::Packet(PacketMsg::Recv(_)) => {
+                    let event = self
+                        .ctx
+                        .inner
+                        .borrow()
+                        .get_ibc_events(EVENT_TYPE_PACKET)
+                        .map_err(|_| {
+                            Error::MaspTx(
+                                "Reading the IBC event failed".to_string(),
+                            )
+                        })?;
+                    // The receiving event should be only one in the single IBC
+                    // transaction
+                    match event.first() {
+                        Some(event) => get_shielded_transfer(event)
+                            .map_err(|e| Error::MaspTx(e.to_string()))?,
+                        None => return Ok(()),
+                    }
                 }
-            }
+                _ => return Ok(()),
+            },
             IbcMessage::Transfer(msg) => msg.shielded_transfer,
             IbcMessage::NftTransfer(msg) => msg.shielded_transfer,
-            _ => return Ok(()),
         };
         if let Some(shielded_transfer) = shielded_transfer {
             self.ctx
@@ -339,7 +341,7 @@ where
 /// The different variants of an Ibc message
 pub enum IbcMessage {
     /// Ibc Envelop
-    Envelope(MsgEnvelope),
+    Envelope(Box<MsgEnvelope>),
     /// Ibc transaprent transfer
     Transfer(MsgTransfer),
     /// NFT transfer
@@ -351,7 +353,7 @@ pub fn decode_message(tx_data: &[u8]) -> Result<IbcMessage, Error> {
     // ibc-rs message
     if let Ok(any_msg) = Any::decode(tx_data) {
         if let Ok(envelope) = MsgEnvelope::try_from(any_msg) {
-            return Ok(IbcMessage::Envelope(envelope));
+            return Ok(IbcMessage::Envelope(Box::new(envelope)));
         }
     }
 
