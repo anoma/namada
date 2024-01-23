@@ -759,12 +759,15 @@ where
 #[cfg(any(test, feature = "testing"))]
 /// Tests and strategies for transactions
 pub mod testing {
+    use borsh_ext::BorshSerializeExt;
     use governance::ProposalType;
     use ibc::primitives::proto::Any;
+    use masp_primitives::transaction::TransparentAddress;
     use namada_account::{InitAccount, UpdateAccount};
     use namada_core::types::address::testing::{
         arb_established_address, arb_non_internal_address,
     };
+    use namada_core::types::address::MASP;
     use namada_core::types::eth_bridge_pool::PendingTransfer;
     use namada_core::types::hash::testing::arb_hash;
     use namada_core::types::storage::testing::arb_epoch;
@@ -784,18 +787,23 @@ pub mod testing {
     };
     use namada_tx::data::{DecryptedTx, Fee, TxType, WrapperTx};
     use proptest::prelude::{Just, Strategy};
-    use proptest::{option, prop_compose};
+    use proptest::{option, prop_compose, prop_oneof};
     use prost::Message;
+    use ripemd::Digest as RipemdDigest;
+    use sha2::Digest;
 
     use super::*;
     use crate::account::tests::{arb_init_account, arb_update_account};
+    use crate::masp::testing::{
+        arb_deshielding_transfer, arb_shielded_transfer, arb_shielding_transfer,
+    };
     use crate::tx::data::pgf::tests::arb_update_steward_commission;
     use crate::tx::data::pos::tests::{
         arb_become_validator, arb_bond, arb_commission_change,
         arb_consensus_key_change, arb_metadata_change, arb_redelegation,
         arb_withdraw,
     };
-    use crate::tx::{Code, Commitment, Header, Section};
+    use crate::tx::{Code, Commitment, Header, MaspBuilder, Section};
     use crate::types::chain::ChainId;
     use crate::types::eth_bridge_pool::testing::arb_pending_transfer;
     use crate::types::key::testing::arb_common_pk;
@@ -912,24 +920,23 @@ pub mod testing {
 
     prop_compose! {
         // Generate an arbitrary decrypted transaction
-        pub fn arb_decrypted_tx()(discriminant in 0..2) -> DecryptedTx {
-            match discriminant {
-                0 => DecryptedTx::Decrypted,
-                1 => DecryptedTx::Undecryptable,
-                _ => unreachable!(),
-            }
+        pub fn arb_decrypted_tx()(decrypted_tx in prop_oneof![
+            Just(DecryptedTx::Decrypted),
+            Just(DecryptedTx::Undecryptable),
+        ]) -> DecryptedTx {
+            decrypted_tx
         }
     }
 
-    // Generate an arbitrary transaction type
-    pub fn arb_tx_type() -> impl Strategy<Value = TxType> {
-        let raw_tx = Just(TxType::Raw).boxed();
-        let decrypted_tx =
-            arb_decrypted_tx().prop_map(TxType::Decrypted).boxed();
-        let wrapper_tx = arb_wrapper_tx()
-            .prop_map(|x| TxType::Wrapper(Box::new(x)))
-            .boxed();
-        raw_tx.prop_union(decrypted_tx).or(wrapper_tx)
+    prop_compose! {
+        // Generate an arbitrary transaction type
+        pub fn arb_tx_type()(tx_type in prop_oneof![
+            Just(TxType::Raw),
+            arb_decrypted_tx().prop_map(TxType::Decrypted),
+            arb_wrapper_tx().prop_map(|x| TxType::Wrapper(Box::new(x))),
+        ]) -> TxType {
+            tx_type
+        }
     }
 
     prop_compose! {
@@ -967,6 +974,87 @@ pub mod testing {
             let mut tx = Tx { header, sections: vec![] };
             tx.add_data(transfer.clone());
             tx.add_code_from_hash(code_hash, Some(TX_TRANSFER_WASM.to_owned()));
+            (tx, TxData::Transfer(transfer))
+        }
+    }
+
+    // Encode the given Address into TransparentAddress
+    fn encode_address(source: &Address) -> TransparentAddress {
+        let hash = ripemd::Ripemd160::digest(sha2::Sha256::digest(
+            source.serialize_to_vec().as_ref(),
+        ));
+        TransparentAddress(hash.into())
+    }
+
+    // Maximum number of notes to include in a transaction
+    const MAX_ASSETS: usize = 10;
+
+    // Type of MASP transaction
+    #[derive(Debug, Clone)]
+    enum MaspTxType {
+        // Shielded transaction
+        Shielded,
+        // Shielding transaction
+        Shielding,
+        // Deshielding transaction
+        Deshielding,
+    }
+
+    prop_compose! {
+        // Generate an arbitrary transfer transaction
+        pub fn arb_masp_transfer_tx()(transfer in arb_transfer())(
+            mut header in arb_header(),
+            wrapper in arb_wrapper_tx(),
+            code_hash in arb_hash(),
+            (masp_tx_type, (shielded_transfer, asset_types)) in prop_oneof![
+                (Just(MaspTxType::Shielded), arb_shielded_transfer(0..MAX_ASSETS)),
+                (Just(MaspTxType::Shielding), arb_shielding_transfer(encode_address(&transfer.source), 1)),
+                (Just(MaspTxType::Deshielding), arb_deshielding_transfer(encode_address(&transfer.target), 1)),
+            ],
+            mut transfer in Just(transfer),
+        ) -> (Tx, TxData) {
+            header.tx_type = TxType::Wrapper(Box::new(wrapper));
+            let mut tx = Tx { header, sections: vec![] };
+            match masp_tx_type {
+                MaspTxType::Shielded => {
+                    transfer.source = MASP;
+                    transfer.target = MASP;
+                    transfer.amount = token::Amount::zero().into();
+                },
+                MaspTxType::Shielding => {
+                    transfer.target = MASP;
+                    // Set the transparent amount and token
+                    let (decoded, value) = asset_types.iter().next().unwrap();
+                    transfer.amount = DenominatedAmount::new(
+                        token::Amount::from_masp_denominated(*value, decoded.position),
+                        decoded.denom,
+                    );
+                    transfer.token = decoded.token.clone();
+                },
+                MaspTxType::Deshielding => {
+                    transfer.source = MASP;
+                    // Set the transparent amount and token
+                    let (decoded, value) = asset_types.iter().next().unwrap();
+                    transfer.amount = DenominatedAmount::new(
+                        token::Amount::from_masp_denominated(*value, decoded.position),
+                        decoded.denom,
+                    );
+                    transfer.token = decoded.token.clone();
+                },
+            }
+            let masp_tx_hash = tx.add_masp_tx_section(shielded_transfer.masp_tx).1;
+            transfer.shielded = Some(masp_tx_hash);
+            tx.add_data(transfer.clone());
+            tx.add_code_from_hash(code_hash, Some(TX_TRANSFER_WASM.to_owned()));
+            tx.add_masp_builder(MaspBuilder {
+                asset_types: asset_types.into_keys().collect(),
+                // Store how the Info objects map to Descriptors/Outputs
+                metadata: shielded_transfer.metadata,
+                // Store the data that was used to construct the Transaction
+                builder: shielded_transfer.builder,
+                // Link the Builder to the Transaction by hash code
+                target: masp_tx_hash,
+            });
             (tx, TxData::Transfer(transfer))
         }
     }
@@ -1327,28 +1415,30 @@ pub mod testing {
 
     // Generate an arbitrary tx
     pub fn arb_tx() -> impl Strategy<Value = (Tx, TxData)> {
-        arb_transfer_tx()
-            .boxed()
-            .prop_union(arb_bond_tx().boxed())
-            .or(arb_unbond_tx().boxed())
-            .or(arb_init_account_tx().boxed())
-            .or(arb_become_validator_tx().boxed())
-            .or(arb_init_proposal_tx().boxed())
-            .or(arb_vote_proposal_tx().boxed())
-            .or(arb_reveal_pk_tx().boxed())
-            .or(arb_update_account_tx().boxed())
-            .or(arb_withdraw_tx().boxed())
-            .or(arb_claim_rewards_tx().boxed())
-            .or(arb_commission_change_tx().boxed())
-            .or(arb_metadata_change_tx().boxed())
-            .or(arb_unjail_validator_tx().boxed())
-            .or(arb_deactivate_validator_tx().boxed())
-            .or(arb_reactivate_validator_tx().boxed())
-            .or(arb_consensus_key_change_tx().boxed())
-            .or(arb_redelegation_tx().boxed())
-            .or(arb_update_steward_commission_tx().boxed())
-            .or(arb_resign_steward_tx().boxed())
-            .or(arb_pending_transfer_tx().boxed())
-            .or(arb_ibc_any_tx().boxed())
+        prop_oneof![
+            arb_transfer_tx(),
+            arb_masp_transfer_tx(),
+            arb_bond_tx(),
+            arb_unbond_tx(),
+            arb_init_account_tx(),
+            arb_become_validator_tx(),
+            arb_init_proposal_tx(),
+            arb_vote_proposal_tx(),
+            arb_reveal_pk_tx(),
+            arb_update_account_tx(),
+            arb_withdraw_tx(),
+            arb_claim_rewards_tx(),
+            arb_commission_change_tx(),
+            arb_metadata_change_tx(),
+            arb_unjail_validator_tx(),
+            arb_deactivate_validator_tx(),
+            arb_reactivate_validator_tx(),
+            arb_consensus_key_change_tx(),
+            arb_redelegation_tx(),
+            arb_update_steward_commission_tx(),
+            arb_resign_steward_tx(),
+            arb_pending_transfer_tx(),
+            arb_ibc_any_tx(),
+        ]
     }
 }

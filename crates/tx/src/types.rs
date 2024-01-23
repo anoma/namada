@@ -18,10 +18,10 @@ use namada_core::types::account::AccountPublicKeysMap;
 use namada_core::types::address::Address;
 use namada_core::types::chain::ChainId;
 use namada_core::types::key::*;
+use namada_core::types::masp::AssetData;
 use namada_core::types::sign::SignatureIndex;
 use namada_core::types::storage::Epoch;
 use namada_core::types::time::DateTimeUtc;
-use namada_core::types::token::MaspDenom;
 use serde::de::Error as SerdeError;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -660,7 +660,7 @@ pub struct MaspBuilder {
     pub target: namada_core::types::hash::Hash,
     /// The decoded set of asset types used by the transaction. Useful for
     /// offline wallets trying to display AssetTypes.
-    pub asset_types: HashSet<(Address, MaspDenom, Option<Epoch>)>,
+    pub asset_types: HashSet<AssetData>,
     /// Track how Info objects map to descriptors and outputs
     #[serde(
         serialize_with = "borsh_serde::<SaplingMetadataSerde, _>",
