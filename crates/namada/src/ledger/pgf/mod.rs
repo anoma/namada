@@ -117,7 +117,7 @@ where
         match tx.data() {
             Some(data) => is_proposal_accepted(&self.ctx.pre(), data.as_ref())
                 .map_err(Error::NativeVpError),
-            None => Ok(true),
+            None => Ok(false),
         }
     }
 }

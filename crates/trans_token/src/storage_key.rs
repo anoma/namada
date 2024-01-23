@@ -73,8 +73,9 @@ pub fn minted_balance_key(token_addr: &Address) -> storage::Key {
         .expect("Cannot obtain a storage key")
 }
 
-/// Check if the given storage key is balance key for the given token. If it is,
-/// returns the owner. For minted balances, use [`is_any_minted_balance_key()`].
+/// Check if the given storage key is a balance key for the given token. If it
+/// is, return the owner. For minted balances, use
+/// [`is_any_minted_balance_key()`].
 pub fn is_balance_key<'a>(
     token_addr: &Address,
     key: &'a storage::Key,
@@ -95,8 +96,8 @@ pub fn is_balance_key<'a>(
     }
 }
 
-/// Check if the given storage key is balance key for the given token. If it is,
-/// returns the owner. For minted balances, use [`is_any_minted_balance_key()`].
+/// Check if the given storage key is a parameter key for an unspecified token.
+/// If it is, return the token address.
 pub fn is_any_token_parameter_key(key: &storage::Key) -> Option<&Address> {
     match &key.segments[..] {
         [
@@ -113,8 +114,8 @@ pub fn is_any_token_parameter_key(key: &storage::Key) -> Option<&Address> {
     }
 }
 
-/// Check if the given storage key is balance key for unspecified token. If it
-/// is, returns the token and owner address.
+/// Check if the given storage key is a balance key for an unspecified token. If
+/// it is, return the token and owner address.
 pub fn is_any_token_balance_key(key: &storage::Key) -> Option<[&Address; 2]> {
     match &key.segments[..] {
         [

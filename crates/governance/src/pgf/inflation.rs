@@ -33,13 +33,12 @@ where
     let epochs_per_year: u64 = storage
         .read(&params_storage::get_epochs_per_year_key())?
         .expect("Epochs per year should exist in storage");
-    let total_tokens: token::Amount = storage
+    let total_supply: token::Amount = storage
         .read(&minted_balance_key(&staking_token))?
-        .expect("Total native token balance should exist in storage"); // 116400000
+        .expect("Total native token balance should exist in storage");
 
-    let pgf_inflation_amount = (total_tokens
-        .mul_ceil(pgf_parameters.pgf_inflation_rate))
-        / epochs_per_year;
+    let pgf_inflation_amount =
+        (pgf_parameters.pgf_inflation_rate * total_supply) / epochs_per_year;
 
     credit_tokens(
         storage,
@@ -52,7 +51,7 @@ where
         "Minting {} tokens for PGF rewards distribution into the PGF account \
          (total supply {}).",
         pgf_inflation_amount.to_string_native(),
-        total_tokens.to_string_native()
+        total_supply.to_string_native()
     );
 
     let mut pgf_fundings = get_payments(storage)?;
@@ -95,31 +94,35 @@ where
 
     // Pgf steward inflation
     let stewards = get_stewards(storage)?;
-    let pgf_steward_inflation = (total_tokens
-        .mul_ceil(pgf_parameters.stewards_inflation_rate))
+    let pgf_steward_inflation = (pgf_parameters.stewards_inflation_rate
+        * total_supply)
         / epochs_per_year;
 
     for steward in stewards {
         for (address, percentage) in steward.reward_distribution {
-            let pgf_steward_reward = pgf_steward_inflation.mul_ceil(percentage);
-            let reward_amount = pgf_steward_reward;
+            let pgf_steward_reward = percentage * pgf_steward_inflation;
 
-            if credit_tokens(storage, &staking_token, &address, reward_amount)
-                .is_ok()
+            if credit_tokens(
+                storage,
+                &staking_token,
+                &address,
+                pgf_steward_reward,
+            )
+            .is_ok()
             {
                 tracing::info!(
                     "Minting {} tokens for steward {} (total supply {})..",
-                    reward_amount.to_string_native(),
+                    pgf_steward_reward.to_string_native(),
                     address,
-                    total_tokens.to_string_native()
+                    total_supply.to_string_native()
                 );
             } else {
                 tracing::warn!(
                     "Failed minting {} tokens for steward {} (total supply \
                      {})..",
-                    reward_amount.to_string_native(),
+                    pgf_steward_reward.to_string_native(),
                     address,
-                    total_tokens.to_string_native()
+                    total_supply.to_string_native()
                 );
             }
         }
