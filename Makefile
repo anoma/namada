@@ -77,7 +77,7 @@ build-debug:
 	$(cargo) build --package namada_apps --manifest-path Cargo.toml
 
 install-release:
-	$(cargo) install --path ./apps --locked
+	$(cargo) install --path ./crates/apps --locked
 
 check-release:
 	$(cargo) check --release --package namada_apps
@@ -121,7 +121,7 @@ tendermint:
 	./scripts/get_tendermint.sh
 
 install: cometbft
-	$(cargo) install --path ./apps --locked
+	$(cargo) install --path ./crates/apps --locked
 
 cometbft:
 	./scripts/get_cometbft.sh
@@ -248,7 +248,7 @@ test-benches:
 # Run PoS state machine tests with shrinking disabled by default (can be 
 # overridden with `PROPTEST_MAX_SHRINK_ITERS`)
 test-pos-sm:
-	cd proof_of_stake && \
+	cd crates/proof_of_stake && \
 		RUST_BACKTRACE=1 \
 		PROPTEST_CASES=$(PROPTEST_CASES) \
 		PROPTEST_MAX_SHRINK_ITERS=$(PROPTEST_MAX_SHRINK_ITERS) \
