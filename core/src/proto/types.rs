@@ -27,10 +27,9 @@ use crate::types::address::Address;
 use crate::types::chain::ChainId;
 use crate::types::keccak::{keccak_hash, KeccakHash};
 use crate::types::key::{self, *};
+use crate::types::masp::AssetData;
 use crate::types::storage::Epoch;
 use crate::types::time::DateTimeUtc;
-use crate::types::token;
-use crate::types::token::MaspDenom;
 use crate::types::transaction::protocol::ProtocolTx;
 use crate::types::transaction::{
     hash_tx, DecryptedTx, Fee, GasLimit, TxType, WrapperTx,
@@ -768,8 +767,7 @@ pub struct MaspBuilder {
     pub target: crate::types::hash::Hash,
     /// The decoded set of asset types used by the transaction. Useful for
     /// offline wallets trying to display AssetTypes.
-    pub asset_types:
-        HashSet<(Address, token::Denomination, MaspDenom, Option<Epoch>)>,
+    pub asset_types: HashSet<AssetData>,
     /// Track how Info objects map to descriptors and outputs
     #[serde(
         serialize_with = "borsh_serde::<SaplingMetadataSerde, _>",

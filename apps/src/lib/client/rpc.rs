@@ -45,7 +45,7 @@ use namada::types::io::Io;
 use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use namada::types::storage::{BlockHeight, BlockResults, Epoch, Key, KeySeg};
-use namada::types::token::{Change, MaspDenom};
+use namada::types::token::{Change, MaspDigitPos};
 use namada::types::{storage, token};
 use namada_sdk::error::{is_pinned_error, Error, PinnedBalanceError};
 use namada_sdk::masp::{Conversions, MaspChange};
@@ -2410,7 +2410,7 @@ pub async fn query_conversion<C: namada::ledger::queries::Client + Sync>(
 ) -> Option<(
     Address,
     token::Denomination,
-    MaspDenom,
+    MaspDigitPos,
     Epoch,
     masp_primitives::transaction::components::I128Sum,
     MerklePath<Node>,

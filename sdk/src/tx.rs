@@ -37,10 +37,10 @@ use namada_core::types::dec::Dec;
 use namada_core::types::hash::Hash;
 use namada_core::types::ibc::{IbcShieldedTransfer, MsgShieldedTransfer};
 use namada_core::types::key::*;
-use namada_core::types::masp::{TransferSource, TransferTarget};
+use namada_core::types::masp::{AssetData, TransferSource, TransferTarget};
 use namada_core::types::storage::Epoch;
 use namada_core::types::time::DateTimeUtc;
-use namada_core::types::token::MaspDenom;
+use namada_core::types::token::MaspDigitPos;
 use namada_core::types::transaction::account::{InitAccount, UpdateAccount};
 use namada_core::types::transaction::governance::{
     InitProposalData, VoteProposalData,
@@ -2215,12 +2215,7 @@ where
 /// Try to decode the given asset type and add its decoding to the supplied set.
 /// Returns true only if a new decoding has been added to the given set.
 async fn add_asset_type(
-    asset_types: &mut HashSet<(
-        Address,
-        token::Denomination,
-        MaspDenom,
-        Option<Epoch>,
-    )>,
+    asset_types: &mut HashSet<AssetData>,
     context: &impl Namada,
     asset_type: AssetType,
 ) -> bool {
@@ -2242,10 +2237,7 @@ async fn add_asset_type(
 async fn used_asset_types<P, R, K, N>(
     context: &impl Namada,
     builder: &Builder<P, R, K, N>,
-) -> std::result::Result<
-    HashSet<(Address, token::Denomination, MaspDenom, Option<Epoch>)>,
-    RpcError,
-> {
+) -> std::result::Result<HashSet<AssetData>, RpcError> {
     let mut asset_types = HashSet::new();
     // Collect all the asset types used in the Sapling inputs
     for input in builder.sapling_inputs() {
@@ -2410,12 +2402,7 @@ async fn construct_shielded_parts<N: Namada>(
     target: &TransferTarget,
     token: &Address,
     amount: token::DenominatedAmount,
-) -> Result<
-    Option<(
-        ShieldedTransfer,
-        HashSet<(Address, token::Denomination, MaspDenom, Option<Epoch>)>,
-    )>,
-> {
+) -> Result<Option<(ShieldedTransfer, HashSet<AssetData>)>> {
     let stx_result =
         ShieldedContext::<N::ShieldedUtils>::gen_shielded_transfer(
             context, source, target, token, amount,
@@ -2693,16 +2680,15 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
             })?;
         // TODO: Workaround for decoding the asset_type later
         let mut shielded = context.shielded_mut().await;
-        for digit in MaspDenom::iter() {
-            let epoch = shielded_transfer.epoch;
+        for position in MaspDigitPos::iter() {
+            let mut decoded = AssetData {
+                token: token.clone(),
+                epoch: Some(shielded_transfer.epoch),
+                denom,
+                position,
+            };
             shielded
-                .get_asset_type(
-                    context.client(),
-                    epoch,
-                    token.clone(),
-                    denom,
-                    digit,
-                )
+                .get_asset_type(context.client(), &mut decoded)
                 .await
                 .map_err(|_| {
                     Error::Other("unable to create asset type".to_string())

@@ -33,7 +33,7 @@ use thiserror::Error;
 use crate::ledger::native_vp;
 use crate::ledger::native_vp::{Ctx, NativeVp};
 use crate::types::masp::encode_asset_type;
-use crate::types::token::MaspDenom;
+use crate::types::token::MaspDigitPos;
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]
@@ -330,10 +330,10 @@ where
 fn unepoched_tokens(
     token: &Address,
     denom: token::Denomination,
-) -> Result<HashMap<AssetType, (Address, token::Denomination, MaspDenom)>> {
+) -> Result<HashMap<AssetType, (Address, token::Denomination, MaspDigitPos)>> {
     let mut unepoched_tokens = HashMap::new();
-    for digit in MaspDenom::iter() {
-        let asset_type = encode_asset_type(None, token, denom, digit)
+    for digit in MaspDigitPos::iter() {
+        let asset_type = encode_asset_type(token.clone(), denom, digit, None)
             .wrap_err("unable to create asset type")?;
         unepoched_tokens.insert(asset_type, (token.clone(), denom, digit));
     }
@@ -440,10 +440,10 @@ where
                         // Determine what the asset type would be if it were
                         // epoched
                         let epoched_asset_type = encode_asset_type(
-                            Some(epoch),
-                            token,
+                            token.clone(),
                             *denom,
                             *digit,
+                            Some(epoch),
                         )
                         .wrap_err("unable to create asset type")?;
                         if conversion_state

@@ -16,7 +16,9 @@ use crate::ledger::storage_api::{StorageRead, StorageWrite};
 use crate::types::address::{Address, MASP};
 use crate::types::dec::Dec;
 use crate::types::storage::Epoch;
-use crate::types::token::{self, DenominatedAmount, Denomination, MaspDenom};
+use crate::types::token::{
+    self, DenominatedAmount, Denomination, MaspDigitPos,
+};
 use crate::types::uint::Uint;
 
 /// A representation of the conversion state
@@ -33,7 +35,7 @@ pub struct ConversionState {
     pub assets: BTreeMap<
         AssetType,
         (
-            (Address, Denomination, MaspDenom),
+            (Address, Denomination, MaspDigitPos),
             Epoch,
             AllowedConversion,
             usize,
@@ -255,38 +257,39 @@ where
     // reward tokens will then be reinflated back to the current epoch.
     let reward_assets = [
         encode_asset_type(
-            Some(Epoch(0)),
-            &native_token,
+            native_token.clone(),
             NATIVE_MAX_DECIMAL_PLACES.into(),
-            MaspDenom::Zero,
+            MaspDigitPos::Zero,
+            Some(Epoch(0)),
         )
         .into_storage_result()?,
         encode_asset_type(
-            Some(Epoch(0)),
-            &native_token,
+            native_token.clone(),
             NATIVE_MAX_DECIMAL_PLACES.into(),
-            MaspDenom::One,
+            MaspDigitPos::One,
+            Some(Epoch(0)),
         )
         .into_storage_result()?,
         encode_asset_type(
-            Some(Epoch(0)),
-            &native_token,
+            native_token.clone(),
             NATIVE_MAX_DECIMAL_PLACES.into(),
-            MaspDenom::Two,
+            MaspDigitPos::Two,
+            Some(Epoch(0)),
         )
         .into_storage_result()?,
         encode_asset_type(
-            Some(Epoch(0)),
-            &native_token,
+            native_token.clone(),
             NATIVE_MAX_DECIMAL_PLACES.into(),
-            MaspDenom::Three,
+            MaspDigitPos::Three,
+            Some(Epoch(0)),
         )
         .into_storage_result()?,
     ];
     // Conversions from the previous to current asset for each address
-    let mut current_convs =
-        BTreeMap::<(Address, Denomination, MaspDenom), AllowedConversion>::new(
-        );
+    let mut current_convs = BTreeMap::<
+        (Address, Denomination, MaspDigitPos),
+        AllowedConversion,
+    >::new();
     // Native token inflation values are always with respect to this
     let mut ref_inflation = 0;
     // Reward all tokens according to above reward rates
@@ -302,22 +305,22 @@ where
         let addr_bal: token::Amount = wl_storage
             .read(&token::balance_key(addr, &masp_addr))?
             .unwrap_or_default();
-        for digit in token::MaspDenom::iter() {
+        for digit in token::MaspDigitPos::iter() {
             // Provide an allowed conversion from previous timestamp. The
             // negative sign allows each instance of the old asset to be
             // cancelled out/replaced with the new asset
             let old_asset = encode_asset_type(
-                Some(wl_storage.storage.last_epoch),
-                addr,
+                addr.clone(),
                 denom,
                 digit,
+                Some(wl_storage.storage.last_epoch),
             )
             .into_storage_result()?;
             let new_asset = encode_asset_type(
-                Some(wl_storage.storage.block.epoch),
-                addr,
+                addr.clone(),
                 denom,
                 digit,
+                Some(wl_storage.storage.block.epoch),
             )
             .into_storage_result()?;
             // Get the last rewarded amount of the native token
@@ -364,7 +367,7 @@ where
                     .into(),
                 );
                 // Operations that happen exactly once for each token
-                if digit == MaspDenom::Three {
+                if digit == MaspDigitPos::Three {
                     // The reward for each reward.1 units of the current asset
                     // is reward.0 units of the reward token
                     let native_reward =
@@ -412,7 +415,7 @@ where
                     .into(),
                 );
                 // Operations that happen exactly once for each token
-                if digit == MaspDenom::Three {
+                if digit == MaspDigitPos::Three {
                     // The reward for each reward.1 units of the current asset
                     // is reward.0 units of the reward token
                     total_reward += (addr_bal * (reward.0, reward.1)).0;
@@ -503,14 +506,14 @@ where
     // Add purely decoding entries to the assets map. These will be
     // overwritten before the creation of the next commitment tree
     for (addr, denom) in masp_reward_denoms {
-        for digit in token::MaspDenom::iter() {
+        for digit in token::MaspDigitPos::iter() {
             // Add the decoding entry for the new asset type. An uncommitted
             // node position is used since this is not a conversion.
             let new_asset = encode_asset_type(
-                Some(wl_storage.storage.block.epoch),
-                addr,
+                addr.clone(),
                 denom,
                 digit,
+                Some(wl_storage.storage.block.epoch),
             )
             .into_storage_result()?;
             wl_storage.storage.conversion_state.assets.insert(

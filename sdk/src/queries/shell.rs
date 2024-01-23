@@ -17,7 +17,7 @@ use namada_core::types::hash::Hash;
 use namada_core::types::storage::{
     self, BlockHeight, BlockResults, Epoch, KeySeg, PrefixValue,
 };
-use namada_core::types::token::{Denomination, MaspDenom};
+use namada_core::types::token::{Denomination, MaspDigitPos};
 #[cfg(any(test, feature = "async-client"))]
 use namada_core::types::transaction::TxResult;
 
@@ -34,7 +34,7 @@ use crate::tendermint::merkle::proof::ProofOps;
 type ConversionWithoutPath = (
     Address,
     Denomination,
-    MaspDenom,
+    MaspDigitPos,
     Epoch,
     masp_primitives::transaction::components::I128Sum,
 );
@@ -42,7 +42,7 @@ type ConversionWithoutPath = (
 type Conversion = (
     Address,
     Denomination,
-    MaspDenom,
+    MaspDigitPos,
     Epoch,
     masp_primitives::transaction::components::I128Sum,
     MerklePath<Node>,
