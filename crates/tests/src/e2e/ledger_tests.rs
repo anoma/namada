@@ -770,11 +770,7 @@ fn wrapper_disposable_signer() -> Result<()> {
     client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
-    let tx_args = vec![
-        "shielded-sync",
-        "--node",
-        &validator_one_rpc,
-    ];
+    let tx_args = vec!["shielded-sync", "--node", &validator_one_rpc];
     let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
     client.assert_success();
     let tx_args = vec![
