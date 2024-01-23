@@ -2286,7 +2286,7 @@ fn pgf_governance_proposal() -> Result<()> {
     ];
 
     client = run!(test, Bin::Client, query_balance_args, Some(30))?;
-    client.exp_string("nam: 2000000")?;
+    client.exp_string("nam: 2000001.")?; // albert is a steward so he receive also inflation
     client.assert_success();
 
     // Check if governance funds are 0
@@ -3827,6 +3827,7 @@ fn proposal_change_shielded_reward() -> Result<()> {
         vec!["masp-reward-tokens", "--node", &validator_one_rpc];
 
     let mut client = run!(test, Bin::Client, query_masp_rewards, Some(30))?;
+    client.exp_regex(".*Max reward rate: 0.05.*")?;
     client.assert_success();
 
     Ok(())

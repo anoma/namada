@@ -1,7 +1,6 @@
 //! PGF lib code.
 
 use namada_core::types::address::Address;
-
 use namada_core::types::token;
 use namada_parameters::storage as params_storage;
 use namada_state::{

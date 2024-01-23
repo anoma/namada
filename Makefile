@@ -169,6 +169,7 @@ test-e2e:
 	-Z unstable-options \
 	-- \
 	--test-threads=1 \
+	--nocapture \
 	-Z unstable-options --report-time
 
 # Run integration tests with pre-built MASP proofs
