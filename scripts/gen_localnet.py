@@ -54,8 +54,8 @@ parser.add_argument('--localnet-dir', type=str, help='The localnet directory con
 parser.add_argument('-m', '--mode', type=str, help='The mode to run the localnet in. Can be release or debug, defaults to debug.')
 parser.add_argument('--epoch-length', type=int, help='The epoch length in seconds, defaults to parameters.toml value.')
 parser.add_argument('--max-validator-slots', type=int, help='The maximum number of validators, defaults to parameters.toml value.')
-parser.add_argument('--no-nodes', type=int, help='Number of nodes to run, defaults to 1. If more than 1, base dirs will be under .namada-port. Number of chains must be less than 9.')
-parser.add_argument('--no-vals', type=int, help='Number of validators to run, defaults to 1. If more than 1, base dirs will be under .namada-port. Number of validators must be less or equal to no-chains.')
+parser.add_argument('--num-nodes', type=int, help='Number of nodes to run, defaults to 1. If more than 1, base dirs will be under .namada-port. Number of chains must be less than 9.')
+parser.add_argument('--num-vals', type=int, help='Number of validators to run, defaults to 1. If more than 1, base dirs will be under .namada-port. Number of validators must be less or equal to no-chains.')
 # Change any parameters in the parameters.toml file
 parser.add_argument('--params', type=str, help='A string representation of a dictionary of parameters to update in the parameters.toml. Must be of the same format.')
 
@@ -99,12 +99,12 @@ BASE_DIR = args.base_dir
 BASE_DIRS=[]
 system(f"rm -rf '{BASE_DIR}'")
 
-if args.no_nodes and args.no_nodes > 1:
-    BASE_DIRS = [f'.namada-2{(7+i) % 10}657' for i in range(args.no_nodes)]
+if args.num_nodes and args.num_nodes > 1:
+    BASE_DIRS = [f'.namada-2{(7+i) % 10}657' for i in range(args.num_nodes)]
     # if the base_dir exists, delete it
     system(f"rm -rf .namada-*")
-if args.no_vals and args.no_vals > 1:
-    assert args.no_vals <= args.no_nodes, 'Number of validators must be less or equal to number of chains.'
+if args.num_vals and args.num_vals > 1:
+    assert args.num_vals <= args.num_nodes, 'Number of validators must be less or equal to number of chains.'
     if os.path.isdir(TEMPLATES_PATH):
         shutil.rmtree(TEMPLATES_PATH)
     os.mkdir(TEMPLATES_PATH)
@@ -113,7 +113,7 @@ if args.no_vals and args.no_vals > 1:
     shutil.copy(localnet_dir + '/transactions.toml', TEMPLATES_PATH + '/transactions.toml')
     shutil.copy(localnet_dir + '/validity-predicates.toml', TEMPLATES_PATH + '/validity-predicates.toml')
     shutil.copy(localnet_dir + '/tokens.toml', TEMPLATES_PATH + '/tokens.toml')
-    system(f"python3 {namada_dir}/scripts/make_localnet.py --no-vals {args.no_vals} --mode {mode}")
+    system(f"python3 {namada_dir}/scripts/make_localnet.py --num-vals {args.num_vals} --mode {mode}")
 
 params = {}
 if args.params:
@@ -223,7 +223,7 @@ if len(BASE_DIRS)> 0:
     val_count = 0
     for base_dir in BASE_DIRS:
         genesis_validator=None
-        if val_count < args.no_vals:
+        if val_count < args.num_vals:
             genesis_validator=f'validator-{val_count}'
             val_count += 1
         join_network(base_dir, genesis_validator)

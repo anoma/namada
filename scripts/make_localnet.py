@@ -10,7 +10,7 @@ import shutil
 parser = argparse.ArgumentParser(description='Builds a localnet for testing purposes')
 
 # Add the arguments
-parser.add_argument('--no-vals', type=int, help='Number of validators to include.')
+parser.add_argument('--num-vals', type=int, help='Number of validators to include.')
 parser.add_argument('--mode', type=str, help='The mode to run the localnet in. Can be release or debug, defaults to debug.')
 
 args = parser.parse_args()
@@ -60,9 +60,9 @@ def make_val_wallet(cmd):
     else:
         print("Command failed")
 
-def make_transactions(no_vals):
+def make_transactions(num_vals):
     new_addresses = []
-    for i in range(1, no_vals):
+    for i in range(1, num_vals):
         val_alias = f"validator-{i}"
         unsigned_tx_file_path = f"{TXS_DIR}/{val_alias}-unsigned.toml"
         signed_tx_file_path = f"{TXS_DIR}/{val_alias}-signed.toml"
@@ -86,8 +86,8 @@ if __name__ == "__main__":
     LOCALNET_DIR = f'{namada_dir}/genesis/localnet'
     # Parse the arguments
 
-    if args.no_vals and args.no_vals > 1:
-        no_vals = args.no_vals
+    if args.num_vals and args.num_vals > 1:
+        num_vals = args.num_vals
     else:
         exit(0)
     
@@ -98,7 +98,7 @@ if __name__ == "__main__":
     TXS_DIR=f"{TMP_LOCAL}/pre-genesis/txs"
     system(f"mkdir -p {TXS_DIR}")
 
-    make_transactions(no_vals)
+    make_transactions(num_vals)
         
     # Concatenate tx_tomls
     bigass_unsigned_toml = {"established_account": [], "validator_account": [], "bond": []}
