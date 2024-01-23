@@ -2063,6 +2063,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, NotSyncing> {
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn syncing<C: Client + Sync>(
         self,
         client: &C,
