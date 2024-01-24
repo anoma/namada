@@ -48,6 +48,41 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// it has 2 blocks delay on validator set update.
 pub const EPOCH_SWITCH_BLOCKS_DELAY: u32 = 2;
 
+mod temp_hack {
+    use namada_core::types::address::{self, Address, InternalAddress};
+    use namada_core::types::storage::{self, DbKeySeg};
+
+    /// Returns true if the given key is one whose data is not merklized
+    pub fn is_key_not_merklized(key: &storage::Key) -> bool {
+        is_masp_key(key) || is_ibc_counter_key(key)
+    }
+
+    fn is_masp_key(key: &storage::Key) -> bool {
+        matches!(&key.segments[..],
+            [DbKeySeg::AddressSeg(addr), ..] if *addr == address::MASP
+        )
+    }
+
+    /// Returns true if the given key is for an IBC counter for clients,
+    /// connections, or channelEnds
+    fn is_ibc_counter_key(key: &storage::Key) -> bool {
+        const CLIENTS_COUNTER_PREFIX: &str = "clients";
+        const CONNECTIONS_COUNTER_PREFIX: &str = "connections";
+        const CHANNELS_COUNTER_PREFIX: &str = "channelEnds";
+        const COUNTER_SEG: &str = "counter";
+
+        matches!(&key.segments[..],
+        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix), DbKeySeg::StringSeg(counter)]
+            if addr == &Address::Internal(InternalAddress::Ibc)
+                && (prefix == CLIENTS_COUNTER_PREFIX
+                    || prefix == CONNECTIONS_COUNTER_PREFIX
+                    || prefix == CHANNELS_COUNTER_PREFIX)
+                && counter == COUNTER_SEG
+                )
+    }
+}
+use temp_hack::is_key_not_merklized;
+
 /// The ledger's state
 #[derive(Debug)]
 pub struct State<D, H>
@@ -368,6 +403,10 @@ where
         if height == BlockHeight(0) || height >= self.get_last_block_height() {
             self.read(key)
         } else {
+            if is_key_not_merklized(key) {
+                return Ok((None, 0));
+            }
+
             match self.db.read_subspace_val_with_height(
                 key,
                 height,
@@ -631,36 +670,43 @@ where
                             .expect("the key should be parsable");
                         let new_key = Key::parse(new.0.clone())
                             .expect("the key should be parsable");
+
                         // compare keys as String
                         match old.0.cmp(&new.0) {
                             Ordering::Equal => {
                                 // the value was updated
-                                tree.update(
-                                    &new_key,
-                                    if is_pending_transfer_key(&new_key) {
-                                        target_height.serialize_to_vec()
-                                    } else {
-                                        new.1.clone()
-                                    },
-                                )?;
+                                if !is_key_not_merklized(&new_key) {
+                                    tree.update(
+                                        &new_key,
+                                        if is_pending_transfer_key(&new_key) {
+                                            target_height.serialize_to_vec()
+                                        } else {
+                                            new.1.clone()
+                                        },
+                                    )?;
+                                }
                                 old_diff = old_diff_iter.next();
                                 new_diff = new_diff_iter.next();
                             }
                             Ordering::Less => {
                                 // the value was deleted
-                                tree.delete(&old_key)?;
+                                if !is_key_not_merklized(&old_key) {
+                                    tree.delete(&old_key)?;
+                                }
                                 old_diff = old_diff_iter.next();
                             }
                             Ordering::Greater => {
                                 // the value was inserted
-                                tree.update(
-                                    &new_key,
-                                    if is_pending_transfer_key(&new_key) {
-                                        target_height.serialize_to_vec()
-                                    } else {
-                                        new.1.clone()
-                                    },
-                                )?;
+                                if !is_key_not_merklized(&new_key) {
+                                    tree.update(
+                                        &new_key,
+                                        if is_pending_transfer_key(&new_key) {
+                                            target_height.serialize_to_vec()
+                                        } else {
+                                            new.1.clone()
+                                        },
+                                    )?;
+                                }
                                 new_diff = new_diff_iter.next();
                             }
                         }
@@ -669,7 +715,11 @@ where
                         // the value was deleted
                         let key = Key::parse(old.0.clone())
                             .expect("the key should be parsable");
-                        tree.delete(&key)?;
+
+                        if is_key_not_merklized(&key) {
+                            tree.delete(&key)?;
+                        }
+
                         old_diff = old_diff_iter.next();
                     }
                     (None, Some(new)) => {
@@ -677,14 +727,17 @@ where
                         let key = Key::parse(new.0.clone())
                             .expect("the key should be parsable");
 
-                        tree.update(
-                            &key,
-                            if is_pending_transfer_key(&key) {
-                                target_height.serialize_to_vec()
-                            } else {
-                                new.1.clone()
-                            },
-                        )?;
+                        if is_key_not_merklized(&key) {
+                            tree.update(
+                                &key,
+                                if is_pending_transfer_key(&key) {
+                                    target_height.serialize_to_vec()
+                                } else {
+                                    new.1.clone()
+                                },
+                            )?;
+                        }
+
                         new_diff = new_diff_iter.next();
                     }
                     (None, None) => break,
