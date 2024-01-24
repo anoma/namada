@@ -2337,8 +2337,7 @@ pub async fn build_transfer<N: Namada>(
 
     let masp_addr = MASP;
 
-    // For MASP sources, use a special sentinel key recognized by VPs as default
-    // signer. Also, if the transaction is shielded, redact the amount and token
+    // If the transaction is shielded, redact the amount and token
     // types by setting the transparent value to 0 and token type to a constant.
     // This has no side-effect because transaction is to self.
     let (transparent_amount, transparent_token) =
@@ -2711,7 +2710,7 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
         .await
         .map_err(|err| TxSubmitError::MaspError(err.to_string()))?;
 
-    let transfer = token::Transfer {
+    let mut transfer = token::Transfer {
         source: source.clone(),
         target: MASP,
         token: token.clone(),
@@ -2720,6 +2719,21 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
         shielded: None,
     };
     if let Some(shielded_transfer) = shielded_transfer {
+        // TODO: Workaround for decoding the asset_type later
+        let mut shielded = context.shielded_mut().await;
+        for denom in MaspDenom::iter() {
+            let epoch = shielded_transfer.epoch;
+            shielded
+                .get_asset_type(context.client(), epoch, token.clone(), denom)
+                .await
+                .map_err(|_| {
+                    Error::Other("unable to create asset type".to_string())
+                })?;
+        }
+        let _ = shielded.save().await;
+
+        transfer.shielded =
+            Some(Section::MaspTx(shielded_transfer.masp_tx.clone()).get_hash());
         Ok(Some(IbcShieldedTransfer {
             transfer,
             masp_tx: shielded_transfer.masp_tx,
