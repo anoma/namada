@@ -365,8 +365,8 @@ where
         }
     }
 
-    /// Returns a value from the specified subspace at the given height or the
-    /// last committed height when 0 and the gas cost.
+    /// Returns a value from the specified subspace at the given height (or the
+    /// last committed height when 0) and the gas cost.
     pub fn read_with_height(
         &self,
         key: &Key,
@@ -654,7 +654,7 @@ where
                         let key = Key::parse(old.0.clone())
                             .expect("the key should be parsable");
 
-                        if !(self.merkle_tree_key_filter)(&key) {
+                        if (self.merkle_tree_key_filter)(&key) {
                             tree.delete(&key)?;
                         }
 
