@@ -17,6 +17,7 @@ use namada_gas::{
 };
 use namada_state::write_log::{self, WriteLog};
 use namada_state::{self, ResultExt, State, StorageHasher};
+use namada_token::storage_key::is_any_token_parameter_key;
 use namada_tx::data::TxSentinel;
 use namada_tx::Tx;
 use thiserror::Error;
@@ -917,6 +918,8 @@ where
 {
     // Get the token if the key is a balance or minter key
     let token = if let Some([token, _]) = is_any_token_balance_key(key) {
+        Some(token)
+    } else if let Some(token) = is_any_token_parameter_key(key) {
         Some(token)
     } else {
         is_any_minted_balance_key(key).or_else(|| is_any_minter_key(key))

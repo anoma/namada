@@ -52,6 +52,7 @@ use masp_proofs::bls12_381::Bls12;
 use masp_proofs::prover::LocalTxProver;
 use masp_proofs::sapling::SaplingVerificationContext;
 use namada_core::types::address::{Address, MASP};
+use namada_core::types::dec::Dec;
 use namada_core::types::ibc::IbcShieldedTransfer;
 use namada_core::types::masp::{
     encode_asset_type, AssetData, BalanceOwner, ExtendedViewingKey,
@@ -120,6 +121,17 @@ pub struct ShieldedTransfer {
     pub metadata: SaplingMetadata,
     /// Epoch in which the transaction was created
     pub epoch: Epoch,
+}
+
+/// Shielded pool data for a token
+#[derive(BorshSerialize, BorshDeserialize)]
+pub struct MaspTokenRewardData {
+    pub name: String,
+    pub address: Address,
+    pub max_reward_rate: Dec,
+    pub kp_gain: Dec,
+    pub kd_gain: Dec,
+    pub locked_ratio_target: Dec,
 }
 
 #[cfg(feature = "testing")]
