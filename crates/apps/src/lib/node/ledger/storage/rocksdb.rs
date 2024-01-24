@@ -1226,6 +1226,24 @@ impl DB for RocksDB {
         Ok(false)
     }
 
+    fn read_diffs_val(
+        &self,
+        key: &Key,
+        height: BlockHeight,
+        is_old: bool,
+    ) -> Result<Option<Vec<u8>>> {
+        let diffs_cf = self.get_column_family(DIFFS_CF)?;
+        let key = if is_old {
+            old_and_new_diff_key(key, height)?.0
+        } else {
+            old_and_new_diff_key(key, height)?.1
+        };
+
+        self.0
+            .get_cf(diffs_cf, key)
+            .map_err(|e| Error::DBError(e.into_string()))
+    }
+
     fn read_subspace_val(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
         self.0
@@ -2105,6 +2123,153 @@ mod test {
                 .unwrap()
                 .unwrap();
         assert_eq!(conversion_state, types::encode(&conversion_state_0));
+    }
+
+    #[test]
+    fn test_diffs() {
+        let dir = tempdir().unwrap();
+        let mut db = open(dir.path(), None).unwrap();
+
+        let key_with_diffs = Key::parse("with_diffs").unwrap();
+        let key_without_diffs = Key::parse("without_diffs").unwrap();
+
+        let initial_val = vec![1_u8, 1, 0, 0];
+        let overwrite_val = vec![1_u8, 1, 1, 0];
+
+        // Write first block
+        let mut batch = RocksDB::batch();
+        let height_0 = BlockHeight::first();
+        db.batch_write_subspace_val(
+            &mut batch,
+            height_0,
+            &key_with_diffs,
+            &initial_val,
+            true,
+        )
+        .unwrap();
+        db.batch_write_subspace_val(
+            &mut batch,
+            height_0,
+            &key_without_diffs,
+            &initial_val,
+            false,
+        )
+        .unwrap();
+        db.exec_batch(batch.0).unwrap();
+
+        {
+            let diffs_cf = db.get_column_family(DIFFS_CF).unwrap();
+
+            // Diffs new key for `key_with_diffs` at height_0 must be present
+            let (old_with_h0, new_with_h0) =
+                old_and_new_diff_key(&key_with_diffs, height_0).unwrap();
+            assert!(db.0.get_cf(diffs_cf, old_with_h0).unwrap().is_none());
+            assert!(db.0.get_cf(diffs_cf, new_with_h0).unwrap().is_some());
+
+            // Diffs new key for `key_without_diffs` at height_0 must be present
+            let (old_wo_h0, new_wo_h0) =
+                old_and_new_diff_key(&key_without_diffs, height_0).unwrap();
+            assert!(db.0.get_cf(diffs_cf, old_wo_h0).unwrap().is_none());
+            assert!(db.0.get_cf(diffs_cf, new_wo_h0).unwrap().is_some());
+        }
+
+        // Write second block
+        let mut batch = RocksDB::batch();
+        let height_1 = height_0 + 10;
+        db.batch_write_subspace_val(
+            &mut batch,
+            height_1,
+            &key_with_diffs,
+            &overwrite_val,
+            true,
+        )
+        .unwrap();
+        db.batch_write_subspace_val(
+            &mut batch,
+            height_1,
+            &key_without_diffs,
+            &overwrite_val,
+            false,
+        )
+        .unwrap();
+        db.exec_batch(batch.0).unwrap();
+
+        {
+            let diffs_cf = db.get_column_family(DIFFS_CF).unwrap();
+
+            // Diffs keys for `key_with_diffs` at height_0 must be present
+            let (old_with_h0, new_with_h0) =
+                old_and_new_diff_key(&key_with_diffs, height_0).unwrap();
+            assert!(db.0.get_cf(diffs_cf, old_with_h0).unwrap().is_none());
+            assert!(db.0.get_cf(diffs_cf, new_with_h0).unwrap().is_some());
+
+            // Diffs keys for `key_without_diffs` at height_0 must be gone
+            let (old_wo_h0, new_wo_h0) =
+                old_and_new_diff_key(&key_without_diffs, height_0).unwrap();
+            assert!(db.0.get_cf(diffs_cf, old_wo_h0).unwrap().is_none());
+            assert!(db.0.get_cf(diffs_cf, new_wo_h0).unwrap().is_none());
+
+            // Diffs keys for `key_with_diffs` at height_1 must be present
+            let (old_with_h1, new_with_h1) =
+                old_and_new_diff_key(&key_with_diffs, height_1).unwrap();
+            assert!(db.0.get_cf(diffs_cf, old_with_h1).unwrap().is_some());
+            assert!(db.0.get_cf(diffs_cf, new_with_h1).unwrap().is_some());
+
+            // Diffs keys for `key_without_diffs` at height_1 must be present
+            let (old_wo_h1, new_wo_h1) =
+                old_and_new_diff_key(&key_without_diffs, height_1).unwrap();
+            assert!(db.0.get_cf(diffs_cf, old_wo_h1).unwrap().is_some());
+            assert!(db.0.get_cf(diffs_cf, new_wo_h1).unwrap().is_some());
+        }
+
+        // Write third block
+        let mut batch = RocksDB::batch();
+        let height_2 = height_1 + 10;
+        db.batch_write_subspace_val(
+            &mut batch,
+            height_2,
+            &key_with_diffs,
+            &initial_val,
+            true,
+        )
+        .unwrap();
+        db.batch_write_subspace_val(
+            &mut batch,
+            height_2,
+            &key_without_diffs,
+            &initial_val,
+            false,
+        )
+        .unwrap();
+        db.exec_batch(batch.0).unwrap();
+
+        {
+            let diffs_cf = db.get_column_family(DIFFS_CF).unwrap();
+
+            // Diffs keys for `key_with_diffs` at height_1 must be present
+            let (old_with_h1, new_with_h1) =
+                old_and_new_diff_key(&key_with_diffs, height_1).unwrap();
+            assert!(db.0.get_cf(diffs_cf, old_with_h1).unwrap().is_some());
+            assert!(db.0.get_cf(diffs_cf, new_with_h1).unwrap().is_some());
+
+            // Diffs keys for `key_without_diffs` at height_1 must be gone
+            let (old_wo_h1, new_wo_h1) =
+                old_and_new_diff_key(&key_without_diffs, height_1).unwrap();
+            assert!(db.0.get_cf(diffs_cf, old_wo_h1).unwrap().is_none());
+            assert!(db.0.get_cf(diffs_cf, new_wo_h1).unwrap().is_none());
+
+            // Diffs keys for `key_with_diffs` at height_2 must be present
+            let (old_with_h2, new_with_h2) =
+                old_and_new_diff_key(&key_with_diffs, height_2).unwrap();
+            assert!(db.0.get_cf(diffs_cf, old_with_h2).unwrap().is_some());
+            assert!(db.0.get_cf(diffs_cf, new_with_h2).unwrap().is_some());
+
+            // Diffs keys for `key_without_diffs` at height_2 must be present
+            let (old_wo_h2, new_wo_h2) =
+                old_and_new_diff_key(&key_without_diffs, height_2).unwrap();
+            assert!(db.0.get_cf(diffs_cf, old_wo_h2).unwrap().is_some());
+            assert!(db.0.get_cf(diffs_cf, new_wo_h2).unwrap().is_some());
+        }
     }
 
     /// A test helper to write a block

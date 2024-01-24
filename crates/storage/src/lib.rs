@@ -319,6 +319,11 @@ pub mod testing {
         epoch: Epoch,
         pred_epochs: Epochs,
         native_token: Address,
+        merkle_tree_key_filter: fn(&storage::Key) -> bool,
+    }
+
+    fn merklize_all_keys(_key: &storage::Key) -> bool {
+        true
     }
 
     #[allow(clippy::derivable_impls)]
@@ -331,6 +336,7 @@ pub mod testing {
                 epoch: Epoch::default(),
                 pred_epochs: Epochs::default(),
                 native_token: address::nam(),
+                merkle_tree_key_filter: merklize_all_keys,
             }
         }
     }
