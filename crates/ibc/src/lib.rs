@@ -173,11 +173,9 @@ where
             {
                 let port_id = &msg.packet.port_id_on_b;
                 let channel_id = &msg.packet.chan_id_on_b;
-                let ibc_denom = format!("{port_id}/{channel_id}/{}", data.token.denom);
-                Some((
-                    vec![ibc_denom],
-                    data.receiver.to_string(),
-                ))
+                let ibc_denom =
+                    format!("{port_id}/{channel_id}/{}", data.token.denom);
+                Some((vec![ibc_denom], data.receiver.to_string()))
             } else if let Ok(data) =
                 serde_json::from_slice::<NftPacketData>(&msg.packet.data)
             {
@@ -187,7 +185,9 @@ where
                     .token_ids
                     .0
                     .iter()
-                    .map(|id| format!("{port_id}/{channel_id}/{}/{id}", data.class_id))
+                    .map(|id| {
+                        format!("{port_id}/{channel_id}/{}/{id}", data.class_id)
+                    })
                     .collect();
                 Some((ibc_traces, data.receiver.to_string()))
             } else {
