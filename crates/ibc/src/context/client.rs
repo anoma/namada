@@ -1,6 +1,6 @@
 //! AnyClientState and AnyConsensusState for IBC context
 
-use ibc_derive::ConsensusState;
+use ibc_derive::IbcConsensusState;
 #[cfg(feature = "testing")]
 use ibc_testkit::testapp::ibc::clients::mock::client_state::MockClientContext;
 #[cfg(feature = "testing")]
@@ -85,7 +85,7 @@ impl TryFrom<Any> for AnyClientState {
 }
 
 /// ConsensusState for light clients
-#[derive(ConsensusState)]
+#[derive(IbcConsensusState)]
 pub enum AnyConsensusState {
     /// Tendermint consensus state
     Tendermint(TmConsensusState),

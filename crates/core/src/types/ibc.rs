@@ -15,8 +15,8 @@ use crate::ibc::apps::nft_transfer::context::{NftClassContext, NftContext};
 use crate::ibc::apps::nft_transfer::types::error::NftTransferError;
 use crate::ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as IbcMsgNftTransfer;
 use crate::ibc::apps::nft_transfer::types::{
-    ClassData, ClassId, ClassUri, PrefixedClassId, TokenData, TokenId,
-    TokenUri, TracePath as NftTracePath,
+    ClassData, ClassId, ClassUri, Memo as NftMemo, PrefixedClassId, TokenData,
+    TokenId, TokenUri, TracePath as NftTracePath,
 };
 use crate::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use crate::ibc::apps::transfer::types::{Memo, PrefixedDenom, TracePath};
@@ -25,27 +25,16 @@ use crate::ibc::core::handler::types::events::{
 };
 use crate::ibc::primitives::proto::Protobuf;
 use crate::tendermint::abci::Event as AbciEvent;
-use crate::types::masp::PaymentAddress;
 use crate::types::token::Transfer;
 
 /// The event type defined in ibc-rs for receiving a token
 pub const EVENT_TYPE_PACKET: &str = "fungible_token_packet";
-/// The event type defined in ibc-rs for IBC denom
-pub const EVENT_TYPE_DENOM_TRACE: &str = "denomination_trace";
-/// The event attribute key defined in ibc-rs for IBC denom
-pub const EVENT_ATTRIBUTE_DENOM: &str = "denom";
-/// The event attribute key defined in ibc-rs for a receiver
-pub const EVENT_ATTRIBUTE_RECEIVER: &str = "receiver";
-/// The event attribute key defined in ibc-rs for a trace hash
-pub const EVENT_ATTRIBUTE_TRACE: &str = "trace_hash";
 /// The event type defined in ibc-rs for receiving an NFT
 pub const EVENT_TYPE_NFT_PACKET: &str = "non_fungible_token_packet";
-/// The event type defined in ibc-rs for NFT trace
-pub const EVENT_TYPE_TOKEN_TRACE: &str = "token_trace";
-/// The event attribute key defined in ibc-rs for NFT class ID
-pub const EVENT_ATTRIBUTE_CLASS: &str = "class";
-/// The event attribute key defined in ibc-rs for NFT token ID
-pub const EVENT_ATTRIBUTE_TOKEN: &str = "token";
+/// The event attribute key defined in ibc-rs for receiving result
+pub const EVENT_ATTRIBUTE_SUCCESS: &str = "success";
+/// The event attribute value defined in ibc-rs for receiving success
+pub const EVENT_VALUE_SUCCESS: &str = "true";
 /// The escrow address for IBC transfer
 pub const IBC_ESCROW_ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
 
@@ -295,31 +284,22 @@ impl TryFrom<Memo> for IbcShieldedTransfer {
     }
 }
 
-/// Get the shielded transfer from the memo
-pub fn get_shielded_transfer(
-    event: &IbcEvent,
-) -> Result<Option<IbcShieldedTransfer>> {
-    if event.event_type != EVENT_TYPE_PACKET {
-        // This event is not for receiving a token
-        return Ok(None);
+impl From<IbcShieldedTransfer> for NftMemo {
+    fn from(shielded: IbcShieldedTransfer) -> Self {
+        let bytes = shielded.serialize_to_vec();
+        HEXUPPER.encode(&bytes).into()
     }
-    let is_success =
-        event.attributes.get("success") == Some(&"true".to_string());
-    let receiver = event.attributes.get("receiver");
-    let is_shielded = if let Some(receiver) = receiver {
-        PaymentAddress::from_str(receiver).is_ok()
-    } else {
-        false
-    };
-    if !is_success || !is_shielded {
-        return Ok(None);
-    }
+}
 
-    event
-        .attributes
-        .get("memo")
-        .map(|memo| IbcShieldedTransfer::try_from(Memo::from(memo.clone())))
-        .transpose()
+impl TryFrom<NftMemo> for IbcShieldedTransfer {
+    type Error = Error;
+
+    fn try_from(memo: NftMemo) -> Result<Self> {
+        let bytes = HEXUPPER
+            .decode(memo.as_ref().as_bytes())
+            .map_err(Error::DecodingHex)?;
+        Self::try_from_slice(&bytes).map_err(Error::DecodingShieldedTransfer)
+    }
 }
 
 /// NFT class

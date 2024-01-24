@@ -2716,11 +2716,8 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
             .await?;
     let ibc_denom =
         rpc::query_ibc_denom(context, &args.token, Some(&source)).await;
-    let prefixed_denom = ibc_denom
-        .parse()
-        .map_err(|_| Error::Other(format!("Invalid IBC denom: {ibc_denom}")))?;
     let token = namada_ibc::received_ibc_token(
-        &prefixed_denom,
+        &ibc_denom,
         &src_port_id,
         &src_channel_id,
         &args.port_id,

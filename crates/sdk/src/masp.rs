@@ -61,7 +61,7 @@ use namada_core::types::storage::{BlockHeight, Epoch, IndexedTx, TxIndex};
 use namada_core::types::time::{DateTimeUtc, DurationSecs};
 use namada_ibc::IbcMessage;
 use namada_token::{self as token, MaspDenom, Transfer};
-use namada_tx::data::{TxResult, WrapperTx};
+use namada_tx::data::WrapperTx;
 use namada_tx::Tx;
 use rand_core::{CryptoRng, OsRng, RngCore};
 use ripemd::Digest as RipemdDigest;
@@ -721,15 +721,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 .block
                 .data;
 
-            for (idx, tx_event) in txs_results {
+            for idx in txs_results {
                 let tx = Tx::try_from(block[idx.0 as usize].as_ref())
                     .map_err(|e| Error::Other(e.to_string()))?;
-                let (transfer, masp_transaction) = Self::extract_masp_tx(
-                    &tx,
-                    ExtractShieldedActionArg::Event::<C>(tx_event),
-                    true,
-                )
-                .await?;
+                let (transfer, masp_transaction) =
+                    Self::extract_masp_tx(&tx, true).await?;
 
                 // Collect the current transaction
                 shielded_txs.insert(
@@ -746,9 +742,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     }
 
     /// Extract the relevant shield portions of a [`Tx`], if any.
-    async fn extract_masp_tx<'args, C: Client + Sync>(
+    async fn extract_masp_tx(
         tx: &Tx,
-        action_arg: ExtractShieldedActionArg<'args, C>,
         check_header: bool,
     ) -> Result<(Transfer, Transaction), Error> {
         let maybe_transaction = if check_header {
@@ -834,10 +829,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     // could be a ShieldedTransfer or an Envelop
                     // message, need to try both
                     let shielded_transfer =
-                        extract_payload_from_shielded_action::<C>(
-                            &tx_data, action_arg,
-                        )
-                        .await?;
+                        extract_payload_from_shielded_action(&tx_data).await?;
                     (shielded_transfer.transfer, shielded_transfer.masp_tx)
                 }
             }
@@ -1430,16 +1422,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
         let tx = Tx::try_from(block[indexed_tx.index.0 as usize].as_ref())
             .map_err(|e| Error::Other(e.to_string()))?;
-        let (_, shielded) = Self::extract_masp_tx(
-            &tx,
-            ExtractShieldedActionArg::Request((
-                client,
-                indexed_tx.height,
-                Some(indexed_tx.index),
-            )),
-            false,
-        )
-        .await?;
+        let (_, shielded) = Self::extract_masp_tx(&tx, false).await?;
 
         // Accumulate the combined output note value into this Amount
         let mut val_acc = I128Sum::zero();
@@ -2236,7 +2219,7 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
     client: &C,
     height: BlockHeight,
     first_idx_to_query: Option<TxIndex>,
-) -> Result<Option<Vec<(TxIndex, crate::tendermint::abci::Event)>>, Error> {
+) -> Result<Option<Vec<TxIndex>>, Error> {
     let first_idx_to_query = first_idx_to_query.unwrap_or_default();
 
     Ok(client
@@ -2258,109 +2241,31 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
                                 None
                             }
                         });
-
-                    match tx_index {
-                        Some(idx) => {
-                            if idx >= first_idx_to_query {
-                                Some((idx, event))
-                            } else {
-                                None
-                            }
-                        }
-                        None => None,
-                    }
+                    tx_index.filter(|&idx| idx >= first_idx_to_query)
                 })
                 .collect::<Vec<_>>()
         }))
 }
 
-enum ExtractShieldedActionArg<'args, C: Client + Sync> {
-    Event(crate::tendermint::abci::Event),
-    Request((&'args C, BlockHeight, Option<TxIndex>)),
-}
-
 // Extract the Transfer and Transaction objects from a masp over ibc message
-async fn extract_payload_from_shielded_action<'args, C: Client + Sync>(
+async fn extract_payload_from_shielded_action(
     tx_data: &[u8],
-    args: ExtractShieldedActionArg<'args, C>,
 ) -> Result<IbcShieldedTransfer, Error> {
     let message = namada_ibc::decode_message(tx_data)
         .map_err(|e| Error::Other(e.to_string()))?;
 
-    let shielded_transfer = match message {
-        IbcMessage::Transfer(msg) => {
-            msg.shielded_transfer.ok_or_else(|| {
-                Error::Other(
-                    "Missing required shielded transfer in IBC message"
-                        .to_string(),
-                )
-            })?
+    match message {
+        IbcMessage::Transfer(msg) => msg.shielded_transfer,
+        IbcMessage::NftTransfer(msg) => msg.shielded_transfer,
+        IbcMessage::Envelope(envelope) => {
+            namada_ibc::get_shielded_transfer(&envelope)
         }
-        IbcMessage::NftTransfer(msg) => {
-            msg.shielded_transfer.ok_or_else(|| {
-                Error::Other(
-                    "Missing required shielded transfer in IBC message"
-                        .to_string(),
-                )
-            })?
-        }
-        IbcMessage::Envelope(_) => {
-            let tx_event = match args {
-                ExtractShieldedActionArg::Event(event) => event,
-                ExtractShieldedActionArg::Request((client, height, index)) => {
-                    get_indexed_masp_events_at_height(client, height, index)
-                        .await?
-                        .ok_or_else(|| {
-                            Error::Other(format!(
-                                "Missing required ibc event at block height {}",
-                                height
-                            ))
-                        })?
-                        .first()
-                        .ok_or_else(|| {
-                            Error::Other(format!(
-                                "Missing required ibc event at block height {}",
-                                height
-                            ))
-                        })?
-                        .1
-                        .to_owned()
-                }
-            };
-
-            tx_event
-                .attributes
-                .iter()
-                .find_map(|attribute| {
-                    if attribute.key == "inner_tx" {
-                        let tx_result =
-                            TxResult::from_str(&attribute.value).unwrap();
-                        for ibc_event in &tx_result.ibc_events {
-                            let event =
-                                namada_core::types::ibc::get_shielded_transfer(
-                                    ibc_event,
-                                )
-                                .ok()
-                                .flatten();
-                            if event.is_some() {
-                                return event;
-                            }
-                        }
-                        None
-                    } else {
-                        None
-                    }
-                })
-                .ok_or_else(|| {
-                    Error::Other(
-                        "Couldn't deserialize masp tx to ibc message envelope"
-                            .to_string(),
-                    )
-                })?
-        }
-    };
-
-    Ok(shielded_transfer)
+    }
+    .ok_or_else(|| {
+        Error::Other(
+            "Missing required shielded transfer in IBC message".to_string(),
+        )
+    })
 }
 
 mod tests {

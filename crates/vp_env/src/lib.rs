@@ -8,15 +8,13 @@ use masp_primitives::transaction::Transaction;
 use namada_core::borsh::BorshDeserialize;
 use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
-use namada_core::types::ibc::{
-    get_shielded_transfer, IbcEvent, MsgNftTransfer, MsgTransfer,
-    EVENT_TYPE_PACKET,
-};
+use namada_core::types::ibc::IbcEvent;
 use namada_core::types::storage::{
     BlockHash, BlockHeight, Epoch, Epochs, Header, Key, TxIndex,
 };
 use namada_core::types::token::Transfer;
-use namada_storage::{OptionExt, ResultExt, StorageRead};
+use namada_ibc::{decode_message, get_shielded_transfer, IbcMessage};
+use namada_storage::{OptionExt, StorageRead};
 use namada_tx::Tx;
 
 /// Validity predicate's environment is available for native VPs and WASM VPs
@@ -132,40 +130,16 @@ where
             return Ok((transfer, masp_tx));
         }
 
-        if let Ok(message) = MsgTransfer::try_from_slice(&data) {
-            if let Some(shielded_transfer) = message.shielded_transfer {
-                return Ok((
-                    shielded_transfer.transfer,
-                    shielded_transfer.masp_tx,
-                ));
-            }
-        }
-
-        if let Ok(message) = MsgNftTransfer::try_from_slice(&data) {
-            if let Some(shielded_transfer) = message.shielded_transfer {
-                return Ok((
-                    shielded_transfer.transfer,
-                    shielded_transfer.masp_tx,
-                ));
-            }
-        }
-
-        // Shielded transfer over IBC
-        let events = self.get_ibc_events(EVENT_TYPE_PACKET.to_string())?;
-        // The receiving event should be only one in the single IBC transaction
-        let event = events.first().ok_or_else(|| {
-            namada_storage::Error::new_const(
-                "No IBC event for the shielded action",
-            )
-        })?;
-        get_shielded_transfer(event)
-            .into_storage_result()?
-            .map(|shielded| (shielded.transfer, shielded.masp_tx))
-            .ok_or_else(|| {
-                namada_storage::Error::new_const(
-                    "No shielded transfer in the IBC event",
-                )
-            })
+        let shielded_transfer = match decode_message(&data).map_err(|_| {
+            namada_storage::Error::new_const("Unknown IBC message")
+        })? {
+            IbcMessage::Transfer(msg) => msg.shielded_transfer,
+            IbcMessage::NftTransfer(msg) => msg.shielded_transfer,
+            IbcMessage::Envelope(envelope) => get_shielded_transfer(&envelope),
+        };
+        shielded_transfer
+            .map(|st| (st.transfer, st.masp_tx))
+            .ok_or_err_msg("No shielded transfer in the IBC message")
     }
 
     /// Charge the provided gas for the current vp
