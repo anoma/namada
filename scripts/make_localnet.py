@@ -62,7 +62,7 @@ def make_val_wallet(cmd):
 
 def make_transactions(num_vals):
     new_addresses = []
-    for i in range(1, num_vals):
+    for i in range(1, num_vals + 1):
         val_alias = f"validator-{i}"
         unsigned_tx_file_path = f"{TXS_DIR}/{val_alias}-unsigned.toml"
         signed_tx_file_path = f"{TXS_DIR}/{val_alias}-signed.toml"
@@ -73,7 +73,7 @@ def make_transactions(num_vals):
         established_address = output[output.find('tnam'):].strip()[:45]
         assert len(established_address) == len('tnam1q9874ezwewthnq7yku6xgwve0fyh6cvd85j5dxee'), len('tnam1q9874ezwewthnq7yku6xgwve0fyh6cvd85j5dxee')
         new_addresses.append(established_address)
-        system(f"{namada_bin}c --base-dir '{BASE_DIR}' utils init-genesis-validator --address {str(established_address).strip()} --alias {val_alias} --net-address 127.0.0.1:2{7+i % 10}657 --commission-rate 0.05 --max-commission-rate-change 0.01 --self-bond-amount 1000 --email validator{i}@gmail.com --path {unsigned_tx_file_path} --unsafe-dont-encrypt")
+        system(f"{namada_bin}c --base-dir '{BASE_DIR}' utils init-genesis-validator --address {str(established_address).strip()} --alias {val_alias} --net-address 127.0.0.1:2{(7 + i) % 10}657 --commission-rate 0.05 --max-commission-rate-change 0.01 --self-bond-amount 1000 --email validator{i}@gmail.com --path {unsigned_tx_file_path} --unsafe-dont-encrypt")
         system(f"{namada_bin}c --base-dir '{BASE_DIR}' utils sign-genesis-txs --path {unsigned_tx_file_path} --output {signed_tx_file_path} --alias {val_alias}")
     update_balances(LOCALNET_DIR, new_addresses)
 

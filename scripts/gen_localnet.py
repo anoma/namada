@@ -100,7 +100,7 @@ BASE_DIRS=[]
 system(f"rm -rf '{BASE_DIR}'")
 
 if args.num_nodes and args.num_nodes > 1:
-    BASE_DIRS = [f'.namada-2{(7+i) % 10}657' for i in range(args.num_nodes)]
+    BASE_DIRS = [f'.namada-2{(7 + i) % 10}657' for i in range(args.num_nodes + 1)]
     # if the base_dir exists, delete it
     system(f"rm -rf .namada-*")
 if args.num_vals and args.num_vals > 1:
