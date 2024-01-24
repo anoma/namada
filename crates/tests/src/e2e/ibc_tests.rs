@@ -1078,6 +1078,7 @@ fn try_invalid_transfers(
     )?;
 
     // invalid port
+    let nam_addr = find_address(test_a, NAM)?;
     transfer(
         test_a,
         ALBERT,
@@ -1089,7 +1090,8 @@ fn try_invalid_transfers(
         channel_id_a,
         None,
         None,
-        Some("Error trying to apply a transaction"),
+        // the IBC denom can't be parsed when using an invalid port
+        Some(&format!("Invalid IBC denom: {nam_addr}")),
         false,
     )?;
 

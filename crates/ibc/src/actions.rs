@@ -3,15 +3,15 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
+use namada_core::borsh::BorshSerializeExt;
+use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use namada_core::ibc::apps::transfer::types::packet::PacketData;
 use namada_core::ibc::apps::transfer::types::PrefixedCoin;
 use namada_core::ibc::core::channel::types::timeout::TimeoutHeight;
-use namada_core::ibc::primitives::ToProto;
 use namada_core::tendermint::Time as TmTime;
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::hash::Hash;
-use namada_core::types::ibc::IbcEvent;
+use namada_core::types::ibc::{IbcEvent, MsgTransfer};
 use namada_core::types::storage::Epochs;
 use namada_core::types::time::DateTimeUtc;
 use namada_core::types::token::DenominatedAmount;
@@ -173,16 +173,18 @@ where
         + read_epoch_duration_parameter(wl_storage)?.min_duration;
     let timeout_timestamp =
         TmTime::try_from(timeout_timestamp).into_storage_result()?;
-    let ibc_message = MsgTransfer {
+    let message = IbcMsgTransfer {
         port_id_on_a: target.port_id.clone(),
         chan_id_on_a: target.channel_id.clone(),
         packet_data,
         timeout_height_on_b: TimeoutHeight::Never,
         timeout_timestamp_on_b: timeout_timestamp.into(),
     };
-    let any_msg = ibc_message.to_any();
-    let mut data = vec![];
-    prost::Message::encode(&any_msg, &mut data).into_storage_result()?;
+    let data = MsgTransfer {
+        message,
+        shielded_transfer: None,
+    }
+    .serialize_to_vec();
 
     let ctx = IbcProtocolContext { wl_storage };
     let mut actions = IbcActions::new(Rc::new(RefCell::new(ctx)));

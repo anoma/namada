@@ -33,8 +33,7 @@ use namada_core::types::address::{Address, InternalAddress, MASP};
 use namada_core::types::dec::Dec;
 use namada_core::types::hash::Hash;
 use namada_core::types::ibc::{
-    is_ibc_denom, is_nft_trace, IbcShieldedTransfer, MsgNftTransfer,
-    MsgTransfer,
+    is_nft_trace, IbcShieldedTransfer, MsgNftTransfer, MsgTransfer,
 };
 use namada_core::types::key::*;
 use namada_core::types::masp::{TransferSource, TransferTarget};
@@ -2120,7 +2119,7 @@ pub async fn build_ibc_transfer(
     let ibc_denom =
         rpc::query_ibc_denom(context, &args.token.to_string(), Some(&source))
             .await;
-    let data = if is_ibc_denom(&ibc_denom).is_some() {
+    let data = if args.port_id == PortId::transfer() {
         let token = PrefixedCoin {
             denom: ibc_denom
                 .parse()
