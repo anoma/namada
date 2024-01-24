@@ -760,7 +760,9 @@ fn ibc(c: &mut Criterion) {
         delay_period: std::time::Duration::new(100, 0),
         signer: defaults::albert_address().to_string().into(),
     };
-    let open_connection = shell.generate_ibc_tx(TX_IBC_WASM, msg.to_any());
+    let mut data = vec![];
+    prost::Message::encode(&msg.to_any(), &mut data).unwrap();
+    let open_connection = shell.generate_ibc_tx(TX_IBC_WASM, data);
 
     // Channel handshake
     let msg = MsgChannelOpenInit {
@@ -773,7 +775,9 @@ fn ibc(c: &mut Criterion) {
     };
 
     // Avoid serializing the data again with borsh
-    let open_channel = shell.generate_ibc_tx(TX_IBC_WASM, msg.to_any());
+    let mut data = vec![];
+    prost::Message::encode(&msg.to_any(), &mut data).unwrap();
+    let open_channel = shell.generate_ibc_tx(TX_IBC_WASM, data);
 
     // Ibc transfer
     let outgoing_transfer = shell.generate_ibc_transfer_tx();
