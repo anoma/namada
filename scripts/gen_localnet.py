@@ -251,9 +251,10 @@ if len(BASE_DIRS)> 0:
     print("---------------------------------------------------------------------------")
     print("Clean up everything by running:")
     print(f"rm -rf .namada-*")
-    system(f"rm -rf .localnet")
 else:
     print("Run the ledger using the following commands:")
     print("---------------------------------------------------------------------------")
     print(f"{namada_bin} --base-dir='{BASE_DIR}' --chain-id '{CHAIN_ID}' ledger run")
-
+    print("---------------------------------------------------------------------------")
+    print("Clean up everything by running:")
+system(f"rm -rf .localnet")
