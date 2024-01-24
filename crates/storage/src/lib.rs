@@ -405,15 +405,17 @@ pub mod testing {
             key: &storage::Key,
             val: impl AsRef<[u8]>,
         ) -> Result<()> {
+            let is_key_merklized = (self.merkle_tree_key_filter)(key);
             self.db
-                .write_subspace_val(self.height, key, val)
+                .write_subspace_val(self.height, key, val, is_key_merklized)
                 .into_storage_result()?;
             Ok(())
         }
 
         fn delete(&mut self, key: &storage::Key) -> Result<()> {
+            let is_key_merklized = (self.merkle_tree_key_filter)(key);
             self.db
-                .delete_subspace_val(self.height, key)
+                .delete_subspace_val(self.height, key, is_key_merklized)
                 .into_storage_result()?;
             Ok(())
         }

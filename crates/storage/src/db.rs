@@ -181,6 +181,7 @@ pub trait DB: Debug {
         height: BlockHeight,
         key: &Key,
         value: impl AsRef<[u8]>,
+        persist_diffs: bool,
     ) -> Result<i64>;
 
     /// Delete the value with the given height and account subspace key from the
@@ -190,6 +191,7 @@ pub trait DB: Debug {
         &mut self,
         height: BlockHeight,
         key: &Key,
+        persist_diffs: bool,
     ) -> Result<i64>;
 
     /// Start write batch.
@@ -207,6 +209,7 @@ pub trait DB: Debug {
         height: BlockHeight,
         key: &Key,
         value: impl AsRef<[u8]>,
+        persist_diffs: bool,
     ) -> Result<i64>;
 
     /// Batch delete the value with the given height and account subspace key
@@ -217,6 +220,7 @@ pub trait DB: Debug {
         batch: &mut Self::WriteBatch,
         height: BlockHeight,
         key: &Key,
+        persist_diffs: bool,
     ) -> Result<i64>;
 
     /// Prune Merkle tree stores at the given epoch

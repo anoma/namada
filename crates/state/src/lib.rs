@@ -432,6 +432,8 @@ where
         // but with gas and storage bytes len diff accounting
         tracing::debug!("storage write key {}", key,);
         let value = value.as_ref();
+        let is_key_merklized = (self.merkle_tree_key_filter)(key);
+
         if is_pending_transfer_key(key) {
             // The tree of the bright pool stores the current height for the
             // pending transfer
@@ -439,13 +441,19 @@ where
             self.block.tree.update(key, height)?;
         } else {
             // Update the merkle tree
-            self.block.tree.update(key, value)?;
+            if is_key_merklized {
+                self.block.tree.update(key, value)?;
+            }
         }
 
         let len = value.len();
         let gas = (key.len() + len) as u64 * STORAGE_WRITE_GAS_PER_BYTE;
-        let size_diff =
-            self.db.write_subspace_val(self.block.height, key, value)?;
+        let size_diff = self.db.write_subspace_val(
+            self.block.height,
+            key,
+            value,
+            is_key_merklized,
+        )?;
         Ok((gas, size_diff))
     }
 
@@ -456,9 +464,15 @@ where
         // but with gas and storage bytes len diff accounting
         let mut deleted_bytes_len = 0;
         if self.has_key(key)?.0 {
-            self.block.tree.delete(key)?;
-            deleted_bytes_len =
-                self.db.delete_subspace_val(self.block.height, key)?;
+            let is_key_merklized = (self.merkle_tree_key_filter)(key);
+            if is_key_merklized {
+                self.block.tree.delete(key)?;
+            }
+            deleted_bytes_len = self.db.delete_subspace_val(
+                self.block.height,
+                key,
+                is_key_merklized,
+            )?;
         }
         let gas = (key.len() + deleted_bytes_len as usize) as u64
             * STORAGE_WRITE_GAS_PER_BYTE;
@@ -894,6 +908,8 @@ where
         value: impl AsRef<[u8]>,
     ) -> Result<i64> {
         let value = value.as_ref();
+        let is_key_merklized = (self.merkle_tree_key_filter)(key);
+
         if is_pending_transfer_key(key) {
             // The tree of the bridge pool stores the current height for the
             // pending transfer
@@ -901,13 +917,16 @@ where
             self.block.tree.update(key, height)?;
         } else {
             // Update the merkle tree
-            self.block.tree.update(key, value)?;
+            if is_key_merklized {
+                self.block.tree.update(key, value)?;
+            }
         }
         Ok(self.db.batch_write_subspace_val(
             batch,
             self.block.height,
             key,
             value,
+            is_key_merklized,
         )?)
     }
 
@@ -919,11 +938,17 @@ where
         batch: &mut D::WriteBatch,
         key: &Key,
     ) -> Result<i64> {
+        let is_key_merklized = (self.merkle_tree_key_filter)(key);
         // Update the merkle tree
-        self.block.tree.delete(key)?;
-        Ok(self
-            .db
-            .batch_delete_subspace_val(batch, self.block.height, key)?)
+        if is_key_merklized {
+            self.block.tree.delete(key)?;
+        }
+        Ok(self.db.batch_delete_subspace_val(
+            batch,
+            self.block.height,
+            key,
+            is_key_merklized,
+        )?)
     }
 
     // Prune merkle tree stores. Use after updating self.block.height in the
