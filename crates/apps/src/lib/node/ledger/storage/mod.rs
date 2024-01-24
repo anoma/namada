@@ -60,7 +60,9 @@ mod tests {
     use namada::ledger::ibc::storage::ibc_key;
     use namada::ledger::parameters::{EpochDuration, Parameters};
     use namada::state::write_log::WriteLog;
-    use namada::state::{self, StorageWrite, StoreType, WlStorage};
+    use namada::state::{
+        self, StorageRead, StorageWrite, StoreType, WlStorage, DB,
+    };
     use namada::token::conversion::update_allowed_conversions;
     use namada::types::chain::ChainId;
     use namada::types::ethereum_events::Uint;
@@ -70,7 +72,6 @@ mod tests {
     use namada::types::time::DurationSecs;
     use namada::types::{address, storage};
     use namada::{parameters, token, types};
-    use namada_sdk::storage::{StorageRead, DB};
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::test_runner::Config;
