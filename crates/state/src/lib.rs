@@ -144,7 +144,7 @@ pub struct BlockStorage<H: StorageHasher> {
     pub pred_epochs: Epochs,
 }
 
-pub fn merkelize_all_keys(_key: &storage::Key) -> bool {
+pub fn merklize_all_keys(_key: &storage::Key) -> bool {
     true
 }
 
@@ -1151,7 +1151,7 @@ pub mod testing {
                 ethereum_height: None,
                 eth_events_queue: EthEventsQueue::default(),
                 storage_read_past_height_limit: Some(1000),
-                merkle_tree_key_filter: merkelize_all_keys,
+                merkle_tree_key_filter: merklize_all_keys,
             }
         }
     }

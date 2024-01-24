@@ -2850,7 +2850,7 @@ mod test_finalize_block {
 
     /// Test that replay protection keys are not added to the merkle tree
     #[test]
-    fn test_replay_keys_not_merkelized() {
+    fn test_replay_keys_not_merklized() {
         let (mut shell, _, _, _) = setup();
 
         let (wrapper_tx, processed_tx) =
