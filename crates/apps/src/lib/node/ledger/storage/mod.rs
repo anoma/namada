@@ -75,6 +75,7 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
+    use crate::node::ledger::shell::is_merkelized_storage_key;
 
     #[test]
     fn test_crud_value() {
@@ -86,6 +87,7 @@ mod tests {
             address::nam(),
             None,
             None,
+            is_merkelized_storage_key,
         );
         let key = Key::parse("key").expect("cannot parse the key string");
         let value: u64 = 1;
@@ -138,6 +140,7 @@ mod tests {
             address::nam(),
             None,
             None,
+            is_merkelized_storage_key,
         );
         storage
             .begin_block(BlockHash::default(), BlockHeight(100))
@@ -239,6 +242,7 @@ mod tests {
             address::nam(),
             None,
             None,
+            is_merkelized_storage_key,
         );
         storage
             .load_last_state()
@@ -263,6 +267,7 @@ mod tests {
             address::nam(),
             None,
             None,
+            is_merkelized_storage_key,
         );
         storage
             .begin_block(BlockHash::default(), BlockHeight(100))
@@ -309,6 +314,7 @@ mod tests {
             address::nam(),
             None,
             None,
+            is_merkelized_storage_key,
         );
         storage
             .begin_block(BlockHash::default(), BlockHeight(100))
@@ -376,6 +382,7 @@ mod tests {
             address::nam(),
             None,
             None,
+            is_merkelized_storage_key,
         );
 
         // 1. For each `blocks_write_value`, write the current block height if
@@ -469,6 +476,7 @@ mod tests {
             address::nam(),
             None,
             None,
+            is_merkelized_storage_key,
         );
 
         let num_keys = 5;
@@ -587,6 +595,7 @@ mod tests {
             address::nam(),
             None,
             Some(5),
+            is_merkelized_storage_key,
         );
         let new_epoch_start = BlockHeight(1);
         let signed_root_key = bridge_pool::get_signed_root_key();
@@ -692,6 +701,7 @@ mod tests {
             address::nam(),
             None,
             None,
+            is_merkelized_storage_key,
         );
         let mut storage = WlStorage {
             storage,

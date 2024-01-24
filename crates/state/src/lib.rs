@@ -23,7 +23,7 @@ pub use namada_core::types::storage::{
 };
 use namada_core::types::time::DateTimeUtc;
 pub use namada_core::types::token::ConversionState;
-use namada_core::types::{encode, ethereum_structs};
+use namada_core::types::{encode, ethereum_structs, storage};
 use namada_gas::{
     MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_ACCESS_GAS_PER_BYTE,
     STORAGE_WRITE_GAS_PER_BYTE,
@@ -104,6 +104,8 @@ where
     pub eth_events_queue: EthEventsQueue,
     /// How many block heights in the past can the storage be queried
     pub storage_read_past_height_limit: Option<u64>,
+    /// Static merkle tree storage key filter
+    pub merkle_tree_key_filter: fn(&storage::Key) -> bool,
 }
 
 /// Last committed block
@@ -140,6 +142,10 @@ pub struct BlockStorage<H: StorageHasher> {
     pub results: BlockResults,
     /// Predecessor block epochs
     pub pred_epochs: Epochs,
+}
+
+pub fn merkelize_all_keys(_key: &storage::Key) -> bool {
+    true
 }
 
 #[allow(missing_docs)]
@@ -179,6 +185,7 @@ where
         native_token: Address,
         cache: Option<&D::Cache>,
         storage_read_past_height_limit: Option<u64>,
+        merkle_tree_key_filter: fn(&storage::Key) -> bool,
     ) -> Self {
         let block = BlockStorage {
             tree: MerkleTree::default(),
@@ -209,6 +216,7 @@ where
             ethereum_height: None,
             eth_events_queue: EthEventsQueue::default(),
             storage_read_past_height_limit,
+            merkle_tree_key_filter,
         }
     }
 
@@ -372,6 +380,10 @@ where
         if height == BlockHeight(0) || height >= self.get_last_block_height() {
             self.read(key)
         } else {
+            if !(self.merkle_tree_key_filter)(key) {
+                return Ok((None, 0));
+            }
+
             match self.db.read_subspace_val_with_height(
                 key,
                 height,
@@ -586,36 +598,43 @@ where
                             .expect("the key should be parsable");
                         let new_key = Key::parse(new.0.clone())
                             .expect("the key should be parsable");
+
                         // compare keys as String
                         match old.0.cmp(&new.0) {
                             Ordering::Equal => {
                                 // the value was updated
-                                tree.update(
-                                    &new_key,
-                                    if is_pending_transfer_key(&new_key) {
-                                        target_height.serialize_to_vec()
-                                    } else {
-                                        new.1.clone()
-                                    },
-                                )?;
+                                if (self.merkle_tree_key_filter)(&new_key) {
+                                    tree.update(
+                                        &new_key,
+                                        if is_pending_transfer_key(&new_key) {
+                                            target_height.serialize_to_vec()
+                                        } else {
+                                            new.1.clone()
+                                        },
+                                    )?;
+                                }
                                 old_diff = old_diff_iter.next();
                                 new_diff = new_diff_iter.next();
                             }
                             Ordering::Less => {
                                 // the value was deleted
-                                tree.delete(&old_key)?;
+                                if (self.merkle_tree_key_filter)(&old_key) {
+                                    tree.delete(&old_key)?;
+                                }
                                 old_diff = old_diff_iter.next();
                             }
                             Ordering::Greater => {
                                 // the value was inserted
-                                tree.update(
-                                    &new_key,
-                                    if is_pending_transfer_key(&new_key) {
-                                        target_height.serialize_to_vec()
-                                    } else {
-                                        new.1.clone()
-                                    },
-                                )?;
+                                if (self.merkle_tree_key_filter)(&new_key) {
+                                    tree.update(
+                                        &new_key,
+                                        if is_pending_transfer_key(&new_key) {
+                                            target_height.serialize_to_vec()
+                                        } else {
+                                            new.1.clone()
+                                        },
+                                    )?;
+                                }
                                 new_diff = new_diff_iter.next();
                             }
                         }
@@ -624,7 +643,11 @@ where
                         // the value was deleted
                         let key = Key::parse(old.0.clone())
                             .expect("the key should be parsable");
-                        tree.delete(&key)?;
+
+                        if !(self.merkle_tree_key_filter)(&key) {
+                            tree.delete(&key)?;
+                        }
+
                         old_diff = old_diff_iter.next();
                     }
                     (None, Some(new)) => {
@@ -632,14 +655,17 @@ where
                         let key = Key::parse(new.0.clone())
                             .expect("the key should be parsable");
 
-                        tree.update(
-                            &key,
-                            if is_pending_transfer_key(&key) {
-                                target_height.serialize_to_vec()
-                            } else {
-                                new.1.clone()
-                            },
-                        )?;
+                        if (self.merkle_tree_key_filter)(&key) {
+                            tree.update(
+                                &key,
+                                if is_pending_transfer_key(&key) {
+                                    target_height.serialize_to_vec()
+                                } else {
+                                    new.1.clone()
+                                },
+                            )?;
+                        }
+
                         new_diff = new_diff_iter.next();
                     }
                     (None, None) => break,
@@ -1104,6 +1130,7 @@ pub mod testing {
                 ethereum_height: None,
                 eth_events_queue: EthEventsQueue::default(),
                 storage_read_past_height_limit: Some(1000),
+                merkle_tree_key_filter: merkelize_all_keys,
             }
         }
     }
