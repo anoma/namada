@@ -99,29 +99,33 @@ BASE_DIR = args.base_dir
 BASE_DIRS=[]
 system(f"rm -rf '{BASE_DIR}'")
 
+if os.path.isdir(TEMPLATES_PATH):
+    shutil.rmtree(TEMPLATES_PATH)
+os.mkdir(TEMPLATES_PATH)
+
+shutil.copy(localnet_dir + '/parameters.toml', TEMPLATES_PATH + '/parameters.toml')
+shutil.copy(localnet_dir + '/transactions.toml', TEMPLATES_PATH + '/transactions.toml')
+shutil.copy(localnet_dir + '/validity-predicates.toml', TEMPLATES_PATH + '/validity-predicates.toml')
+shutil.copy(localnet_dir + '/tokens.toml', TEMPLATES_PATH + '/tokens.toml')
+shutil.copy(localnet_dir + '/balances.toml', TEMPLATES_PATH + '/balances.toml')
+
+
 if args.num_nodes and args.num_nodes > 1:
     BASE_DIRS = [f'.namada-2{(7+i) % 10}657' for i in range(args.num_nodes)]
     # if the base_dir exists, delete it
     system(f"rm -rf .namada-*")
-if args.num_vals and args.num_vals > 1:
     assert args.num_vals <= args.num_nodes, 'Number of validators must be less or equal to number of chains.'
-    if os.path.isdir(TEMPLATES_PATH):
-        shutil.rmtree(TEMPLATES_PATH)
-    os.mkdir(TEMPLATES_PATH)
-
-    shutil.copy(localnet_dir + '/parameters.toml', TEMPLATES_PATH + '/parameters.toml')
-    shutil.copy(localnet_dir + '/transactions.toml', TEMPLATES_PATH + '/transactions.toml')
-    shutil.copy(localnet_dir + '/validity-predicates.toml', TEMPLATES_PATH + '/validity-predicates.toml')
-    shutil.copy(localnet_dir + '/tokens.toml', TEMPLATES_PATH + '/tokens.toml')
     system(f"python3 {namada_dir}/scripts/make_localnet.py --num-vals {args.num_vals} --mode {mode}")
-
+else:
+    system("mkdir .localnet")
+    system(f"cp -r {localnet_dir}/src .localnet/")
 params = {}
 if args.params:
     params = eval(args.params)
 if args.max_validator_slots:
     params['pos_params'] = {'max_validator_slots': args.max_validator_slots}
 if args.epoch_length:
-    epochs_per_year = 365 * 24 * 60 * 60 / args.epoch_length
+    epochs_per_year = 365 * 24 * 60 * 60 // args.epoch_length
     params['parameters'] = {'epochs_per_year': epochs_per_year }
 if len(params.keys())>0:
     edit_parameters(localnet_dir + '/parameters.toml', **params)
