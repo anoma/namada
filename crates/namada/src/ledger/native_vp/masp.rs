@@ -27,7 +27,7 @@ use token::storage_key::{
     masp_commitment_anchor_key, masp_commitment_tree_key,
     masp_convert_anchor_key, masp_nullifier_key, masp_pin_tx_key,
 };
-use token::{Amount, MaspDenom};
+use token::Amount;
 
 use crate::ledger::native_vp;
 use crate::ledger::native_vp::{Ctx, NativeVp};
