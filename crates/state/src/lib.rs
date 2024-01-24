@@ -23,7 +23,7 @@ pub use namada_core::types::storage::{
 };
 use namada_core::types::time::DateTimeUtc;
 pub use namada_core::types::token::ConversionState;
-use namada_core::types::{encode, ethereum_structs};
+use namada_core::types::{encode, ethereum_structs, storage};
 use namada_gas::{
     MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_ACCESS_GAS_PER_BYTE,
     STORAGE_WRITE_GAS_PER_BYTE,
@@ -47,41 +47,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// We delay epoch change 2 blocks to keep it in sync with Tendermint, because
 /// it has 2 blocks delay on validator set update.
 pub const EPOCH_SWITCH_BLOCKS_DELAY: u32 = 2;
-
-mod temp_hack {
-    use namada_core::types::address::{self, Address, InternalAddress};
-    use namada_core::types::storage::{self, DbKeySeg};
-
-    /// Returns true if the given key is one whose data is not merklized
-    pub fn is_key_not_merklized(key: &storage::Key) -> bool {
-        is_masp_key(key) || is_ibc_counter_key(key)
-    }
-
-    fn is_masp_key(key: &storage::Key) -> bool {
-        matches!(&key.segments[..],
-            [DbKeySeg::AddressSeg(addr), ..] if *addr == address::MASP
-        )
-    }
-
-    /// Returns true if the given key is for an IBC counter for clients,
-    /// connections, or channelEnds
-    fn is_ibc_counter_key(key: &storage::Key) -> bool {
-        const CLIENTS_COUNTER_PREFIX: &str = "clients";
-        const CONNECTIONS_COUNTER_PREFIX: &str = "connections";
-        const CHANNELS_COUNTER_PREFIX: &str = "channelEnds";
-        const COUNTER_SEG: &str = "counter";
-
-        matches!(&key.segments[..],
-        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix), DbKeySeg::StringSeg(counter)]
-            if addr == &Address::Internal(InternalAddress::Ibc)
-                && (prefix == CLIENTS_COUNTER_PREFIX
-                    || prefix == CONNECTIONS_COUNTER_PREFIX
-                    || prefix == CHANNELS_COUNTER_PREFIX)
-                && counter == COUNTER_SEG
-                )
-    }
-}
-use temp_hack::is_key_not_merklized;
 
 /// The ledger's state
 #[derive(Debug)]
@@ -139,6 +104,8 @@ where
     pub eth_events_queue: EthEventsQueue,
     /// How many block heights in the past can the storage be queried
     pub storage_read_past_height_limit: Option<u64>,
+    /// Static merkle tree storage key filter
+    pub merkle_tree_key_filter: fn(&storage::Key) -> bool,
 }
 
 /// Last committed block
@@ -175,6 +142,10 @@ pub struct BlockStorage<H: StorageHasher> {
     pub results: BlockResults,
     /// Predecessor block epochs
     pub pred_epochs: Epochs,
+}
+
+pub fn merkelize_all_keys(_key: &storage::Key) -> bool {
+    true
 }
 
 #[allow(missing_docs)]
@@ -214,6 +185,7 @@ where
         native_token: Address,
         cache: Option<&D::Cache>,
         storage_read_past_height_limit: Option<u64>,
+        merkle_tree_key_filter: fn(&storage::Key) -> bool,
     ) -> Self {
         let block = BlockStorage {
             tree: MerkleTree::default(),
@@ -244,6 +216,7 @@ where
             ethereum_height: None,
             eth_events_queue: EthEventsQueue::default(),
             storage_read_past_height_limit,
+            merkle_tree_key_filter,
         }
     }
 
@@ -403,7 +376,7 @@ where
         if height == BlockHeight(0) || height >= self.get_last_block_height() {
             self.read(key)
         } else {
-            if is_key_not_merklized(key) {
+            if !(self.merkle_tree_key_filter)(key) {
                 return Ok((None, 0));
             }
 
@@ -675,7 +648,7 @@ where
                         match old.0.cmp(&new.0) {
                             Ordering::Equal => {
                                 // the value was updated
-                                if !is_key_not_merklized(&new_key) {
+                                if (self.merkle_tree_key_filter)(&new_key) {
                                     tree.update(
                                         &new_key,
                                         if is_pending_transfer_key(&new_key) {
@@ -690,14 +663,14 @@ where
                             }
                             Ordering::Less => {
                                 // the value was deleted
-                                if !is_key_not_merklized(&old_key) {
+                                if (self.merkle_tree_key_filter)(&old_key) {
                                     tree.delete(&old_key)?;
                                 }
                                 old_diff = old_diff_iter.next();
                             }
                             Ordering::Greater => {
                                 // the value was inserted
-                                if !is_key_not_merklized(&new_key) {
+                                if (self.merkle_tree_key_filter)(&new_key) {
                                     tree.update(
                                         &new_key,
                                         if is_pending_transfer_key(&new_key) {
@@ -716,7 +689,7 @@ where
                         let key = Key::parse(old.0.clone())
                             .expect("the key should be parsable");
 
-                        if is_key_not_merklized(&key) {
+                        if !(self.merkle_tree_key_filter)(&key) {
                             tree.delete(&key)?;
                         }
 
@@ -727,7 +700,7 @@ where
                         let key = Key::parse(new.0.clone())
                             .expect("the key should be parsable");
 
-                        if is_key_not_merklized(&key) {
+                        if !(self.merkle_tree_key_filter)(&key) {
                             tree.update(
                                 &key,
                                 if is_pending_transfer_key(&key) {
@@ -1210,6 +1183,7 @@ pub mod testing {
                 ethereum_height: None,
                 eth_events_queue: EthEventsQueue::default(),
                 storage_read_past_height_limit: Some(1000),
+                merkle_tree_key_filter: merkelize_all_keys,
             }
         }
     }
