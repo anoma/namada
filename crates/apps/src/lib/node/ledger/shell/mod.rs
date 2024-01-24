@@ -363,7 +363,11 @@ where
     event_log: EventLog,
 }
 
-fn is_merkelized_storage_key(key: &namada_sdk::types::storage::Key) -> bool {
+/// Merkle tree storage key filter. Return `false` for keys that shouldn't be
+/// merkelized.
+pub fn is_merkelized_storage_key(
+    key: &namada_sdk::types::storage::Key,
+) -> bool {
     !token::storage_key::is_masp_key(key)
         && !namada::ibc::storage::is_ibc_counter_key(key)
 }

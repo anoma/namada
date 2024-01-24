@@ -920,6 +920,7 @@ mod test_bridge_pool_vp {
                 address::nam(),
                 None,
                 None,
+                namada_sdk::state::merkelize_all_keys,
             ),
             write_log: Default::default(),
         };
