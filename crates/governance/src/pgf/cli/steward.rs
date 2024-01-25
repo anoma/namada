@@ -4,6 +4,8 @@ use namada_core::types::address::Address;
 use namada_core::types::dec::Dec;
 use serde::{Deserialize, Serialize};
 
+use crate::pgf::REWARD_DISTRIBUTION_LIMIT;
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 /// Struct holding data about a steward commission
 pub struct Commission {
@@ -22,6 +24,10 @@ impl TryFrom<&[u8]> for Commission {
 impl Commission {
     /// Check if a steward commission is valid
     pub fn is_valid(&self) -> bool {
+        if self.reward_distribution.len() as u64 > REWARD_DISTRIBUTION_LIMIT {
+            return false;
+        }
+
         let mut sum = Dec::zero();
         for percentage in self.reward_distribution.values() {
             sum = sum.add(percentage);
