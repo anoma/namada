@@ -34,7 +34,6 @@ use namada_core::types::key::*;
 use namada_core::types::masp::{AssetData, TransferSource, TransferTarget};
 use namada_core::types::storage::Epoch;
 use namada_core::types::time::DateTimeUtc;
-use namada_core::types::token::MaspDigitPos;
 use namada_core::types::{storage, token};
 use namada_governance::cli::onchain::{
     DefaultProposal, OnChainProposal, PgfFundingProposal, PgfStewardProposal,
@@ -60,7 +59,7 @@ use crate::masp::TransferErr::Build;
 use crate::masp::{ShieldedContext, ShieldedTransfer};
 use crate::queries::Client;
 use crate::rpc::{
-    self, query_denom, query_wasm_code_hash, validate_amount, InnerTxResult,
+    self, query_wasm_code_hash, validate_amount, InnerTxResult,
     TxBroadcastData, TxResponse,
 };
 use crate::signing::{self, SigningTxData, TxSourcePostBalance};
@@ -2431,7 +2430,8 @@ async fn construct_shielded_parts<N: Namada>(
     let _ = context
         .shielded_mut()
         .await
-        .precompute_asset_types(&*context.wallet().await);
+        .precompute_asset_types(context)
+        .await;
     let stx_result =
         ShieldedContext::<N::ShieldedUtils>::gen_shielded_transfer(
             context, source, target, token, amount,
@@ -2697,7 +2697,8 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
     let _ = context
         .shielded_mut()
         .await
-        .precompute_asset_types(&*context.wallet().await);
+        .precompute_asset_types(context)
+        .await;
 
     let shielded_transfer =
         ShieldedContext::<N::ShieldedUtils>::gen_shielded_transfer(

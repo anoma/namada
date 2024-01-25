@@ -284,16 +284,10 @@ where
     let ref_inflation =
         calculate_masp_rewards_precision(wl_storage, &native_token)?.0;
 
-    if !masp_reward_keys.contains(&native_token) {
-        // Since MASP rewards are denominated in NAM tokens, ensure that clients
-        // are able to decode them.
-        masp_reward_keys.push(native_token.clone());
-    }
-
     // Reward all tokens according to above reward rates
     for addr in &masp_reward_keys {
         let (reward, denom) = calculate_masp_rewards(wl_storage, addr)?;
-        masp_reward_denoms.insert(addr, denom);
+        masp_reward_denoms.insert(addr.clone(), denom);
         // Dispense a transparent reward in parallel to the shielded rewards
         let addr_bal: Amount = wl_storage
             .read(&balance_key(addr, &masp_addr))?
@@ -495,6 +489,11 @@ where
         ),
     )?;
 
+    if !masp_reward_keys.contains(&native_token) {
+        // Since MASP rewards are denominated in NAM tokens, ensure that clients
+        // are able to decode them.
+        masp_reward_keys.push(native_token.clone());
+    }
     // Add purely decoding entries to the assets map. These will be
     // overwritten before the creation of the next commitment tree
     for (addr, denom) in masp_reward_denoms {

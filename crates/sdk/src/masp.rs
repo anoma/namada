@@ -78,10 +78,7 @@ use crate::rpc::{
 };
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
-use crate::{
-    display_line, edisplay_line, rpc, MaybeSend, MaybeSync, Namada, Wallet,
-    WalletIo,
-};
+use crate::{display_line, edisplay_line, rpc, MaybeSend, MaybeSync, Namada};
 
 /// Env var to point to a dir with MASP parameters. When not specified,
 /// the default OS specific path is used.
@@ -1031,26 +1028,34 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
     /// Use the addresses already stored in the wallet to precompute as many
     /// asset types as possible.
-    pub fn precompute_asset_types(
+    pub async fn precompute_asset_types<N: Namada>(
         &mut self,
-        wallet: &Wallet<impl WalletIo>,
+        context: &N,
     ) -> Result<(), Error> {
         // To facilitate lookups of human-readable token names
-        for token in wallet.get_addresses().values() {
+        for token in context.wallet().await.get_addresses().values() {
             let Some(denom) = query_denom(context.client(), token).await else {
-            return Err(TransferErr::General(Error::from(QueryError::General(format!(
-                "denomination for token {token}"
-            )))))
-        };
+                return Err(Error::Query(QueryError::General(format!(
+                    "denomination for token {token}"
+                ))))
+            };
             for position in MaspDigitPos::iter() {
-                let asset_type = encode_asset_type(
-                    None, token, denom, position,
-                )
-                .map_err(|_| {
-                    Error::Other("unable to create asset type".to_string())
-                })?;
-                self.asset_types
-                    .insert(asset_type, (token.clone(), denom, None));
+                let asset_type =
+                    encode_asset_type(token.clone(), denom, position, None)
+                        .map_err(|_| {
+                            Error::Other(
+                                "unable to create asset type".to_string(),
+                            )
+                        })?;
+                self.asset_types.insert(
+                    asset_type,
+                    AssetData {
+                        token: token.clone(),
+                        denom,
+                        position,
+                        epoch: None,
+                    },
+                );
             }
         }
         Ok(())
