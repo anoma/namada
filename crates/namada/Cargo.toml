@@ -144,6 +144,7 @@ wasmer-vm = { git = "https://github.com/heliaxdev/wasmer", rev = "255054f7f58b7b
 wat = "=1.0.71"
 wasmparser.workspace = true
 zeroize.workspace = true
+num-traits.workspace = true
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 tokio = { workspace = true, features = ["full"] }

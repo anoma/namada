@@ -6,6 +6,7 @@ use std::ops::Neg;
 use namada_core::types::uint::I256;
 use namada_tx::Tx;
 use namada_vp_env::VpEnv;
+use num_traits::ops::checked::CheckedAdd;
 use thiserror::Error;
 
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
@@ -27,6 +28,8 @@ pub enum Error {
     InvalidTokenAmountKey,
     #[error("Amount subtraction underflowed")]
     AmountUnderflow,
+    #[error("Amount subtraction overflowed")]
+    AmountOverflowed,
 }
 
 /// Multitoken functions result
@@ -62,18 +65,20 @@ where
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
-        let mut changes = HashMap::new();
-        let mut mints = HashMap::new();
+        let mut changes: HashMap<&Address, I256> = HashMap::new();
+        let mut mints: HashMap<&Address, I256> = HashMap::new();
         for key in keys_changed {
             if let Some([token, _]) = is_any_token_balance_key(key) {
                 let pre_amount = self.read_amount(key, ReadType::Pre)?;
                 let post_amount = self.read_amount(key, ReadType::Post)?;
-                println!("{}, {}", pre_amount, post_amount);
                 let diff_amount =
                     self.compute_post_pre_diff(pre_amount, post_amount)?;
 
                 match changes.get_mut(token) {
-                    Some(change) => *change += diff_amount,
+                    Some(change) => match change.checked_add(&diff_amount) {
+                        Some(new_change) => *change = new_change,
+                        None => return Err(Error::AmountOverflowed),
+                    },
                     None => _ = changes.insert(token, diff_amount),
                 }
             } else if let Some(token) = is_any_minted_balance_key(key) {
@@ -88,7 +93,10 @@ where
                     self.compute_post_pre_diff(pre_amount, post_amount)?;
 
                 match mints.get_mut(token) {
-                    Some(mint) => *mint += diff_amount,
+                    Some(mint) => match mint.checked_add(&diff_amount) {
+                        Some(new_mint) => *mint = new_mint,
+                        None => return Err(Error::AmountOverflowed),
+                    },
                     None => _ = mints.insert(token, diff_amount),
                 }
             } else if let Some(token) = is_any_minter_key(key) {

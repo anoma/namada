@@ -4162,6 +4162,7 @@ dependencies = [
  "namada_tx_env",
  "namada_vote_ext",
  "namada_vp_env",
+ "num-traits 0.2.17",
  "num256",
  "orion",
  "owo-colors",
