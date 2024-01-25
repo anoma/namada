@@ -36,6 +36,7 @@ async-send = []
 
 # for integration tests and test utilities
 testing = [
+  "masp_primitives/test-dependencies",
   "namada_account/testing",
   "namada_core/testing",
   "namada_ethereum_bridge/testing",
@@ -45,6 +46,8 @@ testing = [
   "namada_tx/testing",
   "async-client",
   "proptest",
+  "jubjub",
+  "bls12_381",
 ]
 
 # Download MASP params if they're not present
@@ -66,6 +69,7 @@ namada_vote_ext = { path = "../vote_ext" }
 
 async-trait = { version = "0.1.51", optional = true }
 bimap.workspace = true
+bls12_381 = { workspace = true, optional = true }
 borsh.workspace = true
 borsh-ext.workspace = true
 circular-queue.workspace = true
@@ -76,6 +80,7 @@ ethers.workspace = true
 fd-lock = { workspace = true, optional = true }
 futures.workspace = true
 itertools.workspace = true
+jubjub = { workspace = true, optional = true }
 lazy_static.workspace = true
 masp_primitives.workspace = true
 masp_proofs.workspace = true
@@ -131,5 +136,8 @@ namada_vote_ext = {path = "../vote_ext"}
 
 assert_matches.workspace = true
 base58.workspace = true
+bls12_381.workspace = true
+jubjub.workspace = true
+masp_primitives = { workspace = true, features = ["test-dependencies"] }
 proptest.workspace = true
 tempfile.workspace = true

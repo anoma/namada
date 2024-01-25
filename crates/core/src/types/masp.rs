@@ -6,6 +6,7 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::impl_display_and_from_str_via_format;
@@ -15,23 +16,77 @@ use crate::types::string_encoding::{
     self, MASP_EXT_FULL_VIEWING_KEY_HRP, MASP_EXT_SPENDING_KEY_HRP,
     MASP_PAYMENT_ADDRESS_HRP,
 };
-use crate::types::token::MaspDenom;
+use crate::types::token::{Denomination, MaspDigitPos};
+
+/// The plain representation of a MASP aaset
+#[derive(
+    BorshSerialize,
+    BorshDeserialize,
+    Clone,
+    Debug,
+    PartialOrd,
+    Ord,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+)]
+pub struct AssetData {
+    /// The token associated with this asset type
+    pub token: Address,
+    /// The denomination associated with the above toke
+    pub denom: Denomination,
+    /// The digit position covered by this asset type
+    pub position: MaspDigitPos,
+    /// The epoch of the asset type, if any
+    pub epoch: Option<Epoch>,
+}
+
+impl AssetData {
+    /// Make asset type corresponding to given address and epoch
+    pub fn encode(&self) -> Result<AssetType, std::io::Error> {
+        // Timestamp the chosen token with the current epoch
+        let token_bytes = self.serialize_to_vec();
+        // Generate the unique asset identifier from the unique token address
+        AssetType::new(token_bytes.as_ref()).map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "unable to create asset type".to_string(),
+            )
+        })
+    }
+
+    /// Give this pre-asset type the given epoch if already has an epoch. Return
+    /// the replaced value.
+    pub fn redate(&mut self, to: Epoch) -> Option<Epoch> {
+        if self.epoch.is_some() {
+            self.epoch.replace(to)
+        } else {
+            None
+        }
+    }
+
+    /// Remove the epoch associated with this pre-asset type
+    pub fn undate(&mut self) {
+        self.epoch = None;
+    }
+}
 
 /// Make asset type corresponding to given address and epoch
 pub fn encode_asset_type(
+    token: Address,
+    denom: Denomination,
+    position: MaspDigitPos,
     epoch: Option<Epoch>,
-    token: &Address,
-    denom: MaspDenom,
 ) -> Result<AssetType, std::io::Error> {
-    // Timestamp the chosen token with the current epoch
-    let token_bytes = (token, denom, epoch).serialize_to_vec();
-    // Generate the unique asset identifier from the unique token address
-    AssetType::new(token_bytes.as_ref()).map_err(|_| {
-        std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "unable to create asset type".to_string(),
-        )
-    })
+    AssetData {
+        token,
+        denom,
+        position,
+        epoch,
+    }
+    .encode()
 }
 
 // enough capacity to store the payment address

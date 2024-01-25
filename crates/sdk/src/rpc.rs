@@ -17,7 +17,7 @@ use namada_core::types::storage::{
     BlockHeight, BlockResults, Epoch, Key, PrefixValue,
 };
 use namada_core::types::token::{
-    Amount, DenominatedAmount, Denomination, MaspDenom,
+    Amount, DenominatedAmount, Denomination, MaspDigitPos,
 };
 use namada_core::types::{storage, token};
 use namada_governance::parameters::GovernanceParameters;
@@ -291,7 +291,8 @@ pub async fn query_conversion<C: crate::queries::Client + Sync>(
     asset_type: AssetType,
 ) -> Option<(
     Address,
-    MaspDenom,
+    Denomination,
+    MaspDigitPos,
     Epoch,
     masp_primitives::transaction::components::I128Sum,
     MerklePath<Node>,
@@ -309,6 +310,8 @@ pub async fn query_conversions<C: crate::queries::Client + Sync>(
         AssetType,
         (
             Address,
+            Denomination,
+            MaspDigitPos,
             Epoch,
             masp_primitives::transaction::components::I128Sum,
         ),
@@ -1168,6 +1171,16 @@ pub async fn enriched_bonds_and_unbonds<C: crate::queries::Client + Sync>(
                 validator,
             )
             .await,
+    )
+}
+
+/// Query the denomination of the given token
+pub async fn query_denom<C: crate::queries::Client + Sync>(
+    client: &C,
+    token: &Address,
+) -> Option<Denomination> {
+    unwrap_client_response::<C, Option<Denomination>>(
+        RPC.vp().token().denomination(client, token).await,
     )
 }
 

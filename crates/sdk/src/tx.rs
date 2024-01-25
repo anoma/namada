@@ -31,10 +31,10 @@ use namada_core::types::dec::Dec;
 use namada_core::types::hash::Hash;
 use namada_core::types::ibc::{IbcShieldedTransfer, MsgShieldedTransfer};
 use namada_core::types::key::*;
-use namada_core::types::masp::{TransferSource, TransferTarget};
+use namada_core::types::masp::{AssetData, TransferSource, TransferTarget};
 use namada_core::types::storage::Epoch;
 use namada_core::types::time::DateTimeUtc;
-use namada_core::types::token::MaspDenom;
+use namada_core::types::token::MaspDigitPos;
 use namada_core::types::{storage, token};
 use namada_governance::cli::onchain::{
     DefaultProposal, OnChainProposal, PgfFundingProposal, PgfStewardProposal,
@@ -60,7 +60,7 @@ use crate::masp::TransferErr::Build;
 use crate::masp::{ShieldedContext, ShieldedTransfer};
 use crate::queries::Client;
 use crate::rpc::{
-    self, query_wasm_code_hash, validate_amount, InnerTxResult,
+    self, query_denom, query_wasm_code_hash, validate_amount, InnerTxResult,
     TxBroadcastData, TxResponse,
 };
 use crate::signing::{self, SigningTxData, TxSourcePostBalance};
@@ -2239,7 +2239,7 @@ where
 /// Try to decode the given asset type and add its decoding to the supplied set.
 /// Returns true only if a new decoding has been added to the given set.
 async fn add_asset_type(
-    asset_types: &mut HashSet<(Address, MaspDenom, Option<Epoch>)>,
+    asset_types: &mut HashSet<AssetData>,
     context: &impl Namada,
     asset_type: AssetType,
 ) -> bool {
@@ -2261,8 +2261,7 @@ async fn add_asset_type(
 async fn used_asset_types<P, R, K, N>(
     context: &impl Namada,
     builder: &Builder<P, R, K, N>,
-) -> std::result::Result<HashSet<(Address, MaspDenom, Option<Epoch>)>, RpcError>
-{
+) -> std::result::Result<HashSet<AssetData>, RpcError> {
     let mut asset_types = HashSet::new();
     // Collect all the asset types used in the Sapling inputs
     for input in builder.sapling_inputs() {
@@ -2427,12 +2426,7 @@ async fn construct_shielded_parts<N: Namada>(
     target: &TransferTarget,
     token: &Address,
     amount: token::DenominatedAmount,
-) -> Result<
-    Option<(
-        ShieldedTransfer,
-        HashSet<(Address, MaspDenom, Option<Epoch>)>,
-    )>,
-> {
+) -> Result<Option<(ShieldedTransfer, HashSet<AssetData>)>> {
     // Precompute asset types to increase chances of success in decoding
     let _ = context
         .shielded_mut()
