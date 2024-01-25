@@ -60,7 +60,7 @@ fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
     log_string("Escrow succeeded");
     // add transfer into the pool
     let pending_key = get_pending_key(&transfer);
-    ctx.write_bytes(&pending_key, transfer.serialize_to_vec())
+    ctx.write(&pending_key, transfer)
         .wrap_err("Could not write transfer to bridge pool")?;
     Ok(())
 }

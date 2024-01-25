@@ -363,6 +363,13 @@ where
     event_log: EventLog,
 }
 
+/// Merkle tree storage key filter. Return `false` for keys that shouldn't be
+/// merklized.
+pub fn is_merklized_storage_key(key: &namada_sdk::types::storage::Key) -> bool {
+    !token::storage_key::is_masp_key(key)
+        && !namada::ibc::storage::is_ibc_counter_key(key)
+}
+
 /// Channels for communicating with an Ethereum oracle.
 #[derive(Debug)]
 pub struct EthereumOracleChannels {
@@ -431,6 +438,7 @@ where
             native_token,
             db_cache,
             config.shell.storage_read_past_height_limit,
+            is_merklized_storage_key,
         );
         storage
             .load_last_state()
@@ -2041,10 +2049,7 @@ mod test_utils {
         use namada::eth_bridge::storage::eth_bridge_queries::EthBridgeStatus;
         shell
             .wl_storage
-            .write_bytes(
-                &active_key(),
-                EthBridgeStatus::Disabled.serialize_to_vec(),
-            )
+            .write(&active_key(), EthBridgeStatus::Disabled)
             .expect("Test failed");
     }
 

@@ -23,7 +23,7 @@ pub use namada_core::types::storage::{
 };
 use namada_core::types::time::DateTimeUtc;
 pub use namada_core::types::token::ConversionState;
-use namada_core::types::{encode, ethereum_structs};
+use namada_core::types::{encode, ethereum_structs, storage};
 use namada_gas::{
     MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_ACCESS_GAS_PER_BYTE,
     STORAGE_WRITE_GAS_PER_BYTE,
@@ -104,6 +104,8 @@ where
     pub eth_events_queue: EthEventsQueue,
     /// How many block heights in the past can the storage be queried
     pub storage_read_past_height_limit: Option<u64>,
+    /// Static merkle tree storage key filter
+    pub merkle_tree_key_filter: fn(&storage::Key) -> bool,
 }
 
 /// Last committed block
@@ -140,6 +142,10 @@ pub struct BlockStorage<H: StorageHasher> {
     pub results: BlockResults,
     /// Predecessor block epochs
     pub pred_epochs: Epochs,
+}
+
+pub fn merklize_all_keys(_key: &storage::Key) -> bool {
+    true
 }
 
 #[allow(missing_docs)]
@@ -179,6 +185,7 @@ where
         native_token: Address,
         cache: Option<&D::Cache>,
         storage_read_past_height_limit: Option<u64>,
+        merkle_tree_key_filter: fn(&storage::Key) -> bool,
     ) -> Self {
         let block = BlockStorage {
             tree: MerkleTree::default(),
@@ -209,6 +216,7 @@ where
             ethereum_height: None,
             eth_events_queue: EthEventsQueue::default(),
             storage_read_past_height_limit,
+            merkle_tree_key_filter,
         }
     }
 
@@ -338,7 +346,7 @@ where
     /// gas cost.
     pub fn has_key(&self, key: &Key) -> Result<(bool, u64)> {
         Ok((
-            self.block.tree.has_key(key)?,
+            self.db.read_subspace_val(key)?.is_some(),
             key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE,
         ))
     }
@@ -346,10 +354,6 @@ where
     /// Returns a value from the specified subspace and the gas cost
     pub fn read(&self, key: &Key) -> Result<(Option<Vec<u8>>, u64)> {
         tracing::debug!("storage read key {}", key);
-        let (present, gas) = self.has_key(key)?;
-        if !present {
-            return Ok((None, gas));
-        }
 
         match self.db.read_subspace_val(key)? {
             Some(v) => {
@@ -361,8 +365,8 @@ where
         }
     }
 
-    /// Returns a value from the specified subspace at the given height or the
-    /// last committed height when 0 and the gas cost.
+    /// Returns a value from the specified subspace at the given height (or the
+    /// last committed height when 0) and the gas cost.
     pub fn read_with_height(
         &self,
         key: &Key,
@@ -372,6 +376,10 @@ where
         if height == BlockHeight(0) || height >= self.get_last_block_height() {
             self.read(key)
         } else {
+            if !(self.merkle_tree_key_filter)(key) {
+                return Ok((None, 0));
+            }
+
             match self.db.read_subspace_val_with_height(
                 key,
                 height,
@@ -420,6 +428,8 @@ where
         // but with gas and storage bytes len diff accounting
         tracing::debug!("storage write key {}", key,);
         let value = value.as_ref();
+        let is_key_merklized = (self.merkle_tree_key_filter)(key);
+
         if is_pending_transfer_key(key) {
             // The tree of the bright pool stores the current height for the
             // pending transfer
@@ -427,13 +437,19 @@ where
             self.block.tree.update(key, height)?;
         } else {
             // Update the merkle tree
-            self.block.tree.update(key, value)?;
+            if is_key_merklized {
+                self.block.tree.update(key, value)?;
+            }
         }
 
         let len = value.len();
         let gas = (key.len() + len) as u64 * STORAGE_WRITE_GAS_PER_BYTE;
-        let size_diff =
-            self.db.write_subspace_val(self.block.height, key, value)?;
+        let size_diff = self.db.write_subspace_val(
+            self.block.height,
+            key,
+            value,
+            is_key_merklized,
+        )?;
         Ok((gas, size_diff))
     }
 
@@ -444,9 +460,15 @@ where
         // but with gas and storage bytes len diff accounting
         let mut deleted_bytes_len = 0;
         if self.has_key(key)?.0 {
-            self.block.tree.delete(key)?;
-            deleted_bytes_len =
-                self.db.delete_subspace_val(self.block.height, key)?;
+            let is_key_merklized = (self.merkle_tree_key_filter)(key);
+            if is_key_merklized {
+                self.block.tree.delete(key)?;
+            }
+            deleted_bytes_len = self.db.delete_subspace_val(
+                self.block.height,
+                key,
+                is_key_merklized,
+            )?;
         }
         let gas = (key.len() + deleted_bytes_len as usize) as u64
             * STORAGE_WRITE_GAS_PER_BYTE;
@@ -586,36 +608,43 @@ where
                             .expect("the key should be parsable");
                         let new_key = Key::parse(new.0.clone())
                             .expect("the key should be parsable");
+
                         // compare keys as String
                         match old.0.cmp(&new.0) {
                             Ordering::Equal => {
                                 // the value was updated
-                                tree.update(
-                                    &new_key,
-                                    if is_pending_transfer_key(&new_key) {
-                                        target_height.serialize_to_vec()
-                                    } else {
-                                        new.1.clone()
-                                    },
-                                )?;
+                                if (self.merkle_tree_key_filter)(&new_key) {
+                                    tree.update(
+                                        &new_key,
+                                        if is_pending_transfer_key(&new_key) {
+                                            target_height.serialize_to_vec()
+                                        } else {
+                                            new.1.clone()
+                                        },
+                                    )?;
+                                }
                                 old_diff = old_diff_iter.next();
                                 new_diff = new_diff_iter.next();
                             }
                             Ordering::Less => {
                                 // the value was deleted
-                                tree.delete(&old_key)?;
+                                if (self.merkle_tree_key_filter)(&old_key) {
+                                    tree.delete(&old_key)?;
+                                }
                                 old_diff = old_diff_iter.next();
                             }
                             Ordering::Greater => {
                                 // the value was inserted
-                                tree.update(
-                                    &new_key,
-                                    if is_pending_transfer_key(&new_key) {
-                                        target_height.serialize_to_vec()
-                                    } else {
-                                        new.1.clone()
-                                    },
-                                )?;
+                                if (self.merkle_tree_key_filter)(&new_key) {
+                                    tree.update(
+                                        &new_key,
+                                        if is_pending_transfer_key(&new_key) {
+                                            target_height.serialize_to_vec()
+                                        } else {
+                                            new.1.clone()
+                                        },
+                                    )?;
+                                }
                                 new_diff = new_diff_iter.next();
                             }
                         }
@@ -624,7 +653,11 @@ where
                         // the value was deleted
                         let key = Key::parse(old.0.clone())
                             .expect("the key should be parsable");
-                        tree.delete(&key)?;
+
+                        if (self.merkle_tree_key_filter)(&key) {
+                            tree.delete(&key)?;
+                        }
+
                         old_diff = old_diff_iter.next();
                     }
                     (None, Some(new)) => {
@@ -632,14 +665,17 @@ where
                         let key = Key::parse(new.0.clone())
                             .expect("the key should be parsable");
 
-                        tree.update(
-                            &key,
-                            if is_pending_transfer_key(&key) {
-                                target_height.serialize_to_vec()
-                            } else {
-                                new.1.clone()
-                            },
-                        )?;
+                        if (self.merkle_tree_key_filter)(&key) {
+                            tree.update(
+                                &key,
+                                if is_pending_transfer_key(&key) {
+                                    target_height.serialize_to_vec()
+                                } else {
+                                    new.1.clone()
+                                },
+                            )?;
+                        }
+
                         new_diff = new_diff_iter.next();
                     }
                     (None, None) => break,
@@ -868,6 +904,8 @@ where
         value: impl AsRef<[u8]>,
     ) -> Result<i64> {
         let value = value.as_ref();
+        let is_key_merklized = (self.merkle_tree_key_filter)(key);
+
         if is_pending_transfer_key(key) {
             // The tree of the bridge pool stores the current height for the
             // pending transfer
@@ -875,13 +913,16 @@ where
             self.block.tree.update(key, height)?;
         } else {
             // Update the merkle tree
-            self.block.tree.update(key, value)?;
+            if is_key_merklized {
+                self.block.tree.update(key, value)?;
+            }
         }
         Ok(self.db.batch_write_subspace_val(
             batch,
             self.block.height,
             key,
             value,
+            is_key_merklized,
         )?)
     }
 
@@ -893,11 +934,17 @@ where
         batch: &mut D::WriteBatch,
         key: &Key,
     ) -> Result<i64> {
+        let is_key_merklized = (self.merkle_tree_key_filter)(key);
         // Update the merkle tree
-        self.block.tree.delete(key)?;
-        Ok(self
-            .db
-            .batch_delete_subspace_val(batch, self.block.height, key)?)
+        if is_key_merklized {
+            self.block.tree.delete(key)?;
+        }
+        Ok(self.db.batch_delete_subspace_val(
+            batch,
+            self.block.height,
+            key,
+            is_key_merklized,
+        )?)
     }
 
     // Prune merkle tree stores. Use after updating self.block.height in the
@@ -1104,6 +1151,7 @@ pub mod testing {
                 ethereum_height: None,
                 eth_events_queue: EthEventsQueue::default(),
                 storage_read_past_height_limit: Some(1000),
+                merkle_tree_key_filter: merklize_all_keys,
             }
         }
     }
@@ -1341,5 +1389,193 @@ mod tests {
             wl_storage.update_epoch(height_of_update, time_of_update).unwrap();
             assert_eq!(wl_storage.storage.block.epoch, epoch_before.next());
         }
+    }
+
+    fn test_key_1() -> Key {
+        Key::parse("testing1").unwrap()
+    }
+
+    fn test_key_2() -> Key {
+        Key::parse("testing2").unwrap()
+    }
+
+    fn merkle_tree_key_filter(key: &Key) -> bool {
+        key == &test_key_1()
+    }
+
+    #[test]
+    fn test_writing_without_merklizing_or_diffs() {
+        let mut wls = TestWlStorage::default();
+        assert_eq!(wls.storage.block.height.0, 0);
+
+        (wls.storage.merkle_tree_key_filter) = merkle_tree_key_filter;
+
+        let key1 = test_key_1();
+        let val1 = 1u64;
+        let key2 = test_key_2();
+        let val2 = 2u64;
+
+        // Standard write of key-val-1
+        wls.write(&key1, val1).unwrap();
+
+        // Read from WlStorage should return val1
+        let res = wls.read::<u64>(&key1).unwrap().unwrap();
+        assert_eq!(res, val1);
+
+        // Read from Storage shouldn't return val1 bc the block hasn't been
+        // committed
+        let (res, _) = wls.storage.read(&key1).unwrap();
+        assert!(res.is_none());
+
+        // Write key-val-2 without merklizing or diffs
+        wls.write(&key2, val2).unwrap();
+
+        // Read from WlStorage should return val2
+        let res = wls.read::<u64>(&key2).unwrap().unwrap();
+        assert_eq!(res, val2);
+
+        // Commit block and storage changes
+        wls.commit_block().unwrap();
+        wls.storage.block.height = wls.storage.block.height.next_height();
+
+        // Read key1 from Storage should return val1
+        let (res1, _) = wls.storage.read(&key1).unwrap();
+        let res1 = u64::try_from_slice(&res1.unwrap()).unwrap();
+        assert_eq!(res1, val1);
+
+        // Check merkle tree inclusion of key-val-1 explicitly
+        let is_merklized1 = wls.storage.block.tree.has_key(&key1).unwrap();
+        assert!(is_merklized1);
+
+        // Key2 should be in storage. Confirm by reading from
+        // WlStorage and also by reading Storage subspace directly
+        let res2 = wls.read::<u64>(&key2).unwrap().unwrap();
+        assert_eq!(res2, val2);
+        let res2 = wls.storage.db.read_subspace_val(&key2).unwrap().unwrap();
+        let res2 = u64::try_from_slice(&res2).unwrap();
+        assert_eq!(res2, val2);
+
+        // Check explicitly that key-val-2 is not in merkle tree
+        let is_merklized2 = wls.storage.block.tree.has_key(&key2).unwrap();
+        assert!(!is_merklized2);
+
+        // Check that the proper diffs exist for key-val-1
+        let res1 = wls
+            .storage
+            .db
+            .read_diffs_val(&key1, Default::default(), true)
+            .unwrap();
+        assert!(res1.is_none());
+
+        let res1 = wls
+            .storage
+            .db
+            .read_diffs_val(&key1, Default::default(), false)
+            .unwrap()
+            .unwrap();
+        let res1 = u64::try_from_slice(&res1).unwrap();
+        assert_eq!(res1, val1);
+
+        // Check that there are diffs for key-val-2 in block 0, since all keys
+        // need to have diffs for at least 1 block for rollback purposes
+        let res2 = wls
+            .storage
+            .db
+            .read_diffs_val(&key2, BlockHeight(0), true)
+            .unwrap();
+        assert!(res2.is_none());
+        let res2 = wls
+            .storage
+            .db
+            .read_diffs_val(&key2, BlockHeight(0), false)
+            .unwrap()
+            .unwrap();
+        let res2 = u64::try_from_slice(&res2).unwrap();
+        assert_eq!(res2, val2);
+
+        // Now delete the keys properly
+        wls.delete(&key1).unwrap();
+        wls.delete(&key2).unwrap();
+
+        // Commit the block again
+        wls.commit_block().unwrap();
+        wls.storage.block.height = wls.storage.block.height.next_height();
+
+        // Check the key-vals are removed from the storage subspace
+        let res1 = wls.read::<u64>(&key1).unwrap();
+        let res2 = wls.read::<u64>(&key2).unwrap();
+        assert!(res1.is_none() && res2.is_none());
+        let res1 = wls.storage.db.read_subspace_val(&key1).unwrap();
+        let res2 = wls.storage.db.read_subspace_val(&key2).unwrap();
+        assert!(res1.is_none() && res2.is_none());
+
+        // Check that the key-vals don't exist in the merkle tree anymore
+        let is_merklized1 = wls.storage.block.tree.has_key(&key1).unwrap();
+        let is_merklized2 = wls.storage.block.tree.has_key(&key2).unwrap();
+        assert!(!is_merklized1 && !is_merklized2);
+
+        // Check that key-val-1 diffs are properly updated for blocks 0 and 1
+        let res1 = wls
+            .storage
+            .db
+            .read_diffs_val(&key1, BlockHeight(0), true)
+            .unwrap();
+        assert!(res1.is_none());
+
+        let res1 = wls
+            .storage
+            .db
+            .read_diffs_val(&key1, BlockHeight(0), false)
+            .unwrap()
+            .unwrap();
+        let res1 = u64::try_from_slice(&res1).unwrap();
+        assert_eq!(res1, val1);
+
+        let res1 = wls
+            .storage
+            .db
+            .read_diffs_val(&key1, BlockHeight(1), true)
+            .unwrap()
+            .unwrap();
+        let res1 = u64::try_from_slice(&res1).unwrap();
+        assert_eq!(res1, val1);
+
+        let res1 = wls
+            .storage
+            .db
+            .read_diffs_val(&key1, BlockHeight(1), false)
+            .unwrap();
+        assert!(res1.is_none());
+
+        // Check that key-val-2 diffs don't exist for block 0 anymore
+        let res2 = wls
+            .storage
+            .db
+            .read_diffs_val(&key2, BlockHeight(0), true)
+            .unwrap();
+        assert!(res2.is_none());
+        let res2 = wls
+            .storage
+            .db
+            .read_diffs_val(&key2, BlockHeight(0), false)
+            .unwrap();
+        assert!(res2.is_none());
+
+        // Check that the block 1 diffs for key-val-2 include an "old" value of
+        // val2 and no "new" value
+        let res2 = wls
+            .storage
+            .db
+            .read_diffs_val(&key2, BlockHeight(1), true)
+            .unwrap()
+            .unwrap();
+        let res2 = u64::try_from_slice(&res2).unwrap();
+        assert_eq!(res2, val2);
+        let res2 = wls
+            .storage
+            .db
+            .read_diffs_val(&key2, BlockHeight(1), false)
+            .unwrap();
+        assert!(res2.is_none());
     }
 }
