@@ -4713,6 +4713,7 @@ dependencies = [
  "namada_sdk",
  "namada_test_utils",
  "namada_tx_prelude",
+ "namada_vm_env",
  "namada_vp_prelude",
  "num-traits 0.2.17",
  "once_cell",

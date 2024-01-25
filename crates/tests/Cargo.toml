@@ -52,6 +52,7 @@ tracing.workspace = true
 
 [dev-dependencies]
 namada_apps = {path = "../apps", features = ["testing"]}
+namada_vm_env = {path = "../vm_env"}
 assert_cmd.workspace = true
 borsh.workspace = true
 borsh-ext.workspace = true
