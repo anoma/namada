@@ -9,14 +9,14 @@ use crate::storage_key::*;
 
 /// Initialize parameters for the token in storage during the genesis block.
 pub fn write_params<S>(
-    params: &token::Parameters,
+    params: &token::MaspParams,
     storage: &mut S,
     address: &Address,
 ) -> storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
-    let token::Parameters {
+    let token::MaspParams {
         max_reward_rate: max_rate,
         kd_gain_nom,
         kp_gain_nom,

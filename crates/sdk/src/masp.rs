@@ -76,7 +76,10 @@ use crate::queries::Client;
 use crate::rpc::{query_block, query_conversion, query_epoch_at_height};
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
-use crate::{display_line, edisplay_line, rpc, MaybeSend, MaybeSync, Namada};
+use crate::{
+    display_line, edisplay_line, rpc, MaybeSend, MaybeSync, Namada, Wallet,
+    WalletIo,
+};
 
 /// Env var to point to a dir with MASP parameters. When not specified,
 /// the default OS specific path is used.
@@ -1024,6 +1027,26 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         Ok(Some(val_acc))
     }
 
+    /// Use the addresses already stored in the wallet to precompute as many
+    /// asset types as possible.
+    pub fn precompute_asset_types(
+        &mut self,
+        wallet: &Wallet<impl WalletIo>,
+    ) -> Result<(), Error> {
+        // To facilitate lookups of human-readable token names
+        for token in wallet.get_addresses().values() {
+            for denom in MaspDenom::iter() {
+                let asset_type = encode_asset_type(None, token, denom)
+                    .map_err(|_| {
+                        Error::Other("unable to create asset type".to_string())
+                    })?;
+                self.asset_types
+                    .insert(asset_type, (token.clone(), denom, None));
+            }
+        }
+        Ok(())
+    }
+
     /// Query the ledger for the decoding of the given asset type and cache it
     /// if it is found.
     pub async fn decode_asset_type<C: Client + Sync>(
@@ -1484,7 +1507,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         context: &impl Namada,
         owner: PaymentAddress,
         viewing_key: &ViewingKey,
-    ) -> Result<(ValueSum<Address, token::Change>, Epoch), Error> {
+    ) -> Result<(ValueSum<Address, token::Change>, I128Sum, Epoch), Error> {
         // Obtain the balance that will be exchanged
         let (amt, ep) =
             Self::compute_pinned_balance(context.client(), owner, viewing_key)
@@ -1502,15 +1525,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             .await?
             .0;
         display_line!(context.io(), "Exchanged amount: {:?}", computed_amount);
-        Ok((
-            self.decode_combine_sum_to_epoch(
-                context.client(),
-                computed_amount,
-                ep,
-            )
-            .await,
-            ep,
-        ))
+        let (decoded, undecoded) = self
+            .decode_combine_sum_to_epoch(context.client(), computed_amount, ep)
+            .await;
+        Ok((decoded, undecoded, ep))
     }
 
     /// Convert an amount whose units are AssetTypes to one whose units are
@@ -1521,8 +1539,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         client: &C,
         amt: I128Sum,
         target_epoch: Epoch,
-    ) -> ValueSum<Address, token::Change> {
+    ) -> (ValueSum<Address, token::Change>, I128Sum) {
         let mut res = ValueSum::zero();
+        let mut undecoded = ValueSum::zero();
         for (asset_type, val) in amt.components() {
             // Decode the asset type
             let decoded = self.decode_asset_type(client, *asset_type).await;
@@ -1537,10 +1556,14 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     res += ValueSum::from_pair(address, decoded_change)
                         .expect("expected this to fit");
                 }
+                None => {
+                    undecoded += ValueSum::from_pair(*asset_type, *val)
+                        .expect("expected this to fit");
+                }
                 _ => {}
             }
         }
-        res
+        (res, undecoded)
     }
 
     /// Convert an amount whose units are AssetTypes to one whose units are
@@ -1549,8 +1572,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         &mut self,
         client: &C,
         amt: I128Sum,
-    ) -> MaspAmount {
+    ) -> (MaspAmount, I128Sum) {
         let mut res = MaspAmount::zero();
+        let mut undecoded = ValueSum::zero();
         for (asset_type, val) in amt.components() {
             // Decode the asset type
             if let Some((addr, denom, epoch)) =
@@ -1561,9 +1585,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                         .expect("expected this to fit");
                 res += MaspAmount::from_pair((epoch, addr), decoded_change)
                     .expect("unable to construct decoded amount");
+            } else {
+                undecoded += ValueSum::from_pair(*asset_type, *val)
+                    .expect("expected this to fit");
             }
         }
-        res
+        (res, undecoded)
     }
 
     /// Convert an amount whose units are AssetTypes to one whose units are
@@ -1703,11 +1730,17 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         );
 
         // Convert transaction amount into MASP types
-        let (asset_types, masp_amount) = context
-            .shielded_mut()
-            .await
-            .convert_amount(context.client(), epoch, token, amount.amount())
-            .await?;
+        let (asset_types, masp_amount) = {
+            let mut shielded = context.shielded_mut().await;
+            // Do the actual conversion to an asset type
+            let amount = shielded
+                .convert_amount(context.client(), epoch, token, amount.amount())
+                .await?;
+            // Make sure to save any decodings of the asset types used so that
+            // balance queries involving them are successful
+            let _ = shielded.save().await;
+            amount
+        };
 
         // If there are shielded inputs
         if let Some(sk) = spending_key {

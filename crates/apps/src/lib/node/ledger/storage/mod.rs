@@ -68,7 +68,7 @@ mod tests {
     use namada::types::storage::{BlockHash, BlockHeight, Key};
     use namada::types::time::DurationSecs;
     use namada::types::{address, storage};
-    use namada::{parameters, token, types};
+    use namada::{parameters, types};
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::test_runner::Config;
@@ -182,46 +182,6 @@ mod tests {
             .new_epoch(BlockHeight(100));
         // make wl_storage to update conversion for a new epoch
 
-        let token_params = token::Parameters {
-            max_reward_rate: Default::default(),
-            kd_gain_nom: Default::default(),
-            kp_gain_nom: Default::default(),
-            locked_ratio_target: Default::default(),
-        };
-        // Insert a map assigning random addresses to each token alias.
-        // Needed for storage but not for this test.
-        for (token, _) in address::tokens() {
-            let addr = address::gen_deterministic_established_address(token);
-            token::write_params(&token_params, &mut wl_storage, &addr).unwrap();
-            wl_storage
-                .write(
-                    &token::storage_key::minted_balance_key(&addr),
-                    token::Amount::zero(),
-                )
-                .unwrap();
-            wl_storage
-                .storage
-                .conversion_state
-                .tokens
-                .insert(token.to_string(), addr);
-        }
-        wl_storage
-            .storage
-            .conversion_state
-            .tokens
-            .insert("nam".to_string(), wl_storage.storage.native_token.clone());
-        let addr = wl_storage.storage.native_token.clone();
-        token::write_params(&token_params, &mut wl_storage, &addr).unwrap();
-
-        wl_storage
-            .write(
-                &token::storage_key::minted_balance_key(
-                    &wl_storage.storage.native_token.clone(),
-                ),
-                token::Amount::zero(),
-            )
-            .unwrap();
-        wl_storage.storage.conversion_state.normed_inflation = Some(1);
         update_allowed_conversions(&mut wl_storage)
             .expect("update conversions failed");
         wl_storage.commit_block().expect("commit failed");

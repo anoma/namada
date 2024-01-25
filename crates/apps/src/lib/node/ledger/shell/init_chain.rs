@@ -422,25 +422,25 @@ where
 
     /// Init genesis token accounts
     fn init_token_accounts(&mut self, genesis: &genesis::chain::Finalized) {
-        let masp_rewards = address::tokens();
         for (alias, token) in &genesis.tokens.token {
             tracing::debug!("Initializing token {alias}");
 
             let FinalizedTokenConfig {
                 address,
-                config: TokenConfig { denom, parameters },
+                config: TokenConfig { denom, masp_params },
             } = token;
             // associate a token with its denomination.
             write_denom(&mut self.wl_storage, address, *denom).unwrap();
             namada::token::write_params(
-                parameters,
+                masp_params,
                 &mut self.wl_storage,
                 address,
             )
             .unwrap();
-            // add token addresses to the masp reward conversions lookup table.
-            let alias = alias.to_string();
-            if masp_rewards.contains_key(&alias.as_str()) {
+            if masp_params.is_some() {
+                // add token addresses to the masp reward conversions lookup
+                // table.
+                let alias = alias.to_string();
                 self.wl_storage
                     .storage
                     .conversion_state
