@@ -551,12 +551,9 @@ where
             // Handle shielded input
             // The following boundary conditions must be satisfied
             // 1. Zero transparent input
-            // 2. the transparent transaction value pool's amount must equal
-            // the containing wrapper transaction's fee
-            // amount Satisfies 1.
-            // 3. The spend descriptions' anchors are valid
-            // 4. The convert descriptions's anchors are valid
-            // 5. The nullifiers provided by the transaction have not been
+            // 2. The spend descriptions' anchors are valid
+            // 3. The convert descriptions's anchors are valid
+            // 4. The nullifiers provided by the transaction have not been
             // revealed previously (even in the same tx) and no unneeded
             // nullifier is being revealed by the tx
             if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
