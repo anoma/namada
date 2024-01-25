@@ -16,7 +16,7 @@ use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::types::address::Address;
 use namada_core::types::ibc::IBC_ESCROW_ADDRESS;
 use namada_core::types::uint::Uint;
-use namada_trans_token::{read_denom, Amount, DenominatedAmount, Denomination};
+use namada_trans_token::{read_denom, Amount, Denomination};
 
 use super::common::IbcCommonContext;
 use crate::storage;
@@ -44,7 +44,7 @@ where
     fn get_token_amount(
         &self,
         coin: &PrefixedCoin,
-    ) -> Result<(Address, DenominatedAmount), TokenTransferError> {
+    ) -> Result<(Address, Amount), TokenTransferError> {
         let token = match Address::decode(coin.denom.base_denom.as_str()) {
             Ok(token_addr) if coin.denom.trace_path.is_empty() => token_addr,
             _ => storage::ibc_token(coin.denom.to_string()),
@@ -65,7 +65,6 @@ where
                 .into(),
             )
         })?;
-        let amount = DenominatedAmount::new(amount, denom);
 
         Ok((token, amount))
     }

@@ -11,7 +11,7 @@ use crate::ledger::ibc::storage::is_ibc_key;
 use crate::ledger::native_vp::CtxPreStorageRead;
 use crate::state::write_log::StorageModification;
 use crate::state::{self as ledger_storage, StorageHasher};
-use crate::token::{self as token, Amount, DenominatedAmount};
+use crate::token::{self as token, burn, credit_tokens, transfer, Amount};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::ibc::IbcEvent;
 use crate::types::storage::{
@@ -201,20 +201,9 @@ where
         src: &Address,
         dest: &Address,
         token: &Address,
-        amount: DenominatedAmount,
+        amount: Amount,
     ) -> Result<()> {
-        let amount = crate::token::denom_to_amount(amount, token, self)?;
-        let src_key = token::storage_key::balance_key(token, src);
-        let dest_key = token::storage_key::balance_key(token, dest);
-        let src_bal: Option<Amount> = self.ctx.read(&src_key)?;
-        let mut src_bal = src_bal.expect("The source has no balance");
-        src_bal.spend(&amount);
-        let mut dest_bal: Amount =
-            self.ctx.read(&dest_key)?.unwrap_or_default();
-        dest_bal.receive(&amount);
-
-        self.write(&src_key, src_bal.serialize_to_vec())?;
-        self.write(&dest_key, dest_bal.serialize_to_vec())
+        transfer(self, token, src, dest, amount)
     }
 
     fn handle_masp_tx(
@@ -230,21 +219,9 @@ where
         &mut self,
         target: &Address,
         token: &Address,
-        amount: DenominatedAmount,
+        amount: Amount,
     ) -> Result<()> {
-        let amount = crate::token::denom_to_amount(amount, token, self)?;
-        let target_key = token::storage_key::balance_key(token, target);
-        let mut target_bal: Amount =
-            self.ctx.read(&target_key)?.unwrap_or_default();
-        target_bal.receive(&amount);
-
-        let minted_key = token::storage_key::minted_balance_key(token);
-        let mut minted_bal: Amount =
-            self.ctx.read(&minted_key)?.unwrap_or_default();
-        minted_bal.receive(&amount);
-
-        self.write(&target_key, target_bal.serialize_to_vec())?;
-        self.write(&minted_key, minted_bal.serialize_to_vec())?;
+        credit_tokens(self, token, target, amount)?;
 
         let minter_key = token::storage_key::minter_key(token);
         self.write(
@@ -257,21 +234,9 @@ where
         &mut self,
         target: &Address,
         token: &Address,
-        amount: DenominatedAmount,
+        amount: Amount,
     ) -> Result<()> {
-        let amount = crate::token::denom_to_amount(amount, token, self)?;
-        let target_key = token::storage_key::balance_key(token, target);
-        let mut target_bal: Amount =
-            self.ctx.read(&target_key)?.unwrap_or_default();
-        target_bal.spend(&amount);
-
-        let minted_key = token::storage_key::minted_balance_key(token);
-        let mut minted_bal: Amount =
-            self.ctx.read(&minted_key)?.unwrap_or_default();
-        minted_bal.spend(&amount);
-
-        self.write(&target_key, target_bal.serialize_to_vec())?;
-        self.write(&minted_key, minted_bal.serialize_to_vec())
+        burn(self, token, target, amount)
     }
 
     fn log_string(&self, message: String) {
@@ -419,7 +384,7 @@ where
         _src: &Address,
         _dest: &Address,
         _token: &Address,
-        _amount: DenominatedAmount,
+        _amount: Amount,
     ) -> Result<()> {
         unimplemented!("Validation doesn't transfer")
     }
@@ -436,7 +401,7 @@ where
         &mut self,
         _target: &Address,
         _token: &Address,
-        _amount: DenominatedAmount,
+        _amount: Amount,
     ) -> Result<()> {
         unimplemented!("Validation doesn't mint")
     }
@@ -445,7 +410,7 @@ where
         &mut self,
         _target: &Address,
         _token: &Address,
-        _amount: DenominatedAmount,
+        _amount: Amount,
     ) -> Result<()> {
         unimplemented!("Validation doesn't burn")
     }

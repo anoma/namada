@@ -15,7 +15,7 @@ use namada_core::ibc::core::handler::types::error::ContextError;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::types::address::Address;
 use namada_core::types::ibc::{NftClass, NftMetadata, IBC_ESCROW_ADDRESS};
-use namada_core::types::token::DenominatedAmount;
+use namada_core::types::token::Amount;
 
 use super::common::IbcCommonContext;
 use crate::storage;
@@ -249,7 +249,7 @@ where
                 from_account,
                 &IBC_ESCROW_ADDRESS,
                 &ibc_token,
-                DenominatedAmount::new(1.into(), 0.into()),
+                Amount::from_u64(1),
             )
             .map_err(|e| ContextError::from(e).into())
     }
@@ -271,7 +271,7 @@ where
                 &IBC_ESCROW_ADDRESS,
                 to_account,
                 &ibc_token,
-                DenominatedAmount::new(1.into(), 0.into()),
+                Amount::from_u64(1),
             )
             .map_err(|e| ContextError::from(e).into())
     }
@@ -297,11 +297,7 @@ where
 
         self.inner
             .borrow_mut()
-            .mint_token(
-                account,
-                &ibc_token,
-                DenominatedAmount::new(1.into(), 0.into()),
-            )
+            .mint_token(account, &ibc_token, Amount::from_u64(1))
             .map_err(|e| ContextError::from(e).into())
     }
 
@@ -316,11 +312,7 @@ where
 
         self.inner
             .borrow_mut()
-            .burn_token(
-                account,
-                &ibc_token,
-                DenominatedAmount::new(1.into(), 0.into()),
-            )
+            .burn_token(account, &ibc_token, Amount::from_u64(1))
             .map_err(|e| ContextError::from(e).into())
     }
 }

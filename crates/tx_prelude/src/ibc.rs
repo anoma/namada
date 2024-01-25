@@ -5,13 +5,12 @@ use std::rc::Rc;
 
 use namada_core::types::address::{Address, InternalAddress};
 pub use namada_core::types::ibc::{IbcEvent, IbcShieldedTransfer};
-use namada_core::types::token::DenominatedAmount;
+use namada_core::types::token::Amount;
 pub use namada_ibc::storage::is_ibc_key;
 pub use namada_ibc::{
     IbcActions, IbcCommonContext, IbcStorageContext, NftTransferModule,
     ProofSpec, TransferModule,
 };
-use namada_token::denom_to_amount;
 use namada_tx_env::TxEnv;
 
 use crate::token::{burn, mint, transfer};
@@ -48,7 +47,7 @@ impl IbcStorageContext for Ctx {
         src: &Address,
         dest: &Address,
         token: &Address,
-        amount: DenominatedAmount,
+        amount: Amount,
     ) -> std::result::Result<(), Error> {
         transfer(self, src, dest, token, amount)
     }
@@ -66,14 +65,14 @@ impl IbcStorageContext for Ctx {
         &mut self,
         target: &Address,
         token: &Address,
-        amount: DenominatedAmount,
+        amount: Amount,
     ) -> Result<(), Error> {
         mint(
             self,
             &Address::Internal(InternalAddress::Ibc),
             target,
             token,
-            denom_to_amount(amount, token, self)?,
+            amount,
         )
     }
 
@@ -81,9 +80,9 @@ impl IbcStorageContext for Ctx {
         &mut self,
         target: &Address,
         token: &Address,
-        amount: DenominatedAmount,
+        amount: Amount,
     ) -> Result<(), Error> {
-        burn(self, target, token, denom_to_amount(amount, token, self)?)
+        burn(self, target, token, amount)
     }
 
     fn log_string(&self, message: String) {

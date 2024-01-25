@@ -2596,11 +2596,10 @@ where
         src: &Address,
         dest: &Address,
         token: &Address,
-        amount: crate::token::DenominatedAmount,
+        amount: crate::token::Amount,
     ) -> Result<(), namada_state::StorageError> {
         use crate::token;
 
-        let amount = token::denom_to_amount(amount, token, self)?;
         if amount != token::Amount::default() && src != dest {
             let src_key = balance_key(token, src);
             let dest_key = balance_key(token, dest);
@@ -2632,11 +2631,10 @@ where
         &mut self,
         target: &Address,
         token: &Address,
-        amount: crate::token::DenominatedAmount,
+        amount: crate::token::Amount,
     ) -> Result<(), namada_state::StorageError> {
         use crate::token;
 
-        let amount = token::denom_to_amount(amount, token, self)?;
         let target_key = balance_key(token, target);
         let mut target_bal =
             self.read::<token::Amount>(&target_key)?.unwrap_or_default();
@@ -2661,11 +2659,10 @@ where
         &mut self,
         target: &Address,
         token: &Address,
-        amount: crate::token::DenominatedAmount,
+        amount: crate::token::Amount,
     ) -> Result<(), namada_state::StorageError> {
         use crate::token;
 
-        let amount = token::denom_to_amount(amount, token, self)?;
         let target_key = balance_key(token, target);
         let mut target_bal =
             self.read::<token::Amount>(&target_key)?.unwrap_or_default();

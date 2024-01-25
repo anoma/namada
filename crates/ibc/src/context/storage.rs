@@ -3,7 +3,7 @@
 pub use ics23::ProofSpec;
 use namada_core::types::address::Address;
 use namada_core::types::ibc::IbcEvent;
-use namada_core::types::token::DenominatedAmount;
+use namada_core::types::token::Amount;
 use namada_storage::{Error, StorageRead, StorageWrite};
 
 /// IBC context trait to be implemented in integration that can read and write
@@ -23,7 +23,7 @@ pub trait IbcStorageContext: StorageRead + StorageWrite {
         src: &Address,
         dest: &Address,
         token: &Address,
-        amount: DenominatedAmount,
+        amount: Amount,
     ) -> Result<(), Error>;
 
     /// Handle masp tx
@@ -38,7 +38,7 @@ pub trait IbcStorageContext: StorageRead + StorageWrite {
         &mut self,
         target: &Address,
         token: &Address,
-        amount: DenominatedAmount,
+        amount: Amount,
     ) -> Result<(), Error>;
 
     /// Burn token
@@ -46,7 +46,7 @@ pub trait IbcStorageContext: StorageRead + StorageWrite {
         &mut self,
         target: &Address,
         token: &Address,
-        amount: DenominatedAmount,
+        amount: Amount,
     ) -> Result<(), Error>;
 
     /// Logging

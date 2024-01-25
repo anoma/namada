@@ -14,7 +14,7 @@ use namada_core::types::hash::Hash;
 use namada_core::types::ibc::{IbcEvent, MsgTransfer};
 use namada_core::types::storage::Epochs;
 use namada_core::types::time::DateTimeUtc;
-use namada_core::types::token::DenominatedAmount;
+use namada_core::types::token::Amount;
 use namada_governance::storage::proposal::PGFIbcTarget;
 use namada_parameters::read_epoch_duration_parameter;
 use namada_state::wl_storage::{PrefixIter, WriteLogAndStorage};
@@ -99,9 +99,9 @@ where
         src: &Address,
         dest: &Address,
         token: &Address,
-        amount: DenominatedAmount,
+        amount: Amount,
     ) -> Result<(), StorageError> {
-        token::transfer(self, token, src, dest, amount.amount())
+        token::transfer(self, token, src, dest, amount)
     }
 
     /// Handle masp tx
@@ -118,9 +118,9 @@ where
         &mut self,
         target: &Address,
         token: &Address,
-        amount: DenominatedAmount,
+        amount: Amount,
     ) -> Result<(), StorageError> {
-        token::credit_tokens(self.wl_storage, token, target, amount.amount())?;
+        token::credit_tokens(self.wl_storage, token, target, amount)?;
         let minter_key = token::storage_key::minter_key(token);
         self.wl_storage
             .write(&minter_key, Address::Internal(InternalAddress::Ibc))
@@ -131,9 +131,9 @@ where
         &mut self,
         target: &Address,
         token: &Address,
-        amount: DenominatedAmount,
+        amount: Amount,
     ) -> Result<(), StorageError> {
-        token::burn(self.wl_storage, token, target, amount.amount())
+        token::burn(self.wl_storage, token, target, amount)
     }
 
     fn log_string(&self, message: String) {
