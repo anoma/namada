@@ -43,6 +43,11 @@ pub trait Router {
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
     {
+        if !request.path.is_ascii() {
+            return Err(namada_storage::Error::SimpleMessage(
+                "Non-ascii request paths are unsupported",
+            ));
+        }
         self.internal_handle(ctx, request, 0)
     }
 

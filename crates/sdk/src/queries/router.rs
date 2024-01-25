@@ -1031,8 +1031,29 @@ mod test {
         let result = TEST_RPC.handle(ctx, &request);
         assert!(result.is_err());
 
-        // Test requests to valid paths using the router's methods
+        // Test request with a non-ascii path
+        let request = RequestQuery {
+            path: "ÀÁõö÷øùúûüýþÿ".to_owned(),
+            data: Default::default(),
+            height: block::Height::from(0_u32),
+            prove: Default::default(),
+        };
+        let ctx = RequestCtx {
+            event_log: &client.event_log,
+            wl_storage: &client.wl_storage,
+            vp_wasm_cache: (),
+            tx_wasm_cache: (),
+            storage_read_past_height_limit: None,
+        };
+        let result = TEST_RPC.handle(ctx, &request);
+        assert!(matches!(
+            result,
+            Err(namada_storage::Error::SimpleMessage(
+                "Non-ascii request paths are unsupported",
+            ))
+        ));
 
+        // Test requests to valid paths using the router's methods
         let result = TEST_RPC.a(&client).await.unwrap();
         assert_eq!(result, "a");
 
