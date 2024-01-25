@@ -201,7 +201,7 @@ where
                 funds,
             )?;
         } else {
-            token::burn(
+            token::burn_tokens(
                 &mut shell.wl_storage,
                 &native_token,
                 &gov_address,
