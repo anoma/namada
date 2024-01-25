@@ -11,7 +11,7 @@ use crate::token::storage_key::{
     is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
     minter_key,
 };
-use crate::token::{Amount, Change};
+use crate::token::Amount;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{Key, KeySeg};
 use crate::vm::WasmCacheAccess;
@@ -51,26 +51,87 @@ where
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
-        let mut changes = HashMap::new();
-        let mut mints = HashMap::new();
+        let mut inc_changes: HashMap<Address, Amount> = HashMap::new();
+        let mut dec_changes: HashMap<Address, Amount> = HashMap::new();
+        let mut inc_mints: HashMap<Address, Amount> = HashMap::new();
+        let mut dec_mints: HashMap<Address, Amount> = HashMap::new();
         for key in keys_changed {
             if let Some([token, _]) = is_any_token_balance_key(key) {
                 let pre: Amount = self.ctx.read_pre(key)?.unwrap_or_default();
                 let post: Amount = self.ctx.read_post(key)?.unwrap_or_default();
-                let diff = post.change() - pre.change();
-                match changes.get_mut(token) {
-                    Some(change) => *change += diff,
-                    None => _ = changes.insert(token, diff),
+                match post.checked_sub(pre) {
+                    Some(diff) => match inc_changes.get_mut(token) {
+                        Some(change) => {
+                            change.checked_add(diff).ok_or_else(|| {
+                                Error::NativeVpError(
+                                    native_vp::Error::SimpleMessage(
+                                        "Overflowed in balance check",
+                                    ),
+                                )
+                            })?;
+                        }
+                        None => {
+                            inc_changes.insert(token.clone(), diff);
+                        }
+                    },
+                    None => {
+                        let diff = pre
+                            .checked_sub(post)
+                            .expect("Underflow shouldn't happen here");
+                        match dec_changes.get_mut(token) {
+                            Some(change) => {
+                                change.checked_add(diff).ok_or_else(|| {
+                                    Error::NativeVpError(
+                                        native_vp::Error::SimpleMessage(
+                                            "Overflowed in balance check",
+                                        ),
+                                    )
+                                })?;
+                            }
+                            None => {
+                                dec_changes.insert(token.clone(), diff);
+                            }
+                        }
+                    }
                 }
             } else if let Some(token) = is_any_minted_balance_key(key) {
                 let pre: Amount = self.ctx.read_pre(key)?.unwrap_or_default();
                 let post: Amount = self.ctx.read_post(key)?.unwrap_or_default();
-                let diff = post.change() - pre.change();
-                match mints.get_mut(token) {
-                    Some(mint) => *mint += diff,
-                    None => _ = mints.insert(token, diff),
+                match post.checked_sub(pre) {
+                    Some(diff) => match inc_mints.get_mut(token) {
+                        Some(mint) => {
+                            mint.checked_add(diff).ok_or_else(|| {
+                                Error::NativeVpError(
+                                    native_vp::Error::SimpleMessage(
+                                        "Overflowed in balance check",
+                                    ),
+                                )
+                            })?;
+                        }
+                        None => {
+                            inc_mints.insert(token.clone(), diff);
+                        }
+                    },
+                    None => {
+                        let diff = pre
+                            .checked_sub(post)
+                            .expect("Underflow shouldn't happen here");
+                        match dec_mints.get_mut(token) {
+                            Some(mint) => {
+                                mint.checked_add(diff).ok_or_else(|| {
+                                    Error::NativeVpError(
+                                        native_vp::Error::SimpleMessage(
+                                            "Overflowed in balance check",
+                                        ),
+                                    )
+                                })?;
+                            }
+                            None => {
+                                dec_mints.insert(token.clone(), diff);
+                            }
+                        }
+                    }
                 }
-
                 // Check if the minter is set
                 if !self.is_valid_minter(token, verifiers)? {
                     return Ok(false);
@@ -90,12 +151,31 @@ where
             }
         }
 
-        Ok(changes.iter().all(|(token, change)| {
-            let mint = match mints.get(token) {
-                Some(mint) => *mint,
-                None => Change::zero(),
-            };
-            *change == mint
+        let mut all_tokens = BTreeSet::new();
+        let _ = inc_changes.keys().map(|k| all_tokens.insert(k.clone()));
+        let _ = dec_changes.keys().map(|k| all_tokens.insert(k.clone()));
+        let _ = inc_mints.keys().map(|k| all_tokens.insert(k.clone()));
+        let _ = dec_mints.keys().map(|k| all_tokens.insert(k.clone()));
+
+        Ok(all_tokens.iter().all(|token| {
+            let inc_change =
+                inc_changes.get(token).cloned().unwrap_or_default();
+            let dec_change =
+                dec_changes.get(token).cloned().unwrap_or_default();
+            let inc_mint = inc_mints.get(token).cloned().unwrap_or_default();
+            let dec_mint = dec_mints.get(token).cloned().unwrap_or_default();
+
+            if inc_change >= dec_change && inc_mint >= dec_mint {
+                inc_change.checked_sub(dec_change)
+                    == inc_mint.checked_sub(dec_mint)
+            } else if (inc_change < dec_change && inc_mint >= dec_mint)
+                || (inc_change >= dec_change && inc_mint < dec_mint)
+            {
+                false
+            } else {
+                dec_change.checked_sub(inc_change)
+                    == dec_mint.checked_sub(inc_mint)
+            }
         }))
     }
 }
