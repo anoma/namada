@@ -1,10 +1,11 @@
 use namada_sdk::events::Event;
 use namada_sdk::rpc::{TxEventQuery, TxResponse};
+use namada_sdk::tx::data::TxResult;
 
 use super::*;
 
 /// Call the corresponding `tx_event_query` RPC method, to fetch
-/// the current status of a transaction.
+/// the current status of a transation.
 pub fn query_tx_events(
     tendermint_addr: &str,
     tx_hash: &str,
@@ -14,8 +15,9 @@ pub fn query_tx_events(
             .map_err(|e| Error::Other(e.to_string()))?,
     )
     .map_err(|e| Error::Other(e.to_string()))?;
-    let rt = Runtime::new().unwrap();
     let tx_event_query = TxEventQuery::Applied(tx_hash);
+
+    let rt = Runtime::new().unwrap();
     rt.block_on(rpc::query_tx_events(&client, tx_event_query))
         .map_err(|e| Error::Other(e.to_string()))
 }
@@ -24,7 +26,7 @@ pub fn query_tx_events(
 pub fn dry_run_tx(
     tendermint_addr: &str,
     tx_bytes: Vec<u8>,
-) -> Result<namada_sdk::tx::data::TxResult, Error> {
+) -> Result<TxResult, Error> {
     let client = HttpClient::new(
         TendermintAddress::from_str(tendermint_addr)
             .map_err(|e| Error::Other(e.to_string()))?,
@@ -60,7 +62,7 @@ pub fn query_tx_response(
 }
 
 /// Query the status of a given transaction.
-pub async fn query_tx_status(
+pub fn query_tx_status(
     tendermint_addr: &str,
     tx_hash: &str,
 ) -> Result<Event, Error> {

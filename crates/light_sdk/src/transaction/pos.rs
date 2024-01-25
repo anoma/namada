@@ -1,13 +1,15 @@
 use namada_sdk::tx::data::pos::Redelegation;
-use namada_sdk::tx::Tx;
+use namada_sdk::tx::data::GasLimit;
+use namada_sdk::tx::{Signature, Tx, TxError};
 use namada_sdk::types::address::Address;
 use namada_sdk::types::dec::Dec;
 use namada_sdk::types::hash::Hash;
 use namada_sdk::types::key::{common, secp256k1};
+use namada_sdk::types::storage::Epoch;
 use namada_sdk::types::token;
-use namada_sdk::types::token::Amount;
+use namada_sdk::types::token::{Amount, DenominatedAmount};
 
-use super::GlobalArgs;
+use super::{attach_fee, attach_fee_signature, GlobalArgs};
 use crate::transaction;
 
 const TX_BOND_WASM: &str = "tx_bond.wasm";
@@ -67,6 +69,16 @@ impl Bond {
     pub fn to_bytes(&self) -> Vec<u8> {
         self.0.to_bytes()
     }
+
+    /// Gets the inner transaction without the domain wrapper
+    pub fn payload(self) -> Tx {
+        self.0
+    }
+
+    /// Validate this wrapper transaction
+    pub fn validate_tx(&self) -> Result<Option<&Signature>, TxError> {
+        self.0.validate_tx()
+    }
 }
 
 /// An unbond transaction
@@ -112,6 +124,16 @@ impl Unbond {
     /// Generates the protobuf encoding of this transaction
     pub fn to_bytes(&self) -> Vec<u8> {
         self.0.to_bytes()
+    }
+
+    /// Gets the inner transaction without the domain wrapper
+    pub fn payload(self) -> Tx {
+        self.0
+    }
+
+    /// Validate this wrapper transaction
+    pub fn validate_tx(&self) -> Result<Option<&Signature>, TxError> {
+        self.0.validate_tx()
     }
 }
 
@@ -178,6 +200,16 @@ impl BecomeValidator {
     pub fn to_bytes(&self) -> Vec<u8> {
         self.0.to_bytes()
     }
+
+    /// Gets the inner transaction without the domain wrapper
+    pub fn payload(self) -> Tx {
+        self.0
+    }
+
+    /// Validate this wrapper transaction
+    pub fn validate_tx(&self) -> Result<Option<&Signature>, TxError> {
+        self.0.validate_tx()
+    }
 }
 
 /// Transaction to unjail a PoS validator
@@ -212,6 +244,16 @@ impl UnjailValidator {
     /// Generates the protobuf encoding of this transaction
     pub fn to_bytes(&self) -> Vec<u8> {
         self.0.to_bytes()
+    }
+
+    /// Gets the inner transaction without the domain wrapper
+    pub fn payload(self) -> Tx {
+        self.0
+    }
+
+    /// Validate this wrapper transaction
+    pub fn validate_tx(&self) -> Result<Option<&Signature>, TxError> {
+        self.0.validate_tx()
     }
 }
 
@@ -248,6 +290,16 @@ impl DeactivateValidator {
     pub fn to_bytes(&self) -> Vec<u8> {
         self.0.to_bytes()
     }
+
+    /// Gets the inner transaction without the domain wrapper
+    pub fn payload(self) -> Tx {
+        self.0
+    }
+
+    /// Validate this wrapper transaction
+    pub fn validate_tx(&self) -> Result<Option<&Signature>, TxError> {
+        self.0.validate_tx()
+    }
 }
 
 /// Transaction to reactivate a previously deactivated validator
@@ -279,9 +331,45 @@ impl ReactivateValidator {
         ))
     }
 
+    /// Attach the fee data to the tx
+    pub fn attach_fee(
+        self,
+        fee: DenominatedAmount,
+        token: Address,
+        fee_payer: common::PublicKey,
+        epoch: Epoch,
+        gas_limit: GasLimit,
+    ) -> Self {
+        Self(attach_fee(self.0, fee, token, fee_payer, epoch, gas_limit))
+    }
+
+    /// Get the bytes of the fee data to sign
+    pub fn get_fee_sig_bytes(&self) -> Hash {
+        transaction::get_wrapper_sign_bytes(&self.0)
+    }
+
+    /// Attach a signature of the fee to the tx
+    pub fn attach_fee_signature(
+        self,
+        signer: common::PublicKey,
+        signature: common::Signature,
+    ) -> Self {
+        Self(attach_fee_signature(self.0, signer, signature))
+    }
+
     /// Generates the protobuf encoding of this transaction
     pub fn to_bytes(&self) -> Vec<u8> {
         self.0.to_bytes()
+    }
+
+    /// Gets the inner transaction without the domain wrapper
+    pub fn payload(self) -> Tx {
+        self.0
+    }
+
+    /// Validate this wrapper transaction
+    pub fn validate_tx(&self) -> Result<Option<&Signature>, TxError> {
+        self.0.validate_tx()
     }
 }
 
@@ -321,9 +409,45 @@ impl ClaimRewards {
         ))
     }
 
+    /// Attach the fee data to the tx
+    pub fn attach_fee(
+        self,
+        fee: DenominatedAmount,
+        token: Address,
+        fee_payer: common::PublicKey,
+        epoch: Epoch,
+        gas_limit: GasLimit,
+    ) -> Self {
+        Self(attach_fee(self.0, fee, token, fee_payer, epoch, gas_limit))
+    }
+
+    /// Get the bytes of the fee data to sign
+    pub fn get_fee_sig_bytes(&self) -> Hash {
+        transaction::get_wrapper_sign_bytes(&self.0)
+    }
+
+    /// Attach a signature of the fee to the tx
+    pub fn attach_fee_signature(
+        self,
+        signer: common::PublicKey,
+        signature: common::Signature,
+    ) -> Self {
+        Self(attach_fee_signature(self.0, signer, signature))
+    }
+
     /// Generates the protobuf encoding of this transaction
     pub fn to_bytes(&self) -> Vec<u8> {
         self.0.to_bytes()
+    }
+
+    /// Gets the inner transaction without the domain wrapper
+    pub fn payload(self) -> Tx {
+        self.0
+    }
+
+    /// Validate this wrapper transaction
+    pub fn validate_tx(&self) -> Result<Option<&Signature>, TxError> {
+        self.0.validate_tx()
     }
 }
 
@@ -376,9 +500,45 @@ impl ChangeMetaData {
         ))
     }
 
+    /// Attach the fee data to the tx
+    pub fn attach_fee(
+        self,
+        fee: DenominatedAmount,
+        token: Address,
+        fee_payer: common::PublicKey,
+        epoch: Epoch,
+        gas_limit: GasLimit,
+    ) -> Self {
+        Self(attach_fee(self.0, fee, token, fee_payer, epoch, gas_limit))
+    }
+
+    /// Get the bytes of the fee data to sign
+    pub fn get_fee_sig_bytes(&self) -> Hash {
+        transaction::get_wrapper_sign_bytes(&self.0)
+    }
+
+    /// Attach a signature of the fee to the tx
+    pub fn attach_fee_signature(
+        self,
+        signer: common::PublicKey,
+        signature: common::Signature,
+    ) -> Self {
+        Self(attach_fee_signature(self.0, signer, signature))
+    }
+
     /// Generates the protobuf encoding of this transaction
     pub fn to_bytes(&self) -> Vec<u8> {
         self.0.to_bytes()
+    }
+
+    /// Gets the inner transaction without the domain wrapper
+    pub fn payload(self) -> Tx {
+        self.0
+    }
+
+    /// Validate this wrapper transaction
+    pub fn validate_tx(&self) -> Result<Option<&Signature>, TxError> {
+        self.0.validate_tx()
     }
 }
 
@@ -420,9 +580,45 @@ impl ChangeConsensusKey {
         ))
     }
 
+    /// Attach the fee data to the tx
+    pub fn attach_fee(
+        self,
+        fee: DenominatedAmount,
+        token: Address,
+        fee_payer: common::PublicKey,
+        epoch: Epoch,
+        gas_limit: GasLimit,
+    ) -> Self {
+        Self(attach_fee(self.0, fee, token, fee_payer, epoch, gas_limit))
+    }
+
+    /// Get the bytes of the fee data to sign
+    pub fn get_fee_sig_bytes(&self) -> Hash {
+        transaction::get_wrapper_sign_bytes(&self.0)
+    }
+
+    /// Attach a signature of the fee to the tx
+    pub fn attach_fee_signature(
+        self,
+        signer: common::PublicKey,
+        signature: common::Signature,
+    ) -> Self {
+        Self(attach_fee_signature(self.0, signer, signature))
+    }
+
     /// Generates the protobuf encoding of this transaction
     pub fn to_bytes(&self) -> Vec<u8> {
         self.0.to_bytes()
+    }
+
+    /// Gets the inner transaction without the domain wrapper
+    pub fn payload(self) -> Tx {
+        self.0
+    }
+
+    /// Validate this wrapper transaction
+    pub fn validate_tx(&self) -> Result<Option<&Signature>, TxError> {
+        self.0.validate_tx()
     }
 }
 
@@ -460,9 +656,45 @@ impl ChangeCommission {
         ))
     }
 
+    /// Attach the fee data to the tx
+    pub fn attach_fee(
+        self,
+        fee: DenominatedAmount,
+        token: Address,
+        fee_payer: common::PublicKey,
+        epoch: Epoch,
+        gas_limit: GasLimit,
+    ) -> Self {
+        Self(attach_fee(self.0, fee, token, fee_payer, epoch, gas_limit))
+    }
+
+    /// Get the bytes of the fee data to sign
+    pub fn get_fee_sig_bytes(&self) -> Hash {
+        transaction::get_wrapper_sign_bytes(&self.0)
+    }
+
+    /// Attach a signature of the fee to the tx
+    pub fn attach_fee_signature(
+        self,
+        signer: common::PublicKey,
+        signature: common::Signature,
+    ) -> Self {
+        Self(attach_fee_signature(self.0, signer, signature))
+    }
+
     /// Generates the protobuf encoding of this transaction
     pub fn to_bytes(&self) -> Vec<u8> {
         self.0.to_bytes()
+    }
+
+    /// Gets the inner transaction without the domain wrapper
+    pub fn payload(self) -> Tx {
+        self.0
+    }
+
+    /// Validate this wrapper transaction
+    pub fn validate_tx(&self) -> Result<Option<&Signature>, TxError> {
+        self.0.validate_tx()
     }
 }
 
@@ -502,9 +734,45 @@ impl Withdraw {
         ))
     }
 
+    /// Attach the fee data to the tx
+    pub fn attach_fee(
+        self,
+        fee: DenominatedAmount,
+        token: Address,
+        fee_payer: common::PublicKey,
+        epoch: Epoch,
+        gas_limit: GasLimit,
+    ) -> Self {
+        Self(attach_fee(self.0, fee, token, fee_payer, epoch, gas_limit))
+    }
+
+    /// Get the bytes of the fee data to sign
+    pub fn get_fee_sig_bytes(&self) -> Hash {
+        transaction::get_wrapper_sign_bytes(&self.0)
+    }
+
+    /// Attach a signature of the fee to the tx
+    pub fn attach_fee_signature(
+        self,
+        signer: common::PublicKey,
+        signature: common::Signature,
+    ) -> Self {
+        Self(attach_fee_signature(self.0, signer, signature))
+    }
+
     /// Generates the protobuf encoding of this transaction
     pub fn to_bytes(&self) -> Vec<u8> {
         self.0.to_bytes()
+    }
+
+    /// Gets the inner transaction without the domain wrapper
+    pub fn payload(self) -> Tx {
+        self.0
+    }
+
+    /// Validate this wrapper transaction
+    pub fn validate_tx(&self) -> Result<Option<&Signature>, TxError> {
+        self.0.validate_tx()
     }
 }
 
@@ -550,8 +818,44 @@ impl Redelegate {
         ))
     }
 
+    /// Attach the fee data to the tx
+    pub fn attach_fee(
+        self,
+        fee: DenominatedAmount,
+        token: Address,
+        fee_payer: common::PublicKey,
+        epoch: Epoch,
+        gas_limit: GasLimit,
+    ) -> Self {
+        Self(attach_fee(self.0, fee, token, fee_payer, epoch, gas_limit))
+    }
+
+    /// Get the bytes of the fee data to sign
+    pub fn get_fee_sig_bytes(&self) -> Hash {
+        transaction::get_wrapper_sign_bytes(&self.0)
+    }
+
+    /// Attach a signature of the fee to the tx
+    pub fn attach_fee_signature(
+        self,
+        signer: common::PublicKey,
+        signature: common::Signature,
+    ) -> Self {
+        Self(attach_fee_signature(self.0, signer, signature))
+    }
+
     /// Generates the protobuf encoding of this transaction
     pub fn to_bytes(&self) -> Vec<u8> {
         self.0.to_bytes()
+    }
+
+    /// Gets the inner transaction without the domain wrapper
+    pub fn payload(self) -> Tx {
+        self.0
+    }
+
+    /// Validate this wrapper transaction
+    pub fn validate_tx(&self) -> Result<Option<&Signature>, TxError> {
+        self.0.validate_tx()
     }
 }
