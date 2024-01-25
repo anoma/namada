@@ -1,7 +1,9 @@
 //! Native VP for multitokens
 
 use std::collections::{BTreeSet, HashMap};
+use std::ops::Neg;
 
+use namada_core::types::uint::I256;
 use namada_tx::Tx;
 use namada_vp_env::VpEnv;
 use thiserror::Error;
@@ -21,10 +23,19 @@ use crate::vm::WasmCacheAccess;
 pub enum Error {
     #[error("Native VP error: {0}")]
     NativeVpError(#[from] native_vp::Error),
+    #[error("Couldn't read token amount")]
+    InvalidTokenAmountKey,
+    #[error("Amount subtraction underflowed")]
+    AmountUnderflow,
 }
 
 /// Multitoken functions result
 pub type Result<T> = std::result::Result<T, Error>;
+
+enum ReadType {
+    Pre,
+    Post,
+}
 
 /// Multitoken VP
 pub struct MultitokenVp<'a, DB, H, CA>
@@ -55,25 +66,30 @@ where
         let mut mints = HashMap::new();
         for key in keys_changed {
             if let Some([token, _]) = is_any_token_balance_key(key) {
-                let pre: Amount = self.ctx.read_pre(key)?.unwrap_or_default();
-                let post: Amount = self.ctx.read_post(key)?.unwrap_or_default();
-                let diff = post.change() - pre.change();
+                let pre_amount = self.read_amount(key, ReadType::Pre)?;
+                let post_amount = self.read_amount(key, ReadType::Post)?;
+                println!("{}, {}", pre_amount, post_amount);
+                let diff_amount =
+                    self.compute_post_pre_diff(pre_amount, post_amount)?;
+
                 match changes.get_mut(token) {
-                    Some(change) => *change += diff,
-                    None => _ = changes.insert(token, diff),
+                    Some(change) => *change += diff_amount,
+                    None => _ = changes.insert(token, diff_amount),
                 }
             } else if let Some(token) = is_any_minted_balance_key(key) {
-                let pre: Amount = self.ctx.read_pre(key)?.unwrap_or_default();
-                let post: Amount = self.ctx.read_post(key)?.unwrap_or_default();
-                let diff = post.change() - pre.change();
-                match mints.get_mut(token) {
-                    Some(mint) => *mint += diff,
-                    None => _ = mints.insert(token, diff),
-                }
-
                 // Check if the minter is set
                 if !self.is_valid_minter(token, verifiers)? {
                     return Ok(false);
+                }
+
+                let pre_amount = self.read_amount(key, ReadType::Pre)?;
+                let post_amount = self.read_amount(key, ReadType::Post)?;
+                let diff_amount =
+                    self.compute_post_pre_diff(pre_amount, post_amount)?;
+
+                match mints.get_mut(token) {
+                    Some(mint) => *mint += diff_amount,
+                    None => _ = mints.insert(token, diff_amount),
                 }
             } else if let Some(token) = is_any_minter_key(key) {
                 if !self.is_valid_minter(token, verifiers)? {
@@ -130,6 +146,38 @@ where
                 // ERC20 and other tokens should not be minted by a wasm
                 // transaction
                 Ok(false)
+            }
+        }
+    }
+
+    fn read_amount(&self, key: &Key, read_type: ReadType) -> Result<Amount> {
+        let result = match read_type {
+            ReadType::Pre => self.ctx.read_pre::<Amount>(key),
+            ReadType::Post => self.ctx.read_post::<Amount>(key),
+        };
+
+        match result {
+            Ok(Some(amount)) => Ok(amount),
+            Ok(None) => Ok(Amount::zero()),
+            _ => Err(Error::InvalidTokenAmountKey),
+        }
+    }
+
+    // this function computes the difference between post and pre amount
+    fn compute_post_pre_diff(
+        &self,
+        amount_pre: Amount,
+        amount_post: Amount,
+    ) -> Result<I256> {
+        if amount_pre > amount_post {
+            match amount_pre.checked_sub(amount_post) {
+                Some(diff) => Ok(diff.change().neg()),
+                None => Err(Error::AmountUnderflow),
+            }
+        } else {
+            match amount_post.checked_sub(amount_pre) {
+                Some(diff) => Ok(diff.change()),
+                None => Err(Error::AmountUnderflow),
             }
         }
     }
