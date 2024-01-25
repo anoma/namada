@@ -23,10 +23,11 @@ use ripemd::Digest as RipemdDigest;
 use sha2::Digest as Sha2Digest;
 use thiserror::Error;
 use token::storage_key::{
-    is_masp_allowed_key, is_masp_key, is_masp_nullifier_key,
+    balance_key, is_masp_allowed_key, is_masp_key, is_masp_nullifier_key,
     masp_commitment_anchor_key, masp_commitment_tree_key,
     masp_convert_anchor_key, masp_nullifier_key, masp_pin_tx_key,
 };
+use token::Amount;
 
 use crate::ledger::native_vp;
 use crate::ledger::native_vp::{Ctx, NativeVp};
@@ -234,7 +235,8 @@ where
     fn valid_state(
         &self,
         masp_keys_changed: &[&Key],
-        pin_key: Option<&str>,
+        transfer: &token::Transfer,
+        transfer_amount: Amount,
     ) -> Result<bool> {
         // Check that the transaction didn't write unallowed masp keys
         if masp_keys_changed
@@ -244,8 +246,55 @@ where
             return Ok(false);
         }
 
+        // Check that the declared amount in the transaction matches the actual
+        // change in storage
+        let pre_masp_balance: Amount = self
+            .ctx
+            .read_pre(&balance_key(&transfer.token, &Address::Internal(Masp)))?
+            .unwrap_or_default();
+        let post_masp_balance: Amount = self
+            .ctx
+            .read_post(&balance_key(&transfer.token, &Address::Internal(Masp)))?
+            .unwrap_or_default();
+
+        match (&transfer.source, &transfer.target) {
+            (&Address::Internal(Masp), &Address::Internal(Masp)) => {
+                // For shileded operations the amount must be redacted to 0
+                if post_masp_balance != pre_masp_balance {
+                    return Ok(false);
+                }
+            }
+            (&Address::Internal(Masp), _) => {
+                // Unshielding
+                if pre_masp_balance.checked_sub(post_masp_balance).ok_or_else(
+                    || {
+                        Error::NativeVpError(native_vp::Error::SimpleMessage(
+                            "Underflowed in balance check",
+                        ))
+                    },
+                )? != transfer_amount
+                {
+                    return Ok(false);
+                }
+            }
+            (_, &Address::Internal(Masp)) => {
+                // Shielding
+                if post_masp_balance.checked_sub(pre_masp_balance).ok_or_else(
+                    || {
+                        Error::NativeVpError(native_vp::Error::SimpleMessage(
+                            "Underflowed in balance check",
+                        ))
+                    },
+                )? != transfer_amount
+                {
+                    return Ok(false);
+                }
+            }
+            _ => return Ok(false),
+        }
+
         // Validate pin key
-        if let Some(key) = pin_key {
+        if let Some(ref key) = transfer.key {
             match self.ctx.read_post::<IndexedTx>(&masp_pin_tx_key(key))? {
                 Some(IndexedTx { height, index })
                     if height == self.ctx.get_block_height()?
@@ -316,7 +365,8 @@ where
             keys_changed.iter().filter(|key| is_masp_key(key)).collect();
         if !self.valid_state(
             masp_keys_changed.as_slice(),
-            transfer.key.as_deref(),
+            &transfer,
+            transfer_amount,
         )? {
             return Ok(false);
         }
