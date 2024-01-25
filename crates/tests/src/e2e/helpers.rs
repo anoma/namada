@@ -500,6 +500,7 @@ pub fn parse_reached_epoch(find: &mut NamadaCmd) -> Result<Epoch> {
 pub fn wait_for_wasm_pre_compile(ledger: &mut NamadaCmd) -> Result<()> {
     ledger.exp_string("Finished compiling all")?;
     ledger.exp_string("Finished compiling all")?;
+    ledger.exp_string("Block height: 1, epoch: 0");
     Ok(())
 }
 
