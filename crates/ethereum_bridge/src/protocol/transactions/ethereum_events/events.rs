@@ -590,7 +590,7 @@ mod tests {
     };
     use namada_core::types::time::DurationSecs;
     use namada_core::types::token::Amount;
-    use namada_core::types::{address, encode, eth_bridge_pool};
+    use namada_core::types::{address, eth_bridge_pool};
     use namada_parameters::{update_epoch_parameter, EpochDuration};
     use namada_state::testing::TestWlStorage;
     use namada_storage::mockdb::MockDBWriteBatch;
@@ -611,7 +611,7 @@ mod tests {
             .expect("Test failed");
         // set native ERC20 token
         wl_storage
-            .write_bytes(&bridge_storage::native_erc20_key(), encode(&wnam()))
+            .write(&bridge_storage::native_erc20_key(), wnam())
             .expect("Test failed");
     }
 
@@ -757,7 +757,7 @@ mod tests {
             let payer_key = balance_key(&transfer.gas_fee.token, &payer);
             let payer_balance = Amount::from(0);
             wl_storage
-                .write_bytes(&payer_key, payer_balance.serialize_to_vec())
+                .write(&payer_key, payer_balance)
                 .expect("Test failed");
             let escrow_key =
                 balance_key(&transfer.gas_fee.token, &BRIDGE_POOL_ADDRESS);
@@ -772,24 +772,24 @@ mod tests {
                 let sender_key = balance_key(&nam(), &transfer.transfer.sender);
                 let sender_balance = Amount::from(0);
                 wl_storage
-                    .write_bytes(&sender_key, sender_balance.serialize_to_vec())
+                    .write(&sender_key, sender_balance)
                     .expect("Test failed");
                 let escrow_key = balance_key(&nam(), &BRIDGE_ADDRESS);
                 let escrow_balance = Amount::from(10);
                 wl_storage
-                    .write_bytes(&escrow_key, escrow_balance.serialize_to_vec())
+                    .write(&escrow_key, escrow_balance)
                     .expect("Test failed");
             } else {
                 let token = transfer.token_address();
                 let sender_key = balance_key(&token, &transfer.transfer.sender);
                 let sender_balance = Amount::from(0);
                 wl_storage
-                    .write_bytes(&sender_key, sender_balance.serialize_to_vec())
+                    .write(&sender_key, sender_balance)
                     .expect("Test failed");
                 let escrow_key = balance_key(&token, &BRIDGE_POOL_ADDRESS);
                 let escrow_balance = Amount::from(10);
                 wl_storage
-                    .write_bytes(&escrow_key, escrow_balance.serialize_to_vec())
+                    .write(&escrow_key, escrow_balance)
                     .expect("Test failed");
                 update::amount(
                     wl_storage,

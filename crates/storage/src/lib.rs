@@ -319,6 +319,11 @@ pub mod testing {
         epoch: Epoch,
         pred_epochs: Epochs,
         native_token: Address,
+        merkle_tree_key_filter: fn(&storage::Key) -> bool,
+    }
+
+    fn merklize_all_keys(_key: &storage::Key) -> bool {
+        true
     }
 
     #[allow(clippy::derivable_impls)]
@@ -331,6 +336,7 @@ pub mod testing {
                 epoch: Epoch::default(),
                 pred_epochs: Epochs::default(),
                 native_token: address::nam(),
+                merkle_tree_key_filter: merklize_all_keys,
             }
         }
     }
@@ -405,15 +411,17 @@ pub mod testing {
             key: &storage::Key,
             val: impl AsRef<[u8]>,
         ) -> Result<()> {
+            let is_key_merklized = (self.merkle_tree_key_filter)(key);
             self.db
-                .write_subspace_val(self.height, key, val)
+                .write_subspace_val(self.height, key, val, is_key_merklized)
                 .into_storage_result()?;
             Ok(())
         }
 
         fn delete(&mut self, key: &storage::Key) -> Result<()> {
+            let is_key_merklized = (self.merkle_tree_key_filter)(key);
             self.db
-                .delete_subspace_val(self.height, key)
+                .delete_subspace_val(self.height, key, is_key_merklized)
                 .into_storage_result()?;
             Ok(())
         }
