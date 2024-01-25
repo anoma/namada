@@ -65,7 +65,7 @@ pub fn initialize_genesis() -> Result<(MockNode, MockServicesController)> {
         .expect("Could not write genesis files into test chain directory.");
 
     // Finalize the genesis config to derive the chain ID
-    let templates = load_and_validate(&template_dir)
+    let templates = load_and_validate(&genesis_path)
         .expect("Missing or invalid genesis files");
     let genesis_time = Default::default();
     let chain_id_prefix = ChainIdPrefix::from_str("integration-test").unwrap();
