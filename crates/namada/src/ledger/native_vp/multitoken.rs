@@ -152,10 +152,18 @@ where
         }
 
         let mut all_tokens = BTreeSet::new();
-        let _ = inc_changes.keys().map(|k| all_tokens.insert(k.clone()));
-        let _ = dec_changes.keys().map(|k| all_tokens.insert(k.clone()));
-        let _ = inc_mints.keys().map(|k| all_tokens.insert(k.clone()));
-        let _ = dec_mints.keys().map(|k| all_tokens.insert(k.clone()));
+        inc_changes.keys().for_each(|k| {
+            all_tokens.insert(k.clone());
+        });
+        dec_changes.keys().for_each(|k| {
+            all_tokens.insert(k.clone());
+        });
+        inc_mints.keys().for_each(|k| {
+            all_tokens.insert(k.clone());
+        });
+        dec_mints.keys().for_each(|k| {
+            all_tokens.insert(k.clone());
+        });
 
         Ok(all_tokens.iter().all(|token| {
             let inc_change =
