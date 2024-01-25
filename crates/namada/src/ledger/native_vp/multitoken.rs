@@ -60,76 +60,58 @@ where
                 let pre: Amount = self.ctx.read_pre(key)?.unwrap_or_default();
                 let post: Amount = self.ctx.read_post(key)?.unwrap_or_default();
                 match post.checked_sub(pre) {
-                    Some(diff) => match inc_changes.get_mut(token) {
-                        Some(change) => {
-                            change.checked_add(diff).ok_or_else(|| {
-                                Error::NativeVpError(
-                                    native_vp::Error::SimpleMessage(
-                                        "Overflowed in balance check",
-                                    ),
-                                )
-                            })?;
-                        }
-                        None => {
-                            inc_changes.insert(token.clone(), diff);
-                        }
-                    },
+                    Some(diff) => {
+                        let change =
+                            inc_changes.entry(token.clone()).or_default();
+                        change.checked_add(diff).ok_or_else(|| {
+                            Error::NativeVpError(
+                                native_vp::Error::SimpleMessage(
+                                    "Overflowed in balance check",
+                                ),
+                            )
+                        })?;
+                    }
                     None => {
                         let diff = pre
                             .checked_sub(post)
                             .expect("Underflow shouldn't happen here");
-                        match dec_changes.get_mut(token) {
-                            Some(change) => {
-                                change.checked_add(diff).ok_or_else(|| {
-                                    Error::NativeVpError(
-                                        native_vp::Error::SimpleMessage(
-                                            "Overflowed in balance check",
-                                        ),
-                                    )
-                                })?;
-                            }
-                            None => {
-                                dec_changes.insert(token.clone(), diff);
-                            }
-                        }
+                        let change =
+                            dec_changes.entry(token.clone()).or_default();
+                        change.checked_add(diff).ok_or_else(|| {
+                            Error::NativeVpError(
+                                native_vp::Error::SimpleMessage(
+                                    "Overflowed in balance check",
+                                ),
+                            )
+                        })?;
                     }
                 }
             } else if let Some(token) = is_any_minted_balance_key(key) {
                 let pre: Amount = self.ctx.read_pre(key)?.unwrap_or_default();
                 let post: Amount = self.ctx.read_post(key)?.unwrap_or_default();
                 match post.checked_sub(pre) {
-                    Some(diff) => match inc_mints.get_mut(token) {
-                        Some(mint) => {
-                            mint.checked_add(diff).ok_or_else(|| {
-                                Error::NativeVpError(
-                                    native_vp::Error::SimpleMessage(
-                                        "Overflowed in balance check",
-                                    ),
-                                )
-                            })?;
-                        }
-                        None => {
-                            inc_mints.insert(token.clone(), diff);
-                        }
-                    },
+                    Some(diff) => {
+                        let mint = inc_mints.entry(token.clone()).or_default();
+                        mint.checked_add(diff).ok_or_else(|| {
+                            Error::NativeVpError(
+                                native_vp::Error::SimpleMessage(
+                                    "Overflowed in balance check",
+                                ),
+                            )
+                        })?;
+                    }
                     None => {
                         let diff = pre
                             .checked_sub(post)
                             .expect("Underflow shouldn't happen here");
-                        match dec_mints.get_mut(token) {
-                            Some(mint) => {
-                                mint.checked_add(diff).ok_or_else(|| {
-                                    Error::NativeVpError(
-                                        native_vp::Error::SimpleMessage(
-                                            "Overflowed in balance check",
-                                        ),
-                                    )
-                                })?;
-                            }
-                            None => {
-                                dec_mints.insert(token.clone(), diff);
-                            }
-                        }
+                        let mint = dec_mints.entry(token.clone()).or_default();
+                        mint.checked_add(diff).ok_or_else(|| {
+                            Error::NativeVpError(
+                                native_vp::Error::SimpleMessage(
+                                    "Overflowed in balance check",
+                                ),
+                            )
+                        })?;
                     }
                 }
                 // Check if the minter is set
@@ -152,18 +134,10 @@ where
         }
 
         let mut all_tokens = BTreeSet::new();
-        inc_changes.keys().for_each(|k| {
-            all_tokens.insert(k.clone());
-        });
-        dec_changes.keys().for_each(|k| {
-            all_tokens.insert(k.clone());
-        });
-        inc_mints.keys().for_each(|k| {
-            all_tokens.insert(k.clone());
-        });
-        dec_mints.keys().for_each(|k| {
-            all_tokens.insert(k.clone());
-        });
+        all_tokens.extend(inc_changes.keys().cloned());
+        all_tokens.extend(dec_changes.keys().cloned());
+        all_tokens.extend(inc_mints.keys().cloned());
+        all_tokens.extend(dec_mints.keys().cloned());
 
         Ok(all_tokens.iter().all(|token| {
             let inc_change =
