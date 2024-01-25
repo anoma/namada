@@ -49,7 +49,7 @@ pub mod main {
         ctx.write(&target_key, 9_u64)?;
 
         // parameters
-        let target_key = parameters_storage::get_tx_whitelist_storage_key();
+        let target_key = parameters_storage::get_tx_allowlist_storage_key();
         ctx.write(&target_key, vec!["hash"])?;
         Ok(())
     }

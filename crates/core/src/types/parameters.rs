@@ -34,10 +34,10 @@ pub struct Parameters {
     pub max_proposal_bytes: ProposalBytes,
     /// Max gas for block
     pub max_block_gas: u64,
-    /// Whitelisted validity predicate hashes (read only)
-    pub vp_whitelist: Vec<String>,
-    /// Whitelisted tx hashes (read only)
-    pub tx_whitelist: Vec<String>,
+    /// Allowed validity predicate hashes (read only)
+    pub vp_allowlist: Vec<String>,
+    /// Allowed tx hashes (read only)
+    pub tx_allowlist: Vec<String>,
     /// Implicit accounts validity predicate WASM code hash
     pub implicit_vp_code_hash: Option<Hash>,
     /// Expected number of epochs per year (read only)

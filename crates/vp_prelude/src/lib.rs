@@ -50,26 +50,6 @@ pub fn sha256(bytes: &[u8]) -> Hash {
     Hash(*digest.as_ref())
 }
 
-pub fn is_tx_whitelisted(ctx: &Ctx) -> VpResult {
-    let tx_hash = ctx.get_tx_code_hash()?;
-    let key = parameters::storage::get_tx_whitelist_storage_key();
-    let whitelist: Vec<String> = ctx.read_pre(&key)?.unwrap_or_default();
-    // if whitelist is empty, allow any transaction
-    Ok(whitelist.is_empty()
-        || (tx_hash.is_some()
-            && whitelist
-                .contains(&tx_hash.unwrap().to_string().to_lowercase())))
-}
-
-pub fn is_vp_whitelisted(ctx: &Ctx, vp_hash: &[u8]) -> VpResult {
-    let vp_hash = Hash::try_from(vp_hash).unwrap();
-    let key = parameters::storage::get_vp_whitelist_storage_key();
-    let whitelist: Vec<String> = ctx.read_pre(&key)?.unwrap_or_default();
-    // if whitelist is empty, allow any transaction
-    Ok(whitelist.is_empty()
-        || whitelist.contains(&vp_hash.to_string().to_lowercase()))
-}
-
 /// Log a string. The message will be printed at the `tracing::Level::Info`.
 pub fn log_string<T: AsRef<str>>(msg: T) {
     let msg = msg.as_ref();
@@ -116,23 +96,6 @@ pub fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
     };
 
     Ok(HostEnvResult::is_success(valid))
-}
-
-/// Checks whether a transaction is valid, which happens in two cases:
-/// - tx is whitelisted, or
-/// - tx is executed by an approved governance proposal (no need to be
-///   whitelisted)
-pub fn is_valid_tx(ctx: &Ctx, tx_data: &Tx) -> VpResult {
-    if is_tx_whitelisted(ctx)? {
-        accept()
-    } else {
-        let proposal_id = tx_data
-            .data()
-            .as_ref()
-            .and_then(|x| u64::try_from_slice(x).ok());
-
-        proposal_id.map_or(reject(), |id| is_proposal_accepted(ctx, id))
-    }
 }
 
 /// Format and log a string in a debug build.

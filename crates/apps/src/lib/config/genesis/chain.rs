@@ -263,8 +263,8 @@ impl Finalized {
             min_num_of_blocks,
             max_expected_time_per_block,
             max_proposal_bytes,
-            vp_whitelist,
-            tx_whitelist,
+            vp_allowlist,
+            tx_allowlist,
             implicit_vp,
             epochs_per_year,
             max_signatures_per_transaction,
@@ -297,8 +297,8 @@ impl Finalized {
         let max_expected_time_per_block =
             namada::types::time::Duration::seconds(max_expected_time_per_block)
                 .into();
-        let vp_whitelist = vp_whitelist.unwrap_or_default();
-        let tx_whitelist = tx_whitelist.unwrap_or_default();
+        let vp_allowlist = vp_allowlist.unwrap_or_default();
+        let tx_allowlist = tx_allowlist.unwrap_or_default();
         let staked_ratio = Dec::zero();
         let pos_inflation_amount = 0;
 
@@ -306,8 +306,8 @@ impl Finalized {
             max_tx_bytes,
             epoch_duration,
             max_expected_time_per_block,
-            vp_whitelist,
-            tx_whitelist,
+            vp_allowlist,
+            tx_allowlist,
             implicit_vp_code_hash,
             epochs_per_year,
             staked_ratio,
