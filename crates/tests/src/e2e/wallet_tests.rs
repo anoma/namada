@@ -17,7 +17,8 @@ use super::setup;
 use crate::e2e::setup::Bin;
 use crate::run;
 use crate::strings::{
-    WALLET_FOUND_TRANSPARENT_KEYS, WALLET_HD_PASSPHRASE_PROMPT,
+    WALLET_FOUND_TRANSPARENT_KEYS, WALLET_HD_PASSPHRASE_CONFIRMATION_PROMPT,
+    WALLET_HD_PASSPHRASE_PROMPT,
 };
 
 /// Test wallet key commands with an encrypted key:
@@ -31,15 +32,21 @@ fn wallet_encrypted_key_cmds() -> Result<()> {
     let password = "VeRySeCuR3";
 
     // 1. key gen
-    let mut cmd =
-        run!(test, Bin::Wallet, &["gen", "--alias", key_alias], Some(20),)?;
+    let mut cmd = run!(
+        test,
+        Bin::Wallet,
+        &["gen", "--alias", key_alias, "--bip39-passphrase"],
+        Some(20),
+    )?;
 
     cmd.exp_string("Enter your encryption password:")?;
     cmd.send_line(password)?;
     cmd.exp_string("Enter same passphrase again: ")?;
     cmd.send_line(password)?;
     cmd.exp_string(WALLET_HD_PASSPHRASE_PROMPT)?;
-    cmd.send_line("")?;
+    cmd.send_line("test")?;
+    cmd.exp_string(WALLET_HD_PASSPHRASE_CONFIRMATION_PROMPT)?;
+    cmd.send_line("test")?;
     cmd.exp_string(&format!(
         "Successfully added a key and an address with alias: \"{}\"",
         key_alias.to_lowercase()
@@ -89,9 +96,6 @@ fn wallet_encrypted_key_cmds_env_var() -> Result<()> {
     let mut cmd =
         run!(test, Bin::Wallet, &["gen", "--alias", key_alias], Some(20),)?;
 
-    cmd.exp_string(WALLET_HD_PASSPHRASE_PROMPT)?;
-    cmd.send_line("")?;
-
     cmd.exp_string(&format!(
         "Successfully added a key and an address with alias: \"{}\"",
         key_alias.to_lowercase()
@@ -139,9 +143,6 @@ fn wallet_unencrypted_key_cmds() -> Result<()> {
         &["gen", "--alias", key_alias, "--unsafe-dont-encrypt"],
         Some(20),
     )?;
-
-    cmd.exp_string(WALLET_HD_PASSPHRASE_PROMPT)?;
-    cmd.send_line("")?;
 
     cmd.exp_string(&format!(
         "Successfully added a key and an address with alias: \"{}\"",
