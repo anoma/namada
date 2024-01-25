@@ -16,6 +16,9 @@ use color_eyre::eyre::Result;
 use super::setup;
 use crate::e2e::setup::Bin;
 use crate::run;
+use crate::strings::{
+    WALLET_FOUND_TRANSPARENT_KEYS, WALLET_HD_PASSPHRASE_PROMPT,
+};
 
 /// Test wallet key commands with an encrypted key:
 /// 1. key gen
@@ -35,7 +38,7 @@ fn wallet_encrypted_key_cmds() -> Result<()> {
     cmd.send_line(password)?;
     cmd.exp_string("Enter same passphrase again: ")?;
     cmd.send_line(password)?;
-    cmd.exp_string("Enter BIP39 passphrase (empty for none): ")?;
+    cmd.exp_string(WALLET_HD_PASSPHRASE_PROMPT)?;
     cmd.send_line("")?;
     cmd.exp_string(&format!(
         "Successfully added a key and an address with alias: \"{}\"",
@@ -50,7 +53,7 @@ fn wallet_encrypted_key_cmds() -> Result<()> {
         Some(20),
     )?;
 
-    cmd.exp_string("Found transparent keys:")?;
+    cmd.exp_string(WALLET_FOUND_TRANSPARENT_KEYS)?;
     cmd.exp_string(&format!(
         "  Alias \"{}\" (encrypted):",
         key_alias.to_lowercase()
@@ -86,7 +89,7 @@ fn wallet_encrypted_key_cmds_env_var() -> Result<()> {
     let mut cmd =
         run!(test, Bin::Wallet, &["gen", "--alias", key_alias], Some(20),)?;
 
-    cmd.exp_string("Enter BIP39 passphrase (empty for none): ")?;
+    cmd.exp_string(WALLET_HD_PASSPHRASE_PROMPT)?;
     cmd.send_line("")?;
 
     cmd.exp_string(&format!(
@@ -102,7 +105,7 @@ fn wallet_encrypted_key_cmds_env_var() -> Result<()> {
         Some(20),
     )?;
 
-    cmd.exp_string("Found transparent keys:")?;
+    cmd.exp_string(WALLET_FOUND_TRANSPARENT_KEYS)?;
     cmd.exp_string(&format!(
         "  Alias \"{}\" (encrypted):",
         key_alias.to_lowercase()
@@ -136,6 +139,10 @@ fn wallet_unencrypted_key_cmds() -> Result<()> {
         &["gen", "--alias", key_alias, "--unsafe-dont-encrypt"],
         Some(20),
     )?;
+
+    cmd.exp_string(WALLET_HD_PASSPHRASE_PROMPT)?;
+    cmd.send_line("")?;
+
     cmd.exp_string(&format!(
         "Successfully added a key and an address with alias: \"{}\"",
         key_alias.to_lowercase()
@@ -149,7 +156,7 @@ fn wallet_unencrypted_key_cmds() -> Result<()> {
         Some(20),
     )?;
 
-    cmd.exp_string("Found transparent keys:")?;
+    cmd.exp_string(WALLET_FOUND_TRANSPARENT_KEYS)?;
     cmd.exp_string(&format!(
         "  Alias \"{}\" (not encrypted):",
         key_alias.to_lowercase()
@@ -183,7 +190,13 @@ fn wallet_address_cmds() -> Result<()> {
     let mut cmd = run!(
         test,
         Bin::Wallet,
-        &["gen", "--alias", gen_address_alias, "--unsafe-dont-encrypt"],
+        &[
+            "gen",
+            "--alias",
+            gen_address_alias,
+            "--unsafe-dont-encrypt",
+            "--raw"
+        ],
         Some(20),
     )?;
     cmd.exp_string(&format!(

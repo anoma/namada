@@ -171,7 +171,7 @@ where
                 None,
                 &mut OsRng,
             )
-            .unwrap_or_else(|_| {
+            .unwrap_or_else(|| {
                 panic!("Could not generate new key for validator-{}", val)
             });
         println!("alias: {}, pk: {}", alias, sk.ref_to());
