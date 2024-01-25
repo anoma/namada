@@ -2979,6 +2979,7 @@ pub mod args {
         arg_default("hd-path", DefaultFn(|| "default".to_string()));
     pub const HD_ALLOW_NON_COMPLIANT_DERIVATION_PATH: ArgFlag =
         flag("allow-non-compliant");
+    pub const HD_PROMPT_BIP39_PASSPHRASE: ArgFlag = flag("bip39-passphrase");
     pub const HISTORIC: ArgFlag = flag("historic");
     pub const IBC_TRANSFER_MEMO_PATH: ArgOpt<PathBuf> = arg_opt("memo-path");
     pub const INPUT_OPT: ArgOpt<PathBuf> = arg_opt("input");
@@ -6201,6 +6202,8 @@ pub mod args {
             let derivation_path = HD_DERIVATION_PATH.parse(matches);
             let allow_non_compliant =
                 HD_ALLOW_NON_COMPLIANT_DERIVATION_PATH.parse(matches);
+            let prompt_bip39_passphrase =
+                HD_PROMPT_BIP39_PASSPHRASE.parse(matches);
             Self {
                 scheme,
                 shielded,
@@ -6210,6 +6213,7 @@ pub mod args {
                 use_device,
                 derivation_path,
                 allow_non_compliant,
+                prompt_bip39_passphrase,
             }
         }
 
@@ -6262,6 +6266,11 @@ pub mod args {
                     .args([HD_ALLOW_NON_COMPLIANT_DERIVATION_PATH.name])
                     .requires(HD_DERIVATION_PATH.name),
             )
+            .arg(
+                HD_PROMPT_BIP39_PASSPHRASE.def().help(
+                    "Use an additional passphrase for HD-key generation.",
+                ),
+            )
         }
     }
 
@@ -6276,6 +6285,8 @@ pub mod args {
             let derivation_path = HD_DERIVATION_PATH.parse(matches);
             let allow_non_compliant =
                 HD_ALLOW_NON_COMPLIANT_DERIVATION_PATH.parse(matches);
+            let prompt_bip39_passphrase =
+                HD_PROMPT_BIP39_PASSPHRASE.parse(matches);
             Self {
                 scheme,
                 shielded,
@@ -6285,6 +6296,7 @@ pub mod args {
                 unsafe_dont_encrypt,
                 derivation_path,
                 allow_non_compliant,
+                prompt_bip39_passphrase,
             }
         }
 
@@ -6339,6 +6351,11 @@ pub mod args {
                 ArgGroup::new("requires_group")
                     .args([HD_ALLOW_NON_COMPLIANT_DERIVATION_PATH.name])
                     .requires(HD_DERIVATION_PATH.name),
+            )
+            .arg(
+                HD_PROMPT_BIP39_PASSPHRASE.def().help(
+                    "Use an additional passphrase for HD-key generation.",
+                ),
             )
         }
     }

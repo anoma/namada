@@ -621,10 +621,12 @@ impl<U: WalletIo> Wallet<U> {
     }
 
     /// Generate a BIP39 mnemonic code, and derive HD wallet seed from it using
-    /// the given passphrase.
+    /// the given passphrase. If no passphrase is provided, optionally prompt
+    /// for a passphrase.
     pub fn gen_hd_seed(
         passphrase: Option<Zeroizing<String>>,
         rng: &mut U::Rng,
+        prompt_bip39_passphrase: bool,
     ) -> (Mnemonic, Seed) {
         const MNEMONIC_TYPE: MnemonicType = MnemonicType::Words24;
         let mnemonic = U::generate_mnemonic_code(MNEMONIC_TYPE, rng);
@@ -634,8 +636,13 @@ impl<U: WalletIo> Wallet<U> {
         );
         println!("{}", mnemonic.clone().into_phrase());
 
-        let passphrase =
-            passphrase.unwrap_or_else(|| U::read_mnemonic_passphrase(true));
+        let passphrase = passphrase.unwrap_or_else(|| {
+            if prompt_bip39_passphrase {
+                U::read_mnemonic_passphrase(true)
+            } else {
+                Zeroizing::default()
+            }
+        });
         let seed = Seed::new(&mnemonic, &passphrase);
         (mnemonic, seed)
     }

@@ -239,6 +239,7 @@ fn shielded_key_gen(
         unsafe_dont_encrypt,
         derivation_path,
         allow_non_compliant,
+        prompt_bip39_passphrase,
         ..
     }: args::KeyGen,
 ) {
@@ -261,8 +262,11 @@ fn shielded_key_gen(
             display_line!(io, "No changes are persisted. Exiting.");
             cli::safe_exit(1)
         }
-        let (_mnemonic, seed) =
-            Wallet::<CliWalletUtils>::gen_hd_seed(None, &mut OsRng);
+        let (_mnemonic, seed) = Wallet::<CliWalletUtils>::gen_hd_seed(
+            None,
+            &mut OsRng,
+            prompt_bip39_passphrase,
+        );
         wallet.derive_store_hd_spendind_key(
             alias,
             alias_force,
@@ -535,6 +539,7 @@ fn transparent_key_and_address_gen(
         unsafe_dont_encrypt,
         derivation_path,
         allow_non_compliant,
+        prompt_bip39_passphrase,
         ..
     }: args::KeyGen,
 ) {
@@ -565,8 +570,11 @@ fn transparent_key_and_address_gen(
             display_line!(io, "No changes are persisted. Exiting.");
             cli::safe_exit(1)
         }
-        let (_mnemonic, seed) =
-            Wallet::<CliWalletUtils>::gen_hd_seed(None, &mut OsRng);
+        let (_mnemonic, seed) = Wallet::<CliWalletUtils>::gen_hd_seed(
+            None,
+            &mut OsRng,
+            prompt_bip39_passphrase,
+        );
         wallet.derive_store_hd_secret_key(
             scheme,
             Some(alias),
