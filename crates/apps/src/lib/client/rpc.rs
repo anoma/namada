@@ -47,7 +47,7 @@ use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use namada::types::storage::{
     BlockHeight, BlockResults, Epoch, IndexedTx, Key, KeySeg,
 };
-use namada::types::token::{Change, MaspDenom};
+use namada::types::token::{Change, MaspDigitPos};
 use namada::{state as storage, token};
 use namada_sdk::error::{
     is_pinned_error, Error, PinnedBalanceError, QueryError,
@@ -132,7 +132,7 @@ pub async fn query_transfers(
     let mut shielded = context.shielded_mut().await;
     let _ = shielded.load().await;
     // Precompute asset types to increase chances of success in decoding
-    let _ = shielded.precompute_asset_types(&wallet);
+    let _ = shielded.precompute_asset_types(context).await;
     // Obtain the effects of all shielded and transparent transactions
     let transfers = shielded
         .query_tx_deltas(
@@ -431,7 +431,11 @@ pub async fn query_pinned_balance(
         .collect();
     let _ = context.shielded_mut().await.load().await;
     // Precompute asset types to increase chances of success in decoding
-    let _ = context.shielded_mut().await.precompute_asset_types(&wallet);
+    let _ = context
+        .shielded_mut()
+        .await
+        .precompute_asset_types(context)
+        .await;
     // Print the token balances by payment address
     for owner in owners {
         let mut balance =
@@ -880,7 +884,7 @@ pub async fn query_shielded_balance(
             .collect();
         shielded.fetch(context.client(), &[], &fvks).await.unwrap();
         // Precompute asset types to increase chances of success in decoding
-        let _ = shielded.precompute_asset_types(&*context.wallet().await);
+        let _ = shielded.precompute_asset_types(context).await;
         // Save the update state so that future fetches can be short-circuited
         let _ = shielded.save().await;
     }
@@ -2444,7 +2448,7 @@ pub async fn query_conversions(
         .expect("Conversions should be defined");
     // Track whether any non-sentinel conversions are found
     let mut conversions_found = false;
-    for (addr, epoch, amt) in conversions.values() {
+    for (addr, _denom, digit, epoch, amt) in conversions.values() {
         // If the user has specified any targets, then meet them
         // If we have a sentinel conversion, then skip printing
         if matches!(&target_token, Some(target) if target != addr)
@@ -2457,8 +2461,9 @@ pub async fn query_conversions(
         // Print the asset to which the conversion applies
         display!(
             context.io(),
-            "{}[{}]: ",
+            "{}*2^{}[{}]: ",
             tokens.get(addr).cloned().unwrap_or_else(|| addr.clone()),
+            *digit as u8 * 64,
             epoch,
         );
         // Now print out the components of the allowed conversion
@@ -2466,14 +2471,15 @@ pub async fn query_conversions(
         for (asset_type, val) in amt.components() {
             // Look up the address and epoch of asset to facilitate pretty
             // printing
-            let (addr, epoch, _) = &conversions[asset_type];
+            let (addr, _denom, digit, epoch, _) = &conversions[asset_type];
             // Now print out this component of the conversion
             display!(
                 context.io(),
-                "{}{} {}[{}]",
+                "{}{} {}*2^{}[{}]",
                 prefix,
                 val,
                 tokens.get(addr).cloned().unwrap_or_else(|| addr.clone()),
+                *digit as u8 * 64,
                 epoch
             );
             // Future iterations need to be prefixed with +
@@ -2496,7 +2502,8 @@ pub async fn query_conversion<C: namada::ledger::queries::Client + Sync>(
     asset_type: AssetType,
 ) -> Option<(
     Address,
-    MaspDenom,
+    token::Denomination,
+    MaspDigitPos,
     Epoch,
     masp_primitives::transaction::components::I128Sum,
     MerklePath<Node>,
