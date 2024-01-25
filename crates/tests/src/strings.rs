@@ -27,4 +27,7 @@ pub const TX_ACCEPTED: &str = "Wrapper transaction accepted";
 pub const WALLET_HD_PASSPHRASE_PROMPT: &str =
     "Enter BIP39 passphrase (empty for none): ";
 
+pub const WALLET_HD_PASSPHRASE_CONFIRMATION_PROMPT: &str =
+    "Enter same passphrase again: ";
+
 pub const WALLET_FOUND_TRANSPARENT_KEYS: &str = "Found transparent keys:";
