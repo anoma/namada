@@ -8,6 +8,7 @@
 #[cfg(feature = "testing")]
 pub mod bench_utils;
 pub mod cli;
+pub mod cli_utils;
 pub mod client;
 pub mod config;
 pub mod logging;
