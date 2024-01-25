@@ -5,6 +5,8 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
 use color_eyre::eyre::{eyre, Result};
+use namada::types::dec::Dec;
+use namada::types::token;
 use namada_apps::cli::args;
 use namada_apps::client::utils::PRE_GENESIS_DIR;
 use namada_apps::config;
@@ -45,8 +47,16 @@ pub fn initialize_genesis() -> Result<(MockNode, MockServicesController)> {
     let template_dir = working_dir.join(SINGLE_NODE_NET_GENESIS);
 
     // Copy genesis files to test directory.
-    let templates = templates::All::read_toml_files(&template_dir)
+    let mut templates = templates::All::read_toml_files(&template_dir)
         .expect("Missing genesis files");
+    for (_, config) in templates.tokens.token.iter_mut() {
+        config.parameters = token::Parameters {
+            max_reward_rate: Dec::from_str("0.1").unwrap(),
+            kp_gain_nom: Dec::from_str("0.1").unwrap(),
+            kd_gain_nom: Dec::from_str("0.1").unwrap(),
+            locked_ratio_target: Dec::from_str("0.6667").unwrap(),
+        };
+    }
     let genesis_path = test_dir.path().join("int-test-genesis-src");
     std::fs::create_dir(&genesis_path)
         .expect("Could not create test chain directory.");
