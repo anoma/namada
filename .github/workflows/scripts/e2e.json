@@ -15,6 +15,7 @@
     "e2e::ledger_tests::proposal_offline": 21,
     "e2e::ledger_tests::pgf_governance_proposal": 320,
     "e2e::ledger_tests::proposal_submission": 200,
+    "e2e::ledger_tests::proposal_change_shielded_reward": 200,
     "e2e::ledger_tests::run_ledger": 5,
     "e2e::ledger_tests::run_ledger_load_state_and_reset": 23,
     "e2e::ledger_tests::test_namada_shuts_down_if_tendermint_dies": 2,
