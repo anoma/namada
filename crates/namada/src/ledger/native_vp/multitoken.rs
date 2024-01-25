@@ -2,6 +2,8 @@
 
 use std::collections::{BTreeSet, HashMap};
 
+use namada_governance::is_proposal_accepted;
+use namada_token::storage_key::is_any_token_parameter_key;
 use namada_tx::Tx;
 use namada_vp_env::VpEnv;
 use thiserror::Error;
@@ -47,7 +49,7 @@ where
 
     fn validate_tx(
         &self,
-        _tx: &Tx,
+        tx_data: &Tx,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
@@ -79,6 +81,8 @@ where
                 if !self.is_valid_minter(token, verifiers)? {
                     return Ok(false);
                 }
+            } else if is_any_token_parameter_key(key).is_some() {
+                return self.is_valid_parameter(tx_data);
             } else if key.segments.get(0)
                 == Some(
                     &Address::Internal(InternalAddress::Multitoken).to_db_key(),
@@ -131,6 +135,15 @@ where
                 // transaction
                 Ok(false)
             }
+        }
+    }
+
+    /// Return if the parameter change was done via a governance proposal
+    pub fn is_valid_parameter(&self, tx: &Tx) -> Result<bool> {
+        match tx.data() {
+            Some(data) => is_proposal_accepted(&self.ctx.pre(), data.as_ref())
+                .map_err(Error::NativeVpError),
+            None => Ok(false),
         }
     }
 }

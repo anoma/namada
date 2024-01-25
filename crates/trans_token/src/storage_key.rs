@@ -11,6 +11,8 @@ pub const DENOM_STORAGE_KEY: &str = "denomination";
 pub const MINTER_STORAGE_KEY: &str = "minter";
 /// Key segment for minted balance
 pub const MINTED_STORAGE_KEY: &str = "minted";
+/// Key segment for token parameters
+pub const PARAMETERS_STORAGE_KEY: &str = "parameters";
 
 /// Gets the key for the given token address, error with the given
 /// message to expect if the key is not in the address
@@ -42,6 +44,17 @@ pub fn balance_prefix(token_addr: &Address) -> storage::Key {
     .expect("Cannot obtain a storage key")
 }
 
+/// Obtain a storage key prefix for all users' balances.
+pub fn parameter_prefix(token_addr: &Address) -> storage::Key {
+    storage::Key::from(
+        Address::Internal(InternalAddress::Multitoken).to_db_key(),
+    )
+    .push(&token_addr.to_db_key())
+    .expect("Cannot obtain a storage key")
+    .push(&PARAMETERS_STORAGE_KEY.to_owned())
+    .expect("Cannot obtain a storage key")
+}
+
 /// Obtain a storage key for the multitoken minter.
 pub fn minter_key(token_addr: &Address) -> storage::Key {
     storage::Key::from(
@@ -60,8 +73,9 @@ pub fn minted_balance_key(token_addr: &Address) -> storage::Key {
         .expect("Cannot obtain a storage key")
 }
 
-/// Check if the given storage key is balance key for the given token. If it is,
-/// returns the owner. For minted balances, use [`is_any_minted_balance_key()`].
+/// Check if the given storage key is a balance key for the given token. If it
+/// is, return the owner. For minted balances, use
+/// [`is_any_minted_balance_key()`].
 pub fn is_balance_key<'a>(
     token_addr: &Address,
     key: &'a storage::Key,
@@ -82,8 +96,26 @@ pub fn is_balance_key<'a>(
     }
 }
 
-/// Check if the given storage key is balance key for unspecified token. If it
-/// is, returns the token and owner address.
+/// Check if the given storage key is a parameter key for an unspecified token.
+/// If it is, return the token address.
+pub fn is_any_token_parameter_key(key: &storage::Key) -> Option<&Address> {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::AddressSeg(token),
+            DbKeySeg::StringSeg(parameter),
+            DbKeySeg::StringSeg(_parameter_name),
+        ] if *addr == Address::Internal(InternalAddress::Multitoken)
+            && parameter == PARAMETERS_STORAGE_KEY =>
+        {
+            Some(token)
+        }
+        _ => None,
+    }
+}
+
+/// Check if the given storage key is a balance key for an unspecified token. If
+/// it is, return the token and owner address.
 pub fn is_any_token_balance_key(key: &storage::Key) -> Option<[&Address; 2]> {
     match &key.segments[..] {
         [

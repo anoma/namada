@@ -23,6 +23,7 @@ vp_eval = []
 vp_memory_limit = []
 vp_read_storage_key = []
 tx_proposal_code = []
+tx_proposal_masp_reward = []
 
 [dependencies]
 namada_test_utils = {path = "../../crates/test_utils"}

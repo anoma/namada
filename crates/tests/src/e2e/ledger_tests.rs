@@ -2286,7 +2286,7 @@ fn pgf_governance_proposal() -> Result<()> {
     ];
 
     client = run!(test, Bin::Client, query_balance_args, Some(30))?;
-    client.exp_string("nam: 2000000")?;
+    client.exp_string("nam: 2000000.")?;
     client.assert_success();
 
     // Check if governance funds are 0
@@ -3636,6 +3636,205 @@ fn change_consensus_key() -> Result<()> {
 
     // Continue to make blocks for another epoch
     let _epoch = epoch_sleep(&test, &validator_0_rpc, 40)?;
+
+    Ok(())
+}
+#[test]
+fn proposal_change_shielded_reward() -> Result<()> {
+    let test = setup::network(
+        |mut genesis, base_dir: &_| {
+            genesis.parameters.gov_params.max_proposal_code_size = 600000;
+            genesis.parameters.parameters.max_expected_time_per_block = 1;
+            setup::set_validators(1, genesis, base_dir, |_| 0u16)
+        },
+        None,
+    )?;
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+
+    // 1. Run the ledger node
+    let bg_ledger =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
+            .background();
+
+    let validator_0_rpc = get_actor_rpc(&test, Who::Validator(0));
+
+    // 1.1 Delegate some token
+    let tx_args = vec![
+        "bond",
+        "--validator",
+        "validator-0",
+        "--source",
+        BERTHA,
+        "--amount",
+        "900",
+        "--node",
+        &validator_0_rpc,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
+    client.assert_success();
+
+    // 2. Submit valid proposal
+    let albert = find_address(&test, ALBERT)?;
+    let valid_proposal_json_path = prepare_proposal_data(
+        &test,
+        0,
+        albert,
+        TestWasms::TxProposalMaspRewards.read_bytes(),
+        12,
+    );
+    let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
+
+    let submit_proposal_args = vec![
+        "init-proposal",
+        "--data-path",
+        valid_proposal_json_path.to_str().unwrap(),
+        "--gas-limit",
+        "2000000",
+        "--node",
+        &validator_one_rpc,
+    ];
+    let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
+    client.assert_success();
+
+    // Wait for the proposal to be committed
+    let mut ledger = bg_ledger.foreground();
+    ledger.exp_string("Committed block hash")?;
+    let _bg_ledger = ledger.background();
+
+    // 3. Query the proposal
+    let proposal_query_args = vec![
+        "query-proposal",
+        "--proposal-id",
+        "0",
+        "--node",
+        &validator_one_rpc,
+    ];
+
+    let mut client = run!(test, Bin::Client, proposal_query_args, Some(40))?;
+    client.exp_string("Proposal Id: 0")?;
+    client.assert_success();
+
+    // 9. Send a yay vote from a validator
+    let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    while epoch.0 <= 13 {
+        sleep(10);
+        epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    }
+
+    let submit_proposal_vote = vec![
+        "vote-proposal",
+        "--proposal-id",
+        "0",
+        "--vote",
+        "yay",
+        "--address",
+        "validator-0",
+        "--node",
+        &validator_one_rpc,
+    ];
+
+    let mut client = run_as!(
+        test,
+        Who::Validator(0),
+        Bin::Client,
+        submit_proposal_vote,
+        Some(15)
+    )?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
+    client.assert_success();
+
+    let submit_proposal_vote_delagator = vec![
+        "vote-proposal",
+        "--proposal-id",
+        "0",
+        "--vote",
+        "nay",
+        "--address",
+        BERTHA,
+        "--node",
+        &validator_one_rpc,
+    ];
+
+    let mut client =
+        run!(test, Bin::Client, submit_proposal_vote_delagator, Some(40))?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
+    client.assert_success();
+
+    // 11. Query the proposal and check the result
+    let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    while epoch.0 <= 25 {
+        sleep(10);
+        epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    }
+
+    let query_proposal = vec![
+        "query-proposal-result",
+        "--proposal-id",
+        "0",
+        "--node",
+        &validator_one_rpc,
+    ];
+
+    let mut client = run!(test, Bin::Client, query_proposal, Some(15))?;
+    client.exp_string("Proposal Id: 0")?;
+    client.exp_string(
+        "passed with 100000.000000 yay votes, 900.000000 nay votes and \
+         0.000000 abstain votes, total voting power: 100900.000000 threshold \
+         was: 67266.66666",
+    )?;
+    client.assert_success();
+
+    // 12. Wait proposal grace and check proposal author funds
+    let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    while epoch.0 < 31 {
+        sleep(10);
+        epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    }
+
+    let query_balance_args = vec![
+        "balance",
+        "--owner",
+        ALBERT,
+        "--token",
+        NAM,
+        "--node",
+        &validator_one_rpc,
+    ];
+
+    let mut client = run!(test, Bin::Client, query_balance_args, Some(30))?;
+    client.exp_string("nam: 200000")?;
+    client.assert_success();
+
+    // 13. Check if governance funds are 0
+    let query_balance_args = vec![
+        "balance",
+        "--owner",
+        GOVERNANCE_ADDRESS,
+        "--token",
+        NAM,
+        "--node",
+        &validator_one_rpc,
+    ];
+
+    let mut client = run!(test, Bin::Client, query_balance_args, Some(30))?;
+    client.exp_string("nam: 0")?;
+    client.assert_success();
+
+    // 13. Check the shielded rewards token info
+    let query_masp_rewards =
+        vec!["masp-reward-tokens", "--node", &validator_one_rpc];
+
+    let mut client = run!(test, Bin::Client, query_masp_rewards, Some(30))?;
+    client.exp_regex(".*Max reward rate: 0.05.*")?;
+    client.assert_success();
 
     Ok(())
 }
