@@ -113,11 +113,11 @@ where
     /// Get a tx hash
     fn get_tx_code_hash(&self) -> Result<Option<Hash>, namada_storage::Error>;
 
-    /// Get the shielded action including the transfer and the masp tx
+    /// Get the masp tx part of the shielded action
     fn get_shielded_action(
         &self,
         tx_data: &Tx,
-    ) -> Result<(Transfer, Transaction), namada_storage::Error> {
+    ) -> Result<Transaction, namada_storage::Error> {
         let signed = tx_data;
         let data = signed.data().ok_or_err_msg("No transaction data")?;
         if let Ok(transfer) = Transfer::try_from_slice(&data) {
@@ -128,14 +128,11 @@ where
                 .get_section(&shielded_hash)
                 .and_then(|x| x.as_ref().masp_tx())
                 .ok_or_err_msg("unable to find shielded section")?;
-            return Ok((transfer, masp_tx));
+            return Ok(masp_tx);
         }
 
         if let Ok(message) = MsgShieldedTransfer::try_from_slice(&data) {
-            return Ok((
-                message.shielded_transfer.transfer,
-                message.shielded_transfer.masp_tx,
-            ));
+            return Ok(message.shielded_transfer.masp_tx);
         }
 
         // Shielded transfer over IBC
@@ -148,7 +145,7 @@ where
         })?;
         get_shielded_transfer(event)
             .into_storage_result()?
-            .map(|shielded| (shielded.transfer, shielded.masp_tx))
+            .map(|shielded| shielded.masp_tx)
             .ok_or_else(|| {
                 namada_storage::Error::new_const(
                     "No shielded transfer in the IBC event",

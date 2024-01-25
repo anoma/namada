@@ -23,9 +23,9 @@ use ripemd::Digest as RipemdDigest;
 use sha2::Digest as Sha2Digest;
 use thiserror::Error;
 use token::storage_key::{
-    balance_key, is_masp_allowed_key, is_masp_key, is_masp_nullifier_key,
-    masp_commitment_anchor_key, masp_commitment_tree_key,
-    masp_convert_anchor_key, masp_nullifier_key, masp_pin_tx_key,
+    balance_key, is_any_token_balance_key, is_masp_allowed_key, is_masp_key,
+    is_masp_nullifier_key, is_masp_tx_pin_key, masp_commitment_anchor_key,
+    masp_commitment_tree_key, masp_convert_anchor_key, masp_nullifier_key,
 };
 use token::Amount;
 
@@ -65,7 +65,7 @@ where
     // Check that the transaction correctly revealed the nullifiers
     fn valid_nullifiers_reveal(
         &self,
-        keys_changed: &[&Key],
+        keys_changed: &BTreeSet<Key>,
         transaction: &Transaction,
     ) -> Result<bool> {
         let mut revealed_nullifiers = HashSet::new();
@@ -232,78 +232,159 @@ where
         Ok(true)
     }
 
-    fn valid_state(
+    fn validate_state_and_get_transfer_data(
         &self,
-        masp_keys_changed: &[&Key],
-        transfer: &token::Transfer,
-        transfer_amount: Amount,
-    ) -> Result<bool> {
+        keys_changed: &BTreeSet<Key>,
+    ) -> Result<TransparentTransferData> {
         // Check that the transaction didn't write unallowed masp keys
+        let masp_keys_changed: Vec<&Key> =
+            keys_changed.iter().filter(|key| is_masp_key(key)).collect();
+
         if masp_keys_changed
             .iter()
             .any(|key| !is_masp_allowed_key(key))
         {
-            return Ok(false);
+            return Err(Error::NativeVpError(native_vp::Error::SimpleMessage(
+                "Found modifications to non-allowed masp keys",
+            )));
         }
 
-        // Check that the declared amount in the transaction matches the actual
-        // change in storage
+        // Validate pin key if found
+        let pin_keys: Vec<_> = masp_keys_changed
+            .iter()
+            .filter(|key| is_masp_tx_pin_key(key))
+            .collect();
+        match pin_keys.len() {
+            0 => (),
+            1 => {
+                match self
+                    .ctx
+                    .read_post::<IndexedTx>(pin_keys.first().unwrap())?
+                {
+                    Some(IndexedTx { height, index })
+                        if height == self.ctx.get_block_height()?
+                            && index == self.ctx.get_tx_index()? =>
+                    {
+                        ()
+                    }
+                    Some(_) => {
+                        return Err(Error::NativeVpError(
+                            native_vp::Error::SimpleMessage(
+                                "Invalid MASP pin key",
+                            ),
+                        ));
+                    }
+                    _ => (),
+                }
+            }
+            _ => {
+                return Err(Error::NativeVpError(
+                    native_vp::Error::SimpleMessage(
+                        "Found more than one pin key",
+                    ),
+                ));
+            }
+        }
+
+        // Verify the changes to balance keys and return the transparent
+        // transfer data Get the token from the balance key of the MASP
+        let balance_addresses: Vec<[&Address; 2]> = keys_changed
+            .iter()
+            .filter_map(is_any_token_balance_key)
+            .collect();
+
+        let masp_balances: Vec<&[&Address; 2]> = balance_addresses
+            .iter()
+            .filter(|addresses| addresses[1] == &Address::Internal(Masp))
+            .collect();
+        let token = match masp_balances.len() {
+            0 => {
+                // No masp balance modification found, assume shielded
+                // transaction and return mock transparent data
+                return Ok(TransparentTransferData {
+                    source: Address::Internal(Masp),
+                    target: Address::Internal(Masp),
+                    token: self.ctx.get_native_token()?,
+                    amount: Amount::zero(),
+                });
+            }
+            1 => masp_balances[0][0].to_owned(),
+            _ => {
+                // Only one transparent balance of MASP can be updated by the
+                // shielding or unshielding transaction
+                return Err(Error::NativeVpError(
+                    native_vp::Error::SimpleMessage(
+                        "More than one MASP transparent balance was modified",
+                    ),
+                ));
+            }
+        };
+
+        let counterparts: Vec<&[&Address; 2]> = balance_addresses
+            .iter()
+            .filter(|addresses| addresses[1] != &Address::Internal(Masp))
+            .collect();
+        // NOTE: since we don't allow more than one transfer per tx in this vp,
+        // there's no need to check the token address in the balance key nor the
+        // change to the actual balance, the multitoken VP will verify these
+        let counterpart = match counterparts.len() {
+            0 => {
+                return Err(Error::NativeVpError(
+                    native_vp::Error::SimpleMessage(
+                        "No transparent transfer counterpart was found, this \
+                         should not happen",
+                    ),
+                ));
+            }
+            1 => counterparts[0][1].to_owned(),
+            _ => {
+                // We don't support a masp transfer and one ore more transparent
+                // transfers in the same transaction
+                return Err(Error::NativeVpError(
+                    native_vp::Error::SimpleMessage(
+                        "More than one non-MASP transparent balance was \
+                         modified",
+                    ),
+                ));
+            }
+        };
+
         let pre_masp_balance: Amount = self
             .ctx
-            .read_pre(&balance_key(&transfer.token, &Address::Internal(Masp)))?
+            .read_pre(&balance_key(&token, &Address::Internal(Masp)))?
             .unwrap_or_default();
         let post_masp_balance: Amount = self
             .ctx
-            .read_post(&balance_key(&transfer.token, &Address::Internal(Masp)))?
+            .read_post(&balance_key(&token, &Address::Internal(Masp)))?
             .unwrap_or_default();
-
-        match (&transfer.source, &transfer.target) {
-            (&Address::Internal(Masp), &Address::Internal(Masp)) => {
-                // For shileded operations the amount must be redacted to 0
-                if post_masp_balance != pre_masp_balance {
-                    return Ok(false);
+        let (amount, source, target) =
+            match pre_masp_balance.cmp(&post_masp_balance) {
+                Ordering::Equal => {
+                    return Err(Error::NativeVpError(
+                        native_vp::Error::SimpleMessage(
+                            "Found a MASP transaction that moves no \
+                             transparent funds",
+                        ),
+                    ));
                 }
-            }
-            (&Address::Internal(Masp), _) => {
-                // Unshielding
-                if pre_masp_balance.checked_sub(post_masp_balance).ok_or_else(
-                    || {
-                        Error::NativeVpError(native_vp::Error::SimpleMessage(
-                            "Underflowed in balance check",
-                        ))
-                    },
-                )? != transfer_amount
-                {
-                    return Ok(false);
-                }
-            }
-            (_, &Address::Internal(Masp)) => {
-                // Shielding
-                if post_masp_balance.checked_sub(pre_masp_balance).ok_or_else(
-                    || {
-                        Error::NativeVpError(native_vp::Error::SimpleMessage(
-                            "Underflowed in balance check",
-                        ))
-                    },
-                )? != transfer_amount
-                {
-                    return Ok(false);
-                }
-            }
-            _ => return Ok(false),
-        }
+                Ordering::Less => (
+                    post_masp_balance - pre_masp_balance,
+                    counterpart,
+                    Address::Internal(Masp),
+                ),
+                Ordering::Greater => (
+                    pre_masp_balance - post_masp_balance,
+                    Address::Internal(Masp),
+                    counterpart,
+                ),
+            };
 
-        // Validate pin key
-        if let Some(ref key) = transfer.key {
-            match self.ctx.read_post::<IndexedTx>(&masp_pin_tx_key(key))? {
-                Some(IndexedTx { height, index })
-                    if height == self.ctx.get_block_height()?
-                        && index == self.ctx.get_tx_index()? => {}
-                _ => return Ok(false),
-            }
-        }
-
-        Ok(true)
+        Ok(TransparentTransferData {
+            source,
+            target,
+            token,
+            amount,
+        })
     }
 }
 
@@ -319,6 +400,13 @@ fn unepoched_tokens(
         unepoched_tokens.insert(asset_type, (token.clone(), denom, digit));
     }
     Ok(unepoched_tokens)
+}
+
+struct TransparentTransferData {
+    source: Address,
+    target: Address,
+    token: Address,
+    amount: Amount,
 }
 
 impl<'a, DB, H, CA> NativeVp for MaspVp<'a, DB, H, CA>
@@ -337,7 +425,7 @@ where
     ) -> Result<bool> {
         let epoch = self.ctx.get_block_epoch()?;
         let conversion_state = self.ctx.storage.get_conversion_state();
-        let (transfer, shielded_tx) = self.ctx.get_shielded_action(tx_data)?;
+        let shielded_tx = self.ctx.get_shielded_action(tx_data)?;
 
         if u64::from(self.ctx.get_block_height()?)
             > u64::from(shielded_tx.expiry_height())
@@ -346,30 +434,18 @@ where
             return Ok(false);
         }
 
-        let denom = read_denom(&self.ctx.pre(), &transfer.token)?
-            .ok_or_err_msg(
-                "No denomination found in storage for the given token",
-            )?;
-
-        let transfer_amount = crate::token::denom_to_amount(
-            transfer.amount,
-            &transfer.token,
-            &self.ctx.pre(),
-        )?;
         let mut transparent_tx_pool = I128Sum::zero();
         // The Sapling value balance adds to the transparent tx pool
         transparent_tx_pool += shielded_tx.sapling_value_balance();
 
-        // Check the validity of the keys
-        let masp_keys_changed: Vec<&Key> =
-            keys_changed.iter().filter(|key| is_masp_key(key)).collect();
-        if !self.valid_state(
-            masp_keys_changed.as_slice(),
-            &transfer,
-            transfer_amount,
-        )? {
-            return Ok(false);
-        }
+        // Check the validity of the keys and get the transfer data
+        let transfer =
+            self.validate_state_and_get_transfer_data(keys_changed)?;
+
+        let denom = read_denom(&self.ctx.pre(), &transfer.token)?
+            .ok_or_err_msg(
+                "No denomination found in storage for the given token",
+            )?;
 
         if transfer.source != Address::Internal(Masp) {
             // No shielded spends nor shielded converts are allowed
@@ -468,7 +544,7 @@ where
                 };
             }
             // Satisfies 1.
-            if total_in_values != transfer_amount {
+            if total_in_values != transfer.amount {
                 return Ok(false);
             }
         } else {
@@ -496,10 +572,7 @@ where
 
             if !(self.valid_spend_descriptions_anchor(&shielded_tx)?
                 && self.valid_convert_descriptions_anchor(&shielded_tx)?
-                && self.valid_nullifiers_reveal(
-                    &masp_keys_changed,
-                    &shielded_tx,
-                )?)
+                && self.valid_nullifiers_reveal(keys_changed, &shielded_tx)?)
             {
                 return Ok(false);
             }
@@ -580,7 +653,7 @@ where
                 };
             }
             // Satisfies 1.
-            if total_out_values != transfer_amount {
+            if total_out_values != transfer.amount {
                 return Ok(false);
             }
         } else {
