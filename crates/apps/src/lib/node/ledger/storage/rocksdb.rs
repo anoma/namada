@@ -67,12 +67,13 @@ use namada::types::time::DateTimeUtc;
 use namada::types::token::ConversionState;
 use namada::types::{ethereum_events, ethereum_structs};
 use rayon::prelude::*;
-use rocksdb::{
-    BlockBasedOptions, ColumnFamily, ColumnFamilyDescriptor, Direction,
-    FlushOptions, IteratorMode, Options, ReadOptions, WriteBatch,
-};
 
 use crate::config::utils::num_of_threads;
+use crate::rocksdb::{
+    BlockBasedOptions, ColumnFamily, ColumnFamilyDescriptor, DBCompactionStyle,
+    DBCompressionType, Direction, FlushOptions, IteratorMode, Options,
+    ReadOptions, WriteBatch,
+};
 
 // TODO the DB schema will probably need some kind of versioning
 
@@ -92,7 +93,7 @@ const NEW_DIFF_PREFIX: &str = "new";
 
 /// RocksDB handle
 #[derive(Debug)]
-pub struct RocksDB(rocksdb::DB);
+pub struct RocksDB(crate::rocksdb::DB);
 
 /// DB Handle for batch writes.
 #[derive(Default)]
@@ -101,7 +102,7 @@ pub struct RocksDBWriteBatch(WriteBatch);
 /// Open RocksDB for the DB
 pub fn open(
     path: impl AsRef<Path>,
-    cache: Option<&rocksdb::Cache>,
+    cache: Option<&crate::rocksdb::Cache>,
 ) -> Result<RocksDB> {
     let logical_cores = num_cpus::get();
     let compaction_threads = num_of_threads(
@@ -144,19 +145,19 @@ pub fn open(
 
     // for subspace (read/update-intensive)
     let mut subspace_cf_opts = Options::default();
-    subspace_cf_opts.set_compression_type(rocksdb::DBCompressionType::Zstd);
+    subspace_cf_opts.set_compression_type(DBCompressionType::Zstd);
     subspace_cf_opts.set_compression_options(0, 0, 0, 1024 * 1024);
     // ! recommended initial setup https://github.com/facebook/rocksdb/wiki/Setup-Options-and-Basic-Tuning#other-general-options
     subspace_cf_opts.set_level_compaction_dynamic_level_bytes(true);
-    subspace_cf_opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
+    subspace_cf_opts.set_compaction_style(DBCompactionStyle::Level);
     subspace_cf_opts.set_block_based_table_factory(&table_opts);
     cfs.push(ColumnFamilyDescriptor::new(SUBSPACE_CF, subspace_cf_opts));
 
     // for diffs (insert-intensive)
     let mut diffs_cf_opts = Options::default();
-    diffs_cf_opts.set_compression_type(rocksdb::DBCompressionType::Zstd);
+    diffs_cf_opts.set_compression_type(DBCompressionType::Zstd);
     diffs_cf_opts.set_compression_options(0, 0, 0, 1024 * 1024);
-    diffs_cf_opts.set_compaction_style(rocksdb::DBCompactionStyle::Universal);
+    diffs_cf_opts.set_compaction_style(DBCompactionStyle::Universal);
     diffs_cf_opts.set_block_based_table_factory(&table_opts);
     cfs.push(ColumnFamilyDescriptor::new(DIFFS_CF, diffs_cf_opts));
 
@@ -164,34 +165,32 @@ pub fn open(
     let mut state_cf_opts = Options::default();
     // No compression since the size of the state is small
     state_cf_opts.set_level_compaction_dynamic_level_bytes(true);
-    state_cf_opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
+    state_cf_opts.set_compaction_style(DBCompactionStyle::Level);
     state_cf_opts.set_block_based_table_factory(&table_opts);
     cfs.push(ColumnFamilyDescriptor::new(STATE_CF, state_cf_opts));
 
     // for blocks (insert-intensive)
     let mut block_cf_opts = Options::default();
-    block_cf_opts.set_compression_type(rocksdb::DBCompressionType::Zstd);
+    block_cf_opts.set_compression_type(DBCompressionType::Zstd);
     block_cf_opts.set_compression_options(0, 0, 0, 1024 * 1024);
-    block_cf_opts.set_compaction_style(rocksdb::DBCompactionStyle::Universal);
+    block_cf_opts.set_compaction_style(DBCompactionStyle::Universal);
     block_cf_opts.set_block_based_table_factory(&table_opts);
     cfs.push(ColumnFamilyDescriptor::new(BLOCK_CF, block_cf_opts));
 
     // for replay protection (read/insert-intensive)
     let mut replay_protection_cf_opts = Options::default();
-    replay_protection_cf_opts
-        .set_compression_type(rocksdb::DBCompressionType::Zstd);
+    replay_protection_cf_opts.set_compression_type(DBCompressionType::Zstd);
     replay_protection_cf_opts.set_compression_options(0, 0, 0, 1024 * 1024);
     replay_protection_cf_opts.set_level_compaction_dynamic_level_bytes(true);
     // Prioritize minimizing read amplification
-    replay_protection_cf_opts
-        .set_compaction_style(rocksdb::DBCompactionStyle::Level);
+    replay_protection_cf_opts.set_compaction_style(DBCompactionStyle::Level);
     replay_protection_cf_opts.set_block_based_table_factory(&table_opts);
     cfs.push(ColumnFamilyDescriptor::new(
         REPLAY_PROTECTION_CF,
         replay_protection_cf_opts,
     ));
 
-    rocksdb::DB::open_cf_descriptors(&db_opts, path, cfs)
+    crate::rocksdb::DB::open_cf_descriptors(&db_opts, path, cfs)
         .map(RocksDB)
         .map_err(|e| Error::DBError(e.into_string()))
 }
@@ -637,7 +636,7 @@ impl RocksDB {
 }
 
 impl DB for RocksDB {
-    type Cache = rocksdb::Cache;
+    type Cache = crate::rocksdb::Cache;
     type WriteBatch = RocksDBWriteBatch;
 
     fn open(
@@ -1681,7 +1680,7 @@ fn iter_prefix<'a>(
 
 #[derive(Debug)]
 pub struct PersistentPrefixIterator<'a>(
-    PrefixIterator<rocksdb::DBIterator<'a>>,
+    PrefixIterator<crate::rocksdb::DBIterator<'a>>,
 );
 
 impl<'a> Iterator for PersistentPrefixIterator<'a> {
@@ -1756,7 +1755,7 @@ fn unknown_key_error(key: &str) -> Result<()> {
 
 /// Try to increase NOFILE limit and set the `max_open_files` limit to it in
 /// RocksDB options.
-fn set_max_open_files(cf_opts: &mut rocksdb::Options) {
+fn set_max_open_files(cf_opts: &mut crate::rocksdb::Options) {
     #[cfg(unix)]
     imp::set_max_open_files(cf_opts);
     // Nothing to do on non-unix
@@ -1772,7 +1771,7 @@ mod imp {
 
     const DEFAULT_NOFILE_LIMIT: Rlim = Rlim::from_raw(16384);
 
-    pub fn set_max_open_files(cf_opts: &mut rocksdb::Options) {
+    pub fn set_max_open_files(cf_opts: &mut crate::rocksdb::Options) {
         let max_open_files = match increase_nofile_limit() {
             Ok(max_open_files) => Some(max_open_files),
             Err(err) => {
