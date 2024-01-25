@@ -287,8 +287,6 @@ where
     S: StorageRead + StorageWrite,
 {
     let key = storage::get_max_signatures_per_transaction_key();
-    // Using `fn write_bytes` here, because implicit_vp doesn't need to be
-    // encoded, it's bytes already.
     storage.write(&key, value)
 }
 

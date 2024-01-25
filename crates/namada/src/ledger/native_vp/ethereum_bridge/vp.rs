@@ -219,10 +219,9 @@ mod tests {
             &Address::decode(ARBITRARY_OWNER_A_ADDRESS).expect("Test failed"),
         );
         wl_storage
-            .write_bytes(
+            .write(
                 &balance_key,
-                Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE)
-                    .serialize_to_vec(),
+                Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE),
             )
             .expect("Test failed");
 
