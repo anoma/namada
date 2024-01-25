@@ -2710,17 +2710,17 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
         .await
         .map_err(|err| TxSubmitError::MaspError(err.to_string()))?;
 
-    let mut transfer = token::Transfer {
-        source: source.clone(),
-        target: MASP,
-        token: token.clone(),
-        amount: validated_amount,
-        key,
-        shielded: None,
-    };
     if let Some(shielded_transfer) = shielded_transfer {
-        transfer.shielded =
-            Some(Section::MaspTx(shielded_transfer.masp_tx.clone()).get_hash());
+        let transfer = token::Transfer {
+            source: source.clone(),
+            target: MASP,
+            token: token.clone(),
+            amount: validated_amount,
+            key,
+            shielded: Some(
+                Section::MaspTx(shielded_transfer.masp_tx.clone()).get_hash(),
+            ),
+        };
         Ok(Some(IbcShieldedTransfer {
             transfer,
             masp_tx: shielded_transfer.masp_tx,
