@@ -153,6 +153,7 @@ impl Amount {
 
     /// Checked addition. Returns `None` on overflow or if
     /// the amount exceed [`uint::MAX_VALUE`]
+    #[must_use]
     pub fn checked_add(&self, amount: Amount) -> Option<Self> {
         self.raw.checked_add(amount.raw).and_then(|result| {
             if result <= uint::MAX_VALUE {
@@ -165,6 +166,7 @@ impl Amount {
 
     /// Checked addition. Returns `None` on overflow or if
     /// the amount exceed [`uint::MAX_SIGNED_VALUE`]
+    #[must_use]
     pub fn checked_signed_add(&self, amount: Amount) -> Option<Self> {
         self.raw.checked_add(amount.raw).and_then(|result| {
             if result <= uint::MAX_SIGNED_VALUE {
@@ -189,6 +191,7 @@ impl Amount {
     }
 
     /// Checked division. Returns `None` on underflow.
+    #[must_use]
     pub fn checked_div(&self, amount: Amount) -> Option<Self> {
         self.raw
             .checked_div(amount.raw)
@@ -196,6 +199,7 @@ impl Amount {
     }
 
     /// Checked multiplication. Returns `None` on overflow.
+    #[must_use]
     pub fn checked_mul(&self, amount: Amount) -> Option<Self> {
         self.raw
             .checked_mul(amount.raw)
