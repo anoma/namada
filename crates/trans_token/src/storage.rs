@@ -230,14 +230,14 @@ pub fn denom_to_amount(
 #[cfg(test)]
 mod testing {
     use namada_core::types::{address, token};
-    use namada_state::testing::TestWlStorage;
+    use namada_storage::testing::TestStorage;
 
     use super::{burn_tokens, credit_tokens, read_balance, read_total_supply};
 
     #[test]
     fn test_burn_native_tokens() {
-        let mut storage = TestWlStorage::default();
-        let native_token = storage.storage.native_token.clone();
+        let mut storage = TestStorage::default();
+        let native_token = address::nam();
 
         // Get some addresses
         let addr1 = address::testing::gen_implicit_address();

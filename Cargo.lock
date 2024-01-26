@@ -4753,7 +4753,6 @@ name = "namada_trans_token"
 version = "0.30.1"
 dependencies = [
  "namada_core",
- "namada_state",
  "namada_storage",
 ]
 
