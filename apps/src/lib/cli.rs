@@ -33,11 +33,11 @@ const WALLET_CMD: &str = "wallet";
 const RELAYER_CMD: &str = "relayer";
 
 pub mod cmds {
-
     use super::utils::*;
     use super::{
         args, ArgMatches, CLIENT_CMD, NODE_CMD, RELAYER_CMD, WALLET_CMD,
     };
+    use crate::cli_utils::FormatHelp;
 
     /// Commands for `namada` binary.
     #[allow(clippy::large_enum_variant)]
@@ -588,7 +588,8 @@ pub mod cmds {
                      alias.\nIn the shielded setting, generates a new \
                      spending key with a given alias.\nIn both settings, by \
                      default, an HD-key with a default derivation path is \
-                     generated, with a random mnemonic code.",
+                     generated, with a random mnemonic code."
+                        .wrap_lines(),
                 )
                 .add_args::<args::KeyGen>()
         }
@@ -613,7 +614,8 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about(
                     "Derive transparent / shielded key from the mnemonic code \
-                     or a seed stored on the hardware wallet device.",
+                     or a seed stored on the hardware wallet device."
+                        .wrap_lines(),
                 )
                 .long_about(
                     "In the transparent setting, derives a keypair from the \
@@ -622,7 +624,8 @@ pub mod cmds {
                      keypair and the address with the given alias.\nIn the \
                      shielded setting, derives a spending key.\nA hardware \
                      wallet can be used, in which case the private key is not \
-                     derivable.",
+                     derivable."
+                        .wrap_lines(),
                 )
                 .add_args::<args::KeyDerive>()
         }
@@ -647,7 +650,8 @@ pub mod cmds {
                 .long_about(
                     "In the transparent setting, list known keypairs and \
                      addresses.\nIn the shielded setting, list known spending \
-                     / viewing keys and payment addresses.",
+                     / viewing keys and payment addresses."
+                        .wrap_lines(),
                 )
                 .add_args::<args::KeyAddressList>()
         }
@@ -675,7 +679,8 @@ pub mod cmds {
                      hash. Looks up an alias of the given address.\nIn the \
                      shielded setting, searches for a spending / viewing key \
                      and payment address by a given alias. Looks up an alias \
-                     of the given payment address.",
+                     of the given payment address."
+                        .wrap_lines(),
                 )
                 .add_args::<args::KeyAddressFind>()
         }
@@ -929,7 +934,8 @@ pub mod cmds {
                 "Roll Namada state back to the previous height. This command \
                  does not create a backup of neither the Namada nor the \
                  Tendermint state before execution: for extra safety, it is \
-                 recommended to make a backup in advance.",
+                 recommended to make a backup in advance."
+                    .wrap_lines(),
             )
         }
     }
@@ -1268,7 +1274,8 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about(
                     "Send a signed transaction to create an established \
-                     account and then become a validator.",
+                     account and then become a validator."
+                        .wrap_lines(),
                 )
                 .add_args::<args::TxInitValidator<args::CliTypes>>()
         }
@@ -1786,7 +1793,8 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about(
                     "Find a PoS validator and its consensus key by its native \
-                     address or Tendermint address.",
+                     address or Tendermint address."
+                        .wrap_lines(),
                 )
                 .add_args::<args::QueryFindValidator<args::CliTypes>>()
         }
@@ -2002,7 +2010,8 @@ pub mod cmds {
                      needed and submit it automatically. This will write the \
                      PK into the account's storage so that it can be used for \
                      signature verification on transactions authorized by \
-                     this account.",
+                     this account."
+                        .wrap_lines(),
                 )
                 .add_args::<args::RevealPk<args::CliTypes>>()
         }
@@ -2299,7 +2308,8 @@ pub mod cmds {
                     "Initialize genesis validator's address, consensus key \
                      and validator account key and use it in the ledger's \
                      node. Appends validator creation and self-bond txs to a \
-                     .toml file containing an established account tx.",
+                     .toml file containing an established account tx."
+                        .wrap_lines(),
                 )
                 .add_args::<args::InitGenesisValidator>()
         }
@@ -2464,7 +2474,8 @@ pub mod cmds {
                 .about(
                     "Functionality for interacting with the Ethereum bridge \
                      pool. This pool holds transfers waiting to be relayed to \
-                     Ethereum.",
+                     Ethereum."
+                        .wrap_lines(),
                 )
                 .subcommand_required(true)
                 .subcommand(ConstructProof::def().display_order(1))
@@ -2669,7 +2680,8 @@ pub mod cmds {
                 .about(
                     "Validator set queries, that return data in a format to \
                      be consumed by the Namada Ethereum bridge smart \
-                     contracts.",
+                     contracts."
+                        .wrap_lines(),
                 )
                 .subcommand_required(true)
                 .subcommand(BridgeValidatorSet::def().display_order(1))
@@ -2742,7 +2754,8 @@ pub mod cmds {
                 .about(
                     "Query an Ethereum ABI encoding of a proof of the \
                      consensus validator set in Namada, at the requested \
-                     epoch, or the next one, if no epoch is provided.",
+                     epoch, or the next one, if no epoch is provided."
+                        .wrap_lines(),
                 )
                 .add_args::<args::ValidatorSetProof<args::CliTypes>>()
         }
@@ -2811,7 +2824,8 @@ pub mod cmds {
                 .about(
                     "Print the default base directory that would be used if \
                      --base-dir or NAMADA_BASE_DIR were not used to set the \
-                     base directory.",
+                     base directory."
+                        .wrap_lines(),
                 )
                 .add_args::<args::DefaultBaseDir>()
         }
@@ -2855,6 +2869,7 @@ pub mod args {
     use super::context::*;
     use super::utils::*;
     use super::{ArgGroup, ArgMatches};
+    use crate::cli_utils::FormatHelp;
     use crate::client::utils::PRE_GENESIS_DIR;
     use crate::config::genesis::GenesisAddress;
     use crate::config::{self, Action, ActionAtHeight};
@@ -2981,8 +2996,8 @@ pub mod args {
     pub const IBC_TRANSFER_MEMO_PATH: ArgOpt<PathBuf> = arg_opt("memo-path");
     pub const INPUT_OPT: ArgOpt<PathBuf> = arg_opt("input");
     pub const LEDGER_ADDRESS_ABOUT: &str =
-        "Address of a ledger node as \"{scheme}://{host}:{port}\". If the \
-         scheme is not supplied, it is assumed to be TCP.";
+        "Address of a ledger node as \"{scheme}://{host}:{port}\". If \
+         the\nscheme is not supplied, it is assumed to be TCP.";
     pub const LEDGER_ADDRESS_DEFAULT: ArgDefault<TendermintAddress> =
         LEDGER_ADDRESS.default(DefaultFn(|| {
             let raw = "127.0.0.1:26657";
@@ -3128,22 +3143,29 @@ pub mod args {
         /// command.
         pub fn def(app: App) -> App {
             app.arg(CHAIN_ID_OPT.def().help("The chain ID."))
-                .arg(BASE_DIR.def().help(
-                    "The base directory is where the nodes, client and wallet \
-                     configuration and state is stored. This value can also \
-                     be set via `NAMADA_BASE_DIR` environment variable, but \
-                     the argument takes precedence, if specified. Defaults to \
-                     `$XDG_DATA_HOME/namada` (`$HOME/.local/share/namada` \
-                     where `XDG_DATA_HOME` is unset) on \
-                     Unix,`$HOME/Library/Application Support/Namada` on \
-                     Mac,and `%AppData%\\Namada` on Windows.",
-                ))
-                .arg(WASM_DIR.def().help(
-                    "Directory with built WASM validity predicates, \
-                     transactions. This value can also be set via \
-                     `NAMADA_WASM_DIR` environment variable, but the argument \
-                     takes precedence, if specified.",
-                ))
+                .arg(
+                    BASE_DIR.def().help(
+                        "The base directory is where the nodes, client and \
+                         wallet configuration and state is stored. This value \
+                         can also be set via `NAMADA_BASE_DIR` environment \
+                         variable, but the argument takes precedence, if \
+                         specified. Defaults to `$XDG_DATA_HOME/namada` \
+                         (`$HOME/.local/share/namada` where `XDG_DATA_HOME` \
+                         is unset) on Unix,`$HOME/Library/Application \
+                         Support/Namada` on Mac,and `%AppData%\\Namada` on \
+                         Windows."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    WASM_DIR.def().help(
+                        "Directory with built WASM validity predicates, \
+                         transactions. This value can also be set via \
+                         `NAMADA_WASM_DIR` environment variable, but the \
+                         argument takes precedence, if specified."
+                            .wrap_lines(),
+                    ),
+                )
                 .arg(
                     PRE_GENESIS
                         .def()
@@ -3164,14 +3186,18 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(NAMADA_START_TIME.def().help(
-                "The start time of the ledger. Accepts a relaxed form of \
-                 RFC3339. A space or a 'T' are accepted as the separator \
-                 between the date and time components. Additional spaces are \
-                 allowed between each component.\nAll of these examples are \
-                 equivalent:\n2023-01-20T12:12:12Z\n2023-01-20 \
-                 12:12:12Z\n2023-  01-20T12:  12:12Z",
-            ))
+            app.arg(
+                NAMADA_START_TIME.def().help(
+                    "The start time of the ledger. Accepts a relaxed form of \
+                     RFC3339. A space or a 'T' are accepted as the separator \
+                     between the date and time components. Additional spaces \
+                     are allowed between each component.\nAll of these \
+                     examples are \
+                     equivalent:\n2023-01-20T12:12:12Z\n2023-01-20 \
+                     12:12:12Z\n2023-  01-20T12:  12:12Z"
+                        .wrap_lines(),
+                ),
+            )
         }
     }
 
@@ -3245,11 +3271,14 @@ pub mod args {
                 "The block height to dump. Defaults to latest committed
                 block.",
             ))
-            .arg(OUT_FILE_PATH_OPT.def().help(
-                "Path for the output file (omitting file extension). Defaults \
-                 to \"db_dump.{block_height}.toml\" in the current working \
-                 directory.",
-            ))
+            .arg(
+                OUT_FILE_PATH_OPT.def().help(
+                    "Path for the output file (omitting file extension). \
+                     Defaults to \"db_dump.{block_height}.toml\" in the \
+                     current working directory."
+                        .wrap_lines(),
+                ),
+            )
             .arg(
                 HISTORIC
                     .def()
@@ -3392,22 +3421,35 @@ pub mod args {
                         "The amount of tokens being sent across the bridge.",
                     ),
                 )
-                .arg(BRIDGE_POOL_GAS_AMOUNT.def().help(
-                    "The amount of gas you wish to pay to have this transfer \
-                     relayed to Ethereum.",
-                ))
-                .arg(BRIDGE_POOL_GAS_PAYER.def().help(
-                    "The Namada address of the account paying the gas. By \
-                     default, it is the same as the source.",
-                ))
-                .arg(BRIDGE_POOL_GAS_TOKEN.def().help(
-                    "The token for paying the Bridge pool gas fees. Defaults \
-                     to NAM.",
-                ))
-                .arg(NUT.def().help(
-                    "Add Non Usable Tokens (NUTs) to the Bridge pool. These \
-                     are usually obtained from invalid transfers to Namada.",
-                ))
+                .arg(
+                    BRIDGE_POOL_GAS_AMOUNT.def().help(
+                        "The amount of gas you wish to pay to have this \
+                         transfer relayed to Ethereum."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    BRIDGE_POOL_GAS_PAYER.def().help(
+                        "The Namada address of the account paying the gas. By \
+                         default, it is the same as the source."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    BRIDGE_POOL_GAS_TOKEN.def().help(
+                        "The token for paying the Bridge pool gas fees. \
+                         Defaults to NAM."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    NUT.def().help(
+                        "Add Non Usable Tokens (NUTs) to the Bridge pool. \
+                         These are usually obtained from invalid transfers to \
+                         Namada."
+                            .wrap_lines(),
+                    ),
+                )
         }
     }
 
@@ -3469,17 +3511,24 @@ pub mod args {
                     "The maximum amount Ethereum gas that can be spent during \
                      the relay call.",
                 ))
-                .arg(ETH_GAS.def().help(
-                    "Under ideal conditions, relaying transfers will yield a \
-                     net profit. If that is not possible, setting this \
-                     optional value will result in a batch transfer that \
-                     costs as close to the given value as possible without \
-                     exceeding it.",
-                ))
-                .arg(CONVERSION_TABLE.def().help(
-                    "Path to a JSON object containing a mapping between token \
-                     aliases (or addresses) and their conversion rates in gwei",
-                ))
+                .arg(
+                    ETH_GAS.def().help(
+                        "Under ideal conditions, relaying transfers will \
+                         yield a net profit. If that is not possible, setting \
+                         this optional value will result in a batch transfer \
+                         that costs as close to the given value as possible \
+                         without exceeding it."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    CONVERSION_TABLE.def().help(
+                        "Path to a JSON object containing a mapping between \
+                         token aliases (or addresses) and their conversion \
+                         rates in gwei"
+                            .wrap_lines(),
+                    ),
+                )
         }
     }
 
@@ -3588,10 +3637,14 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>()
-                .arg(SAFE_MODE.def().help(
-                    "Safe mode overrides keyboard interrupt signals, to \
-                     ensure Ethereum transfers aren't canceled midway through.",
-                ))
+                .arg(
+                    SAFE_MODE.def().help(
+                        "Safe mode overrides keyboard interrupt signals, to \
+                         ensure Ethereum transfers aren't canceled midway \
+                         through."
+                            .wrap_lines(),
+                    ),
+                )
                 .arg(HASH_LIST.def().help(
                     "Whitespace separated Keccak hash list of transfers in \
                      the Bridge pool.",
@@ -3619,10 +3672,13 @@ pub mod args {
                         .def()
                         .help("The number of block confirmations on Ethereum."),
                 )
-                .arg(ETH_SYNC.def().help(
-                    "Synchronize with the network, or exit immediately, if \
-                     the Ethereum node has fallen behind.",
-                ))
+                .arg(
+                    ETH_SYNC.def().help(
+                        "Synchronize with the network, or exit immediately, \
+                         if the Ethereum node has fallen behind."
+                            .wrap_lines(),
+                    ),
+                )
         }
     }
 
@@ -3760,26 +3816,39 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>()
-                .arg(SAFE_MODE.def().help(
-                    "Safe mode overrides keyboard interrupt signals, to \
-                     ensure Ethereum transfers aren't canceled midway through.",
-                ))
-                .arg(DAEMON_MODE.def().help(
-                    "Run in daemon mode, which will continuously perform \
-                     validator set updates.",
-                ))
-                .arg(DAEMON_MODE_RETRY_DUR.def().help(
-                    "The amount of time to sleep between failed daemon mode \
-                     relays.",
-                ))
+                .arg(
+                    SAFE_MODE.def().help(
+                        "Safe mode overrides keyboard interrupt signals, to \
+                         ensure Ethereum transfers aren't canceled midway \
+                         through."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    DAEMON_MODE.def().help(
+                        "Run in daemon mode, which will continuously perform \
+                         validator set updates."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    DAEMON_MODE_RETRY_DUR.def().help(
+                        "The amount of time to sleep between failed daemon \
+                         mode relays."
+                            .wrap_lines(),
+                    ),
+                )
                 .arg(DAEMON_MODE_SUCCESS_DUR.def().help(
                     "The amount of time to sleep between successful daemon \
                      mode relays.",
                 ))
-                .arg(ETH_ADDRESS_OPT.def().help(
-                    "The address of the Ethereum wallet to pay the gas fees. \
-                     If unset, the default wallet is used.",
-                ))
+                .arg(
+                    ETH_ADDRESS_OPT.def().help(
+                        "The address of the Ethereum wallet to pay the gas \
+                         fees. If unset, the default wallet is used."
+                            .wrap_lines(),
+                    ),
+                )
                 .arg(
                     EPOCH
                         .def()
@@ -3799,10 +3868,13 @@ pub mod args {
                         .def()
                         .help("The number of block confirmations on Ethereum."),
                 )
-                .arg(ETH_SYNC.def().help(
-                    "Synchronize with the network, or exit immediately, if \
-                     the Ethereum node has fallen behind.",
-                ))
+                .arg(
+                    ETH_SYNC.def().help(
+                        "Synchronize with the network, or exit immediately, \
+                         if the Ethereum node has fallen behind."
+                            .wrap_lines(),
+                    ),
+                )
         }
     }
 
@@ -3853,7 +3925,8 @@ pub mod args {
                         .help(
                             "The data file at this path containing arbitrary \
                              bytes will be passed to the transaction code \
-                             when it's executed.",
+                             when it's executed."
+                                .wrap_lines(),
                         )
                         .requires(CODE_PATH_OPT.name)
                         .conflicts_with(TX_PATH_OPT.name),
@@ -3911,14 +3984,20 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
-                .arg(TRANSFER_SOURCE.def().help(
-                    "The source account address. The source's key may be used \
-                     to produce the signature.",
-                ))
-                .arg(TRANSFER_TARGET.def().help(
-                    "The target account address. The target's key may be used \
-                     to produce the signature.",
-                ))
+                .arg(
+                    TRANSFER_SOURCE.def().help(
+                        "The source account address. The source's key may be \
+                         used to produce the signature."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    TRANSFER_TARGET.def().help(
+                        "The target account address. The target's key may be \
+                         used to produce the signature."
+                            .wrap_lines(),
+                    ),
+                )
                 .arg(TOKEN.def().help("The transfer token."))
                 .arg(AMOUNT.def().help("The amount to transfer in decimal."))
         }
@@ -3977,10 +4056,13 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
-                .arg(SOURCE.def().help(
-                    "The source account address. The source's key is used to \
-                     produce the signature.",
-                ))
+                .arg(
+                    SOURCE.def().help(
+                        "The source account address. The source's key is used \
+                         to produce the signature."
+                            .wrap_lines(),
+                    ),
+                )
                 .arg(RECEIVER.def().help(
                     "The receiver address on the destination chain as string.",
                 ))
@@ -4040,20 +4122,29 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
-                .arg(CODE_PATH_OPT.def().help(
-                    "The path to the validity predicate WASM code to be used \
-                     for the new account. Uses the default user VP if none \
-                     specified.",
-                ))
-                .arg(PUBLIC_KEYS.def().help(
-                    "A list public keys to be associated with the new account \
-                     in hexadecimal encoding.",
-                ))
-                .arg(THRESHOLD.def().help(
-                    "The minimum number of signature to be provided for \
-                     authorization. Must be less then the maximum number of \
-                     public keys provided.",
-                ))
+                .arg(
+                    CODE_PATH_OPT.def().help(
+                        "The path to the validity predicate WASM code to be \
+                         used for the new account. Uses the default user VP \
+                         if none specified."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    PUBLIC_KEYS.def().help(
+                        "A list public keys to be associated with the new \
+                         account in hexadecimal encoding."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    THRESHOLD.def().help(
+                        "The minimum number of signature to be provided for \
+                         authorization. Must be less then the maximum number \
+                         of public keys provided."
+                            .wrap_lines(),
+                    ),
+                )
         }
     }
 
@@ -4126,50 +4217,74 @@ pub mod args {
                 .arg(ADDRESS.def().help(
                     "Address of an account that will become a validator.",
                 ))
-                .arg(SCHEME.def().help(
-                    "The key scheme/type used for the validator keys. \
-                     Currently supports ed25519 and secp256k1.",
-                ))
-                .arg(VALIDATOR_CONSENSUS_KEY.def().help(
-                    "A consensus key for the validator account. A new one \
-                     will be generated if none given. Note that this must be \
-                     ed25519.",
-                ))
-                .arg(VALIDATOR_ETH_COLD_KEY.def().help(
-                    "An Eth cold key for the validator account. A new one \
-                     will be generated if none given. Note that this must be \
-                     secp256k1.",
-                ))
-                .arg(VALIDATOR_ETH_HOT_KEY.def().help(
-                    "An Eth hot key for the validator account. A new one will \
-                     be generated if none given. Note that this must be \
-                     secp256k1.",
-                ))
-                .arg(PROTOCOL_KEY.def().help(
-                    "A public key for signing protocol transactions. A new \
-                     one will be generated if none given.",
-                ))
-                .arg(COMMISSION_RATE.def().help(
-                    "The commission rate charged by the validator for \
-                     delegation rewards. Expressed as a decimal between 0 and \
-                     1. This is a required parameter.",
-                ))
-                .arg(MAX_COMMISSION_RATE_CHANGE.def().help(
-                    "The maximum change per epoch in the commission rate \
-                     charged by the validator for delegation rewards. \
-                     Expressed as a decimal between 0 and 1. This is a \
-                     required parameter.",
-                ))
+                .arg(
+                    SCHEME.def().help(
+                        "The key scheme/type used for the validator keys. \
+                         Currently supports ed25519 and secp256k1."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    VALIDATOR_CONSENSUS_KEY.def().help(
+                        "A consensus key for the validator account. A new one \
+                         will be generated if none given. Note that this must \
+                         be ed25519."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    VALIDATOR_ETH_COLD_KEY.def().help(
+                        "An Eth cold key for the validator account. A new one \
+                         will be generated if none given. Note that this must \
+                         be secp256k1."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    VALIDATOR_ETH_HOT_KEY.def().help(
+                        "An Eth hot key for the validator account. A new one \
+                         will be generated if none given. Note that this must \
+                         be secp256k1."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    PROTOCOL_KEY.def().help(
+                        "A public key for signing protocol transactions. A \
+                         new one will be generated if none given."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    COMMISSION_RATE.def().help(
+                        "The commission rate charged by the validator for \
+                         delegation rewards. Expressed as a decimal between 0 \
+                         and 1. This is a required parameter."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    MAX_COMMISSION_RATE_CHANGE.def().help(
+                        "The maximum change per epoch in the commission rate \
+                         charged by the validator for delegation rewards. \
+                         Expressed as a decimal between 0 and 1. This is a \
+                         required parameter."
+                            .wrap_lines(),
+                    ),
+                )
                 .arg(EMAIL.def().help("The validator's email."))
                 .arg(DESCRIPTION_OPT.def().help("The validator's description."))
                 .arg(WEBSITE_OPT.def().help("The validator's website."))
                 .arg(DISCORD_OPT.def().help("The validator's discord handle."))
                 .arg(AVATAR_OPT.def().help("The validator's avatar."))
-                .arg(VALIDATOR_CODE_PATH.def().help(
-                    "The path to the validity predicate WASM code to be used \
-                     for the validator account. Uses the default validator VP \
-                     if none specified.",
-                ))
+                .arg(
+                    VALIDATOR_CODE_PATH.def().help(
+                        "The path to the validity predicate WASM code to be \
+                         used for the validator account. Uses the default \
+                         validator VP if none specified."
+                            .wrap_lines(),
+                    ),
+                )
                 .arg(UNSAFE_DONT_ENCRYPT.def().help(
                     "UNSAFE: Do not encrypt the generated keypairs. Do not \
                      use this for keys used in a live network.",
@@ -4265,64 +4380,97 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
-                .arg(SCHEME.def().help(
-                    "The key scheme/type used for the validator keys. \
-                     Currently supports ed25519 and secp256k1.",
-                ))
-                .arg(VALIDATOR_ACCOUNT_KEYS.def().help(
-                    "A list public keys to be associated with the new account \
-                     in hexadecimal encoding. A new one will be generated if \
-                     none given.",
-                ))
-                .arg(VALIDATOR_CONSENSUS_KEY.def().help(
-                    "A consensus key for the validator account. A new one \
-                     will be generated if none given. Note that this must be \
-                     ed25519.",
-                ))
-                .arg(VALIDATOR_ETH_COLD_KEY.def().help(
-                    "An Eth cold key for the validator account. A new one \
-                     will be generated if none given. Note that this must be \
-                     secp256k1.",
-                ))
-                .arg(VALIDATOR_ETH_HOT_KEY.def().help(
-                    "An Eth hot key for the validator account. A new one will \
-                     be generated if none given. Note that this must be \
-                     secp256k1.",
-                ))
-                .arg(PROTOCOL_KEY.def().help(
-                    "A public key for signing protocol transactions. A new \
-                     one will be generated if none given.",
-                ))
-                .arg(COMMISSION_RATE.def().help(
-                    "The commission rate charged by the validator for \
-                     delegation rewards. Expressed as a decimal between 0 and \
-                     1. This is a required parameter.",
-                ))
-                .arg(MAX_COMMISSION_RATE_CHANGE.def().help(
-                    "The maximum change per epoch in the commission rate \
-                     charged by the validator for delegation rewards. \
-                     Expressed as a decimal between 0 and 1. This is a \
-                     required parameter.",
-                ))
+                .arg(
+                    SCHEME.def().help(
+                        "The key scheme/type used for the validator keys. \
+                         Currently supports ed25519 and secp256k1."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    VALIDATOR_ACCOUNT_KEYS.def().help(
+                        "A list public keys to be associated with the new \
+                         account in hexadecimal encoding. A new one will be \
+                         generated if none given."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    VALIDATOR_CONSENSUS_KEY.def().help(
+                        "A consensus key for the validator account. A new one \
+                         will be generated if none given. Note that this must \
+                         be ed25519."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    VALIDATOR_ETH_COLD_KEY.def().help(
+                        "An Eth cold key for the validator account. A new one \
+                         will be generated if none given. Note that this must \
+                         be secp256k1."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    VALIDATOR_ETH_HOT_KEY.def().help(
+                        "An Eth hot key for the validator account. A new one \
+                         will be generated if none given. Note that this must \
+                         be secp256k1."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    PROTOCOL_KEY.def().help(
+                        "A public key for signing protocol transactions. A \
+                         new one will be generated if none given."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    COMMISSION_RATE.def().help(
+                        "The commission rate charged by the validator for \
+                         delegation rewards. Expressed as a decimal between 0 \
+                         and 1. This is a required parameter."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    MAX_COMMISSION_RATE_CHANGE.def().help(
+                        "The maximum change per epoch in the commission rate \
+                         charged by the validator for delegation rewards. \
+                         Expressed as a decimal between 0 and 1. This is a \
+                         required parameter."
+                            .wrap_lines(),
+                    ),
+                )
                 .arg(EMAIL.def().help("The validator's email."))
                 .arg(DESCRIPTION_OPT.def().help("The validator's description."))
                 .arg(WEBSITE_OPT.def().help("The validator's website."))
                 .arg(DISCORD_OPT.def().help("The validator's discord handle."))
                 .arg(AVATAR_OPT.def().help("The validator's avatar."))
-                .arg(VALIDATOR_CODE_PATH.def().help(
-                    "The path to the validity predicate WASM code to be used \
-                     for the validator account. Uses the default validator VP \
-                     if none specified.",
-                ))
-                .arg(UNSAFE_DONT_ENCRYPT.def().help(
-                    "UNSAFE: Do not encrypt the generated keypairs. Do not \
-                     use this for keys used in a live network.",
-                ))
-                .arg(THRESHOLD.def().help(
-                    "The minimum number of signature to be provided for \
-                     authorization. Must be less then the maximum number of \
-                     public keys provided.",
-                ))
+                .arg(
+                    VALIDATOR_CODE_PATH.def().help(
+                        "The path to the validity predicate WASM code to be \
+                         used for the validator account. Uses the default \
+                         validator VP if none specified."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    UNSAFE_DONT_ENCRYPT.def().help(
+                        "UNSAFE: Do not encrypt the generated keypairs. Do \
+                         not use this for keys used in a live network."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    THRESHOLD.def().help(
+                        "The minimum number of signature to be provided for \
+                         authorization. Must be less then the maximum number \
+                         of public keys provided."
+                            .wrap_lines(),
+                    ),
+                )
         }
     }
 
@@ -4374,15 +4522,21 @@ pub mod args {
                     "The account's address. It's key is used to produce the \
                      signature.",
                 ))
-                .arg(PUBLIC_KEYS.def().help(
-                    "A list public keys to be associated with the new account \
-                     in hexadecimal encoding.",
-                ))
-                .arg(THRESHOLD.def().help(
-                    "The minimum number of signature to be provided for \
-                     authorization. Must be less then the maximum number of \
-                     public keys provided.",
-                ))
+                .arg(
+                    PUBLIC_KEYS.def().help(
+                        "A list public keys to be associated with the new \
+                         account in hexadecimal encoding."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    THRESHOLD.def().help(
+                        "The minimum number of signature to be provided for \
+                         authorization. Must be less then the maximum number \
+                         of public keys provided."
+                            .wrap_lines(),
+                    ),
+                )
         }
     }
 
@@ -4483,11 +4637,14 @@ pub mod args {
                         .def()
                         .help("Amount of tokens to unbond from a bond."),
                 )
-                .arg(SOURCE_OPT.def().help(
-                    "Source address for unbonding from delegations. For \
-                     unbonding from self-bonds, the validator is also the \
-                     source.",
-                ))
+                .arg(
+                    SOURCE_OPT.def().help(
+                        "Source address for unbonding from delegations. For \
+                         unbonding from self-bonds, the validator is also the \
+                         source."
+                            .wrap_lines(),
+                    ),
+                )
         }
     }
 
@@ -4524,11 +4681,15 @@ pub mod args {
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
                 .arg(STEWARD.def().help("Steward address."))
-                .arg(DATA_PATH.def().help(
-                    "The path to the file that describes the commission \
-                     split. The file must contain a map from namada address \
-                     to a percentage. Percentages must sum to 1 or less.",
-                ))
+                .arg(
+                    DATA_PATH.def().help(
+                        "The path to the file that describes the commission \
+                         split. The file must contain a map from namada \
+                         address to a percentage. Percentages must sum to 1 \
+                         or less."
+                            .wrap_lines(),
+                    ),
+                )
         }
     }
 
@@ -4697,7 +4858,8 @@ pub mod args {
                         .def()
                         .help(
                             "Flag if the proposal is of type pgf-funding. \
-                             Used to control continuous/retro pgf fundings.",
+                             Used to control continuous/retro pgf fundings."
+                                .wrap_lines(),
                         )
                         .conflicts_with_all([
                             PROPOSAL_ETH.name,
@@ -5006,11 +5168,14 @@ pub mod args {
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
                 .arg(VALIDATOR.def().help("Validator address."))
-                .arg(SOURCE_OPT.def().help(
-                    "Source address for withdrawing from delegations. For \
-                     withdrawing from self-bonds, this arg does not need to \
-                     be supplied.",
-                ))
+                .arg(
+                    SOURCE_OPT.def().help(
+                        "Source address for withdrawing from delegations. For \
+                         withdrawing from self-bonds, this arg does not need \
+                         to be supplied."
+                            .wrap_lines(),
+                    ),
+                )
         }
     }
 
@@ -5044,10 +5209,13 @@ pub mod args {
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
                 .arg(VALIDATOR.def().help("Validator address."))
-                .arg(SOURCE_OPT.def().help(
-                    "Source address for claiming rewards for a bond. For \
-                     self-bonds, the validator is also the source.",
-                ))
+                .arg(
+                    SOURCE_OPT.def().help(
+                        "Source address for claiming rewards for a bond. For \
+                         self-bonds, the validator is also the source."
+                            .wrap_lines(),
+                    ),
+                )
         }
     }
 
@@ -5264,10 +5432,13 @@ pub mod args {
                 .arg(VALIDATOR_OPT.def().help(
                     "The validator's address whose bonded stake to query.",
                 ))
-                .arg(EPOCH.def().help(
-                    "The epoch at which to query (corresponding to the last \
-                     committed block, if not specified).",
-                ))
+                .arg(
+                    EPOCH.def().help(
+                        "The epoch at which to query (corresponding to the \
+                         last committed block, if not specified)."
+                            .wrap_lines(),
+                    ),
+                )
         }
     }
 
@@ -5300,10 +5471,13 @@ pub mod args {
                         "The validator's address whose state is queried.",
                     ),
                 )
-                .arg(EPOCH.def().help(
-                    "The epoch at which to query (corresponding to the last \
-                     committed block, if not specified).",
-                ))
+                .arg(
+                    EPOCH.def().help(
+                        "The epoch at which to query (corresponding to the \
+                         last committed block, if not specified)."
+                            .wrap_lines(),
+                    ),
+                )
         }
     }
 
@@ -5382,14 +5556,21 @@ pub mod args {
                 .arg(VALIDATOR.def().help(
                     "The validator's address whose consensus key to change.",
                 ))
-                .arg(VALIDATOR_CONSENSUS_KEY.def().help(
-                    "The desired new consensus key. A new one will be \
-                     generated if none given. Note this key must be ed25519.",
-                ))
-                .arg(UNSAFE_DONT_ENCRYPT.def().help(
-                    "UNSAFE: Do not encrypt the generated keypairs. Do not \
-                     use this for keys used in a live network.",
-                ))
+                .arg(
+                    VALIDATOR_CONSENSUS_KEY.def().help(
+                        "The desired new consensus key. A new one will be \
+                         generated if none given. Note this key must be \
+                         ed25519."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    UNSAFE_DONT_ENCRYPT.def().help(
+                        "UNSAFE: Do not encrypt the generated keypairs. Do \
+                         not use this for keys used in a live network."
+                            .wrap_lines(),
+                    ),
+                )
         }
     }
 
@@ -5438,28 +5619,46 @@ pub mod args {
                 .arg(VALIDATOR.def().help(
                     "The validator's address whose commission rate to change.",
                 ))
-                .arg(EMAIL_OPT.def().help(
-                    "The desired new validator email. To remove the existing \
-                     email, pass an empty string to this argument.",
-                ))
-                .arg(DESCRIPTION_OPT.def().help(
-                    "The desired new validator description. To remove the \
-                     existing description, pass an empty string to this \
-                     argument.",
-                ))
-                .arg(WEBSITE_OPT.def().help(
-                    "The desired new validator website. To remove the \
-                     existing website, pass an empty string to this argument.",
-                ))
-                .arg(DISCORD_OPT.def().help(
-                    "The desired new validator discord handle. To remove the \
-                     existing discord handle, pass an empty string to this \
-                     argument.",
-                ))
-                .arg(AVATAR_OPT.def().help(
-                    "The desired new validator avatar url. To remove the \
-                     existing avatar, pass an empty string to this argument.",
-                ))
+                .arg(
+                    EMAIL_OPT.def().help(
+                        "The desired new validator email. To remove the \
+                         existing email, pass an empty string to this \
+                         argument."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    DESCRIPTION_OPT.def().help(
+                        "The desired new validator description. To remove the \
+                         existing description, pass an empty string to this \
+                         argument."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    WEBSITE_OPT.def().help(
+                        "The desired new validator website. To remove the \
+                         existing website, pass an empty string to this \
+                         argument."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    DISCORD_OPT.def().help(
+                        "The desired new validator discord handle. To remove \
+                         the existing discord handle, pass an empty string to \
+                         this argument."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    AVATAR_OPT.def().help(
+                        "The desired new validator avatar url. To remove the \
+                         existing avatar, pass an empty string to this \
+                         argument."
+                            .wrap_lines(),
+                    ),
+                )
                 .arg(
                     COMMISSION_RATE_OPT
                         .def()
@@ -5770,10 +5969,13 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>()
-                .arg(SOURCE_OPT.def().help(
-                    "Source address for the rewards query. For self-bonds, \
-                     this arg does not need to be supplied.",
-                ))
+                .arg(
+                    SOURCE_OPT.def().help(
+                        "Source address for the rewards query. For \
+                         self-bonds, this arg does not need to be supplied."
+                            .wrap_lines(),
+                    ),
+                )
                 .arg(
                     VALIDATOR
                         .def()
@@ -5943,7 +6145,8 @@ pub mod args {
                     .def()
                     .help(
                         "Simulate the complete transaction application. This \
-                         estimates the gas cost of the transaction.",
+                         estimates the gas cost of the transaction."
+                            .wrap_lines(),
                     )
                     .conflicts_with(DRY_RUN_TX.name),
             )
@@ -5951,10 +6154,13 @@ pub mod args {
             .arg(FORCE.def().help(
                 "Submit the transaction even if it doesn't pass client checks.",
             ))
-            .arg(BROADCAST_ONLY.def().help(
-                "Do not wait for the transaction to be applied. This will \
-                 return once the transaction is added to the mempool.",
-            ))
+            .arg(
+                BROADCAST_ONLY.def().help(
+                    "Do not wait for the transaction to be applied. This will \
+                     return once the transaction is added to the mempool."
+                        .wrap_lines(),
+                ),
+            )
             .arg(
                 LEDGER_ADDRESS_DEFAULT
                     .def()
@@ -5962,41 +6168,58 @@ pub mod args {
                     // This used to be "ledger-address", alias for compatibility
                     .alias("ledger-address"),
             )
-            .arg(ALIAS_OPT.def().help(
-                "If any new account is initialized by the tx, use the given \
-                 alias to save it in the wallet. If multiple accounts are \
-                 initialized, the alias will be the prefix of each new \
-                 address joined with a number.",
-            ))
-            .arg(FEE_AMOUNT_OPT.def().help(
-                "The amount being paid, per gas unit, for the inclusion of \
-                 this transaction",
-            ))
+            .arg(
+                ALIAS_OPT.def().help(
+                    "If any new account is initialized by the tx, use the \
+                     given alias to save it in the wallet. If multiple \
+                     accounts are initialized, the alias will be the prefix \
+                     of each new address joined with a number."
+                        .wrap_lines(),
+                ),
+            )
+            .arg(
+                FEE_AMOUNT_OPT.def().help(
+                    "The amount being paid, per gas unit, for the inclusion \
+                     of this transaction"
+                        .wrap_lines(),
+                ),
+            )
             .arg(FEE_TOKEN.def().help("The token for paying the gas"))
-            .arg(FEE_UNSHIELD_SPENDING_KEY.def().help(
-                "The spending key to be used for fee unshielding. If none is \
-                 provided, fee will be paid from the unshielded balance only.",
-            ))
-            .arg(GAS_LIMIT.def().help(
-                "The multiplier of the gas limit resolution defining the \
-                 maximum amount of gas needed to run transaction.",
-            ))
+            .arg(
+                FEE_UNSHIELD_SPENDING_KEY.def().help(
+                    "The spending key to be used for fee unshielding. If none \
+                     is provided, fee will be paid from the unshielded \
+                     balance only."
+                        .wrap_lines(),
+                ),
+            )
+            .arg(
+                GAS_LIMIT.def().help(
+                    "The multiplier of the gas limit resolution defining the \
+                     maximum amount of gas needed to run transaction."
+                        .wrap_lines(),
+                ),
+            )
             .arg(WALLET_ALIAS_FORCE.def().help(
                 "Override the alias without confirmation if it already exists.",
             ))
-            .arg(EXPIRATION_OPT.def().help(
-                "The expiration datetime of the transaction, after which the \
-                 tx won't be accepted anymore. All of these examples are \
-                 equivalent:\n2012-12-12T12:12:12Z\n2012-12-12 \
-                 12:12:12Z\n2012-  12-12T12:  12:12Z",
-            ))
+            .arg(
+                EXPIRATION_OPT.def().help(
+                    "The expiration datetime of the transaction, after which \
+                     the tx won't be accepted anymore. All of these examples \
+                     are equivalent:\n2012-12-12T12:12:12Z\n2012-12-12 \
+                     12:12:12Z\n2012-  12-12T12:  12:12Z"
+                        .wrap_lines(),
+                ),
+            )
             .arg(
                 DISPOSABLE_SIGNING_KEY
                     .def()
                     .help(
                         "Generates an ephemeral, disposable keypair to sign \
                          the wrapper transaction. This keypair will be \
-                         immediately discarded after use.",
+                         immediately discarded after use."
+                            .wrap_lines(),
                     )
                     .requires(FEE_UNSHIELD_SPENDING_KEY.name),
             )
@@ -6006,7 +6229,8 @@ pub mod args {
                     .help(
                         "Sign the transaction with the key for the given \
                          public key, public key hash or alias from your \
-                         wallet.",
+                         wallet."
+                            .wrap_lines(),
                     )
                     .conflicts_with_all([SIGNATURES.name]),
             )
@@ -6016,7 +6240,8 @@ pub mod args {
                     .help(
                         "List of file paths containing a serialized signature \
                          to be attached to a transaction. Requires to provide \
-                         a gas payer.",
+                         a gas payer."
+                            .wrap_lines(),
                     )
                     .conflicts_with_all([SIGNING_KEYS.name])
                     .requires(FEE_PAYER_OPT.name),
@@ -6031,7 +6256,8 @@ pub mod args {
                     .help(
                         "The implicit address of the gas payer. It defaults \
                          to the address associated to the first key passed to \
-                         --signing-keys.",
+                         --signing-keys."
+                            .wrap_lines(),
                     )
                     .conflicts_with(DISPOSABLE_SIGNING_KEY.name),
             )
@@ -6209,12 +6435,15 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(SCHEME.def().conflicts_with(SHIELDED.name).help(
-                "For the transparent pool, the type of key that should be \
-                 derived. Argument must be either ed25519 or secp256k1. If \
-                 none provided, the default key scheme is ed25519.\nNot \
-                 applicable for the shielded pool.",
-            ))
+            app.arg(
+                SCHEME.def().conflicts_with(SHIELDED.name).help(
+                    "For the transparent pool, the type of key that should be \
+                     derived. Argument must be either ed25519 or secp256k1. \
+                     If none provided, the default key scheme is \
+                     ed25519.\nNot applicable for the shielded pool."
+                        .wrap_lines(),
+                ),
+            )
             .arg(
                 SHIELDED
                     .def()
@@ -6230,18 +6459,24 @@ pub mod args {
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
                  used in a live network.",
             ))
-            .arg(USE_DEVICE.def().help(
-                "Derive an address and public key from the seed stored on the \
-                 connected hardware wallet.",
-            ))
-            .arg(HD_WALLET_DERIVATION_PATH.def().help(
-                "HD key derivation path. Use keyword `default` to refer to a \
-                 scheme default path:\n- m/44'/60'/0'/0/0 for secp256k1 \
-                 scheme\n- m/44'/877'/0'/0'/0' for ed25519 scheme.\nFor \
-                 ed25519, all path indices will be promoted to hardened \
-                 indexes. If none is specified, the scheme default path is \
-                 used.",
-            ))
+            .arg(
+                USE_DEVICE.def().help(
+                    "Derive an address and public key from the seed stored on \
+                     the connected hardware wallet."
+                        .wrap_lines(),
+                ),
+            )
+            .arg(
+                HD_WALLET_DERIVATION_PATH.def().help(
+                    "HD key derivation path. Use keyword `default` to refer \
+                     to a scheme default path:\n- m/44'/60'/0'/0/0 for \
+                     secp256k1 scheme\n- m/44'/877'/0'/0'/0' for ed25519 \
+                     scheme.\nFor ed25519, all path indices will be promoted \
+                     to hardened indexes. If none is specified, the scheme \
+                     default path is used."
+                        .wrap_lines(),
+                ),
+            )
         }
     }
 
@@ -6266,12 +6501,15 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(SCHEME.def().conflicts_with(SHIELDED.name).help(
-                "For the transparent pool, the type of key that should be \
-                 generated. Argument must be either ed25519 or secp256k1. If \
-                 none provided, the default key scheme is ed25519.\nNot \
-                 applicable for the shielded pool.",
-            ))
+            app.arg(
+                SCHEME.def().conflicts_with(SHIELDED.name).help(
+                    "For the transparent pool, the type of key that should be \
+                     generated. Argument must be either ed25519 or secp256k1. \
+                     If none provided, the default key scheme is \
+                     ed25519.\nNot applicable for the shielded pool."
+                        .wrap_lines(),
+                ),
+            )
             .arg(
                 SHIELDED
                     .def()
@@ -6283,25 +6521,32 @@ pub mod args {
                     .conflicts_with(HD_WALLET_DERIVATION_PATH.name)
                     .help(
                         "Generate a random non-HD secret / spending key. No \
-                         mnemonic code is generated.",
+                         mnemonic code is generated."
+                            .wrap_lines(),
                     ),
             )
             .arg(ALIAS.def().help("The key and address alias."))
             .arg(ALIAS_FORCE.def().help(
                 "Override the alias without confirmation if it already exists.",
             ))
-            .arg(UNSAFE_DONT_ENCRYPT.def().help(
-                "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
-                 used in a live network.",
-            ))
-            .arg(HD_WALLET_DERIVATION_PATH.def().help(
-                "HD key derivation path. Use keyword `default` to refer to a \
-                 scheme default path:\n- m/44'/60'/0'/0/0 for secp256k1 \
-                 scheme\n- m/44'/877'/0'/0'/0' for ed25519 scheme.\nFor \
-                 ed25519, all path indices will be promoted to hardened \
-                 indexes. If none is specified, the scheme default path is \
-                 used.",
-            ))
+            .arg(
+                UNSAFE_DONT_ENCRYPT.def().help(
+                    "UNSAFE: Do not encrypt the keypair. Do not use this for \
+                     keys used in a live network."
+                        .wrap_lines(),
+                ),
+            )
+            .arg(
+                HD_WALLET_DERIVATION_PATH.def().help(
+                    "HD key derivation path. Use keyword `default` to refer \
+                     to a scheme default path:\n- m/44'/60'/0'/0/0 for \
+                     secp256k1 scheme\n- m/44'/877'/0'/0'/0' for ed25519 \
+                     scheme.\nFor ed25519, all path indices will be promoted \
+                     to hardened indexes. If none is specified, the scheme \
+                     default path is used."
+                        .wrap_lines(),
+                ),
+            )
         }
     }
 
@@ -6452,12 +6697,15 @@ pub mod args {
             .arg(ALIAS_FORCE.def().help(
                 "Override the alias without confirmation if it already exists.",
             ))
-            .arg(VALUE.def().help(
-                "Any value of the following:\n- transparent pool secret \
-                 key\n- transparent pool public key\n- transparent pool \
-                 address\n- shielded pool spending key\n- shielded pool \
-                 viewing key\n- shielded pool payment address ",
-            ))
+            .arg(
+                VALUE.def().help(
+                    "Any value of the following:\n- transparent pool secret \
+                     key\n- transparent pool public key\n- transparent pool \
+                     address\n- shielded pool spending key\n- shielded pool \
+                     viewing key\n- shielded pool payment address "
+                        .wrap_lines(),
+                ),
+            )
             .arg(UNSAFE_DONT_ENCRYPT.def().help(
                 "UNSAFE: Do not encrypt the added keys. Do not use this for \
                  keys used in a live network.",
@@ -6515,10 +6763,13 @@ pub mod args {
                     .def()
                     .help("An alias to be associated with the imported entry."),
             )
-            .arg(UNSAFE_DONT_ENCRYPT.def().help(
-                "UNSAFE: Do not encrypt the imported keys. Do not use this \
-                 for keys used in a live network.",
-            ))
+            .arg(
+                UNSAFE_DONT_ENCRYPT.def().help(
+                    "UNSAFE: Do not encrypt the imported keys. Do not use \
+                     this for keys used in a live network."
+                        .wrap_lines(),
+                ),
+            )
         }
     }
 
@@ -6551,13 +6802,13 @@ pub mod args {
             app.arg(CHAIN_ID.def().help("The chain ID. The chain must be known in the repository: \
                                           https://github.com/heliaxdev/anoma-network-config"))
                 .arg(GENESIS_VALIDATOR.def().help("The alias of the genesis validator that you want to set up as, if any."))
-                .arg(PRE_GENESIS_PATH.def().help("The path to the pre-genesis directory for genesis validator, if any. Defaults to \"{base-dir}/pre-genesis/{genesis-validator}\"."))
+                .arg(PRE_GENESIS_PATH.def().help("The path to the pre-genesis directory for genesis validator, if any. Defaults to \"{base-dir}/pre-genesis/{genesis-validator}\".".wrap_lines()))
             .arg(DONT_PREFETCH_WASM.def().help(
                 "Do not pre-fetch WASM.",
             ))
             .arg(ALLOW_DUPLICATE_IP.def().help(
                 "Toggle to disable guard against peers connecting from the \
-                 same IP. This option shouldn't be used in mainnet.",
+                 same IP. This option shouldn't be used in mainnet.".wrap_lines(),
             ))
         }
     }
@@ -6676,23 +6927,32 @@ pub mod args {
                 "The chain ID prefix. Up to 19 alphanumeric, '.', '-' or '_' \
                  characters.",
             ))
-            .arg(GENESIS_TIME.def().help(
-                "The start time of the network in RFC 3339 and ISO 8601 \
-                 format. For example: \"2021-12-31T00:00:00Z\".",
-            ))
-            .arg(CONSENSUS_TIMEOUT_COMMIT.def().help(
-                "The Tendermint consensus timeout_commit configuration as \
-                 e.g. `1s` or `1000ms`. Defaults to 10 seconds.",
-            ))
+            .arg(
+                GENESIS_TIME.def().help(
+                    "The start time of the network in RFC 3339 and ISO 8601 \
+                     format. For example: \"2021-12-31T00:00:00Z\"."
+                        .wrap_lines(),
+                ),
+            )
+            .arg(
+                CONSENSUS_TIMEOUT_COMMIT.def().help(
+                    "The Tendermint consensus timeout_commit configuration as \
+                     e.g. `1s` or `1000ms`. Defaults to 10 seconds."
+                        .wrap_lines(),
+                ),
+            )
             .arg(
                 DONT_ARCHIVE
                     .def()
                     .help("Do NOT create the release archive."),
             )
-            .arg(ARCHIVE_DIR.def().help(
-                "Specify a directory into which to store the archive. Default \
-                 is the current working directory.",
-            ))
+            .arg(
+                ARCHIVE_DIR.def().help(
+                    "Specify a directory into which to store the archive. \
+                     Default is the current working directory."
+                        .wrap_lines(),
+                ),
+            )
         }
     }
 
@@ -6740,18 +7000,24 @@ pub mod args {
                 "Comma separated list of aliases of the keys to use from the \
                  wallet.",
             ))
-            .arg(THRESHOLD.def().help(
-                "The minimum number of signatures to be provided for \
-                 authorization. Must be less than or equal to the maximum \
-                 number of key aliases provided.",
-            ))
+            .arg(
+                THRESHOLD.def().help(
+                    "The minimum number of signatures to be provided for \
+                     authorization. Must be less than or equal to the maximum \
+                     number of key aliases provided."
+                        .wrap_lines(),
+                ),
+            )
             .arg(VP.def().help(
                 "The validity predicate of the account. Defaults to `vp_user`.",
             ))
-            .arg(PATH.def().help(
-                "The path of the .toml file to write the established account \
-                 transaction to. Overwrites the file if it exists.",
-            ))
+            .arg(
+                PATH.def().help(
+                    "The path of the .toml file to write the established \
+                     account transaction to. Overwrites the file if it exists."
+                        .wrap_lines(),
+                ),
+            )
         }
     }
 
@@ -6783,10 +7049,13 @@ pub mod args {
         fn def(app: App) -> App {
             app.arg(GENESIS_VALIDATOR_ADDRESS.def().help("Validator address."))
                 .arg(AMOUNT.def().help("Amount of tokens to stake in a bond."))
-                .arg(GENESIS_BOND_SOURCE.def().help(
-                    "Source address for delegations. For self-bonds, the \
-                     validator is also the source.",
-                ))
+                .arg(
+                    GENESIS_BOND_SOURCE.def().help(
+                        "Source address for delegations. For self-bonds, the \
+                         validator is also the source."
+                            .wrap_lines(),
+                    ),
+                )
                 .arg(
                     PATH.def()
                         .help("Output toml file to write transactions to."),
@@ -6854,32 +7123,48 @@ pub mod args {
                     "The address of an established account to be promoted to \
                      a validator.",
                 ))
-                .arg(PATH.def().help(
-                    "The .toml file containing an established account tx from \
-                     which to create a validator.",
-                ))
-                .arg(NET_ADDRESS.def().help(
-                    "Static {host:port} of your validator node's P2P address. \
-                     Namada uses port `26656` for P2P connections by default, \
-                     but you can configure a different value.",
-                ))
-                .arg(COMMISSION_RATE.def().help(
-                    "The commission rate charged by the validator for \
-                     delegation rewards. This is a required parameter.",
-                ))
-                .arg(MAX_COMMISSION_RATE_CHANGE.def().help(
-                    "The maximum change per epoch in the commission rate \
-                     charged by the validator for delegation rewards. This is \
-                     a required parameter.",
-                ))
+                .arg(
+                    PATH.def().help(
+                        "The .toml file containing an established account tx \
+                         from which to create a validator."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    NET_ADDRESS.def().help(
+                        "Static {host:port} of your validator node's P2P \
+                         address. Namada uses port `26656` for P2P \
+                         connections by default, but you can configure a \
+                         different value."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    COMMISSION_RATE.def().help(
+                        "The commission rate charged by the validator for \
+                         delegation rewards. This is a required parameter."
+                            .wrap_lines(),
+                    ),
+                )
+                .arg(
+                    MAX_COMMISSION_RATE_CHANGE.def().help(
+                        "The maximum change per epoch in the commission rate \
+                         charged by the validator for delegation rewards. \
+                         This is a required parameter."
+                            .wrap_lines(),
+                    ),
+                )
                 .arg(UNSAFE_DONT_ENCRYPT.def().help(
                     "UNSAFE: Do not encrypt the generated keypairs. Do not \
                      use this for keys used in a live network.",
                 ))
-                .arg(SCHEME.def().help(
-                    "The key scheme/type used for the validator keys. \
-                     Currently supports ed25519 and secp256k1.",
-                ))
+                .arg(
+                    SCHEME.def().help(
+                        "The key scheme/type used for the validator keys. \
+                         Currently supports ed25519 and secp256k1."
+                            .wrap_lines(),
+                    ),
+                )
                 .arg(
                     SELF_BOND_AMOUNT.def().help(
                         "The amount of native token to self-bond in PoS.",
@@ -6979,19 +7264,25 @@ pub mod args {
                 PATH.def()
                     .help("Path to the unsigned transactions TOML file."),
             )
-            .arg(OUTPUT.def().help(
-                "Save the output to a TOML file. When not supplied, the \
-                 signed transactions will be printed to stdout instead.",
-            ))
+            .arg(
+                OUTPUT.def().help(
+                    "Save the output to a TOML file. When not supplied, the \
+                     signed transactions will be printed to stdout instead."
+                        .wrap_lines(),
+                ),
+            )
             .arg(
                 ALIAS_OPT
                     .def()
                     .help("Optional alias to a validator wallet."),
             )
-            .arg(USE_DEVICE.def().help(
-                "Derive an address and public key from the seed stored on the \
-                 connected hardware wallet.",
-            ))
+            .arg(
+                USE_DEVICE.def().help(
+                    "Derive an address and public key from the seed stored on \
+                     the connected hardware wallet."
+                        .wrap_lines(),
+                ),
+            )
         }
     }
 }
