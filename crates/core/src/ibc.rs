@@ -5,8 +5,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
-use data_encoding::{DecodePartial, HEXLOWER, HEXLOWER_PERMISSIVE, HEXUPPER};
+use data_encoding::{DecodePartial, HEXLOWER, HEXLOWER_PERMISSIVE};
 pub use ibc::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -16,11 +15,12 @@ use crate::ibc::apps::nft_transfer::context::{NftClassContext, NftContext};
 use crate::ibc::apps::nft_transfer::types::error::NftTransferError;
 use crate::ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as IbcMsgNftTransfer;
 use crate::ibc::apps::nft_transfer::types::{
-    ClassData, ClassId, ClassUri, Memo as NftMemo, PrefixedClassId, TokenData,
-    TokenId, TokenUri, TracePath as NftTracePath,
+    ClassData, ClassId, ClassUri, PrefixedClassId, TokenData, TokenId,
+    TokenUri, TracePath as NftTracePath,
 };
 use crate::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
-use crate::ibc::apps::transfer::types::{Memo, PrefixedDenom, TracePath};
+use crate::ibc::apps::transfer::types::{PrefixedDenom, TracePath};
+use crate::ibc::core::channel::types::msgs::MsgRecvPacket as IbcMsgRecvPacket;
 use crate::ibc::core::handler::types::events::{
     Error as IbcEventError, IbcEvent as RawIbcEvent,
 };
@@ -194,6 +194,42 @@ impl BorshDeserialize for MsgNftTransfer {
     }
 }
 
+/// IBC receiving packet message with `IbcShieldedTransfer`
+#[derive(Debug, Clone)]
+pub struct MsgRecvPacket {
+    /// IBC receiving packet message
+    pub message: IbcMsgRecvPacket,
+    /// MASP tx with token transfer
+    pub shielded_transfer: Option<IbcShieldedTransfer>,
+}
+
+impl BorshSerialize for MsgRecvPacket {
+    fn serialize<W: std::io::Write>(
+        &self,
+        writer: &mut W,
+    ) -> std::io::Result<()> {
+        let encoded_msg = self.message.clone().encode_vec();
+        let members = (encoded_msg, self.shielded_transfer.clone());
+        BorshSerialize::serialize(&members, writer)
+    }
+}
+
+impl BorshDeserialize for MsgRecvPacket {
+    fn deserialize_reader<R: std::io::Read>(
+        reader: &mut R,
+    ) -> std::io::Result<Self> {
+        use std::io::{Error, ErrorKind};
+        let (msg, shielded_transfer): (Vec<u8>, Option<IbcShieldedTransfer>) =
+            BorshDeserialize::deserialize_reader(reader)?;
+        let message = IbcMsgRecvPacket::decode_vec(&msg)
+            .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
+        Ok(Self {
+            message,
+            shielded_transfer,
+        })
+    }
+}
+
 /// IBC shielded transfer
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 pub struct IbcShieldedTransfer {
@@ -264,42 +300,6 @@ pub fn is_nft_trace(
         ))
     } else {
         None
-    }
-}
-
-impl From<IbcShieldedTransfer> for Memo {
-    fn from(shielded: IbcShieldedTransfer) -> Self {
-        let bytes = shielded.serialize_to_vec();
-        HEXUPPER.encode(&bytes).into()
-    }
-}
-
-impl TryFrom<Memo> for IbcShieldedTransfer {
-    type Error = Error;
-
-    fn try_from(memo: Memo) -> Result<Self> {
-        let bytes = HEXUPPER
-            .decode(memo.as_ref().as_bytes())
-            .map_err(Error::DecodingHex)?;
-        Self::try_from_slice(&bytes).map_err(Error::DecodingShieldedTransfer)
-    }
-}
-
-impl From<IbcShieldedTransfer> for NftMemo {
-    fn from(shielded: IbcShieldedTransfer) -> Self {
-        let bytes = shielded.serialize_to_vec();
-        HEXUPPER.encode(&bytes).into()
-    }
-}
-
-impl TryFrom<NftMemo> for IbcShieldedTransfer {
-    type Error = Error;
-
-    fn try_from(memo: NftMemo) -> Result<Self> {
-        let bytes = HEXUPPER
-            .decode(memo.as_ref().as_bytes())
-            .map_err(Error::DecodingHex)?;
-        Self::try_from_slice(&bytes).map_err(Error::DecodingShieldedTransfer)
     }
 }
 

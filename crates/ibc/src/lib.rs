@@ -37,7 +37,9 @@ use namada_core::ibc::apps::transfer::types::packet::PacketData;
 use namada_core::ibc::apps::transfer::types::{
     is_receiver_chain_source, TracePrefix,
 };
-use namada_core::ibc::core::channel::types::msgs::{MsgRecvPacket, PacketMsg};
+use namada_core::ibc::core::channel::types::msgs::{
+    MsgRecvPacket as IbcMsgRecvPacket, PacketMsg,
+};
 use namada_core::ibc::core::entrypoint::{execute, validate};
 use namada_core::ibc::core::handler::types::error::ContextError;
 use namada_core::ibc::core::handler::types::msgs::MsgEnvelope;
@@ -138,6 +140,22 @@ where
                     None => Ok(()),
                 }
             }
+            IbcMessage::RecvPacket(msg) => {
+                let envelope =
+                    MsgEnvelope::Packet(PacketMsg::Recv(msg.message.clone()));
+                execute(&mut self.ctx, &mut self.router, envelope)
+                    .map_err(|e| Error::Context(Box::new(e)))?;
+                if self.is_receiving_success()? {
+                    // the current ibc-rs execution doesn't store the denom
+                    // for the token hash when transfer with MsgRecvPacket
+                    self.store_trace(&msg.message)?;
+                    // For receiving the token to a shielded address
+                    if let Some(shielded_transfer) = &msg.shielded_transfer {
+                        self.handle_masp_tx(shielded_transfer)?;
+                    }
+                }
+                Ok(())
+            }
             IbcMessage::Envelope(envelope) => {
                 execute(&mut self.ctx, &mut self.router, *envelope.clone())
                     .map_err(|e| Error::Context(Box::new(e)))?;
@@ -146,12 +164,6 @@ where
                         // the current ibc-rs execution doesn't store the denom
                         // for the token hash when transfer with MsgRecvPacket
                         self.store_trace(msg)?;
-                        // For receiving the token to a shielded address
-                        if let Some(shielded_transfer) =
-                            get_shielded_transfer(msg)
-                        {
-                            self.handle_masp_tx(&shielded_transfer)?;
-                        }
                     }
                 }
                 Ok(())
@@ -160,7 +172,7 @@ where
     }
 
     /// Store the trace path when transfer with MsgRecvPacket
-    fn store_trace(&mut self, msg: &MsgRecvPacket) -> Result<(), Error> {
+    fn store_trace(&mut self, msg: &IbcMsgRecvPacket) -> Result<(), Error> {
         // Get the IBC trace, and the receiver from the packet data
         let minted_token_info = if let Ok(data) =
             serde_json::from_slice::<PacketData>(&msg.packet.data)
@@ -286,6 +298,12 @@ where
                 )
                 .map_err(Error::NftTransfer)
             }
+            IbcMessage::RecvPacket(msg) => validate(
+                &self.ctx,
+                &self.router,
+                MsgEnvelope::Packet(PacketMsg::Recv(msg.message)),
+            )
+            .map_err(|e| Error::Context(Box::new(e))),
             IbcMessage::Envelope(envelope) => {
                 validate(&self.ctx, &self.router, *envelope)
                     .map_err(|e| Error::Context(Box::new(e)))
@@ -319,6 +337,8 @@ pub enum IbcMessage {
     Transfer(MsgTransfer),
     /// NFT transfer
     NftTransfer(MsgNftTransfer),
+    /// Receiving a packet
+    RecvPacket(MsgRecvPacket),
 }
 
 /// Tries to decode transaction data to an `IbcMessage`
@@ -340,22 +360,12 @@ pub fn decode_message(tx_data: &[u8]) -> Result<IbcMessage, Error> {
         return Ok(IbcMessage::NftTransfer(msg));
     }
 
-    Err(Error::DecodingData)
-}
-
-/// Get the MASP transction from MsgRecvPacket
-pub fn get_shielded_transfer(
-    msg: &MsgRecvPacket,
-) -> Option<IbcShieldedTransfer> {
-    if let Ok(data) = serde_json::from_slice::<PacketData>(&msg.packet.data) {
-        data.memo.try_into().ok()
-    } else if let Ok(data) =
-        serde_json::from_slice::<NftPacketData>(&msg.packet.data)
-    {
-        data.memo.and_then(|m| m.try_into().ok())
-    } else {
-        None
+    // Receiving packet message with `IbcShieldedTransfer`
+    if let Ok(msg) = MsgRecvPacket::try_from_slice(tx_data) {
+        return Ok(IbcMessage::RecvPacket(msg));
     }
+
+    Err(Error::DecodingData)
 }
 
 /// Get the IbcToken from the source/destination ports and channels

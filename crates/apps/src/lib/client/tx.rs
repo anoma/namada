@@ -17,8 +17,6 @@ use namada::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
 use namada::governance::ProposalVote;
-use namada::ibc::apps::transfer::types::Memo;
-use namada::io::Io;
 use namada::state::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::tx::data::pos::{BecomeValidator, ConsensusKeyChange};
 use namada::tx::{CompressedSignature, Section, Signer, Tx};
@@ -1628,7 +1626,7 @@ pub async fn gen_ibc_shielded_transfer(
         };
         let mut out = File::create(&output_path)
             .expect("Should be able to create the out file.");
-        out.write_all(Memo::from(shielded_transfer).as_ref().as_bytes())
+        out.write_all(&shielded_transfer.serialize_to_vec())
             .expect("IBC memo should be deserializable.");
         println!(
             "Output IBC shielded transfer for {tx_id} to {}",

@@ -8,14 +8,12 @@ use masp_primitives::transaction::Transaction;
 use namada_core::address::Address;
 use namada_core::borsh::BorshDeserialize;
 use namada_core::hash::Hash;
-use namada_core::ibc::core::channel::types::msgs::PacketMsg;
-use namada_core::ibc::core::handler::types::msgs::MsgEnvelope;
 use namada_core::ibc::IbcEvent;
 use namada_core::storage::{
     BlockHash, BlockHeight, Epoch, Epochs, Header, Key, TxIndex,
 };
 use namada_core::token::Transfer;
-use namada_ibc::{decode_message, get_shielded_transfer, IbcMessage};
+use namada_ibc::{decode_message, IbcMessage};
 use namada_storage::{OptionExt, StorageRead};
 use namada_tx::Tx;
 
@@ -137,13 +135,8 @@ where
         })? {
             IbcMessage::Transfer(msg) => msg.shielded_transfer,
             IbcMessage::NftTransfer(msg) => msg.shielded_transfer,
-            IbcMessage::Envelope(envelope) => {
-                if let MsgEnvelope::Packet(PacketMsg::Recv(msg)) = *envelope {
-                    get_shielded_transfer(&msg)
-                } else {
-                    None
-                }
-            }
+            IbcMessage::RecvPacket(msg) => msg.shielded_transfer,
+            IbcMessage::Envelope(_) => None,
         };
         shielded_transfer
             .map(|st| st.masp_tx)
