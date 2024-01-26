@@ -54,12 +54,6 @@ mod dev {
     pub fn tokens() -> HashMap<Address, &'static str> {
         vec![
             (nam(), "NAAN"),
-            (btc(), "BTC"),
-            (eth(), "ETH"),
-            (dot(), "DOT"),
-            (schnitzel(), "Schnitzel"),
-            (apfel(), "Apfel"),
-            (kartoffel(), "Kartoffel"),
         ]
         .into_iter()
         .collect()

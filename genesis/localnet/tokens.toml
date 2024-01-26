@@ -3,8 +3,8 @@
 [token.NAAN]
 denom = 6
 
-[token.NAAN.masp_params]
+[token.NAAN.parameters]
 max_reward_rate = "0.0"
 kd_gain_nom = "0.1"
 kp_gain_nom = "0.1"
-locked_ratio_target = "0.0"
+locked_ratio_target = "0.1"

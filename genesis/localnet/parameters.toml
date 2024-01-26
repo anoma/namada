@@ -3,7 +3,7 @@
 native_token = "NAAN"
 # Minimum number of blocks in an epoch.
 # This should be 10 hours given that blocks are on average 10 seconds. ( (10*60*60)/10 )
-min_num_of_blocks = 3_600
+min_num_of_blocks = 25
 # Maximum expected time per block (in seconds).
 max_expected_time_per_block = 10
 # Max payload size, in bytes, for a tx.
@@ -18,7 +18,7 @@ tx_allowlist = []
 implicit_vp = "vp_implicit"
 # Expected number of epochs per year (also sets the min duration of an epoch in seconds)
 # Epochs should be 12 hours. ( (365*24*60*60)/(12*60*60) )
-epochs_per_year = 730
+epochs_per_year = 1_000_000
 # Maximum number of signature per transaction
 max_signatures_per_transaction = 15
 # Max gas for block
