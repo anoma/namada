@@ -521,7 +521,6 @@ impl SyncStatus for Syncing {}
 #[derive(BorshSerialize, BorshDeserialize, Debug, Default, Clone)]
 pub struct Unscanned {
     pub txs: BTreeMap<IndexedTx, (Epoch, Transfer, Transaction)>,
-    pub vks: BTreeSet<ViewingKey>,
 }
 
 impl Unscanned {
@@ -2245,9 +2244,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, Syncing> {
         // Fetch all the transactions we do not have yet
         let heights = logger.fetch(first_height_to_query.0..=last_query_height.0);
         for height in heights {
-            if self.unscanned.contains_height(height) {
-                continue;
-            }
             // Get the valid masp transactions at the specified height
             let epoch = query_epoch_at_height(client, height.into())
                 .await?
