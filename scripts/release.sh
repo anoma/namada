@@ -49,7 +49,7 @@ git add wasm/checksums.json
 git commit --fixup=$HASH_AFTER
 
 # update the changelog (1 fixup)
-unclog release --version $TAG_NAME
+unclog release $TAG_NAME
 unclog build > CHANGELOG.md
 git add .changelog CHANGELOG.md
 git commit --fixup=$HASH_AFTER
