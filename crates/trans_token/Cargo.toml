@@ -20,4 +20,4 @@ namada_core = { path = "../core" }
 namada_storage = { path = "../storage" }
 
 [dev-dependencies]
-namada_state = { path = "../state", features = ["testing"] }
+namada_storage = { path = "../storage", features = ["testing"] }
