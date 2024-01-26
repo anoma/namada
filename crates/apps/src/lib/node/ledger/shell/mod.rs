@@ -2166,7 +2166,7 @@ mod test_utils {
                 .insert(token.to_string(), addr);
         }
         shell.wl_storage.storage.conversion_state.tokens.insert(
-            "nam".to_string(),
+            "naan".to_string(),
             shell.wl_storage.storage.native_token.clone(),
         );
         let addr = shell.wl_storage.storage.native_token.clone();

@@ -515,7 +515,7 @@ async fn test_wnam_transfer() -> Result<()> {
         |mut genesis| {
             genesis.ethereum_bridge_params =
                 Some(ethereum_bridge_params.clone());
-            let native_token = genesis.token.get_mut("NAM").unwrap();
+            let native_token = genesis.token.get_mut("NAAN").unwrap();
             native_token_address =
                 Some(native_token.address.as_ref().unwrap().clone());
             native_token.balances.as_mut().unwrap().insert(

@@ -209,7 +209,7 @@ mod tests {
             .storage
             .conversion_state
             .tokens
-            .insert("nam".to_string(), wl_storage.storage.native_token.clone());
+            .insert("naan".to_string(), wl_storage.storage.native_token.clone());
         let addr = wl_storage.storage.native_token.clone();
         token::write_params(&token_params, &mut wl_storage, &addr).unwrap();
 

@@ -1,22 +1,24 @@
 # General protocol parameters.
 [parameters]
-native_token = "NAM"
+native_token = "NAAN"
 # Minimum number of blocks in an epoch.
-min_num_of_blocks = 4
+# This should be 10 hours given that blocks are on average 10 seconds. ( (10*60*60)/10 )
+min_num_of_blocks = 3_600
 # Maximum expected time per block (in seconds).
-max_expected_time_per_block = 30
+max_expected_time_per_block = 10
 # Max payload size, in bytes, for a tx.
 max_tx_bytes = 1048576
 # Max payload size, in bytes, for a tx batch proposal.
 max_proposal_bytes = 6291456
-# vp whitelist
-vp_whitelist = []
-# tx whitelist
-tx_whitelist = []
+# vp allowlist
+vp_allowlist = []
+# tx allowlist
+tx_allowlist = []
 # Implicit VP WASM name
 implicit_vp = "vp_implicit"
 # Expected number of epochs per year (also sets the min duration of an epoch in seconds)
-epochs_per_year = 31_536_000
+# Epochs should be 12 hours. ( (365*24*60*60)/(12*60*60) )
+epochs_per_year = 730
 # Maximum number of signature per transaction
 max_signatures_per_transaction = 15
 # Max gas for block
@@ -28,18 +30,19 @@ fee_unshielding_descriptions_limit = 15
 
 # Map of the cost per gas unit for every token allowed for fee payment
 [parameters.minimum_gas_price]
-nam = "0.000001"
+naan = "0.000001"
 
 # Proof of stake parameters.
 [pos_params]
 # Maximum number of active validators.
-max_validator_slots = 128
+max_validator_slots = 257
 # Pipeline length (in epochs). Any change in the validator set made in
 # epoch 'n' will become active in epoch 'n + pipeline_len'.
 pipeline_len = 2
 # Unbonding length (in epochs). Validators may have their stake slashed
 # for a fault in epoch 'n' up through epoch 'n + unbonding_len'.
-unbonding_len = 3
+# 3 days for unbonding
+unbonding_len = 6
 # Votes per fundamental staking token (namnam)
 tm_votes_per_token = "1"
 # Reward for proposing a block.
@@ -47,9 +50,10 @@ block_proposer_reward = "0.125"
 # Reward for voting on a block.
 block_vote_reward = "0.1"
 # Maximum inflation rate per annum (10%)
-max_inflation_rate = "0.1"
+max_inflation_rate = "0.0"
 # Targeted ratio of staked tokens to total tokens in the supply
-target_staked_ratio = "0.6667"
+# start with 0 inflation
+target_staked_ratio = "0.0"
 # Portion of a validator's stake that should be slashed on a duplicate
 # vote.
 duplicate_vote_min_slash_rate = "0.001"
@@ -58,13 +62,16 @@ duplicate_vote_min_slash_rate = "0.001"
 light_client_attack_min_slash_rate = "0.001"
 # Number of epochs above and below (separately) the current epoch to
 # consider when doing cubic slashing
-cubic_slashing_window_length = 1
+# 2 epochs for cubic slashing
+cubic_slashing_window_length = 2
 # The minimum amount of bonded tokens that a validator needs to be in
 # either the `consensus` or `below_capacity` validator sets
-validator_stake_threshold = "1"
+# A validator should have at least 0.01% of the total tokens to be considered active.
+validator_stake_threshold = "100000"
 # The length, in blocks, of the sliding window for consensus validators
 # inactivity verification
-liveness_window_check = 100
+# Liveness window is 24 hours.
+liveness_window_check = 8_640
 # The minimum required activity of consensus validators, in percentage, over 
 # the `liveness_window_check`
 liveness_threshold = "0.9"
@@ -75,29 +82,29 @@ rewards_gain_d = "0.25"
 
 # Governance parameters.
 [gov_params]
-# minimum amount of nam token to lock
+# minimum amount of naan token to lock
 min_proposal_fund = 500
 # proposal code size in bytes
 max_proposal_code_size = 600000
 # min proposal period length in epochs
-min_proposal_voting_period = 3
+min_proposal_voting_period = 6
 # max proposal period length in epochs
-max_proposal_period = 27
+max_proposal_period = 18
 # maximum number of characters in the proposal content
 max_proposal_content_size = 10000
 # minimum epochs between end and grace epoch
-min_proposal_grace_epochs = 6
+min_proposal_grace_epochs = 2
 
 # Public goods funding parameters
 [pgf_params]
 # Initial set of stewards
 stewards = [
     # bertha
-    "tnam1q9rhgyv3ydq0zu3whnftvllqnvhvhm270qxay5tn",
+    # "tnam1q9rhgyv3ydq0zu3whnftvllqnvhvhm270qxay5tn",
     # validator-0
-    "tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx"
+    # "tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx"
 ]
 # The pgf funding inflation rate
-pgf_inflation_rate = "0.1"
+pgf_inflation_rate = "0.0"
 # The pgf stewards inflation rate
 stewards_inflation_rate = "0.01"

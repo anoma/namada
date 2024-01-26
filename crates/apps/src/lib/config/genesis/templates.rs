@@ -872,7 +872,7 @@ pub fn validate_balances(
 ) -> bool {
     let mut is_valid = true;
     use std::str::FromStr;
-    let native_alias = Alias::from_str("nam").expect("Infalllible");
+    let native_alias = Alias::from_str("naan").expect("Infalllible");
     balances.token.iter().for_each(|(token, next)| {
         // Every token alias used in Balances file must be present in
         // the Tokens file

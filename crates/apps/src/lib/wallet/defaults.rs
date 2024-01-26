@@ -53,7 +53,7 @@ mod dev {
     /// The default tokens with their aliases.
     pub fn tokens() -> HashMap<Address, &'static str> {
         vec![
-            (nam(), "NAM"),
+            (nam(), "NAAN"),
             (btc(), "BTC"),
             (eth(), "ETH"),
             (dot(), "DOT"),

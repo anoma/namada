@@ -588,7 +588,7 @@ mod tests {
 
     pub fn tokens() -> HashMap<Address, (&'static str, Denomination)> {
         vec![
-            (address::nam(), ("nam", 6.into())),
+            (address::nam(), ("naan", 6.into())),
             (address::btc(), ("btc", 8.into())),
             (address::eth(), ("eth", 18.into())),
             (address::dot(), ("dot", 10.into())),

@@ -219,7 +219,7 @@ where
         let nam_balances = genesis
             .balances
             .token
-            .get_mut(&Alias::from_str("nam").expect("Infallible"))
+            .get_mut(&Alias::from_str("naan").expect("Infallible"))
             .expect("NAM balances should exist in pre-genesis wallet already");
         nam_balances.0.insert(
             GenesisAddress::PublicKey(StringEncoded::new(sk.ref_to())),
@@ -1269,7 +1269,7 @@ pub mod constants {
     pub const MASP: &str = "masp";
 
     // Fungible token addresses
-    pub const NAM: &str = "NAM";
+    pub const NAM: &str = "NAAN";
     pub const BTC: &str = "BTC";
     pub const ETH: &str = "ETH";
     pub const DOT: &str = "DOT";
