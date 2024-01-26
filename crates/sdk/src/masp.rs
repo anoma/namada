@@ -538,6 +538,12 @@ pub struct Unscanned {
     pub vks: BTreeSet<ViewingKey>,
 }
 
+impl Unscanned {
+    pub fn contains_height(&self, height: u64) -> bool {
+        self.txs.iter().any(|(ix, _)| ix.height.0 == height)
+    }
+}
+
 /// Represents the current state of the shielded pool from the perspective of
 /// the chosen viewing keys.
 #[derive(BorshSerialize, BorshDeserialize, Debug, Clone)]
@@ -545,13 +551,11 @@ pub struct ShieldedContext<U: ShieldedUtils, S: SyncStatus = NotSyncing> {
     /// Location where this shielded context is saved
     #[borsh(skip)]
     pub utils: U,
-    /// The last indexed transaction fetched by the context
-    pub last_fetched: Option<IndexedTx>,
     /// The commitment tree produced by scanning all transactions up to tx_pos
     pub tree: CommitmentTree<Node>,
     /// Maps viewing keys to the block height to which they are synced.
     /// In particular, the height given by the value *has been scanned*.
-    pub vk_heights: BTreeMap<ViewingKey, BlockHeight>,
+    pub vk_heights: BTreeMap<ViewingKey, IndexedTx>,
     /// Maps viewing keys to applicable note positions
     pub pos_map: HashMap<ViewingKey, BTreeSet<usize>>,
     /// Maps a nullifier to the note position to which it applies
@@ -586,7 +590,6 @@ impl<U: ShieldedUtils + Default> Default for ShieldedContext<U> {
     fn default() -> ShieldedContext<U> {
         ShieldedContext::<U> {
             utils: U::default(),
-            last_fetched: None,
             tree: CommitmentTree::empty(),
             vk_heights: Default::default(),
             pos_map: HashMap::default(),
@@ -2038,7 +2041,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, NotSyncing> {
     pub fn into_syncing(self) -> ShieldedContext<U, Syncing> {
         ShieldedContext {
             utils: self.utils,
-            last_fetched: self.last_fetched,
             tree: self.tree,
             vk_heights: self.vk_heights,
             pos_map: self.pos_map,
@@ -2063,7 +2065,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, Syncing> {
     pub fn into_non_syncing(self) -> ShieldedContext<U> {
         ShieldedContext {
             utils: self.utils,
-            last_fetched: self.last_fetched,
             tree: self.tree,
             vk_heights: self.vk_heights,
             pos_map: self.pos_map,
@@ -2132,19 +2133,19 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, Syncing> {
         // add new viewing keys
         for esk in sks {
             let vk = to_viewing_key(esk).vk;
-            self.vk_heights.entry(vk).or_insert_with(|| 0.into());
+            self.vk_heights.entry(vk).or_default();
         }
         for vk in fvks {
-            self.vk_heights.entry(*vk).or_insert_with(|| 0.into());
+            self.vk_heights.entry(*vk).or_default();
         }
         // the latest block height which has been added to the witness Merkle
         // tree
-        let Some(mut latest_height) = self.vk_heights.values().max().cloned() else {
+        let Some(mut latest_idx) = self.vk_heights.values().max().cloned() else {
             return Ok(());
         };
 
         // get the bounds on the block heights to fetch
-        let mut start_height = self.vk_heights.values().min().cloned().unwrap();
+        let mut start_height = self.vk_heights.values().min().cloned().unwrap().height;
         // the last block height in the chain
         let last_block_height = query_block(client)
             .await?
@@ -2170,23 +2171,21 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, Syncing> {
         // keys.
         let txs = logger.scan(self.unscanned.txs.clone());
         for (indexed_tx, (epoch, tx, stx)) in txs {
-            if indexed_tx.height > latest_height {
+            if indexed_tx > latest_idx {
                 self.update_witness_map(indexed_tx, &stx)?;
             }
             let mut vk_heights = BTreeMap::new();
             std::mem::swap(&mut vk_heights, &mut self.vk_heights);
-            for vk in vk_heights.iter().filter_map(|(vk, h)| {
-                (*h < indexed_tx.height).then_some(vk)
+            for (vk, h) in vk_heights.iter_mut().filter_map(|(vk, h)| {
+                (*h < indexed_tx).then_some((vk, h))
             }) {
                 self.tx_scan(indexed_tx, epoch, &tx, &stx, vk)?;
+                *h = indexed_tx;
             }
             std::mem::swap(&mut vk_heights, &mut self.vk_heights);
-            latest_height = std::cmp::max(latest_height, indexed_tx.height);
+            latest_idx = std::cmp::max(latest_idx, indexed_tx);
             self.unscanned.txs.remove(&indexed_tx);
             self.save().await?;
-        }
-        for (_, height) in self.vk_heights.iter_mut() {
-            *height = fetch_up_to;
         }
 
         Ok(())
@@ -2344,6 +2343,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, Syncing> {
         // Fetch all the transactions we do not have yet
         let heights = logger.fetch(first_height_to_query.0..=last_query_height.0);
         for height in heights {
+            if self.unscanned.contains_height(height) {
+                continue;
+            }
             // Get the valid masp transactions at the specified height
             let epoch = query_epoch_at_height(client, height.into())
                 .await?
@@ -2378,18 +2380,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, Syncing> {
                 .block
                 .data;
 
-            self.last_fetched = txs_results
-                .last()
-                .map(|(idx, _)| IndexedTx {
-                    height: height.into(),
-                    index: *idx,
-                })
-                .or_else(|| {
-                    Some(IndexedTx {
-                        height: height.into(),
-                        index: Default::default(),
-                    })
-                });
             for (idx, tx_event) in txs_results {
                 let tx = Tx::try_from(block[idx.0 as usize].as_ref())
                     .map_err(|e| Error::Other(e.to_string()))?;

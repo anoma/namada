@@ -35,28 +35,6 @@ pub async fn syncing<
     };
 
     display_line!(io, "{}", "==== Shielded sync started ====".on_white());
-    if let Some(indexed) = shielded.last_fetched.as_ref() {
-        display_line!(
-            io,
-            "  -> last fetched tx: block height {}, index {}",
-            indexed.height,
-            indexed.index
-        );
-    }
-    if !shielded.unscanned.vks.is_empty() {
-        display_line!(
-            io,
-            "  -> viewing keys still to be synced: {}",
-            shielded.unscanned.vks.len()
-        );
-    }
-    if !shielded.unscanned.txs.is_empty() {
-        display_line!(
-            io,
-            "  -> fetched txs to scan: {}",
-            shielded.unscanned.txs.len()
-        );
-    }
     display_line!(io, "\n\n");
     let logger = CliLogger::new(io);
     let mut syncing = shielded.into_syncing();
