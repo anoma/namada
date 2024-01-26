@@ -955,7 +955,8 @@ impl BenchShieldedCtx {
             .find_spending_key(ALBERT_SPENDING_KEY, None)
             .unwrap();
         self.shielded = async_runtime
-            .block_on(self.shielded.syncing(
+            .block_on(crate::client::masp::syncing(
+                self.shielded,
                 &self.shell,
                 &StdIo,
                 None,
