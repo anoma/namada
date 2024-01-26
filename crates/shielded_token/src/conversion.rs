@@ -1,6 +1,8 @@
 //! MASP rewards conversions
 
-use namada_core::ledger::inflation::{RewardsController, ValsToUpdate};
+use namada_core::ledger::inflation::{
+    ShieldedRewardsController, ShieldedValsToUpdate,
+};
 use namada_core::types::address::{Address, MASP};
 use namada_core::types::dec::Dec;
 use namada_core::types::uint::Uint;
@@ -12,7 +14,7 @@ use namada_trans_token::{read_denom, Amount, DenominatedAmount, Denomination};
 
 use crate::storage_key::{
     masp_kd_gain_key, masp_kp_gain_key, masp_last_inflation_key,
-    masp_last_locked_ratio_key, masp_locked_ratio_target_key,
+    masp_last_locked_amount_key, masp_locked_amount_target_key,
     masp_max_reward_rate_key,
 };
 
@@ -45,31 +47,27 @@ where
 /// parameters and the last inflation and last locked rewards ratio values.
 pub fn calculate_masp_rewards<D, H>(
     wl_storage: &mut WlStorage<D, H>,
-    addr: &Address,
+    token: &Address,
 ) -> namada_storage::Result<((u128, u128), Denomination)>
 where
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
 {
     let (precision, denomination) =
-        calculate_masp_rewards_precision(wl_storage, addr)?;
+        calculate_masp_rewards_precision(wl_storage, token)?;
 
     let masp_addr = MASP;
-    // Query the storage for information
 
-    //// information about the amount of tokens on the chain
-    let total_tokens: Amount = wl_storage
-        .read(&minted_balance_key(addr))?
-        .expect("the total supply key should be here");
+    // Query the storage for information -------------------------
 
     //// information about the amount of native tokens on the chain
     let total_native_tokens: Amount = wl_storage
         .read(&minted_balance_key(&wl_storage.storage.native_token))?
         .expect("the total supply key should be here");
 
-    // total staked amount in the Shielded pool
-    let total_token_in_masp: Amount = wl_storage
-        .read(&balance_key(addr, &masp_addr))?
+    // total locked amount in the Shielded pool
+    let total_tokens_in_masp: Amount = wl_storage
+        .read(&balance_key(token, &masp_addr))?
         .unwrap_or_default();
 
     let epochs_per_year: u64 = wl_storage
@@ -78,37 +76,36 @@ where
 
     //// Values from the last epoch
     let last_inflation: Amount = wl_storage
-        .read(&masp_last_inflation_key(addr))?
+        .read(&masp_last_inflation_key(token))?
         .expect("failure to read last inflation");
 
-    let last_locked_ratio: Dec = wl_storage
-        .read(&masp_last_locked_ratio_key(addr))?
+    let last_locked_amount: Uint = wl_storage
+        .read(&masp_last_locked_amount_key(token))?
         .expect("failure to read last inflation");
 
     //// Parameters for each token
     let max_reward_rate: Dec = wl_storage
-        .read(&masp_max_reward_rate_key(addr))?
+        .read(&masp_max_reward_rate_key(token))?
         .expect("max reward should properly decode");
 
     let kp_gain_nom: Dec = wl_storage
-        .read(&masp_kp_gain_key(addr))?
+        .read(&masp_kp_gain_key(token))?
         .expect("kp_gain_nom reward should properly decode");
 
     let kd_gain_nom: Dec = wl_storage
-        .read(&masp_kd_gain_key(addr))?
+        .read(&masp_kd_gain_key(token))?
         .expect("kd_gain_nom reward should properly decode");
 
-    let locked_target_ratio: Dec = wl_storage
-        .read(&masp_locked_ratio_target_key(addr))?
+    let target_locked_amount: Uint = wl_storage
+        .read(&masp_locked_amount_target_key(token))?
         .expect("locked ratio target should properly decode");
 
     // Creating the PD controller for handing out tokens
-    let controller = RewardsController {
-        locked_tokens: total_token_in_masp.raw_amount(),
-        total_tokens: total_tokens.raw_amount(),
+    let controller = ShieldedRewardsController {
+        locked_tokens: total_tokens_in_masp.raw_amount(),
         total_native_tokens: total_native_tokens.raw_amount(),
-        locked_ratio_target: locked_target_ratio,
-        locked_ratio_last: last_locked_ratio,
+        locked_tokens_target: target_locked_amount,
+        locked_tokens_last: last_locked_amount,
         max_reward_rate,
         last_inflation_amount: last_inflation.raw_amount(),
         p_gain_nom: kp_gain_nom,
@@ -116,22 +113,20 @@ where
         epochs_per_year,
     };
 
-    let ValsToUpdate {
-        locked_ratio,
-        inflation,
-    } = RewardsController::run(controller);
+    let ShieldedValsToUpdate { inflation } =
+        ShieldedRewardsController::run(controller);
 
     // inflation-per-token = inflation / locked tokens = n/PRECISION
     // ∴ n = (inflation * PRECISION) / locked tokens
     // Since we must put the notes in a compatible format with the
     // note format, we must make the inflation amount discrete.
-    let noterized_inflation = if total_token_in_masp.is_zero() {
+    let noterized_inflation = if total_tokens_in_masp.is_zero() {
         0u128
     } else {
         inflation
             .checked_mul_div(
                 Uint::from(precision),
-                total_token_in_masp.raw_amount(),
+                total_tokens_in_masp.raw_amount(),
             )
             .and_then(|x| x.0.try_into().ok())
             .unwrap_or_else(|| {
@@ -139,40 +134,38 @@ where
                     "MASP inflation for {} assumed to be 0 because the \
                      computed value is too large. Please check the inflation \
                      parameters.",
-                    *addr
+                    *token
                 );
                 0u128
             })
     };
     let inflation_amount = Amount::from_uint(
-        (total_token_in_masp.raw_amount() / precision)
+        (total_tokens_in_masp.raw_amount() / precision)
             * Uint::from(noterized_inflation),
         0,
     )
     .unwrap();
     let denom_amount = DenominatedAmount::new(inflation_amount, denomination);
-    tracing::info!("MASP inflation for {addr} is {denom_amount}");
+    tracing::info!("MASP inflation for {token} is {denom_amount}");
 
     tracing::debug!(
-        "Controller, call: total_in_masp {:?}, total_tokens {:?}, \
-         total_native_tokens {:?}, locked_target_ratio {:?}, \
-         last_locked_ratio {:?}, max_reward_rate {:?}, last_inflation {:?}, \
-         kp_gain_nom {:?}, kd_gain_nom {:?}, epochs_per_year {:?}",
-        total_token_in_masp,
-        total_tokens,
+        "Controller, call: total_in_masp {:?}, total_native_tokens {:?}, \
+         locked_target_amount {:?}, last_locked_amount {:?}, max_reward_rate \
+         {:?}, last_inflation {:?}, kp_gain_nom {:?}, kd_gain_nom {:?}, \
+         epochs_per_year {:?}",
+        total_tokens_in_masp,
         total_native_tokens,
-        locked_target_ratio,
-        last_locked_ratio,
+        target_locked_amount,
+        last_locked_amount,
         max_reward_rate,
         last_inflation,
         kp_gain_nom,
         kd_gain_nom,
         epochs_per_year,
     );
-    tracing::debug!("Token address: {:?}", addr);
-    tracing::debug!("Ratio {:?}", locked_ratio);
+    tracing::debug!("Token address: {:?}", token);
     tracing::debug!("inflation from the pd controller {:?}", inflation);
-    tracing::debug!("total in the masp {:?}", total_token_in_masp);
+    tracing::debug!("total in the masp {:?}", total_tokens_in_masp);
     tracing::debug!("precision {}", precision);
     tracing::debug!("Noterized inflation: {}", noterized_inflation);
 
@@ -180,9 +173,10 @@ where
     // but we should make sure the return value's ratio matches
     // this new inflation rate in 'update_allowed_conversions',
     // otherwise we will have an inaccurate view of inflation
-    wl_storage.write(&masp_last_inflation_key(addr), inflation_amount)?;
+    wl_storage.write(&masp_last_inflation_key(token), inflation_amount)?;
 
-    wl_storage.write(&masp_last_locked_ratio_key(addr), locked_ratio)?;
+    wl_storage
+        .write(&masp_last_locked_amount_key(token), total_tokens_in_masp)?;
 
     Ok(((noterized_inflation, precision), denomination))
 }
@@ -285,12 +279,12 @@ where
         calculate_masp_rewards_precision(wl_storage, &native_token)?.0;
 
     // Reward all tokens according to above reward rates
-    for addr in &masp_reward_keys {
-        let (reward, denom) = calculate_masp_rewards(wl_storage, addr)?;
-        masp_reward_denoms.insert(addr.clone(), denom);
+    for token in &masp_reward_keys {
+        let (reward, denom) = calculate_masp_rewards(wl_storage, token)?;
+        masp_reward_denoms.insert(token.clone(), denom);
         // Dispense a transparent reward in parallel to the shielded rewards
         let addr_bal: Amount = wl_storage
-            .read(&balance_key(addr, &masp_addr))?
+            .read(&balance_key(token, &masp_addr))?
             .unwrap_or_default();
         // Get the last rewarded amount of the native token
         let normed_inflation = wl_storage
@@ -304,20 +298,20 @@ where
             // negative sign allows each instance of the old asset to be
             // cancelled out/replaced with the new asset
             let old_asset = encode_asset_type(
-                addr.clone(),
+                token.clone(),
                 denom,
                 digit,
                 Some(wl_storage.storage.last_epoch),
             )
             .into_storage_result()?;
             let new_asset = encode_asset_type(
-                addr.clone(),
+                token.clone(),
                 denom,
                 digit,
                 Some(wl_storage.storage.block.epoch),
             )
             .into_storage_result()?;
-            if *addr == native_token {
+            if *token == native_token {
                 // The amount that will be given of the new native token for
                 // every amount of the native token given in the
                 // previous epoch
@@ -332,7 +326,7 @@ where
                             "MASP reward for {} assumed to be 0 because the \
                              computed value is too large. Please check the \
                              inflation parameters.",
-                            addr
+                            token
                         );
                         *normed_inflation
                     });
@@ -341,7 +335,7 @@ where
                 // intermediate native tokens cancel/
                 // telescope out
                 current_convs.insert(
-                    (addr.clone(), denom, digit),
+                    (token.clone(), denom, digit),
                     (MaspAmount::from_pair(
                         old_asset,
                         -(*normed_inflation as i128),
@@ -382,7 +376,7 @@ where
                             "MASP reward for {} assumed to be 0 because the \
                              computed value is too large. Please check the \
                              inflation parameters.",
-                            addr
+                            token
                         );
                         0u128
                     });
@@ -390,7 +384,7 @@ where
                 // conversions are added together, the
                 // intermediate tokens cancel/ telescope out
                 current_convs.insert(
-                    (addr.clone(), denom, digit),
+                    (token.clone(), denom, digit),
                     (MaspAmount::from_pair(old_asset, -(reward.1 as i128))
                         .unwrap()
                         + MaspAmount::from_pair(new_asset, reward.1 as i128)
@@ -413,7 +407,7 @@ where
             wl_storage.storage.conversion_state.assets.insert(
                 old_asset,
                 (
-                    (addr.clone(), denom, digit),
+                    (token.clone(), denom, digit),
                     wl_storage.storage.last_epoch,
                     MaspAmount::zero().into(),
                     0,
@@ -592,7 +586,7 @@ mod tests {
                 max_reward_rate: Dec::from_str("0.1").unwrap(),
                 kp_gain_nom: Dec::from_str("0.1").unwrap(),
                 kd_gain_nom: Dec::from_str("0.1").unwrap(),
-                locked_ratio_target: Dec::from_str("0.6667").unwrap(),
+                locked_amount_target: Uint::from_u64(10_000),
             };
 
             for (token_addr, (alias, denom)) in tokens() {

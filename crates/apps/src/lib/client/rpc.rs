@@ -2523,7 +2523,7 @@ pub async fn query_masp_reward_tokens(context: &impl Namada) {
         max_reward_rate,
         kp_gain,
         kd_gain,
-        locked_ratio_target,
+        locked_amount_target,
     } in tokens
     {
         display_line!(context.io(), "{}: {}", name, address);
@@ -2532,8 +2532,8 @@ pub async fn query_masp_reward_tokens(context: &impl Namada) {
         display_line!(context.io(), "  Kd gain: {}", kd_gain);
         display_line!(
             context.io(),
-            "  Locked ratio target: {}",
-            locked_ratio_target
+            "  Locked amount target: {}",
+            locked_amount_target
         );
     }
 }

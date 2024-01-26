@@ -292,9 +292,8 @@ where
     let pos_max_inflation_rate = params.max_inflation_rate;
 
     // Run rewards PD controller
-    let pos_controller = inflation::RewardsController {
+    let pos_controller = inflation::PosRewardsController {
         locked_tokens: pos_locked_supply.raw_amount(),
-        total_tokens: total_tokens.raw_amount(),
         total_native_tokens: total_tokens.raw_amount(),
         locked_ratio_target: pos_locked_ratio_target,
         locked_ratio_last: pos_last_staked_ratio,
@@ -305,7 +304,7 @@ where
         epochs_per_year,
     };
     // Run the rewards controllers
-    let inflation::ValsToUpdate {
+    let inflation::PosValsToUpdate {
         locked_ratio,
         inflation,
     } = pos_controller.run();
@@ -313,6 +312,8 @@ where
     let inflation =
         token::Amount::from_uint(inflation, 0).into_storage_result()?;
 
+    // Mint inflation and partition rewards among all accounts that earn a
+    // portion of it
     update_rewards_products_and_mint_inflation(
         storage,
         &params,
