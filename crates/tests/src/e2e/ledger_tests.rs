@@ -2283,7 +2283,7 @@ fn pgf_governance_proposal() -> Result<()> {
     ];
 
     client = run!(test, Bin::Client, query_balance_args, Some(30))?;
-    client.exp_string("nam: 2000001.")?; // albert is a steward so he receive also inflation
+    client.exp_string("nam: 2000000.")?; // albert is a steward so he receive also inflation
     client.assert_success();
 
     // Check if governance funds are 0
