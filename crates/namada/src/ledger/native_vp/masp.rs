@@ -263,10 +263,7 @@ where
                 {
                     Some(IndexedTx { height, index })
                         if height == self.ctx.get_block_height()?
-                            && index == self.ctx.get_tx_index()? =>
-                    {
-                        ()
-                    }
+                            && index == self.ctx.get_tx_index()? => {}
                     Some(_) => {
                         return Err(Error::NativeVpError(
                             native_vp::Error::SimpleMessage(
@@ -300,7 +297,7 @@ where
         let token = match masp_balances.len() {
             0 => {
                 // No masp balance modification found, assume shielded
-                // transaction and return mock transparent data
+                // transaction and return dummy transparent data
                 return Ok(TransparentTransferData {
                     source: Address::Internal(Masp),
                     target: Address::Internal(Masp),
@@ -328,22 +325,12 @@ where
         // there's no need to check the token address in the balance key nor the
         // change to the actual balance, the multitoken VP will verify these
         let counterpart = match counterparts.len() {
-            0 => {
-                return Err(Error::NativeVpError(
-                    native_vp::Error::SimpleMessage(
-                        "No transparent transfer counterpart was found, this \
-                         should not happen",
-                    ),
-                ));
-            }
             1 => counterparts[0][1].to_owned(),
             _ => {
-                // We don't support a masp transfer and one ore more transparent
-                // transfers in the same transaction
                 return Err(Error::NativeVpError(
                     native_vp::Error::SimpleMessage(
-                        "More than one non-MASP transparent balance was \
-                         modified",
+                        "An invalid number of non-MASP transparent balances \
+                         was modified",
                     ),
                 ));
             }
