@@ -13,3 +13,6 @@ pub mod storage;
 
 /// The Pgf internal address
 pub const ADDRESS: Address = Address::Internal(InternalAddress::Pgf);
+
+/// Upper limit on the number of reward distribution per steawrd
+pub const REWARD_DISTRIBUTION_LIMIT: u64 = 100;
