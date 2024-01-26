@@ -5,7 +5,7 @@ use std::collections::{btree_map, BTreeMap, BTreeSet, HashMap, HashSet};
 use std::env;
 use std::fmt::Debug;
 use std::ops::Deref;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::str::FromStr;
 
 // use async_std::io::prelude::WriteExt;
@@ -2075,7 +2075,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 .map_err(|e| Error::Other(e.to_string()))?
                 // Two up from "tests" dir to the root dir
                 .parent()
-                .and_then(Path::parent)
+                .and_then(std::path::Path::parent)
                 .ok_or_else(|| {
                     Error::Other("Can not get root dir".to_string())
                 })?
