@@ -25,7 +25,6 @@ use namada_apps::node::ledger::shell::Shell;
 use namada_apps::wallet::pre_genesis;
 use namada_core::types::chain::ChainIdPrefix;
 use namada_sdk::wallet::alias::Alias;
-use namada_tx_prelude::uint::Uint;
 
 use crate::e2e::setup::{copy_wasm_to_chain_dir, SINGLE_NODE_NET_GENESIS};
 
@@ -55,7 +54,7 @@ pub fn initialize_genesis() -> Result<(MockNode, MockServicesController)> {
             max_reward_rate: Dec::from_str("0.1").unwrap(),
             kp_gain_nom: Dec::from_str("0.1").unwrap(),
             kd_gain_nom: Dec::from_str("0.1").unwrap(),
-            locked_amount_target: Uint::from_u64(10_000),
+            locked_amount_target: 10_000_u64,
         });
     }
     let genesis_path = test_dir.path().join("int-test-genesis-src");

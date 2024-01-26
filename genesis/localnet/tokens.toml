@@ -7,7 +7,7 @@ denom = 6
 max_reward_rate = "0.01"
 kd_gain_nom = "0.25"
 kp_gain_nom = "0.25"
-locked_amount_target = "10000"
+locked_amount_target = 10000
 
 [token.BTC]
 denom = 8
@@ -16,7 +16,7 @@ denom = 8
 max_reward_rate = "0.01"
 kd_gain_nom = "0.25"
 kp_gain_nom = "0.25"
-locked_amount_target = "10000"
+locked_amount_target = 10000
 
 [token.ETH]
 denom = 18
@@ -25,7 +25,7 @@ denom = 18
 max_reward_rate = "0.01"
 kd_gain_nom = "0.25"
 kp_gain_nom = "0.25"
-locked_amount_target = "10000"
+locked_amount_target = 10000
 
 [token.DOT]
 denom = 10
@@ -34,7 +34,7 @@ denom = 10
 max_reward_rate = "0.01"
 kd_gain_nom = "0.25"
 kp_gain_nom = "0.25"
-locked_amount_target = "10000"
+locked_amount_target = 10000
 
 [token.Schnitzel]
 denom = 6
@@ -43,7 +43,7 @@ denom = 6
 max_reward_rate = "0.01"
 kd_gain_nom = "0.25"
 kp_gain_nom = "0.25"
-locked_amount_target = "10000"
+locked_amount_target = 10000
 
 [token.Apfel]
 denom = 6
@@ -52,7 +52,7 @@ denom = 6
 max_reward_rate = "0.01"
 kd_gain_nom = "0.25"
 kp_gain_nom = "0.25"
-locked_amount_target = "10000"
+locked_amount_target = 10000
 
 [token.Kartoffel]
 denom = 6
@@ -61,4 +61,4 @@ denom = 6
 max_reward_rate = "0.01"
 kd_gain_nom = "0.25"
 kp_gain_nom = "0.25"
-locked_amount_target = "10000"
+locked_amount_target = 10000

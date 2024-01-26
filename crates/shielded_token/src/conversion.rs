@@ -79,7 +79,7 @@ where
         .read(&masp_last_inflation_key(token))?
         .expect("failure to read last inflation");
 
-    let last_locked_amount: Uint = wl_storage
+    let last_locked_amount: Amount = wl_storage
         .read(&masp_last_locked_amount_key(token))?
         .expect("failure to read last inflation");
 
@@ -96,7 +96,7 @@ where
         .read(&masp_kd_gain_key(token))?
         .expect("kd_gain_nom reward should properly decode");
 
-    let target_locked_amount: Uint = wl_storage
+    let target_locked_amount: Amount = wl_storage
         .read(&masp_locked_amount_target_key(token))?
         .expect("locked ratio target should properly decode");
 
@@ -104,8 +104,8 @@ where
     let controller = ShieldedRewardsController {
         locked_tokens: total_tokens_in_masp.raw_amount(),
         total_native_tokens: total_native_tokens.raw_amount(),
-        locked_tokens_target: target_locked_amount,
-        locked_tokens_last: last_locked_amount,
+        locked_tokens_target: target_locked_amount.raw_amount(),
+        locked_tokens_last: last_locked_amount.raw_amount(),
         max_reward_rate,
         last_inflation_amount: last_inflation.raw_amount(),
         p_gain_nom: kp_gain_nom,
@@ -586,7 +586,7 @@ mod tests {
                 max_reward_rate: Dec::from_str("0.1").unwrap(),
                 kp_gain_nom: Dec::from_str("0.1").unwrap(),
                 kd_gain_nom: Dec::from_str("0.1").unwrap(),
-                locked_amount_target: Uint::from_u64(10_000),
+                locked_amount_target: 10_000_u64,
             };
 
             for (token_addr, (alias, denom)) in tokens() {

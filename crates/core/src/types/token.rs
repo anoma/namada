@@ -1010,8 +1010,8 @@ pub struct MaspParams {
     /// Shielded Pool nominal proportional gain for the given token
     pub kp_gain_nom: Dec,
     /// Target amount for the given token that is locked in the shielded pool
-    /// TODO: should this be a Uint or DenominatedAmount?
-    pub locked_amount_target: Uint,
+    /// TODO: should this be a Uint or DenominatedAmount???
+    pub locked_amount_target: u64,
 }
 
 impl Default for MaspParams {
@@ -1020,7 +1020,7 @@ impl Default for MaspParams {
             max_reward_rate: Dec::from_str("0.1").unwrap(),
             kp_gain_nom: Dec::from_str("0.25").unwrap(),
             kd_gain_nom: Dec::from_str("0.25").unwrap(),
-            locked_amount_target: Uint::one(), // FIXME: just a dummy value rn
+            locked_amount_target: 10_000_u64,
         }
     }
 }
