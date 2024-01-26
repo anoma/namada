@@ -1080,7 +1080,7 @@ fn claim_rewards(c: &mut Criterion) {
 }
 
 criterion_group!(
-    whitelisted_txs,
+    allowed_txs,
     transfer,
     bond,
     unbond,
@@ -1104,4 +1104,4 @@ criterion_group!(
     claim_rewards,
     change_consensus_key
 );
-criterion_main!(whitelisted_txs);
+criterion_main!(allowed_txs);

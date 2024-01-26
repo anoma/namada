@@ -52,6 +52,7 @@ fn new_blake2b() -> Blake2b {
 mod tests {
     use std::collections::HashMap;
 
+    use borsh::BorshDeserialize;
     use itertools::Itertools;
     use namada::eth_bridge::storage::proof::BridgePoolRootProof;
     use namada::ledger::eth_bridge::storage::bridge_pool;
@@ -59,7 +60,9 @@ mod tests {
     use namada::ledger::ibc::storage::ibc_key;
     use namada::ledger::parameters::{EpochDuration, Parameters};
     use namada::state::write_log::WriteLog;
-    use namada::state::{self, StorageWrite, StoreType, WlStorage};
+    use namada::state::{
+        self, StorageRead, StorageWrite, StoreType, WlStorage, DB,
+    };
     use namada::token::conversion::update_allowed_conversions;
     use namada::types::chain::ChainId;
     use namada::types::ethereum_events::Uint;
@@ -68,13 +71,14 @@ mod tests {
     use namada::types::storage::{BlockHash, BlockHeight, Key};
     use namada::types::time::DurationSecs;
     use namada::types::{address, storage};
-    use namada::{parameters, token, types};
+    use namada::{parameters, types};
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::test_runner::Config;
     use tempfile::TempDir;
 
     use super::*;
+    use crate::node::ledger::shell::is_merklized_storage_key;
 
     #[test]
     fn test_crud_value() {
@@ -86,6 +90,7 @@ mod tests {
             address::nam(),
             None,
             None,
+            is_merklized_storage_key,
         );
         let key = Key::parse("key").expect("cannot parse the key string");
         let value: u64 = 1;
@@ -138,6 +143,7 @@ mod tests {
             address::nam(),
             None,
             None,
+            is_merklized_storage_key,
         );
         storage
             .begin_block(BlockHash::default(), BlockHeight(100))
@@ -156,8 +162,8 @@ mod tests {
             max_expected_time_per_block: DurationSecs(3600),
             max_proposal_bytes: Default::default(),
             max_block_gas: 100,
-            vp_whitelist: vec![],
-            tx_whitelist: vec![],
+            vp_allowlist: vec![],
+            tx_allowlist: vec![],
             implicit_vp_code_hash: Default::default(),
             epochs_per_year: 365,
             max_signatures_per_transaction: 10,
@@ -182,46 +188,6 @@ mod tests {
             .new_epoch(BlockHeight(100));
         // make wl_storage to update conversion for a new epoch
 
-        let token_params = token::Parameters {
-            max_reward_rate: Default::default(),
-            kd_gain_nom: Default::default(),
-            kp_gain_nom: Default::default(),
-            locked_ratio_target: Default::default(),
-        };
-        // Insert a map assigning random addresses to each token alias.
-        // Needed for storage but not for this test.
-        for (token, _) in address::tokens() {
-            let addr = address::gen_deterministic_established_address(token);
-            token::write_params(&token_params, &mut wl_storage, &addr).unwrap();
-            wl_storage
-                .write(
-                    &token::storage_key::minted_balance_key(&addr),
-                    token::Amount::zero(),
-                )
-                .unwrap();
-            wl_storage
-                .storage
-                .conversion_state
-                .tokens
-                .insert(token.to_string(), addr);
-        }
-        wl_storage
-            .storage
-            .conversion_state
-            .tokens
-            .insert("nam".to_string(), wl_storage.storage.native_token.clone());
-        let addr = wl_storage.storage.native_token.clone();
-        token::write_params(&token_params, &mut wl_storage, &addr).unwrap();
-
-        wl_storage
-            .write(
-                &token::storage_key::minted_balance_key(
-                    &wl_storage.storage.native_token.clone(),
-                ),
-                token::Amount::zero(),
-            )
-            .unwrap();
-        wl_storage.storage.conversion_state.normed_inflation = Some(1);
         update_allowed_conversions(&mut wl_storage)
             .expect("update conversions failed");
         wl_storage.commit_block().expect("commit failed");
@@ -239,6 +205,7 @@ mod tests {
             address::nam(),
             None,
             None,
+            is_merklized_storage_key,
         );
         storage
             .load_last_state()
@@ -263,6 +230,7 @@ mod tests {
             address::nam(),
             None,
             None,
+            is_merklized_storage_key,
         );
         storage
             .begin_block(BlockHash::default(), BlockHeight(100))
@@ -309,6 +277,7 @@ mod tests {
             address::nam(),
             None,
             None,
+            is_merklized_storage_key,
         );
         storage
             .begin_block(BlockHash::default(), BlockHeight(100))
@@ -376,6 +345,7 @@ mod tests {
             address::nam(),
             None,
             None,
+            is_merklized_storage_key,
         );
 
         // 1. For each `blocks_write_value`, write the current block height if
@@ -469,6 +439,7 @@ mod tests {
             address::nam(),
             None,
             None,
+            is_merklized_storage_key,
         );
 
         let num_keys = 5;
@@ -587,6 +558,7 @@ mod tests {
             address::nam(),
             None,
             Some(5),
+            is_merklized_storage_key,
         );
         let new_epoch_start = BlockHeight(1);
         let signed_root_key = bridge_pool::get_signed_root_key();
@@ -692,6 +664,7 @@ mod tests {
             address::nam(),
             None,
             None,
+            is_merklized_storage_key,
         );
         let mut storage = WlStorage {
             storage,
@@ -782,5 +755,205 @@ mod tests {
             .unwrap()
             .map(Result::unwrap);
         itertools::assert_equal(iter, expected);
+    }
+
+    fn test_key_1() -> Key {
+        Key::parse("testing1").unwrap()
+    }
+
+    fn test_key_2() -> Key {
+        Key::parse("testing2").unwrap()
+    }
+
+    fn merkle_tree_key_filter(key: &Key) -> bool {
+        key == &test_key_1()
+    }
+
+    #[test]
+    fn test_persistent_storage_writing_without_merklizing_or_diffs() {
+        let db_path =
+            TempDir::new().expect("Unable to create a temporary DB directory");
+        let storage = PersistentStorage::open(
+            db_path.path(),
+            ChainId::default(),
+            address::nam(),
+            None,
+            None,
+            merkle_tree_key_filter,
+        );
+        let mut wls = WlStorage {
+            storage,
+            write_log: Default::default(),
+        };
+        // Start the first block
+        let first_height = BlockHeight::first();
+        wls.storage.block.height = first_height;
+
+        let key1 = test_key_1();
+        let val1 = 1u64;
+        let key2 = test_key_2();
+        let val2 = 2u64;
+
+        // Standard write of key-val-1
+        wls.write(&key1, val1).unwrap();
+
+        // Read from WlStorage should return val1
+        let res = wls.read::<u64>(&key1).unwrap().unwrap();
+        assert_eq!(res, val1);
+
+        // Read from Storage shouldn't return val1 because the block hasn't been
+        // committed
+        let (res, _) = wls.storage.read(&key1).unwrap();
+        assert!(res.is_none());
+
+        // Write key-val-2 without merklizing or diffs
+        wls.write(&key2, val2).unwrap();
+
+        // Read from WlStorage should return val2
+        let res = wls.read::<u64>(&key2).unwrap().unwrap();
+        assert_eq!(res, val2);
+
+        // Commit block and storage changes
+        wls.commit_block().unwrap();
+        wls.storage.block.height = wls.storage.block.height.next_height();
+        let second_height = wls.storage.block.height;
+
+        // Read key1 from Storage should return val1
+        let (res1, _) = wls.storage.read(&key1).unwrap();
+        let res1 = u64::try_from_slice(&res1.unwrap()).unwrap();
+        assert_eq!(res1, val1);
+
+        // Check merkle tree inclusion of key-val-1 explicitly
+        let is_merklized1 = wls.storage.block.tree.has_key(&key1).unwrap();
+        assert!(is_merklized1);
+
+        // Key2 should be in storage. Confirm by reading from
+        // WlStorage and also by reading Storage subspace directly
+        let res2 = wls.read::<u64>(&key2).unwrap().unwrap();
+        assert_eq!(res2, val2);
+        let res2 = wls.storage.db.read_subspace_val(&key2).unwrap().unwrap();
+        let res2 = u64::try_from_slice(&res2).unwrap();
+        assert_eq!(res2, val2);
+
+        // Check explicitly that key-val-2 is not in merkle tree
+        let is_merklized2 = wls.storage.block.tree.has_key(&key2).unwrap();
+        assert!(!is_merklized2);
+
+        // Check that the proper diffs exist for key-val-1
+        let res1 = wls
+            .storage
+            .db
+            .read_diffs_val(&key1, first_height, true)
+            .unwrap();
+        assert!(res1.is_none());
+
+        let res1 = wls
+            .storage
+            .db
+            .read_diffs_val(&key1, first_height, false)
+            .unwrap()
+            .unwrap();
+        let res1 = u64::try_from_slice(&res1).unwrap();
+        assert_eq!(res1, val1);
+
+        // Check that there are diffs for key-val-2 in block 0, since all keys
+        // need to have diffs for at least 1 block for rollback purposes
+        let res2 = wls
+            .storage
+            .db
+            .read_diffs_val(&key2, first_height, true)
+            .unwrap();
+        assert!(res2.is_none());
+        let res2 = wls
+            .storage
+            .db
+            .read_diffs_val(&key2, first_height, false)
+            .unwrap()
+            .unwrap();
+        let res2 = u64::try_from_slice(&res2).unwrap();
+        assert_eq!(res2, val2);
+
+        // Delete the data then commit the block
+        wls.delete(&key1).unwrap();
+        wls.delete(&key2).unwrap();
+        wls.commit_block().unwrap();
+        wls.storage.block.height = wls.storage.block.height.next_height();
+
+        // Check the key-vals are removed from the storage subspace
+        let res1 = wls.read::<u64>(&key1).unwrap();
+        let res2 = wls.read::<u64>(&key2).unwrap();
+        assert!(res1.is_none() && res2.is_none());
+        let res1 = wls.storage.db.read_subspace_val(&key1).unwrap();
+        let res2 = wls.storage.db.read_subspace_val(&key2).unwrap();
+        assert!(res1.is_none() && res2.is_none());
+
+        // Check that the key-vals don't exist in the merkle tree anymore
+        let is_merklized1 = wls.storage.block.tree.has_key(&key1).unwrap();
+        let is_merklized2 = wls.storage.block.tree.has_key(&key2).unwrap();
+        assert!(!is_merklized1 && !is_merklized2);
+
+        // Check that key-val-1 diffs are properly updated for blocks 0 and 1
+        let res1 = wls
+            .storage
+            .db
+            .read_diffs_val(&key1, first_height, true)
+            .unwrap();
+        assert!(res1.is_none());
+
+        let res1 = wls
+            .storage
+            .db
+            .read_diffs_val(&key1, first_height, false)
+            .unwrap()
+            .unwrap();
+        let res1 = u64::try_from_slice(&res1).unwrap();
+        assert_eq!(res1, val1);
+
+        let res1 = wls
+            .storage
+            .db
+            .read_diffs_val(&key1, second_height, true)
+            .unwrap()
+            .unwrap();
+        let res1 = u64::try_from_slice(&res1).unwrap();
+        assert_eq!(res1, val1);
+
+        let res1 = wls
+            .storage
+            .db
+            .read_diffs_val(&key1, second_height, false)
+            .unwrap();
+        assert!(res1.is_none());
+
+        // Check that key-val-2 diffs don't exist for block 0 anymore
+        let res2 = wls
+            .storage
+            .db
+            .read_diffs_val(&key2, first_height, true)
+            .unwrap();
+        assert!(res2.is_none());
+        let res2 = wls
+            .storage
+            .db
+            .read_diffs_val(&key2, first_height, false)
+            .unwrap();
+        assert!(res2.is_none());
+
+        // Check that the block 1 diffs for key-val-2 include an "old" value of
+        // val2 and no "new" value
+        let res2 = wls
+            .storage
+            .db
+            .read_diffs_val(&key2, second_height, true)
+            .unwrap()
+            .unwrap();
+        let res2 = u64::try_from_slice(&res2).unwrap();
+        assert_eq!(res2, val2);
+        let res2 = wls
+            .storage
+            .db
+            .read_diffs_val(&key2, second_height, false)
+            .unwrap();
+        assert!(res2.is_none());
     }
 }

@@ -17,7 +17,7 @@ use namada_core::types::storage::{
     BlockHeight, BlockResults, Epoch, Key, PrefixValue,
 };
 use namada_core::types::token::{
-    Amount, DenominatedAmount, Denomination, MaspDenom,
+    Amount, DenominatedAmount, Denomination, MaspDigitPos,
 };
 use namada_core::types::{storage, token};
 use namada_governance::parameters::GovernanceParameters;
@@ -44,6 +44,7 @@ use crate::error::{EncodingError, Error, QueryError, TxSubmitError};
 use crate::events::Event;
 use crate::internal_macros::echo_error;
 use crate::io::Io;
+use crate::masp::MaspTokenRewardData;
 use crate::queries::vp::pos::EnrichedBondsAndUnbondsDetails;
 use crate::queries::{Client, RPC};
 use crate::tendermint::block::Height;
@@ -180,11 +181,11 @@ pub async fn get_token_balance<C: crate::queries::Client + Sync>(
     )
 }
 
-/// Query token total supply;
+/// Query token total supply.
 pub async fn get_token_total_supply<C: crate::queries::Client + Sync>(
     client: &C,
     token: &Address,
-) -> Result<Option<token::Amount>, error::Error> {
+) -> Result<token::Amount, error::Error> {
     convert_response::<C, _>(RPC.vp().token().total_supply(client, token).await)
 }
 
@@ -291,7 +292,8 @@ pub async fn query_conversion<C: crate::queries::Client + Sync>(
     asset_type: AssetType,
 ) -> Option<(
     Address,
-    MaspDenom,
+    Denomination,
+    MaspDigitPos,
     Epoch,
     masp_primitives::transaction::components::I128Sum,
     MerklePath<Node>,
@@ -309,6 +311,8 @@ pub async fn query_conversions<C: crate::queries::Client + Sync>(
         AssetType,
         (
             Address,
+            Denomination,
+            MaspDigitPos,
             Epoch,
             masp_primitives::transaction::components::I128Sum,
         ),
@@ -321,7 +325,7 @@ pub async fn query_conversions<C: crate::queries::Client + Sync>(
 /// Query to read the tokens that earn masp rewards.
 pub async fn query_masp_reward_tokens<C: crate::queries::Client + Sync>(
     client: &C,
-) -> Result<BTreeMap<String, Address>, Error> {
+) -> Result<Vec<MaspTokenRewardData>, Error> {
     convert_response::<C, _>(RPC.shell().masp_reward_tokens(client).await)
 }
 
@@ -1168,6 +1172,16 @@ pub async fn enriched_bonds_and_unbonds<C: crate::queries::Client + Sync>(
                 validator,
             )
             .await,
+    )
+}
+
+/// Query the denomination of the given token
+pub async fn query_denom<C: crate::queries::Client + Sync>(
+    client: &C,
+    token: &Address,
+) -> Option<Denomination> {
+    unwrap_client_response::<C, Option<Denomination>>(
+        RPC.vp().token().denomination(client, token).await,
     )
 }
 

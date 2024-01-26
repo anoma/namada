@@ -49,8 +49,28 @@ pub mod main {
         ctx.write(&target_key, 9_u64)?;
 
         // parameters
-        let target_key = parameters_storage::get_tx_whitelist_storage_key();
+        let target_key = parameters_storage::get_tx_allowlist_storage_key();
         ctx.write(&target_key, vec!["hash"])?;
+        Ok(())
+    }
+}
+
+/// A tx to be used as proposal_code for changing shielded rewards
+#[cfg(feature = "tx_proposal_masp_reward")]
+pub mod main {
+    use std::str::FromStr;
+
+    use dec::Dec;
+    use namada_tx_prelude::*;
+
+    #[transaction(gas = 1000)]
+    fn apply_tx(ctx: &mut Ctx, _tx_data: Tx) -> TxResult {
+        let native_token = ctx.get_native_token()?;
+        let shielded_rewards_key =
+            token::storage_key::masp_max_reward_rate_key(&native_token);
+
+        ctx.write(&shielded_rewards_key, Dec::from_str("0.05").unwrap())?;
+
         Ok(())
     }
 }

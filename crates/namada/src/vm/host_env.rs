@@ -17,6 +17,7 @@ use namada_gas::{
 };
 use namada_state::write_log::{self, WriteLog};
 use namada_state::{self, ResultExt, State, StorageHasher};
+use namada_token::storage_key::is_any_token_parameter_key;
 use namada_tx::data::TxSentinel;
 use namada_tx::Tx;
 use thiserror::Error;
@@ -56,8 +57,10 @@ pub enum TxRuntimeError {
     CannotDeleteVp,
     #[error("Storage modification error: {0}")]
     StorageModificationError(write_log::Error),
+    #[error("State error: {0}")]
+    StateError(#[from] namada_state::Error),
     #[error("Storage error: {0}")]
-    StorageError(#[from] namada_state::Error),
+    StorageError(#[from] namada_state::StorageError),
     #[error("Storage data error: {0}")]
     StorageDataError(crate::types::storage::Error),
     #[error("Encoding error: {0}")]
@@ -72,9 +75,14 @@ pub enum TxRuntimeError {
     MissingTxData,
     #[error("IBC: {0}")]
     Ibc(#[from] namada_ibc::Error),
+    #[error("No value found in result buffer")]
+    NoValueInResultBuffer,
+    #[error("VP code is not allowed in allowlist parameter.")]
+    DisallowedVp,
 }
 
-type TxResult<T> = std::result::Result<T, TxRuntimeError>;
+/// Result of a tx host env fn call
+pub type TxResult<T> = std::result::Result<T, TxRuntimeError>;
 
 /// A transaction's host environment
 pub struct TxVmEnv<'a, MEM, DB, H, CA>
@@ -565,9 +573,8 @@ where
         None => {
             // when not found in write log, try to check the storage
             let storage = unsafe { env.ctx.storage.get() };
-            let (present, gas) = storage
-                .has_key(&key)
-                .map_err(TxRuntimeError::StorageError)?;
+            let (present, gas) =
+                storage.has_key(&key).map_err(TxRuntimeError::StateError)?;
             tx_charge_gas(env, gas)?;
             HostEnvResult::from(present).to_i64()
         }
@@ -643,7 +650,7 @@ where
             // when not found in write log, try to read from the storage
             let storage = unsafe { env.ctx.storage.get() };
             let (value, gas) =
-                storage.read(&key).map_err(TxRuntimeError::StorageError)?;
+                storage.read(&key).map_err(TxRuntimeError::StateError)?;
             tx_charge_gas(env, gas)?;
             match value {
                 Some(value) => {
@@ -680,7 +687,9 @@ where
     CA: WasmCacheAccess,
 {
     let result_buffer = unsafe { env.ctx.result_buffer.get() };
-    let value = result_buffer.take().unwrap();
+    let value = result_buffer
+        .take()
+        .ok_or(TxRuntimeError::NoValueInResultBuffer)?;
     let gas = env
         .memory
         .write_bytes(result_ptr, value)
@@ -898,6 +907,8 @@ where
     // Get the token if the key is a balance or minter key
     let token = if let Some([token, _]) = is_any_token_balance_key(key) {
         Some(token)
+    } else if let Some(token) = is_any_token_parameter_key(key) {
+        Some(token)
     } else {
         is_any_minted_balance_key(key).or_else(|| is_any_minter_key(key))
     };
@@ -921,7 +932,7 @@ where
         if vp.is_none() {
             let (is_present, gas) = storage
                 .has_key(&vp_key)
-                .map_err(TxRuntimeError::StorageError)?;
+                .map_err(TxRuntimeError::StateError)?;
             tx_charge_gas(env, gas)?;
             if !is_present {
                 tracing::info!(
@@ -1197,7 +1208,9 @@ where
     CA: WasmCacheAccess,
 {
     let result_buffer = unsafe { env.ctx.result_buffer.get() };
-    let value = result_buffer.take().unwrap();
+    let value = result_buffer
+        .take()
+        .ok_or(vp_host_fns::RuntimeError::NoValueInResultBuffer)?;
     let gas = env
         .memory
         .write_bytes(result_ptr, value)
@@ -1700,7 +1713,7 @@ where
     let storage = unsafe { env.ctx.storage.get() };
     let (header, gas) = storage
         .get_block_header(Some(BlockHeight(height)))
-        .map_err(TxRuntimeError::StorageError)?;
+        .map_err(TxRuntimeError::StateError)?;
     tx_charge_gas(env, gas)?;
     Ok(match header {
         Some(h) => {
@@ -2090,7 +2103,7 @@ where
         let hash_key = Key::wasm_hash(tag);
         let (result, gas) = storage
             .read(&hash_key)
-            .map_err(TxRuntimeError::StorageError)?;
+            .map_err(TxRuntimeError::StateError)?;
         tx_charge_gas(env, gas)?;
         if let Some(tag_hash) = result {
             let tag_hash = Hash::try_from(&tag_hash[..]).map_err(|e| {
@@ -2110,6 +2123,13 @@ where
         }
     }
 
+    // Then check that VP code hash is in the allowlist.
+    if !crate::parameters::is_vp_allowed(&env.ctx, &code_hash)
+        .map_err(TxRuntimeError::StorageError)?
+    {
+        return Err(TxRuntimeError::DisallowedVp);
+    }
+
     // Then check that the corresponding VP code does indeed exist
     let code_key = Key::wasm_code(&code_hash);
     let write_log = unsafe { env.ctx.write_log.get() };
@@ -2119,7 +2139,7 @@ where
         let storage = unsafe { env.ctx.storage.get() };
         let (is_present, gas) = storage
             .has_key(&code_key)
-            .map_err(TxRuntimeError::StorageError)?;
+            .map_err(TxRuntimeError::StateError)?;
         tx_charge_gas(env, gas)?;
         if !is_present {
             return Err(TxRuntimeError::InvalidVpCodeHash(
@@ -2726,6 +2746,7 @@ pub mod testing {
 
     use super::*;
     use crate::vm::memory::testing::NativeMemory;
+    use crate::vm::wasm::memory::WasmMemory;
 
     /// Setup a transaction environment
     #[allow(clippy::too_many_arguments)]
@@ -2749,6 +2770,50 @@ pub mod testing {
     {
         TxVmEnv::new(
             NativeMemory,
+            storage,
+            write_log,
+            iterators,
+            gas_meter,
+            sentinel,
+            tx,
+            tx_index,
+            verifiers,
+            result_buffer,
+            #[cfg(feature = "wasm-runtime")]
+            vp_wasm_cache,
+            #[cfg(feature = "wasm-runtime")]
+            tx_wasm_cache,
+        )
+    }
+
+    /// Setup a transaction environment
+    #[allow(clippy::too_many_arguments)]
+    pub fn tx_env_with_wasm_memory<DB, H, CA>(
+        storage: &State<DB, H>,
+        write_log: &mut WriteLog,
+        iterators: &mut PrefixIterators<'static, DB>,
+        verifiers: &mut BTreeSet<Address>,
+        gas_meter: &mut TxGasMeter,
+        sentinel: &mut TxSentinel,
+        tx: &Tx,
+        tx_index: &TxIndex,
+        result_buffer: &mut Option<Vec<u8>>,
+        #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
+        #[cfg(feature = "wasm-runtime")] tx_wasm_cache: &mut TxCache<CA>,
+    ) -> TxVmEnv<'static, WasmMemory, DB, H, CA>
+    where
+        DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+        H: StorageHasher,
+        CA: WasmCacheAccess,
+    {
+        let store = crate::vm::wasm::compilation_cache::common::store();
+        let initial_memory =
+            crate::vm::wasm::memory::prepare_tx_memory(&store).unwrap();
+        let mut wasm_memory = WasmMemory::default();
+        wasm_memory.inner.initialize(initial_memory);
+
+        TxVmEnv::new(
+            wasm_memory,
             storage,
             write_log,
             iterators,

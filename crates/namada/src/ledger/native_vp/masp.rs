@@ -16,21 +16,23 @@ use namada_core::types::storage::{IndexedTx, Key};
 use namada_gas::MASP_VERIFY_SHIELDED_TX_GAS;
 use namada_sdk::masp::verify_shielded_tx;
 use namada_state::{OptionExt, ResultExt};
+use namada_token::read_denom;
 use namada_tx::Tx;
 use namada_vp_env::VpEnv;
 use ripemd::Digest as RipemdDigest;
 use sha2::Digest as Sha2Digest;
 use thiserror::Error;
 use token::storage_key::{
-    is_masp_allowed_key, is_masp_key, is_masp_nullifier_key,
+    balance_key, is_masp_allowed_key, is_masp_key, is_masp_nullifier_key,
     masp_commitment_anchor_key, masp_commitment_tree_key,
     masp_convert_anchor_key, masp_nullifier_key, masp_pin_tx_key,
 };
-use token::MaspDenom;
+use token::Amount;
 
 use crate::ledger::native_vp;
 use crate::ledger::native_vp::{Ctx, NativeVp};
 use crate::token;
+use crate::types::token::MaspDigitPos;
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]
@@ -233,7 +235,8 @@ where
     fn valid_state(
         &self,
         masp_keys_changed: &[&Key],
-        pin_key: Option<&str>,
+        transfer: &token::Transfer,
+        transfer_amount: Amount,
     ) -> Result<bool> {
         // Check that the transaction didn't write unallowed masp keys
         if masp_keys_changed
@@ -243,8 +246,55 @@ where
             return Ok(false);
         }
 
+        // Check that the declared amount in the transaction matches the actual
+        // change in storage
+        let pre_masp_balance: Amount = self
+            .ctx
+            .read_pre(&balance_key(&transfer.token, &Address::Internal(Masp)))?
+            .unwrap_or_default();
+        let post_masp_balance: Amount = self
+            .ctx
+            .read_post(&balance_key(&transfer.token, &Address::Internal(Masp)))?
+            .unwrap_or_default();
+
+        match (&transfer.source, &transfer.target) {
+            (&Address::Internal(Masp), &Address::Internal(Masp)) => {
+                // For shileded operations the amount must be redacted to 0
+                if post_masp_balance != pre_masp_balance {
+                    return Ok(false);
+                }
+            }
+            (&Address::Internal(Masp), _) => {
+                // Unshielding
+                if pre_masp_balance.checked_sub(post_masp_balance).ok_or_else(
+                    || {
+                        Error::NativeVpError(native_vp::Error::SimpleMessage(
+                            "Underflowed in balance check",
+                        ))
+                    },
+                )? != transfer_amount
+                {
+                    return Ok(false);
+                }
+            }
+            (_, &Address::Internal(Masp)) => {
+                // Shielding
+                if post_masp_balance.checked_sub(pre_masp_balance).ok_or_else(
+                    || {
+                        Error::NativeVpError(native_vp::Error::SimpleMessage(
+                            "Underflowed in balance check",
+                        ))
+                    },
+                )? != transfer_amount
+                {
+                    return Ok(false);
+                }
+            }
+            _ => return Ok(false),
+        }
+
         // Validate pin key
-        if let Some(key) = pin_key {
+        if let Some(ref key) = transfer.key {
             match self.ctx.read_post::<IndexedTx>(&masp_pin_tx_key(key))? {
                 Some(IndexedTx { height, index })
                     if height == self.ctx.get_block_height()?
@@ -260,12 +310,13 @@ where
 // Make a map to help recognize asset types lacking an epoch
 fn unepoched_tokens(
     token: &Address,
-) -> Result<HashMap<AssetType, (Address, MaspDenom)>> {
+    denom: token::Denomination,
+) -> Result<HashMap<AssetType, (Address, token::Denomination, MaspDigitPos)>> {
     let mut unepoched_tokens = HashMap::new();
-    for denom in MaspDenom::iter() {
-        let asset_type = encode_asset_type(None, token, denom)
+    for digit in MaspDigitPos::iter() {
+        let asset_type = encode_asset_type(token.clone(), denom, digit, None)
             .wrap_err("unable to create asset type")?;
-        unepoched_tokens.insert(asset_type, (token.clone(), denom));
+        unepoched_tokens.insert(asset_type, (token.clone(), denom, digit));
     }
     Ok(unepoched_tokens)
 }
@@ -295,6 +346,11 @@ where
             return Ok(false);
         }
 
+        let denom = read_denom(&self.ctx.pre(), &transfer.token)?
+            .ok_or_err_msg(
+                "No denomination found in storage for the given token",
+            )?;
+
         let transfer_amount = crate::token::denom_to_amount(
             transfer.amount,
             &transfer.token,
@@ -309,7 +365,8 @@ where
             keys_changed.iter().filter(|key| is_masp_key(key)).collect();
         if !self.valid_state(
             masp_keys_changed.as_slice(),
-            transfer.key.as_deref(),
+            &transfer,
+            transfer_amount,
         )? {
             return Ok(false);
         }
@@ -333,7 +390,7 @@ where
                 ripemd::Ripemd160::digest(sha2::Sha256::digest(&source_enc));
 
             // To help recognize asset types not in the conversion tree
-            let unepoched_tokens = unepoched_tokens(&transfer.token)?;
+            let unepoched_tokens = unepoched_tokens(&transfer.token, denom)?;
             // Handle transparent input
             // The following boundary conditions must be satisfied
             // 1. Total of transparent input values equals containing transfer
@@ -362,22 +419,32 @@ where
                     // transparent inputs to a transaction for they would then
                     // be able to claim rewards while locking their assets for
                     // negligible time periods.
-                    Some(((address, denom), asset_epoch, _, _))
-                        if *address == transfer.token
-                            && *asset_epoch == epoch =>
+                    Some((
+                        (address, asset_denom, digit),
+                        asset_epoch,
+                        _,
+                        _,
+                    )) if *address == transfer.token
+                        && *asset_denom == denom
+                        && *asset_epoch == epoch =>
                     {
                         total_in_values += token::Amount::from_masp_denominated(
-                            vin.value, *denom,
+                            vin.value, *digit,
                         );
                     }
                     // Maybe the asset type has no attached epoch
                     None if unepoched_tokens.contains_key(&vin.asset_type) => {
-                        let (token, denom) = &unepoched_tokens[&vin.asset_type];
+                        let (token, denom, digit) =
+                            &unepoched_tokens[&vin.asset_type];
                         // Determine what the asset type would be if it were
                         // epoched
-                        let epoched_asset_type =
-                            encode_asset_type(Some(epoch), token, *denom)
-                                .wrap_err("unable to create asset type")?;
+                        let epoched_asset_type = encode_asset_type(
+                            token.clone(),
+                            *denom,
+                            *digit,
+                            Some(epoch),
+                        )
+                        .wrap_err("unable to create asset type")?;
                         if conversion_state
                             .assets
                             .contains_key(&epoched_asset_type)
@@ -392,7 +459,7 @@ where
                             // trransparent input
                             total_in_values +=
                                 token::Amount::from_masp_denominated(
-                                    vin.value, *denom,
+                                    vin.value, *digit,
                                 );
                         }
                     }
@@ -461,7 +528,7 @@ where
             let hash =
                 ripemd::Ripemd160::digest(sha2::Sha256::digest(&target_enc));
             // To help recognize asset types not in the conversion tree
-            let unepoched_tokens = unepoched_tokens(&transfer.token)?;
+            let unepoched_tokens = unepoched_tokens(&transfer.token, denom)?;
 
             for out in &transp_bundle.vout {
                 // Non-masp destinations subtract from transparent tx
@@ -483,24 +550,29 @@ where
                 }
                 match conversion_state.assets.get(&out.asset_type) {
                     // Satisfies 2.
-                    Some(((address, denom), asset_epoch, _, _))
-                        if *address == transfer.token
-                            && *asset_epoch <= epoch =>
+                    Some((
+                        (address, asset_denom, digit),
+                        asset_epoch,
+                        _,
+                        _,
+                    )) if *address == transfer.token
+                        && *asset_denom == denom
+                        && *asset_epoch <= epoch =>
                     {
                         total_out_values +=
                             token::Amount::from_masp_denominated(
-                                out.value, *denom,
+                                out.value, *digit,
                             );
                     }
                     // Maybe the asset type has no attached epoch
                     None if unepoched_tokens.contains_key(&out.asset_type) => {
-                        let (_token, denom) =
+                        let (_token, _denom, digit) =
                             &unepoched_tokens[&out.asset_type];
                         // Otherwise note the contribution to this
                         // trransparent input
                         total_out_values +=
                             token::Amount::from_masp_denominated(
-                                out.value, *denom,
+                                out.value, *digit,
                             );
                     }
                     // unrecognized asset

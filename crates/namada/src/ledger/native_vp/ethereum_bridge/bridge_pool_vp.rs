@@ -920,6 +920,7 @@ mod test_bridge_pool_vp {
                 address::nam(),
                 None,
                 None,
+                namada_sdk::state::merklize_all_keys,
             ),
             write_log: Default::default(),
         };
@@ -1622,16 +1623,13 @@ mod test_bridge_pool_vp {
         let eb_account_key =
             balance_key(&nam(), &Address::Internal(InternalAddress::EthBridge));
         wl_storage
-            .write_bytes(&eb_account_key, Amount::default().serialize_to_vec())
+            .write(&eb_account_key, Amount::default())
             .expect("Test failed");
         // initialize the gas payers account
         let gas_payer_balance_key =
             balance_key(&nam(), &established_address_1());
         wl_storage
-            .write_bytes(
-                &gas_payer_balance_key,
-                Amount::from(BERTHA_WEALTH).serialize_to_vec(),
-            )
+            .write(&gas_payer_balance_key, Amount::from(BERTHA_WEALTH))
             .expect("Test failed");
         wl_storage.write_log.commit_tx();
         let tx = Tx::from_type(TxType::Raw);

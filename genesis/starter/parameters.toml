@@ -9,10 +9,10 @@ max_expected_time_per_block = 30
 max_tx_bytes = 1048576
 # Max payload size, in bytes, for a tx batch proposal.
 max_proposal_bytes = 6291456
-# vp whitelist
-vp_whitelist = []
-# tx whitelist
-tx_whitelist = []
+# vp allowlist
+vp_allowlist = []
+# tx allowlist
+tx_allowlist = []
 # Implicit VP WASM name
 implicit_vp = "vp_implicit"
 # Expected number of epochs per year (also sets the min duration of an epoch in seconds)

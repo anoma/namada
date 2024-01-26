@@ -453,7 +453,7 @@ pub mod testing {
     use ibc::primitives::proto::Any;
     use ibc::primitives::{Timestamp, ToProto};
     use proptest::prelude::{Just, Strategy};
-    use proptest::{collection, prop_compose};
+    use proptest::{collection, prop_compose, prop_oneof};
 
     prop_compose! {
         /// Generate an arbitrary port ID
@@ -482,10 +482,10 @@ pub mod testing {
 
     /// Generate arbitrary timeout data
     pub fn arb_ibc_timeout_data() -> impl Strategy<Value = TimeoutHeight> {
-        arb_ibc_height()
-            .prop_map(TimeoutHeight::At)
-            .boxed()
-            .prop_union(Just(TimeoutHeight::Never).boxed())
+        prop_oneof![
+            arb_ibc_height().prop_map(TimeoutHeight::At),
+            Just(TimeoutHeight::Never),
+        ]
     }
 
     prop_compose! {

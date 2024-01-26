@@ -36,8 +36,8 @@ struct Keys {
     epochs_per_year: &'static str,
     implicit_vp: &'static str,
     max_expected_time_per_block: &'static str,
-    tx_whitelist: &'static str,
-    vp_whitelist: &'static str,
+    tx_allowlist: &'static str,
+    vp_allowlist: &'static str,
     max_proposal_bytes: &'static str,
     max_tx_bytes: &'static str,
     max_block_gas: &'static str,
@@ -75,14 +75,14 @@ pub fn is_max_expected_time_per_block_key(key: &Key) -> bool {
     is_max_expected_time_per_block_key_at_addr(key, &ADDRESS)
 }
 
-/// Returns if the key is the tx_whitelist key.
-pub fn is_tx_whitelist_key(key: &Key) -> bool {
-    is_tx_whitelist_key_at_addr(key, &ADDRESS)
+/// Returns if the key is the tx_allowlist key.
+pub fn is_tx_allowlist_key(key: &Key) -> bool {
+    is_tx_allowlist_key_at_addr(key, &ADDRESS)
 }
 
-/// Returns if the key is the vp_whitelist key.
-pub fn is_vp_whitelist_key(key: &Key) -> bool {
-    is_vp_whitelist_key_at_addr(key, &ADDRESS)
+/// Returns if the key is the vp_allowlist key.
+pub fn is_vp_allowlist_key(key: &Key) -> bool {
+    is_vp_allowlist_key_at_addr(key, &ADDRESS)
 }
 
 /// Returns if the key is the implicit VP key.
@@ -120,14 +120,14 @@ pub fn get_epoch_duration_storage_key() -> Key {
     get_epoch_duration_key_at_addr(ADDRESS)
 }
 
-/// Storage key used for vp whitelist parameter.
-pub fn get_vp_whitelist_storage_key() -> Key {
-    get_vp_whitelist_key_at_addr(ADDRESS)
+/// Storage key used for vp allowlist parameter.
+pub fn get_vp_allowlist_storage_key() -> Key {
+    get_vp_allowlist_key_at_addr(ADDRESS)
 }
 
-/// Storage key used for tx whitelist parameter.
-pub fn get_tx_whitelist_storage_key() -> Key {
-    get_tx_whitelist_key_at_addr(ADDRESS)
+/// Storage key used for tx allowlist parameter.
+pub fn get_tx_allowlist_storage_key() -> Key {
+    get_tx_allowlist_key_at_addr(ADDRESS)
 }
 
 /// Storage key used for the fee unshielding gas limit

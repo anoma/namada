@@ -29,3 +29,10 @@ pub mod facade {
         pub use tower_abci::BoxError;
     }
 }
+
+#[cfg(all(feature = "no_jemalloc", feature = "jemalloc"))]
+compile_error!("`jemalloc` and `no_jemalloc` may not be used at the same time");
+#[cfg(feature = "no_jemalloc")]
+pub use rocksdb;
+#[cfg(feature = "jemalloc")]
+pub use rocksdb_with_jemalloc as rocksdb;

@@ -36,10 +36,9 @@ use namada_core::types::ibc::{
     is_nft_trace, IbcShieldedTransfer, MsgNftTransfer, MsgTransfer,
 };
 use namada_core::types::key::*;
-use namada_core::types::masp::{TransferSource, TransferTarget};
+use namada_core::types::masp::{AssetData, TransferSource, TransferTarget};
 use namada_core::types::storage::Epoch;
 use namada_core::types::time::DateTimeUtc;
-use namada_core::types::token::MaspDenom;
 use namada_core::types::{storage, token};
 use namada_governance::cli::onchain::{
     DefaultProposal, OnChainProposal, PgfFundingProposal, PgfStewardProposal,
@@ -2277,7 +2276,7 @@ where
 /// Try to decode the given asset type and add its decoding to the supplied set.
 /// Returns true only if a new decoding has been added to the given set.
 async fn add_asset_type(
-    asset_types: &mut HashSet<(Address, MaspDenom, Option<Epoch>)>,
+    asset_types: &mut HashSet<AssetData>,
     context: &impl Namada,
     asset_type: AssetType,
 ) -> bool {
@@ -2299,8 +2298,7 @@ async fn add_asset_type(
 async fn used_asset_types<P, R, K, N>(
     context: &impl Namada,
     builder: &Builder<P, R, K, N>,
-) -> std::result::Result<HashSet<(Address, MaspDenom, Option<Epoch>)>, RpcError>
-{
+) -> std::result::Result<HashSet<AssetData>, RpcError> {
     let mut asset_types = HashSet::new();
     // Collect all the asset types used in the Sapling inputs
     for input in builder.sapling_inputs() {
@@ -2377,8 +2375,7 @@ pub async fn build_transfer<N: Namada>(
 
     let masp_addr = MASP;
 
-    // For MASP sources, use a special sentinel key recognized by VPs as default
-    // signer. Also, if the transaction is shielded, redact the amount and token
+    // If the transaction is shielded, redact the amount and token
     // types by setting the transparent value to 0 and token type to a constant.
     // This has no side-effect because transaction is to self.
     let (transparent_amount, transparent_token) =
@@ -2465,12 +2462,13 @@ async fn construct_shielded_parts<N: Namada>(
     target: &TransferTarget,
     token: &Address,
     amount: token::DenominatedAmount,
-) -> Result<
-    Option<(
-        ShieldedTransfer,
-        HashSet<(Address, MaspDenom, Option<Epoch>)>,
-    )>,
-> {
+) -> Result<Option<(ShieldedTransfer, HashSet<AssetData>)>> {
+    // Precompute asset types to increase chances of success in decoding
+    let _ = context
+        .shielded_mut()
+        .await
+        .precompute_asset_types(context)
+        .await;
     let stx_result =
         ShieldedContext::<N::ShieldedUtils>::gen_shielded_transfer(
             context, source, target, token, amount,
@@ -2729,6 +2727,13 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
     let validated_amount =
         validate_amount(context, args.amount, &token, false).await?;
 
+    // Precompute asset types to increase chances of success in decoding
+    let _ = context
+        .shielded_mut()
+        .await
+        .precompute_asset_types(context)
+        .await;
+
     let shielded_transfer =
         ShieldedContext::<N::ShieldedUtils>::gen_shielded_transfer(
             context,
@@ -2740,28 +2745,17 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
         .await
         .map_err(|err| TxSubmitError::MaspError(err.to_string()))?;
 
-    let transfer = token::Transfer {
-        source: source.clone(),
-        target: MASP,
-        token: token.clone(),
-        amount: validated_amount,
-        key,
-        shielded: None,
-    };
     if let Some(shielded_transfer) = shielded_transfer {
-        // TODO: Workaround for decoding the asset_type later
-        let mut shielded = context.shielded_mut().await;
-        for denom in MaspDenom::iter() {
-            let epoch = shielded_transfer.epoch;
-            shielded
-                .get_asset_type(context.client(), epoch, token.clone(), denom)
-                .await
-                .map_err(|_| {
-                    Error::Other("unable to create asset type".to_string())
-                })?;
-        }
-        let _ = shielded.save().await;
-
+        let transfer = token::Transfer {
+            source: source.clone(),
+            target: MASP,
+            token: token.clone(),
+            amount: validated_amount,
+            key,
+            shielded: Some(
+                Section::MaspTx(shielded_transfer.masp_tx.clone()).get_hash(),
+            ),
+        };
         Ok(Some(IbcShieldedTransfer {
             transfer,
             masp_tx: shielded_transfer.masp_tx,

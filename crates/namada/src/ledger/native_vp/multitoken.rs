@@ -2,6 +2,8 @@
 
 use std::collections::{BTreeSet, HashMap};
 
+use namada_governance::is_proposal_accepted;
+use namada_token::storage_key::is_any_token_parameter_key;
 use namada_tx::Tx;
 use namada_vp_env::VpEnv;
 use thiserror::Error;
@@ -11,7 +13,7 @@ use crate::token::storage_key::{
     is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
     minter_key,
 };
-use crate::token::{Amount, Change};
+use crate::token::Amount;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::storage::{Key, KeySeg};
 use crate::vm::WasmCacheAccess;
@@ -47,30 +49,75 @@ where
 
     fn validate_tx(
         &self,
-        _tx: &Tx,
+        tx_data: &Tx,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
-        let mut changes = HashMap::new();
-        let mut mints = HashMap::new();
+        let mut inc_changes: HashMap<Address, Amount> = HashMap::new();
+        let mut dec_changes: HashMap<Address, Amount> = HashMap::new();
+        let mut inc_mints: HashMap<Address, Amount> = HashMap::new();
+        let mut dec_mints: HashMap<Address, Amount> = HashMap::new();
         for key in keys_changed {
             if let Some([token, _]) = is_any_token_balance_key(key) {
                 let pre: Amount = self.ctx.read_pre(key)?.unwrap_or_default();
                 let post: Amount = self.ctx.read_post(key)?.unwrap_or_default();
-                let diff = post.change() - pre.change();
-                match changes.get_mut(token) {
-                    Some(change) => *change += diff,
-                    None => _ = changes.insert(token, diff),
+                match post.checked_sub(pre) {
+                    Some(diff) => {
+                        let change =
+                            inc_changes.entry(token.clone()).or_default();
+                        *change =
+                            change.checked_add(diff).ok_or_else(|| {
+                                Error::NativeVpError(
+                                    native_vp::Error::SimpleMessage(
+                                        "Overflowed in balance check",
+                                    ),
+                                )
+                            })?;
+                    }
+                    None => {
+                        let diff = pre
+                            .checked_sub(post)
+                            .expect("Underflow shouldn't happen here");
+                        let change =
+                            dec_changes.entry(token.clone()).or_default();
+                        *change =
+                            change.checked_add(diff).ok_or_else(|| {
+                                Error::NativeVpError(
+                                    native_vp::Error::SimpleMessage(
+                                        "Overflowed in balance check",
+                                    ),
+                                )
+                            })?;
+                    }
                 }
             } else if let Some(token) = is_any_minted_balance_key(key) {
                 let pre: Amount = self.ctx.read_pre(key)?.unwrap_or_default();
                 let post: Amount = self.ctx.read_post(key)?.unwrap_or_default();
-                let diff = post.change() - pre.change();
-                match mints.get_mut(token) {
-                    Some(mint) => *mint += diff,
-                    None => _ = mints.insert(token, diff),
+                match post.checked_sub(pre) {
+                    Some(diff) => {
+                        let mint = inc_mints.entry(token.clone()).or_default();
+                        *mint = mint.checked_add(diff).ok_or_else(|| {
+                            Error::NativeVpError(
+                                native_vp::Error::SimpleMessage(
+                                    "Overflowed in balance check",
+                                ),
+                            )
+                        })?;
+                    }
+                    None => {
+                        let diff = pre
+                            .checked_sub(post)
+                            .expect("Underflow shouldn't happen here");
+                        let mint = dec_mints.entry(token.clone()).or_default();
+                        *mint = mint.checked_add(diff).ok_or_else(|| {
+                            Error::NativeVpError(
+                                native_vp::Error::SimpleMessage(
+                                    "Overflowed in balance check",
+                                ),
+                            )
+                        })?;
+                    }
                 }
-
                 // Check if the minter is set
                 if !self.is_valid_minter(token, verifiers)? {
                     return Ok(false);
@@ -79,6 +126,8 @@ where
                 if !self.is_valid_minter(token, verifiers)? {
                     return Ok(false);
                 }
+            } else if is_any_token_parameter_key(key).is_some() {
+                return self.is_valid_parameter(tx_data);
             } else if key.segments.get(0)
                 == Some(
                     &Address::Internal(InternalAddress::Multitoken).to_db_key(),
@@ -90,12 +139,31 @@ where
             }
         }
 
-        Ok(changes.iter().all(|(token, change)| {
-            let mint = match mints.get(token) {
-                Some(mint) => *mint,
-                None => Change::zero(),
-            };
-            *change == mint
+        let mut all_tokens = BTreeSet::new();
+        all_tokens.extend(inc_changes.keys().cloned());
+        all_tokens.extend(dec_changes.keys().cloned());
+        all_tokens.extend(inc_mints.keys().cloned());
+        all_tokens.extend(dec_mints.keys().cloned());
+
+        Ok(all_tokens.iter().all(|token| {
+            let inc_change =
+                inc_changes.get(token).cloned().unwrap_or_default();
+            let dec_change =
+                dec_changes.get(token).cloned().unwrap_or_default();
+            let inc_mint = inc_mints.get(token).cloned().unwrap_or_default();
+            let dec_mint = dec_mints.get(token).cloned().unwrap_or_default();
+
+            if inc_change >= dec_change && inc_mint >= dec_mint {
+                inc_change.checked_sub(dec_change)
+                    == inc_mint.checked_sub(dec_mint)
+            } else if (inc_change < dec_change && inc_mint >= dec_mint)
+                || (inc_change >= dec_change && inc_mint < dec_mint)
+            {
+                false
+            } else {
+                dec_change.checked_sub(inc_change)
+                    == dec_mint.checked_sub(inc_mint)
+            }
         }))
     }
 }
@@ -131,6 +199,15 @@ where
                 // transaction
                 Ok(false)
             }
+        }
+    }
+
+    /// Return if the parameter change was done via a governance proposal
+    pub fn is_valid_parameter(&self, tx: &Tx) -> Result<bool> {
+        match tx.data() {
+            Some(data) => is_proposal_accepted(&self.ctx.pre(), data.as_ref())
+                .map_err(Error::NativeVpError),
+            None => Ok(false),
         }
     }
 }

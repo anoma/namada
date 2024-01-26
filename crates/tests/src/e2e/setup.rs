@@ -171,7 +171,7 @@ where
                 None,
                 &mut OsRng,
             )
-            .unwrap_or_else(|_| {
+            .unwrap_or_else(|| {
                 panic!("Could not generate new key for validator-{}", val)
             });
         println!("alias: {}, pk: {}", alias, sk.ref_to());
@@ -362,9 +362,9 @@ pub fn network(
     templates.transactions.bond = None;
 
     // Update the templates as needed
-    templates.parameters.parameters.vp_whitelist =
+    templates.parameters.parameters.vp_allowlist =
         Some(get_all_wasms_hashes(&working_dir, Some("vp_")));
-    templates.parameters.parameters.tx_whitelist =
+    templates.parameters.parameters.tx_allowlist =
         Some(get_all_wasms_hashes(&working_dir, Some("tx_")));
     // Copy the main wallet from templates dir into the base dir.
     {

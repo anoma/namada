@@ -14,6 +14,7 @@ use namada_core::types::storage;
 use namada_gas::{MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE};
 use namada_trans_token::storage_key::{
     is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
+    is_any_token_parameter_key,
 };
 use thiserror::Error;
 
@@ -525,6 +526,7 @@ impl WriteLog {
             }
         }
 
+        // Replay protections specifically
         for (hash, entry) in self.replay_protection.iter() {
             match entry {
                 ReProtStorageModification::Write => storage
@@ -599,6 +601,7 @@ impl WriteLog {
                 verifiers.insert(owner.clone());
             } else if is_any_minted_balance_key(key).is_some()
                 || is_any_minter_key(key).is_some()
+                || is_any_token_parameter_key(key).is_some()
             {
                 verifiers
                     .insert(Address::Internal(InternalAddress::Multitoken));

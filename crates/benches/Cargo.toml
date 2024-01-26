@@ -13,12 +13,12 @@ repository.workspace = true
 version.workspace = true
 
 [[bench]]
-name = "whitelisted_txs"
+name = "allowed_txs"
 harness = false
 path = "txs.rs"
 
 [[bench]]
-name = "whitelisted_vps"
+name = "allowed_vps"
 harness = false
 path = "vps.rs"
 

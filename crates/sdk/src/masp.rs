@@ -52,15 +52,16 @@ use masp_proofs::bls12_381::Bls12;
 use masp_proofs::prover::LocalTxProver;
 use masp_proofs::sapling::SaplingVerificationContext;
 use namada_core::types::address::{Address, MASP};
+use namada_core::types::dec::Dec;
 use namada_core::types::ibc::IbcShieldedTransfer;
 use namada_core::types::masp::{
-    encode_asset_type, BalanceOwner, ExtendedViewingKey, PaymentAddress,
-    TransferSource, TransferTarget,
+    encode_asset_type, AssetData, BalanceOwner, ExtendedViewingKey,
+    PaymentAddress, TransferSource, TransferTarget,
 };
 use namada_core::types::storage::{BlockHeight, Epoch, IndexedTx, TxIndex};
 use namada_core::types::time::{DateTimeUtc, DurationSecs};
 use namada_ibc::IbcMessage;
-use namada_token::{self as token, MaspDenom, Transfer};
+use namada_token::{self as token, Denomination, MaspDigitPos, Transfer};
 use namada_tx::data::WrapperTx;
 use namada_tx::Tx;
 use rand_core::{CryptoRng, OsRng, RngCore};
@@ -73,7 +74,9 @@ use crate::error::EncodingError;
 use crate::error::{Error, PinnedBalanceError, QueryError};
 use crate::io::Io;
 use crate::queries::Client;
-use crate::rpc::{query_block, query_conversion, query_epoch_at_height};
+use crate::rpc::{
+    query_block, query_conversion, query_denom, query_epoch_at_height,
+};
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
 use crate::{display_line, edisplay_line, rpc, MaybeSend, MaybeSync, Namada};
@@ -118,6 +121,17 @@ pub struct ShieldedTransfer {
     pub metadata: SaplingMetadata,
     /// Epoch in which the transaction was created
     pub epoch: Epoch,
+}
+
+/// Shielded pool data for a token
+#[derive(BorshSerialize, BorshDeserialize)]
+pub struct MaspTokenRewardData {
+    pub name: String,
+    pub address: Address,
+    pub max_reward_rate: Dec,
+    pub kp_gain: Dec,
+    pub kd_gain: Dec,
+    pub locked_ratio_target: Dec,
 }
 
 #[cfg(feature = "testing")]
@@ -530,7 +544,7 @@ pub struct ShieldedContext<U: ShieldedUtils> {
     /// The set of note positions that have been spent
     pub spents: HashSet<usize>,
     /// Maps asset types to their decodings
-    pub asset_types: HashMap<AssetType, (Address, MaspDenom, Option<Epoch>)>,
+    pub asset_types: HashMap<AssetType, AssetData>,
     /// Maps note positions to their corresponding viewing keys
     pub vk_map: HashMap<usize, ViewingKey>,
 }
@@ -1016,28 +1030,69 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         Ok(Some(val_acc))
     }
 
+    /// Use the addresses already stored in the wallet to precompute as many
+    /// asset types as possible.
+    pub async fn precompute_asset_types<N: Namada>(
+        &mut self,
+        context: &N,
+    ) -> Result<(), Error> {
+        // To facilitate lookups of human-readable token names
+        for token in context.wallet().await.get_addresses().values() {
+            let Some(denom) = query_denom(context.client(), token).await else {
+                return Err(Error::Query(QueryError::General(format!(
+                    "denomination for token {token}"
+                ))))
+            };
+            for position in MaspDigitPos::iter() {
+                let asset_type =
+                    encode_asset_type(token.clone(), denom, position, None)
+                        .map_err(|_| {
+                            Error::Other(
+                                "unable to create asset type".to_string(),
+                            )
+                        })?;
+                self.asset_types.insert(
+                    asset_type,
+                    AssetData {
+                        token: token.clone(),
+                        denom,
+                        position,
+                        epoch: None,
+                    },
+                );
+            }
+        }
+        Ok(())
+    }
+
     /// Query the ledger for the decoding of the given asset type and cache it
     /// if it is found.
     pub async fn decode_asset_type<C: Client + Sync>(
         &mut self,
         client: &C,
         asset_type: AssetType,
-    ) -> Option<(Address, MaspDenom, Option<Epoch>)> {
+    ) -> Option<AssetData> {
         // Try to find the decoding in the cache
         if let decoded @ Some(_) = self.asset_types.get(&asset_type) {
             return decoded.cloned();
         }
         // Query for the ID of the last accepted transaction
-        let (addr, denom, ep, _conv, _path): (
+        let (token, denom, position, ep, _conv, _path): (
             Address,
-            MaspDenom,
+            Denomination,
+            MaspDigitPos,
             _,
             I128Sum,
             MerklePath<Node>,
         ) = rpc::query_conversion(client, asset_type).await?;
-        self.asset_types
-            .insert(asset_type, (addr.clone(), denom, Some(ep)));
-        Some((addr, denom, Some(ep)))
+        let pre_asset_type = AssetData {
+            token,
+            denom,
+            position,
+            epoch: Some(ep),
+        };
+        self.asset_types.insert(asset_type, pre_asset_type.clone());
+        Some(pre_asset_type)
     }
 
     /// Query the ledger for the conversion that is allowed for the given asset
@@ -1052,14 +1107,20 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             conversions.entry(asset_type)
         {
             // Query for the ID of the last accepted transaction
-            if let Some((addr, denom, ep, conv, path)) =
-                query_conversion(client, asset_type).await
-            {
-                self.asset_types.insert(asset_type, (addr, denom, Some(ep)));
-                // If the conversion is 0, then we just have a pure decoding
-                if !conv.is_zero() {
-                    conv_entry.insert((conv.into(), path, 0));
-                }
+            let Some((token, denom, position, ep, conv, path)) =
+                query_conversion(client, asset_type).await else { return };
+            self.asset_types.insert(
+                asset_type,
+                AssetData {
+                    token,
+                    denom,
+                    position,
+                    epoch: Some(ep),
+                },
+            );
+            // If the conversion is 0, then we just have a pure decoding
+            if !conv.is_zero() {
+                conv_entry.insert((conv.into(), path, 0));
             }
         }
     }
@@ -1173,12 +1234,14 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             let (target_asset_type, forward_conversion) = self
                 .decode_asset_type(client, asset_type)
                 .await
-                .map(|(addr, denom, epoch)| {
-                    encode_asset_type(epoch.map(|_| target_epoch), &addr, denom)
+                .map(|mut pre_asset_type| {
+                    let old_epoch = pre_asset_type.redate(target_epoch);
+                    pre_asset_type
+                        .encode()
                         .map(|asset_type| {
                             (
                                 asset_type,
-                                epoch.map_or(false, |epoch| {
+                                old_epoch.map_or(false, |epoch| {
                                     target_epoch >= epoch
                                 }),
                             )
@@ -1467,7 +1530,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         context: &impl Namada,
         owner: PaymentAddress,
         viewing_key: &ViewingKey,
-    ) -> Result<(ValueSum<Address, token::Change>, Epoch), Error> {
+    ) -> Result<(ValueSum<Address, token::Change>, I128Sum, Epoch), Error> {
         // Obtain the balance that will be exchanged
         let (amt, ep) =
             Self::compute_pinned_balance(context.client(), owner, viewing_key)
@@ -1485,15 +1548,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             .await?
             .0;
         display_line!(context.io(), "Exchanged amount: {:?}", computed_amount);
-        Ok((
-            self.decode_combine_sum_to_epoch(
-                context.client(),
-                computed_amount,
-                ep,
-            )
-            .await,
-            ep,
-        ))
+        let (decoded, undecoded) = self
+            .decode_combine_sum_to_epoch(context.client(), computed_amount, ep)
+            .await;
+        Ok((decoded, undecoded, ep))
     }
 
     /// Convert an amount whose units are AssetTypes to one whose units are
@@ -1504,26 +1562,38 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         client: &C,
         amt: I128Sum,
         target_epoch: Epoch,
-    ) -> ValueSum<Address, token::Change> {
+    ) -> (ValueSum<Address, token::Change>, I128Sum) {
         let mut res = ValueSum::zero();
+        let mut undecoded = ValueSum::zero();
         for (asset_type, val) in amt.components() {
             // Decode the asset type
             let decoded = self.decode_asset_type(client, *asset_type).await;
             // Only assets with the target timestamp count
             match decoded {
-                Some((address, denom, epoch))
-                    if epoch.map_or(true, |epoch| epoch <= target_epoch) =>
+                Some(pre_asset_type)
+                    if pre_asset_type
+                        .epoch
+                        .map_or(true, |epoch| epoch <= target_epoch) =>
                 {
-                    let decoded_change =
-                        token::Change::from_masp_denominated(*val, denom)
-                            .expect("expected this to fit");
-                    res += ValueSum::from_pair(address, decoded_change)
+                    let decoded_change = token::Change::from_masp_denominated(
+                        *val,
+                        pre_asset_type.position,
+                    )
+                    .expect("expected this to fit");
+                    res += ValueSum::from_pair(
+                        pre_asset_type.token,
+                        decoded_change,
+                    )
+                    .expect("expected this to fit");
+                }
+                None => {
+                    undecoded += ValueSum::from_pair(*asset_type, *val)
                         .expect("expected this to fit");
                 }
                 _ => {}
             }
         }
-        res
+        (res, undecoded)
     }
 
     /// Convert an amount whose units are AssetTypes to one whose units are
@@ -1532,21 +1602,30 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         &mut self,
         client: &C,
         amt: I128Sum,
-    ) -> MaspAmount {
+    ) -> (MaspAmount, I128Sum) {
         let mut res = MaspAmount::zero();
+        let mut undecoded = ValueSum::zero();
         for (asset_type, val) in amt.components() {
             // Decode the asset type
-            if let Some((addr, denom, epoch)) =
+            if let Some(decoded) =
                 self.decode_asset_type(client, *asset_type).await
             {
-                let decoded_change =
-                    token::Change::from_masp_denominated(*val, denom)
-                        .expect("expected this to fit");
-                res += MaspAmount::from_pair((epoch, addr), decoded_change)
-                    .expect("unable to construct decoded amount");
+                let decoded_change = token::Change::from_masp_denominated(
+                    *val,
+                    decoded.position,
+                )
+                .expect("expected this to fit");
+                res += MaspAmount::from_pair(
+                    (decoded.epoch, decoded.token),
+                    decoded_change,
+                )
+                .expect("unable to construct decoded amount");
+            } else {
+                undecoded += ValueSum::from_pair(*asset_type, *val)
+                    .expect("expected this to fit");
             }
         }
-        res
+        (res, undecoded)
     }
 
     /// Convert an amount whose units are AssetTypes to one whose units are
@@ -1555,18 +1634,15 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         &mut self,
         client: &C,
         amt: I128Sum,
-    ) -> ValueSum<(AssetType, Address, MaspDenom, Option<Epoch>), i128> {
+    ) -> ValueSum<(AssetType, AssetData), i128> {
         let mut res = ValueSum::zero();
         for (asset_type, val) in amt.components() {
             // Decode the asset type
-            if let Some((addr, denom, epoch)) =
+            if let Some(decoded) =
                 self.decode_asset_type(client, *asset_type).await
             {
-                res += ValueSum::from_pair(
-                    (*asset_type, addr, denom, epoch),
-                    *val,
-                )
-                .expect("unable to construct decoded amount");
+                res += ValueSum::from_pair((*asset_type, decoded), *val)
+                    .expect("unable to construct decoded amount");
             }
         }
         res
@@ -1686,11 +1762,28 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         );
 
         // Convert transaction amount into MASP types
-        let (asset_types, masp_amount) = context
-            .shielded_mut()
-            .await
-            .convert_amount(context.client(), epoch, token, amount.amount())
-            .await?;
+        let Some(denom) = query_denom(context.client(), token).await else {
+            return Err(TransferErr::General(Error::from(QueryError::General(format!(
+                "denomination for token {token}"
+            )))))
+        };
+        let (asset_types, masp_amount) = {
+            let mut shielded = context.shielded_mut().await;
+            // Do the actual conversion to an asset type
+            let amount = shielded
+                .convert_amount(
+                    context.client(),
+                    epoch,
+                    token,
+                    denom,
+                    amount.amount(),
+                )
+                .await?;
+            // Make sure to save any decodings of the asset types used so that
+            // balance queries involving them are successful
+            let _ = shielded.save().await;
+            amount
+        };
 
         // If there are shielded inputs
         if let Some(sk) = spending_key {
@@ -1740,9 +1833,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 source_enc.as_ref(),
             ));
             let script = TransparentAddress(hash.into());
-            for (denom, asset_type) in MaspDenom::iter().zip(asset_types.iter())
+            for (digit, asset_type) in
+                MaspDigitPos::iter().zip(asset_types.iter())
             {
-                let amount_part = denom.denominate(&amount.amount());
+                let amount_part = digit.denominate(&amount.amount());
                 // Skip adding an input if its value is 0
                 if amount_part != 0 {
                     builder
@@ -1795,14 +1889,13 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         // Now handle the outputs of this transaction
         // Loop through the value balance components and see which
         // ones can be given to the receiver
-        for ((asset_type, vbal_token, vbal_denom, vbal_epoch), val) in
-            value_balance.components()
-        {
-            let rem_amount = &mut rem_amount[*vbal_denom as usize];
+        for ((asset_type, decoded), val) in value_balance.components() {
+            let rem_amount = &mut rem_amount[decoded.position as usize];
             // Only asset types with the correct token can contribute. But
             // there must be a demonstrated need for it.
-            if vbal_token == token
-                && vbal_epoch.map_or(true, |vbal_epoch| vbal_epoch <= epoch)
+            if decoded.token == *token
+                && decoded.denom == denom
+                && decoded.epoch.map_or(true, |vbal_epoch| vbal_epoch <= epoch)
                 && *rem_amount > 0
             {
                 let val = u128::try_from(*val).expect(
@@ -2148,22 +2241,19 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     pub async fn get_asset_type<C: Client + Sync>(
         &mut self,
         client: &C,
-        epoch: Epoch,
-        token: Address,
-        denom: MaspDenom,
+        decoded: &mut AssetData,
     ) -> Result<AssetType, Error> {
-        let mut asset_type = encode_asset_type(Some(epoch), &token, denom)
-            .map_err(|_| {
-                Error::Other("unable to create asset type".to_string())
-            })?;
+        let mut asset_type = decoded.encode().map_err(|_| {
+            Error::Other("unable to create asset type".to_string())
+        })?;
         if self.decode_asset_type(client, asset_type).await.is_none() {
             // If we fail to decode the epoched asset type, then remove the
             // epoch
-            asset_type =
-                encode_asset_type(None, &token, denom).map_err(|_| {
-                    Error::Other("unable to create asset type".to_string())
-                })?;
-            self.asset_types.insert(asset_type, (token, denom, None));
+            decoded.undate();
+            asset_type = decoded.encode().map_err(|_| {
+                Error::Other("unable to create asset type".to_string())
+            })?;
+            self.asset_types.insert(asset_type, decoded.clone());
         }
         Ok(asset_type)
     }
@@ -2174,17 +2264,23 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         client: &C,
         epoch: Epoch,
         token: &Address,
+        denom: Denomination,
         val: token::Amount,
     ) -> Result<([AssetType; 4], U64Sum), Error> {
         let mut amount = U64Sum::zero();
         let mut asset_types = Vec::new();
-        for denom in MaspDenom::iter() {
-            let asset_type = self
-                .get_asset_type(client, epoch, token.clone(), denom)
-                .await?;
+        for position in MaspDigitPos::iter() {
+            let mut pre_asset_type = AssetData {
+                epoch: Some(epoch),
+                token: token.clone(),
+                denom,
+                position,
+            };
+            let asset_type =
+                self.get_asset_type(client, &mut pre_asset_type).await?;
             // Combine the value and unit into one amount
             amount +=
-                U64Sum::from_nonnegative(asset_type, denom.denominate(&val))
+                U64Sum::from_nonnegative(asset_type, position.denominate(&val))
                     .map_err(|_| {
                         Error::Other("invalid value for amount".to_string())
                     })?;
@@ -2376,6 +2472,727 @@ mod tests {
             &fake_params_paths[1].0,
             &fake_params_paths[2].0,
         );
+    }
+}
+
+#[cfg(any(test, feature = "testing"))]
+/// Tests and strategies for transactions
+pub mod testing {
+    use std::ops::AddAssign;
+    use std::sync::Mutex;
+
+    use masp_primitives::asset_type::AssetType;
+    use masp_primitives::consensus::testing::arb_height;
+    use masp_primitives::constants::SPENDING_KEY_GENERATOR;
+    use masp_primitives::convert::AllowedConversion;
+    use masp_primitives::ff::Field;
+    use masp_primitives::merkle_tree::MerklePath;
+    use masp_primitives::sapling::prover::TxProver;
+    use masp_primitives::sapling::redjubjub::{PublicKey, Signature};
+    use masp_primitives::sapling::{
+        Diversifier, Node, PaymentAddress, ProofGenerationKey, Rseed,
+    };
+    use masp_primitives::transaction::components::{I128Sum, GROTH_PROOF_SIZE};
+    use proptest::collection::SizeRange;
+    use proptest::prelude::*;
+    use proptest::test_runner::TestRng;
+    use proptest::{collection, option, prop_compose};
+
+    use super::*;
+    use crate::masp_primitives::consensus::BranchId;
+    use crate::masp_primitives::constants::VALUE_COMMITMENT_RANDOMNESS_GENERATOR;
+    use crate::masp_primitives::merkle_tree::FrozenCommitmentTree;
+    use crate::masp_primitives::sapling::keys::OutgoingViewingKey;
+    use crate::masp_primitives::sapling::redjubjub::PrivateKey;
+    use crate::masp_primitives::transaction::components::transparent::testing::arb_transparent_address;
+    use crate::token::testing::arb_denomination;
+    use crate::types::address::testing::arb_address;
+    use crate::types::storage::testing::arb_epoch;
+
+    #[derive(Debug, Clone)]
+    // Adapts a CSPRNG from a PRNG for proptesting
+    pub struct TestCsprng<R: RngCore>(R);
+
+    impl<R: RngCore> CryptoRng for TestCsprng<R> {}
+
+    impl<R: RngCore> RngCore for TestCsprng<R> {
+        fn next_u32(&mut self) -> u32 {
+            self.0.next_u32()
+        }
+
+        fn next_u64(&mut self) -> u64 {
+            self.0.next_u64()
+        }
+
+        fn fill_bytes(&mut self, dest: &mut [u8]) {
+            self.0.fill_bytes(dest)
+        }
+
+        fn try_fill_bytes(
+            &mut self,
+            dest: &mut [u8],
+        ) -> Result<(), rand::Error> {
+            self.0.try_fill_bytes(dest)
+        }
+    }
+
+    // This function computes `value` in the exponent of the value commitment
+    // base
+    fn masp_compute_value_balance(
+        asset_type: AssetType,
+        value: i128,
+    ) -> Option<jubjub::ExtendedPoint> {
+        // Compute the absolute value (failing if -i128::MAX is
+        // the value)
+        let abs = match value.checked_abs() {
+            Some(a) => a as u128,
+            None => return None,
+        };
+
+        // Is it negative? We'll have to negate later if so.
+        let is_negative = value.is_negative();
+
+        // Compute it in the exponent
+        let mut abs_bytes = [0u8; 32];
+        abs_bytes[0..16].copy_from_slice(&abs.to_le_bytes());
+        let mut value_balance = asset_type.value_commitment_generator()
+            * jubjub::Fr::from_bytes(&abs_bytes).unwrap();
+
+        // Negate if necessary
+        if is_negative {
+            value_balance = -value_balance;
+        }
+
+        // Convert to unknown order point
+        Some(value_balance.into())
+    }
+
+    // A context object for creating the Sapling components of a Zcash
+    // transaction.
+    pub struct SaplingProvingContext {
+        bsk: jubjub::Fr,
+        // (sum of the Spend value commitments) - (sum of the Output value
+        // commitments)
+        cv_sum: jubjub::ExtendedPoint,
+    }
+
+    // An implementation of TxProver that does everything except generating
+    // valid zero-knowledge proofs. Uses the supplied source of randomness to
+    // carry out its operations.
+    pub struct MockTxProver<R: RngCore>(Mutex<R>);
+
+    impl<R: RngCore> TxProver for MockTxProver<R> {
+        type SaplingProvingContext = SaplingProvingContext;
+
+        fn new_sapling_proving_context(&self) -> Self::SaplingProvingContext {
+            SaplingProvingContext {
+                bsk: jubjub::Fr::zero(),
+                cv_sum: jubjub::ExtendedPoint::identity(),
+            }
+        }
+
+        fn spend_proof(
+            &self,
+            ctx: &mut Self::SaplingProvingContext,
+            proof_generation_key: ProofGenerationKey,
+            _diversifier: Diversifier,
+            _rseed: Rseed,
+            ar: jubjub::Fr,
+            asset_type: AssetType,
+            value: u64,
+            _anchor: bls12_381::Scalar,
+            _merkle_path: MerklePath<Node>,
+        ) -> Result<
+            ([u8; GROTH_PROOF_SIZE], jubjub::ExtendedPoint, PublicKey),
+            (),
+        > {
+            // Initialize secure RNG
+            let mut rng = self.0.lock().unwrap();
+
+            // We create the randomness of the value commitment
+            let rcv = jubjub::Fr::random(&mut *rng);
+
+            // Accumulate the value commitment randomness in the context
+            {
+                let mut tmp = rcv;
+                tmp.add_assign(&ctx.bsk);
+
+                // Update the context
+                ctx.bsk = tmp;
+            }
+
+            // Construct the value commitment
+            let value_commitment = asset_type.value_commitment(value, rcv);
+
+            // This is the result of the re-randomization, we compute it for the
+            // caller
+            let rk = PublicKey(proof_generation_key.ak.into())
+                .randomize(ar, SPENDING_KEY_GENERATOR);
+
+            // Compute value commitment
+            let value_commitment: jubjub::ExtendedPoint =
+                value_commitment.commitment().into();
+
+            // Accumulate the value commitment in the context
+            ctx.cv_sum += value_commitment;
+
+            Ok(([0u8; GROTH_PROOF_SIZE], value_commitment, rk))
+        }
+
+        fn output_proof(
+            &self,
+            ctx: &mut Self::SaplingProvingContext,
+            _esk: jubjub::Fr,
+            _payment_address: PaymentAddress,
+            _rcm: jubjub::Fr,
+            asset_type: AssetType,
+            value: u64,
+        ) -> ([u8; GROTH_PROOF_SIZE], jubjub::ExtendedPoint) {
+            // Initialize secure RNG
+            let mut rng = self.0.lock().unwrap();
+
+            // We construct ephemeral randomness for the value commitment. This
+            // randomness is not given back to the caller, but the synthetic
+            // blinding factor `bsk` is accumulated in the context.
+            let rcv = jubjub::Fr::random(&mut *rng);
+
+            // Accumulate the value commitment randomness in the context
+            {
+                let mut tmp = rcv.neg(); // Outputs subtract from the total.
+                tmp.add_assign(&ctx.bsk);
+
+                // Update the context
+                ctx.bsk = tmp;
+            }
+
+            // Construct the value commitment for the proof instance
+            let value_commitment = asset_type.value_commitment(value, rcv);
+
+            // Compute the actual value commitment
+            let value_commitment_point: jubjub::ExtendedPoint =
+                value_commitment.commitment().into();
+
+            // Accumulate the value commitment in the context. We do this to
+            // check internal consistency.
+            ctx.cv_sum -= value_commitment_point; // Outputs subtract from the total.
+
+            ([0u8; GROTH_PROOF_SIZE], value_commitment_point)
+        }
+
+        fn convert_proof(
+            &self,
+            ctx: &mut Self::SaplingProvingContext,
+            allowed_conversion: AllowedConversion,
+            value: u64,
+            _anchor: bls12_381::Scalar,
+            _merkle_path: MerklePath<Node>,
+        ) -> Result<([u8; GROTH_PROOF_SIZE], jubjub::ExtendedPoint), ()>
+        {
+            // Initialize secure RNG
+            let mut rng = self.0.lock().unwrap();
+
+            // We create the randomness of the value commitment
+            let rcv = jubjub::Fr::random(&mut *rng);
+
+            // Accumulate the value commitment randomness in the context
+            {
+                let mut tmp = rcv;
+                tmp.add_assign(&ctx.bsk);
+
+                // Update the context
+                ctx.bsk = tmp;
+            }
+
+            // Construct the value commitment
+            let value_commitment =
+                allowed_conversion.value_commitment(value, rcv);
+
+            // Compute value commitment
+            let value_commitment: jubjub::ExtendedPoint =
+                value_commitment.commitment().into();
+
+            // Accumulate the value commitment in the context
+            ctx.cv_sum += value_commitment;
+
+            Ok(([0u8; GROTH_PROOF_SIZE], value_commitment))
+        }
+
+        fn binding_sig(
+            &self,
+            ctx: &mut Self::SaplingProvingContext,
+            assets_and_values: &I128Sum,
+            sighash: &[u8; 32],
+        ) -> Result<Signature, ()> {
+            // Initialize secure RNG
+            let mut rng = self.0.lock().unwrap();
+
+            // Grab the current `bsk` from the context
+            let bsk = PrivateKey(ctx.bsk);
+
+            // Grab the `bvk` using DerivePublic.
+            let bvk = PublicKey::from_private(
+                &bsk,
+                VALUE_COMMITMENT_RANDOMNESS_GENERATOR,
+            );
+
+            // In order to check internal consistency, let's use the accumulated
+            // value commitments (as the verifier would) and apply
+            // value_balance to compare against our derived bvk.
+            {
+                let final_bvk = assets_and_values
+                    .components()
+                    .map(|(asset_type, value_balance)| {
+                        // Compute value balance for each asset
+                        // Error for bad value balances (-INT128_MAX value)
+                        masp_compute_value_balance(*asset_type, *value_balance)
+                    })
+                    .try_fold(ctx.cv_sum, |tmp, value_balance| {
+                        // Compute cv_sum minus sum of all value balances
+                        Result::<_, ()>::Ok(tmp - value_balance.ok_or(())?)
+                    })?;
+
+                // The result should be the same, unless the provided
+                // valueBalance is wrong.
+                if bvk.0 != final_bvk {
+                    return Err(());
+                }
+            }
+
+            // Construct signature message
+            let mut data_to_be_signed = [0u8; 64];
+            data_to_be_signed[0..32].copy_from_slice(&bvk.0.to_bytes());
+            data_to_be_signed[32..64].copy_from_slice(&sighash[..]);
+
+            // Sign
+            Ok(bsk.sign(
+                &data_to_be_signed,
+                &mut *rng,
+                VALUE_COMMITMENT_RANDOMNESS_GENERATOR,
+            ))
+        }
+    }
+
+    prop_compose! {
+        // Expose a random number generator
+        pub fn arb_rng()(rng in Just(()).prop_perturb(|(), rng| rng)) -> TestRng {
+            rng
+        }
+    }
+
+    prop_compose! {
+        // Generate an arbitrary output description with the given value
+        pub fn arb_output_description(
+            asset_type: AssetType,
+            value: u64,
+        )(
+            mut rng in arb_rng().prop_map(TestCsprng),
+        ) -> (Option<OutgoingViewingKey>, masp_primitives::sapling::PaymentAddress, AssetType, u64, MemoBytes) {
+            let mut spending_key_seed = [0; 32];
+            rng.fill_bytes(&mut spending_key_seed);
+            let spending_key = masp_primitives::zip32::ExtendedSpendingKey::master(spending_key_seed.as_ref());
+
+            let viewing_key = ExtendedFullViewingKey::from(&spending_key).fvk.vk;
+            let (div, _g_d) = find_valid_diversifier(&mut rng);
+            let payment_addr = viewing_key
+                .to_payment_address(div)
+                .expect("a PaymentAddress");
+
+            (None, payment_addr, asset_type, value, MemoBytes::empty())
+        }
+    }
+
+    prop_compose! {
+        // Generate an arbitrary spend description with the given value
+        pub fn arb_spend_description(
+            asset_type: AssetType,
+            value: u64,
+        )(
+            address in arb_transparent_address(),
+            expiration_height in arb_height(BranchId::MASP, &TestNetwork),
+            mut rng in arb_rng().prop_map(TestCsprng),
+            prover_rng in arb_rng().prop_map(TestCsprng),
+        ) -> (ExtendedSpendingKey, Diversifier, Note, Node) {
+            let mut spending_key_seed = [0; 32];
+            rng.fill_bytes(&mut spending_key_seed);
+            let spending_key = masp_primitives::zip32::ExtendedSpendingKey::master(spending_key_seed.as_ref());
+
+            let viewing_key = ExtendedFullViewingKey::from(&spending_key).fvk.vk;
+            let (div, _g_d) = find_valid_diversifier(&mut rng);
+            let payment_addr = viewing_key
+                .to_payment_address(div)
+                .expect("a PaymentAddress");
+
+            let mut builder = Builder::<TestNetwork, _>::new_with_rng(
+                NETWORK,
+                // NOTE: this is going to add 20 more blocks to the actual
+                // expiration but there's no other exposed function that we could
+                // use from the masp crate to specify the expiration better
+                expiration_height.unwrap(),
+                rng,
+            );
+            // Add a transparent input to support our desired shielded output
+            builder.add_transparent_input(TxOut { asset_type, value, address }).unwrap();
+            // Finally add the shielded output that we need
+            builder.add_sapling_output(None, payment_addr, asset_type, value, MemoBytes::empty()).unwrap();
+            // Build a transaction in order to get its shielded outputs
+            let (transaction, metadata) = builder.build(
+                &MockTxProver(Mutex::new(prover_rng)),
+                &FeeRule::non_standard(U64Sum::zero()),
+            ).unwrap();
+            // Extract the shielded output from the transaction
+            let shielded_output = &transaction
+                .sapling_bundle()
+                .unwrap()
+                .shielded_outputs[metadata.output_index(0).unwrap()];
+
+            // Let's now decrypt the constructed notes
+            let (note, pa, _memo) = try_sapling_note_decryption::<_, OutputDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>>(
+                &NETWORK,
+                1.into(),
+                &PreparedIncomingViewingKey::new(&viewing_key.ivk()),
+                shielded_output,
+            ).unwrap();
+            assert_eq!(payment_addr, pa);
+            // Make a path to out new note
+            let node = Node::new(shielded_output.cmu.to_repr());
+            (spending_key, div, note, node)
+        }
+    }
+
+    prop_compose! {
+        // Generate an arbitrary MASP denomination
+        pub fn arb_masp_digit_pos()(denom in 0..4u8) -> MaspDigitPos {
+            MaspDigitPos::from(denom)
+        }
+    }
+
+    // Maximum value for a note partition
+    const MAX_MONEY: u64 = 100;
+    // Maximum number of partitions for a note
+    const MAX_SPLITS: usize = 10;
+
+    prop_compose! {
+        // Arbitrarily partition the given vector of integers into sets and sum
+        // them
+        pub fn arb_partition(values: Vec<u64>)(buckets in ((!values.is_empty()) as usize)..=values.len())(
+            values in Just(values.clone()),
+            assigns in collection::vec(0..buckets, values.len()),
+            buckets in Just(buckets),
+        ) -> Vec<u64> {
+            let mut buckets = vec![0; buckets];
+            for (bucket, value) in assigns.iter().zip(values) {
+                buckets[*bucket] += value;
+            }
+            buckets
+        }
+    }
+
+    prop_compose! {
+        // Generate arbitrary spend descriptions with the given asset type
+        // partitioning the given values
+        pub fn arb_spend_descriptions(
+            asset: AssetData,
+            values: Vec<u64>,
+        )(partition in arb_partition(values))(
+            spend_description in partition
+                .iter()
+                .map(|value| arb_spend_description(
+                    encode_asset_type(
+                        asset.token.clone(),
+                        asset.denom,
+                        asset.position,
+                        asset.epoch,
+                    ).unwrap(),
+                    *value,
+                )).collect::<Vec<_>>()
+        ) -> Vec<(ExtendedSpendingKey, Diversifier, Note, Node)> {
+            spend_description
+        }
+    }
+
+    prop_compose! {
+        // Generate arbitrary output descriptions with the given asset type
+        // partitioning the given values
+        pub fn arb_output_descriptions(
+            asset: AssetData,
+            values: Vec<u64>,
+        )(partition in arb_partition(values))(
+            output_description in partition
+                .iter()
+                .map(|value| arb_output_description(
+                    encode_asset_type(
+                        asset.token.clone(),
+                        asset.denom,
+                        asset.position,
+                        asset.epoch,
+                    ).unwrap(),
+                    *value,
+                )).collect::<Vec<_>>()
+        ) -> Vec<(Option<OutgoingViewingKey>, masp_primitives::sapling::PaymentAddress, AssetType, u64, MemoBytes)> {
+            output_description
+        }
+    }
+
+    prop_compose! {
+        // Generate arbitrary spend descriptions with the given asset type
+        // partitioning the given values
+        pub fn arb_txouts(
+            asset: AssetData,
+            values: Vec<u64>,
+            address: TransparentAddress,
+        )(
+            partition in arb_partition(values),
+        ) -> Vec<TxOut> {
+            partition
+                .iter()
+                .map(|value| TxOut {
+                    asset_type: encode_asset_type(
+                        asset.token.clone(),
+                        asset.denom,
+                        asset.position,
+                        asset.epoch,
+                    ).unwrap(),
+                    value: *value,
+                    address,
+                }).collect::<Vec<_>>()
+        }
+    }
+
+    prop_compose! {
+        // Generate an arbitrary shielded MASP transaction builder
+        pub fn arb_shielded_builder(asset_range: impl Into<SizeRange>)(
+            assets in collection::hash_map(
+                arb_pre_asset_type(),
+                collection::vec(..MAX_MONEY, ..MAX_SPLITS),
+                asset_range,
+            ),
+        )(
+            expiration_height in arb_height(BranchId::MASP, &TestNetwork),
+            rng in arb_rng().prop_map(TestCsprng),
+            spend_descriptions in assets
+                .iter()
+                .map(|(asset, values)| arb_spend_descriptions(asset.clone(), values.clone()))
+                .collect::<Vec<_>>(),
+            output_descriptions in assets
+                .iter()
+                .map(|(asset, values)| arb_output_descriptions(asset.clone(), values.clone()))
+                .collect::<Vec<_>>(),
+            assets in Just(assets),
+        ) -> (
+            Builder::<TestNetwork, TestCsprng<TestRng>>,
+            HashMap<AssetData, u64>,
+        ) {
+            let mut builder = Builder::<TestNetwork, _>::new_with_rng(
+                NETWORK,
+                // NOTE: this is going to add 20 more blocks to the actual
+                // expiration but there's no other exposed function that we could
+                // use from the masp crate to specify the expiration better
+                expiration_height.unwrap(),
+                rng,
+            );
+            let mut leaves = Vec::new();
+            // First construct a Merkle tree containing all notes to be used
+            for (_esk, _div, _note, node) in spend_descriptions.iter().flatten() {
+                leaves.push(*node);
+            }
+            let tree = FrozenCommitmentTree::new(&leaves);
+            // Then use the notes knowing that they all have the same anchor
+            for (idx, (esk, div, note, _node)) in spend_descriptions.iter().flatten().enumerate() {
+                builder.add_sapling_spend(*esk, *div, *note, tree.path(idx)).unwrap();
+            }
+            for (ovk, payment_addr, asset_type, value, memo) in output_descriptions.into_iter().flatten() {
+                builder.add_sapling_output(ovk, payment_addr, asset_type, value, memo).unwrap();
+            }
+            (builder, assets.into_iter().map(|(k, v)| (k, v.iter().sum())).collect())
+        }
+    }
+
+    prop_compose! {
+        // Generate an arbitrary pre-asset type
+        pub fn arb_pre_asset_type()(
+            token in arb_address(),
+            denom in arb_denomination(),
+            position in arb_masp_digit_pos(),
+            epoch in option::of(arb_epoch()),
+        ) -> AssetData {
+            AssetData {
+                token,
+                denom,
+                position,
+                epoch,
+            }
+        }
+    }
+
+    prop_compose! {
+        // Generate an arbitrary shielding MASP transaction builder
+        pub fn arb_shielding_builder(
+            source: TransparentAddress,
+            asset_range: impl Into<SizeRange>,
+        )(
+            assets in collection::hash_map(
+                arb_pre_asset_type(),
+                collection::vec(..MAX_MONEY, ..MAX_SPLITS),
+                asset_range,
+            ),
+        )(
+            expiration_height in arb_height(BranchId::MASP, &TestNetwork),
+            rng in arb_rng().prop_map(TestCsprng),
+            txins in assets
+                .iter()
+                .map(|(asset, values)| arb_txouts(asset.clone(), values.clone(), source))
+                .collect::<Vec<_>>(),
+            output_descriptions in assets
+                .iter()
+                .map(|(asset, values)| arb_output_descriptions(asset.clone(), values.clone()))
+                .collect::<Vec<_>>(),
+            assets in Just(assets),
+        ) -> (
+            Builder::<TestNetwork, TestCsprng<TestRng>>,
+            HashMap<AssetData, u64>,
+        ) {
+            let mut builder = Builder::<TestNetwork, _>::new_with_rng(
+                NETWORK,
+                // NOTE: this is going to add 20 more blocks to the actual
+                // expiration but there's no other exposed function that we could
+                // use from the masp crate to specify the expiration better
+                expiration_height.unwrap(),
+                rng,
+            );
+            for txin in txins.into_iter().flatten() {
+                builder.add_transparent_input(txin).unwrap();
+            }
+            for (ovk, payment_addr, asset_type, value, memo) in output_descriptions.into_iter().flatten() {
+                builder.add_sapling_output(ovk, payment_addr, asset_type, value, memo).unwrap();
+            }
+            (builder, assets.into_iter().map(|(k, v)| (k, v.iter().sum())).collect())
+        }
+    }
+
+    prop_compose! {
+        // Generate an arbitrary deshielding MASP transaction builder
+        pub fn arb_deshielding_builder(
+            target: TransparentAddress,
+            asset_range: impl Into<SizeRange>,
+        )(
+            assets in collection::hash_map(
+                arb_pre_asset_type(),
+                collection::vec(..MAX_MONEY, ..MAX_SPLITS),
+                asset_range,
+            ),
+        )(
+            expiration_height in arb_height(BranchId::MASP, &TestNetwork),
+            rng in arb_rng().prop_map(TestCsprng),
+            spend_descriptions in assets
+                .iter()
+                .map(|(asset, values)| arb_spend_descriptions(asset.clone(), values.clone()))
+                .collect::<Vec<_>>(),
+            txouts in assets
+                .iter()
+                .map(|(asset, values)| arb_txouts(asset.clone(), values.clone(), target))
+                .collect::<Vec<_>>(),
+            assets in Just(assets),
+        ) -> (
+            Builder::<TestNetwork, TestCsprng<TestRng>>,
+            HashMap<AssetData, u64>,
+        ) {
+            let mut builder = Builder::<TestNetwork, _>::new_with_rng(
+                NETWORK,
+                // NOTE: this is going to add 20 more blocks to the actual
+                // expiration but there's no other exposed function that we could
+                // use from the masp crate to specify the expiration better
+                expiration_height.unwrap(),
+                rng,
+            );
+            let mut leaves = Vec::new();
+            // First construct a Merkle tree containing all notes to be used
+            for (_esk, _div, _note, node) in spend_descriptions.iter().flatten() {
+                leaves.push(*node);
+            }
+            let tree = FrozenCommitmentTree::new(&leaves);
+            // Then use the notes knowing that they all have the same anchor
+            for (idx, (esk, div, note, _node)) in spend_descriptions.into_iter().flatten().enumerate() {
+                builder.add_sapling_spend(esk, div, note, tree.path(idx)).unwrap();
+            }
+            for txout in txouts.into_iter().flatten() {
+                builder.add_transparent_output(&txout.address, txout.asset_type, txout.value).unwrap();
+            }
+            (builder, assets.into_iter().map(|(k, v)| (k, v.iter().sum())).collect())
+        }
+    }
+
+    prop_compose! {
+        // Generate an arbitrary MASP shielded transfer
+        pub fn arb_shielded_transfer(
+            asset_range: impl Into<SizeRange>,
+        )(asset_range in Just(asset_range.into()))(
+            (builder, asset_types) in arb_shielded_builder(asset_range),
+            epoch in arb_epoch(),
+            rng in arb_rng().prop_map(TestCsprng),
+        ) -> (ShieldedTransfer, HashMap<AssetData, u64>) {
+            let (masp_tx, metadata) = builder.clone().build(
+                &MockTxProver(Mutex::new(rng)),
+                &FeeRule::non_standard(U64Sum::zero()),
+            ).unwrap();
+            (ShieldedTransfer {
+                builder: builder.map_builder(WalletMap),
+                metadata,
+                masp_tx,
+                epoch,
+            }, asset_types)
+        }
+    }
+
+    prop_compose! {
+        // Generate an arbitrary MASP shielded transfer
+        pub fn arb_shielding_transfer(
+            source: TransparentAddress,
+            asset_range: impl Into<SizeRange>,
+        )(asset_range in Just(asset_range.into()))(
+            (builder, asset_types) in arb_shielding_builder(
+                source,
+                asset_range,
+            ),
+            epoch in arb_epoch(),
+            rng in arb_rng().prop_map(TestCsprng),
+        ) -> (ShieldedTransfer, HashMap<AssetData, u64>) {
+            let (masp_tx, metadata) = builder.clone().build(
+                &MockTxProver(Mutex::new(rng)),
+                &FeeRule::non_standard(U64Sum::zero()),
+            ).unwrap();
+            (ShieldedTransfer {
+                builder: builder.map_builder(WalletMap),
+                metadata,
+                masp_tx,
+                epoch,
+            }, asset_types)
+        }
+    }
+
+    prop_compose! {
+        // Generate an arbitrary MASP shielded transfer
+        pub fn arb_deshielding_transfer(
+            target: TransparentAddress,
+            asset_range: impl Into<SizeRange>,
+        )(asset_range in Just(asset_range.into()))(
+            (builder, asset_types) in arb_deshielding_builder(
+                target,
+                asset_range,
+            ),
+            epoch in arb_epoch(),
+            rng in arb_rng().prop_map(TestCsprng),
+        ) -> (ShieldedTransfer, HashMap<AssetData, u64>) {
+            let (masp_tx, metadata) = builder.clone().build(
+                &MockTxProver(Mutex::new(rng)),
+                &FeeRule::non_standard(U64Sum::zero()),
+            ).unwrap();
+            (ShieldedTransfer {
+                builder: builder.map_builder(WalletMap),
+                metadata,
+                masp_tx,
+                epoch,
+            }, asset_types)
+        }
     }
 }
 

@@ -11,7 +11,9 @@ use crate::ledger::ibc::storage::is_ibc_key;
 use crate::ledger::native_vp::CtxPreStorageRead;
 use crate::state::write_log::StorageModification;
 use crate::state::{self as ledger_storage, StorageHasher};
-use crate::token::{self as token, burn, credit_tokens, transfer, Amount};
+use crate::token::{
+    self as token, burn_tokens, credit_tokens, transfer, Amount,
+};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::ibc::IbcEvent;
 use crate::types::storage::{
@@ -236,7 +238,7 @@ where
         token: &Address,
         amount: Amount,
     ) -> Result<()> {
-        burn(self, token, target, amount)
+        burn_tokens(self, token, target, amount)
     }
 
     fn log_string(&self, message: String) {

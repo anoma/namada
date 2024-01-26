@@ -70,8 +70,10 @@ where
                     let is_valid = if total_stewards_pre < total_stewards_post {
                         false
                     } else {
-                        // if a steward resign or update commissions, check the
-                        // for signature authorization
+                        // if a steward resign, check the signature
+                        // if a steward update the reward distribution (so
+                        // total_stewards_pre == total_stewards_post) check
+                        // signature and if commission are valid
                         let steward_address = pgf_storage::is_stewards_key(key);
                         if let Some(address) = steward_address {
                             let steward_post = pgf::storage::get_steward(
@@ -83,7 +85,10 @@ where
                                     steward.is_valid_reward_distribution()
                                         && verifiers.contains(address)
                                 }
-                                _ => verifiers.contains(address),
+                                Ok(None) => verifiers.contains(address),
+                                // if reading from storage returns an error,
+                                // just return false
+                                Err(_) => false,
                             }
                         } else {
                             false
@@ -117,7 +122,7 @@ where
         match tx.data() {
             Some(data) => is_proposal_accepted(&self.ctx.pre(), data.as_ref())
                 .map_err(Error::NativeVpError),
-            None => Ok(true),
+            None => Ok(false),
         }
     }
 }

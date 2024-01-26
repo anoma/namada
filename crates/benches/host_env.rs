@@ -318,7 +318,7 @@ fn storage_write(c: &mut Criterion) {
                             .wl_storage
                             .storage
                             .db
-                            .write_subspace_val(block_height, &key, value)
+                            .write_subspace_val(block_height, &key, value, true)
                             .unwrap();
                     },
                     criterion::BatchSize::SmallInput,

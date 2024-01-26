@@ -47,12 +47,12 @@ use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use namada::types::storage::{
     BlockHeight, BlockResults, Epoch, IndexedTx, Key, KeySeg,
 };
-use namada::types::token::{Change, MaspDenom};
+use namada::types::token::{Change, MaspDigitPos};
 use namada::{state as storage, token};
 use namada_sdk::error::{
     is_pinned_error, Error, PinnedBalanceError, QueryError,
 };
-use namada_sdk::masp::{Conversions, MaspChange};
+use namada_sdk::masp::{Conversions, MaspChange, MaspTokenRewardData};
 use namada_sdk::proof_of_stake::types::ValidatorMetaData;
 use namada_sdk::rpc::{
     self, enriched_bonds_and_unbonds, query_epoch, TxResponse,
@@ -131,6 +131,8 @@ pub async fn query_transfers(
     );
     let mut shielded = context.shielded_mut().await;
     let _ = shielded.load().await;
+    // Precompute asset types to increase chances of success in decoding
+    let _ = shielded.precompute_asset_types(context).await;
     // Obtain the effects of all shielded and transparent transactions
     let transfers = shielded
         .query_tx_deltas(
@@ -194,7 +196,7 @@ pub async fn query_transfers(
                 ) || shielded_accounts
                     .values()
                     .cloned()
-                    .any(|x| !x.get(token).is_zero())
+                    .any(|x| !x.0.get(token).is_zero())
             }
             None => true,
         };
@@ -235,7 +237,7 @@ pub async fn query_transfers(
         for (account, masp_change) in shielded_accounts {
             if fvk_map.contains_key(&account) {
                 display!(context.io(), "  {}:", fvk_map[&account]);
-                for (token_addr, val) in masp_change.components() {
+                for (token_addr, val) in masp_change.0.components() {
                     let token_alias =
                         lookup_token_alias(context, token_addr, &MASP).await;
                     let sign = match val.cmp(&Change::zero()) {
@@ -250,6 +252,14 @@ pub async fn query_transfers(
                         context.format_amount(token_addr, (*val).into()).await,
                         token_alias,
                     );
+                }
+                for (asset_type, val) in masp_change.1.components() {
+                    let sign = match val.cmp(&0) {
+                        Ordering::Greater => "+",
+                        Ordering::Less => "-",
+                        Ordering::Equal => "",
+                    };
+                    display!(context.io(), " {}{} {}", sign, val, asset_type,);
                 }
                 display_line!(context.io(), "");
             }
@@ -420,6 +430,12 @@ pub async fn query_pinned_balance(
         .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
         .collect();
     let _ = context.shielded_mut().await.load().await;
+    // Precompute asset types to increase chances of success in decoding
+    let _ = context
+        .shielded_mut()
+        .await
+        .precompute_asset_types(context)
+        .await;
     // Print the token balances by payment address
     for owner in owners {
         let mut balance =
@@ -483,7 +499,7 @@ pub async fn query_pinned_balance(
                     other
                 )
             }
-            (Ok((balance, epoch)), Some(base_token)) => {
+            (Ok((balance, _undecoded, epoch)), Some(base_token)) => {
                 let tokens =
                     query_tokens(context, Some(base_token), None).await;
                 for (token_alias, token) in &tokens {
@@ -518,10 +534,10 @@ pub async fn query_pinned_balance(
                     }
                 }
             }
-            (Ok((balance, epoch)), None) => {
+            (Ok((balance, undecoded, epoch)), None) => {
                 let mut found_any = false;
 
-                for (token_addr, value) in balance.0.iter() {
+                for (token_addr, value) in balance.components() {
                     if !found_any {
                         display_line!(
                             context.io(),
@@ -543,6 +559,19 @@ pub async fn query_pinned_balance(
                         token_alias,
                         formatted,
                     );
+                }
+                for (asset_type, value) in undecoded.components() {
+                    if !found_any {
+                        display_line!(
+                            context.io(),
+                            "Payment address {} was consumed during epoch {}. \
+                             Received:",
+                            owner,
+                            epoch
+                        );
+                        found_any = true;
+                    }
+                    display_line!(context.io(), " {}: {}", asset_type, value,);
                 }
                 if !found_any {
                     display_line!(
@@ -854,6 +883,8 @@ pub async fn query_shielded_balance(
             .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
             .collect();
         shielded.fetch(context.client(), &[], &fvks).await.unwrap();
+        // Precompute asset types to increase chances of success in decoding
+        let _ = shielded.precompute_asset_types(context).await;
         // Save the update state so that future fetches can be short-circuited
         let _ = shielded.save().await;
     }
@@ -896,6 +927,7 @@ pub async fn query_shielded_balance(
                         epoch,
                     )
                     .await
+                    .0
                     .get(&token);
                 if total_balance.is_zero() {
                     display_line!(
@@ -948,7 +980,7 @@ pub async fn query_shielded_balance(
                         epoch,
                     )
                     .await;
-                for (key, value) in balance.components() {
+                for (key, value) in balance.0.components() {
                     balances
                         .entry(key.clone())
                         .or_insert(Vec::new())
@@ -1023,6 +1055,7 @@ pub async fn query_shielded_balance(
                             epoch,
                         )
                         .await
+                        .0
                         .get(&token);
                     if !total_balance.is_zero() {
                         found_any = true;
@@ -1094,13 +1127,16 @@ pub async fn print_decoded_balance(
             .await
             .decode_combine_sum_to_epoch(context.client(), balance, epoch)
             .await;
-        for (token_addr, amount) in decoded_balance.components() {
+        for (token_addr, amount) in decoded_balance.0.components() {
             display_line!(
                 context.io(),
                 "{} : {}",
                 lookup_token_alias(context, token_addr, &MASP).await,
                 context.format_amount(token_addr, (*amount).into()).await,
             );
+        }
+        for (asset_type, amount) in decoded_balance.1.components() {
+            display_line!(context.io(), "{} : {}", asset_type, amount,);
         }
     }
 }
@@ -1121,10 +1157,10 @@ pub async fn print_decoded_balance_with_epoch(
         .await
         .decode_combine_sum(context.client(), balance)
         .await;
-    for ((epoch, token_addr), value) in decoded_balance.0 {
-        let asset_value = value.into();
+    for ((epoch, token_addr), value) in decoded_balance.0.components() {
+        let asset_value = (*value).into();
         let alias = tokens
-            .get(&token_addr)
+            .get(token_addr)
             .map(|a| a.to_string())
             .unwrap_or_else(|| token_addr.to_string());
         if let Some(epoch) = epoch {
@@ -1133,16 +1169,19 @@ pub async fn print_decoded_balance_with_epoch(
                 "{} | {} : {}",
                 alias,
                 epoch,
-                context.format_amount(&token_addr, asset_value).await,
+                context.format_amount(token_addr, asset_value).await,
             );
         } else {
             display_line!(
                 context.io(),
                 "{} : {}",
                 alias,
-                context.format_amount(&token_addr, asset_value).await,
+                context.format_amount(token_addr, asset_value).await,
             );
         }
+    }
+    for (asset_type, value) in decoded_balance.1.components() {
+        display_line!(context.io(), "{} : {}", asset_type, value,);
     }
 }
 
@@ -1419,21 +1458,21 @@ pub async fn query_protocol_parameters(
         max_block_duration
     );
 
-    let key = param_storage::get_tx_whitelist_storage_key();
-    let vp_whitelist: Vec<String> = query_storage_value(context.client(), &key)
+    let key = param_storage::get_tx_allowlist_storage_key();
+    let vp_allowlist: Vec<String> = query_storage_value(context.client(), &key)
         .await
         .expect("Parameter should be defined.");
-    display_line!(context.io(), "{:4}VP whitelist: {:?}", "", vp_whitelist);
+    display_line!(context.io(), "{:4}VP allowlist: {:?}", "", vp_allowlist);
 
-    let key = param_storage::get_tx_whitelist_storage_key();
-    let tx_whitelist: Vec<String> = query_storage_value(context.client(), &key)
+    let key = param_storage::get_tx_allowlist_storage_key();
+    let tx_allowlist: Vec<String> = query_storage_value(context.client(), &key)
         .await
         .expect("Parameter should be defined.");
     display_line!(
         context.io(),
-        "{:4}Transactions whitelist: {:?}",
+        "{:4}Transactions allowlist: {:?}",
         "",
-        tx_whitelist
+        tx_allowlist
     );
 
     let key = param_storage::get_max_block_gas_key();
@@ -2409,7 +2448,7 @@ pub async fn query_conversions(
         .expect("Conversions should be defined");
     // Track whether any non-sentinel conversions are found
     let mut conversions_found = false;
-    for (addr, epoch, amt) in conversions.values() {
+    for (addr, _denom, digit, epoch, amt) in conversions.values() {
         // If the user has specified any targets, then meet them
         // If we have a sentinel conversion, then skip printing
         if matches!(&target_token, Some(target) if target != addr)
@@ -2422,8 +2461,9 @@ pub async fn query_conversions(
         // Print the asset to which the conversion applies
         display!(
             context.io(),
-            "{}[{}]: ",
+            "{}*2^{}[{}]: ",
             tokens.get(addr).cloned().unwrap_or_else(|| addr.clone()),
+            *digit as u8 * 64,
             epoch,
         );
         // Now print out the components of the allowed conversion
@@ -2431,14 +2471,15 @@ pub async fn query_conversions(
         for (asset_type, val) in amt.components() {
             // Look up the address and epoch of asset to facilitate pretty
             // printing
-            let (addr, epoch, _) = &conversions[asset_type];
+            let (addr, _denom, digit, epoch, _) = &conversions[asset_type];
             // Now print out this component of the conversion
             display!(
                 context.io(),
-                "{}{} {}[{}]",
+                "{}{} {}*2^{}[{}]",
                 prefix,
                 val,
                 tokens.get(addr).cloned().unwrap_or_else(|| addr.clone()),
+                *digit as u8 * 64,
                 epoch
             );
             // Future iterations need to be prefixed with +
@@ -2461,7 +2502,8 @@ pub async fn query_conversion<C: namada::ledger::queries::Client + Sync>(
     asset_type: AssetType,
 ) -> Option<(
     Address,
-    MaspDenom,
+    token::Denomination,
+    MaspDigitPos,
     Epoch,
     masp_primitives::transaction::components::I128Sum,
     MerklePath<Node>,
@@ -2474,9 +2516,25 @@ pub async fn query_masp_reward_tokens(context: &impl Namada) {
     let tokens = namada_sdk::rpc::query_masp_reward_tokens(context.client())
         .await
         .expect("The tokens that may earn MASP rewards should be defined");
-    display_line!(context.io(), "The following tokens may ear MASP rewards:");
-    for (alias, address) in tokens {
-        display_line!(context.io(), "{}: {}", alias, address);
+    display_line!(context.io(), "The following tokens may earn MASP rewards:");
+    for MaspTokenRewardData {
+        name,
+        address,
+        max_reward_rate,
+        kp_gain,
+        kd_gain,
+        locked_ratio_target,
+    } in tokens
+    {
+        display_line!(context.io(), "{}: {}", name, address);
+        display_line!(context.io(), "  Max reward rate: {}", max_reward_rate);
+        display_line!(context.io(), "  Kp gain: {}", kp_gain);
+        display_line!(context.io(), "  Kd gain: {}", kd_gain);
+        display_line!(
+            context.io(),
+            "  Locked ratio target: {}",
+            locked_ratio_target
+        );
     }
 }
 

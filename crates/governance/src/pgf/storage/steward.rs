@@ -4,6 +4,8 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::types::address::Address;
 use namada_core::types::dec::Dec;
 
+use crate::pgf::REWARD_DISTRIBUTION_LIMIT;
+
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, PartialEq)]
 /// Struct holding data about a pgf steward
 pub struct StewardDetail {
@@ -24,6 +26,10 @@ impl StewardDetail {
 
     /// Check if reward distribution is valid
     pub fn is_valid_reward_distribution(&self) -> bool {
+        if self.reward_distribution.len() as u64 > REWARD_DISTRIBUTION_LIMIT {
+            return false;
+        }
+
         let mut sum = Dec::zero();
         for percentage in self.reward_distribution.values().cloned() {
             if percentage < Dec::zero() || percentage > Dec::one() {
@@ -31,6 +37,7 @@ impl StewardDetail {
             }
             sum += percentage;
         }
+
         sum <= Dec::one()
     }
 }

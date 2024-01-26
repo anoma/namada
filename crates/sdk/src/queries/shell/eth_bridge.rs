@@ -1079,10 +1079,7 @@ mod test_ethbridge_router {
         client.wl_storage.storage.block.height = 1.into();
         client
             .wl_storage
-            .write_bytes(
-                &get_pending_key(&transfer),
-                transfer.serialize_to_vec(),
-            )
+            .write(&get_pending_key(&transfer), &transfer)
             .expect("Test failed");
 
         // commit the changes and increase block height
@@ -1122,10 +1119,7 @@ mod test_ethbridge_router {
         // write a transfer into the bridge pool
         client
             .wl_storage
-            .write_bytes(
-                &get_pending_key(&transfer),
-                transfer.serialize_to_vec(),
-            )
+            .write(&get_pending_key(&transfer), &transfer)
             .expect("Test failed");
 
         // commit the changes and increase block height
@@ -1141,10 +1135,7 @@ mod test_ethbridge_router {
         transfer2.transfer.amount = 1.into();
         client
             .wl_storage
-            .write_bytes(
-                &get_pending_key(&transfer2),
-                transfer2.serialize_to_vec(),
-            )
+            .write(&get_pending_key(&transfer2), &transfer2)
             .expect("Test failed");
 
         // commit the changes and increase block height
@@ -1187,10 +1178,7 @@ mod test_ethbridge_router {
         // write a transfer into the bridge pool
         client
             .wl_storage
-            .write_bytes(
-                &get_pending_key(&transfer),
-                transfer.serialize_to_vec(),
-            )
+            .write(&get_pending_key(&transfer), &transfer)
             .expect("Test failed");
 
         // create a signed Merkle root for this pool
@@ -1209,18 +1197,15 @@ mod test_ethbridge_router {
         transfer2.transfer.amount = 1.into();
         client
             .wl_storage
-            .write_bytes(
-                &get_pending_key(&transfer2),
-                transfer2.serialize_to_vec(),
-            )
+            .write(&get_pending_key(&transfer2), transfer2)
             .expect("Test failed");
 
         // add the signature for the pool at the previous block height
         client
             .wl_storage
-            .write_bytes(
+            .write(
                 &get_signed_root_key(),
-                (signed_root.clone(), written_height).serialize_to_vec(),
+                (signed_root.clone(), written_height),
             )
             .expect("Test failed");
 
@@ -1303,10 +1288,7 @@ mod test_ethbridge_router {
         // write a transfer into the bridge pool
         client
             .wl_storage
-            .write_bytes(
-                &get_pending_key(&transfer),
-                transfer.serialize_to_vec(),
-            )
+            .write(&get_pending_key(&transfer), &transfer)
             .expect("Test failed");
 
         // create a signed Merkle root for this pool
@@ -1328,19 +1310,13 @@ mod test_ethbridge_router {
         transfer2.transfer.amount = 1.into();
         client
             .wl_storage
-            .write_bytes(
-                &get_pending_key(&transfer2),
-                transfer2.serialize_to_vec(),
-            )
+            .write(&get_pending_key(&transfer2), &transfer2)
             .expect("Test failed");
 
         // add the signature for the pool at the previous block height
         client
             .wl_storage
-            .write_bytes(
-                &get_signed_root_key(),
-                (signed_root, BlockHeight::from(0)).serialize_to_vec(),
-            )
+            .write(&get_signed_root_key(), (signed_root, BlockHeight::from(0)))
             .expect("Test failed");
 
         // commit the changes and increase block height
@@ -1398,10 +1374,7 @@ mod test_ethbridge_router {
         // write a transfer into the bridge pool
         client
             .wl_storage
-            .write_bytes(
-                &get_pending_key(&transfer),
-                transfer.serialize_to_vec(),
-            )
+            .write(&get_pending_key(&transfer), &transfer)
             .expect("Test failed");
 
         // create a signed Merkle root for this pool
@@ -1420,19 +1393,13 @@ mod test_ethbridge_router {
         transfer2.transfer.amount = 1.into();
         client
             .wl_storage
-            .write_bytes(
-                &get_pending_key(&transfer2),
-                transfer2.serialize_to_vec(),
-            )
+            .write(&get_pending_key(&transfer2), transfer2)
             .expect("Test failed");
 
         // add the signature for the pool at the previous block height
         client
             .wl_storage
-            .write_bytes(
-                &get_signed_root_key(),
-                (signed_root, written_height).serialize_to_vec(),
-            )
+            .write(&get_signed_root_key(), (signed_root, written_height))
             .expect("Test failed");
 
         // commit the changes and increase block height
@@ -1473,10 +1440,7 @@ mod test_ethbridge_router {
         // write a transfer into the bridge pool
         client
             .wl_storage
-            .write_bytes(
-                &get_pending_key(&transfer),
-                transfer.serialize_to_vec(),
-            )
+            .write(&get_pending_key(&transfer), &transfer)
             .expect("Test failed");
 
         let event_transfer: namada_core::types::ethereum_events::TransferToEthereum
@@ -1490,17 +1454,16 @@ mod test_ethbridge_router {
         let voting_power = FractionalVotingPower::HALF;
         client
             .wl_storage
-            .write_bytes(&eth_msg_key.body(), eth_event.serialize_to_vec())
+            .write(&eth_msg_key.body(), eth_event)
             .expect("Test failed");
         client
             .wl_storage
-            .write_bytes(
+            .write(
                 &eth_msg_key.voting_power(),
                 EpochedVotingPower::from([(
                     0.into(),
                     voting_power * dummy_validator_stake,
-                )])
-                .serialize_to_vec(),
+                )]),
             )
             .expect("Test failed");
         client
@@ -1520,10 +1483,7 @@ mod test_ethbridge_router {
         transfer2.transfer.amount = 1.into();
         client
             .wl_storage
-            .write_bytes(
-                &get_pending_key(&transfer2),
-                transfer2.serialize_to_vec(),
-            )
+            .write(&get_pending_key(&transfer2), transfer2)
             .expect("Test failed");
 
         // commit the changes and increase block height
@@ -1572,10 +1532,7 @@ mod test_ethbridge_router {
         // write a transfer into the bridge pool
         client
             .wl_storage
-            .write_bytes(
-                &get_pending_key(&transfer),
-                transfer.serialize_to_vec(),
-            )
+            .write(&get_pending_key(&transfer), &transfer)
             .expect("Test failed");
 
         // create a signed Merkle root for this pool
@@ -1594,19 +1551,13 @@ mod test_ethbridge_router {
         transfer2.transfer.amount = 1.into();
         client
             .wl_storage
-            .write_bytes(
-                &get_pending_key(&transfer2),
-                transfer2.serialize_to_vec(),
-            )
+            .write(&get_pending_key(&transfer2), transfer2)
             .expect("Test failed");
 
         // add the signature for the pool at the previous block height
         client
             .wl_storage
-            .write_bytes(
-                &get_signed_root_key(),
-                (signed_root, written_height).serialize_to_vec(),
-            )
+            .write(&get_signed_root_key(), (signed_root, written_height))
             .expect("Test failed");
 
         // commit the changes and increase block height
@@ -1739,10 +1690,7 @@ mod test_ethbridge_router {
         };
         client
             .wl_storage
-            .write_bytes(
-                &get_pending_key(&transfer),
-                transfer.serialize_to_vec(),
-            )
+            .write(&get_pending_key(&transfer), transfer.clone())
             .expect("Test failed");
 
         // write transfers into the event log
@@ -1781,10 +1729,7 @@ mod test_ethbridge_router {
             let written_height = client.wl_storage.storage.block.height;
             client
                 .wl_storage
-                .write_bytes(
-                    &get_signed_root_key(),
-                    (signed_root, written_height).serialize_to_vec(),
-                )
+                .write(&get_signed_root_key(), (signed_root, written_height))
                 .expect("Test failed");
             client
                 .wl_storage

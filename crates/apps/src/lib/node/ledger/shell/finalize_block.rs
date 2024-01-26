@@ -408,23 +408,26 @@ where
                 },
             };
 
-            match protocol::dispatch_tx(
-                tx,
-                processed_tx.tx.as_ref(),
-                TxIndex(
-                    tx_index
-                        .try_into()
-                        .expect("transaction index out of bounds"),
-                ),
-                &mut tx_gas_meter,
-                &mut self.wl_storage,
-                &mut self.vp_wasm_cache,
-                &mut self.tx_wasm_cache,
-                wrapper_args.as_mut(),
-            )
-            .map_err(Error::TxApply)
-            {
-                Ok(ref mut result) => {
+            let tx_result = protocol::check_tx_allowed(&tx, &self.wl_storage)
+                .and_then(|()| {
+                    protocol::dispatch_tx(
+                        tx,
+                        processed_tx.tx.as_ref(),
+                        TxIndex(
+                            tx_index
+                                .try_into()
+                                .expect("transaction index out of bounds"),
+                        ),
+                        &mut tx_gas_meter,
+                        &mut self.wl_storage,
+                        &mut self.vp_wasm_cache,
+                        &mut self.tx_wasm_cache,
+                        wrapper_args.as_mut(),
+                    )
+                })
+                .map_err(Error::TxApply);
+            match tx_result {
+                Ok(result) => {
                     if result.is_accepted() {
                         if let EventType::Accepted = tx_event.event_type {
                             // Wrapper transaction
@@ -2850,7 +2853,7 @@ mod test_finalize_block {
 
     /// Test that replay protection keys are not added to the merkle tree
     #[test]
-    fn test_replay_keys_not_merkelized() {
+    fn test_replay_keys_not_merklized() {
         let (mut shell, _, _, _) = setup();
 
         let (wrapper_tx, processed_tx) =
@@ -3080,7 +3083,10 @@ mod test_finalize_block {
         let mut out_of_gas_inner = out_of_gas_wrapper.clone();
         let mut undecryptable_inner = undecryptable_wrapper.clone();
         let mut unsigned_inner = unsigned_wrapper.clone();
-        let mut wrong_commitment_inner = wrong_commitment_wrapper.clone();
+        let mut wrong_commitment_inner = failing_wrapper.clone();
+        // Add some extra data to avoid having the same Tx hash as the
+        // `failing_wrapper`
+        wrong_commitment_inner.add_memo(&[0_u8]);
         let mut failing_inner = failing_wrapper.clone();
 
         undecryptable_inner
@@ -4743,7 +4749,7 @@ mod test_finalize_block {
         next_block_for_inflation(
             &mut shell,
             pkh1.to_vec(),
-            default_all_votes,
+            default_all_votes.clone(),
             None,
         );
         assert!(missed_votes.is_empty(&shell.wl_storage)?);
@@ -4777,6 +4783,13 @@ mod test_finalize_block {
             .unwrap();
         assert_eq!(val5_pipeline_state, ValidatorState::BelowThreshold);
 
+        next_block_for_inflation(
+            &mut shell,
+            pkh1.to_vec(),
+            default_all_votes,
+            None,
+        );
+
         // Advance to the next epoch with no votes from validator 2
         // NOTE: assume the minimum blocks for jailing is larger than remaining
         // blocks to next epoch!
@@ -4786,7 +4799,7 @@ mod test_finalize_block {
         );
         votes_no2.retain(|vote| vote.validator.address != pkh2);
 
-        let first_height_without_vote = 2;
+        let first_height_without_vote = 3;
         let mut val2_num_missed_blocks = 0u64;
         while current_epoch == Epoch::default() {
             next_block_for_inflation(
@@ -4840,7 +4853,10 @@ mod test_finalize_block {
             liveness_sum_missed_votes_handle().get(&shell.wl_storage, &val2)?;
         assert_eq!(
             val2_sum_missed_votes,
-            Some(shell.wl_storage.storage.block.height.0 - 2)
+            Some(
+                shell.wl_storage.storage.block.height.0
+                    - first_height_without_vote
+            )
         );
         for val in &initial_consensus_set {
             if val == &val2 {
@@ -4907,7 +4923,10 @@ mod test_finalize_block {
             if val == &val2 {
                 assert_eq!(
                     sum,
-                    Some(shell.wl_storage.storage.block.height.0 - 2)
+                    Some(
+                        shell.wl_storage.storage.block.height.0
+                            - first_height_without_vote
+                    )
                 );
                 for height in first_height_without_vote
                     ..shell.wl_storage.storage.block.height.0

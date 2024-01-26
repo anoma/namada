@@ -133,7 +133,7 @@ where
         token: &Address,
         amount: Amount,
     ) -> Result<(), StorageError> {
-        token::burn(self.wl_storage, token, target, amount)
+        token::burn_tokens(self.wl_storage, token, target, amount)
     }
 
     fn log_string(&self, message: String) {

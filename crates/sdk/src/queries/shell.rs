@@ -10,11 +10,12 @@ use masp_primitives::sapling::Node;
 use namada_account::{Account, AccountPublicKeysMap};
 use namada_core::hints;
 use namada_core::types::address::Address;
+use namada_core::types::dec::Dec;
 use namada_core::types::hash::Hash;
 use namada_core::types::storage::{
     self, BlockHeight, BlockResults, Epoch, KeySeg, PrefixValue,
 };
-use namada_core::types::token::MaspDenom;
+use namada_core::types::token::{Denomination, MaspDigitPos};
 use namada_state::{DBIter, LastBlock, StorageHasher, DB};
 use namada_storage::{self, ResultExt, StorageRead};
 #[cfg(any(test, feature = "async-client"))]
@@ -26,19 +27,23 @@ use crate::events::{Event, EventType};
 use crate::ibc::core::host::types::identifiers::{
     ChannelId, ClientId, PortId, Sequence,
 };
+use crate::masp::MaspTokenRewardData;
 use crate::queries::types::{RequestCtx, RequestQuery};
 use crate::queries::{require_latest_height, EncodedResponseQuery};
 use crate::tendermint::merkle::proof::ProofOps;
 
 type ConversionWithoutPath = (
     Address,
+    Denomination,
+    MaspDigitPos,
     Epoch,
     masp_primitives::transaction::components::I128Sum,
 );
 
 type Conversion = (
     Address,
-    MaspDenom,
+    Denomination,
+    MaspDigitPos,
     Epoch,
     masp_primitives::transaction::components::I128Sum,
     MerklePath<Node>,
@@ -84,7 +89,7 @@ router! {SHELL,
     ( "conversions" ) -> BTreeMap<AssetType, ConversionWithoutPath> = read_conversions,
 
     // Conversion state access - read conversion
-    ( "masp_reward_tokens" ) -> BTreeMap<String, Address> = masp_reward_tokens,
+    ( "masp_reward_tokens" ) -> Vec<MaspTokenRewardData> = masp_reward_tokens,
 
     // Block results access - read bit-vec
     ( "results" ) -> Vec<BlockResults> = read_results,
@@ -172,9 +177,14 @@ where
         .conversion_state
         .assets
         .iter()
-        .map(|(&asset_type, ((ref addr, _), epoch, ref conv, _))| {
-            (asset_type, (addr.clone(), *epoch, conv.clone().into()))
-        })
+        .map(
+            |(&asset_type, ((ref addr, denom, digit), epoch, ref conv, _))| {
+                (
+                    asset_type,
+                    (addr.clone(), *denom, *digit, *epoch, conv.clone().into()),
+                )
+            },
+        )
         .collect())
 }
 
@@ -188,7 +198,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     // Conversion values are constructed on request
-    if let Some(((addr, denom), epoch, conv, pos)) = ctx
+    if let Some(((addr, denom, digit), epoch, conv, pos)) = ctx
         .wl_storage
         .storage
         .conversion_state
@@ -198,6 +208,7 @@ where
         Ok(Some((
             addr.clone(),
             *denom,
+            *digit,
             *epoch,
             Into::<masp_primitives::transaction::components::I128Sum>::into(
                 conv.clone(),
@@ -212,12 +223,80 @@ where
 /// Query to read the tokens that earn masp rewards.
 fn masp_reward_tokens<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
-) -> namada_storage::Result<BTreeMap<String, Address>>
+) -> namada_storage::Result<Vec<MaspTokenRewardData>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    Ok(ctx.wl_storage.storage.conversion_state.tokens.clone())
+    let tokens = ctx.wl_storage.storage.conversion_state.tokens.clone();
+    let mut data = Vec::<MaspTokenRewardData>::new();
+    for (name, token) in tokens {
+        let max_reward_rate = ctx
+            .wl_storage
+            .read::<Dec>(&namada_token::storage_key::masp_max_reward_rate_key(
+                &token,
+            ))?
+            .ok_or_else(|| {
+                namada_storage::Error::new(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!(
+                        "Did not find max reward rate set for token {} ({})",
+                        &name, &token
+                    ),
+                ))
+            })?;
+        let kd_gain = ctx
+            .wl_storage
+            .read::<Dec>(&namada_token::storage_key::masp_kd_gain_key(&token))?
+            .ok_or_else(|| {
+                namada_storage::Error::new(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!(
+                        "Did not find kd gain set for token {} ({})",
+                        &name, &token
+                    ),
+                ))
+            })?;
+        let kp_gain = ctx
+            .wl_storage
+            .read::<Dec>(&namada_token::storage_key::masp_kp_gain_key(&token))?
+            .ok_or_else(|| {
+                namada_storage::Error::new(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!(
+                        "Did not find kp gain set for token {} ({})",
+                        &name, &token
+                    ),
+                ))
+            })?;
+        let locked_ratio_target = ctx
+            .wl_storage
+            .read::<Dec>(
+                &namada_token::storage_key::masp_locked_ratio_target_key(
+                    &token,
+                ),
+            )?
+            .ok_or_else(|| {
+                namada_storage::Error::new(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!(
+                        "Did not find target locked ratio set for token {} \
+                         ({})",
+                        &name, &token
+                    ),
+                ))
+            })?;
+
+        data.push(MaspTokenRewardData {
+            name,
+            address: token,
+            max_reward_rate,
+            kp_gain,
+            kd_gain,
+            locked_ratio_target,
+        });
+    }
+    Ok(data)
 }
 
 fn epoch<D, H, V, T>(

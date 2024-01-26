@@ -169,15 +169,15 @@ pub fn write_vp_inputs(
 
 /// Check that the given offset and length fits into the memory bounds. If not,
 /// it will try to grow the memory.
-fn check_bounds(memory: &Memory, base_offset: u64, len: usize) -> Result<()> {
+fn check_bounds(memory: &Memory, base_addr: u64, offset: usize) -> Result<()> {
     tracing::debug!(
-        "check_bounds pages {}, data_size {}, base_offset + len {}",
+        "check_bounds pages {}, data_size {}, base_addr {base_addr}, offset \
+         {offset}",
         memory.size().0,
         memory.data_size(),
-        base_offset + len as u64
     );
-    let desired_offset = base_offset
-        .checked_add(len as u64)
+    let desired_offset = base_addr
+        .checked_add(offset as u64)
         .and_then(|off| {
             if off < u32::MAX as u64 {
                 // wasm pointers are 32 bits wide, therefore we can't
@@ -187,7 +187,7 @@ fn check_bounds(memory: &Memory, base_offset: u64, len: usize) -> Result<()> {
                 None
             }
         })
-        .ok_or(Error::OverflowingOffset(base_offset, len))?;
+        .ok_or(Error::OverflowingOffset(base_addr, offset))?;
     if memory.data_size() < desired_offset {
         let cur_pages = memory.size().0;
         let capacity = cur_pages as usize * wasmer::WASM_PAGE_SIZE;
@@ -246,7 +246,7 @@ fn write_memory_bytes(
 /// The wasm memory
 #[derive(Debug, Clone, Default)]
 pub struct WasmMemory {
-    inner: LazyInit<wasmer::Memory>,
+    pub(crate) inner: LazyInit<wasmer::Memory>,
 }
 
 impl WasmMemory {

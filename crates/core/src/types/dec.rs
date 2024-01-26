@@ -420,7 +420,7 @@ impl Mul<Amount> for Dec {
         if !self.is_negative() {
             (rhs * self.0.abs()) / 10u64.pow(POS_DECIMAL_PRECISION as u32)
         } else {
-            panic!("aaa");
+            panic!("Dec is negative and cannot produce a valid Amount output");
         }
     }
 }

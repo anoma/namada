@@ -363,6 +363,13 @@ where
     event_log: EventLog,
 }
 
+/// Merkle tree storage key filter. Return `false` for keys that shouldn't be
+/// merklized.
+pub fn is_merklized_storage_key(key: &namada_sdk::types::storage::Key) -> bool {
+    !token::storage_key::is_masp_key(key)
+        && !namada::ibc::storage::is_ibc_counter_key(key)
+}
+
 /// Channels for communicating with an Ethereum oracle.
 #[derive(Debug)]
 pub struct EthereumOracleChannels {
@@ -431,6 +438,7 @@ where
             native_token,
             db_cache,
             config.shell.storage_read_past_height_limit,
+            is_merklized_storage_key,
         );
         storage
             .load_last_state()
@@ -1972,7 +1980,7 @@ mod test_utils {
             },
             validators: vec![],
             app_state_bytes: vec![].into(),
-            initial_height: 0_u32.into(),
+            initial_height: 1_u32.into(),
         };
         test.init_chain(req, num_validators);
         test.wl_storage.commit_block().expect("Test failed");
@@ -2041,10 +2049,7 @@ mod test_utils {
         use namada::eth_bridge::storage::eth_bridge_queries::EthBridgeStatus;
         shell
             .wl_storage
-            .write_bytes(
-                &active_key(),
-                EthBridgeStatus::Disabled.serialize_to_vec(),
-            )
+            .write(&active_key(), EthBridgeStatus::Disabled)
             .expect("Test failed");
     }
 
@@ -2125,8 +2130,8 @@ mod test_utils {
             max_expected_time_per_block: DurationSecs(3600),
             max_proposal_bytes: Default::default(),
             max_block_gas: 100,
-            vp_whitelist: vec![],
-            tx_whitelist: vec![],
+            vp_allowlist: vec![],
+            tx_allowlist: vec![],
             implicit_vp_code_hash: Default::default(),
             epochs_per_year: 365,
             max_signatures_per_transaction: 10,
@@ -2139,51 +2144,6 @@ mod test_utils {
         parameters::init_storage(&params, &mut shell.wl_storage)
             .expect("Test failed");
         // make wl_storage to update conversion for a new epoch
-        let token_params = token::Parameters {
-            max_reward_rate: Default::default(),
-            kd_gain_nom: Default::default(),
-            kp_gain_nom: Default::default(),
-            locked_ratio_target: Default::default(),
-        };
-        // Insert a map assigning random addresses to each token alias.
-        // Needed for storage but not for this test.
-        for (token, _) in address::tokens() {
-            let addr = address::gen_deterministic_established_address(token);
-            token::write_params(&token_params, &mut shell.wl_storage, &addr)
-                .unwrap();
-            shell
-                .wl_storage
-                .write(
-                    &token::storage_key::minted_balance_key(&addr),
-                    token::Amount::zero(),
-                )
-                .unwrap();
-            shell
-                .wl_storage
-                .storage
-                .conversion_state
-                .tokens
-                .insert(token.to_string(), addr);
-        }
-        shell.wl_storage.storage.conversion_state.tokens.insert(
-            "nam".to_string(),
-            shell.wl_storage.storage.native_token.clone(),
-        );
-        let addr = shell.wl_storage.storage.native_token.clone();
-        token::write_params(&token_params, &mut shell.wl_storage, &addr)
-            .unwrap();
-        // final adjustments so that updating allowed conversions doesn't panic
-        // with divide by zero
-        shell
-            .wl_storage
-            .write(
-                &token::storage_key::minted_balance_key(
-                    &shell.wl_storage.storage.native_token.clone(),
-                ),
-                token::Amount::zero(),
-            )
-            .unwrap();
-        shell.wl_storage.storage.conversion_state.normed_inflation = Some(1);
         update_allowed_conversions(&mut shell.wl_storage)
             .expect("update conversions failed");
         shell.wl_storage.commit_block().expect("commit failed");

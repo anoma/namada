@@ -92,9 +92,10 @@ pub mod testing {
 
     /// Generate an arbitrary proposal vote
     pub fn arb_proposal_vote() -> impl Strategy<Value = ProposalVote> {
-        Just(ProposalVote::Yay)
-            .boxed()
-            .prop_union(Just(ProposalVote::Nay).boxed())
-            .or(Just(ProposalVote::Abstain).boxed())
+        prop_oneof![
+            Just(ProposalVote::Yay),
+            Just(ProposalVote::Nay),
+            Just(ProposalVote::Abstain),
+        ]
     }
 }

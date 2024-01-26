@@ -74,27 +74,31 @@ where
         )?;
         let proposal_result =
             compute_proposal_result(votes, total_voting_power, tally_type);
-        let proposal_result_key = gov_storage::get_proposal_result_key(id);
-        shell
-            .wl_storage
-            .write(&proposal_result_key, proposal_result)?;
+        gov_api::write_proposal_result(
+            &mut shell.wl_storage,
+            id,
+            proposal_result,
+        )?;
 
         let transfer_address = match proposal_result.result {
             TallyResult::Passed => {
                 let proposal_event = match proposal_type {
                     ProposalType::Default(_) => {
-                        let proposal_code_key =
-                            gov_storage::get_proposal_code_key(id);
                         let proposal_code =
-                            shell.wl_storage.read_bytes(&proposal_code_key)?;
+                            gov_api::get_proposal_code(&shell.wl_storage, id)?;
                         let result = execute_default_proposal(
                             shell,
                             id,
                             proposal_code.clone(),
                         )?;
                         tracing::info!(
-                            "Governance proposal (default) {} has been \
-                             executed ({}) and passed.",
+                            "Governance proposal (default {} wasm) {} has \
+                             been executed ({}) and passed.",
+                            if proposal_code.is_some() {
+                                "with"
+                            } else {
+                                "without"
+                            },
                             id,
                             result
                         );
@@ -156,8 +160,7 @@ where
                 response.events.push(proposal_event);
                 proposals_result.passed.push(id);
 
-                let proposal_author_key = gov_storage::get_author_key(id);
-                shell.wl_storage.read::<Address>(&proposal_author_key)?
+                gov_api::get_proposal_author(&shell.wl_storage, id)?
             }
             TallyResult::Rejected => {
                 if let ProposalType::PGFPayment(_) = proposal_type {
@@ -191,7 +194,7 @@ where
             }
         };
 
-        let native_token = shell.wl_storage.storage.native_token.clone();
+        let native_token = shell.wl_storage.get_native_token()?;
         if let Some(address) = transfer_address {
             token::transfer(
                 &mut shell.wl_storage,
@@ -201,7 +204,7 @@ where
                 funds,
             )?;
         } else {
-            token::burn(
+            token::burn_tokens(
                 &mut shell.wl_storage,
                 &native_token,
                 &gov_address,

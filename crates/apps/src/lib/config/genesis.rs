@@ -228,7 +228,7 @@ pub struct TokenAccount {
     #[derivative(PartialOrd = "ignore", Ord = "ignore")]
     pub balances: HashMap<Address, token::Amount>,
     /// Token parameters
-    pub parameters: token::Parameters,
+    pub masp_params: Option<token::MaspParams>,
     /// Token inflation from the last epoch (read + write for every epoch)
     pub last_inflation: token::Amount,
     /// Token shielded ratio from the last epoch (read + write for every epoch)
@@ -275,10 +275,10 @@ pub struct Parameters {
     pub epoch_duration: EpochDuration,
     /// Maximum expected time per block
     pub max_expected_time_per_block: DurationSecs,
-    /// Whitelisted validity predicate hashes
-    pub vp_whitelist: Vec<String>,
-    /// Whitelisted tx hashes
-    pub tx_whitelist: Vec<String>,
+    /// Allowed validity predicate hashes
+    pub vp_allowlist: Vec<String>,
+    /// Allowed tx hashes
+    pub tx_allowlist: Vec<String>,
     /// Implicit accounts validity predicate code WASM
     pub implicit_vp_code_path: String,
     /// Expected SHA-256 hash of the implicit VP

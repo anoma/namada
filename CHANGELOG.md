@@ -1,5 +1,57 @@
 # CHANGELOG
 
+## v0.30.2
+
+Namada 0.30.2 is a patch release that contains various bug fixes and improvements.
+
+### BUG FIXES
+
+- Fixed possible panics in transaction host environment functions.
+  ([\#2401](https://github.com/anoma/namada/pull/2401))
+- Fix the token burn function.
+  ([\#2408](https://github.com/anoma/namada/pull/2408))
+- Improving code around governance tally computations.
+  ([\#2415](https://github.com/anoma/namada/pull/2415))
+- Fix the MASP VP to enable changes to the shielded set max reward rate for a
+  token. ([\#2424](https://github.com/anoma/namada/pull/2424))
+- Validates changes to the balance key in masp vp.
+  ([\#2428](https://github.com/anoma/namada/pull/2428))
+- Restrict the reward distribution of a steward to a maximum of 100.
+  ([\#2440](https://github.com/anoma/namada/pull/2440))
+- Avoid diff overflow in Multitoken VP
+  ([\#2443](https://github.com/anoma/namada/issues/2443))
+- Restricted RPC router paths to ASCII characters to prevent crashes.
+  ([\#2447](https://github.com/anoma/namada/pull/2447))
+
+### FEATURES
+
+- Implemented ZIP32 functionality for shielded pool keys.
+  ([\#2417](https://github.com/anoma/namada/pull/2417))
+
+### IMPROVEMENTS
+
+- Added tx WASM code allowlist at protocol level and VP WASM code allowlist in
+  the host environment functions.
+  ([\#2419](https://github.com/anoma/namada/pull/2419))
+- The test vector generator now supports generating MASP transactions.
+  ([\#2427](https://github.com/anoma/namada/pull/2427))
+- Disabled RocksDB jemalloc feature by default for non-release builds.
+  ([\#2404](https://github.com/anoma/namada/pull/2404))
+- Skip writing some MASP and IBC storage keys to merkle tree and DB diffs.
+  ([\#2438](https://github.com/anoma/namada/pull/2438))
+- BIP39 passphrase made optional.
+  ([\#2442](https://github.com/anoma/namada/pull/2442))
+
+### SDK
+
+- Both the `reading` and `writing` modules of the light SDK can now be used from
+  within an async runtime. ([\#2399](https://github.com/anoma/namada/pull/2399))
+
+### TESTING
+
+- Added an integration test to verify that unconverted asset types can be spent
+  in the MASP. ([\#2406](https://github.com/anoma/namada/pull/2406))
+
 ## v0.30.1
 
 Namada 0.30.1 is a patch release that contains various bug fixes for MASP, IBC, the shell and crates refactor (the core has been subdivided into many smaller crates).
