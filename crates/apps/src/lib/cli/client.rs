@@ -316,16 +316,15 @@ impl CliApi {
                             .map(|vk| vk.into())
                             .collect::<Vec<_>>();
                         _ = chain_ctx.shielded.load().await;
-                        chain_ctx
-                            .shielded
-                            .syncing(
-                                &client,
-                                &io,
-                                args.last_query_height,
-                                &sks,
-                                &vks,
-                            )
-                            .await?;
+                        crate::client::masp::syncing(
+                            chain_ctx.shielded,
+                            &client,
+                            &io,
+                            args.last_query_height,
+                            &sks,
+                            &vks,
+                        )
+                        .await?;
                     }
                     // Eth bridge
                     Sub::AddToEthBridgePool(args) => {

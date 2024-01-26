@@ -1454,7 +1454,15 @@ impl<E> GetEventNonce for InnerEthEventsQueue<E> {
 /// Represents the pointers of an indexed tx, which are the block height and the
 /// index inside that block
 #[derive(
-    Default, Debug, Copy, Clone, BorshSerialize, BorshDeserialize, Eq, PartialEq,
+    Default,
+    Debug,
+    Copy,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    Eq,
+    PartialEq,
+    Hash,
 )]
 pub struct IndexedTx {
     /// The block height of the indexed tx

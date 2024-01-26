@@ -187,7 +187,7 @@ fn run_ledger_ibc() -> Result<()> {
 }
 
 #[test]
-fn drun_ledger_ibc_with_hermes() -> Result<()> {
+fn run_ledger_ibc_with_hermes() -> Result<()> {
     let update_genesis =
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
             genesis.parameters.parameters.epochs_per_year = 31536;
