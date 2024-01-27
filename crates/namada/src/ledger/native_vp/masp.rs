@@ -23,9 +23,10 @@ use ripemd::Digest as RipemdDigest;
 use sha2::Digest as Sha2Digest;
 use thiserror::Error;
 use token::storage_key::{
-    balance_key, is_any_token_balance_key, is_masp_allowed_key, is_masp_key,
-    is_masp_nullifier_key, is_masp_tx_pin_key, masp_commitment_anchor_key,
-    masp_commitment_tree_key, masp_convert_anchor_key, masp_nullifier_key,
+    balance_key, is_any_shielded_action_balance_key, is_masp_allowed_key,
+    is_masp_key, is_masp_nullifier_key, is_masp_tx_pin_key,
+    masp_commitment_anchor_key, masp_commitment_tree_key,
+    masp_convert_anchor_key, masp_nullifier_key,
 };
 use token::Amount;
 
@@ -287,7 +288,7 @@ where
         // transfer data Get the token from the balance key of the MASP
         let balance_addresses: Vec<[&Address; 2]> = keys_changed
             .iter()
-            .filter_map(is_any_token_balance_key)
+            .filter_map(is_any_shielded_action_balance_key)
             .collect();
 
         let masp_balances: Vec<&[&Address; 2]> = balance_addresses

@@ -67,7 +67,7 @@ use rand_core::{CryptoRng, OsRng, RngCore};
 use ripemd::Digest as RipemdDigest;
 use sha2::Digest;
 use thiserror::Error;
-use token::storage_key::is_any_token_balance_key;
+use token::storage_key::is_any_shielded_action_balance_key;
 use token::Amount;
 
 #[cfg(feature = "testing")]
@@ -1051,7 +1051,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
         let balance_keys: Vec<_> = tx_changed_keys
             .iter()
-            .filter_map(is_any_token_balance_key)
+            .filter_map(is_any_shielded_action_balance_key)
             .collect();
         let (source, token, amount) = match balance_keys.len() {
             0 => {
