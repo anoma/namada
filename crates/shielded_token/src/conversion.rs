@@ -591,7 +591,7 @@ mod tests {
 
             for (token_addr, (alias, denom)) in tokens() {
                 namada_trans_token::write_params(&mut s, &token_addr).unwrap();
-                crate::write_params(&token_params, &mut s, &token_addr)
+                crate::write_params(&token_params, &mut s, &token_addr, &denom)
                     .unwrap();
 
                 write_denom(&mut s, &token_addr, denom).unwrap();
