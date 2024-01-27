@@ -54,7 +54,7 @@ pub fn initialize_genesis() -> Result<(MockNode, MockServicesController)> {
             max_reward_rate: Dec::from_str("0.1").unwrap(),
             kp_gain_nom: Dec::from_str("0.1").unwrap(),
             kd_gain_nom: Dec::from_str("0.1").unwrap(),
-            locked_amount_target: 10_000_u64,
+            locked_amount_target: 1_000_000u64,
         });
     }
     let genesis_path = test_dir.path().join("int-test-genesis-src");
