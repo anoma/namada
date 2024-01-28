@@ -24,6 +24,7 @@ use namada::types::address::Address;
 use namada::types::encode;
 use namada::types::storage::Epoch;
 use namada::{ibc, token};
+use namada_sdk::proof_of_stake::storage::read_validator_stake;
 
 use super::utils::force_read;
 use super::*;
@@ -242,7 +243,8 @@ where
             let vote_data = vote.data.clone();
 
             let validator_stake =
-                read_total_stake(storage, params, epoch).unwrap_or_default();
+                read_validator_stake(storage, params, &validator, epoch)
+                    .unwrap_or_default();
 
             validators_vote.insert(validator.clone(), vote_data.into());
             validator_voting_power.insert(validator, validator_stake);
