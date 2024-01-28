@@ -8,6 +8,7 @@ use borsh::BorshDeserialize;
 use namada_governance::storage::proposal::{AddRemove, ProposalType};
 use namada_governance::storage::{is_proposal_accepted, keys as gov_storage};
 use namada_governance::utils::is_valid_validator_voting_period;
+use namada_governance::ProposalVote;
 use namada_proof_of_stake::is_validator;
 use namada_state::StorageRead;
 use namada_tx::Tx;
@@ -40,8 +41,6 @@ pub enum Error {
     EmptyProposalField(String),
     #[error("Vote key is not valid: {0}")]
     InvalidVoteKey(String),
-    #[error("Vote type is not compatible with proposal type.")]
-    InvalidVoteType,
 }
 
 /// Governance VP
@@ -209,6 +208,11 @@ where
                  {proposal_id}."
             );
             return Ok(false);
+        }
+
+        let vote_key = gov_storage::get_vote_proposal_key(proposal_id, voter_address.clone(), delegation_address.clone());
+        if let Err(_) = self.force_read::<ProposalVote>(&vote_key, ReadType::Post) {
+            return Err(Error::InvalidVoteKey(key.to_string()))
         }
 
         // Voted outside of voting window. We dont check for validator because
