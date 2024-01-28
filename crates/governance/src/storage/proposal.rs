@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::Display;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -103,7 +103,7 @@ impl TryFrom<PgfStewardProposal> for InitProposalData {
 
     fn try_from(value: PgfStewardProposal) -> Result<Self, Self::Error> {
         let extra_data =
-            HashSet::<AddRemove<Address>>::try_from(value.data).unwrap();
+            BTreeSet::<AddRemove<Address>>::try_from(value.data).unwrap();
 
         Ok(InitProposalData {
             id: value.proposal.id,
@@ -197,7 +197,7 @@ pub enum ProposalType {
     /// Default governance proposal with the optional wasm code
     Default(Option<Hash>),
     /// PGF stewards proposal
-    PGFSteward(HashSet<AddRemove<Address>>),
+    PGFSteward(BTreeSet<AddRemove<Address>>),
     /// PGF funding proposal
     PGFPayment(Vec<PGFAction>),
 }
@@ -401,11 +401,11 @@ pub enum ProposalTypeError {
     InvalidProposalType,
 }
 
-impl TryFrom<StewardsUpdate> for HashSet<AddRemove<Address>> {
+impl TryFrom<StewardsUpdate> for BTreeSet<AddRemove<Address>> {
     type Error = ProposalTypeError;
 
     fn try_from(value: StewardsUpdate) -> Result<Self, Self::Error> {
-        let mut data = HashSet::default();
+        let mut data = BTreeSet::default();
 
         if value.add.is_some() {
             data.insert(AddRemove::Add(value.add.unwrap()));
@@ -613,7 +613,7 @@ pub mod testing {
     pub fn arb_proposal_type() -> impl Strategy<Value = ProposalType> {
         prop_oneof![
             option::of(arb_hash()).prop_map(ProposalType::Default),
-            collection::hash_set(
+            collection::btree_set(
                 arb_add_remove(arb_non_internal_address()),
                 0..10,
             )

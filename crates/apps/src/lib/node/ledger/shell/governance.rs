@@ -336,7 +336,7 @@ where
 
 fn execute_pgf_steward_proposal<S>(
     storage: &mut S,
-    stewards: HashSet<AddRemove<Address>>,
+    stewards: BTreeSet<AddRemove<Address>>,
 ) -> Result<bool>
 where
     S: StorageRead + StorageWrite,

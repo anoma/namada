@@ -291,31 +291,47 @@ where
 
         match proposal_type {
             ProposalType::PGFSteward(stewards) => {
-                let steward_added = stewards
+                let stewards_added = stewards
                     .iter()
-                    .filter_map(|steward| match steward {
-                        AddRemove::Add(address) => Some(address),
-                        AddRemove::Remove(_) => None,
+                    .filter_map(|pgf_action| match pgf_action {
+                        AddRemove::Add(address) => Some(address.clone()),
+                        _ => None,
                     })
-                    .cloned()
                     .collect::<Vec<Address>>();
+                let total_stewards_added = stewards_added.len() as u64;
 
-                if steward_added.len() > 1 {
+                let all_pgf_action_addresses = stewards
+                    .iter()
+                    .map(|steward| match steward {
+                        AddRemove::Add(address) => address,
+                        AddRemove::Remove(address) => address,
+                    })
+                    .count();
+
+                // we allow only a single steward to be added
+                if total_stewards_added > 1 {
                     Ok(false)
-                } else if steward_added.is_empty() {
-                    return Ok(stewards.len() < MAX_PGF_ACTIONS);
+                } else if total_stewards_added == 0 {
+                    let is_valid_total_pgf_actions =
+                        stewards.len() < MAX_PGF_ACTIONS;
+
+                    return Ok(is_valid_total_pgf_actions);
+                } else if let Some(address) = stewards_added.first() {
+                    let author_key = gov_storage::get_author_key(proposal_id);
+                    let author = self
+                        .force_read::<Address>(&author_key, ReadType::Post)?;
+                    let is_valid_author = address.eq(&author);
+
+                    let is_valid_total_pgf_actions =
+                        stewards.len() < MAX_PGF_ACTIONS;
+                    let stewards_addresses_are_unique =
+                        stewards.len() == all_pgf_action_addresses;
+
+                    return Ok(is_valid_author
+                        && stewards_addresses_are_unique
+                        && is_valid_total_pgf_actions);
                 } else {
-                    match steward_added.get(0) {
-                        Some(address) => {
-                            let author_key =
-                                gov_storage::get_author_key(proposal_id);
-                            let author =
-                                self.force_read(&author_key, ReadType::Post)?;
-                            return Ok(stewards.len() < MAX_PGF_ACTIONS
-                                && address.eq(&author));
-                        }
-                        None => return Ok(false),
-                    }
+                    return Ok(false);
                 }
             }
             ProposalType::PGFPayment(payments) => {
