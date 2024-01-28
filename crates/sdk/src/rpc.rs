@@ -818,7 +818,7 @@ pub async fn get_delegators_delegation<C: crate::queries::Client + Sync>(
     )
 }
 
-/// Get the delegator's delegation at some epoh
+/// Get the delegator's delegation at some epoch
 pub async fn get_delegators_delegation_at<C: crate::queries::Client + Sync>(
     client: &C,
     address: &Address,

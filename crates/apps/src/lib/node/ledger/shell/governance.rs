@@ -257,14 +257,17 @@ where
                 source: delegator.clone(),
                 validator: validator.clone(),
             };
-            let delegator_stake =
-                bond_amount(storage, &bond_id, epoch).unwrap_or_default();
+            let delegator_stake = bond_amount(storage, &bond_id, epoch);
 
-            delegators_vote.insert(delegator.clone(), vote_data.into());
-            delegator_voting_power
-                .entry(delegator)
-                .or_default()
-                .insert(validator, delegator_stake);
+            if let Ok(stake) = delegator_stake {
+                delegators_vote.insert(delegator.clone(), vote_data.into());
+                delegator_voting_power
+                    .entry(delegator)
+                    .or_default()
+                    .insert(validator, stake);
+            } else {
+                continue;
+            }
         }
     }
 
@@ -369,6 +372,10 @@ where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
 {
+    // first we remove pgf continous payments
+    // second we add all pgf continous payments
+    // last we execute all retro payments
+
     for payment in payments {
         match payment {
             PGFAction::Continuous(action) => match action {

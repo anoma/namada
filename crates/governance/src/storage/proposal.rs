@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Display;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -76,9 +76,9 @@ pub struct VoteProposalData {
     pub id: u64,
     /// The proposal vote
     pub vote: ProposalVote,
-    /// The proposal author address
+    /// The proposal voter address
     pub voter: Address,
-    /// Delegator addreses
+    /// Validators to who the voter has delegations to
     pub delegations: Vec<Address>,
 }
 
@@ -121,7 +121,7 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
     type Error = ProposalError;
 
     fn try_from(value: PgfFundingProposal) -> Result<Self, Self::Error> {
-        let continous_fundings = value
+        let mut continous_fundings = value
             .data
             .continuous
             .iter()
@@ -143,13 +143,13 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
             .map(PGFAction::Retro)
             .collect::<Vec<PGFAction>>();
 
-        let extra_data = [continous_fundings, retro_fundings].concat();
+        continous_fundings.extend(retro_fundings);
 
         Ok(InitProposalData {
             id: value.proposal.id,
             content: Hash::default(),
             author: value.proposal.author,
-            r#type: ProposalType::PGFPayment(extra_data),
+            r#type: ProposalType::PGFPayment(continous_fundings), /* here continous_fundings is contains also the retro funding */
             voting_start_epoch: value.proposal.voting_start_epoch,
             voting_end_epoch: value.proposal.voting_end_epoch,
             grace_epoch: value.proposal.grace_epoch,
@@ -369,6 +369,9 @@ impl borsh::BorshSchema for PGFIbcTarget {
     BorshDeserialize,
     Serialize,
     Deserialize,
+    Eq,
+    Ord,
+    PartialOrd,
 )]
 pub enum PGFAction {
     /// A continuous payment

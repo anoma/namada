@@ -13,7 +13,7 @@ pub mod storage;
 pub mod utils;
 
 pub use storage::proposal::{InitProposalData, ProposalType, VoteProposalData};
-pub use storage::vote::{ProposalVote, VoteType};
+pub use storage::vote::ProposalVote;
 pub use storage::{init_proposal, is_proposal_accepted, vote_proposal};
 
 /// The governance internal address

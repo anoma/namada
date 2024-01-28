@@ -2855,14 +2855,18 @@ pub async fn compute_proposal_votes<
                 &vote.validator,
                 epoch,
             )
-            .await
-            .unwrap_or_default();
+            .await;
 
-            delegators_vote.insert(vote.delegator.clone(), vote.data.into());
-            delegator_voting_power
-                .entry(vote.delegator.clone())
-                .or_default()
-                .insert(vote.validator, delegator_stake);
+            if let Some(stake) = delegator_stake {
+                delegators_vote
+                    .insert(vote.delegator.clone(), vote.data.into());
+                delegator_voting_power
+                    .entry(vote.delegator.clone())
+                    .or_default()
+                    .insert(vote.validator, stake);
+            } else {
+                continue;
+            }
         }
     }
 

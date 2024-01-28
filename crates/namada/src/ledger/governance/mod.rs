@@ -5,11 +5,12 @@ pub mod utils;
 use std::collections::BTreeSet;
 
 use borsh::BorshDeserialize;
-use namada_governance::storage::proposal::{AddRemove, ProposalType};
+use namada_governance::storage::proposal::{AddRemove, PGFAction, ProposalType};
 use namada_governance::storage::{is_proposal_accepted, keys as gov_storage};
 use namada_governance::utils::is_valid_validator_voting_period;
 use namada_governance::ProposalVote;
 use namada_proof_of_stake::is_validator;
+use namada_proof_of_stake::queries::find_delegations;
 use namada_state::StorageRead;
 use namada_tx::Tx;
 use namada_vp_env::VpEnv;
@@ -69,11 +70,12 @@ where
         verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
         let (is_valid_keys_set, set_count) =
-            self.is_valid_key_set(keys_changed)?;
+            self.is_valid_init_proposal_key_set(keys_changed)?;
         if !is_valid_keys_set {
             tracing::info!("Invalid changed governance key set");
             return Ok(false);
         };
+
         let native_token = self.ctx.pre().get_native_token()?;
 
         Ok(keys_changed.iter().all(|key| {
@@ -136,7 +138,10 @@ where
     H: 'static + namada_state::StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    fn is_valid_key_set(&self, keys: &BTreeSet<Key>) -> Result<(bool, u64)> {
+    fn is_valid_init_proposal_key_set(
+        &self,
+        keys: &BTreeSet<Key>,
+    ) -> Result<(bool, u64)> {
         let counter_key = gov_storage::get_counter_key();
         let pre_counter: u64 = self.force_read(&counter_key, ReadType::Pre)?;
         let post_counter: u64 =
@@ -210,9 +215,40 @@ where
             return Ok(false);
         }
 
-        let vote_key = gov_storage::get_vote_proposal_key(proposal_id, voter_address.clone(), delegation_address.clone());
-        if let Err(_) = self.force_read::<ProposalVote>(&vote_key, ReadType::Post) {
-            return Err(Error::InvalidVoteKey(key.to_string()))
+        let vote_key = gov_storage::get_vote_proposal_key(
+            proposal_id,
+            voter_address.clone(),
+            delegation_address.clone(),
+        );
+
+        if self
+            .force_read::<ProposalVote>(&vote_key, ReadType::Post)
+            .is_err()
+        {
+            return Err(Error::InvalidVoteKey(key.to_string()));
+        }
+
+        // TODO: We should refactor this by modifying the vote proposal tx
+        let all_delegations_are_valid = if let Ok(delegations) =
+            find_delegations(&self.ctx.pre(), voter_address, &current_epoch)
+        {
+            if delegations.is_empty() {
+                return Ok(false);
+            } else {
+                delegations.iter().all(|(address, _)| {
+                    let vote_key = gov_storage::get_vote_proposal_key(
+                        proposal_id,
+                        voter_address.clone(),
+                        address.clone(),
+                    );
+                    self.ctx.post().has_key(&vote_key).unwrap_or(false)
+                })
+            }
+        } else {
+            return Ok(false);
+        };
+        if !all_delegations_are_valid {
+            return Ok(false);
         }
 
         // Voted outside of voting window. We dont check for validator because
@@ -326,10 +362,10 @@ where
                         .force_read::<Address>(&author_key, ReadType::Post)?;
                     let is_valid_author = address.eq(&author);
 
-                    let is_valid_total_pgf_actions =
-                        stewards.len() < MAX_PGF_ACTIONS;
                     let stewards_addresses_are_unique =
                         stewards.len() == all_pgf_action_addresses;
+                    let is_valid_total_pgf_actions =
+                        all_pgf_action_addresses < MAX_PGF_ACTIONS;
 
                     return Ok(is_valid_author
                         && stewards_addresses_are_unique
@@ -338,12 +374,56 @@ where
                     return Ok(false);
                 }
             }
-            ProposalType::PGFPayment(payments) => {
-                if payments.len() > MAX_PGF_ACTIONS {
-                    Ok(false)
-                } else {
-                    Ok(true)
-                }
+            ProposalType::PGFPayment(fundings) => {
+                // collect all the funding target that we have to add and are
+                // unique
+                let are_continous_add_targets_unique = fundings
+                    .iter()
+                    .filter_map(|funding| match funding {
+                        PGFAction::Continuous(AddRemove::Add(target)) => {
+                            Some(target.target().to_lowercase())
+                        }
+                        _ => None,
+                    })
+                    .collect::<BTreeSet<String>>();
+
+                // collect all the funding target that we have to remove and are
+                // unique
+                let are_continous_remove_targets_unique = fundings
+                    .iter()
+                    .filter_map(|funding| match funding {
+                        PGFAction::Continuous(AddRemove::Remove(target)) => {
+                            Some(target.target().to_lowercase())
+                        }
+                        _ => None,
+                    })
+                    .collect::<BTreeSet<String>>();
+
+                let total_retro_targerts = fundings
+                    .iter()
+                    .filter(|funding| matches!(funding, PGFAction::Retro(_)))
+                    .count();
+
+                let is_total_fundings_valid = fundings.len() < MAX_PGF_ACTIONS;
+
+                // check that they are unique by checking that the set of add
+                // plus the set of remove plus the set of retro is equal to the
+                // total fundings
+                let are_continous_fundings_unique =
+                    are_continous_add_targets_unique.len()
+                        + are_continous_remove_targets_unique.len()
+                        + total_retro_targerts
+                        == fundings.len();
+
+                // can't remove and add the same target in the same proposal
+                let are_targets_unique = are_continous_add_targets_unique
+                    .intersection(&are_continous_remove_targets_unique)
+                    .count() as u64
+                    == 0;
+
+                Ok(is_total_fundings_valid
+                    && are_continous_fundings_unique
+                    && are_targets_unique)
             }
             _ => Ok(true), // default proposal
         }
