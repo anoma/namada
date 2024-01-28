@@ -133,7 +133,7 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
                     PGFAction::Continuous(AddRemove::Add(target))
                 }
             })
-            .collect::<Vec<PGFAction>>();
+            .collect::<BTreeSet<PGFAction>>();
 
         let retro_fundings = value
             .data
@@ -141,7 +141,7 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
             .iter()
             .cloned()
             .map(PGFAction::Retro)
-            .collect::<Vec<PGFAction>>();
+            .collect::<BTreeSet<PGFAction>>();
 
         continous_fundings.extend(retro_fundings);
 
@@ -199,7 +199,7 @@ pub enum ProposalType {
     /// PGF stewards proposal
     PGFSteward(BTreeSet<AddRemove<Address>>),
     /// PGF funding proposal
-    PGFPayment(Vec<PGFAction>),
+    PGFPayment(BTreeSet<PGFAction>),
 }
 
 /// An add or remove action for PGF
@@ -621,7 +621,7 @@ pub mod testing {
                 0..10,
             )
             .prop_map(ProposalType::PGFSteward),
-            collection::vec(arb_pgf_action(), 0..10)
+            collection::btree_set(arb_pgf_action(), 0..10)
                 .prop_map(ProposalType::PGFPayment),
         ]
     }

@@ -5,7 +5,9 @@ pub mod utils;
 use std::collections::BTreeSet;
 
 use borsh::BorshDeserialize;
-use namada_governance::storage::proposal::{AddRemove, PGFAction, ProposalType};
+use namada_governance::storage::proposal::{
+    AddRemove, PGFAction, ProposalType,
+};
 use namada_governance::storage::{is_proposal_accepted, keys as gov_storage};
 use namada_governance::utils::is_valid_validator_voting_period;
 use namada_governance::ProposalVote;
@@ -346,7 +348,8 @@ where
                         AddRemove::Add(address) => address,
                         AddRemove::Remove(address) => address,
                     })
-                    .count();
+                    .collect::<BTreeSet<&Address>>()
+                    .len();
 
                 // we allow only a single steward to be added
                 if total_stewards_added > 1 {
@@ -354,7 +357,6 @@ where
                 } else if total_stewards_added == 0 {
                     let is_valid_total_pgf_actions =
                         stewards.len() < MAX_PGF_ACTIONS;
-
                     return Ok(is_valid_total_pgf_actions);
                 } else if let Some(address) = stewards_added.first() {
                     let author_key = gov_storage::get_author_key(proposal_id);
