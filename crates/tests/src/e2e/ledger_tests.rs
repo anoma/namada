@@ -89,7 +89,7 @@ fn start_namada_ledger_node_wait_wasm(
     timeout_sec: Option<u64>,
 ) -> Result<NamadaCmd> {
     let mut node = start_namada_ledger_node(test, idx, timeout_sec)?;
-    wait_for_wasm_pre_compile(&mut node)?;
+    node.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
     Ok(node)
 }
 
@@ -1225,7 +1225,7 @@ fn pos_rewards() -> Result<()> {
             genesis.parameters.parameters.max_expected_time_per_block = 1;
             genesis.parameters.pos_params.pipeline_len = 2;
             genesis.parameters.pos_params.unbonding_len = 4;
-            setup::set_validators(1, genesis, base_dir, default_port_offset)
+            setup::set_validators(1, genesis, base_dir, |_| 0u16)
         },
         None,
     )?;
