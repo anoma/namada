@@ -169,6 +169,8 @@ Namada 0.29.0 is a minor release that introduces the light SDK, upgrades the MAS
 - Non-Namada token can be given to ibc-gen-shielded
   ([\#2308](https://github.com/anoma/namada/issues/2308))
  - Make the ledger wait for genesis before starting up any processes ([\#2310](https://github.com/anoma/namada/pull/2310))
+ - chore:Fix typos across multiple files for consistency
+ ([\#2461](https://github.com/anoma/namada/pull/2461))
 
 ### FEATURES
 
