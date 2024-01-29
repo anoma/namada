@@ -5,10 +5,14 @@ pub mod utils;
 use std::collections::BTreeSet;
 
 use borsh::BorshDeserialize;
-use namada_governance::storage::proposal::{AddRemove, ProposalType};
+use namada_governance::storage::proposal::{
+    AddRemove, PGFAction, ProposalType,
+};
 use namada_governance::storage::{is_proposal_accepted, keys as gov_storage};
 use namada_governance::utils::is_valid_validator_voting_period;
+use namada_governance::ProposalVote;
 use namada_proof_of_stake::is_validator;
+use namada_proof_of_stake::queries::find_delegations;
 use namada_state::StorageRead;
 use namada_tx::Tx;
 use namada_vp_env::VpEnv;
@@ -40,8 +44,6 @@ pub enum Error {
     EmptyProposalField(String),
     #[error("Vote key is not valid: {0}")]
     InvalidVoteKey(String),
-    #[error("Vote type is not compatible with proposal type.")]
-    InvalidVoteType,
 }
 
 /// Governance VP
@@ -70,11 +72,12 @@ where
         verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
         let (is_valid_keys_set, set_count) =
-            self.is_valid_key_set(keys_changed)?;
+            self.is_valid_init_proposal_key_set(keys_changed)?;
         if !is_valid_keys_set {
             tracing::info!("Invalid changed governance key set");
             return Ok(false);
         };
+
         let native_token = self.ctx.pre().get_native_token()?;
 
         Ok(keys_changed.iter().all(|key| {
@@ -137,7 +140,10 @@ where
     H: 'static + namada_state::StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    fn is_valid_key_set(&self, keys: &BTreeSet<Key>) -> Result<(bool, u64)> {
+    fn is_valid_init_proposal_key_set(
+        &self,
+        keys: &BTreeSet<Key>,
+    ) -> Result<(bool, u64)> {
         let counter_key = gov_storage::get_counter_key();
         let pre_counter: u64 = self.force_read(&counter_key, ReadType::Pre)?;
         let post_counter: u64 =
@@ -208,6 +214,42 @@ where
                 "Invalid proposal ID. Expected {pre_counter} or lower, got \
                  {proposal_id}."
             );
+            return Ok(false);
+        }
+
+        let vote_key = gov_storage::get_vote_proposal_key(
+            proposal_id,
+            voter_address.clone(),
+            delegation_address.clone(),
+        );
+
+        if self
+            .force_read::<ProposalVote>(&vote_key, ReadType::Post)
+            .is_err()
+        {
+            return Err(Error::InvalidVoteKey(key.to_string()));
+        }
+
+        // TODO: We should refactor this by modifying the vote proposal tx
+        let all_delegations_are_valid = if let Ok(delegations) =
+            find_delegations(&self.ctx.pre(), voter_address, &current_epoch)
+        {
+            if delegations.is_empty() {
+                return Ok(false);
+            } else {
+                delegations.iter().all(|(address, _)| {
+                    let vote_key = gov_storage::get_vote_proposal_key(
+                        proposal_id,
+                        voter_address.clone(),
+                        address.clone(),
+                    );
+                    self.ctx.post().has_key(&vote_key).unwrap_or(false)
+                })
+            }
+        } else {
+            return Ok(false);
+        };
+        if !all_delegations_are_valid {
             return Ok(false);
         }
 
@@ -291,39 +333,99 @@ where
 
         match proposal_type {
             ProposalType::PGFSteward(stewards) => {
-                let steward_added = stewards
+                let stewards_added = stewards
                     .iter()
-                    .filter_map(|steward| match steward {
-                        AddRemove::Add(address) => Some(address),
-                        AddRemove::Remove(_) => None,
+                    .filter_map(|pgf_action| match pgf_action {
+                        AddRemove::Add(address) => Some(address.clone()),
+                        _ => None,
                     })
-                    .cloned()
                     .collect::<Vec<Address>>();
+                let total_stewards_added = stewards_added.len() as u64;
 
-                if steward_added.len() > 1 {
+                let all_pgf_action_addresses = stewards
+                    .iter()
+                    .map(|steward| match steward {
+                        AddRemove::Add(address) => address,
+                        AddRemove::Remove(address) => address,
+                    })
+                    .collect::<BTreeSet<&Address>>()
+                    .len();
+
+                // we allow only a single steward to be added
+                if total_stewards_added > 1 {
                     Ok(false)
-                } else if steward_added.is_empty() {
-                    return Ok(stewards.len() < MAX_PGF_ACTIONS);
+                } else if total_stewards_added == 0 {
+                    let is_valid_total_pgf_actions =
+                        stewards.len() < MAX_PGF_ACTIONS;
+                    return Ok(is_valid_total_pgf_actions);
+                } else if let Some(address) = stewards_added.first() {
+                    let author_key = gov_storage::get_author_key(proposal_id);
+                    let author = self
+                        .force_read::<Address>(&author_key, ReadType::Post)?;
+                    let is_valid_author = address.eq(&author);
+
+                    let stewards_addresses_are_unique =
+                        stewards.len() == all_pgf_action_addresses;
+                    let is_valid_total_pgf_actions =
+                        all_pgf_action_addresses < MAX_PGF_ACTIONS;
+
+                    return Ok(is_valid_author
+                        && stewards_addresses_are_unique
+                        && is_valid_total_pgf_actions);
                 } else {
-                    match steward_added.get(0) {
-                        Some(address) => {
-                            let author_key =
-                                gov_storage::get_author_key(proposal_id);
-                            let author =
-                                self.force_read(&author_key, ReadType::Post)?;
-                            return Ok(stewards.len() < MAX_PGF_ACTIONS
-                                && address.eq(&author));
-                        }
-                        None => return Ok(false),
-                    }
+                    return Ok(false);
                 }
             }
-            ProposalType::PGFPayment(payments) => {
-                if payments.len() > MAX_PGF_ACTIONS {
-                    Ok(false)
-                } else {
-                    Ok(true)
-                }
+            ProposalType::PGFPayment(fundings) => {
+                // collect all the funding target that we have to add and are
+                // unique
+                let are_continous_add_targets_unique = fundings
+                    .iter()
+                    .filter_map(|funding| match funding {
+                        PGFAction::Continuous(AddRemove::Add(target)) => {
+                            Some(target.target().to_lowercase())
+                        }
+                        _ => None,
+                    })
+                    .collect::<BTreeSet<String>>();
+
+                // collect all the funding target that we have to remove and are
+                // unique
+                let are_continous_remove_targets_unique = fundings
+                    .iter()
+                    .filter_map(|funding| match funding {
+                        PGFAction::Continuous(AddRemove::Remove(target)) => {
+                            Some(target.target().to_lowercase())
+                        }
+                        _ => None,
+                    })
+                    .collect::<BTreeSet<String>>();
+
+                let total_retro_targerts = fundings
+                    .iter()
+                    .filter(|funding| matches!(funding, PGFAction::Retro(_)))
+                    .count();
+
+                let is_total_fundings_valid = fundings.len() < MAX_PGF_ACTIONS;
+
+                // check that they are unique by checking that the set of add
+                // plus the set of remove plus the set of retro is equal to the
+                // total fundings
+                let are_continous_fundings_unique =
+                    are_continous_add_targets_unique.len()
+                        + are_continous_remove_targets_unique.len()
+                        + total_retro_targerts
+                        == fundings.len();
+
+                // can't remove and add the same target in the same proposal
+                let are_targets_unique = are_continous_add_targets_unique
+                    .intersection(&are_continous_remove_targets_unique)
+                    .count() as u64
+                    == 0;
+
+                Ok(is_total_fundings_valid
+                    && are_continous_fundings_unique
+                    && are_targets_unique)
             }
             _ => Ok(true), // default proposal
         }
@@ -397,8 +499,9 @@ where
         if !is_valid_grace_epoch {
             tracing::info!(
                 "Expected min duration between the end and grace epoch \
-                 {min_grace_epoch}, but got {}",
-                grace_epoch - end_epoch
+                 {min_grace_epoch}, but got grace = {}, end = {}",
+                grace_epoch,
+                end_epoch
             );
         }
         let is_valid_max_proposal_period = start_epoch < grace_epoch
@@ -406,8 +509,9 @@ where
         if !is_valid_max_proposal_period {
             tracing::info!(
                 "Expected max duration between the start and grace epoch \
-                 {max_proposal_period}, but got {}",
-                grace_epoch - start_epoch
+                 {max_proposal_period}, but got grace ={}, start = {}",
+                grace_epoch,
+                start_epoch
             );
         }
 
@@ -512,8 +616,11 @@ where
             self.force_read(&funds_key, ReadType::Post)?;
 
         if let Some(pre_balance) = pre_balance {
-            Ok(post_funds >= min_funds_parameter
-                && post_balance - pre_balance == post_funds)
+            let is_post_funds_greater_than_minimum =
+                post_funds >= min_funds_parameter;
+            let is_valid_funds = post_balance >= pre_balance
+                && post_balance - pre_balance == post_funds;
+            Ok(is_post_funds_greater_than_minimum && is_valid_funds)
         } else {
             Ok(post_funds >= min_funds_parameter && post_balance == post_funds)
         }
