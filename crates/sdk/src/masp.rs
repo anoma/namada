@@ -56,7 +56,7 @@ use namada_core::types::address::{Address, MASP};
 use namada_core::types::dec::Dec;
 use namada_core::types::ibc::IbcShieldedTransfer;
 use namada_core::types::masp::{
-    encode_asset_type, AssetData, BalanceOwner, ExtendedViewingKey,
+    encode_asset_type, AssetData, BalanceOwner,
     PaymentAddress, TransferSource, TransferTarget,
 };
 use namada_core::types::storage::{BlockHeight, Epoch, IndexedTx, TxIndex};
@@ -1491,14 +1491,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, NotSyncing> {
         client: &C,
         query_owner: &Either<BalanceOwner, Vec<Address>>,
         query_token: &Option<Address>,
-        viewing_keys: &HashMap<String, ExtendedViewingKey>,
     ) -> Result<
         BTreeMap<IndexedTx, (Epoch, TransferDelta, TransactionDelta)>,
         Error,
     > {
         const TXS_PER_PAGE: u8 = 100;
         let _ = self.load().await;
-        let vks = viewing_keys;
         // Required for filtering out rejected transactions from Tendermint
         // responses
         let block_results = rpc::query_results(client).await?;
@@ -2108,35 +2106,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, Syncing> {
             .save(&ctx)
             .await
             .map_err(|e| Error::Other(e.to_string()))
-    }
-
-    /// Merge data from the given shielded context into the current shielded
-    /// context. It must be the case that the two shielded contexts share the
-    /// same last transaction ID and share identical commitment trees.
-    pub fn merge(&mut self, new_ctx: &ShieldedContext<U, Syncing>) {
-        // Merge by simply extending maps. Identical keys should contain
-        // identical values, so overwriting should not be problematic.
-        self.nf_map.extend(new_ctx.nf_map.clone());
-        self.note_map.extend(new_ctx.note_map.clone());
-        self.memo_map.extend(new_ctx.memo_map.clone());
-        self.div_map.extend(new_ctx.div_map.clone());
-        self.witness_map.extend(new_ctx.witness_map.clone());
-        self.spents.extend(new_ctx.spents.clone());
-        self.asset_types.extend(new_ctx.asset_types.clone());
-        self.vk_map.extend(new_ctx.vk_map.clone());
-
-        // The deltas are the exception because different keys can reveal
-        // different parts of the same transaction. Hence each delta needs to be
-        // merged separately.
-        for (height, (ep, ntfer_delta, ntx_delta)) in new_ctx.delta_map.clone()
-        {
-            let (_ep, tfer_delta, tx_delta) = self
-                .delta_map
-                .entry(height)
-                .or_insert((ep, TransferDelta::new(), TransactionDelta::new()));
-            tfer_delta.extend(ntfer_delta);
-            tx_delta.extend(ntx_delta);
-        }
     }
 
     pub async fn fetch<C: Client + Sync, IO: Io>(

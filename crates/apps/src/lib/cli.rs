@@ -5652,7 +5652,7 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.arg(LEDGER_ADDRESS_DEFAULT.def().help(LEDGER_ADDRESS_ABOUT))
-                .arg(BLOCK_HEIGHT_OPT.def().help(
+                .arg(BATCH_SIZE_OPT.def().help(
                     "Optional batch size which determines how many txs to \
                      fetch before caching locally. Default is 1.",
                 ))
