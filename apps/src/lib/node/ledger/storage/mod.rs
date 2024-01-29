@@ -206,7 +206,7 @@ mod tests {
             .storage
             .conversion_state
             .tokens
-            .insert("nam".to_string(), wl_storage.storage.native_token.clone());
+            .insert("naan".to_string(), wl_storage.storage.native_token.clone());
         token_params.init_storage(
             &wl_storage.storage.native_token.clone(),
             &mut wl_storage,

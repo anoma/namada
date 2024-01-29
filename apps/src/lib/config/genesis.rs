@@ -392,7 +392,7 @@ pub fn make_dev_genesis(
         let nam_balances = genesis
             .balances
             .token
-            .get_mut(&Alias::from_str("nam").unwrap())
+            .get_mut(&Alias::from_str("naan").unwrap())
             .unwrap();
 
         let tx = genesis
@@ -514,7 +514,7 @@ pub fn make_dev_genesis(
             let nam_balances = genesis
                 .balances
                 .token
-                .get_mut(&Alias::from_str("nam").unwrap())
+                .get_mut(&Alias::from_str("naan").unwrap())
                 .unwrap();
 
             let validator_addr =
