@@ -653,7 +653,7 @@ pub const fn wnam() -> EthAddress {
 /// informal currency codes and number of decimal places.
 pub fn tokens() -> HashMap<&'static str, Denomination> {
     vec![
-        ("nam", 6.into()),
+        ("naan", 6.into()),
         ("btc", 8.into()),
         ("eth", 18.into()),
         ("dot", 10.into()),

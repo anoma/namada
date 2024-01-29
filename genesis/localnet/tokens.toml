@@ -1,9 +1,9 @@
 # Token accounts with their validity predicates
 
-[token.NAM]
+[token.NAAN]
 denom = 6
 
-[token.NAM.parameters]
+[token.NAAN.parameters]
 max_reward_rate = "0.1"
 kd_gain_nom = "0.1"
 kp_gain_nom = "0.1"
