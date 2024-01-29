@@ -3899,7 +3899,6 @@ pub mod args {
                 target: chain_ctx.get(&self.target),
                 token: chain_ctx.get(&self.token),
                 amount: self.amount,
-                native_token: chain_ctx.native_token.clone(),
                 tx_code_path: self.tx_code_path.to_path_buf(),
             }
         }
@@ -3920,7 +3919,6 @@ pub mod args {
                 token,
                 amount,
                 tx_code_path,
-                native_token: (),
             }
         }
 
@@ -4410,7 +4408,6 @@ pub mod args {
                 validator: chain_ctx.get(&self.validator),
                 amount: self.amount,
                 source: self.source.map(|x| chain_ctx.get(&x)),
-                native_token: chain_ctx.native_token.clone(),
                 tx_code_path: self.tx_code_path.to_path_buf(),
             }
         }
@@ -4437,7 +4434,6 @@ pub mod args {
                 amount,
                 source,
                 tx_code_path,
-                native_token: (),
             }
         }
 
@@ -4642,7 +4638,6 @@ pub mod args {
                 is_offline: self.is_offline,
                 is_pgf_stewards: self.is_pgf_stewards,
                 is_pgf_funding: self.is_pgf_funding,
-                native_token: ctx.borrow_chain_or_exit().native_token.clone(),
                 tx_code_path: self.tx_code_path,
             }
         }
@@ -4660,7 +4655,6 @@ pub mod args {
             Self {
                 tx,
                 proposal_data,
-                native_token: (),
                 tx_code_path,
                 is_offline,
                 is_pgf_stewards,
@@ -5895,7 +5889,6 @@ pub mod args {
         type Data = PathBuf;
         type EthereumAddress = String;
         type Keypair = WalletKeypair;
-        type NativeAddress = ();
         type PublicKey = WalletPublicKey;
         type TendermintAddress = tendermint_config::net::Address;
         type TransferSource = WalletTransferSource;

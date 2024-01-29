@@ -46,8 +46,6 @@ impl ::std::str::FromStr for Duration {
 pub trait NamadaTypes: Clone + std::fmt::Debug {
     /// Represents an address on the ledger
     type Address: Clone + std::fmt::Debug;
-    /// Represents the address of a native token
-    type NativeAddress: Clone + std::fmt::Debug;
     /// Represents a key pair
     type Keypair: Clone + std::fmt::Debug;
     /// Represents the address of a Tendermint endpoint (used in context-less
@@ -98,7 +96,6 @@ impl NamadaTypes for SdkTypes {
     type Data = Vec<u8>;
     type EthereumAddress = ();
     type Keypair = namada_core::types::key::common::SecretKey;
-    type NativeAddress = Address;
     type PublicKey = namada_core::types::key::common::PublicKey;
     type TendermintAddress = tendermint_config::net::Address;
     type TransferSource = namada_core::types::masp::TransferSource;
@@ -236,8 +233,6 @@ pub struct TxTransfer<C: NamadaTypes = SdkTypes> {
     pub token: C::Address,
     /// Transferred token amount
     pub amount: InputAmount,
-    /// Native token address
-    pub native_token: C::NativeAddress,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -273,14 +268,6 @@ impl<C: NamadaTypes> TxTransfer<C> {
     /// Transferred token amount
     pub fn amount(self, amount: InputAmount) -> Self {
         Self { amount, ..self }
-    }
-
-    /// Native token address
-    pub fn native_token(self, native_token: C::NativeAddress) -> Self {
-        Self {
-            native_token,
-            ..self
-        }
     }
 
     /// Path to the TX WASM code file
@@ -424,8 +411,6 @@ pub struct InitProposal<C: NamadaTypes = SdkTypes> {
     pub tx: Tx<C>,
     /// The proposal data
     pub proposal_data: C::Data,
-    /// Native token address
-    pub native_token: C::NativeAddress,
     /// Flag if proposal should be run offline
     pub is_offline: bool,
     /// Flag if proposal is of type Pgf stewards
@@ -453,14 +438,6 @@ impl<C: NamadaTypes> InitProposal<C> {
     pub fn proposal_data(self, proposal_data: C::Data) -> Self {
         Self {
             proposal_data,
-            ..self
-        }
-    }
-
-    /// Native token address
-    pub fn native_token(self, native_token: C::NativeAddress) -> Self {
-        Self {
-            native_token,
             ..self
         }
     }
@@ -903,8 +880,6 @@ pub struct Bond<C: NamadaTypes = SdkTypes> {
     /// Source address for delegations. For self-bonds, the validator is
     /// also the source.
     pub source: Option<C::Address>,
-    /// Native token address
-    pub native_token: C::NativeAddress,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -937,14 +912,6 @@ impl<C: NamadaTypes> Bond<C> {
     pub fn source(self, source: C::Address) -> Self {
         Self {
             source: Some(source),
-            ..self
-        }
-    }
-
-    /// Native token address
-    pub fn native_token(self, native_token: C::NativeAddress) -> Self {
-        Self {
-            native_token,
             ..self
         }
     }

@@ -1646,7 +1646,6 @@ pub async fn build_bond(
         validator,
         amount,
         source,
-        native_token,
         tx_code_path,
     }: &args::Bond,
 ) -> Result<(Tx, SigningTxData)> {
@@ -1715,11 +1714,12 @@ pub async fn build_bond(
     // Check bond's source (source for delegation or validator for self-bonds)
     // balance
     let bond_source = source.as_ref().unwrap_or(&validator);
-    let balance_key = balance_key(native_token, bond_source);
+    let native_token = context.native_token();
+    let balance_key = balance_key(&native_token, bond_source);
 
     // TODO Should we state the same error message for the native token?
     let post_balance = check_balance_too_low_err(
-        native_token,
+        &native_token,
         bond_source,
         *amount,
         balance_key,
@@ -1730,7 +1730,7 @@ pub async fn build_bond(
     let tx_source_balance = Some(TxSourcePostBalance {
         post_balance,
         source: bond_source.clone(),
-        token: native_token.clone(),
+        token: native_token,
     });
 
     let data = pos::Bond {
@@ -1758,7 +1758,6 @@ pub async fn build_default_proposal(
     args::InitProposal {
         tx,
         proposal_data: _,
-        native_token: _,
         is_offline: _,
         is_pgf_stewards: _,
         is_pgf_funding: _,
@@ -1898,7 +1897,6 @@ pub async fn build_pgf_funding_proposal(
     args::InitProposal {
         tx,
         proposal_data: _,
-        native_token: _,
         is_offline: _,
         is_pgf_stewards: _,
         is_pgf_funding: _,
@@ -1943,7 +1941,6 @@ pub async fn build_pgf_stewards_proposal(
     args::InitProposal {
         tx,
         proposal_data: _,
-        native_token: _,
         is_offline: _,
         is_pgf_stewards: _,
         is_pgf_funding: _,
@@ -2343,7 +2340,7 @@ pub async fn build_transfer<N: Namada>(
     let (transparent_amount, transparent_token) =
         if source == masp_addr && target == masp_addr {
             // TODO Refactor me, we shouldn't rely on any specific token here.
-            (token::Amount::zero().into(), args.native_token.clone())
+            (token::Amount::zero().into(), context.native_token())
         } else {
             (validated_amount, args.token.clone())
         };

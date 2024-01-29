@@ -165,7 +165,6 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             amount,
             tx_code_path: PathBuf::from(TX_TRANSFER_WASM),
             tx: self.tx_builder(),
-            native_token: self.native_token(),
         }
     }
 
@@ -203,7 +202,6 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             amount,
             source: None,
             tx: self.tx_builder(),
-            native_token: self.native_token(),
             tx_code_path: PathBuf::from(TX_BOND_WASM),
         }
     }
@@ -274,7 +272,6 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     fn new_init_proposal(&self, proposal_data: Vec<u8>) -> args::InitProposal {
         args::InitProposal {
             proposal_data,
-            native_token: self.native_token(),
             is_offline: false,
             is_pgf_stewards: false,
             is_pgf_funding: false,
