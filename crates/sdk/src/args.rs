@@ -50,8 +50,13 @@ pub trait NamadaTypes: Clone + std::fmt::Debug {
     type NativeAddress: Clone + std::fmt::Debug;
     /// Represents a key pair
     type Keypair: Clone + std::fmt::Debug;
-    /// Represents the address of a Tendermint endpoint
+    /// Represents the address of a Tendermint endpoint (used in context-less
+    /// CLI commands where chain config isn't available)
     type TendermintAddress: Clone + std::fmt::Debug;
+    /// RPC address of a locally configured node
+    type ConfigRpcTendermintAddress: Clone
+        + std::fmt::Debug
+        + From<Self::TendermintAddress>;
     /// Represents the address of an Ethereum endpoint
     type EthereumAddress: Clone + std::fmt::Debug;
     /// Represents a viewing key
@@ -89,12 +94,13 @@ impl NamadaTypes for SdkTypes {
     type Address = Address;
     type BalanceOwner = namada_core::types::masp::BalanceOwner;
     type BpConversionTable = HashMap<Address, BpConversionTableEntry>;
+    type ConfigRpcTendermintAddress = tendermint_config::net::Address;
     type Data = Vec<u8>;
     type EthereumAddress = ();
     type Keypair = namada_core::types::key::common::SecretKey;
     type NativeAddress = Address;
     type PublicKey = namada_core::types::key::common::PublicKey;
-    type TendermintAddress = ();
+    type TendermintAddress = tendermint_config::net::Address;
     type TransferSource = namada_core::types::masp::TransferSource;
     type TransferTarget = namada_core::types::masp::TransferTarget;
     type ViewingKey = namada_core::types::masp::ExtendedViewingKey;
@@ -103,6 +109,13 @@ impl NamadaTypes for SdkTypes {
 /// Common query arguments
 #[derive(Clone, Debug)]
 pub struct Query<C: NamadaTypes = SdkTypes> {
+    /// The address of the ledger node as host:port
+    pub ledger_address: C::ConfigRpcTendermintAddress,
+}
+
+/// Common query arguments
+#[derive(Clone, Debug)]
+pub struct QueryWithoutCtx<C: NamadaTypes = SdkTypes> {
     /// The address of the ledger node as host:port
     pub ledger_address: C::TendermintAddress,
 }
@@ -1908,7 +1921,7 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// Do not wait for the transaction to be added to the blockchain
     pub broadcast_only: bool,
     /// The address of the ledger node as host:port
-    pub ledger_address: C::TendermintAddress,
+    pub ledger_address: C::ConfigRpcTendermintAddress,
     /// If any new account is initialized by the tx, use the given alias to
     /// save it in the wallet.
     pub initialized_account_alias: Option<String>,
@@ -1988,7 +2001,7 @@ pub trait TxBuilder<C: NamadaTypes>: Sized {
     /// The address of the ledger node as host:port
     fn ledger_address(self, ledger_address: C::TendermintAddress) -> Self {
         self.tx(|x| Tx {
-            ledger_address,
+            ledger_address: C::ConfigRpcTendermintAddress::from(ledger_address),
             ..x
         })
     }
@@ -2359,8 +2372,8 @@ impl EthereumBridgePool {
 /// Bridge pool proof arguments.
 #[derive(Debug, Clone)]
 pub struct BridgePoolProof<C: NamadaTypes = SdkTypes> {
-    /// The query parameters.
-    pub query: Query<C>,
+    /// The address of the ledger node as host:port
+    pub ledger_address: C::TendermintAddress,
     /// The keccak hashes of transfers to
     /// acquire a proof of.
     pub transfers: Vec<KeccakHash>,
@@ -2376,8 +2389,8 @@ pub struct BridgePoolProof<C: NamadaTypes = SdkTypes> {
 /// Arguments to an Ethereum Bridge pool relay operation.
 #[derive(Debug, Clone)]
 pub struct RelayBridgePoolProof<C: NamadaTypes = SdkTypes> {
-    /// The query parameters.
-    pub query: Query<C>,
+    /// The address of the ledger node as host:port
+    pub ledger_address: C::TendermintAddress,
     /// The hashes of the transfers to be relayed
     pub transfers: Vec<KeccakHash>,
     /// The Namada address for receiving fees for relaying
@@ -2406,8 +2419,8 @@ pub struct RelayBridgePoolProof<C: NamadaTypes = SdkTypes> {
 /// Bridge validator set arguments.
 #[derive(Debug, Clone)]
 pub struct BridgeValidatorSet<C: NamadaTypes = SdkTypes> {
-    /// The query parameters.
-    pub query: Query<C>,
+    /// The address of the ledger node as host:port
+    pub ledger_address: C::TendermintAddress,
     /// The epoch to query.
     pub epoch: Option<Epoch>,
 }
@@ -2415,8 +2428,8 @@ pub struct BridgeValidatorSet<C: NamadaTypes = SdkTypes> {
 /// Governance validator set arguments.
 #[derive(Debug, Clone)]
 pub struct GovernanceValidatorSet<C: NamadaTypes = SdkTypes> {
-    /// The query parameters.
-    pub query: Query<C>,
+    /// The address of the ledger node as host:port
+    pub ledger_address: C::TendermintAddress,
     /// The epoch to query.
     pub epoch: Option<Epoch>,
 }
@@ -2424,8 +2437,8 @@ pub struct GovernanceValidatorSet<C: NamadaTypes = SdkTypes> {
 /// Validator set proof arguments.
 #[derive(Debug, Clone)]
 pub struct ValidatorSetProof<C: NamadaTypes = SdkTypes> {
-    /// The query parameters.
-    pub query: Query<C>,
+    /// The address of the ledger node as host:port
+    pub ledger_address: C::TendermintAddress,
     /// The epoch to query.
     pub epoch: Option<Epoch>,
 }
@@ -2436,8 +2449,8 @@ pub struct ValidatorSetUpdateRelay<C: NamadaTypes = SdkTypes> {
     /// Run in daemon mode, which will continuously
     /// perform validator set updates.
     pub daemon: bool,
-    /// The query parameters.
-    pub query: Query<C>,
+    /// The address of the ledger node as host:port
+    pub ledger_address: C::TendermintAddress,
     /// The number of block confirmations on Ethereum.
     pub confirmations: u64,
     /// The Ethereum RPC endpoint.

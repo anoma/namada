@@ -35,7 +35,6 @@ use crate::config::{
     self, genesis, get_default_namada_folder, Config, TendermintMode,
 };
 use crate::facade::tendermint::node::Id as TendermintNodeId;
-use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::node::ledger::tendermint_node;
 use crate::wallet::{pre_genesis, CliWalletUtils};
 use crate::wasm_loader;
@@ -1172,19 +1171,6 @@ where
     }
     println!();
     task.join().unwrap()
-}
-
-/// Replace the contents of `addr` with a dummy address.
-#[inline]
-pub fn take_config_address(addr: &mut TendermintAddress) -> TendermintAddress {
-    std::mem::replace(
-        addr,
-        TendermintAddress::Tcp {
-            peer_id: None,
-            host: String::new(),
-            port: 0,
-        },
-    )
 }
 
 #[cfg(not(test))]

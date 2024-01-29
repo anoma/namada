@@ -3626,6 +3626,7 @@ dependencies = [
  "serde_json",
  "sha2 0.9.9",
  "slip10_ed25519",
+ "tendermint-config",
  "tendermint-rpc",
  "thiserror",
  "tiny-bip39",

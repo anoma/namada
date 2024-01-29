@@ -93,7 +93,7 @@ pub fn run(
 
 #[async_trait::async_trait(?Send)]
 impl<'a> CliClient for &'a MockNode {
-    fn from_tendermint_address(_: &mut TendermintAddress) -> Self {
+    fn from_tendermint_address(_: &TendermintAddress) -> Self {
         unreachable!("MockNode should always be instantiated at test start.")
     }
 

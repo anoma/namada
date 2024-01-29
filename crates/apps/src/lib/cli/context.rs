@@ -18,6 +18,7 @@ use namada_sdk::masp::fs::FsShieldedUtils;
 use namada_sdk::masp::ShieldedContext;
 use namada_sdk::wallet::Wallet;
 use namada_sdk::{Namada, NamadaImpl};
+use tendermint_config::net::Address as TendermintAddress;
 
 use super::args;
 use crate::cli::utils;
@@ -67,6 +68,15 @@ pub type WalletPublicKey = FromContext<common::PublicKey>;
 /// A raw address or a raw full viewing key (bech32m encoding) or an alias of
 /// either in the wallet
 pub type WalletBalanceOwner = FromContext<BalanceOwner>;
+
+/// RPC address of a locally configured node
+pub type ConfigRpcAddress = FromContext<TendermintAddress>;
+
+impl From<TendermintAddress> for ConfigRpcAddress {
+    fn from(value: TendermintAddress) -> Self {
+        FromContext::new(value.to_string())
+    }
+}
 
 /// Command execution context
 #[derive(Debug)]
@@ -406,6 +416,19 @@ impl ArgFromContext for Address {
                     .ok_or(Skip)
             })
             .map_err(|_| format!("Unknown address {raw}"))
+    }
+}
+
+impl ArgFromContext for TendermintAddress {
+    fn arg_from_ctx(
+        ctx: &ChainContext,
+        raw: impl AsRef<str>,
+    ) -> Result<Self, String> {
+        if raw.as_ref().is_empty() {
+            return Ok(ctx.config.ledger.cometbft.rpc.laddr.clone());
+        }
+        Self::from_str(raw.as_ref())
+            .map_err(|err| format!("Invalid Tendermint address: {err}"))
     }
 }
 
