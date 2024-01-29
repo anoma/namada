@@ -2566,7 +2566,7 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryEthBridgePool(pub args::Query<args::CliTypes>);
+    pub struct QueryEthBridgePool(pub args::QueryWithoutCtx<args::CliTypes>);
 
     impl SubCmd for QueryEthBridgePool {
         const CMD: &'static str = "query";
@@ -2574,18 +2574,18 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .map(|matches| Self(args::Query::parse(matches)))
+                .map(|matches| Self(args::QueryWithoutCtx::parse(matches)))
         }
 
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Get the contents of the Ethereum Bridge pool.")
-                .add_args::<args::Query<args::CliTypes>>()
+                .add_args::<args::QueryWithoutCtx<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QuerySignedBridgePool(pub args::Query<args::CliTypes>);
+    pub struct QuerySignedBridgePool(pub args::QueryWithoutCtx<args::CliTypes>);
 
     impl SubCmd for QuerySignedBridgePool {
         const CMD: &'static str = "query-signed";
@@ -2593,7 +2593,7 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .map(|matches| Self(args::Query::parse(matches)))
+                .map(|matches| Self(args::QueryWithoutCtx::parse(matches)))
         }
 
         fn def() -> App {
@@ -2602,12 +2602,12 @@ pub mod cmds {
                     "Get the contents of the Ethereum Bridge pool with a \
                      signed Merkle root.",
                 )
-                .add_args::<args::Query<args::CliTypes>>()
+                .add_args::<args::QueryWithoutCtx<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryRelayProgress(pub args::Query<args::CliTypes>);
+    pub struct QueryRelayProgress(pub args::QueryWithoutCtx<args::CliTypes>);
 
     impl SubCmd for QueryRelayProgress {
         const CMD: &'static str = "query-relayed";
@@ -2615,13 +2615,13 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .map(|matches| Self(args::Query::parse(matches)))
+                .map(|matches| Self(args::QueryWithoutCtx::parse(matches)))
         }
 
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Get the confirmation status of transfers to Ethereum.")
-                .add_args::<args::Query<args::CliTypes>>()
+                .add_args::<args::QueryWithoutCtx<args::CliTypes>>()
         }
     }
 
@@ -2892,11 +2892,12 @@ pub mod args {
         );
     pub const BRIDGE_POOL_GAS_PAYER: ArgOpt<WalletAddress> =
         arg_opt("pool-gas-payer");
-    pub const BRIDGE_POOL_GAS_TOKEN: ArgDefaultFromCtx<WalletAddress> =
-        arg_default_from_ctx(
-            "pool-gas-token",
-            DefaultFn(|| "NAM".parse().unwrap()),
-        );
+    pub const BRIDGE_POOL_GAS_TOKEN: ArgDefaultFromCtx<
+        WalletAddrOrNativeToken,
+    > = arg_default_from_ctx(
+        "pool-gas-token",
+        DefaultFn(|| "".parse().unwrap()),
+    );
     pub const BRIDGE_POOL_TARGET: Arg<EthAddress> = arg("target");
     pub const BROADCAST_ONLY: ArgFlag = flag("broadcast-only");
     pub const CHAIN_ID: Arg<ChainId> = arg("chain-id");
@@ -2954,8 +2955,8 @@ pub mod args {
     pub const FORCE: ArgFlag = flag("force");
     pub const GAS_LIMIT: ArgDefault<GasLimit> =
         arg_default("gas-limit", DefaultFn(|| GasLimit::from(25_000)));
-    pub const FEE_TOKEN: ArgDefaultFromCtx<WalletAddress> =
-        arg_default_from_ctx("gas-token", DefaultFn(|| "NAM".parse().unwrap()));
+    pub const FEE_TOKEN: ArgDefaultFromCtx<WalletAddrOrNativeToken> =
+        arg_default_from_ctx("gas-token", DefaultFn(|| "".parse().unwrap()));
     pub const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
     pub const FEE_AMOUNT: ArgDefault<token::DenominatedAmount> = arg_default(
         "fee-amount",
@@ -2986,12 +2987,13 @@ pub mod args {
     pub const LEDGER_ADDRESS_ABOUT: &str =
         "Address of a ledger node as \"{scheme}://{host}:{port}\". If the \
          scheme is not supplied, it is assumed to be TCP.";
-    pub const LEDGER_ADDRESS_DEFAULT: ArgDefault<TendermintAddress> =
-        LEDGER_ADDRESS.default(DefaultFn(|| {
+    pub const CONFIG_RPC_LEDGER_ADDRESS: ArgDefaultFromCtx<ConfigRpcAddress> =
+        arg_default_from_ctx("node", DefaultFn(|| "".to_string()));
+    pub const LEDGER_ADDRESS: ArgDefault<TendermintAddress> = arg("node")
+        .default(DefaultFn(|| {
             let raw = "127.0.0.1:26657";
             TendermintAddress::from_str(raw).unwrap()
         }));
-    pub const LEDGER_ADDRESS: Arg<TendermintAddress> = arg("node");
     pub const LIST_FIND_ADDRESSES_ONLY: ArgFlag = flag("addr");
     pub const LIST_FIND_KEYS_ONLY: ArgFlag = flag("keys");
     pub const LOCALHOST: ArgFlag = flag("localhost");
@@ -3342,7 +3344,7 @@ pub mod args {
                 fee_payer: self
                     .fee_payer
                     .map(|fee_payer| chain_ctx.get(&fee_payer)),
-                fee_token: chain_ctx.get(&self.fee_token),
+                fee_token: chain_ctx.get(&self.fee_token).into(),
                 code_path: self.code_path,
             }
         }
@@ -3416,9 +3418,10 @@ pub mod args {
 
     impl CliToSdk<RecommendBatch<SdkTypes>> for RecommendBatch<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> RecommendBatch<SdkTypes> {
+            let query = self.query.to_sdk(ctx);
             let chain_ctx = ctx.borrow_chain_or_exit();
             RecommendBatch::<SdkTypes> {
-                query: self.query.to_sdk_ctxless(),
+                query,
                 max_gas: self.max_gas,
                 gas: self.gas,
                 conversion_table: {
@@ -3489,7 +3492,7 @@ pub mod args {
     impl CliToSdkCtxless<BridgePoolProof<SdkTypes>> for BridgePoolProof<CliTypes> {
         fn to_sdk_ctxless(self) -> BridgePoolProof<SdkTypes> {
             BridgePoolProof::<SdkTypes> {
-                query: self.query.to_sdk_ctxless(),
+                ledger_address: self.ledger_address,
                 transfers: self.transfers,
                 relayer: self.relayer,
             }
@@ -3498,11 +3501,11 @@ pub mod args {
 
     impl Args for BridgePoolProof<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
-            let query = Query::parse(matches);
+            let ledger_address = LEDGER_ADDRESS.parse(matches);
             let hashes = HASH_LIST.parse(matches);
             let relayer = RELAYER.parse(matches);
             Self {
-                query,
+                ledger_address,
                 transfers: hashes
                     .split_whitespace()
                     .map(|hash| {
@@ -3520,7 +3523,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query<CliTypes>>()
+            app.arg(LEDGER_ADDRESS.def().help(LEDGER_ADDRESS_ABOUT))
                 .arg(HASH_LIST.def().help(
                     "Whitespace separated Keccak hash list of transfers in \
                      the Bridge pool.",
@@ -3538,7 +3541,7 @@ pub mod args {
     {
         fn to_sdk_ctxless(self) -> RelayBridgePoolProof<SdkTypes> {
             RelayBridgePoolProof::<SdkTypes> {
-                query: self.query.to_sdk_ctxless(),
+                ledger_address: self.ledger_address,
                 transfers: self.transfers,
                 relayer: self.relayer,
                 confirmations: self.confirmations,
@@ -3555,7 +3558,7 @@ pub mod args {
     impl Args for RelayBridgePoolProof<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let safe_mode = SAFE_MODE.parse(matches);
-            let query = Query::parse(matches);
+            let ledger_address = LEDGER_ADDRESS.parse(matches);
             let hashes = HASH_LIST.parse(matches);
             let relayer = RELAYER.parse(matches);
             let gas = ETH_GAS.parse(matches);
@@ -3565,7 +3568,7 @@ pub mod args {
             let confirmations = ETH_CONFIRMATIONS.parse(matches);
             let sync = ETH_SYNC.parse(matches);
             Self {
-                query,
+                ledger_address,
                 sync,
                 transfers: hashes
                     .split(' ')
@@ -3590,7 +3593,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query<CliTypes>>()
+            app.arg(LEDGER_ADDRESS.def().help(LEDGER_ADDRESS_ABOUT))
                 .arg(SAFE_MODE.def().help(
                     "Safe mode overrides keyboard interrupt signals, to \
                      ensure Ethereum transfers aren't canceled midway through.",
@@ -3634,7 +3637,7 @@ pub mod args {
     {
         fn to_sdk_ctxless(self) -> BridgeValidatorSet<SdkTypes> {
             BridgeValidatorSet::<SdkTypes> {
-                query: self.query.to_sdk_ctxless(),
+                ledger_address: self.ledger_address,
                 epoch: self.epoch,
             }
         }
@@ -3642,17 +3645,19 @@ pub mod args {
 
     impl Args for BridgeValidatorSet<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
-            let query = Query::parse(matches);
+            let ledger_address = LEDGER_ADDRESS.parse(matches);
             let epoch = EPOCH.parse(matches);
-            Self { query, epoch }
+            Self {
+                ledger_address,
+                epoch,
+            }
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query<CliTypes>>().arg(
-                EPOCH.def().help(
+            app.arg(LEDGER_ADDRESS.def().help(LEDGER_ADDRESS_ABOUT))
+                .arg(EPOCH.def().help(
                     "The epoch of the Bridge set of validators to query.",
-                ),
-            )
+                ))
         }
     }
 
@@ -3661,7 +3666,7 @@ pub mod args {
     {
         fn to_sdk_ctxless(self) -> GovernanceValidatorSet<SdkTypes> {
             GovernanceValidatorSet::<SdkTypes> {
-                query: self.query.to_sdk_ctxless(),
+                ledger_address: self.ledger_address,
                 epoch: self.epoch,
             }
         }
@@ -3669,15 +3674,19 @@ pub mod args {
 
     impl Args for GovernanceValidatorSet<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
-            let query = Query::parse(matches);
+            let ledger_address = LEDGER_ADDRESS.parse(matches);
             let epoch = EPOCH.parse(matches);
-            Self { query, epoch }
+            Self {
+                ledger_address,
+                epoch,
+            }
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query<CliTypes>>().arg(EPOCH.def().help(
-                "The epoch of the Governance set of validators to query.",
-            ))
+            app.arg(LEDGER_ADDRESS.def().help(LEDGER_ADDRESS_ABOUT))
+                .arg(EPOCH.def().help(
+                    "The epoch of the Governance set of validators to query.",
+                ))
         }
     }
 
@@ -3686,7 +3695,7 @@ pub mod args {
     {
         fn to_sdk_ctxless(self) -> ValidatorSetProof<SdkTypes> {
             ValidatorSetProof::<SdkTypes> {
-                query: self.query.to_sdk_ctxless(),
+                ledger_address: self.ledger_address,
                 epoch: self.epoch,
             }
         }
@@ -3694,17 +3703,21 @@ pub mod args {
 
     impl Args for ValidatorSetProof<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
-            let query = Query::parse(matches);
+            let ledger_address = LEDGER_ADDRESS.parse(matches);
             let epoch = EPOCH.parse(matches);
-            Self { query, epoch }
+            Self {
+                ledger_address,
+                epoch,
+            }
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query<CliTypes>>().arg(
-                EPOCH
-                    .def()
-                    .help("The epoch of the set of validators to be proven."),
-            )
+            app.arg(LEDGER_ADDRESS.def().help(LEDGER_ADDRESS_ABOUT))
+                .arg(
+                    EPOCH.def().help(
+                        "The epoch of the set of validators to be proven.",
+                    ),
+                )
         }
     }
 
@@ -3714,7 +3727,7 @@ pub mod args {
         fn to_sdk_ctxless(self) -> ValidatorSetUpdateRelay<SdkTypes> {
             ValidatorSetUpdateRelay::<SdkTypes> {
                 daemon: self.daemon,
-                query: self.query.to_sdk_ctxless(),
+                ledger_address: self.ledger_address,
                 confirmations: self.confirmations,
                 eth_rpc_endpoint: (),
                 epoch: self.epoch,
@@ -3731,9 +3744,9 @@ pub mod args {
 
     impl Args for ValidatorSetUpdateRelay<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
+            let ledger_address = LEDGER_ADDRESS.parse(matches);
             let safe_mode = SAFE_MODE.parse(matches);
             let daemon = DAEMON_MODE.parse(matches);
-            let query = Query::parse(matches);
             let epoch = EPOCH.parse(matches);
             let gas = ETH_GAS.parse(matches);
             let gas_price = ETH_GAS_PRICE.parse(matches);
@@ -3746,9 +3759,9 @@ pub mod args {
             let success_dur =
                 DAEMON_MODE_SUCCESS_DUR.parse(matches).map(|dur| dur.0);
             Self {
+                ledger_address,
                 sync,
                 daemon,
-                query,
                 epoch,
                 gas,
                 gas_price,
@@ -3762,7 +3775,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query<CliTypes>>()
+            app.arg(LEDGER_ADDRESS.def().help(LEDGER_ADDRESS_ABOUT))
                 .arg(SAFE_MODE.def().help(
                     "Safe mode overrides keyboard interrupt signals, to \
                      ensure Ethereum transfers aren't canceled midway through.",
@@ -3887,7 +3900,6 @@ pub mod args {
                 target: chain_ctx.get(&self.target),
                 token: chain_ctx.get(&self.token),
                 amount: self.amount,
-                native_token: chain_ctx.native_token.clone(),
                 tx_code_path: self.tx_code_path.to_path_buf(),
             }
         }
@@ -3908,7 +3920,6 @@ pub mod args {
                 token,
                 amount,
                 tx_code_path,
-                native_token: (),
             }
         }
 
@@ -4398,7 +4409,6 @@ pub mod args {
                 validator: chain_ctx.get(&self.validator),
                 amount: self.amount,
                 source: self.source.map(|x| chain_ctx.get(&x)),
-                native_token: chain_ctx.native_token.clone(),
                 tx_code_path: self.tx_code_path.to_path_buf(),
             }
         }
@@ -4425,7 +4435,6 @@ pub mod args {
                 amount,
                 source,
                 tx_code_path,
-                native_token: (),
             }
         }
 
@@ -4630,7 +4639,6 @@ pub mod args {
                 is_offline: self.is_offline,
                 is_pgf_stewards: self.is_pgf_stewards,
                 is_pgf_funding: self.is_pgf_funding,
-                native_token: ctx.borrow_chain_or_exit().native_token.clone(),
                 tx_code_path: self.tx_code_path,
             }
         }
@@ -4648,7 +4656,6 @@ pub mod args {
             Self {
                 tx,
                 proposal_data,
-                native_token: (),
                 tx_code_path,
                 is_offline,
                 is_pgf_stewards,
@@ -5876,15 +5883,16 @@ pub mod args {
     pub struct CliTypes;
 
     impl NamadaTypes for CliTypes {
+        type AddrOrNativeToken = WalletAddrOrNativeToken;
         type Address = WalletAddress;
         type BalanceOwner = WalletBalanceOwner;
         type BpConversionTable = PathBuf;
+        type ConfigRpcTendermintAddress = ConfigRpcAddress;
         type Data = PathBuf;
         type EthereumAddress = String;
         type Keypair = WalletKeypair;
-        type NativeAddress = ();
         type PublicKey = WalletPublicKey;
-        type TendermintAddress = TendermintAddress;
+        type TendermintAddress = tendermint_config::net::Address;
         type TransferSource = WalletTransferSource;
         type TransferTarget = WalletTransferTarget;
         type ViewingKey = WalletViewingKey;
@@ -5900,11 +5908,11 @@ pub mod args {
                 output_folder: self.output_folder,
                 force: self.force,
                 broadcast_only: self.broadcast_only,
-                ledger_address: (),
+                ledger_address: ctx.get(&self.ledger_address),
                 initialized_account_alias: self.initialized_account_alias,
                 wallet_alias_force: self.wallet_alias_force,
                 fee_amount: self.fee_amount,
-                fee_token: ctx.get(&self.fee_token),
+                fee_token: ctx.get(&self.fee_token).into(),
                 fee_unshield: self
                     .fee_unshield
                     .map(|ref fee_unshield| ctx.get_cached(fee_unshield)),
@@ -5959,7 +5967,7 @@ pub mod args {
                  return once the transaction is added to the mempool.",
             ))
             .arg(
-                LEDGER_ADDRESS_DEFAULT
+                CONFIG_RPC_LEDGER_ADDRESS
                     .def()
                     .help(LEDGER_ADDRESS_ABOUT)
                     // This used to be "ledger-address", alias for compatibility
@@ -6055,7 +6063,7 @@ pub mod args {
             let dump_tx = DUMP_TX.parse(matches);
             let force = FORCE.parse(matches);
             let broadcast_only = BROADCAST_ONLY.parse(matches);
-            let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
+            let ledger_address = CONFIG_RPC_LEDGER_ADDRESS.parse(matches);
             let initialized_account_alias = ALIAS_OPT.parse(matches);
             let fee_amount =
                 FEE_AMOUNT_OPT.parse(matches).map(InputAmount::Unvalidated);
@@ -6103,16 +6111,19 @@ pub mod args {
         }
     }
 
-    impl CliToSdkCtxless<Query<SdkTypes>> for Query<CliTypes> {
-        fn to_sdk_ctxless(self) -> Query<SdkTypes> {
-            Query::<SdkTypes> { ledger_address: () }
+    impl CliToSdk<Query<SdkTypes>> for Query<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> Query<SdkTypes> {
+            let chain_ctx = ctx.borrow_mut_chain_or_exit();
+            Query::<SdkTypes> {
+                ledger_address: chain_ctx.get(&self.ledger_address),
+            }
         }
     }
 
     impl Args for Query<CliTypes> {
         fn def(app: App) -> App {
             app.arg(
-                LEDGER_ADDRESS_DEFAULT
+                CONFIG_RPC_LEDGER_ADDRESS
                     .def()
                     .help(LEDGER_ADDRESS_ABOUT)
                     // This used to be "ledger-address", alias for compatibility
@@ -6121,7 +6132,32 @@ pub mod args {
         }
 
         fn parse(matches: &ArgMatches) -> Self {
-            let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
+            let ledger_address = CONFIG_RPC_LEDGER_ADDRESS.parse(matches);
+            Self { ledger_address }
+        }
+    }
+
+    impl CliToSdkCtxless<QueryWithoutCtx<SdkTypes>> for QueryWithoutCtx<CliTypes> {
+        fn to_sdk_ctxless(self) -> QueryWithoutCtx<SdkTypes> {
+            QueryWithoutCtx::<SdkTypes> {
+                ledger_address: self.ledger_address,
+            }
+        }
+    }
+
+    impl Args for QueryWithoutCtx<CliTypes> {
+        fn def(app: App) -> App {
+            app.arg(
+                LEDGER_ADDRESS
+                    .def()
+                    .help(LEDGER_ADDRESS_ABOUT)
+                    // This used to be "ledger-address", alias for compatibility
+                    .alias("ledger-address"),
+            )
+        }
+
+        fn parse(matches: &ArgMatches) -> Self {
+            let ledger_address = LEDGER_ADDRESS.parse(matches);
             Self { ledger_address }
         }
     }
