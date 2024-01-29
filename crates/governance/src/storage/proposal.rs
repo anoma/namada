@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Display;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -76,9 +76,9 @@ pub struct VoteProposalData {
     pub id: u64,
     /// The proposal vote
     pub vote: ProposalVote,
-    /// The proposal author address
+    /// The proposal voter address
     pub voter: Address,
-    /// Delegator addreses
+    /// Validators to who the voter has delegations to
     pub delegations: Vec<Address>,
 }
 
@@ -103,7 +103,7 @@ impl TryFrom<PgfStewardProposal> for InitProposalData {
 
     fn try_from(value: PgfStewardProposal) -> Result<Self, Self::Error> {
         let extra_data =
-            HashSet::<AddRemove<Address>>::try_from(value.data).unwrap();
+            BTreeSet::<AddRemove<Address>>::try_from(value.data).unwrap();
 
         Ok(InitProposalData {
             id: value.proposal.id,
@@ -121,7 +121,7 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
     type Error = ProposalError;
 
     fn try_from(value: PgfFundingProposal) -> Result<Self, Self::Error> {
-        let continous_fundings = value
+        let mut continous_fundings = value
             .data
             .continuous
             .iter()
@@ -133,7 +133,7 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
                     PGFAction::Continuous(AddRemove::Add(target))
                 }
             })
-            .collect::<Vec<PGFAction>>();
+            .collect::<BTreeSet<PGFAction>>();
 
         let retro_fundings = value
             .data
@@ -141,15 +141,15 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
             .iter()
             .cloned()
             .map(PGFAction::Retro)
-            .collect::<Vec<PGFAction>>();
+            .collect::<BTreeSet<PGFAction>>();
 
-        let extra_data = [continous_fundings, retro_fundings].concat();
+        continous_fundings.extend(retro_fundings);
 
         Ok(InitProposalData {
             id: value.proposal.id,
             content: Hash::default(),
             author: value.proposal.author,
-            r#type: ProposalType::PGFPayment(extra_data),
+            r#type: ProposalType::PGFPayment(continous_fundings), /* here continous_fundings is contains also the retro funding */
             voting_start_epoch: value.proposal.voting_start_epoch,
             voting_end_epoch: value.proposal.voting_end_epoch,
             grace_epoch: value.proposal.grace_epoch,
@@ -197,9 +197,9 @@ pub enum ProposalType {
     /// Default governance proposal with the optional wasm code
     Default(Option<Hash>),
     /// PGF stewards proposal
-    PGFSteward(HashSet<AddRemove<Address>>),
+    PGFSteward(BTreeSet<AddRemove<Address>>),
     /// PGF funding proposal
-    PGFPayment(Vec<PGFAction>),
+    PGFPayment(BTreeSet<PGFAction>),
 }
 
 /// An add or remove action for PGF
@@ -369,6 +369,9 @@ impl borsh::BorshSchema for PGFIbcTarget {
     BorshDeserialize,
     Serialize,
     Deserialize,
+    Eq,
+    Ord,
+    PartialOrd,
 )]
 pub enum PGFAction {
     /// A continuous payment
@@ -401,11 +404,11 @@ pub enum ProposalTypeError {
     InvalidProposalType,
 }
 
-impl TryFrom<StewardsUpdate> for HashSet<AddRemove<Address>> {
+impl TryFrom<StewardsUpdate> for BTreeSet<AddRemove<Address>> {
     type Error = ProposalTypeError;
 
     fn try_from(value: StewardsUpdate) -> Result<Self, Self::Error> {
-        let mut data = HashSet::default();
+        let mut data = BTreeSet::default();
 
         if value.add.is_some() {
             data.insert(AddRemove::Add(value.add.unwrap()));
@@ -613,12 +616,12 @@ pub mod testing {
     pub fn arb_proposal_type() -> impl Strategy<Value = ProposalType> {
         prop_oneof![
             option::of(arb_hash()).prop_map(ProposalType::Default),
-            collection::hash_set(
+            collection::btree_set(
                 arb_add_remove(arb_non_internal_address()),
                 0..10,
             )
             .prop_map(ProposalType::PGFSteward),
-            collection::vec(arb_pgf_action(), 0..10)
+            collection::btree_set(arb_pgf_action(), 0..10)
                 .prop_map(ProposalType::PGFPayment),
         ]
     }

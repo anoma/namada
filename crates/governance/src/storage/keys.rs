@@ -438,7 +438,7 @@ pub fn get_proposal_vote_prefix_key(id: u64) -> Key {
         .expect("Cannot obtain a storage key")
 }
 
-/// Get proposal code key
+/// Get the vote key for a specific proposal id
 pub fn get_vote_proposal_key(
     id: u64,
     voter_address: Address,
