@@ -1471,6 +1471,22 @@ pub struct IndexedTx {
     pub index: TxIndex,
 }
 
+impl IndexedTx {
+    /// The next two possible indices
+    pub fn possible_nexts(&self) -> [Self; 2] {
+        [
+            Self {
+                height: self.height,
+                index: self.index + 1,
+            },
+            Self {
+                height: self.height + 1,
+                index: TxIndex(0),
+            },
+        ]
+    }
+}
+
 impl PartialOrd for IndexedTx {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))

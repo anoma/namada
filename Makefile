@@ -165,7 +165,7 @@ test-e2e:
 	NAMADA_E2E_USE_PREBUILT_BINARIES=$(NAMADA_E2E_USE_PREBUILT_BINARIES) \
 	NAMADA_E2E_DEBUG=$(NAMADA_E2E_DEBUG) \
 	RUST_BACKTRACE=$(RUST_BACKTRACE) \
-	$(cargo) +$(nightly) test e2e::$(TEST_FILTER) \
+	$(cargo) +$(nightly) test $(jobs) e2e::$(TEST_FILTER) \
 	-Z unstable-options \
 	-- \
 	--test-threads=1 \
@@ -189,7 +189,7 @@ test-integration-save-proofs:
 # Run integration tests without specifying any pre-built MASP proofs option
 test-integration-slow:
 	RUST_BACKTRACE=$(RUST_BACKTRACE) \
-	$(cargo) +$(nightly) test integration::$(TEST_FILTER)  --features integration \
+	$(cargo) +$(nightly) test $(jobs) integration::$(TEST_FILTER)  --features integration \
 	-Z unstable-options \
 	-- \
 	--test-threads=1 \

@@ -518,14 +518,39 @@ impl SyncStatus for NotSyncing {}
 
 impl SyncStatus for Syncing {}
 
+/// A cached of fetched indexed transactions.
+///
+/// The cache is designed so that it either contains
+/// all transactions from a given height, or none.
 #[derive(BorshSerialize, BorshDeserialize, Debug, Default, Clone)]
 pub struct Unscanned {
-    pub txs: BTreeMap<IndexedTx, (Epoch, Transfer, Transaction)>,
+    txs: BTreeMap<IndexedTx, (Epoch, Transfer, Transaction)>,
 }
 
 impl Unscanned {
-    pub fn contains_height(&self, height: u64) -> bool {
-        self.txs.iter().any(|(ix, _)| ix.height.0 == height)
+    fn extend<I>(&mut self, items: I)
+    where
+        I: IntoIterator<Item = (IndexedTx, (Epoch, Transfer, Transaction))>,
+    {
+        self.txs.extend(items.into_iter());
+    }
+
+    fn contains_height(&self, height: u64) -> bool {
+        self.txs.keys().any(|k| k.height.0 == height)
+    }
+
+    fn scanned(&mut self, ix: &IndexedTx) {
+        self.txs.retain(|i, _| i.height >= ix.height);
+    }
+}
+
+impl IntoIterator for Unscanned {
+    type IntoIter =
+        btree_map::IntoIter<IndexedTx, (Epoch, Transfer, Transaction)>;
+    type Item = (IndexedTx, (Epoch, Transfer, Transaction));
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.txs.into_iter()
     }
 }
 
@@ -597,12 +622,6 @@ impl<U: ShieldedUtils + Default> Default for ShieldedContext<U> {
 impl<U: ShieldedUtils + MaybeSend + MaybeSync, S: SyncStatus>
     ShieldedContext<U, S>
 {
-    /// If we have unscanned txs in the local cache, get the index of the
-    /// latest one.
-    pub fn latest_unscanned(&self) -> Option<IndexedTx> {
-        self.unscanned.txs.keys().max().cloned()
-    }
-
     /// Extract the relevant shield portions of a [`Tx`], if any.
     async fn extract_masp_tx<'args, C: Client + Sync>(
         tx: &Tx,
@@ -2022,7 +2041,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, Syncing> {
         }
     }
 
-    pub async fn fetchy_fetch<C: Client + Sync, IO: Io>(
+    pub async fn fetch<C: Client + Sync, IO: Io>(
         &mut self,
         client: &C,
         logger: &impl ProgressLogger<IO>,
@@ -2039,14 +2058,23 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, Syncing> {
         for vk in fvks {
             self.vk_heights.entry(*vk).or_default();
         }
-        // the latest block height which has been added to the witness Merkle
+        // the latest index which has been added to the witness Merkle
         // tree
-        let Some(mut latest_idx) = self.vk_heights.values().max().cloned() else {
+        let last_witnessed_tx =
+            self.tx_note_map.keys().max().cloned().unwrap_or_default();
+
+        // get the bounds on the block heights to fetch
+        let Some(mut start_height) = std::cmp::min(
+            Some(last_witnessed_tx),
+            self.vk_heights
+                .values()
+                .min()
+                .cloned()
+        )
+        .map(|ix| ix.height) else {
             return Ok(());
         };
 
-        // get the bounds on the block heights to fetch
-        let mut start_height = self.vk_heights.values().min().cloned().unwrap().height;
         // the last block height in the chain
         let last_block_height = query_block(client)
             .await?
@@ -2060,10 +2088,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, Syncing> {
                     client,
                     logger,
                     start_height,
-                    start_height + batch_size,
+                    std::cmp::min(start_height + batch_size, fetch_up_to),
                 )
                 .await?;
-            self.unscanned.txs.extend(fetched);
+            self.unscanned.extend(fetched);
             self.save().await?;
             start_height = start_height + batch_size + 1;
         }
@@ -2072,163 +2100,24 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, Syncing> {
         // keys.
         let txs = logger.scan(self.unscanned.txs.clone());
         for (indexed_tx, (epoch, tx, stx)) in txs {
-            if indexed_tx > latest_idx {
+            if indexed_tx > last_witnessed_tx {
                 self.update_witness_map(indexed_tx, &stx)?;
             }
             let mut vk_heights = BTreeMap::new();
             std::mem::swap(&mut vk_heights, &mut self.vk_heights);
-            for (vk, h) in vk_heights.iter_mut().filter_map(|(vk, h)| {
-                (*h < indexed_tx).then_some((vk, h))
-            }) {
-                self.tx_scan(indexed_tx, epoch, &tx, &stx, vk)?;
+            for (vk, h) in
+                vk_heights.iter_mut().filter(|(_, h)| **h < indexed_tx)
+            {
+                self.scan_tx(indexed_tx, epoch, &tx, &stx, vk)?;
                 *h = indexed_tx;
             }
             std::mem::swap(&mut vk_heights, &mut self.vk_heights);
-            latest_idx = std::cmp::max(latest_idx, indexed_tx);
-            self.unscanned.txs.remove(&indexed_tx);
+            self.unscanned.scanned(&indexed_tx);
             self.save().await?;
         }
 
         Ok(())
     }
-
-    /// Fetch the current state of the multi-asset shielded pool into a
-    /// ShieldedContext
-    // pub async fn fetch<C: Client + Sync, IO: Io>(
-    // &mut self,
-    // client: &C,
-    // logger: &impl ProgressLogger<IO>,
-    // last_query_height: Option<BlockHeight>,
-    // batch_size: u64,
-    // sks: &[ExtendedSpendingKey],
-    // fvks: &[ViewingKey],
-    // ) -> Result<(), Error> {
-    // First determine which of the keys requested to be fetched are new.
-    // Necessary because old transactions will need to be scanned for new
-    // keys.
-    // let mut unknown_keys = Vec::new();
-    // for esk in sks {
-    // let vk = to_viewing_key(esk).vk;
-    // if !self.pos_map.contains_key(&vk) &&
-    // !self.unscanned.pos_map.contains_key(&vk) { unknown_keys.push(vk);
-    // }
-    // }
-    // for vk in fvks {
-    // if !self.pos_map.contains_key(vk) &&
-    // !self.unscanned.pos_map.contains_key(&vk) { unknown_keys.push(*vk);
-    // }
-    // }
-    // Check if we all keys are synced to the same height. If not,
-    // we need to scan historical notes again.
-    // let start_from_historical = if !unknown_keys.is_empty() {
-    // new keys have been added to the shielded context so we need to scan
-    // from height 1
-    // Some(1.into())
-    // } else if !self.unscanned.pos_map.is_empty() {
-    // We have keys which are not up to date but we don't need to start from
-    // block 0.
-    // self.latest_unscanned().map(|x| x.height)
-    // } else {
-    // all keys are synced to the same block height
-    // None
-    // };
-    //
-    // If unknown keys are being used, we need to scan older transactions
-    // for any unspent notes
-    // if start_from_historical.is_some() {
-    // display_line!(
-    // logger.io(),
-    // "Scanning historical notes to synchronize new viewing key(s)."
-    // );
-    //
-    // Load all transactions transactions up to level of fully
-    // synced keys (and possibly further)
-    //
-    // This is done in batches which are saved to disk
-    // periodically
-    // let last_fetched = self.last_fetched
-    // .map(|ix| ix.height)
-    // .unwrap_or_default();
-    // let last_block_height = query_block(client)
-    // .await?
-    // .map_or_else(BlockHeight::first, |block| block.height);
-    // let fetch_up_to = last_query_height
-    // .map(|h| std::cmp::max(h, last_fetched))
-    // .unwrap_or(last_block_height);
-    // let mut start_from = start_from_historical.unwrap_or_else(|| 1.into());
-    // while start_from < fetch_up_to {
-    // let fetched = self.fetch_shielded_transfers(
-    // client,
-    // logger,
-    // Some(start_from),
-    // Some(start_from + batch_size),
-    // )
-    // .await?;
-    // self.unscanned.txs.extend(fetched);
-    // self.utils.save(&self).await?;
-    // start_from = start_from + batch_size + 1;
-    // }
-    //
-    // Do this by constructing a shielding context only for unknown keys
-    // let mut tx_ctx = ShieldedContext {
-    // utils: self.utils.clone(),
-    // ..Default::default()
-    // }
-    // .into_syncing();
-    // in case syncing new keys got interrupted
-    // tx_ctx.pos_map.extend(self.unscanned.pos_map.clone());
-    // for vk in unknown_keys {
-    // tx_ctx.pos_map.entry(vk).or_insert_with(BTreeSet::new);
-    // }
-    //
-    // Update this shielded context until it is level with self
-    // let txs = logger.scan(self.unscanned.txs.clone());
-    // for (indexed_tx, (epoch, tx, stx)) in txs {
-    // if self.last_fetched.is_none() || indexed_tx >=
-    // *self.last_fetched.as_ref().unwrap() {
-    // break;
-    // }
-    // self.scan_tx(indexed_tx, epoch, &tx, &stx)?;
-    // Merge the context data originating from the unknown keys into the
-    // current context
-    // self.merge(&tx_ctx);
-    // self.unscanned.txs.remove(&indexed_tx);
-    // self.unscanned.pos_map.extend(tx_ctx.pos_map.clone());
-    // self.utils.save(&self).await?;
-    // }
-    // if we successfully finished scanning, we can clear
-    // out viewing keys from our unscanned data and add them to the
-    // pos map.
-    // self.pos_map.extend(tx_ctx.pos_map);
-    // self.unscanned.pos_map.clear();
-    // self.utils.save(&self).await?;
-    //
-    // } else {
-    // let resume_point =
-    // std::cmp::max(self.latest_unscanned(), self.last_fetched)
-    // .map(|ix| ix.height);
-    // fetch only new transactions
-    // let fetched = self
-    // .fetch_shielded_transfers(
-    // client,
-    // logger,
-    // resume_point,
-    // last_query_height,
-    // )
-    // .await?;
-    // self.unscanned.txs.extend(fetched);
-    // display_line!(logger.io(), "");
-    // }
-    // Now that we possess the unspent notes corresponding to both old and
-    // new keys up until tx_pos, proceed to scan the new transactions.
-    // let txs = logger.scan(self.unscanned.txs.clone());
-    // for (indexed_tx, (epoch, tx, stx)) in txs {
-    // self.scan_tx(indexed_tx, epoch, &tx, &stx)?;
-    // self.unscanned.txs.remove(&indexed_tx);
-    // self.utils.save(&self).await?;
-    // }
-    // Ok(())
-    // }
 
     /// Obtain a chronologically-ordered list of all accepted shielded
     /// transactions from a node.
@@ -2242,8 +2131,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, Syncing> {
     {
         let mut shielded_txs = BTreeMap::new();
         // Fetch all the transactions we do not have yet
-        let heights = logger.fetch(first_height_to_query.0..=last_query_height.0);
+        let heights =
+            logger.fetch(first_height_to_query.0..=last_query_height.0);
         for height in heights {
+            if self.unscanned.contains_height(height) {
+                continue;
+            }
             // Get the valid masp transactions at the specified height
             let epoch = query_epoch_at_height(client, height.into())
                 .await?
@@ -2343,7 +2236,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, Syncing> {
     /// we have spent are updated. The witness map is maintained to make it
     /// easier to construct note merkle paths in other code. See
     /// <https://zips.z.cash/protocol/protocol.pdf#scan>
-    pub fn tx_scan(
+    pub fn scan_tx(
         &mut self,
         indexed_tx: IndexedTx,
         epoch: Epoch,
@@ -2400,7 +2293,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U, Syncing> {
                     )
                 })?;
                 self.vk_map.insert(note_pos, *vk);
-                break;
             }
             note_pos += 1;
         }
