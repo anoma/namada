@@ -298,6 +298,33 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
     // The balance should not be changed
     check_balances_after_back(&port_id_b, &channel_id_b, &test_a, &test_b)?;
 
+    // Send a token to the shielded address on Chain A
+    transfer_on_chain(
+        &test_a,
+        ALBERT,
+        AA_PAYMENT_ADDRESS,
+        BTC,
+        10,
+        ALBERT_KEY,
+    )?;
+    // Shieded transfer from Chain A to Chain B
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
+    transfer(
+        &test_a,
+        A_SPENDING_KEY,
+        AB_PAYMENT_ADDRESS,
+        BTC,
+        "10",
+        ALBERT_KEY,
+        &port_id_a,
+        &channel_id_a,
+        None,
+        None,
+        false,
+    )?;
+    wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
+    check_shielded_balances(&port_id_b, &channel_id_b, &test_a, &test_b)?;
+
     Ok(())
 }
 
