@@ -1053,21 +1053,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             .iter()
             .filter_map(is_any_shielded_action_balance_key)
             .collect();
-        let (source, token, amount) = match balance_keys.len() {
-            0 => {
-                // Shielded transfer
-                (MASP, native_token, Amount::zero())
-            }
-            2 => {
-                let transp_bundle =
-                    shielded.transparent_bundle().ok_or_else(|| {
-                        Error::Other(
-                            "Missing expected transparent bundle in masp \
-                             transaction"
-                                .to_string(),
-                        )
-                    })?;
-
+        let (source, token, amount) = match shielded.transparent_bundle() {
+            Some(transp_bundle) => {
+                // Shielding/Unshielding transfer
                 match (transp_bundle.vin.len(), transp_bundle.vout.len()) {
                     (0, 0) => {
                         return Err(Error::Other(
@@ -1079,7 +1067,26 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                         // Shielding
                         let addresses = balance_keys
                             .iter()
-                            .find(|addresses| addresses[1] != &MASP)
+                            .find(|addresses| {
+                                if addresses[1] != &MASP {
+                                    let transp_addr_commit = TransparentAddress(
+                                        ripemd::Ripemd160::digest(
+                                            sha2::Sha256::digest(
+                                                &addresses[1]
+                                                    .serialize_to_vec(),
+                                            ),
+                                        )
+                                        .into(),
+                                    );
+                                    // Vins contain the same address, so we can
+                                    // just examine the first one
+                                    transp_bundle.vin.first().is_some_and(
+                                        |vin| vin.address == transp_addr_commit,
+                                    )
+                                } else {
+                                    false
+                                }
+                            })
                             .ok_or_else(|| {
                                 Error::Other(
                                     "Could not find source of MASP tx"
@@ -1104,10 +1111,32 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                         // Unshielding
                         let token = balance_keys
                             .iter()
-                            .find(|addresses| addresses[1] == &MASP)
+                            .find(|addresses| {
+                                if addresses[1] != &MASP {
+                                    let transp_addr_commit = TransparentAddress(
+                                        ripemd::Ripemd160::digest(
+                                            sha2::Sha256::digest(
+                                                &addresses[1]
+                                                    .serialize_to_vec(),
+                                            ),
+                                        )
+                                        .into(),
+                                    );
+
+                                    // Vouts contain the same address, so we can
+                                    // just examine the first one
+                                    transp_bundle.vout.first().is_some_and(
+                                        |vout| {
+                                            vout.address == transp_addr_commit
+                                        },
+                                    )
+                                } else {
+                                    false
+                                }
+                            })
                             .ok_or_else(|| {
                                 Error::Other(
-                                    "Could not find source of MASP tx"
+                                    "Could not find target of MASP tx"
                                         .to_string(),
                                 )
                             })?[0];
@@ -1129,12 +1158,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     }
                 }
             }
-            _ => {
-                return Err(Error::Other(
-                    "Found invalid MASP transfer involving a wrong number of \
-                     addresses"
-                        .to_string(),
-                ));
+            None => {
+                // Shielded transfer
+                (MASP, native_token, Amount::zero())
             }
         };
 
