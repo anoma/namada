@@ -320,6 +320,7 @@ impl CliApi {
                             chain_ctx.shielded,
                             &client,
                             &io,
+                            args.batch_size,
                             args.last_query_height,
                             &sks,
                             &vks,

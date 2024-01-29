@@ -24,6 +24,7 @@ pub async fn syncing<
     shielded: ShieldedContext<U>,
     client: &C,
     io: &IO,
+    batch_size: u64,
     last_query_height: Option<BlockHeight>,
     sks: &[ExtendedSpendingKey],
     fvks: &[ViewingKey],
@@ -40,14 +41,14 @@ pub async fn syncing<
     let mut syncing = shielded.into_syncing();
     let sync = async move {
         syncing
-            .fetchy_fetch(client, &logger, last_query_height, 100, sks, fvks)
+            .fetch(client, &logger, last_query_height, batch_size, sks, fvks)
             .await
             .map(|_| syncing.into_non_syncing())
     };
     tokio::select! {
         sync = sync => {
             let shielded = sync?;
-            display!(io, "Syncing finished");
+            display!(io, "Syncing finished\n");
             Ok(shielded)
         },
         sig = shutdown_signal => {
