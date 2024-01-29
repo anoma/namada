@@ -57,6 +57,13 @@ where
     pub ctx: Ctx<'a, DB, H, CA>,
 }
 
+struct TransparentTransferData {
+    source: Address,
+    target: Address,
+    token: Address,
+    amount: Amount,
+}
+
 impl<'a, DB, H, CA> MaspVp<'a, DB, H, CA>
 where
     DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
@@ -390,13 +397,6 @@ fn unepoched_tokens(
     Ok(unepoched_tokens)
 }
 
-struct TransparentTransferData {
-    source: Address,
-    target: Address,
-    token: Address,
-    amount: Amount,
-}
-
 impl<'a, DB, H, CA> NativeVp for MaspVp<'a, DB, H, CA>
 where
     DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
@@ -492,9 +492,17 @@ where
                         && *asset_denom == denom
                         && *asset_epoch == epoch =>
                     {
-                        total_in_values += token::Amount::from_masp_denominated(
-                            vin.value, *digit,
-                        );
+                        total_in_values = total_in_values
+                            .checked_add(token::Amount::from_masp_denominated(
+                                vin.value, *digit,
+                            ))
+                            .ok_or_else(|| {
+                                Error::NativeVpError(
+                                    native_vp::Error::SimpleMessage(
+                                        "Overflow in total in value sum",
+                                    ),
+                                )
+                            })?;
                     }
                     // Maybe the asset type has no attached epoch
                     None if unepoched_tokens.contains_key(&vin.asset_type) => {
@@ -521,10 +529,19 @@ where
                         } else {
                             // Otherwise note the contribution to this
                             // trransparent input
-                            total_in_values +=
-                                token::Amount::from_masp_denominated(
-                                    vin.value, *digit,
-                                );
+                            total_in_values = total_in_values
+                                .checked_add(
+                                    token::Amount::from_masp_denominated(
+                                        vin.value, *digit,
+                                    ),
+                                )
+                                .ok_or_else(|| {
+                                    Error::NativeVpError(
+                                        native_vp::Error::SimpleMessage(
+                                            "Overflow in total in values sum",
+                                        ),
+                                    )
+                                })?;
                         }
                     }
                     // unrecognized asset
@@ -617,10 +634,17 @@ where
                         && *asset_denom == denom
                         && *asset_epoch <= epoch =>
                     {
-                        total_out_values +=
-                            token::Amount::from_masp_denominated(
+                        total_out_values = total_out_values
+                            .checked_add(token::Amount::from_masp_denominated(
                                 out.value, *digit,
-                            );
+                            ))
+                            .ok_or_else(|| {
+                                Error::NativeVpError(
+                                    native_vp::Error::SimpleMessage(
+                                        "Overflow in total out values sum",
+                                    ),
+                                )
+                            })?;
                     }
                     // Maybe the asset type has no attached epoch
                     None if unepoched_tokens.contains_key(&out.asset_type) => {
@@ -628,10 +652,17 @@ where
                             &unepoched_tokens[&out.asset_type];
                         // Otherwise note the contribution to this
                         // trransparent input
-                        total_out_values +=
-                            token::Amount::from_masp_denominated(
+                        total_out_values = total_out_values
+                            .checked_add(token::Amount::from_masp_denominated(
                                 out.value, *digit,
-                            );
+                            ))
+                            .ok_or_else(|| {
+                                Error::NativeVpError(
+                                    native_vp::Error::SimpleMessage(
+                                        "Overflow in total out values sum",
+                                    ),
+                                )
+                            })?;
                     }
                     // unrecognized asset
                     _ => return Ok(false),
