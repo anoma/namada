@@ -5,30 +5,24 @@
 use crate::types::dec::Dec;
 use crate::types::uint::Uint;
 
-/// The domains of inflation
-pub enum RewardsType {
-    /// Proof-of-stake rewards
-    Staking,
-    /// Rewards for locking tokens in the multi-asset shielded pool
-    Masp,
-    /// Rewards for public goods funding (PGF)
-    PubGoodsFunding,
+/// Holds the PD controller values that should be updated in storage
+#[allow(missing_docs)]
+pub struct PosValsToUpdate {
+    pub locked_ratio: Dec,
+    pub inflation: Uint,
 }
 
 /// Holds the PD controller values that should be updated in storage
 #[allow(missing_docs)]
-pub struct ValsToUpdate {
-    pub locked_ratio: Dec,
+pub struct ShieldedValsToUpdate {
     pub inflation: Uint,
 }
 
 /// PD controller used to dynamically adjust the rewards rates
 #[derive(Debug, Clone)]
-pub struct RewardsController {
+pub struct PosRewardsController {
     /// Locked token amount in the relevant system
     pub locked_tokens: Uint,
-    /// Total token supply
-    pub total_tokens: Uint,
     /// Total native token supply
     pub total_native_tokens: Uint,
     /// PD target locked ratio
@@ -47,12 +41,13 @@ pub struct RewardsController {
     pub epochs_per_year: u64,
 }
 
-impl RewardsController {
-    /// Calculate a new rewards rate
-    pub fn run(self) -> ValsToUpdate {
+impl PosRewardsController {
+    /// Calculate a new inflation rate for the Proof-of-stake rewards system.
+    /// Uses the ratios of locked (staked) tokens to the total native token
+    /// supply to determine the new inflation amount.
+    pub fn run(self) -> PosValsToUpdate {
         let Self {
             locked_tokens,
-            total_tokens,
             total_native_tokens,
             locked_ratio_target,
             locked_ratio_last,
@@ -63,31 +58,35 @@ impl RewardsController {
             epochs_per_year,
         } = self;
 
-        // Token amounts must be expressed in terms of the raw amount (namnam)
+        // Token amounts must be expressed in terms of the raw amount
         // to properly run the PD controller
         let locked = Dec::try_from(locked_tokens)
             .expect("Should not fail to convert Uint to Dec");
-        let total = Dec::try_from(total_tokens)
-            .expect("Should not fail to convert Uint to Dec");
         let total_native = Dec::try_from(total_native_tokens)
             .expect("Should not fail to convert Uint to Dec");
+        let last_inflation_amount = Dec::try_from(last_inflation_amount)
+            .expect("Should not fail to convert Uint to Dec");
+
         let epochs_py: Dec = epochs_per_year.into();
 
-        let locked_ratio = if total.is_zero() {
+        // Staked ratio
+        let locked_ratio = if total_native.is_zero() {
             Dec::one()
         } else {
-            locked / total
+            locked / total_native
         };
+
+        // Max inflation amount for this epoch
         let max_inflation = total_native * max_reward_rate / epochs_py;
+
+        // Intermediate values
         let p_gain = p_gain_nom * max_inflation;
         let d_gain = d_gain_nom * max_inflation;
-
         let error = locked_ratio_target - locked_ratio;
         let delta_error = locked_ratio_last - locked_ratio;
         let control_val = p_gain * error - d_gain * delta_error;
 
-        let last_inflation_amount = Dec::try_from(last_inflation_amount)
-            .expect("Should not fail to convert Uint to Dec");
+        // New inflation amount
         let new_inflation_amount_raw = last_inflation_amount + control_val;
         let new_inflation_amount = if new_inflation_amount_raw.is_negative() {
             Uint::zero()
@@ -96,16 +95,98 @@ impl RewardsController {
                 .to_uint()
                 .expect("Should not fail to convert Dec to Uint")
         };
-
         let max_inflation = max_inflation
             .to_uint()
             .expect("Should not fail to convert Dec to Uint");
 
         let inflation = std::cmp::min(new_inflation_amount, max_inflation);
-        ValsToUpdate {
+        PosValsToUpdate {
             locked_ratio,
             inflation,
         }
+    }
+}
+
+/// PD controller used to dynamically adjust the rewards rates
+#[derive(Debug, Clone)]
+pub struct ShieldedRewardsController {
+    /// Locked token amount in the relevant system
+    pub locked_tokens: Uint,
+    /// Total native token supply
+    pub total_native_tokens: Uint,
+    /// PD target locked amount
+    pub locked_tokens_target: Uint,
+    /// PD last locked amount
+    pub locked_tokens_last: Uint,
+    /// Maximum reward rate
+    pub max_reward_rate: Dec,
+    /// Last inflation amount
+    pub last_inflation_amount: Uint,
+    /// Nominal proportional gain
+    pub p_gain_nom: Dec,
+    /// Nominal derivative gain
+    pub d_gain_nom: Dec,
+    /// Number of epochs per year
+    pub epochs_per_year: u64,
+}
+
+impl ShieldedRewardsController {
+    /// Calculate a new inflation rate for the Proof-of-stake rewards system.
+    /// Uses the ratios of locked (staked) tokens to the total native token
+    /// supply to determine the new inflation amount.
+    pub fn run(self) -> ShieldedValsToUpdate {
+        let Self {
+            locked_tokens,
+            total_native_tokens,
+            locked_tokens_target,
+            locked_tokens_last,
+            max_reward_rate,
+            last_inflation_amount,
+            p_gain_nom,
+            d_gain_nom,
+            epochs_per_year,
+        } = self;
+
+        // Token amounts must be expressed in terms of the raw amount
+        // to properly run the PD controller
+        let locked = Dec::try_from(locked_tokens)
+            .expect("Should not fail to convert Uint to Dec");
+        let locked_amount_target = Dec::try_from(locked_tokens_target)
+            .expect("Should not fail to convert Uint to Dec");
+        let locked_amount_last = Dec::try_from(locked_tokens_last)
+            .expect("Should not fail to convert Uint to Dec");
+        let total_native = Dec::try_from(total_native_tokens)
+            .expect("Should not fail to convert Uint to Dec");
+        let last_inflation_amount = Dec::try_from(last_inflation_amount)
+            .expect("Should not fail to convert Uint to Dec");
+
+        let epochs_py: Dec = epochs_per_year.into();
+
+        // Max inflation amount for this epoch
+        let max_inflation = total_native * max_reward_rate / epochs_py;
+
+        // Intermediate values
+        let p_gain = p_gain_nom * max_reward_rate / epochs_py;
+        let d_gain = d_gain_nom * max_reward_rate / epochs_py;
+        let error = locked_amount_target - locked;
+        let delta_error = locked_amount_last - locked;
+        let control_val = p_gain * error - d_gain * delta_error;
+
+        // New inflation amount
+        let new_inflation_amount_raw = last_inflation_amount + control_val;
+        let new_inflation_amount = if new_inflation_amount_raw.is_negative() {
+            Uint::zero()
+        } else {
+            new_inflation_amount_raw
+                .to_uint()
+                .expect("Should not fail to convert Dec to Uint")
+        };
+        let max_inflation = max_inflation
+            .to_uint()
+            .expect("Should not fail to convert Dec to Uint");
+
+        let inflation = std::cmp::min(new_inflation_amount, max_inflation);
+        ShieldedValsToUpdate { inflation }
     }
 }
 
@@ -117,9 +198,8 @@ mod test {
 
     #[test]
     fn test_inflation_calc_up() {
-        let mut controller = RewardsController {
+        let mut controller = PosRewardsController {
             locked_tokens: Uint::from(2_000_000_000),
-            total_tokens: Uint::from(4_000_000_000_u64),
             total_native_tokens: Uint::from(4_000_000_000_u64),
             locked_ratio_target: Dec::from_str("0.66666666").unwrap(),
             locked_ratio_last: Dec::from_str("0.5").unwrap(),
@@ -131,7 +211,7 @@ mod test {
         };
         dbg!(&controller);
 
-        let ValsToUpdate {
+        let PosValsToUpdate {
             locked_ratio: locked_ratio_0,
             inflation: inflation_0,
         } = controller.clone().run();
@@ -143,10 +223,9 @@ mod test {
 
         controller.locked_ratio_last = locked_ratio_0;
         controller.last_inflation_amount = inflation_0;
-        controller.total_tokens += inflation_0;
         controller.locked_tokens += inflation_0;
 
-        let ValsToUpdate {
+        let PosValsToUpdate {
             locked_ratio: locked_ratio_1,
             inflation: inflation_1,
         } = controller.clone().run();
@@ -160,10 +239,9 @@ mod test {
 
         controller.locked_ratio_last = locked_ratio_1;
         controller.last_inflation_amount = inflation_1;
-        controller.total_tokens += inflation_1;
         controller.locked_tokens += inflation_1;
 
-        let ValsToUpdate {
+        let PosValsToUpdate {
             locked_ratio: locked_ratio_2,
             inflation: inflation_2,
         } = controller.run();
@@ -178,9 +256,8 @@ mod test {
 
     #[test]
     fn test_inflation_calc_down() {
-        let mut controller = RewardsController {
+        let mut controller = PosRewardsController {
             locked_tokens: Uint::from(900_000_000),
-            total_tokens: Uint::from(1_000_000_000),
             total_native_tokens: Uint::from(1_000_000_000),
             locked_ratio_target: Dec::from_str("0.66666666").unwrap(),
             locked_ratio_last: Dec::from_str("0.9").unwrap(),
@@ -192,7 +269,7 @@ mod test {
         };
         dbg!(&controller);
 
-        let ValsToUpdate {
+        let PosValsToUpdate {
             locked_ratio: locked_ratio_0,
             inflation: inflation_0,
         } = controller.clone().run();
@@ -204,10 +281,9 @@ mod test {
 
         controller.locked_ratio_last = locked_ratio_0;
         controller.last_inflation_amount = inflation_0;
-        controller.total_tokens += inflation_0;
         controller.locked_tokens += inflation_0;
 
-        let ValsToUpdate {
+        let PosValsToUpdate {
             locked_ratio: locked_ratio_1,
             inflation: inflation_1,
         } = controller.clone().run();
@@ -221,10 +297,9 @@ mod test {
 
         controller.locked_ratio_last = locked_ratio_1;
         controller.last_inflation_amount = inflation_1;
-        controller.total_tokens += inflation_1;
         controller.locked_tokens += inflation_1;
 
-        let ValsToUpdate {
+        let PosValsToUpdate {
             locked_ratio: locked_ratio_2,
             inflation: inflation_2,
         } = controller.run();
@@ -247,11 +322,10 @@ mod test {
         // let a = (init_locked_ratio * total_tokens).to_uint().unwrap();
         let num_rounds = 100;
 
-        let mut controller = RewardsController {
+        let mut controller = PosRewardsController {
             locked_tokens: (init_locked_ratio * total_tokens)
                 .to_uint()
                 .unwrap(),
-            total_tokens: Uint::from(total_tokens),
             total_native_tokens: Uint::from(total_tokens),
             locked_ratio_target: Dec::from_str("0.66666666").unwrap(),
             locked_ratio_last: init_locked_ratio,
@@ -264,7 +338,7 @@ mod test {
         dbg!(&controller);
 
         for round in 0..num_rounds {
-            let ValsToUpdate {
+            let PosValsToUpdate {
                 locked_ratio,
                 inflation,
             } = controller.clone().run();
@@ -276,7 +350,6 @@ mod test {
                  {rate}",
             );
             controller.last_inflation_amount = inflation;
-            controller.total_tokens += inflation;
             controller.total_native_tokens += inflation;
 
             // if rate.abs_diff(&controller.max_reward_rate)
@@ -285,11 +358,12 @@ mod test {
             //     controller.locked_tokens = controller.total_tokens;
             // }
 
-            let tot_tokens = u64::try_from(controller.total_tokens).unwrap();
+            let tot_tokens =
+                u64::try_from(controller.total_native_tokens).unwrap();
             let change_staked_tokens =
                 (staking_growth * tot_tokens).to_uint().unwrap();
             controller.locked_tokens = std::cmp::min(
-                controller.total_tokens,
+                controller.total_native_tokens,
                 controller.locked_tokens + change_staked_tokens,
             );
 

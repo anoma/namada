@@ -59,6 +59,7 @@ use namada_core::types::masp::{
 };
 use namada_core::types::storage::{BlockHeight, Epoch, IndexedTx, TxIndex};
 use namada_core::types::time::{DateTimeUtc, DurationSecs};
+use namada_core::types::uint::Uint;
 use namada_ibc::IbcMessage;
 use namada_token::{self as token, Denomination, MaspDigitPos, Transfer};
 use namada_tx::data::{TxResult, WrapperTx};
@@ -133,7 +134,7 @@ pub struct MaspTokenRewardData {
     pub max_reward_rate: Dec,
     pub kp_gain: Dec,
     pub kd_gain: Dec,
-    pub locked_ratio_target: Dec,
+    pub locked_amount_target: Uint,
 }
 
 #[cfg(feature = "testing")]

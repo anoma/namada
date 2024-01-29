@@ -61,7 +61,7 @@ light_client_attack_min_slash_rate = "0.001"
 cubic_slashing_window_length = 1
 # The minimum amount of bonded tokens that a validator needs to be in
 # either the `consensus` or `below_capacity` validator sets
-validator_stake_threshold = "1"
+validator_stake_threshold = "1000000"
 # The length, in blocks, of the sliding window for consensus validators
 # inactivity verification
 liveness_window_check = 100
