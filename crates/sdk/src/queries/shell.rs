@@ -16,6 +16,7 @@ use namada_core::types::storage::{
     self, BlockHeight, BlockResults, Epoch, KeySeg, PrefixValue,
 };
 use namada_core::types::token::{Denomination, MaspDigitPos};
+use namada_core::types::uint::Uint;
 use namada_state::{DBIter, LastBlock, StorageHasher, DB};
 use namada_storage::{self, ResultExt, StorageRead};
 #[cfg(any(test, feature = "async-client"))]
@@ -269,10 +270,10 @@ where
                     ),
                 ))
             })?;
-        let locked_ratio_target = ctx
+        let locked_amount_target = ctx
             .wl_storage
-            .read::<Dec>(
-                &namada_token::storage_key::masp_locked_ratio_target_key(
+            .read::<Uint>(
+                &namada_token::storage_key::masp_locked_amount_target_key(
                     &token,
                 ),
             )?
@@ -293,7 +294,7 @@ where
             max_reward_rate,
             kp_gain,
             kd_gain,
-            locked_ratio_target,
+            locked_amount_target,
         });
     }
     Ok(data)
