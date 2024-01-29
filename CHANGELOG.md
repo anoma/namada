@@ -1,5 +1,30 @@
 # CHANGELOG
 
+## v0.30.3
+
+Namada 0.30.3 is a patch release that refactors some MASP functionality and fixes some governance and CLI issues.
+
+### BUG FIXES
+
+- Fixing several bugs in how governance and pgf transactions are handled and
+  validated. ([\#2459](https://github.com/anoma/namada/pull/2459))
+
+### IMPROVEMENTS
+
+- Modified the MASP VP to validate the changed storage keys instead of the
+  `Transfer` object. ([\#2452](https://github.com/anoma/namada/pull/2452))
+- MASP inflation for a given token now is adjusted based on a target amount
+  of total locked (shielded) tokens rather than a ratio relative to some total
+  supply. ([\#2460](https://github.com/anoma/namada/pull/2460))
+- Add an address CLI arg that defaults to the native token.
+  ([\#2467](https://github.com/anoma/namada/pull/2467))
+
+### SDK
+
+- Modified `scan_tx` to require the set of changed keys instead of `Transfer`.
+  `fetch_shielded_transfer` now returns the set of changed keys instead of
+  `Transfer`. ([\#2452](https://github.com/anoma/namada/pull/2452))
+
 ## v0.30.2
 
 Namada 0.30.2 is a patch release that contains various bug fixes and improvements.
@@ -55,6 +80,11 @@ Namada 0.30.2 is a patch release that contains various bug fixes and improvement
 ## v0.30.1
 
 Namada 0.30.1 is a patch release that contains various bug fixes for MASP, IBC, the shell and crates refactor (the core has been subdivided into many smaller crates).
+<!--
+    Add a summary for the release here.
+
+    If you don't change this message, or if this file is empty, the release
+    will not be created. -->
 
 ### IMPROVEMENTS
 
