@@ -2892,11 +2892,12 @@ pub mod args {
         );
     pub const BRIDGE_POOL_GAS_PAYER: ArgOpt<WalletAddress> =
         arg_opt("pool-gas-payer");
-    pub const BRIDGE_POOL_GAS_TOKEN: ArgDefaultFromCtx<WalletAddress> =
-        arg_default_from_ctx(
-            "pool-gas-token",
-            DefaultFn(|| "NAM".parse().unwrap()),
-        );
+    pub const BRIDGE_POOL_GAS_TOKEN: ArgDefaultFromCtx<
+        WalletAddrOrNativeToken,
+    > = arg_default_from_ctx(
+        "pool-gas-token",
+        DefaultFn(|| "".parse().unwrap()),
+    );
     pub const BRIDGE_POOL_TARGET: Arg<EthAddress> = arg("target");
     pub const BROADCAST_ONLY: ArgFlag = flag("broadcast-only");
     pub const CHAIN_ID: Arg<ChainId> = arg("chain-id");
@@ -2954,8 +2955,8 @@ pub mod args {
     pub const FORCE: ArgFlag = flag("force");
     pub const GAS_LIMIT: ArgDefault<GasLimit> =
         arg_default("gas-limit", DefaultFn(|| GasLimit::from(25_000)));
-    pub const FEE_TOKEN: ArgDefaultFromCtx<WalletAddress> =
-        arg_default_from_ctx("gas-token", DefaultFn(|| "NAM".parse().unwrap()));
+    pub const FEE_TOKEN: ArgDefaultFromCtx<WalletAddrOrNativeToken> =
+        arg_default_from_ctx("gas-token", DefaultFn(|| "".parse().unwrap()));
     pub const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
     pub const FEE_AMOUNT: ArgDefault<token::DenominatedAmount> = arg_default(
         "fee-amount",
@@ -3343,7 +3344,7 @@ pub mod args {
                 fee_payer: self
                     .fee_payer
                     .map(|fee_payer| chain_ctx.get(&fee_payer)),
-                fee_token: chain_ctx.get(&self.fee_token),
+                fee_token: chain_ctx.get(&self.fee_token).into(),
                 code_path: self.code_path,
             }
         }
@@ -5882,6 +5883,7 @@ pub mod args {
     pub struct CliTypes;
 
     impl NamadaTypes for CliTypes {
+        type AddrOrNativeToken = WalletAddrOrNativeToken;
         type Address = WalletAddress;
         type BalanceOwner = WalletBalanceOwner;
         type BpConversionTable = PathBuf;
@@ -5910,7 +5912,7 @@ pub mod args {
                 initialized_account_alias: self.initialized_account_alias,
                 wallet_alias_force: self.wallet_alias_force,
                 fee_amount: self.fee_amount,
-                fee_token: ctx.get(&self.fee_token),
+                fee_token: ctx.get(&self.fee_token).into(),
                 fee_unshield: self
                     .fee_unshield
                     .map(|ref fee_unshield| ctx.get_cached(fee_unshield)),

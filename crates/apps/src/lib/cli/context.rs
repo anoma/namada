@@ -37,6 +37,10 @@ pub const ENV_VAR_CHAIN_ID: &str = "NAMADA_CHAIN_ID";
 /// in the wallet
 pub type WalletAddress = FromContext<Address>;
 
+/// A raw address (bech32m encoding) or an alias of an address that may be found
+/// in the wallet. Defaults to the native token address.
+pub type WalletAddrOrNativeToken = FromContext<AddrOrNativeToken>;
+
 /// A raw extended spending key (bech32m encoding) or an alias of an extended
 /// spending key in the wallet
 pub type WalletSpendingKey = FromContext<ExtendedSpendingKey>;
@@ -71,6 +75,25 @@ pub type WalletBalanceOwner = FromContext<BalanceOwner>;
 
 /// RPC address of a locally configured node
 pub type ConfigRpcAddress = FromContext<TendermintAddress>;
+
+/// Address that defaults to the native token address.
+#[derive(Clone, Debug)]
+pub struct AddrOrNativeToken(Address);
+
+impl From<AddrOrNativeToken> for Address {
+    fn from(AddrOrNativeToken(addr): AddrOrNativeToken) -> Self {
+        addr
+    }
+}
+
+impl FromStr for AddrOrNativeToken {
+    type Err = <Address as FromStr>::Err;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let addr = Address::from_str(s)?;
+        Ok(Self(addr))
+    }
+}
 
 impl From<TendermintAddress> for ConfigRpcAddress {
     fn from(value: TendermintAddress) -> Self {
@@ -295,6 +318,15 @@ impl<T> FromContext<T> {
     }
 }
 
+impl From<FromContext<Address>> for FromContext<AddrOrNativeToken> {
+    fn from(value: FromContext<Address>) -> Self {
+        Self {
+            raw: value.raw,
+            phantom: PhantomData,
+        }
+    }
+}
+
 impl FromContext<TransferSource> {
     /// Converts this TransferSource argument to an Address. Call this function
     /// only when certain that raw represents an Address.
@@ -416,6 +448,19 @@ impl ArgFromContext for Address {
                     .ok_or(Skip)
             })
             .map_err(|_| format!("Unknown address {raw}"))
+    }
+}
+
+impl ArgFromContext for AddrOrNativeToken {
+    fn arg_from_ctx(
+        ctx: &ChainContext,
+        raw: impl AsRef<str>,
+    ) -> Result<Self, String> {
+        if let Ok(addr) = Address::arg_from_ctx(ctx, raw) {
+            Ok(Self(addr))
+        } else {
+            Ok(Self(ctx.native_token.clone()))
+        }
     }
 }
 

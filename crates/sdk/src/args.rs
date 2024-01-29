@@ -46,6 +46,8 @@ impl ::std::str::FromStr for Duration {
 pub trait NamadaTypes: Clone + std::fmt::Debug {
     /// Represents an address on the ledger
     type Address: Clone + std::fmt::Debug;
+    /// Represents an address that defaults to a native token
+    type AddrOrNativeToken: Clone + std::fmt::Debug + From<Self::Address>;
     /// Represents a key pair
     type Keypair: Clone + std::fmt::Debug;
     /// Represents the address of a Tendermint endpoint (used in context-less
@@ -89,6 +91,7 @@ pub struct BpConversionTableEntry {
 }
 
 impl NamadaTypes for SdkTypes {
+    type AddrOrNativeToken = Address;
     type Address = Address;
     type BalanceOwner = namada_core::types::masp::BalanceOwner;
     type BpConversionTable = HashMap<Address, BpConversionTableEntry>;
@@ -1900,7 +1903,7 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// The fee payer signing key
     pub wrapper_fee_payer: Option<C::PublicKey>,
     /// The token in which the fee is being paid
-    pub fee_token: C::Address,
+    pub fee_token: C::AddrOrNativeToken,
     /// The optional spending key for fee unshielding
     pub fee_unshield: Option<C::TransferSource>,
     /// The max amount of gas used to process tx
@@ -2007,7 +2010,10 @@ pub trait TxBuilder<C: NamadaTypes>: Sized {
     }
     /// The token in which the fee is being paid
     fn fee_token(self, fee_token: C::Address) -> Self {
-        self.tx(|x| Tx { fee_token, ..x })
+        self.tx(|x| Tx {
+            fee_token: fee_token.into(),
+            ..x
+        })
     }
     /// The optional spending key for fee unshielding
     fn fee_unshield(self, fee_unshield: C::TransferSource) -> Self {
@@ -2254,7 +2260,7 @@ pub struct EthereumBridgePool<C: NamadaTypes = SdkTypes> {
     /// If unset, it is the same as the sender.
     pub fee_payer: Option<C::Address>,
     /// The token in which the gas is being paid
-    pub fee_token: C::Address,
+    pub fee_token: C::AddrOrNativeToken,
     /// Path to the tx WASM code file
     pub code_path: PathBuf,
 }
@@ -2317,7 +2323,10 @@ impl<C: NamadaTypes> EthereumBridgePool<C> {
 
     /// The token in which the gas is being paid
     pub fn fee_token(self, fee_token: C::Address) -> Self {
-        Self { fee_token, ..self }
+        Self {
+            fee_token: fee_token.into(),
+            ..self
+        }
     }
 
     /// Path to the tx WASM code file
