@@ -499,7 +499,7 @@ fn setup_storage_for_masp_verification(
         TransferTarget::PaymentAddress(albert_payment_addr),
     );
     shielded_ctx.shell.execute_tx(&shield_tx);
-    shielded_ctx.shell.wl_storage.commit_tx();
+    shielded_ctx.shell.commit_masp_tx(shield_tx);
 
     // Update the anchor in storage
     let tree_key = namada::token::storage_key::masp_commitment_tree_key();
@@ -518,8 +518,6 @@ fn setup_storage_for_masp_verification(
         .write(&anchor_key, ())
         .unwrap();
     shielded_ctx.shell.commit_block();
-    // Cache the masp tx so that it can be returned when queried
-    shielded_ctx.shell.last_block_masp_txs.push(shield_tx);
 
     let (mut shielded_ctx, signed_tx) = match bench_name {
         "shielding" => shielded_ctx.generate_masp_tx(
