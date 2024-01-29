@@ -67,13 +67,13 @@ use namada::types::time::DateTimeUtc;
 use namada::types::token::ConversionState;
 use namada::types::{ethereum_events, ethereum_structs};
 use rayon::prelude::*;
-
-use crate::config::utils::num_of_threads;
-use crate::rocksdb::{
+use rocksdb::{
     BlockBasedOptions, ColumnFamily, ColumnFamilyDescriptor, DBCompactionStyle,
     DBCompressionType, Direction, FlushOptions, IteratorMode, Options,
     ReadOptions, WriteBatch,
 };
+
+use crate::config::utils::num_of_threads;
 
 // TODO the DB schema will probably need some kind of versioning
 
@@ -93,7 +93,7 @@ const NEW_DIFF_PREFIX: &str = "new";
 
 /// RocksDB handle
 #[derive(Debug)]
-pub struct RocksDB(crate::rocksdb::DB);
+pub struct RocksDB(rocksdb::DB);
 
 /// DB Handle for batch writes.
 #[derive(Default)]
@@ -102,7 +102,7 @@ pub struct RocksDBWriteBatch(WriteBatch);
 /// Open RocksDB for the DB
 pub fn open(
     path: impl AsRef<Path>,
-    cache: Option<&crate::rocksdb::Cache>,
+    cache: Option<&rocksdb::Cache>,
 ) -> Result<RocksDB> {
     let logical_cores = num_cpus::get();
     let compaction_threads = num_of_threads(
@@ -190,7 +190,7 @@ pub fn open(
         replay_protection_cf_opts,
     ));
 
-    crate::rocksdb::DB::open_cf_descriptors(&db_opts, path, cfs)
+    rocksdb::DB::open_cf_descriptors(&db_opts, path, cfs)
         .map(RocksDB)
         .map_err(|e| Error::DBError(e.into_string()))
 }
@@ -636,7 +636,7 @@ impl RocksDB {
 }
 
 impl DB for RocksDB {
-    type Cache = crate::rocksdb::Cache;
+    type Cache = rocksdb::Cache;
     type WriteBatch = RocksDBWriteBatch;
 
     fn open(
@@ -1680,7 +1680,7 @@ fn iter_prefix<'a>(
 
 #[derive(Debug)]
 pub struct PersistentPrefixIterator<'a>(
-    PrefixIterator<crate::rocksdb::DBIterator<'a>>,
+    PrefixIterator<rocksdb::DBIterator<'a>>,
 );
 
 impl<'a> Iterator for PersistentPrefixIterator<'a> {
@@ -1755,7 +1755,7 @@ fn unknown_key_error(key: &str) -> Result<()> {
 
 /// Try to increase NOFILE limit and set the `max_open_files` limit to it in
 /// RocksDB options.
-fn set_max_open_files(cf_opts: &mut crate::rocksdb::Options) {
+fn set_max_open_files(cf_opts: &mut rocksdb::Options) {
     #[cfg(unix)]
     imp::set_max_open_files(cf_opts);
     // Nothing to do on non-unix
@@ -1771,7 +1771,7 @@ mod imp {
 
     const DEFAULT_NOFILE_LIMIT: Rlim = Rlim::from_raw(16384);
 
-    pub fn set_max_open_files(cf_opts: &mut crate::rocksdb::Options) {
+    pub fn set_max_open_files(cf_opts: &mut rocksdb::Options) {
         let max_open_files = match increase_nofile_limit() {
             Ok(max_open_files) => Some(max_open_files),
             Err(err) => {
