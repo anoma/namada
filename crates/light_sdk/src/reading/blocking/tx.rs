@@ -5,7 +5,7 @@ use namada_sdk::tx::data::TxResult;
 use super::*;
 
 /// Call the corresponding `tx_event_query` RPC method, to fetch
-/// the current status of a transation.
+/// the current status of a transaction.
 pub fn query_tx_events(
     tendermint_addr: &str,
     tx_hash: &str,

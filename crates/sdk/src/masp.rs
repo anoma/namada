@@ -1867,7 +1867,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             }
         }
 
-        // Anotate the asset type in the value balance with its decoding in
+        // Annotate the asset type in the value balance with its decoding in
         // order to facilitate cross-epoch computations
         let value_balance = builder.value_balance().map_err(|e| {
             Error::Other(format!("unable to complete value balance: {}", e))
