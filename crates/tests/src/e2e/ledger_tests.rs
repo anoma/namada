@@ -89,7 +89,7 @@ fn start_namada_ledger_node_wait_wasm(
     timeout_sec: Option<u64>,
 ) -> Result<NamadaCmd> {
     let mut node = start_namada_ledger_node(test, idx, timeout_sec)?;
-    node.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
+    node.exp_regex(r"Starting RPC HTTP server")?;
     Ok(node)
 }
 
