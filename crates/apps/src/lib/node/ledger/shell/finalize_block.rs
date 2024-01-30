@@ -24,7 +24,6 @@ use namada::vote_ext::ethereum_events::MultiSignedEthEvent;
 use namada::vote_ext::ethereum_tx_data_variants;
 use namada_sdk::tx::new_tx_event;
 
-use super::governance::execute_governance_proposals;
 use super::*;
 use crate::facade::tendermint::abci::types::{Misbehavior, VoteInfo};
 use crate::node::ledger::shell::stats::InternalStats;
@@ -88,18 +87,16 @@ where
                 .expect("Failed tx hashes finalization")
         }
 
-        token::finalize_block(
-            &mut self.wl_storage,
-            &mut response.events,
-            new_epoch,
-        )?;
+        let emit_events = &mut response.events;
+
+        token::finalize_block(&mut self.wl_storage, emit_events, new_epoch)?;
+
+        governance::finalize_block(self, emit_events, new_epoch)?;
 
         let pos_params =
             namada_proof_of_stake::storage::read_pos_params(&self.wl_storage)?;
 
         if new_epoch {
-            execute_governance_proposals(self, &mut response)?;
-
             // Copy the new_epoch + pipeline_len - 1 validator set into
             // new_epoch + pipeline_len
             namada_proof_of_stake::validator_set_update::copy_validator_sets_and_positions(

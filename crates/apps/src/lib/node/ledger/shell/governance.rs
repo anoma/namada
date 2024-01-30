@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use namada::core::event::EmitEvents;
 use namada::governance::pgf::storage::keys as pgf_storage;
 use namada::governance::pgf::storage::steward::StewardDetail;
 use namada::governance::pgf::{storage as pgf, ADDRESS};
@@ -29,15 +30,30 @@ use namada_sdk::proof_of_stake::storage::read_validator_stake;
 use super::utils::force_read;
 use super::*;
 
+pub fn finalize_block<D, H>(
+    shell: &mut Shell<D, H>,
+    events: &mut impl EmitEvents,
+    is_new_epoch: bool,
+) -> Result<()>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    if is_new_epoch {
+        execute_governance_proposals(shell, events)?;
+    }
+    Ok(())
+}
+
 #[derive(Default)]
 pub struct ProposalsResult {
     passed: Vec<u64>,
     rejected: Vec<u64>,
 }
 
-pub fn execute_governance_proposals<D, H>(
+fn execute_governance_proposals<D, H>(
     shell: &mut Shell<D, H>,
-    response: &mut shim::response::FinalizeBlock,
+    events: &mut impl EmitEvents,
 ) -> Result<ProposalsResult>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -151,14 +167,14 @@ where
                                 .get_last_block_height()
                                 + 1;
                             event["height"] = height.to_string();
-                            response.events.push(event);
+                            events.emit(event);
                         }
 
                         ProposalEvent::pgf_payments_proposal_event(id, result)
                             .into()
                     }
                 };
-                response.events.push(proposal_event);
+                events.emit(proposal_event);
                 proposals_result.passed.push(id);
 
                 gov_api::get_proposal_author(&shell.wl_storage, id)?
@@ -183,7 +199,7 @@ where
                 }
                 let proposal_event =
                     ProposalEvent::rejected_proposal_event(id).into();
-                response.events.push(proposal_event);
+                events.emit(proposal_event);
                 proposals_result.rejected.push(id);
 
                 tracing::info!(
