@@ -19,6 +19,7 @@ use namada_state::{OptionExt, ResultExt};
 use namada_token::read_denom;
 use namada_tx::Tx;
 use namada_vp_env::VpEnv;
+use num_traits::ops::checked::{CheckedAdd, CheckedSub};
 use ripemd::Digest as RipemdDigest;
 use sha2::Digest as Sha2Digest;
 use thiserror::Error;
@@ -462,12 +463,18 @@ where
             // 3. Public key must be the hash of the source
             for vin in &transp_bundle.vin {
                 // Non-masp sources add to the transparent tx pool
-                transparent_tx_pool += I128Sum::from_nonnegative(
-                    vin.asset_type,
-                    vin.value as i128,
-                )
-                .ok()
-                .ok_or_err_msg("invalid value or asset type for amount")?;
+                transparent_tx_pool = transparent_tx_pool
+                    .checked_add(
+                        &I128Sum::from_nonnegative(
+                            vin.asset_type,
+                            vin.value as i128,
+                        )
+                        .ok()
+                        .ok_or_err_msg(
+                            "invalid value or asset type for amount",
+                        )?,
+                    )
+                    .ok_or_err_msg("Overflow in input sum")?;
 
                 // Satisfies 3.
                 if <[u8; 20]>::from(hash) != vin.address.0 {
@@ -608,12 +615,18 @@ where
             for out in &transp_bundle.vout {
                 // Non-masp destinations subtract from transparent tx
                 // pool
-                transparent_tx_pool -= I128Sum::from_nonnegative(
-                    out.asset_type,
-                    out.value as i128,
-                )
-                .ok()
-                .ok_or_err_msg("invalid value or asset type for amount")?;
+                transparent_tx_pool = transparent_tx_pool
+                    .checked_sub(
+                        &I128Sum::from_nonnegative(
+                            out.asset_type,
+                            out.value as i128,
+                        )
+                        .ok()
+                        .ok_or_err_msg(
+                            "invalid value or asset type for amount",
+                        )?,
+                    )
+                    .ok_or_err_msg("Underflow in output subtraction")?;
 
                 // Satisfies 3.
                 if <[u8; 20]>::from(hash) != out.address.0 {
