@@ -57,8 +57,8 @@ use namada_core::types::address::{Address, MASP};
 use namada_core::types::dec::Dec;
 use namada_core::types::ibc::IbcShieldedTransfer;
 use namada_core::types::masp::{
-    encode_asset_type, AssetData, BalanceOwner, ExtendedViewingKey,
-    PaymentAddress, TransferSource, TransferTarget,
+    encode_asset_type, AssetData, BalanceOwner, PaymentAddress, TransferSource,
+    TransferTarget,
 };
 use namada_core::types::storage::{BlockHeight, Epoch, IndexedTx, TxIndex};
 use namada_core::types::time::{DateTimeUtc, DurationSecs};
@@ -636,26 +636,27 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             // transactions
             if Some(indexed_tx) > last_witnessed_tx {
                 self.update_witness_map(indexed_tx, &stx)?;
+                // Save the new state of the context
+                let _ = self.save().await;
             }
-            let mut vk_heights = BTreeMap::new();
-            std::mem::swap(&mut vk_heights, &mut self.vk_heights);
+            let vk_heights = self.vk_heights.clone();
             // Scan the current transaction with all the outdated viewing keys
-            for (vk, h) in vk_heights
-                .iter_mut()
-                .filter(|(_vk, h)| **h < Some(indexed_tx))
+            for (vk, _h) in
+                vk_heights.iter().filter(|(_vk, h)| **h < Some(indexed_tx))
             {
                 self.scan_tx(indexed_tx, epoch, &tx, &stx, vk)?;
                 // Retimestamp this viewing key
-                *h = Some(indexed_tx);
+                self.vk_heights.insert(*vk, Some(indexed_tx));
+                // Save the new state of the context
+                let _ = self.save().await;
             }
-            std::mem::swap(&mut vk_heights, &mut self.vk_heights);
         }
         Ok(())
     }
 
     /// Fetch the current state of the multi-asset shielded pool into a
     /// ShieldedContext
-    pub async fn fetch<C: Client + Sync>(
+    pub async fn sync<C: Client + Sync>(
         &mut self,
         client: &C,
         last_block_height: Option<BlockHeight>,
@@ -1702,18 +1703,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         }
         // We want to fund our transaction solely from supplied spending key
         let spending_key = spending_key.map(|x| x.into());
-        let spending_keys: Vec<_> = spending_key.into_iter().collect();
         {
             // Load the current shielded context given the spending key we
             // possess
             let mut shielded = context.shielded_mut().await;
             let _ = shielded.load().await;
-            shielded
-                .fetch(context.client(), None, &spending_keys, &[])
-                .await?;
-            // Save the update state so that future fetches can be
-            // short-circuited
-            let _ = shielded.save().await;
         }
         // Determine epoch in which to submit potential shielded transaction
         let epoch = rpc::query_epoch(context.client()).await?;
@@ -2148,21 +2142,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         client: &C,
         query_owner: &Either<BalanceOwner, Vec<Address>>,
         query_token: &Option<Address>,
-        viewing_keys: &HashMap<String, ExtendedViewingKey>,
     ) -> Result<
         BTreeMap<IndexedTx, (Epoch, TransferDelta, TransactionDelta)>,
         Error,
     > {
         const TXS_PER_PAGE: u8 = 100;
         let _ = self.load().await;
-        let vks = viewing_keys;
-        let fvks: Vec<_> = vks
-            .values()
-            .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
-            .collect();
-        self.fetch(client, None, &[], &fvks).await?;
-        // Save the update state so that future fetches can be short-circuited
-        let _ = self.save().await;
         // Required for filtering out rejected transactions from Tendermint
         // responses
         let block_results = rpc::query_results(client).await?;
