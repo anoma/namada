@@ -17,12 +17,12 @@ use namada::state::write_log::StorageModification;
 use namada::state::{
     ResultExt, StorageRead, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY,
 };
-use namada::token::conversion::update_allowed_conversions;
 use namada::tx::data::protocol::ProtocolTxType;
 use namada::types::key::tm_raw_hash_to_string;
 use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
 use namada::vote_ext::ethereum_events::MultiSignedEthEvent;
 use namada::vote_ext::ethereum_tx_data_variants;
+use namada_sdk::tx::new_tx_event;
 
 use super::governance::execute_governance_proposals;
 use super::*;
@@ -88,12 +88,16 @@ where
                 .expect("Failed tx hashes finalization")
         }
 
+        token::finalize_block(
+            &mut self.wl_storage,
+            &mut response.events,
+            new_epoch,
+        )?;
+
         let pos_params =
             namada_proof_of_stake::storage::read_pos_params(&self.wl_storage)?;
 
         if new_epoch {
-            update_allowed_conversions(&mut self.wl_storage)?;
-
             execute_governance_proposals(self, &mut response)?;
 
             // Copy the new_epoch + pipeline_len - 1 validator set into
@@ -216,7 +220,7 @@ where
             {
                 let mut tx_event = match tx.header().tx_type {
                     TxType::Wrapper(_) | TxType::Protocol(_) => {
-                        Event::new_tx_event(&tx, height.0)
+                        new_tx_event(&tx, height.0)
                     }
                     _ => {
                         tracing::error!(
@@ -249,7 +253,7 @@ where
             if ResultCode::from_u32(processed_tx.result.code).unwrap()
                 != ResultCode::Ok
             {
-                let mut tx_event = Event::new_tx_event(&tx, height.0);
+                let mut tx_event = new_tx_event(&tx, height.0);
                 tx_event["code"] = processed_tx.result.code.to_string();
                 tx_event["info"] =
                     format!("Tx rejected: {}", &processed_tx.result.info);
@@ -277,7 +281,7 @@ where
             ) = match &tx_header.tx_type {
                 TxType::Wrapper(wrapper) => {
                     stats.increment_wrapper_txs();
-                    let tx_event = Event::new_tx_event(&tx, height.0);
+                    let tx_event = new_tx_event(&tx, height.0);
                     let gas_meter = TxGasMeter::new(wrapper.gas_limit);
                     (
                         tx_event,
@@ -298,7 +302,7 @@ where
                         .tx_queue
                         .pop()
                         .expect("Missing wrapper tx in queue");
-                    let mut event = Event::new_tx_event(&tx, height.0);
+                    let mut event = new_tx_event(&tx, height.0);
 
                     match inner {
                         DecryptedTx::Decrypted => {
@@ -345,7 +349,7 @@ where
                     | ProtocolTxType::BridgePool
                     | ProtocolTxType::ValSetUpdateVext
                     | ProtocolTxType::ValidatorSetUpdate => (
-                        Event::new_tx_event(&tx, height.0),
+                        new_tx_event(&tx, height.0),
                         None,
                         TxGasMeter::new_from_sub_limit(0.into()),
                         None,
@@ -370,7 +374,7 @@ where
                             }
                         }
                         (
-                            Event::new_tx_event(&tx, height.0),
+                            new_tx_event(&tx, height.0),
                             None,
                             TxGasMeter::new_from_sub_limit(0.into()),
                             None,
@@ -398,7 +402,7 @@ where
                             }
                         }
                         (
-                            Event::new_tx_event(&tx, height.0),
+                            new_tx_event(&tx, height.0),
                             None,
                             TxGasMeter::new_from_sub_limit(0.into()),
                             None,

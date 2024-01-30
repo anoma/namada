@@ -4,6 +4,10 @@ pub mod data;
 pub mod proto;
 mod types;
 
+use std::collections::HashMap;
+
+use data::TxType;
+use namada_core::event::{Event, EventLevel, EventType};
 pub use namada_core::types::key::SignableEthMessage;
 pub use namada_core::types::sign::SignatureIndex;
 pub use types::{
@@ -11,6 +15,48 @@ pub use types::{
     CompressedSignature, Data, DecodeError, Header, MaspBuilder, Memo, Section,
     Signature, Signed, Signer, Tx, TxError, VerifySigError,
 };
+
+/// Creates a new event with the hash and height of the transaction
+/// already filled in
+pub fn new_tx_event(tx: &Tx, height: u64) -> Event {
+    let mut event = match tx.header().tx_type {
+        TxType::Wrapper(_) => {
+            let mut event = Event {
+                event_type: EventType::Accepted,
+                level: EventLevel::Tx,
+                attributes: HashMap::new(),
+            };
+            event["hash"] = tx.header_hash().to_string();
+            event
+        }
+        TxType::Decrypted(_) => {
+            let mut event = Event {
+                event_type: EventType::Applied,
+                level: EventLevel::Tx,
+                attributes: HashMap::new(),
+            };
+            event["hash"] = tx
+                .clone()
+                .update_header(TxType::Raw)
+                .header_hash()
+                .to_string();
+            event
+        }
+        TxType::Protocol(_) => {
+            let mut event = Event {
+                event_type: EventType::Applied,
+                level: EventLevel::Tx,
+                attributes: HashMap::new(),
+            };
+            event["hash"] = tx.header_hash().to_string();
+            event
+        }
+        _ => unreachable!(),
+    };
+    event["height"] = height.to_string();
+    event["log"] = "".to_string();
+    event
+}
 
 #[cfg(test)]
 mod tests {
