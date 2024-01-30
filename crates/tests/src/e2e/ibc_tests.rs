@@ -1130,7 +1130,7 @@ fn transfer_on_chain(
         "--node",
         &rpc,
     ];
-    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
     client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
@@ -1297,6 +1297,16 @@ fn shielded_transfer(
 
     // Send a token to the shielded address on Chain A
     transfer_on_chain(test_a, ALBERT, AA_PAYMENT_ADDRESS, BTC, 10, ALBERT_KEY)?;
+    let rpc = get_actor_rpc(test_a, Who::Validator(0));
+    let tx_args = vec![
+        "shielded-sync",
+        "--viewing-keys",
+        AA_VIEWING_KEY,
+        "--node",
+        &rpc,
+    ];
+    let mut client = run!(test_a, Bin::Client, tx_args, Some(120))?;
+    client.assert_success();
 
     // Send a token from SP(A) on Chain A to PA(B) on Chain B
     let amount = Amount::native_whole(10).to_string_native();
@@ -1899,6 +1909,15 @@ fn check_shielded_balances(
     let token_addr = find_address(test_a, BTC)?.to_string();
     std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
     let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
+    let tx_args = vec![
+        "shielded-sync",
+        "--viewing-keys",
+        AB_VIEWING_KEY,
+        "--node",
+        &rpc_b,
+    ];
+    let mut client = run!(test_b, Bin::Client, tx_args, Some(120))?;
+    client.assert_success();
     let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/btc");
     let query_args = vec![
         "balance",
