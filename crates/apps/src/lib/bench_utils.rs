@@ -1,6 +1,7 @@
 //! Library code for benchmarks provides a wrapper of the ledger's shell
 //! `BenchShell` and helper functions to generate transactions.
 
+use std::collections::BTreeSet;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::ops::{Deref, DerefMut};
@@ -59,6 +60,7 @@ use namada::ledger::queries::{
 use namada::state::StorageRead;
 use namada::tendermint_rpc::{self};
 use namada::tx::data::pos::Bond;
+use namada::tx::data::{TxResult, VpsResult};
 use namada::tx::{Code, Data, Section, Signature, Tx};
 use namada::types::address::{self, Address, InternalAddress};
 use namada::types::chain::ChainId;
@@ -123,9 +125,9 @@ static SHELL_INIT: Once = Once::new();
 
 pub struct BenchShell {
     pub inner: Shell,
-    // Cache of the masp transactions in the last block committed, the tx index
-    // coincides with the index in this collection
-    pub last_block_masp_txs: Vec<Tx>,
+    // Cache of the masp transactions and their changed keys in the last block
+    // committed, the tx index coincides with the index in this collection
+    pub last_block_masp_txs: Vec<(Tx, BTreeSet<Key>)>,
     // NOTE: Temporary directory should be dropped last since Shell need to
     // flush data on drop
     tempdir: TempDir,
@@ -555,9 +557,9 @@ impl BenchShell {
             .unwrap();
     }
 
+    // Update the block height in state to guarantee a valid response to the
+    // client queries
     pub fn commit_block(&mut self) {
-        // Update the block height in state to guarantee a valid response to the
-        // client queries
         self.inner
             .wl_storage
             .storage
@@ -568,6 +570,14 @@ impl BenchShell {
             .unwrap();
 
         self.inner.commit();
+    }
+
+    // Commit a masp transaction and cache the tx and the changed keys for
+    // client queries
+    pub fn commit_masp_tx(&mut self, masp_tx: Tx) {
+        self.last_block_masp_txs
+            .push((masp_tx, self.wl_storage.write_log.get_keys()));
+        self.wl_storage.commit_tx();
     }
 }
 
@@ -797,7 +807,10 @@ impl Client for BenchShell {
                     evidence_hash: None,
                     proposer_address: tendermint::account::Id::new([0u8; 20]),
                 },
-                last_block_txs.into_iter().map(|tx| tx.to_bytes()).collect(),
+                last_block_txs
+                    .into_iter()
+                    .map(|(tx, _)| tx.to_bytes())
+                    .collect(),
                 tendermint::evidence::List::default(),
                 None,
             )
@@ -828,14 +841,27 @@ impl Client for BenchShell {
                 self.last_block_masp_txs
                     .iter()
                     .enumerate()
-                    .map(|(idx, _tx)| {
+                    .map(|(idx, (_tx, changed_keys))| {
+                        let tx_result = TxResult {
+                            gas_used: 0.into(),
+                            changed_keys: changed_keys.to_owned(),
+                            vps_result: VpsResult::default(),
+                            initialized_accounts: vec![],
+                            ibc_events: BTreeSet::default(),
+                            eth_bridge_events: BTreeSet::default(),
+                        };
                         namada::tendermint::abci::Event {
                             kind: "applied".to_string(),
-                            // Mock only the masp attribute
+                            // Mock the masp and tx attributes
                             attributes: vec![
                                 namada::tendermint::abci::EventAttribute {
                                     key: "is_valid_masp_tx".to_string(),
                                     value: format!("{}", idx),
+                                    index: true,
+                                },
+                                namada::tendermint::abci::EventAttribute {
+                                    key: "inner_tx".to_string(),
+                                    value: tx_result.to_string(),
                                     index: true,
                                 },
                             ],

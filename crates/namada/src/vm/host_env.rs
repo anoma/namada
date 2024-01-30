@@ -43,6 +43,7 @@ use crate::vm::{HostRef, MutHostRef};
 
 /// These runtime errors will abort tx WASM execution immediately
 #[allow(missing_docs)]
+#[allow(clippy::result_large_err)]
 #[derive(Error, Debug)]
 pub enum TxRuntimeError {
     #[error("Out of gas: {0}")]

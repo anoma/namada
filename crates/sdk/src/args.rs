@@ -46,12 +46,17 @@ impl ::std::str::FromStr for Duration {
 pub trait NamadaTypes: Clone + std::fmt::Debug {
     /// Represents an address on the ledger
     type Address: Clone + std::fmt::Debug;
-    /// Represents the address of a native token
-    type NativeAddress: Clone + std::fmt::Debug;
+    /// Represents an address that defaults to a native token
+    type AddrOrNativeToken: Clone + std::fmt::Debug + From<Self::Address>;
     /// Represents a key pair
     type Keypair: Clone + std::fmt::Debug;
-    /// Represents the address of a Tendermint endpoint
+    /// Represents the address of a Tendermint endpoint (used in context-less
+    /// CLI commands where chain config isn't available)
     type TendermintAddress: Clone + std::fmt::Debug;
+    /// RPC address of a locally configured node
+    type ConfigRpcTendermintAddress: Clone
+        + std::fmt::Debug
+        + From<Self::TendermintAddress>;
     /// Represents the address of an Ethereum endpoint
     type EthereumAddress: Clone + std::fmt::Debug;
     /// Represents a viewing key
@@ -86,15 +91,16 @@ pub struct BpConversionTableEntry {
 }
 
 impl NamadaTypes for SdkTypes {
+    type AddrOrNativeToken = Address;
     type Address = Address;
     type BalanceOwner = namada_core::types::masp::BalanceOwner;
     type BpConversionTable = HashMap<Address, BpConversionTableEntry>;
+    type ConfigRpcTendermintAddress = tendermint_config::net::Address;
     type Data = Vec<u8>;
     type EthereumAddress = ();
     type Keypair = namada_core::types::key::common::SecretKey;
-    type NativeAddress = Address;
     type PublicKey = namada_core::types::key::common::PublicKey;
-    type TendermintAddress = ();
+    type TendermintAddress = tendermint_config::net::Address;
     type TransferSource = namada_core::types::masp::TransferSource;
     type TransferTarget = namada_core::types::masp::TransferTarget;
     type ViewingKey = namada_core::types::masp::ExtendedViewingKey;
@@ -103,6 +109,13 @@ impl NamadaTypes for SdkTypes {
 /// Common query arguments
 #[derive(Clone, Debug)]
 pub struct Query<C: NamadaTypes = SdkTypes> {
+    /// The address of the ledger node as host:port
+    pub ledger_address: C::ConfigRpcTendermintAddress,
+}
+
+/// Common query arguments
+#[derive(Clone, Debug)]
+pub struct QueryWithoutCtx<C: NamadaTypes = SdkTypes> {
     /// The address of the ledger node as host:port
     pub ledger_address: C::TendermintAddress,
 }
@@ -223,8 +236,6 @@ pub struct TxTransfer<C: NamadaTypes = SdkTypes> {
     pub token: C::Address,
     /// Transferred token amount
     pub amount: InputAmount,
-    /// Native token address
-    pub native_token: C::NativeAddress,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -260,14 +271,6 @@ impl<C: NamadaTypes> TxTransfer<C> {
     /// Transferred token amount
     pub fn amount(self, amount: InputAmount) -> Self {
         Self { amount, ..self }
-    }
-
-    /// Native token address
-    pub fn native_token(self, native_token: C::NativeAddress) -> Self {
-        Self {
-            native_token,
-            ..self
-        }
     }
 
     /// Path to the TX WASM code file
@@ -411,8 +414,6 @@ pub struct InitProposal<C: NamadaTypes = SdkTypes> {
     pub tx: Tx<C>,
     /// The proposal data
     pub proposal_data: C::Data,
-    /// Native token address
-    pub native_token: C::NativeAddress,
     /// Flag if proposal should be run offline
     pub is_offline: bool,
     /// Flag if proposal is of type Pgf stewards
@@ -440,14 +441,6 @@ impl<C: NamadaTypes> InitProposal<C> {
     pub fn proposal_data(self, proposal_data: C::Data) -> Self {
         Self {
             proposal_data,
-            ..self
-        }
-    }
-
-    /// Native token address
-    pub fn native_token(self, native_token: C::NativeAddress) -> Self {
-        Self {
-            native_token,
             ..self
         }
     }
@@ -890,8 +883,6 @@ pub struct Bond<C: NamadaTypes = SdkTypes> {
     /// Source address for delegations. For self-bonds, the validator is
     /// also the source.
     pub source: Option<C::Address>,
-    /// Native token address
-    pub native_token: C::NativeAddress,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -924,14 +915,6 @@ impl<C: NamadaTypes> Bond<C> {
     pub fn source(self, source: C::Address) -> Self {
         Self {
             source: Some(source),
-            ..self
-        }
-    }
-
-    /// Native token address
-    pub fn native_token(self, native_token: C::NativeAddress) -> Self {
-        Self {
-            native_token,
             ..self
         }
     }
@@ -1908,7 +1891,7 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// Do not wait for the transaction to be added to the blockchain
     pub broadcast_only: bool,
     /// The address of the ledger node as host:port
-    pub ledger_address: C::TendermintAddress,
+    pub ledger_address: C::ConfigRpcTendermintAddress,
     /// If any new account is initialized by the tx, use the given alias to
     /// save it in the wallet.
     pub initialized_account_alias: Option<String>,
@@ -1920,7 +1903,7 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// The fee payer signing key
     pub wrapper_fee_payer: Option<C::PublicKey>,
     /// The token in which the fee is being paid
-    pub fee_token: C::Address,
+    pub fee_token: C::AddrOrNativeToken,
     /// The optional spending key for fee unshielding
     pub fee_unshield: Option<C::TransferSource>,
     /// The max amount of gas used to process tx
@@ -1988,7 +1971,7 @@ pub trait TxBuilder<C: NamadaTypes>: Sized {
     /// The address of the ledger node as host:port
     fn ledger_address(self, ledger_address: C::TendermintAddress) -> Self {
         self.tx(|x| Tx {
-            ledger_address,
+            ledger_address: C::ConfigRpcTendermintAddress::from(ledger_address),
             ..x
         })
     }
@@ -2027,7 +2010,10 @@ pub trait TxBuilder<C: NamadaTypes>: Sized {
     }
     /// The token in which the fee is being paid
     fn fee_token(self, fee_token: C::Address) -> Self {
-        self.tx(|x| Tx { fee_token, ..x })
+        self.tx(|x| Tx {
+            fee_token: fee_token.into(),
+            ..x
+        })
     }
     /// The optional spending key for fee unshielding
     fn fee_unshield(self, fee_unshield: C::TransferSource) -> Self {
@@ -2274,7 +2260,7 @@ pub struct EthereumBridgePool<C: NamadaTypes = SdkTypes> {
     /// If unset, it is the same as the sender.
     pub fee_payer: Option<C::Address>,
     /// The token in which the gas is being paid
-    pub fee_token: C::Address,
+    pub fee_token: C::AddrOrNativeToken,
     /// Path to the tx WASM code file
     pub code_path: PathBuf,
 }
@@ -2337,7 +2323,10 @@ impl<C: NamadaTypes> EthereumBridgePool<C> {
 
     /// The token in which the gas is being paid
     pub fn fee_token(self, fee_token: C::Address) -> Self {
-        Self { fee_token, ..self }
+        Self {
+            fee_token: fee_token.into(),
+            ..self
+        }
     }
 
     /// Path to the tx WASM code file
@@ -2359,8 +2348,8 @@ impl EthereumBridgePool {
 /// Bridge pool proof arguments.
 #[derive(Debug, Clone)]
 pub struct BridgePoolProof<C: NamadaTypes = SdkTypes> {
-    /// The query parameters.
-    pub query: Query<C>,
+    /// The address of the ledger node as host:port
+    pub ledger_address: C::TendermintAddress,
     /// The keccak hashes of transfers to
     /// acquire a proof of.
     pub transfers: Vec<KeccakHash>,
@@ -2376,8 +2365,8 @@ pub struct BridgePoolProof<C: NamadaTypes = SdkTypes> {
 /// Arguments to an Ethereum Bridge pool relay operation.
 #[derive(Debug, Clone)]
 pub struct RelayBridgePoolProof<C: NamadaTypes = SdkTypes> {
-    /// The query parameters.
-    pub query: Query<C>,
+    /// The address of the ledger node as host:port
+    pub ledger_address: C::TendermintAddress,
     /// The hashes of the transfers to be relayed
     pub transfers: Vec<KeccakHash>,
     /// The Namada address for receiving fees for relaying
@@ -2406,8 +2395,8 @@ pub struct RelayBridgePoolProof<C: NamadaTypes = SdkTypes> {
 /// Bridge validator set arguments.
 #[derive(Debug, Clone)]
 pub struct BridgeValidatorSet<C: NamadaTypes = SdkTypes> {
-    /// The query parameters.
-    pub query: Query<C>,
+    /// The address of the ledger node as host:port
+    pub ledger_address: C::TendermintAddress,
     /// The epoch to query.
     pub epoch: Option<Epoch>,
 }
@@ -2415,8 +2404,8 @@ pub struct BridgeValidatorSet<C: NamadaTypes = SdkTypes> {
 /// Governance validator set arguments.
 #[derive(Debug, Clone)]
 pub struct GovernanceValidatorSet<C: NamadaTypes = SdkTypes> {
-    /// The query parameters.
-    pub query: Query<C>,
+    /// The address of the ledger node as host:port
+    pub ledger_address: C::TendermintAddress,
     /// The epoch to query.
     pub epoch: Option<Epoch>,
 }
@@ -2424,8 +2413,8 @@ pub struct GovernanceValidatorSet<C: NamadaTypes = SdkTypes> {
 /// Validator set proof arguments.
 #[derive(Debug, Clone)]
 pub struct ValidatorSetProof<C: NamadaTypes = SdkTypes> {
-    /// The query parameters.
-    pub query: Query<C>,
+    /// The address of the ledger node as host:port
+    pub ledger_address: C::TendermintAddress,
     /// The epoch to query.
     pub epoch: Option<Epoch>,
 }
@@ -2436,8 +2425,8 @@ pub struct ValidatorSetUpdateRelay<C: NamadaTypes = SdkTypes> {
     /// Run in daemon mode, which will continuously
     /// perform validator set updates.
     pub daemon: bool,
-    /// The query parameters.
-    pub query: Query<C>,
+    /// The address of the ledger node as host:port
+    pub ledger_address: C::TendermintAddress,
     /// The number of block confirmations on Ethereum.
     pub confirmations: u64,
     /// The Ethereum RPC endpoint.

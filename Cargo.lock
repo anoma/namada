@@ -3901,8 +3901,7 @@ dependencies = [
 [[package]]
 name = "librocksdb-sys"
 version = "0.11.0+8.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3386f101bcb4bd252d8e9d2fb41ec3b0862a15a62b478c355b2982efa469e3e"
+source = "git+https://github.com/heliaxdev/rust-rocksdb?rev=20f158ade557eea2d62baece0a5b5b55a34f4915#20f158ade557eea2d62baece0a5b5b55a34f4915"
 dependencies = [
  "bindgen",
  "bzip2-sys",
@@ -4259,7 +4258,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "namada"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -4341,7 +4340,7 @@ dependencies = [
 
 [[package]]
 name = "namada_account"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "borsh 1.2.1",
  "namada_core",
@@ -4353,7 +4352,7 @@ dependencies = [
 
 [[package]]
 name = "namada_apps"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "ark-serialize",
  "ark-std",
@@ -4443,7 +4442,7 @@ dependencies = [
 
 [[package]]
 name = "namada_benchmarks"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "borsh 1.2.1",
  "borsh-ext",
@@ -4460,7 +4459,7 @@ dependencies = [
 
 [[package]]
 name = "namada_core"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "bech32 0.8.1",
  "borsh 1.2.1",
@@ -4510,7 +4509,7 @@ dependencies = [
 
 [[package]]
 name = "namada_encoding_spec"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "borsh 1.2.1",
  "itertools 0.10.5",
@@ -4521,7 +4520,7 @@ dependencies = [
 
 [[package]]
 name = "namada_ethereum_bridge"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "assert_matches",
  "borsh 1.2.1",
@@ -4553,7 +4552,7 @@ dependencies = [
 
 [[package]]
 name = "namada_examples"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "masp_proofs",
  "namada_sdk",
@@ -4564,7 +4563,7 @@ dependencies = [
 
 [[package]]
 name = "namada_gas"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "assert_matches",
  "borsh 1.2.1",
@@ -4576,7 +4575,7 @@ dependencies = [
 
 [[package]]
 name = "namada_governance"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "borsh 1.2.1",
  "namada_core",
@@ -4593,7 +4592,7 @@ dependencies = [
 
 [[package]]
 name = "namada_ibc"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "borsh 1.2.1",
  "ibc",
@@ -4618,7 +4617,7 @@ dependencies = [
 
 [[package]]
 name = "namada_light_sdk"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "borsh 1.2.1",
  "borsh-ext",
@@ -4632,7 +4631,7 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "pretty_assertions",
  "proc-macro2",
@@ -4642,7 +4641,7 @@ dependencies = [
 
 [[package]]
 name = "namada_merkle_tree"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "assert_matches",
  "borsh 1.2.1",
@@ -4658,7 +4657,7 @@ dependencies = [
 
 [[package]]
 name = "namada_parameters"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "borsh 1.2.1",
  "namada_core",
@@ -4669,7 +4668,7 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "assert_matches",
  "borsh 1.2.1",
@@ -4698,7 +4697,7 @@ dependencies = [
 
 [[package]]
 name = "namada_sdk"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -4748,6 +4747,7 @@ dependencies = [
  "sha2 0.9.9",
  "slip10_ed25519",
  "tempfile",
+ "tendermint-config",
  "tendermint-rpc",
  "thiserror",
  "tiny-bip39",
@@ -4761,7 +4761,7 @@ dependencies = [
 
 [[package]]
 name = "namada_shielded_token"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "masp_primitives",
  "namada_core",
@@ -4777,7 +4777,7 @@ dependencies = [
 
 [[package]]
 name = "namada_state"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "assert_matches",
  "borsh 1.2.1",
@@ -4803,7 +4803,7 @@ dependencies = [
 
 [[package]]
 name = "namada_storage"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "borsh 1.2.1",
  "itertools 0.10.5",
@@ -4817,7 +4817,7 @@ dependencies = [
 
 [[package]]
 name = "namada_test_utils"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "borsh 1.2.1",
  "namada_core",
@@ -4826,7 +4826,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tests"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "assert_cmd",
  "async-trait",
@@ -4878,7 +4878,7 @@ dependencies = [
 
 [[package]]
 name = "namada_token"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "namada_core",
  "namada_shielded_token",
@@ -4888,7 +4888,7 @@ dependencies = [
 
 [[package]]
 name = "namada_trans_token"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "namada_core",
  "namada_storage",
@@ -4896,7 +4896,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "ark-bls12-381",
  "assert_matches",
@@ -4920,7 +4920,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_env"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "namada_core",
  "namada_storage",
@@ -4928,7 +4928,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "borsh 1.2.1",
  "masp_primitives",
@@ -4950,7 +4950,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "borsh 1.2.1",
  "masp_primitives",
@@ -4959,7 +4959,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vote_ext"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "borsh 1.2.1",
  "data-encoding",
@@ -4970,7 +4970,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_env"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "derivative",
  "masp_primitives",
@@ -4983,7 +4983,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.30.2"
+version = "0.30.3"
 dependencies = [
  "borsh 1.2.1",
  "namada_account",
@@ -6419,8 +6419,7 @@ dependencies = [
 [[package]]
 name = "rocksdb"
 version = "0.21.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb6f170a4041d50a0ce04b0d2e14916d6ca863ea2e422689a5b694395d299ffe"
+source = "git+https://github.com/heliaxdev/rust-rocksdb?rev=20f158ade557eea2d62baece0a5b5b55a34f4915#20f158ade557eea2d62baece0a5b5b55a34f4915"
 dependencies = [
  "libc",
  "librocksdb-sys",

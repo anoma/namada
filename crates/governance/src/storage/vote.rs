@@ -23,26 +23,6 @@ pub enum ProposalVote {
     Abstain,
 }
 
-/// The type of a governance vote with the optional associated Memo
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    BorshSerialize,
-    BorshDeserialize,
-    Eq,
-    Serialize,
-    Deserialize,
-)]
-pub enum VoteType {
-    /// A default vote without Memo
-    Default,
-    /// A vote for the PGF stewards
-    PGFSteward,
-    /// A vote for a PGF payment proposal
-    PGFPayment,
-}
-
 impl ProposalVote {
     /// Check if a vote is yay
     pub fn is_yay(&self) -> bool {

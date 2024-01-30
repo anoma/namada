@@ -2523,7 +2523,7 @@ pub async fn query_masp_reward_tokens(context: &impl Namada) {
         max_reward_rate,
         kp_gain,
         kd_gain,
-        locked_ratio_target,
+        locked_amount_target,
     } in tokens
     {
         display_line!(context.io(), "{}: {}", name, address);
@@ -2532,8 +2532,8 @@ pub async fn query_masp_reward_tokens(context: &impl Namada) {
         display_line!(context.io(), "  Kd gain: {}", kd_gain);
         display_line!(
             context.io(),
-            "  Locked ratio target: {}",
-            locked_ratio_target
+            "  Locked amount target: {}",
+            locked_amount_target
         );
     }
 }
@@ -2855,14 +2855,18 @@ pub async fn compute_proposal_votes<
                 &vote.validator,
                 epoch,
             )
-            .await
-            .unwrap_or_default();
+            .await;
 
-            delegators_vote.insert(vote.delegator.clone(), vote.data.into());
-            delegator_voting_power
-                .entry(vote.delegator.clone())
-                .or_default()
-                .insert(vote.validator, delegator_stake);
+            if let Some(stake) = delegator_stake {
+                delegators_vote
+                    .insert(vote.delegator.clone(), vote.data.into());
+                delegator_voting_power
+                    .entry(vote.delegator.clone())
+                    .or_default()
+                    .insert(vote.validator, stake);
+            } else {
+                continue;
+            }
         }
     }
 

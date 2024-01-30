@@ -50,7 +50,7 @@ name = "namadar"
 path = "src/bin/namada-relayer/main.rs"
 
 [features]
-default = ["no_jemalloc"]
+default = []
 mainnet = [
   "namada/mainnet",
 ]
@@ -58,12 +58,7 @@ mainnet = [
 testing = ["namada_test_utils"]
 benches = ["testing", "namada_test_utils"]
 integration = []
-
-# RocksDB's "jemalloc" disabled by default as it takes a long time to build.
-# Note that only exactly one of these features has to be enabled at a time. 
-# Jemalloc is enabled in `make build-release`.
-no_jemalloc = ["dep:rocksdb"]
-jemalloc = ["rocksdb_with_jemalloc"]
+jemalloc = ["rocksdb/jemalloc"]
 
 [dependencies]
 namada = {path = "../namada", features = ["multicore", "http-client", "tendermint-rpc", "std"]}
@@ -121,6 +116,7 @@ regex.workspace = true
 reqwest.workspace = true
 ripemd.workspace = true
 rlimit.workspace = true
+rocksdb.workspace = true
 rpassword.workspace = true
 serde_bytes.workspace = true
 serde_json = {workspace = true, features = ["raw_value"]}
@@ -145,15 +141,6 @@ winapi.workspace = true
 zeroize.workspace = true
 warp = "0.3.2"
 bytes = "1.1.0"
-
-[target.'cfg(not(windows))'.dependencies]
-rocksdb = { workspace = true, optional = true }
-rocksdb_with_jemalloc = { package = "rocksdb", version = "0.21.0", default-features = false, features = ['zstd', 'jemalloc'], optional = true }
-
-[target.'cfg(windows)'.dependencies]
-rocksdb = { workspace = true, optional = true }
- # jemalloc is not supported on windows
-rocksdb_with_jemalloc = { package = "rocksdb", version = "0.21.0", default-features = false, features = ['zstd'], optional = true }
 
 [dev-dependencies]
 assert_matches = "1.5.0"
