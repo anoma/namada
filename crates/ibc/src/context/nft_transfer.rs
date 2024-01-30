@@ -67,14 +67,8 @@ where
         _class_data: Option<&ClassData>,
     ) -> Result<(), NftTransferError> {
         match self.get_nft_class(class_id) {
-            Err(NftTransferError::NftClassNotFound) => Ok(()),
+            Ok(_) | Err(NftTransferError::NftClassNotFound) => Ok(()),
             Err(e) => Err(e),
-            Ok(class) if class.class_id != *class_id => {
-                Err(NftTransferError::Other(format!(
-                    "The existing Class ID mismatched: class_id {class_id}"
-                )))
-            }
-            _ => Ok(()),
         }
     }
 
@@ -87,9 +81,6 @@ where
         token_id: &TokenId,
         _memo: &Memo,
     ) -> Result<(), NftTransferError> {
-        // Assumes that the class ID is prefixed with "port-id/channel-id" or
-        // has no prefix
-
         // The metadata should exist
         self.get_nft(class_id, token_id)?;
 
@@ -117,9 +108,6 @@ where
         class_id: &PrefixedClassId,
         token_id: &TokenId,
     ) -> Result<(), NftTransferError> {
-        // Assumes that the class ID is prefixed with "port-id/channel-id" or
-        // has no prefix
-
         // The metadata should exist
         self.get_nft(class_id, token_id)?;
 

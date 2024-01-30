@@ -147,8 +147,6 @@ where
         coin: &PrefixedCoin,
         _memo: &Memo,
     ) -> Result<(), TokenTransferError> {
-        // Assumes that the coin denom is prefixed with "port-id/channel-id" or
-        // has no prefix
         let (ibc_token, amount) = self.get_token_amount(coin)?;
 
         self.inner
@@ -169,8 +167,6 @@ where
         _channel_id: &ChannelId,
         coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
-        // Assumes that the coin denom is prefixed with "port-id/channel-id" or
-        // has no prefix
         let (ibc_token, amount) = self.get_token_amount(coin)?;
 
         self.inner
