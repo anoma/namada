@@ -725,16 +725,23 @@ pub fn load_and_validate(templates_dir: &Path) -> Option<All<Validated>> {
         }
     }
 
-    let parameters = parameters.and_then(|params| {
-        let params =
-            validate_parameters(params, &tokens, &transactions, vps.as_ref());
-        if params.is_some() {
+    let (parameters, native_token) = if let Some(parameters) = parameters {
+        let params = validate_parameters(
+            parameters,
+            &tokens,
+            &transactions,
+            vps.as_ref(),
+        );
+        if let Some(validate_params) = params.clone() {
             println!("Parameters file is valid.");
+            (params, Some(validate_params.parameters.native_token))
         } else {
-            is_valid = false
+            is_valid = false;
+            (params, None)
         }
-        params
-    });
+    } else {
+        (None, None)
+    };
 
     let balances = if let Some(tokens) = tokens.as_ref() {
         if tokens.token.is_empty() {
@@ -747,10 +754,12 @@ pub fn load_and_validate(templates_dir: &Path) -> Option<All<Validated>> {
         balances
             .and_then(|raw| raw.denominate(tokens).ok())
             .and_then(|balances| {
-                validate_balances(&balances, Some(tokens)).then(|| {
-                    println!("Balances file is valid.");
-                    balances
-                })
+                validate_balances(&balances, Some(tokens), native_token).then(
+                    || {
+                        println!("Balances file is valid.");
+                        balances
+                    },
+                )
             })
     } else {
         None
@@ -871,10 +880,10 @@ pub fn validate_parameters(
 pub fn validate_balances(
     balances: &DenominatedBalances,
     tokens: Option<&Tokens>,
+    native_alias: Option<Alias>,
 ) -> bool {
     let mut is_valid = true;
-    use std::str::FromStr;
-    let native_alias = Alias::from_str("nam").expect("Infalllible");
+
     balances.token.iter().for_each(|(token, next)| {
         // Every token alias used in Balances file must be present in
         // the Tokens file
@@ -904,20 +913,30 @@ pub fn validate_balances(
                 res
             },
         );
-        if sum.is_none()
-            || (*token == native_alias
-                && sum.unwrap()
-                    > Amount::from_uint(
-                        MAX_TOKEN_BALANCE_SUM,
-                        NATIVE_MAX_DECIMAL_PLACES,
-                    )
-                    .unwrap())
-        {
-            eprintln!(
-                "The sum of balances for token {token} is greater than \
-                 {MAX_TOKEN_BALANCE_SUM}"
-            );
-            is_valid = false;
+        if Some(token) == native_alias.as_ref() {
+            match sum {
+                Some(sum) if sum.is_positive() => {
+                    if sum
+                        > Amount::from_uint(
+                            MAX_TOKEN_BALANCE_SUM,
+                            NATIVE_MAX_DECIMAL_PLACES,
+                        )
+                        .unwrap()
+                    {
+                        eprintln!(
+                            "The sum of balances for token {token} is greater \
+                             than {MAX_TOKEN_BALANCE_SUM}"
+                        );
+                        is_valid = false;
+                    }
+                }
+                _ => {
+                    eprintln!(
+                        "Native token {token} balance is zero at genesis."
+                    );
+                    is_valid = false;
+                }
+            }
         }
     });
     is_valid
