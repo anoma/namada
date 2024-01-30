@@ -3897,7 +3897,7 @@ dependencies = [
 [[package]]
 name = "masp_note_encryption"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?tag=v1.0.0#c3c6047a9c9da54058afc71219b913ac9f79e48b"
+source = "git+https://github.com/anoma/masp?tag=v1.1.0#f24691c0eb76909e3c15ae03aef294dccebd2df3"
 dependencies = [
  "borsh",
  "chacha20",
@@ -3910,7 +3910,7 @@ dependencies = [
 [[package]]
 name = "masp_primitives"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?tag=v1.0.0#c3c6047a9c9da54058afc71219b913ac9f79e48b"
+source = "git+https://github.com/anoma/masp?tag=v1.1.0#f24691c0eb76909e3c15ae03aef294dccebd2df3"
 dependencies = [
  "aes",
  "bip0039",
@@ -3942,7 +3942,7 @@ dependencies = [
 [[package]]
 name = "masp_proofs"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?tag=v1.0.0#c3c6047a9c9da54058afc71219b913ac9f79e48b"
+source = "git+https://github.com/anoma/masp?tag=v1.1.0#f24691c0eb76909e3c15ae03aef294dccebd2df3"
 dependencies = [
  "bellman",
  "blake2b_simd",
@@ -4162,6 +4162,7 @@ dependencies = [
  "namada_tx_env",
  "namada_vote_ext",
  "namada_vp_env",
+ "num-traits 0.2.17",
  "num256",
  "orion",
  "owo-colors",
