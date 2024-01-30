@@ -960,6 +960,7 @@ impl BenchShieldedCtx {
         async_runtime
             .block_on(self.shielded.fetch(
                 &self.shell,
+                None,
                 &[spending_key.into()],
                 &[],
             ))

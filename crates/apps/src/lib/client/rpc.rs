@@ -882,7 +882,10 @@ pub async fn query_shielded_balance(
             .iter()
             .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
             .collect();
-        shielded.fetch(context.client(), &[], &fvks).await.unwrap();
+        shielded
+            .fetch(context.client(), None, &[], &fvks)
+            .await
+            .unwrap();
         // Precompute asset types to increase chances of success in decoding
         let _ = shielded.precompute_asset_types(context).await;
         // Save the update state so that future fetches can be short-circuited

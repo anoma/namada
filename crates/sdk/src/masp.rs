@@ -658,6 +658,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     pub async fn fetch<C: Client + Sync>(
         &mut self,
         client: &C,
+        last_block_height: Option<BlockHeight>,
         sks: &[ExtendedSpendingKey],
         fvks: &[ViewingKey],
     ) -> Result<(), Error> {
@@ -679,8 +680,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let start_idx = std::cmp::min(last_witnessed_tx, least_idx);
         let (tx_sender, tx_receiver) = sync_channel(100);
         // Download all transactions accepted until this point
-        let fetch =
-            Self::fetch_shielded_transfers(client, tx_sender, start_idx);
+        let fetch = Self::fetch_shielded_transfers(
+            client,
+            tx_sender,
+            start_idx,
+            last_block_height,
+        );
         // Concurrently process the shielded transactions
         let process =
             self.process_shielded_transfers(last_witnessed_tx, tx_receiver);
@@ -697,11 +702,17 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         client: &C,
         txs: SyncSender<(IndexedTx, (Epoch, Transfer, Transaction))>,
         last_indexed_tx: Option<IndexedTx>,
+        last_block_height: Option<BlockHeight>,
     ) -> Result<(), Error> {
         // Query for the last produced block height
-        let last_block_height = query_block(client)
-            .await?
-            .map_or_else(BlockHeight::first, |block| block.height);
+        let last_block_height =
+            if let Some(last_block_height) = last_block_height {
+                last_block_height
+            } else {
+                query_block(client)
+                    .await?
+                    .map_or_else(BlockHeight::first, |block| block.height)
+            };
 
         // Fetch all the transactions we do not have yet
         let first_height_to_query =
@@ -1698,7 +1709,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             let mut shielded = context.shielded_mut().await;
             let _ = shielded.load().await;
             shielded
-                .fetch(context.client(), &spending_keys, &[])
+                .fetch(context.client(), None, &spending_keys, &[])
                 .await?;
             // Save the update state so that future fetches can be
             // short-circuited
@@ -2149,7 +2160,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             .values()
             .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
             .collect();
-        self.fetch(client, &[], &fvks).await?;
+        self.fetch(client, None, &[], &fvks).await?;
         // Save the update state so that future fetches can be short-circuited
         let _ = self.save().await;
         // Required for filtering out rejected transactions from Tendermint
