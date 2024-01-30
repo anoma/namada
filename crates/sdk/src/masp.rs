@@ -7,11 +7,13 @@ use std::fmt::Debug;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 
 // use async_std::io::prelude::WriteExt;
 // use async_std::io::{self};
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
+use futures::join;
 use itertools::Either;
 use lazy_static::lazy_static;
 use masp_primitives::asset_type::AssetType;
@@ -621,6 +623,36 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         Ok(())
     }
 
+    /// Process the shielded transactions arriving in the given channel as they
+    /// come.
+    pub async fn process_shielded_transfers(
+        &mut self,
+        last_witnessed_tx: Option<IndexedTx>,
+        tx_receiver: Receiver<(IndexedTx, (Epoch, Transfer, Transaction))>,
+    ) -> Result<(), Error> {
+        // Keep pulling transactions from the queue until they are finished
+        while let Ok((indexed_tx, (epoch, tx, stx))) = tx_receiver.recv() {
+            // Only modify the Merkle trees and witnesses for heretofore unseen
+            // transactions
+            if Some(indexed_tx) > last_witnessed_tx {
+                self.update_witness_map(indexed_tx, &stx)?;
+            }
+            let mut vk_heights = BTreeMap::new();
+            std::mem::swap(&mut vk_heights, &mut self.vk_heights);
+            // Scan the current transaction with all the outdated viewing keys
+            for (vk, h) in vk_heights
+                .iter_mut()
+                .filter(|(_vk, h)| **h < Some(indexed_tx))
+            {
+                self.scan_tx(indexed_tx, epoch, &tx, &stx, vk)?;
+                // Retimestamp this viewing key
+                *h = Some(indexed_tx);
+            }
+            std::mem::swap(&mut vk_heights, &mut self.vk_heights);
+        }
+        Ok(())
+    }
+
     /// Fetch the current state of the multi-asset shielded pool into a
     /// ShieldedContext
     pub async fn fetch<C: Client + Sync>(
@@ -645,41 +677,32 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let last_witnessed_tx = self.tx_note_map.keys().max().cloned();
         // get the bounds on the block heights to fetch
         let start_idx = std::cmp::min(last_witnessed_tx, least_idx);
-        // Load all transactions accepted until this point
-        let txs = Self::fetch_shielded_transfers(client, start_idx).await?;
-
-        for (indexed_tx, (epoch, tx, stx)) in txs.into_iter() {
-            if Some(indexed_tx) > last_witnessed_tx {
-                self.update_witness_map(indexed_tx, &stx)?;
-            }
-            let mut vk_heights = BTreeMap::new();
-            std::mem::swap(&mut vk_heights, &mut self.vk_heights);
-            for (vk, h) in vk_heights
-                .iter_mut()
-                .filter(|(_vk, h)| **h < Some(indexed_tx))
-            {
-                self.scan_tx(indexed_tx, epoch, &tx, &stx, vk)?;
-                *h = Some(indexed_tx);
-            }
-            std::mem::swap(&mut vk_heights, &mut self.vk_heights);
-        }
-
-        Ok(())
+        let (tx_sender, tx_receiver) = sync_channel(100);
+        // Download all transactions accepted until this point
+        let fetch =
+            Self::fetch_shielded_transfers(client, tx_sender, start_idx);
+        // Concurrently process the shielded transactions
+        let process =
+            self.process_shielded_transfers(last_witnessed_tx, tx_receiver);
+        // Wait for both downloading and processing to complete
+        let (fetch_result, process_result) = join!(fetch, process);
+        // Finally, propagate the errors
+        fetch_result?;
+        process_result
     }
 
     /// Obtain a chronologically-ordered list of all accepted shielded
     /// transactions from a node.
     pub async fn fetch_shielded_transfers<C: Client + Sync>(
         client: &C,
+        txs: SyncSender<(IndexedTx, (Epoch, Transfer, Transaction))>,
         last_indexed_tx: Option<IndexedTx>,
-    ) -> Result<BTreeMap<IndexedTx, (Epoch, Transfer, Transaction)>, Error>
-    {
+    ) -> Result<(), Error> {
         // Query for the last produced block height
         let last_block_height = query_block(client)
             .await?
             .map_or_else(BlockHeight::first, |block| block.height);
 
-        let mut shielded_txs = BTreeMap::new();
         // Fetch all the transactions we do not have yet
         let first_height_to_query =
             last_indexed_tx.map_or_else(|| 1, |last| last.height.0);
@@ -737,17 +760,22 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 .await?;
 
                 // Collect the current transaction
-                shielded_txs.insert(
+                txs.send((
                     IndexedTx {
                         height: height.into(),
                         index: idx,
                     },
                     (epoch, transfer, masp_transaction),
-                );
+                ))
+                .map_err(|_| {
+                    Error::Other(
+                        "unable to put transaction into queue".to_string(),
+                    )
+                })?;
             }
         }
 
-        Ok(shielded_txs)
+        Ok(())
     }
 
     /// Extract the relevant shield portions of a [`Tx`], if any.
