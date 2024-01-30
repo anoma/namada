@@ -403,9 +403,15 @@ mod tests {
             token::testing::arb_amount_non_zero_ceiled(max_amount),
         )
             .prop_filter_map(
-                "Src and dest validator must not be the same",
+                "Src and dest validator must not be the same and owner must \
+                 not be a validator",
                 |(src_validator, dest_validator, owner, amount)| {
-                    if src_validator == dest_validator {
+                    let is_owner_validator = matches!(
+                        &owner,
+                        Address::Established(owner)
+                        if owner == &src_validator || owner == &dest_validator
+                    );
+                    if is_owner_validator || src_validator == dest_validator {
                         None
                     } else {
                         let src_validator = Address::Established(src_validator);
