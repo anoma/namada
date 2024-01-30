@@ -518,6 +518,61 @@ pub type TransferDelta = HashMap<Address, MaspChange>;
 /// Represents the changes that were made to a list of shielded accounts
 pub type TransactionDelta = HashMap<ViewingKey, I128Sum>;
 
+#[derive(Debug, Clone)]
+/// A marker type indicating that the shielded context is currently
+/// syncing.
+pub enum Syncing {}
+
+#[derive(Debug, Clone)]
+/// A marker type indicating that the shielded context is not currently
+/// syncing.
+pub enum NotSyncing {}
+
+pub trait SyncStatus {}
+
+impl SyncStatus for NotSyncing {}
+
+impl SyncStatus for Syncing {}
+
+/// A cache of fetched indexed transactions.
+///
+/// The cache is designed so that it either contains
+/// all transactions from a given height, or none.
+#[derive(BorshSerialize, BorshDeserialize, Debug, Default, Clone)]
+pub struct Unscanned {
+    txs: BTreeMap<IndexedTx, (Epoch, Transfer, Transaction)>,
+}
+
+impl Unscanned {
+    fn extend<I>(&mut self, items: I)
+    where
+        I: IntoIterator<Item = (IndexedTx, (Epoch, Transfer, Transaction))>,
+    {
+        self.txs.extend(items.into_iter());
+    }
+
+    fn contains_height(&self, height: u64) -> bool {
+        self.txs.keys().any(|k| k.height.0 == height)
+    }
+
+    /// We remove all indices from blocks that have been entirely scanned.
+    /// If a block is only partially scanned, we leave all the events in the
+    /// cache.
+    fn scanned(&mut self, ix: &IndexedTx) {
+        self.txs.retain(|i, _| i.height >= ix.height);
+    }
+}
+
+impl IntoIterator for Unscanned {
+    type IntoIter =
+        btree_map::IntoIter<IndexedTx, (Epoch, Transfer, Transaction)>;
+    type Item = (IndexedTx, (Epoch, Transfer, Transaction));
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.txs.into_iter()
+    }
+}
+
 /// Represents the current state of the shielded pool from the perspective of
 /// the chosen viewing keys.
 #[derive(BorshSerialize, BorshDeserialize, Debug)]
@@ -553,6 +608,8 @@ pub struct ShieldedContext<U: ShieldedUtils> {
     pub vk_map: HashMap<usize, ViewingKey>,
     /// Maps a shielded tx to the index of its first output note.
     pub tx_note_map: BTreeMap<IndexedTx, usize>,
+    /// A cache of fetched indexed txs.
+    pub unscanned: Unscanned,
 }
 
 /// Default implementation to ease construction of TxContexts. Derive cannot be
@@ -574,6 +631,7 @@ impl<U: ShieldedUtils + Default> Default for ShieldedContext<U> {
             delta_map: BTreeMap::default(),
             asset_types: HashMap::default(),
             vk_map: HashMap::default(),
+            unscanned: Default::default(),
         }
     }
 }
@@ -626,9 +684,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
     /// Fetch the current state of the multi-asset shielded pool into a
     /// ShieldedContext
-    pub async fn fetch<C: Client + Sync>(
+    pub async fn fetch<C: Client + Sync, IO: Io>(
         &mut self,
         client: &C,
+        logger: &impl ProgressLogger<IO>,
+        last_query_height: Option<BlockHeight>,
+        _batch_size: u64,
         sks: &[ExtendedSpendingKey],
         fvks: &[ViewingKey],
     ) -> Result<(), Error> {
@@ -640,6 +701,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         for vk in fvks {
             self.vk_heights.entry(*vk).or_default();
         }
+        self.utils
+            .save(self)
+            .await
+            .map_err(|e| Error::Other(e.to_string()))?;
         let native_token = query_native_token(client).await?;
         // the latest block height which has been added to the witness Merkle
         // tree
@@ -648,11 +713,27 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         };
         let last_witnessed_tx = self.tx_note_map.keys().max().cloned();
         // get the bounds on the block heights to fetch
-        let start_idx = std::cmp::min(last_witnessed_tx, least_idx);
+        let start_idx =
+            std::cmp::min(last_witnessed_tx, least_idx).map(|ix| ix.height);
         // Load all transactions accepted until this point
-        let txs = Self::fetch_shielded_transfers(client, start_idx).await?;
+        // N.B. the cache is a hash map
+        self.unscanned.extend(
+            self.fetch_shielded_transfers(
+                client,
+                logger,
+                start_idx,
+                last_query_height,
+            )
+            .await?,
+        );
+        // persist the cache in case of interruptions.
+        self.utils
+            .save(self)
+            .await
+            .map_err(|e| Error::Other(e.to_string()))?;
 
-        for (indexed_tx, (epoch, tx, stx)) in txs.into_iter() {
+        let txs = logger.scan(self.unscanned.clone());
+        for (indexed_tx, (epoch, tx, stx)) in txs {
             if Some(indexed_tx) > last_witnessed_tx {
                 self.update_witness_map(indexed_tx, &stx)?;
             }
@@ -665,7 +746,13 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 self.scan_tx(indexed_tx, epoch, &tx, &stx, vk, native_token.clone())?;
                 *h = Some(indexed_tx);
             }
+            // possibly remove unneeded elements from the cache.
+            self.unscanned.scanned(&indexed_tx);
             std::mem::swap(&mut vk_heights, &mut self.vk_heights);
+            self.utils
+                .save(self)
+                .await
+                .map_err(|e| Error::Other(e.to_string()))?;
         }
 
         Ok(())
@@ -673,9 +760,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
     /// Obtain a chronologically-ordered list of all accepted shielded
     /// transactions from a node.
-    pub async fn fetch_shielded_transfers<C: Client + Sync>(
+    pub async fn fetch_shielded_transfers<C: Client + Sync, IO: Io>(
+        &self,
         client: &C,
-        last_indexed_tx: Option<IndexedTx>,
+        logger: &impl ProgressLogger<IO>,
+        last_indexed_tx: Option<BlockHeight>,
+        last_query_height: Option<BlockHeight>,
     ) -> Result<
         BTreeMap<
             IndexedTx,
@@ -691,14 +781,17 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let last_block_height = query_block(client)
             .await?
             .map_or_else(BlockHeight::first, |block| block.height);
+        let last_query_height = last_query_height.unwrap_or(last_block_height);
 
         let mut shielded_txs = BTreeMap::new();
         // Fetch all the transactions we do not have yet
         let first_height_to_query =
-            last_indexed_tx.map_or_else(|| 1, |last| last.height.0);
-        let first_idx_to_query =
-            last_indexed_tx.map_or_else(|| 0, |last| last.index.0 + 1);
-        for height in first_height_to_query..=last_block_height.0 {
+            last_indexed_tx.map_or_else(|| 1, |last| last.0);
+        let heights = logger.fetch(first_height_to_query..=last_query_height.0);
+        for height in heights {
+            if self.unscanned.contains_height(height) {
+                continue;
+            }
             // Get the valid masp transactions at the specified height
             let epoch = query_epoch_at_height(client, height.into())
                 .await?
@@ -710,16 +803,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     ))
                 })?;
 
-            let first_index_to_query = if height == first_height_to_query {
-                Some(TxIndex(first_idx_to_query))
-            } else {
-                None
-            };
-
             let txs_results = match get_indexed_masp_events_at_height(
                 client,
                 height.into(),
-                first_index_to_query,
+                None,
             )
             .await?
             {
@@ -1837,18 +1924,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         }
         // We want to fund our transaction solely from supplied spending key
         let spending_key = spending_key.map(|x| x.into());
-        let spending_keys: Vec<_> = spending_key.into_iter().collect();
         {
             // Load the current shielded context given the spending key we
             // possess
             let mut shielded = context.shielded_mut().await;
             let _ = shielded.load().await;
-            shielded
-                .fetch(context.client(), &spending_keys, &[])
-                .await?;
-            // Save the update state so that future fetches can be
-            // short-circuited
-            let _ = shielded.save().await;
         }
         // Determine epoch in which to submit potential shielded transaction
         let epoch = rpc::query_epoch(context.client()).await?;
@@ -2278,9 +2358,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     /// transactions. If an owner is specified, then restrict the set to only
     /// transactions crediting/debiting the given owner. If token is specified,
     /// then restrict set to only transactions involving the given token.
-    pub async fn query_tx_deltas<C: Client + Sync>(
+    pub async fn query_tx_deltas<C: Client + Sync, IO: Io>(
         &mut self,
         client: &C,
+        io: &IO,
         query_owner: &Either<BalanceOwner, Vec<Address>>,
         query_token: &Option<Address>,
         viewing_keys: &HashMap<String, ExtendedViewingKey>,
@@ -2295,7 +2376,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             .values()
             .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
             .collect();
-        self.fetch(client, &[], &fvks).await?;
+        self.fetch(client, &DefaultLogger::new(io), None, 1, &[], &fvks)
+            .await?;
         // Save the update state so that future fetches can be short-circuited
         let _ = self.save().await;
         // Required for filtering out rejected transactions from Tendermint
@@ -3583,14 +3665,67 @@ pub mod fs {
             // Atomically update the old shielded context file with new data.
             // Atomicity is required to prevent other client instances from
             // reading corrupt data.
-            std::fs::rename(
-                tmp_path.clone(),
-                self.context_dir.join(FILE_NAME),
-            )?;
-            // Finally, remove our temporary file to allow future saving of
-            // shielded contexts.
-            std::fs::remove_file(tmp_path)?;
-            Ok(())
+            std::fs::rename(tmp_path, self.context_dir.join(FILE_NAME))
         }
+    }
+}
+
+/// A enum to indicate how to log sync progress depending on
+/// whether sync is currently fetch or scanning blocks.
+#[derive(Debug, Copy, Clone)]
+pub enum ProgressType {
+    Fetch,
+    Scan,
+}
+
+pub trait ProgressLogger<IO: Io> {
+    type Fetch: Iterator<Item = u64>;
+    type Scan: Iterator<Item = (IndexedTx, (Epoch, Transfer, Transaction))>;
+
+    fn io(&self) -> &IO;
+
+    fn fetch<I>(&self, items: I) -> Self::Fetch
+    where
+        I: IntoIterator<Item = u64>;
+
+    fn scan<I>(&self, items: I) -> Self::Scan
+    where
+        I: IntoIterator<Item = (IndexedTx, (Epoch, Transfer, Transaction))>;
+}
+
+/// The default type for logging sync progress.
+#[derive(Debug, Clone)]
+pub struct DefaultLogger<'io, IO: Io> {
+    io: &'io IO,
+}
+
+impl<'io, IO: Io> DefaultLogger<'io, IO> {
+    pub fn new(io: &'io IO) -> Self {
+        Self { io }
+    }
+}
+
+impl<'io, IO: Io> ProgressLogger<IO> for DefaultLogger<'io, IO> {
+    type Fetch = <Vec<u64> as IntoIterator>::IntoIter;
+    type Scan = <Vec<(IndexedTx, (Epoch, Transfer, Transaction))> as IntoIterator>::IntoIter;
+
+    fn io(&self) -> &IO {
+        self.io
+    }
+
+    fn fetch<I>(&self, items: I) -> Self::Fetch
+    where
+        I: IntoIterator<Item = u64>,
+    {
+        let items: Vec<_> = items.into_iter().collect();
+        items.into_iter()
+    }
+
+    fn scan<I>(&self, items: I) -> Self::Scan
+    where
+        I: IntoIterator<Item = (IndexedTx, (Epoch, Transfer, Transaction))>,
+    {
+        let items: Vec<_> = items.into_iter().collect();
+        items.into_iter()
     }
 }
