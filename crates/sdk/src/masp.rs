@@ -7,13 +7,13 @@ use std::fmt::Debug;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 
 // use async_std::io::prelude::WriteExt;
 // use async_std::io::{self};
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
-use futures::join;
+use futures::channel::mpsc::{channel, Receiver, Sender};
+use futures::{try_join, StreamExt};
 use itertools::Either;
 use lazy_static::lazy_static;
 use masp_primitives::asset_type::AssetType;
@@ -628,10 +628,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     pub async fn process_shielded_transfers(
         &mut self,
         last_witnessed_tx: Option<IndexedTx>,
-        tx_receiver: Receiver<(IndexedTx, (Epoch, Transfer, Transaction))>,
+        mut tx_receiver: Receiver<(IndexedTx, (Epoch, Transfer, Transaction))>,
     ) -> Result<(), Error> {
         // Keep pulling transactions from the queue until they are finished
-        while let Ok((indexed_tx, (epoch, tx, stx))) = tx_receiver.recv() {
+        while let Some((indexed_tx, (epoch, tx, stx))) =
+            tx_receiver.next().await
+        {
             // Only modify the Merkle trees and witnesses for heretofore unseen
             // transactions
             if Some(indexed_tx) > last_witnessed_tx {
@@ -679,7 +681,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let last_witnessed_tx = self.tx_note_map.keys().max().cloned();
         // get the bounds on the block heights to fetch
         let start_idx = std::cmp::min(last_witnessed_tx, least_idx);
-        let (tx_sender, tx_receiver) = sync_channel(100);
+        // Maximum number of transactions that can be buffered
+        const TX_BUFFER_SIZE: usize = 100;
+        // Make a channel to hold downloaded transactions before they are
+        // processed
+        let (tx_sender, tx_receiver) = channel(TX_BUFFER_SIZE);
         // Download all transactions accepted until this point
         let fetch = Self::fetch_shielded_transfers(
             client,
@@ -691,17 +697,15 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let process =
             self.process_shielded_transfers(last_witnessed_tx, tx_receiver);
         // Wait for both downloading and processing to complete
-        let (fetch_result, process_result) = join!(fetch, process);
-        // Finally, propagate the errors
-        fetch_result?;
-        process_result
+        let _ = try_join!(fetch, process)?;
+        Ok(())
     }
 
     /// Obtain a chronologically-ordered list of all accepted shielded
     /// transactions from a node.
     pub async fn fetch_shielded_transfers<C: Client + Sync>(
         client: &C,
-        txs: SyncSender<(IndexedTx, (Epoch, Transfer, Transaction))>,
+        mut txs: Sender<(IndexedTx, (Epoch, Transfer, Transaction))>,
         last_indexed_tx: Option<IndexedTx>,
         last_block_height: Option<BlockHeight>,
     ) -> Result<(), Error> {
@@ -772,7 +776,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 .await?;
 
                 // Collect the current transaction
-                txs.send((
+                txs.try_send((
                     IndexedTx {
                         height: height.into(),
                         index: idx,
