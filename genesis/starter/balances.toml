@@ -1,2 +1,3 @@
 [token.NAM]
-# assign balance to public keys
+# assign balance to public keys, e.g.:
+tnam1qxfj3sf6a0meahdu9t6znp05g8zx4dkjtgyn9gfu = "1"

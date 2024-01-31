@@ -151,6 +151,11 @@ impl Amount {
         self.raw == Uint::from(0)
     }
 
+    /// Check if [`Amount`] is greater than zero.
+    pub fn is_positive(&self) -> bool {
+        !self.is_zero()
+    }
+
     /// Checked addition. Returns `None` on overflow or if
     /// the amount exceed [`uint::MAX_VALUE`]
     #[must_use]
