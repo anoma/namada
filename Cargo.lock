@@ -4626,6 +4626,7 @@ dependencies = [
 name = "namada_shielded_token"
 version = "0.31.5"
 dependencies = [
+ "borsh",
  "masp_primitives",
  "namada_core",
  "namada_parameters",
@@ -4633,6 +4634,7 @@ dependencies = [
  "namada_trans_token",
  "proptest",
  "rayon",
+ "serde 1.0.193",
  "test-log",
  "tracing",
 ]

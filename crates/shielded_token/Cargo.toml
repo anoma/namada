@@ -23,8 +23,10 @@ namada_parameters = { path = "../parameters" }
 namada_storage = { path = "../storage" }
 namada_trans_token = { path = "../trans_token" }
 
+borsh.workspace = true
 masp_primitives.workspace = true
 rayon = { workspace = true, optional = true }
+serde.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
