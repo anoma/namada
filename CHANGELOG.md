@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## v0.31.0
+
+Namada 0.31.0 is a minor release that fixes wasm host function execution and upgrades some CLI functions and the Masp VP.
+
+### BUG FIXES
+
+- Use the configured native token for genesis validation.
+  ([\#2471](https://github.com/anoma/namada/pull/2471))
+- Wallet: handle the case when empty decryption password is provided.
+  ([\#2473](https://github.com/anoma/namada/pull/2473))
+- Avoid panic in host env functions
+  ([\#2478](https://github.com/anoma/namada/issues/2478))
+
+### IMPROVEMENTS
+
+- Removed possible over/under-flow of `I128Sum` operations in the masp vp.
+  ([\#2476](https://github.com/anoma/namada/pull/2476))
+
 ## v0.30.3
 
 Namada 0.30.3 is a patch release that refactors some MASP functionality and fixes some governance and CLI issues.
