@@ -3,9 +3,10 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use borsh_ext::BorshSerializeExt;
+use ledger_storage::ResultExt;
 use namada_core::types::storage::Epochs;
 use namada_ibc::{IbcCommonContext, IbcStorageContext};
-use namada_state::{StorageRead, StorageWrite};
+use namada_state::{StorageRead, StorageWrite, StorageError};
 
 use crate::ledger::ibc::storage::is_ibc_key;
 use crate::ledger::native_vp::CtxPreStorageRead;
@@ -83,10 +84,10 @@ where
             }
             Some(StorageModification::Delete) => Ok(None),
             Some(StorageModification::Temp { .. }) => {
-                unreachable!("Temp shouldn't be inserted")
+                Err(StorageError::new_const("Temp shouldn't be inserted in an IBC transaction"))
             }
             Some(StorageModification::InitAccount { .. }) => {
-                unreachable!("InitAccount shouldn't be inserted")
+                Err(StorageError::new_const("InitAccount shouldn't be inserted"))
             }
             None => self.ctx.read_bytes(key),
         }
@@ -207,11 +208,13 @@ where
         let src_key = token::storage_key::balance_key(token, src);
         let dest_key = token::storage_key::balance_key(token, dest);
         let src_bal: Option<Amount> = self.ctx.read(&src_key)?;
-        let mut src_bal = src_bal.expect("The source has no balance");
-        src_bal.spend(&amount);
+        let mut src_bal = src_bal.ok_or_else(|| {
+            StorageError::new_const("the source has no balance")
+        })?;
+        src_bal.spend(&amount).into_storage_result()?;
         let mut dest_bal: Amount =
             self.ctx.read(&dest_key)?.unwrap_or_default();
-        dest_bal.receive(&amount);
+        dest_bal.receive(&amount).into_storage_result()?;
 
         self.write(&src_key, src_bal.serialize_to_vec())?;
         self.write(&dest_key, dest_bal.serialize_to_vec())
@@ -236,12 +239,12 @@ where
         let target_key = token::storage_key::balance_key(token, target);
         let mut target_bal: Amount =
             self.ctx.read(&target_key)?.unwrap_or_default();
-        target_bal.receive(&amount);
+        target_bal.receive(&amount).into_storage_result()?;
 
         let minted_key = token::storage_key::minted_balance_key(token);
         let mut minted_bal: Amount =
             self.ctx.read(&minted_key)?.unwrap_or_default();
-        minted_bal.receive(&amount);
+        minted_bal.receive(&amount).into_storage_result()?;
 
         self.write(&target_key, target_bal.serialize_to_vec())?;
         self.write(&minted_key, minted_bal.serialize_to_vec())?;
@@ -263,12 +266,12 @@ where
         let target_key = token::storage_key::balance_key(token, target);
         let mut target_bal: Amount =
             self.ctx.read(&target_key)?.unwrap_or_default();
-        target_bal.spend(&amount);
+        target_bal.spend(&amount).into_storage_result()?;
 
         let minted_key = token::storage_key::minted_balance_key(token);
         let mut minted_bal: Amount =
             self.ctx.read(&minted_key)?.unwrap_or_default();
-        minted_bal.spend(&amount);
+        minted_bal.spend(&amount).into_storage_result()?;
 
         self.write(&target_key, target_bal.serialize_to_vec())?;
         self.write(&minted_key, minted_bal.serialize_to_vec())
