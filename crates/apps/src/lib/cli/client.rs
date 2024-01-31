@@ -1,4 +1,6 @@
 use color_eyre::eyre::Result;
+use masp_primitives::sapling::ViewingKey;
+use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::types::io::Io;
 use namada_sdk::{Namada, NamadaImpl};
 
@@ -313,6 +315,37 @@ impl CliApi {
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         tx::submit_validator_metadata_change(&namada, args)
+                            .await?;
+                    }
+                    Sub::ShieldedSync(ShieldedSync(args)) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(&args.ledger_address)
+                        });
+                        client.wait_until_node_is_synced(&io).await?;
+                        let args = args.to_sdk(&mut ctx);
+                        let namada = ctx.to_sdk(client, io);
+                        let mut vks: Vec<ViewingKey> = namada
+                            .wallet()
+                            .await
+                            .get_viewing_keys()
+                            .values()
+                            .copied()
+                            .map(|vk| ExtendedFullViewingKey::from(vk).fvk.vk)
+                            .collect();
+                        vks.extend(
+                            args.viewing_keys.into_iter().map(|vk| {
+                                ExtendedFullViewingKey::from(vk).fvk.vk
+                            }),
+                        );
+                        let mut shielded = namada.shielded_mut().await;
+                        let _ = shielded.load().await;
+                        shielded
+                            .sync(
+                                namada.client(),
+                                args.last_query_height,
+                                &[],
+                                &vks,
+                            )
                             .await?;
                     }
                     // Eth bridge

@@ -984,8 +984,9 @@ impl BenchShieldedCtx {
             .find_spending_key(ALBERT_SPENDING_KEY, None)
             .unwrap();
         async_runtime
-            .block_on(self.shielded.fetch(
+            .block_on(self.shielded.sync(
                 &self.shell,
+                None,
                 &[spending_key.into()],
                 &[],
             ))
