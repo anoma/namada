@@ -1,7 +1,7 @@
 use color_eyre::eyre::Result;
+use masp_primitives::sapling::ViewingKey;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::types::io::Io;
-use namada::types::masp::ExtendedViewingKey;
 use namada_sdk::{Namada, NamadaImpl};
 
 use crate::cli;
@@ -307,26 +307,21 @@ impl CliApi {
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
-                        let wallet_keys: Vec<ExtendedViewingKey> = namada
+                        let mut vks: Vec<ViewingKey> = namada
                             .wallet()
                             .await
                             .get_viewing_keys()
                             .values()
                             .copied()
-                            .collect();
-                        let vks = args
-                            .viewing_keys
-                            .into_iter()
                             .map(|vk| ExtendedFullViewingKey::from(vk).fvk.vk)
-                            .collect::<Vec<_>>();
+                            .collect();
+                        vks.extend(
+                            args.viewing_keys.into_iter().map(|vk| {
+                                ExtendedFullViewingKey::from(vk).fvk.vk
+                            }),
+                        );
                         let mut shielded = namada.shielded_mut().await;
                         let _ = shielded.load().await;
-                        for vk in wallet_keys {
-                            shielded.vk_heights.insert(
-                                ExtendedFullViewingKey::from(vk).fvk.vk,
-                                None,
-                            );
-                        }
                         shielded
                             .sync(
                                 namada.client(),

@@ -673,6 +673,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         for vk in fvks {
             self.vk_heights.entry(*vk).or_default();
         }
+        // Save the new keys into the context
+        let _ = self.save().await;
         // the latest block height which has been added to the witness Merkle
         // tree
         let Some(least_idx) = self.vk_heights.values().min().cloned() else {
