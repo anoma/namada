@@ -33,7 +33,7 @@ def update_balances(localnet_dir, new_addresses):
     balances_file = f"{localnet_dir}/balances.toml"
     balances_toml = toml.load(balances_file)
     for addr in new_addresses:
-        balances_toml["token"]["NAAN"][addr] = "10000000"
+        balances_toml["token"]["NAAN"][addr] = "1000000000000"
     with open(f"{localnet_dir}/tmp/balances.toml", "w") as f:
         toml.dump(balances_toml, f)
 
@@ -73,7 +73,7 @@ def make_transactions(num_vals):
         established_address = output[output.find('tnam'):].strip()[:45]
         assert len(established_address) == len('tnam1q9874ezwewthnq7yku6xgwve0fyh6cvd85j5dxee'), len('tnam1q9874ezwewthnq7yku6xgwve0fyh6cvd85j5dxee')
         new_addresses.append(established_address)
-        system(f"{namada_bin}c --base-dir '{BASE_DIR}' utils init-genesis-validator --address {str(established_address).strip()} --alias {val_alias} --net-address 127.0.0.1:2{(7+i) % 10}657 --commission-rate 0.05 --max-commission-rate-change 0.01 --self-bond-amount 10000000 --email validator{i}@gmail.com --path {unsigned_tx_file_path} --unsafe-dont-encrypt")
+        system(f"{namada_bin}c --base-dir '{BASE_DIR}' utils init-genesis-validator --address {str(established_address).strip()} --alias {val_alias} --net-address 127.0.0.1:2{(7+i) % 10}657 --commission-rate 0.05 --max-commission-rate-change 0.01 --self-bond-amount 1000000000000 --email validator{i}@gmail.com --path {unsigned_tx_file_path} --unsafe-dont-encrypt")
         system(f"{namada_bin}c --base-dir '{BASE_DIR}' utils sign-genesis-txs --path {unsigned_tx_file_path} --output {signed_tx_file_path} --alias {val_alias}")
     update_balances(LOCALNET_DIR, new_addresses)
 
