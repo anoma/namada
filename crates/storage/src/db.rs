@@ -7,7 +7,6 @@ use namada_core::types::storage::{
     Header, Key,
 };
 use namada_core::types::time::DateTimeUtc;
-use namada_core::types::token::ConversionState;
 use namada_core::types::{ethereum_events, ethereum_structs};
 use namada_merkle_tree::{
     Error as MerkleTreeError, MerkleTreeStoresRead, MerkleTreeStoresWrite,
@@ -15,6 +14,7 @@ use namada_merkle_tree::{
 };
 use thiserror::Error;
 
+use crate::conversion_state::ConversionState;
 use crate::tx_queue::TxQueue;
 
 #[allow(missing_docs)]

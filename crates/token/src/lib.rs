@@ -11,10 +11,7 @@ pub mod storage_key {
 
 use namada_core::event::EmitEvents;
 use namada_core::types::address::Address;
-use namada_state::{
-    DBIter, StorageHasher, StorageRead, StorageResult, StorageWrite, WlStorage,
-    DB,
-};
+use namada_storage::{Result, StorageRead, StorageWrite};
 
 /// Initialize parameters for the token in storage during the genesis block.
 pub fn write_params<S>(
@@ -22,7 +19,7 @@ pub fn write_params<S>(
     storage: &mut S,
     address: &Address,
     denom: &Denomination,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -33,17 +30,16 @@ where
     Ok(())
 }
 
-pub fn finalize_block<D, H>(
-    wl_storage: &mut WlStorage<D, H>,
+pub fn finalize_block<S>(
+    storage: &mut S,
     _events: &mut impl EmitEvents,
     is_new_epoch: bool,
-) -> StorageResult<()>
+) -> Result<()>
 where
-    D: 'static + DB + for<'iter> DBIter<'iter>,
-    H: 'static + StorageHasher,
+    S: StorageWrite + StorageRead + WithConversionState,
 {
     if is_new_epoch {
-        conversion::update_allowed_conversions(wl_storage)?;
+        conversion::update_allowed_conversions(storage)?;
     }
     Ok(())
 }
