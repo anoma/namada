@@ -22,12 +22,13 @@ impl CliApi {
                 let (sub, mut ctx) = *boxed;
                 match sub {
                     EthBridgePoolWithCtx::RecommendBatch(RecommendBatch(
-                        mut args,
+                        args,
                     )) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.query.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.query.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
@@ -38,22 +39,18 @@ impl CliApi {
             }
             cli::NamadaRelayer::EthBridgePoolWithoutCtx(sub) => match sub {
                 EthBridgePoolWithoutCtx::ConstructProof(ConstructProof(
-                    mut args,
+                    args,
                 )) => {
                     let client = client.unwrap_or_else(|| {
-                        C::from_tendermint_address(
-                            &mut args.query.ledger_address,
-                        )
+                        C::from_tendermint_address(&args.ledger_address)
                     });
                     client.wait_until_node_is_synced(&io).await?;
                     let args = args.to_sdk_ctxless();
                     bridge_pool::construct_proof(&client, &io, args).await?;
                 }
-                EthBridgePoolWithoutCtx::RelayProof(RelayProof(mut args)) => {
+                EthBridgePoolWithoutCtx::RelayProof(RelayProof(args)) => {
                     let client = client.unwrap_or_else(|| {
-                        C::from_tendermint_address(
-                            &mut args.query.ledger_address,
-                        )
+                        C::from_tendermint_address(&args.ledger_address)
                     });
                     client.wait_until_node_is_synced(&io).await?;
                     let eth_client =
@@ -65,41 +62,37 @@ impl CliApi {
                     .await?;
                 }
                 EthBridgePoolWithoutCtx::QueryPool(QueryEthBridgePool(
-                    mut query,
+                    query,
                 )) => {
                     let client = client.unwrap_or_else(|| {
-                        C::from_tendermint_address(&mut query.ledger_address)
+                        C::from_tendermint_address(&query.ledger_address)
                     });
                     client.wait_until_node_is_synced(&io).await?;
                     bridge_pool::query_bridge_pool(&client, &io).await?;
                 }
                 EthBridgePoolWithoutCtx::QuerySigned(
-                    QuerySignedBridgePool(mut query),
+                    QuerySignedBridgePool(query),
                 ) => {
                     let client = client.unwrap_or_else(|| {
-                        C::from_tendermint_address(&mut query.ledger_address)
+                        C::from_tendermint_address(&query.ledger_address)
                     });
                     client.wait_until_node_is_synced(&io).await?;
                     bridge_pool::query_signed_bridge_pool(&client, &io).await?;
                 }
                 EthBridgePoolWithoutCtx::QueryRelays(QueryRelayProgress(
-                    mut query,
+                    query,
                 )) => {
                     let client = client.unwrap_or_else(|| {
-                        C::from_tendermint_address(&mut query.ledger_address)
+                        C::from_tendermint_address(&query.ledger_address)
                     });
                     client.wait_until_node_is_synced(&io).await?;
                     bridge_pool::query_relay_progress(&client, &io).await?;
                 }
             },
             cli::NamadaRelayer::ValidatorSet(sub) => match sub {
-                ValidatorSet::BridgeValidatorSet(BridgeValidatorSet(
-                    mut args,
-                )) => {
+                ValidatorSet::BridgeValidatorSet(BridgeValidatorSet(args)) => {
                     let client = client.unwrap_or_else(|| {
-                        C::from_tendermint_address(
-                            &mut args.query.ledger_address,
-                        )
+                        C::from_tendermint_address(&args.ledger_address)
                     });
                     client.wait_until_node_is_synced(&io).await?;
                     let args = args.to_sdk_ctxless();
@@ -109,12 +102,10 @@ impl CliApi {
                     .await?;
                 }
                 ValidatorSet::GovernanceValidatorSet(
-                    GovernanceValidatorSet(mut args),
+                    GovernanceValidatorSet(args),
                 ) => {
                     let client = client.unwrap_or_else(|| {
-                        C::from_tendermint_address(
-                            &mut args.query.ledger_address,
-                        )
+                        C::from_tendermint_address(&args.ledger_address)
                     });
                     client.wait_until_node_is_synced(&io).await?;
                     let args = args.to_sdk_ctxless();
@@ -123,13 +114,9 @@ impl CliApi {
                     )
                     .await?;
                 }
-                ValidatorSet::ValidatorSetProof(ValidatorSetProof(
-                    mut args,
-                )) => {
+                ValidatorSet::ValidatorSetProof(ValidatorSetProof(args)) => {
                     let client = client.unwrap_or_else(|| {
-                        C::from_tendermint_address(
-                            &mut args.query.ledger_address,
-                        )
+                        C::from_tendermint_address(&args.ledger_address)
                     });
                     client.wait_until_node_is_synced(&io).await?;
                     let args = args.to_sdk_ctxless();
@@ -139,12 +126,10 @@ impl CliApi {
                     .await?;
                 }
                 ValidatorSet::ValidatorSetUpdateRelay(
-                    ValidatorSetUpdateRelay(mut args),
+                    ValidatorSetUpdateRelay(args),
                 ) => {
                     let client = client.unwrap_or_else(|| {
-                        C::from_tendermint_address(
-                            &mut args.query.ledger_address,
-                        )
+                        C::from_tendermint_address(&args.ledger_address)
                     });
                     client.wait_until_node_is_synced(&io).await?;
                     let eth_client =

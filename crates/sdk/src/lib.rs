@@ -127,7 +127,10 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             output_folder: None,
             force: false,
             broadcast_only: false,
-            ledger_address: (),
+            ledger_address: tendermint_config::net::Address::from_str(
+                "127.0.0.1:26657",
+            )
+            .unwrap(),
             initialized_account_alias: None,
             wallet_alias_force: false,
             fee_amount: None,
@@ -162,7 +165,6 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             amount,
             tx_code_path: PathBuf::from(TX_TRANSFER_WASM),
             tx: self.tx_builder(),
-            native_token: self.native_token(),
         }
     }
 
@@ -200,7 +202,6 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             amount,
             source: None,
             tx: self.tx_builder(),
-            native_token: self.native_token(),
             tx_code_path: PathBuf::from(TX_BOND_WASM),
         }
     }
@@ -271,7 +272,6 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     fn new_init_proposal(&self, proposal_data: Vec<u8>) -> args::InitProposal {
         args::InitProposal {
             proposal_data,
-            native_token: self.native_token(),
             is_offline: false,
             is_pgf_stewards: false,
             is_pgf_funding: false,
@@ -642,7 +642,10 @@ where
                 output_folder: None,
                 force: false,
                 broadcast_only: false,
-                ledger_address: (),
+                ledger_address: tendermint_config::net::Address::from_str(
+                    "127.0.0.1:26657",
+                )
+                .unwrap(),
                 initialized_account_alias: None,
                 wallet_alias_force: false,
                 fee_amount: None,
