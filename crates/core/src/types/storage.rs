@@ -1463,6 +1463,7 @@ impl<E> GetEventNonce for InnerEthEventsQueue<E> {
     PartialEq,
     Ord,
     PartialOrd,
+    Hash,
 )]
 pub struct IndexedTx {
     /// The block height of the indexed tx
