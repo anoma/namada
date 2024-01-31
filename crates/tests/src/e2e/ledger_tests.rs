@@ -698,6 +698,8 @@ fn ledger_txs_and_queries() -> Result<()> {
 /// operation is successful
 /// 2. Test that a tx requesting a disposable signer
 /// providing an insufficient unshielding fails
+/// 3. Submit another transaction with valid fee unshielding and an inner
+/// shielded transfer with the same source
 #[test]
 fn wrapper_disposable_signer() -> Result<()> {
     // Download the shielded pool parameters before starting node
@@ -763,6 +765,8 @@ fn wrapper_disposable_signer() -> Result<()> {
         NAM,
         "--amount",
         "1",
+        "--gas-limit",
+        "20000",
         "--gas-spending-key",
         A_SPENDING_KEY,
         "--disposable-gas-payer",
@@ -787,6 +791,8 @@ fn wrapper_disposable_signer() -> Result<()> {
         NAM,
         "--amount",
         "1",
+        "--gas-limit",
+        "20000",
         "--gas-price",
         "90000000",
         "--gas-spending-key",
@@ -802,6 +808,32 @@ fn wrapper_disposable_signer() -> Result<()> {
     let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
     client.exp_string("Error while processing transaction's fees")?;
 
+    // Try another valid fee unshielding and masp transaction in the same tx,
+    // with the same source. This tests that the client can properly fetch data
+    // and construct these kind of transactions
+    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let tx_args = vec![
+        "transfer",
+        "--source",
+        A_SPENDING_KEY,
+        "--target",
+        AB_PAYMENT_ADDRESS,
+        "--token",
+        NAM,
+        "--amount",
+        "1",
+        "--gas-limit",
+        "20000",
+        "--gas-spending-key",
+        A_SPENDING_KEY,
+        "--disposable-gas-payer",
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
+
+    client.exp_string(TX_ACCEPTED)?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     Ok(())
 }
 
