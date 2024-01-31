@@ -532,12 +532,13 @@ mod tests {
     use namada_core::types::token::testing::arb_amount;
     use namada_parameters::{EpochDuration, Parameters};
     use namada_storage::testing::TestStorage;
-    use namada_trans_token::{write_denom, Denomination, MaspParams};
+    use namada_trans_token::{write_denom, Denomination};
     use proptest::prelude::*;
     use proptest::test_runner::Config;
     use test_log::test;
 
     use super::*;
+    use crate::ShieldedParams;
 
     proptest! {
         #![proptest_config(Config {
@@ -587,7 +588,7 @@ mod tests {
             namada_parameters::init_storage(&params, &mut s).unwrap();
 
             // Tokens
-            let token_params = MaspParams {
+            let token_params = ShieldedParams {
                 max_reward_rate: Dec::from_str("0.1").unwrap(),
                 kp_gain_nom: Dec::from_str("0.1").unwrap(),
                 kd_gain_nom: Dec::from_str("0.1").unwrap(),
