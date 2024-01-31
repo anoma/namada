@@ -6,16 +6,12 @@
 use namada_tx_prelude::*;
 
 #[transaction(gas = 585022)]
-fn apply_tx(_ctx: &mut Ctx, _tx_data: Tx) -> TxResult {
-    // let signed = tx_data;
-    // let data = signed.data().ok_or_err_msg("Missing data").or_else(|err| {
-    //                 ctx.set_commitment_sentinel();
-    //                 Err(err)
-    // })?;
+fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
+    let signed = tx_data;
+    let data = signed.data().ok_or_err_msg("Missing data").map_err(|err| {
+        ctx.set_commitment_sentinel();
+        err
+    })?;
 
-    // ibc::ibc_actions(ctx).execute(&data).into_storage_result()
-
-    // Temp. workaround for <https://github.com/anoma/namada/issues/1831>
-    tx_ibc_execute();
-    Ok(())
+    ibc::ibc_actions(ctx).execute(&data).into_storage_result()
 }

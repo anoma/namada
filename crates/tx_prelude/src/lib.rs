@@ -379,12 +379,6 @@ impl TxEnv for Ctx {
     }
 }
 
-/// Execute IBC tx.
-// Temp. workaround for <https://github.com/anoma/namada/issues/1831>
-pub fn tx_ibc_execute() {
-    unsafe { namada_tx_ibc_execute() }
-}
-
 /// Verify section signatures against the given list of keys
 pub fn verify_signatures_of_pks(
     ctx: &Ctx,
