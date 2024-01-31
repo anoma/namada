@@ -1,103 +1,74 @@
-# General protocol parameters.
 [parameters]
-native_token = "NAM"
-# Minimum number of blocks in an epoch.
-min_num_of_blocks = 4
-# Maximum expected time per block (in seconds).
-max_expected_time_per_block = 30
-# Max payload size, in bytes, for a tx.
+native_token = "NAAN"
+min_num_of_blocks = 3600
+max_expected_time_per_block = 20
 max_tx_bytes = 1048576
-# Max payload size, in bytes, for a tx batch proposal.
 max_proposal_bytes = 6291456
-# vp allowlist
-vp_allowlist = []
-# tx allowlist
-tx_allowlist = []
-# Implicit VP WASM name
+vp_allowlist = [
+    "fb99a9e1d8d8ca23e29c2668bf16dcb378fb847a0b089d033ab1eee2901cdb3a",
+    "454337f9e0cd292f12297f248872413d4df4ce44b6ea4c9a60365c6ee7b5655e",
+]
+tx_allowlist = [
+    "8df88a97bf4c610f136ddc7508863595447aa2bc5690695913a3b99ce7915db4",
+    "b0f895d92ebb56296bcd2331de9f50525bdc018062faa80be003565096c98b0e",
+    "d2e23c4efb08f95a969abbe66ace29ee147b446910f774a91ca411c4f7c33839",
+    "f3a73802a8aa3b0bd3df227223e7d518ab2eeaba5ed22ddb22fff37eee0bac7b",
+    "a6b4fe747a500468a008298c173a6f6bb10823ea48b2e7e387601aafb97a411e",
+    "a3b9483e570552b7188d9c474d6c853ba71793b965eb82df630c2240fd36d52c",
+    "9a23fc15dcfbd64f7ae2c0a8877256ee7bac8e5ec85add66dac0bb04341336cd",
+    "d8b6dcc070b87874c88381387545ee081a29adcce370d129dbfd5afb0acf6369",
+    "3a54f5086273d9056981bf1437c102027bb2dd93e01049aad0bc1446914a0922",
+    "66195469a7e80a7c019900241f127fe4b944dc43a5b22c817e8d9664d9f8bff7",
+    "f6406b2e30579d8d8752837702bd7bdb7dfc9adb92a1d3700f72d81f20f25f96",
+    "893adb2b8f59c132ae60a1ba2b850c0fe06703d63bd537a2ba42f6a7d785a83a",
+    "14975e2d1d631025b86af4c69d94c6b05e65f3c5dcaa78c258a8321b47fd2c28",
+    "4223fd4bbddb65402ac3a856a2a26a3135505f6dce75e6cc9366b91dd0813a19",
+    "309baf2cf49bb57790f0da7dc0fa8bb463aff5f2deef91f72e95b7bac5a4223f",
+    "eec37f37129766e8a9bd8908c4ee9f637723def0b53b337dd044e676e303b82a",
+    "5b4cdd37cd3d676df308e91db9680046099e2c59b35fd8f60182c2f1b4352ed9",
+    "3641d61e260eaf0570502f5ae196fdab9b658bf4ca17283517ed8f5a6b20b144",
+    "67e3fe173b9ec85df136caac1099cae3ce7227628b6e2186fd95368ebc8c3581",
+    "aab49609ce1ddf8be7e9c85ea0dc62586296a0d6ca083c35bbd8138583f5771c",
+    "3de7f3bd6063bd068c696c53698a40e1b9086c9dc45c05b02003c27ae26080f5",
+    "66f99861369b419968bb1f8a3e04ea9421072ea4f6b173ed1e2f2b41c4940330",
+]
 implicit_vp = "vp_implicit"
-# Expected number of epochs per year (also sets the min duration of an epoch in seconds)
-epochs_per_year = 31_536_000
-# Maximum number of signature per transaction
+epochs_per_year = 730
 max_signatures_per_transaction = 15
-# Max gas for block
-max_block_gas = 20000000
-# Fee unshielding gas limit
+max_block_gas = 5000000
 fee_unshielding_gas_limit = 20000
-# Fee unshielding descriptions limit
 fee_unshielding_descriptions_limit = 15
 
-# Map of the cost per gas unit for every token allowed for fee payment
-[parameters.minimum_gas_price]
-nam = "0.000001"
-
-# Proof of stake parameters.
 [pos_params]
-# Maximum number of active validators.
-max_validator_slots = 128
-# Pipeline length (in epochs). Any change in the validator set made in
-# epoch 'n' will become active in epoch 'n + pipeline_len'.
+max_validator_slots = 257
 pipeline_len = 2
-# Unbonding length (in epochs). Validators may have their stake slashed
-# for a fault in epoch 'n' up through epoch 'n + unbonding_len'.
-unbonding_len = 3
-# Votes per fundamental staking token (namnam)
+unbonding_len = 4
 tm_votes_per_token = "1"
-# Reward for proposing a block.
 block_proposer_reward = "0.125"
-# Reward for voting on a block.
 block_vote_reward = "0.1"
-# Maximum inflation rate per annum (10%)
-max_inflation_rate = "0.1"
-# Targeted ratio of staked tokens to total tokens in the supply
-target_staked_ratio = "0.6667"
-# Portion of a validator's stake that should be slashed on a duplicate
-# vote.
+max_inflation_rate = "0.0"
+target_staked_ratio = "0.0"
 duplicate_vote_min_slash_rate = "0.001"
-# Portion of a validator's stake that should be slashed on a light
-# client attack.
 light_client_attack_min_slash_rate = "0.001"
-# Number of epochs above and below (separately) the current epoch to
-# consider when doing cubic slashing
 cubic_slashing_window_length = 1
-# The minimum amount of bonded tokens that a validator needs to be in
-# either the `consensus` or `below_capacity` validator sets
-validator_stake_threshold = "1000000"
-# The length, in blocks, of the sliding window for consensus validators
-# inactivity verification
-liveness_window_check = 100
-# The minimum required activity of consensus validators, in percentage, over 
-# the `liveness_window_check`
+validator_stake_threshold = "1000000000000"
+liveness_window_check = 8640
 liveness_threshold = "0.9"
-# The P gain factor in the Proof of Stake rewards controller
-rewards_gain_p = "0.25"
-# The D gain factor in the Proof of Stake rewards controller
-rewards_gain_d = "0.25"
+rewards_gain_p = "0.0"
+rewards_gain_d = "0.0"
 
-# Governance parameters.
 [gov_params]
-# minimum amount of nam token to lock
-min_proposal_fund = 500
-# proposal code size in bytes
+min_proposal_fund = 5000
 max_proposal_code_size = 600000
-# min proposal period length in epochs
-min_proposal_voting_period = 3
-# max proposal period length in epochs
-max_proposal_period = 27
-# maximum number of characters in the proposal content
+min_proposal_voting_period = 2
+max_proposal_period = 6
 max_proposal_content_size = 10000
-# minimum epochs between end and grace epoch
-min_proposal_grace_epochs = 6
+min_proposal_grace_epochs = 2
 
-# Public goods funding parameters
 [pgf_params]
-# Initial set of stewards
-stewards = [
-    # bertha
-    "tnam1q9rhgyv3ydq0zu3whnftvllqnvhvhm270qxay5tn",
-    # validator-0
-    "tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx"
-]
-# The pgf funding inflation rate
-pgf_inflation_rate = "0.1"
-# The pgf stewards inflation rate
-stewards_inflation_rate = "0.01"
+stewards = []
+pgf_inflation_rate = "0.0"
+stewards_inflation_rate = "0.0"
+
+[parameters.minimum_gas_price]
+naan = "0.0001"
