@@ -412,6 +412,10 @@ pub async fn submit_change_consensus_key(
     )
     .add_data(data);
 
+    if let Some(memo) = &tx_args.memo {
+        tx.add_memo(memo);
+    };
+
     let signing_data =
         init_validator_signing_data(namada, &tx_args, vec![new_key]).await?;
 
@@ -739,6 +743,10 @@ pub async fn submit_become_validator(
         Some(args::TX_BECOME_VALIDATOR_WASM.to_string()),
     )
     .add_data(data);
+
+    if let Some(memo) = &tx_args.memo {
+        tx.add_memo(memo);
+    };
 
     let signing_data =
         init_validator_signing_data(namada, &tx_args, all_pks).await?;
