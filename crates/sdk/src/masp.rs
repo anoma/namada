@@ -113,6 +113,26 @@ pub const OUTPUT_NAME: &str = "masp-output.params";
 /// Convert circuit name
 pub const CONVERT_NAME: &str = "masp-convert.params";
 
+/// Type alias for convenience and profit
+pub type IndexedNoteData = BTreeMap<
+    IndexedTx,
+    (
+        Epoch,
+        BTreeSet<namada_core::types::storage::Key>,
+        Transaction,
+    ),
+>;
+
+/// Type alias for the entries of [`IndexedNoteData`] iterators
+pub type IndexedNoteEntry = (
+    IndexedTx,
+    (
+        Epoch,
+        BTreeSet<namada_core::types::storage::Key>,
+        Transaction,
+    ),
+);
+
 /// Shielded transfer
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub struct ShieldedTransfer {
@@ -540,13 +560,13 @@ impl SyncStatus for Syncing {}
 /// all transactions from a given height, or none.
 #[derive(BorshSerialize, BorshDeserialize, Debug, Default, Clone)]
 pub struct Unscanned {
-    txs: BTreeMap<IndexedTx, (Epoch, Transfer, Transaction)>,
+    txs: IndexedNoteData,
 }
 
 impl Unscanned {
     fn extend<I>(&mut self, items: I)
     where
-        I: IntoIterator<Item = (IndexedTx, (Epoch, Transfer, Transaction))>,
+        I: IntoIterator<Item = IndexedNoteEntry>,
     {
         self.txs.extend(items.into_iter());
     }
@@ -564,9 +584,8 @@ impl Unscanned {
 }
 
 impl IntoIterator for Unscanned {
-    type IntoIter =
-        btree_map::IntoIter<IndexedTx, (Epoch, Transfer, Transaction)>;
-    type Item = (IndexedTx, (Epoch, Transfer, Transaction));
+    type IntoIter = <IndexedNoteData as IntoIterator>::IntoIter;
+    type Item = IndexedNoteEntry;
 
     fn into_iter(self) -> Self::IntoIter {
         self.txs.into_iter()
@@ -743,7 +762,14 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 .iter_mut()
                 .filter(|(_vk, h)| **h < Some(indexed_tx))
             {
-                self.scan_tx(indexed_tx, epoch, &tx, &stx, vk, native_token.clone())?;
+                self.scan_tx(
+                    indexed_tx,
+                    epoch,
+                    &tx,
+                    &stx,
+                    vk,
+                    native_token.clone(),
+                )?;
                 *h = Some(indexed_tx);
             }
             // possibly remove unneeded elements from the cache.
@@ -766,17 +792,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         logger: &impl ProgressLogger<IO>,
         last_indexed_tx: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
-    ) -> Result<
-        BTreeMap<
-            IndexedTx,
-            (
-                Epoch,
-                BTreeSet<namada_core::types::storage::Key>,
-                Transaction,
-            ),
-        >,
-        Error,
-    > {
+    ) -> Result<IndexedNoteData, Error> {
         // Query for the last produced block height
         let last_block_height = query_block(client)
             .await?
@@ -3680,7 +3696,7 @@ pub enum ProgressType {
 
 pub trait ProgressLogger<IO: Io> {
     type Fetch: Iterator<Item = u64>;
-    type Scan: Iterator<Item = (IndexedTx, (Epoch, Transfer, Transaction))>;
+    type Scan: Iterator<Item = IndexedNoteEntry>;
 
     fn io(&self) -> &IO;
 
@@ -3690,7 +3706,7 @@ pub trait ProgressLogger<IO: Io> {
 
     fn scan<I>(&self, items: I) -> Self::Scan
     where
-        I: IntoIterator<Item = (IndexedTx, (Epoch, Transfer, Transaction))>;
+        I: IntoIterator<Item = IndexedNoteEntry>;
 }
 
 /// The default type for logging sync progress.
@@ -3707,7 +3723,7 @@ impl<'io, IO: Io> DefaultLogger<'io, IO> {
 
 impl<'io, IO: Io> ProgressLogger<IO> for DefaultLogger<'io, IO> {
     type Fetch = <Vec<u64> as IntoIterator>::IntoIter;
-    type Scan = <Vec<(IndexedTx, (Epoch, Transfer, Transaction))> as IntoIterator>::IntoIter;
+    type Scan = <Vec<IndexedNoteEntry> as IntoIterator>::IntoIter;
 
     fn io(&self) -> &IO {
         self.io
@@ -3723,7 +3739,7 @@ impl<'io, IO: Io> ProgressLogger<IO> for DefaultLogger<'io, IO> {
 
     fn scan<I>(&self, items: I) -> Self::Scan
     where
-        I: IntoIterator<Item = (IndexedTx, (Epoch, Transfer, Transaction))>,
+        I: IntoIterator<Item = IndexedNoteEntry>,
     {
         let items: Vec<_> = items.into_iter().collect();
         items.into_iter()

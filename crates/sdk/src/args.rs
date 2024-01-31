@@ -102,8 +102,8 @@ impl NamadaTypes for SdkTypes {
     type EthereumAddress = ();
     type Keypair = namada_core::types::key::common::SecretKey;
     type PublicKey = namada_core::types::key::common::PublicKey;
-    type TendermintAddress = tendermint_config::net::Address;
     type SpendingKey = namada_core::types::masp::ExtendedSpendingKey;
+    type TendermintAddress = tendermint_config::net::Address;
     type TransferSource = namada_core::types::masp::TransferSource;
     type TransferTarget = namada_core::types::masp::TransferTarget;
     type ViewingKey = namada_core::types::masp::ExtendedViewingKey;
