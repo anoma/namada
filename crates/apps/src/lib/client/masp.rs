@@ -2,15 +2,12 @@ use std::fmt::Debug;
 
 use color_eyre::owo_colors::OwoColorize;
 use masp_primitives::sapling::ViewingKey;
-use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::ExtendedSpendingKey;
-use namada::proof_of_stake::Epoch;
-use namada::token::Transfer;
-use namada::types::storage::IndexedTx;
 use namada_sdk::error::Error;
 use namada_sdk::io::Io;
 use namada_sdk::masp::{
-    ProgressLogger, ProgressType, ShieldedContext, ShieldedUtils,
+    IndexedNoteEntry, ProgressLogger, ProgressType, ShieldedContext,
+    ShieldedUtils,
 };
 use namada_sdk::queries::Client;
 use namada_sdk::types::storage::BlockHeight;
@@ -135,8 +132,7 @@ impl<'io, IO: Io> CliLogger<'io, IO> {
 
 impl<'io, IO: Io> ProgressLogger<IO> for CliLogger<'io, IO> {
     type Fetch = CliLogging<'io, u64, IO>;
-    type Scan =
-        CliLogging<'io, (IndexedTx, (Epoch, Transfer, Transaction)), IO>;
+    type Scan = CliLogging<'io, IndexedNoteEntry, IO>;
 
     fn io(&self) -> &IO {
         self.io
@@ -151,7 +147,7 @@ impl<'io, IO: Io> ProgressLogger<IO> for CliLogger<'io, IO> {
 
     fn scan<I>(&self, items: I) -> Self::Scan
     where
-        I: IntoIterator<Item = (IndexedTx, (Epoch, Transfer, Transaction))>,
+        I: IntoIterator<Item = IndexedNoteEntry>,
     {
         CliLogging::new(items, self.io, ProgressType::Scan)
     }

@@ -5666,7 +5666,7 @@ pub mod args {
 
     impl Args for ShieldedSync<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
-            let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
+            let ledger_address = LEDGER_ADDRESS.parse(matches);
             let batch_size = BATCH_SIZE_OPT.parse(matches);
             let last_query_height = BLOCK_HEIGHT_OPT.parse(matches);
             let spending_keys = SPENDING_KEYS.parse(matches);
@@ -5681,7 +5681,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(LEDGER_ADDRESS_DEFAULT.def().help(LEDGER_ADDRESS_ABOUT))
+            app.arg(LEDGER_ADDRESS.def().help(LEDGER_ADDRESS_ABOUT))
                 .arg(BATCH_SIZE_OPT.def().help(
                     "Optional batch size which determines how many txs to \
                      fetch before caching locally. Default is 1.",
@@ -5704,7 +5704,7 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> ShieldedSync<SdkTypes> {
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
             ShieldedSync {
-                ledger_address: (),
+                ledger_address: self.ledger_address,
                 batch_size: self.batch_size,
                 last_query_height: self.last_query_height,
                 spending_keys: self
@@ -6005,8 +6005,8 @@ pub mod args {
         type EthereumAddress = String;
         type Keypair = WalletKeypair;
         type PublicKey = WalletPublicKey;
-        type TendermintAddress = tendermint_config::net::Address;
         type SpendingKey = WalletSpendingKey;
+        type TendermintAddress = tendermint_config::net::Address;
         type TransferSource = WalletTransferSource;
         type TransferTarget = WalletTransferTarget;
         type ViewingKey = WalletViewingKey;
