@@ -545,7 +545,8 @@ pub async fn construct_proof(
                         let fees = total_fees
                             .entry(token)
                             .or_insert_with(Amount::zero);
-                        fees.receive(&amount).map_err(|e| Error::Other(e.to_string()))?;
+                        fees.receive(&amount)
+                            .map_err(|e| Error::Other(e.to_string()))?;
                         Ok::<_, Error>(total_fees)
                     },
                 )

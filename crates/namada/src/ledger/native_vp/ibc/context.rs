@@ -6,7 +6,7 @@ use borsh_ext::BorshSerializeExt;
 use ledger_storage::ResultExt;
 use namada_core::types::storage::Epochs;
 use namada_ibc::{IbcCommonContext, IbcStorageContext};
-use namada_state::{StorageRead, StorageWrite, StorageError};
+use namada_state::{StorageError, StorageRead, StorageWrite};
 
 use crate::ledger::ibc::storage::is_ibc_key;
 use crate::ledger::native_vp::CtxPreStorageRead;
@@ -84,11 +84,13 @@ where
             }
             Some(StorageModification::Delete) => Ok(None),
             Some(StorageModification::Temp { .. }) => {
-                Err(StorageError::new_const("Temp shouldn't be inserted in an IBC transaction"))
+                Err(StorageError::new_const(
+                    "Temp shouldn't be inserted in an IBC transaction",
+                ))
             }
-            Some(StorageModification::InitAccount { .. }) => {
-                Err(StorageError::new_const("InitAccount shouldn't be inserted"))
-            }
+            Some(StorageModification::InitAccount { .. }) => Err(
+                StorageError::new_const("InitAccount shouldn't be inserted"),
+            ),
             None => self.ctx.read_bytes(key),
         }
     }
