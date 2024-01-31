@@ -310,7 +310,8 @@ impl Store {
             .unwrap_or_else(|| Address::Implicit(ImplicitAddress(pkh.clone())));
         if !force {
             if self.pkhs.contains_key(&pkh) {
-                println!("The key already exists.");
+                let alias = self.pkhs.get(&pkh).unwrap();
+                println!("The key already exists with alias {}", alias);
                 return None;
             } else if let Some(alias) = self.addresses.get_by_right(&address) {
                 println!(
@@ -449,7 +450,8 @@ impl Store {
             .unwrap_or_else(|| Address::Implicit(ImplicitAddress(pkh.clone())));
         if !force {
             if self.pkhs.contains_key(&pkh) {
-                println!("The key already exists.");
+                let alias = self.pkhs.get(&pkh).unwrap();
+                println!("The key already exists with alias {}", alias);
                 return None;
             } else if let Some(alias) = self.addresses.get_by_right(&address) {
                 println!(
