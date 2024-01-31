@@ -316,9 +316,9 @@ impl CliApi {
                         tx::submit_validator_metadata_change(&namada, args)
                             .await?;
                     }
-                    Sub::ShieldedSync(ShieldedSync(mut args)) => {
+                    Sub::ShieldedSync(ShieldedSync(args)) => {
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(&mut args.ledger_address)
+                            C::from_tendermint_address(&args.ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
