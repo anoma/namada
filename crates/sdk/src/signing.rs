@@ -623,11 +623,11 @@ pub async fn wrap_tx<N: Namada>(
         }
         _ => {
             if args.fee_unshield.is_some() {
-                display_line!(
-                    context.io(),
-                    "Enough transparent balance to pay fees: the fee \
-                     unshielding spending key will be ignored"
-                );
+                return Err(Error::Other(
+                    "Enough transparent balance to pay fees: please remove \
+                     the --gas-spending-key or select a different --gas-payer"
+                        .to_string(),
+                ));
             }
             None
         }
