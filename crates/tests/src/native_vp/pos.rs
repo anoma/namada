@@ -1319,10 +1319,10 @@ pub mod testing {
                     tx::ctx().read(&balance_key).unwrap().unwrap_or_default();
                 if !delta.non_negative() {
                     let to_spend = token::Amount::from_change(delta);
-                    balance.spend(&to_spend);
+                    balance.spend(&to_spend).unwrap();
                 } else {
                     let to_recv = token::Amount::from_change(delta);
-                    balance.receive(&to_recv);
+                    balance.receive(&to_recv).unwrap();
                 }
                 tx::ctx().write(&balance_key, balance).unwrap();
             }
