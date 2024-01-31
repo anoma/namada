@@ -578,7 +578,6 @@ where
                     return Ok(false);
                 }
             }
-
             if !(self.valid_spend_descriptions_anchor(&shielded_tx)?
                 && self.valid_convert_descriptions_anchor(&shielded_tx)?
                 && self.valid_nullifiers_reveal(keys_changed, &shielded_tx)?)

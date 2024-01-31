@@ -537,23 +537,6 @@ pub type TransferDelta = HashMap<Address, MaspChange>;
 
 /// Represents the changes that were made to a list of shielded accounts
 pub type TransactionDelta = HashMap<ViewingKey, I128Sum>;
-
-#[derive(Debug, Clone)]
-/// A marker type indicating that the shielded context is currently
-/// syncing.
-pub enum Syncing {}
-
-#[derive(Debug, Clone)]
-/// A marker type indicating that the shielded context is not currently
-/// syncing.
-pub enum NotSyncing {}
-
-pub trait SyncStatus {}
-
-impl SyncStatus for NotSyncing {}
-
-impl SyncStatus for Syncing {}
-
 /// A cache of fetched indexed transactions.
 ///
 /// The cache is designed so that it either contains
