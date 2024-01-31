@@ -514,13 +514,20 @@ impl<U: WalletIo> Wallet<U> {
         alias_force: bool,
         derivation_path: DerivationPath,
         mnemonic_passphrase: Option<(Mnemonic, Zeroizing<String>)>,
+        prompt_bip39_passphrase: bool,
         password: Option<Zeroizing<String>>,
     ) -> Option<(String, ExtendedSpendingKey)> {
         let (mnemonic, passphrase) =
             if let Some(mnemonic_passphrase) = mnemonic_passphrase {
                 mnemonic_passphrase
             } else {
-                (U::read_mnemonic_code()?, U::read_mnemonic_passphrase(false))
+                let mnemonic = U::read_mnemonic_code()?;
+                let passphrase = if prompt_bip39_passphrase {
+                    U::read_mnemonic_passphrase(false)
+                } else {
+                    Zeroizing::default()
+                };
+                (mnemonic, passphrase)
             };
         let seed = Seed::new(&mnemonic, &passphrase);
         let spend_key =
@@ -552,13 +559,20 @@ impl<U: WalletIo> Wallet<U> {
         alias_force: bool,
         derivation_path: DerivationPath,
         mnemonic_passphrase: Option<(Mnemonic, Zeroizing<String>)>,
+        prompt_bip39_passphrase: bool,
         password: Option<Zeroizing<String>>,
     ) -> Option<(String, common::SecretKey)> {
         let (mnemonic, passphrase) =
             if let Some(mnemonic_passphrase) = mnemonic_passphrase {
                 mnemonic_passphrase
             } else {
-                (U::read_mnemonic_code()?, U::read_mnemonic_passphrase(false))
+                let mnemonic = U::read_mnemonic_code()?;
+                let passphrase = if prompt_bip39_passphrase {
+                    U::read_mnemonic_passphrase(false)
+                } else {
+                    Zeroizing::default()
+                };
+                (mnemonic, passphrase)
             };
         let seed = Seed::new(&mnemonic, &passphrase);
         let sk = derive_hd_secret_key(
