@@ -23,7 +23,6 @@ mod vote_extensions;
 
 use std::collections::{BTreeSet, HashSet};
 use std::convert::{TryFrom, TryInto};
-use std::mem;
 use std::path::{Path, PathBuf};
 #[allow(unused_imports)]
 use std::rc::Rc;
@@ -46,11 +45,9 @@ use namada::ledger::protocol::{
     apply_wasm_tx, get_fee_unshielding_transaction,
     get_transfer_hash_from_storage, ShellParams,
 };
-use namada::ledger::{parameters, pos, protocol};
+use namada::ledger::{parameters, protocol};
 use namada::parameters::validate_tx_bytes;
-use namada::proof_of_stake::slashing::{process_slashes, slash};
 use namada::proof_of_stake::storage::read_pos_params;
-use namada::proof_of_stake::{self};
 use namada::state::tx_queue::{ExpiredTx, TxInQueue};
 use namada::state::wl_storage::WriteLogAndStorage;
 use namada::state::write_log::WriteLog;
@@ -79,7 +76,6 @@ use tokio::sync::mpsc::{Receiver, UnboundedSender};
 
 use super::ethereum_oracle::{self as oracle, last_processed_block};
 use crate::config::{self, genesis, TendermintMode, ValidatorLocalConfig};
-use crate::facade::tendermint::abci::types::{Misbehavior, MisbehaviorKind};
 use crate::facade::tendermint::v0_37::abci::{request, response};
 use crate::facade::tendermint::{self, validator};
 use crate::facade::tendermint_proto::v0_37::crypto::public_key;
@@ -338,9 +334,6 @@ where
     pub chain_id: ChainId,
     /// The persistent storage with write log
     pub wl_storage: WlStorage<D, H>,
-    /// Byzantine validators given from ABCI++ `prepare_proposal` are stored in
-    /// this field. They will be slashed when we finalize the block.
-    byzantine_validators: Vec<Misbehavior>,
     /// Path to the base directory with DB data and configs
     #[allow(dead_code)]
     pub(crate) base_dir: PathBuf,
@@ -521,7 +514,6 @@ where
         let mut shell = Self {
             chain_id,
             wl_storage,
-            byzantine_validators: vec![],
             base_dir,
             wasm_dir,
             mode,
@@ -621,115 +613,6 @@ where
         }
     }
 
-    /// Apply PoS slashes from the evidence
-    fn record_slashes_from_evidence(&mut self) {
-        if !self.byzantine_validators.is_empty() {
-            let byzantine_validators =
-                mem::take(&mut self.byzantine_validators);
-            // TODO: resolve this unwrap() better
-            let pos_params = read_pos_params(&self.wl_storage).unwrap();
-            let current_epoch = self.wl_storage.storage.block.epoch;
-            for evidence in byzantine_validators {
-                // dbg!(&evidence);
-                tracing::info!("Processing evidence {evidence:?}.");
-                let evidence_height = match u64::try_from(evidence.height) {
-                    Ok(height) => height,
-                    Err(err) => {
-                        tracing::error!(
-                            "Unexpected evidence block height {}",
-                            err
-                        );
-                        continue;
-                    }
-                };
-                let evidence_epoch = match self
-                    .wl_storage
-                    .storage
-                    .block
-                    .pred_epochs
-                    .get_epoch(BlockHeight(evidence_height))
-                {
-                    Some(epoch) => epoch,
-                    None => {
-                        tracing::error!(
-                            "Couldn't find epoch for evidence block height {}",
-                            evidence_height
-                        );
-                        continue;
-                    }
-                };
-                // Disregard evidences that should have already been processed
-                // at this time
-                if evidence_epoch + pos_params.slash_processing_epoch_offset()
-                    - pos_params.cubic_slashing_window_length
-                    <= current_epoch
-                {
-                    tracing::info!(
-                        "Skipping outdated evidence from epoch \
-                         {evidence_epoch}"
-                    );
-                    continue;
-                }
-                let slash_type = match evidence.kind {
-                    MisbehaviorKind::DuplicateVote => {
-                        pos::types::SlashType::DuplicateVote
-                    }
-                    MisbehaviorKind::LightClientAttack => {
-                        pos::types::SlashType::LightClientAttack
-                    }
-                    MisbehaviorKind::Unknown => {
-                        tracing::error!("Unknown evidence: {:#?}", evidence);
-                        continue;
-                    }
-                };
-                let validator_raw_hash =
-                    tm_raw_hash_to_string(evidence.validator.address);
-                let validator =
-                    match proof_of_stake::storage::find_validator_by_raw_hash(
-                        &self.wl_storage,
-                        &validator_raw_hash,
-                    )
-                    .expect("Must be able to read storage")
-                    {
-                        Some(validator) => validator,
-                        None => {
-                            tracing::error!(
-                                "Cannot find validator's address from raw \
-                                 hash {}",
-                                validator_raw_hash
-                            );
-                            continue;
-                        }
-                    };
-                // Check if we're gonna switch to a new epoch after a delay
-                let validator_set_update_epoch =
-                    self.get_validator_set_update_epoch(current_epoch);
-                tracing::info!(
-                    "Slashing {} for {} in epoch {}, block height {} (current \
-                     epoch = {}, validator set update epoch = \
-                     {validator_set_update_epoch})",
-                    validator,
-                    slash_type,
-                    evidence_epoch,
-                    evidence_height,
-                    current_epoch
-                );
-                if let Err(err) = slash(
-                    &mut self.wl_storage,
-                    &pos_params,
-                    current_epoch,
-                    evidence_epoch,
-                    evidence_height,
-                    slash_type,
-                    &validator,
-                    validator_set_update_epoch,
-                ) {
-                    tracing::error!("Error in slashing: {}", err);
-                }
-            }
-        }
-    }
-
     /// Get the next epoch for which we can request validator set changed
     pub fn get_validator_set_update_epoch(
         &self,
@@ -749,20 +632,6 @@ where
             }
         } else {
             current_epoch.next()
-        }
-    }
-
-    /// Process and apply slashes that have already been recorded for the
-    /// current epoch
-    fn process_slashes(&mut self) {
-        let current_epoch = self.wl_storage.storage.block.epoch;
-        if let Err(err) = process_slashes(&mut self.wl_storage, current_epoch) {
-            tracing::error!(
-                "Error while processing slashes queued for epoch {}: {}",
-                current_epoch,
-                err
-            );
-            panic!("Error while processing slashes");
         }
     }
 

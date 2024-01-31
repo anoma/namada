@@ -27,9 +27,11 @@ use std::cmp::{self};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 pub use error::*;
+use namada_core::event::EmitEvents;
+use namada_core::tendermint::abci::types::{Misbehavior, MisbehaviorKind};
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::dec::Dec;
-use namada_core::types::key::common;
+use namada_core::types::key::{common, tm_raw_hash_to_string};
 use namada_core::types::storage::BlockHeight;
 pub use namada_core::types::storage::{Epoch, Key, KeySeg};
 use namada_storage::collections::lazy_map::{self, Collectable, LazyMap};
@@ -2762,6 +2764,252 @@ where
             current_epoch,
             offset,
         )?;
+    }
+    Ok(())
+}
+
+/// Apply PoS updates for a block
+pub fn finalize_block<S>(
+    storage: &mut S,
+    _events: &mut impl EmitEvents,
+    is_new_epoch: bool,
+    validator_set_update_epoch: Epoch,
+    votes: Vec<VoteInfo>,
+    byzantine_validators: Vec<Misbehavior>,
+) -> namada_storage::Result<()>
+where
+    S: StorageWrite + StorageRead,
+{
+    let height = storage.get_block_height()?;
+    let current_epoch = storage.get_block_epoch()?;
+    let pos_params = storage::read_pos_params(storage)?;
+
+    if is_new_epoch {
+        // Copy the new_epoch + pipeline_len - 1 validator set into
+        // new_epoch + pipeline_len
+        validator_set_update::copy_validator_sets_and_positions(
+            storage,
+            &pos_params,
+            current_epoch,
+            current_epoch + pos_params.pipeline_len,
+        )?;
+
+        // Compute the total stake of the consensus validator set and record
+        // it in storage
+        compute_and_store_total_consensus_stake(storage, current_epoch)?;
+    }
+
+    // Invariant: Has to be applied before `record_slashes_from_evidence`
+    // because it potentially needs to be able to read validator state from
+    // previous epoch and jailing validator removes the historical state
+    if !votes.is_empty() {
+        log_block_rewards(
+            storage,
+            votes.clone(),
+            height,
+            current_epoch,
+            is_new_epoch,
+        )?;
+    }
+
+    // Invariant: This has to be applied after
+    // `copy_validator_sets_and_positions` and before `self.update_epoch`.
+    record_slashes_from_evidence(
+        storage,
+        byzantine_validators,
+        &pos_params,
+        current_epoch,
+        validator_set_update_epoch,
+    )?;
+
+    // Invariant: This has to be applied after
+    // `copy_validator_sets_and_positions` if we're starting a new epoch
+    if is_new_epoch {
+        // Invariant: Process slashes before inflation as they may affect
+        // the rewards in the current epoch.
+
+        // Process and apply slashes that have already been recorded for the
+        // current epoch
+        if let Err(err) = slashing::process_slashes(storage, current_epoch) {
+            tracing::error!(
+                "Error while processing slashes queued for epoch {}: {}",
+                current_epoch,
+                err
+            );
+            panic!("Error while processing slashes");
+        }
+    }
+
+    // Consensus set liveness check
+    if !votes.is_empty() {
+        let vote_height = height.prev_height();
+        let epoch_of_votes =
+            storage.get_pred_epochs()?.get_epoch(vote_height).expect(
+                "Should always find an epoch when looking up the vote height \
+                 before recording liveness data.",
+            );
+        record_liveness_data(
+            storage,
+            &votes,
+            epoch_of_votes,
+            vote_height,
+            &pos_params,
+        )?;
+    }
+
+    // Jail validators for inactivity
+    jail_for_liveness(
+        storage,
+        &pos_params,
+        current_epoch,
+        validator_set_update_epoch,
+    )?;
+
+    if is_new_epoch {
+        // Prune liveness data from validators that are no longer in the
+        // consensus set
+        prune_liveness_data(storage, current_epoch)?;
+    }
+
+    Ok(())
+}
+
+// Process the proposer and votes in the block to assign their PoS rewards.
+fn log_block_rewards<S>(
+    storage: &mut S,
+    votes: Vec<VoteInfo>,
+    height: BlockHeight,
+    current_epoch: Epoch,
+    new_epoch: bool,
+) -> namada_storage::Result<()>
+where
+    S: StorageWrite + StorageRead,
+{
+    // Read the block proposer of the previously committed block in storage
+    // (n-1 if we are in the process of finalizing n right now).
+    match storage::read_last_block_proposer_address(storage)? {
+        Some(proposer_address) => {
+            tracing::debug!("Found last block proposer: {proposer_address}");
+            rewards::log_block_rewards(
+                storage,
+                if new_epoch {
+                    current_epoch.prev()
+                } else {
+                    current_epoch
+                },
+                &proposer_address,
+                votes,
+            )?;
+        }
+        None => {
+            if height > BlockHeight::default().next_height() {
+                tracing::error!(
+                    "Can't find the last block proposer at height {height}"
+                );
+            } else {
+                tracing::debug!("No last block proposer at height {height}");
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Apply PoS slashes from the evidence
+fn record_slashes_from_evidence<S>(
+    storage: &mut S,
+    byzantine_validators: Vec<Misbehavior>,
+    pos_params: &PosParams,
+    current_epoch: Epoch,
+    validator_set_update_epoch: Epoch,
+) -> namada_storage::Result<()>
+where
+    S: StorageWrite + StorageRead,
+{
+    if !byzantine_validators.is_empty() {
+        let pred_epochs = storage.get_pred_epochs()?;
+        for evidence in byzantine_validators {
+            // dbg!(&evidence);
+            tracing::info!("Processing evidence {evidence:?}.");
+            let evidence_height = match u64::try_from(evidence.height) {
+                Ok(height) => height,
+                Err(err) => {
+                    tracing::error!("Unexpected evidence block height {}", err);
+                    continue;
+                }
+            };
+            let evidence_epoch =
+                match pred_epochs.get_epoch(BlockHeight(evidence_height)) {
+                    Some(epoch) => epoch,
+                    None => {
+                        tracing::error!(
+                            "Couldn't find epoch for evidence block height {}",
+                            evidence_height
+                        );
+                        continue;
+                    }
+                };
+            // Disregard evidences that should have already been processed
+            // at this time
+            if evidence_epoch + pos_params.slash_processing_epoch_offset()
+                - pos_params.cubic_slashing_window_length
+                <= current_epoch
+            {
+                tracing::info!(
+                    "Skipping outdated evidence from epoch {evidence_epoch}"
+                );
+                continue;
+            }
+            let slash_type = match evidence.kind {
+                MisbehaviorKind::DuplicateVote => {
+                    types::SlashType::DuplicateVote
+                }
+                MisbehaviorKind::LightClientAttack => {
+                    types::SlashType::LightClientAttack
+                }
+                MisbehaviorKind::Unknown => {
+                    tracing::error!("Unknown evidence: {:#?}", evidence);
+                    continue;
+                }
+            };
+            let validator_raw_hash =
+                tm_raw_hash_to_string(evidence.validator.address);
+            let validator = match storage::find_validator_by_raw_hash(
+                storage,
+                &validator_raw_hash,
+            )? {
+                Some(validator) => validator,
+                None => {
+                    tracing::error!(
+                        "Cannot find validator's address from raw hash {}",
+                        validator_raw_hash
+                    );
+                    continue;
+                }
+            };
+            // Check if we're gonna switch to a new epoch after a delay
+            tracing::info!(
+                "Slashing {} for {} in epoch {}, block height {} (current \
+                 epoch = {}, validator set update epoch = \
+                 {validator_set_update_epoch})",
+                validator,
+                slash_type,
+                evidence_epoch,
+                evidence_height,
+                current_epoch
+            );
+            if let Err(err) = slashing::slash(
+                storage,
+                pos_params,
+                current_epoch,
+                evidence_epoch,
+                evidence_height,
+                slash_type,
+                &validator,
+                validator_set_update_epoch,
+            ) {
+                tracing::error!("Error in slashing: {}", err);
+            }
+        }
     }
     Ok(())
 }
