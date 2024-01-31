@@ -325,7 +325,7 @@ impl Store {
 
         // abort if the alias is reserved
         if Alias::is_reserved(&alias).is_some() {
-            println!("The alias {} is reserved", alias);
+            println!("The alias {} is reserved.", alias);
             return None;
         }
 
@@ -372,7 +372,7 @@ impl Store {
     ) -> Option<Alias> {
         // abort if the alias is reserved
         if Alias::is_reserved(&alias).is_some() {
-            println!("The alias {} is reserved", alias);
+            println!("The alias {} is reserved.", alias);
             return None;
         }
         // abort if the alias is empty
@@ -413,7 +413,7 @@ impl Store {
     ) -> Option<Alias> {
         // abort if the alias is reserved
         if Alias::is_reserved(&alias).is_some() {
-            println!("The alias {} is reserved", alias);
+            println!("The alias {} is reserved.", alias);
             return None;
         }
 
@@ -498,7 +498,7 @@ impl Store {
     ) -> Option<Alias> {
         // abort if the alias is reserved
         if Alias::is_reserved(&alias).is_some() {
-            println!("The alias {} is reserved", alias);
+            println!("The alias {} is reserved.", alias);
             return None;
         }
 
@@ -536,7 +536,7 @@ impl Store {
     ) -> Option<Alias> {
         // abort if the alias is reserved
         if Alias::is_reserved(&alias).is_some() {
-            println!("The alias {} is reserved", alias);
+            println!("The alias {} is reserved.", alias);
             return None;
         }
         // abort if the address already exists in the wallet
