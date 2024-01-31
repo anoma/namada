@@ -20,7 +20,6 @@ testing = ["multicore", "namada_core/testing"]
 [dependencies]
 namada_core = { path = "../core" }
 namada_parameters = { path = "../parameters" }
-namada_state = { path = "../state" }
 namada_storage = { path = "../storage" }
 namada_trans_token = { path = "../trans_token" }
 
@@ -30,7 +29,7 @@ tracing.workspace = true
 
 [dev-dependencies]
 namada_core = { path = "../core", features = ["testing"] }
-namada_state = { path = "../state", features = ["testing"] }
+namada_storage = { path = "../storage", features = ["testing"] }
 
 proptest.workspace = true
 rayon.workspace = true
