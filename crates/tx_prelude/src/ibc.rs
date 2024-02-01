@@ -14,7 +14,7 @@ use namada_token::denom_to_amount;
 use namada_tx_env::TxEnv;
 
 use crate::token::{burn, mint, transfer};
-use crate::{Ctx, Error};
+use crate::{update_masp_note_commitment_tree, Ctx, Error};
 
 /// IBC actions to handle an IBC message
 pub fn ibc_actions(ctx: &mut Ctx) -> IbcActions<Ctx> {
@@ -56,7 +56,8 @@ impl IbcStorageContext for Ctx {
         pin_key: Option<&str>,
     ) -> Result<(), Error> {
         namada_token::utils::handle_masp_tx(self, shielded, pin_key)?;
-        namada_token::utils::update_note_commitment_tree(self, shielded)
+        update_masp_note_commitment_tree(shielded)?;
+        Ok(())
     }
 
     fn mint_token(

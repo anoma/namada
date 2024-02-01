@@ -520,6 +520,10 @@ mod native_tx_host_env {
         max_signatures_ptr: u64,
         max_signatures_len: u64,
     ) -> i64);
+    native_host_fn!(tx_update_masp_note_commitment_tree(
+        transaction_ptr: u64,
+        transaction_len: u64,
+    ) -> i64);
 }
 
 #[cfg(test)]
