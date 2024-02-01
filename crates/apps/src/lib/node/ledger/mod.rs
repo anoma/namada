@@ -17,7 +17,7 @@ use futures::future::TryFutureExt;
 use namada::eth_bridge::ethers::providers::{Http, Provider};
 use namada::governance::storage::keys as governance_storage;
 use namada::types::storage::Key;
-use namada::types::time::{DateTimeUtc, Utc};
+use namada::types::time::DateTimeUtc;
 use namada_sdk::tendermint::abci::request::CheckTxKind;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
@@ -242,12 +242,6 @@ pub fn rollback(config: config::Ledger) -> Result<(), shell::Error> {
 ///
 /// All must be alive for correct functioning.
 async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
-    // wait for genesis time
-    let genesis_time = DateTimeUtc::try_from(config.genesis_time.clone())
-        .expect("Should be able to parse genesis time");
-    if let std::ops::ControlFlow::Break(_) = sleep_until(genesis_time).await {
-        return;
-    }
     let setup_data = run_aux_setup(&config, &wasm_dir).await;
 
     // Create an `AbortableSpawner` for signalling shut down from the shell or
@@ -441,7 +435,8 @@ fn start_abci_broadcaster_shell(
     // Channels for validators to send protocol txs to be broadcast to the
     // broadcaster service
     let (broadcaster_sender, broadcaster_receiver) = mpsc::unbounded_channel();
-
+    let genesis_time = DateTimeUtc::try_from(config.genesis_time.clone())
+        .expect("Should be able to parse genesis time");
     // Start broadcaster
     let broadcaster = if matches!(
         config.shell.tendermint_mode,
@@ -456,7 +451,7 @@ fn start_abci_broadcaster_shell(
                 // the ledger
                 let mut broadcaster =
                     Broadcaster::new(rpc_address, broadcaster_receiver);
-                broadcaster.run(bc_abort_recv).await;
+                broadcaster.run(bc_abort_recv, genesis_time).await;
                 tracing::info!("Broadcaster is no longer running.");
 
                 drop(aborter);
@@ -787,37 +782,4 @@ pub fn test_genesis_files(
 /// which will resolve instantly.
 fn spawn_dummy_task<T: Send + 'static>(ready: T) -> task::JoinHandle<T> {
     tokio::spawn(async { std::future::ready(ready).await })
-}
-
-/// Sleep until the genesis time if necessary.
-async fn sleep_until(time: DateTimeUtc) -> std::ops::ControlFlow<()> {
-    // Sleep until start time if needed
-    let sleep = async {
-        if let Ok(sleep_time) =
-            time.0.signed_duration_since(Utc::now()).to_std()
-        {
-            if !sleep_time.is_zero() {
-                tracing::info!(
-                    "Waiting for ledger genesis time: {:?}, time left: {:?}",
-                    time,
-                    sleep_time
-                );
-                tokio::time::sleep(sleep_time).await
-            }
-        }
-    };
-    let shutdown_signal = async {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        namada_sdk::control_flow::shutdown_send(tx).await;
-        rx.await
-    };
-    tokio::select! {
-        _ = shutdown_signal => {
-            std::ops::ControlFlow::Break(())
-        }
-        _ = sleep => {
-            tracing::info!("Genesis time reached, starting ledger");
-            std::ops::ControlFlow::Continue(())
-        }
-    }
 }

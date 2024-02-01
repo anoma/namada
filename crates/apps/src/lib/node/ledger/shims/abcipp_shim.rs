@@ -11,6 +11,8 @@ use namada::tx::Tx;
 use namada::types::hash::Hash;
 use namada::types::key::tm_raw_hash_to_string;
 use namada::types::storage::{BlockHash, BlockHeight};
+use namada::types::time::Utc;
+use namada_sdk::types::time::DateTimeUtc;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc::UnboundedSender;
 use tower::Service;
@@ -182,6 +184,7 @@ impl AbcippShim {
                     Err(err) => Err(err),
                 },
             };
+
             let resp = resp.map_err(|e| e.into());
             if resp_sender.send(resp).is_err() {
                 tracing::info!("ABCI response channel is closed")
@@ -292,20 +295,43 @@ impl AbciService {
     /// forward it normally.
     fn forward_request(&mut self, req: Req) -> <Self as Service<Req>>::Future {
         let (resp_send, recv) = tokio::sync::oneshot::channel();
-        let result = self.shell_send.send((req, resp_send));
-
+        let shell_send = self.shell_send.clone();
         async move {
+            let genesis_time = if let Req::InitChain(ref init) = req {
+                Some(
+                    DateTimeUtc::try_from(init.time)
+                        .expect("Should be able to parse genesis time."),
+                )
+            } else {
+                None
+            };
+            let result = shell_send.send((req, resp_send));
             if let Err(err) = result {
                 // The shell has shut-down
                 return Err(err.into());
             }
-            match recv.await {
-                Ok(resp) => resp,
-                Err(err) => {
+            recv.await
+                .unwrap_or_else(|err| {
                     tracing::info!("ABCI response channel didn't respond");
                     Err(err.into())
-                }
-            }
+                })
+                .map(|res| {
+                    // emit a log line stating that we are sleeping until
+                    // genesis.
+                    if let Some(Ok(sleep_time)) = genesis_time
+                        .map(|t| t.0.signed_duration_since(Utc::now()).to_std())
+                    {
+                        if !sleep_time.is_zero() {
+                            tracing::info!(
+                                "Waiting for ledger genesis time: {:?}, time \
+                                 left: {:?}",
+                                genesis_time.unwrap(),
+                                sleep_time
+                            );
+                        }
+                    }
+                    res
+                })
         }
         .boxed()
     }
