@@ -8,7 +8,7 @@ use std::ops::ControlFlow;
 pub use ethers;
 use ethers::providers::Middleware;
 use itertools::Either;
-pub use namada_core::types::ethereum_structs as structs;
+pub use namada_core::ethereum_structs as structs;
 pub use namada_ethereum_bridge::storage::eth_bridge_queries::*;
 pub use namada_ethereum_bridge::storage::parameters::*;
 pub use namada_ethereum_bridge::storage::wrapped_erc20s;

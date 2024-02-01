@@ -1,4 +1,4 @@
-use namada_core::types::ethereum_events::Uint;
+use namada_core::ethereum_events::Uint;
 use namada_state::{DBIter, StorageHasher, WlStorage, DB};
 use namada_storage::StorageWrite;
 use namada_trans_token::storage_key::balance_key;

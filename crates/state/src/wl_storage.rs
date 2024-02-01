@@ -2,10 +2,10 @@
 
 use std::iter::Peekable;
 
-use namada_core::types::address::Address;
-use namada_core::types::hash::{Hash, StorageHasher};
-use namada_core::types::storage::{self, BlockHeight, Epochs};
-use namada_core::types::time::DateTimeUtc;
+use namada_core::address::Address;
+use namada_core::hash::{Hash, StorageHasher};
+use namada_core::storage::{self, BlockHeight, Epochs};
+use namada_core::time::DateTimeUtc;
 use namada_parameters::EpochDuration;
 use namada_storage::conversion_state::{ConversionState, WithConversionState};
 use namada_storage::{ResultExt, StorageRead, StorageWrite};
@@ -591,9 +591,9 @@ where
 mod tests {
     use std::collections::BTreeMap;
 
+    use namada_core::address::InternalAddress;
     use namada_core::borsh::{BorshDeserialize, BorshSerializeExt};
-    use namada_core::types::address::InternalAddress;
-    use namada_core::types::storage::DbKeySeg;
+    use namada_core::storage::DbKeySeg;
     use proptest::prelude::*;
     use proptest::test_runner::Config;
     // Use `RUST_LOG=info` (or another tracing level) and `--nocapture` to

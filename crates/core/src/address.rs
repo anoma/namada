@@ -14,13 +14,12 @@ use data_encoding::HEXUPPER;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::ethereum_events::EthAddress;
 use crate::ibc::primitives::Signer;
-use crate::impl_display_and_from_str_via_format;
-use crate::types::ethereum_events::EthAddress;
-use crate::types::ibc::IbcTokenHash;
-use crate::types::key::PublicKeyHash;
-use crate::types::token::Denomination;
-use crate::types::{key, string_encoding};
+use crate::ibc::IbcTokenHash;
+use crate::key::PublicKeyHash;
+use crate::token::Denomination;
+use crate::{impl_display_and_from_str_via_format, key, string_encoding};
 
 /// The length of an established [`Address`] encoded with Borsh.
 pub const ESTABLISHED_ADDRESS_BYTES_LEN: usize = 21;
@@ -44,7 +43,7 @@ pub const HASH_LEN: usize = 20;
 /// use sha2::Digest;
 /// assert_eq!(
 ///     sha2::Sha256::output_size(),
-///     namada_core::types::address::SHA_HASH_LEN
+///     namada_core::address::SHA_HASH_LEN
 /// );
 /// ```
 pub const SHA_HASH_LEN: usize = 32;
@@ -366,8 +365,7 @@ impl TryFrom<Signer> for Address {
         // sending a token from a spending key, it has been already
         // replaced with the MASP address.
         Address::decode(signer.as_ref()).or(
-            match crate::types::masp::PaymentAddress::from_str(signer.as_ref())
-            {
+            match crate::masp::PaymentAddress::from_str(signer.as_ref()) {
                 Ok(_) => Ok(MASP),
                 Err(_) => Err(DecodeError::InvalidInnerEncoding(format!(
                     "Invalid address for IBC transfer: {signer}"
@@ -750,7 +748,7 @@ pub mod testing {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::types::key::*;
+    use crate::key::*;
 
     /// Generate a new established address.
     pub fn gen_established_address() -> Address {
@@ -899,13 +897,13 @@ pub mod testing {
     }
 
     fn arb_erc20() -> InternalAddress {
-        use crate::types::ethereum_events::testing::arbitrary_eth_address;
+        use crate::ethereum_events::testing::arbitrary_eth_address;
         // TODO: generate random erc20 addr data
         InternalAddress::Erc20(arbitrary_eth_address())
     }
 
     fn arb_nut() -> InternalAddress {
-        use crate::types::ethereum_events::testing::arbitrary_eth_address;
+        use crate::ethereum_events::testing::arbitrary_eth_address;
         // TODO: generate random erc20 addr data
         InternalAddress::Nut(arbitrary_eth_address())
     }

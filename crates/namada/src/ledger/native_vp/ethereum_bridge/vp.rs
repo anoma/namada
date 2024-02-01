@@ -2,9 +2,9 @@
 use std::collections::{BTreeSet, HashSet};
 
 use eyre::{eyre, Result};
-use namada_core::types::address::Address;
-use namada_core::types::hash::StorageHasher;
-use namada_core::types::storage::Key;
+use namada_core::address::Address;
+use namada_core::hash::StorageHasher;
+use namada_core::storage::Key;
 use namada_ethereum_bridge;
 use namada_ethereum_bridge::storage;
 use namada_ethereum_bridge::storage::escrow_key;
@@ -176,21 +176,21 @@ mod tests {
     use rand::Rng;
 
     use super::*;
+    use crate::address::testing::established_address_1;
+    use crate::address::{nam, wnam};
     use crate::ethereum_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
     use crate::ethereum_bridge::storage::parameters::{
         Contracts, EthereumBridgeParams, UpgradeableContract,
     };
     use crate::ethereum_bridge::storage::wrapped_erc20s;
+    use crate::ethereum_events;
+    use crate::ethereum_events::EthAddress;
     use crate::ledger::gas::VpGasMeter;
     use crate::state::mockdb::MockDB;
     use crate::state::write_log::WriteLog;
     use crate::state::{Sha256Hasher, State, WlStorage};
+    use crate::storage::TxIndex;
     use crate::token::storage_key::minted_balance_key;
-    use crate::types::address::testing::established_address_1;
-    use crate::types::address::{nam, wnam};
-    use crate::types::ethereum_events;
-    use crate::types::ethereum_events::EthAddress;
-    use crate::types::storage::TxIndex;
     use crate::vm::wasm::VpCache;
     use crate::vm::WasmCacheRwAccess;
 

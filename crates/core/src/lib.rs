@@ -10,7 +10,7 @@ pub mod bytes;
 pub mod event;
 pub mod hints;
 
-pub use {ibc, masp_primitives, tendermint, tendermint_proto};
+pub use {masp_primitives, tendermint, tendermint_proto};
 /// Borsh binary encoding (re-exported) from official crate with custom ext.
 pub mod borsh {
     pub use borsh::*;

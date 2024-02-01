@@ -5,10 +5,10 @@
 
 use std::str::FromStr;
 
-use namada_core::types::eth_bridge_pool::erc20_token_address;
-use namada_core::types::ethereum_events::EthAddress;
-use namada_core::types::storage;
-use namada_core::types::storage::DbKeySeg;
+use namada_core::eth_bridge_pool::erc20_token_address;
+use namada_core::ethereum_events::EthAddress;
+use namada_core::storage;
+use namada_core::storage::DbKeySeg;
 use namada_trans_token::storage_key::{denom_key, minted_balance_key};
 
 use super::prefix as ethbridge_key_prefix;
@@ -16,7 +16,7 @@ use crate::ADDRESS as BRIDGE_ADDRESS;
 
 mod segments {
     //! Storage key segments under the token whitelist.
-    use namada_core::types::address::Address;
+    use namada_core::address::Address;
     use namada_macros::StorageKeys;
 
     /// The name of the main storage segment.
@@ -118,7 +118,7 @@ pub fn is_cap_or_whitelisted_key(key: &storage::Key) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use namada_core::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
+    use namada_core::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
 
     use super::*;
 

@@ -1,4 +1,4 @@
-use namada_core::types::hash::StorageHasher;
+use namada_core::hash::StorageHasher;
 use namada_state::{DBIter, WlStorage, DB};
 use namada_storage::StorageWrite;
 use namada_trans_token::storage_key::balance_key;

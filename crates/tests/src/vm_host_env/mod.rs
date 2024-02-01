@@ -24,6 +24,11 @@ mod tests {
     use borsh_ext::BorshSerializeExt;
     use itertools::Itertools;
     use namada::account::pks_handle;
+    use namada::core::hash::Hash;
+    use namada::core::key::*;
+    use namada::core::storage::{self, BlockHash, BlockHeight, Key, KeySeg};
+    use namada::core::time::DateTimeUtc;
+    use namada::core::{address, key};
     use namada::ibc::context::transfer_mod::testing::DummyTransferModule;
     use namada::ibc::primitives::Msg;
     use namada::ibc::Error as IbcActionError;
@@ -34,11 +39,6 @@ mod tests {
     use namada::ledger::tx_env::TxEnv;
     use namada::token::{self, Amount};
     use namada::tx::Tx;
-    use namada::types::hash::Hash;
-    use namada::types::key::*;
-    use namada::types::storage::{self, BlockHash, BlockHeight, Key, KeySeg};
-    use namada::types::time::DateTimeUtc;
-    use namada::types::{address, key};
     use namada_test_utils::TestWasms;
     use namada_tx_prelude::address::InternalAddress;
     use namada_tx_prelude::chain::ChainId;

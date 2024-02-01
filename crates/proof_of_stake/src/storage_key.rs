@@ -1,7 +1,7 @@
 //! Proof-of-Stake storage keys and storage integration.
 
-use namada_core::types::address::Address;
-use namada_core::types::storage::{DbKeySeg, Epoch, Key, KeySeg};
+use namada_core::address::Address;
+use namada_core::storage::{DbKeySeg, Epoch, Key, KeySeg};
 use namada_storage::collections::{lazy_map, lazy_vec};
 
 use super::ADDRESS;

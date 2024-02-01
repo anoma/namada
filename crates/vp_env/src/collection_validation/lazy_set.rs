@@ -2,7 +2,7 @@
 
 use std::fmt::Debug;
 
-use namada_core::types::storage;
+use namada_core::storage;
 use namada_storage::collections::lazy_set::{LazySet, SubKey};
 
 use super::LazyCollectionExt;

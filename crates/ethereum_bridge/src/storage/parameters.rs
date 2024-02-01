@@ -3,10 +3,10 @@ use std::num::NonZeroU64;
 
 use eyre::{eyre, Result};
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::types::ethereum_events::EthAddress;
-use namada_core::types::ethereum_structs;
-use namada_core::types::storage::Key;
-use namada_core::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
+use namada_core::ethereum_events::EthAddress;
+use namada_core::ethereum_structs;
+use namada_core::storage::Key;
+use namada_core::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
 use namada_state::{DBIter, StorageHasher, WlStorage, DB};
 use namada_storage::{StorageRead, StorageWrite};
 use serde::{Deserialize, Serialize};
@@ -364,7 +364,7 @@ where
 #[cfg(test)]
 mod tests {
     use eyre::Result;
-    use namada_core::types::ethereum_events::EthAddress;
+    use namada_core::ethereum_events::EthAddress;
     use namada_state::testing::TestWlStorage;
 
     use super::*;

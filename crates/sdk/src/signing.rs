@@ -11,17 +11,15 @@ use masp_primitives::transaction::components::sapling::fees::{
     InputView, OutputView,
 };
 use namada_account::{AccountPublicKeysMap, InitAccount, UpdateAccount};
-use namada_core::types::address::{
-    Address, ImplicitAddress, InternalAddress, MASP,
-};
-use namada_core::types::key::*;
-use namada_core::types::masp::{AssetData, ExtendedViewingKey, PaymentAddress};
-use namada_core::types::sign::SignatureIndex;
-use namada_core::types::storage::Epoch;
-use namada_core::types::token;
-use namada_core::types::token::Transfer;
-// use namada_core::types::storage::Key;
-use namada_core::types::token::{Amount, DenominatedAmount};
+use namada_core::address::{Address, ImplicitAddress, InternalAddress, MASP};
+use namada_core::key::*;
+use namada_core::masp::{AssetData, ExtendedViewingKey, PaymentAddress};
+use namada_core::sign::SignatureIndex;
+use namada_core::storage::Epoch;
+use namada_core::token;
+use namada_core::token::Transfer;
+// use namada_core::storage::Key;
+use namada_core::token::{Amount, DenominatedAmount};
 use namada_governance::storage::proposal::{
     InitProposalData, ProposalType, VoteProposalData,
 };
@@ -41,6 +39,7 @@ use tokio::sync::RwLock;
 use super::masp::{ShieldedContext, ShieldedTransfer};
 use crate::args::SdkTypes;
 use crate::error::{EncodingError, Error, TxSubmitError};
+use crate::eth_bridge_pool::PendingTransfer;
 use crate::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
 use crate::ibc::primitives::proto::Any;
 use crate::io::*;
@@ -56,7 +55,6 @@ use crate::tx::{
     TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
     VP_USER_WASM,
 };
-use crate::types::eth_bridge_pool::PendingTransfer;
 pub use crate::wallet::store::AddressVpType;
 use crate::wallet::{Wallet, WalletIo};
 use crate::{args, display_line, rpc, MaybeSend, Namada};
@@ -506,7 +504,7 @@ pub async fn wrap_tx<N: Namada>(
         Some(diff) if !diff.is_zero() => {
             if let Some(spending_key) = args.fee_unshield.clone() {
                 // Unshield funds for fee payment
-                let target = namada_core::types::masp::TransferTarget::Address(
+                let target = namada_core::masp::TransferTarget::Address(
                     fee_payer_address.clone(),
                 );
                 let fee_amount = DenominatedAmount::new(
@@ -638,7 +636,7 @@ pub async fn wrap_tx<N: Namada>(
         let mut hasher = sha2::Sha256::new();
         section.hash(&mut hasher);
         tx.add_section(section);
-        namada_core::types::hash::Hash(hasher.finalize().into())
+        namada_core::hash::Hash(hasher.finalize().into())
     });
 
     tx.add_wrapper(

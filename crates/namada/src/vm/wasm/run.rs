@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
-use namada_core::types::validity_predicate::VpSentinel;
+use namada_core::validity_predicate::VpSentinel;
 use namada_gas::{GasMetering, TxGasMeter, WASM_MEMORY_PAGE_GAS};
 use namada_state::write_log::StorageModification;
 use namada_state::{State, StorageHasher};
@@ -16,12 +16,12 @@ use wasmer::{BaseTunables, Module, Store};
 
 use super::memory::{Limit, WasmMemory};
 use super::TxCache;
+use crate::address::Address;
+use crate::hash::{Error as TxHashError, Hash};
+use crate::internal::HostEnvResult;
 use crate::ledger::gas::VpGasMeter;
 use crate::state::write_log::WriteLog;
-use crate::types::address::Address;
-use crate::types::hash::{Error as TxHashError, Hash};
-use crate::types::internal::HostEnvResult;
-use crate::types::storage::{Key, TxIndex};
+use crate::storage::{Key, TxIndex};
 use crate::vm::host_env::{TxVmEnv, VpCtx, VpEvaluator, VpVmEnv};
 use crate::vm::prefix_iter::PrefixIterators;
 use crate::vm::types::VpInput;
@@ -641,9 +641,9 @@ mod tests {
     use wasmer_vm::TrapCode;
 
     use super::*;
+    use crate::hash::Hash;
     use crate::state::testing::TestStorage;
     use crate::tx::data::eval_vp::EvalVp;
-    use crate::types::hash::Hash;
     use crate::vm::host_env::TxRuntimeError;
     use crate::vm::wasm;
 

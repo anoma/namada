@@ -7,22 +7,20 @@ use core::fmt::Debug;
 use std::cmp::Ordering;
 use std::format;
 
+use namada_core::address::{Address, EstablishedAddressGen, InternalAddress};
 use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
-use namada_core::tendermint::merkle::proof::ProofOps;
-use namada_core::types::address::{
-    Address, EstablishedAddressGen, InternalAddress,
-};
-use namada_core::types::chain::{ChainId, CHAIN_ID_LENGTH};
-use namada_core::types::eth_bridge_pool::is_pending_transfer_key;
-use namada_core::types::hash::{Error as HashError, Hash};
-pub use namada_core::types::hash::{Sha256Hasher, StorageHasher};
-pub use namada_core::types::storage::{
+use namada_core::chain::{ChainId, CHAIN_ID_LENGTH};
+use namada_core::eth_bridge_pool::is_pending_transfer_key;
+use namada_core::hash::{Error as HashError, Hash};
+pub use namada_core::hash::{Sha256Hasher, StorageHasher};
+pub use namada_core::storage::{
     BlockHash, BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue,
     Header, Key, KeySeg, TxIndex, BLOCK_HASH_LENGTH, BLOCK_HEIGHT_LENGTH,
     EPOCH_TYPE_LENGTH,
 };
-use namada_core::types::time::DateTimeUtc;
-use namada_core::types::{encode, ethereum_structs, storage};
+use namada_core::tendermint::merkle::proof::ProofOps;
+use namada_core::time::DateTimeUtc;
+use namada_core::{encode, ethereum_structs, storage};
 use namada_gas::{
     MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_ACCESS_GAS_PER_BYTE,
     STORAGE_WRITE_GAS_PER_BYTE,
@@ -156,9 +154,9 @@ pub enum Error {
     #[error("Found an unknown key: {key}")]
     UnknownKey { key: String },
     #[error("Storage key error {0}")]
-    KeyError(namada_core::types::storage::Error),
+    KeyError(namada_core::storage::Error),
     #[error("Coding error: {0}")]
-    CodingError(#[from] namada_core::types::DecodeError),
+    CodingError(#[from] namada_core::DecodeError),
     #[error("Merkle tree error: {0}")]
     MerkleTreeError(MerkleTreeError),
     #[error("DB error: {0}")]
@@ -1102,8 +1100,8 @@ impl From<MerkleTreeError> for Error {
 /// Helpers for testing components that depend on storage
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-    use namada_core::types::address;
-    use namada_core::types::hash::Sha256Hasher;
+    use namada_core::address;
+    use namada_core::hash::Sha256Hasher;
 
     use super::mockdb::MockDB;
     use super::*;
@@ -1172,9 +1170,9 @@ mod tests {
     use std::collections::BTreeMap;
 
     use chrono::{TimeZone, Utc};
-    use namada_core::types::dec::Dec;
-    use namada_core::types::time::{self, Duration};
-    use namada_core::types::token;
+    use namada_core::dec::Dec;
+    use namada_core::time::{self, Duration};
+    use namada_core::token;
     use namada_parameters::Parameters;
     use proptest::prelude::*;
     use proptest::test_runner::Config;

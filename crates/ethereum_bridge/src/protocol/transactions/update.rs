@@ -1,9 +1,9 @@
 //! Helpers for writing to storage
 use eyre::Result;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::types::hash::StorageHasher;
-use namada_core::types::storage;
-use namada_core::types::token::{Amount, AmountError};
+use namada_core::hash::StorageHasher;
+use namada_core::storage;
+use namada_core::token::{Amount, AmountError};
 use namada_state::{DBIter, WlStorage, DB};
 use namada_storage::StorageWrite;
 
@@ -43,7 +43,7 @@ where
 #[cfg(test)]
 mod tests {
     use eyre::{eyre, Result};
-    use namada_core::types::storage;
+    use namada_core::storage;
     use namada_state::testing::TestWlStorage;
     use namada_storage::{StorageRead, StorageWrite};
 

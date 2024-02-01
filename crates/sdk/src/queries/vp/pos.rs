@@ -3,10 +3,10 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use namada_core::types::address::Address;
-use namada_core::types::key::common;
-use namada_core::types::storage::Epoch;
-use namada_core::types::token;
+use namada_core::address::Address;
+use namada_core::key::common;
+use namada_core::storage::Epoch;
+use namada_core::token;
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::queries::{
     find_delegation_validators, find_delegations,

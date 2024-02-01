@@ -18,14 +18,14 @@ use std::fmt::{self, Display};
 use std::str::FromStr;
 
 pub use decrypted::*;
+use namada_core::address::Address;
 use namada_core::borsh::{
     BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
 };
-use namada_core::types::address::Address;
-use namada_core::types::ethereum_structs::EthBridgeEvent;
-use namada_core::types::hash::Hash;
-use namada_core::types::ibc::IbcEvent;
-use namada_core::types::storage;
+use namada_core::ethereum_structs::EthBridgeEvent;
+use namada_core::hash::Hash;
+use namada_core::ibc::IbcEvent;
+use namada_core::storage;
 use namada_gas::{Gas, VpsGas};
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
@@ -341,10 +341,10 @@ impl TxSentinel {
 #[cfg(test)]
 mod test_process_tx {
     use assert_matches::assert_matches;
-    use namada_core::types::address::nam;
-    use namada_core::types::key::*;
-    use namada_core::types::storage::Epoch;
-    use namada_core::types::token::{Amount, DenominatedAmount};
+    use namada_core::address::nam;
+    use namada_core::key::*;
+    use namada_core::storage::Epoch;
+    use namada_core::token::{Amount, DenominatedAmount};
 
     use super::*;
     use crate::{Code, Data, Section, Signature, Tx, TxError};
@@ -505,7 +505,7 @@ fn test_process_tx_decrypted_unsigned() {
 /// signature
 #[test]
 fn test_process_tx_decrypted_signed() {
-    use namada_core::types::key::*;
+    use namada_core::key::*;
 
     use crate::{Code, Data, Section, Signature, Tx};
 
@@ -517,7 +517,7 @@ fn test_process_tx_decrypted_signed() {
         ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap()
     }
 
-    use namada_core::types::key::Signature as S;
+    use namada_core::key::Signature as S;
     let mut decrypted =
         Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
     // Invalid signed data

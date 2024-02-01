@@ -6,14 +6,14 @@ use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use masp_proofs::bls12_381;
 use namada::account::protocol_pk_key;
+use namada::core::address::Address;
+use namada::core::hash::Hash as CodeHash;
+use namada::core::time::{DateTimeUtc, TimeZone, Utc};
 use namada::ledger::parameters::Parameters;
 use namada::ledger::{ibc, pos};
 use namada::proof_of_stake::BecomeValidator;
 use namada::state::{DBIter, StorageHasher, StorageWrite, DB};
 use namada::token::{credit_tokens, write_denom};
-use namada::types::address::Address;
-use namada::types::hash::Hash as CodeHash;
-use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::vm::validate_untrusted_wasm;
 use namada_sdk::eth_bridge::EthBridgeStatus;
 use namada_sdk::proof_of_stake::PosParams;
@@ -153,7 +153,7 @@ where
         let convert_anchor_key = token::storage_key::masp_convert_anchor_key();
         self.wl_storage.write(
             &convert_anchor_key,
-            namada::types::hash::Hash(
+            namada::core::hash::Hash(
                 bls12_381::Scalar::from(
                     self.wl_storage.storage.conversion_state.tree.root(),
                 )
@@ -554,7 +554,7 @@ where
         genesis: &genesis::chain::Finalized,
         vp_cache: &mut HashMap<String, Vec<u8>>,
         params: &PosParams,
-        current_epoch: namada::types::storage::Epoch,
+        current_epoch: namada::core::storage::Epoch,
     ) -> ControlFlow<()> {
         if let Some(txs) = genesis.transactions.validator_account.as_ref() {
             for FinalizedValidatorAccountTx {
@@ -939,8 +939,8 @@ mod test {
     use std::collections::BTreeMap;
     use std::str::FromStr;
 
+    use namada::core::string_encoding::StringEncoded;
     use namada::state::DBIter;
-    use namada::types::string_encoding::StringEncoded;
     use namada_sdk::wallet::alias::Alias;
 
     use super::*;

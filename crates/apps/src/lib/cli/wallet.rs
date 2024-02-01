@@ -12,10 +12,10 @@ use ledger_namada_rs::{BIP44Path, NamadaApp};
 use ledger_transport_hid::hidapi::HidApi;
 use ledger_transport_hid::TransportNativeHID;
 use masp_primitives::zip32::ExtendedFullViewingKey;
-use namada::types::address::{Address, DecodeError};
-use namada::types::io::Io;
-use namada::types::key::*;
-use namada::types::masp::{ExtendedSpendingKey, MaspValue, PaymentAddress};
+use namada::core::address::{Address, DecodeError};
+use namada::core::key::*;
+use namada::core::masp::{ExtendedSpendingKey, MaspValue, PaymentAddress};
+use namada::io::Io;
 use namada_sdk::masp::find_valid_diversifier;
 use namada_sdk::wallet::{
     DecryptionError, DerivationPath, DerivationPathError, FindKeyError, Wallet,

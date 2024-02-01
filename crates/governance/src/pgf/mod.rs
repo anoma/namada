@@ -1,6 +1,6 @@
 //! Pgf library code
 
-use namada_core::types::address::{Address, InternalAddress};
+use namada_core::address::{Address, InternalAddress};
 
 /// Pgf CLI
 pub mod cli;

@@ -2,14 +2,12 @@
 
 use std::collections::{BTreeMap, HashSet};
 
-use namada_core::types::address::Address;
-use namada_core::types::dec::Dec;
-use namada_core::types::key::testing::{
-    common_sk_from_simple_seed, gen_keypair,
-};
-use namada_core::types::key::RefTo;
-use namada_core::types::storage::{BlockHeight, Epoch};
-use namada_core::types::{address, key};
+use namada_core::address::Address;
+use namada_core::dec::Dec;
+use namada_core::key::testing::{common_sk_from_simple_seed, gen_keypair};
+use namada_core::key::RefTo;
+use namada_core::storage::{BlockHeight, Epoch};
+use namada_core::{address, key};
 use namada_state::testing::TestWlStorage;
 use namada_storage::collections::lazy_map::Collectable;
 use namada_storage::StorageRead;

@@ -43,6 +43,7 @@ testing = [
   "namada_governance/testing",
   "namada_ibc/testing",
   "namada_proof_of_stake/testing",
+  "namada_storage/testing",
   "namada_tx/testing",
   "async-client",
   "proptest",
@@ -131,6 +132,7 @@ namada_proof_of_stake = { path = "../proof_of_stake", default-features = false, 
   "testing",
 ] }
 namada_state = { path = "../state", features = ["testing"] }
+namada_storage = { path = "../storage", features = ["testing"] }
 namada_test_utils = { path = "../test_utils" }
 namada_tx = { path = "../tx", features = ["testing"]}
 namada_vote_ext = {path = "../vote_ext"}

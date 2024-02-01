@@ -12,13 +12,13 @@ use ethabi::ethereum_types::U256;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::address::Address;
+use crate::dec::{Dec, POS_DECIMAL_PRECISION};
+use crate::hash::Hash;
 use crate::ibc::apps::transfer::types::Amount as IbcAmount;
-use crate::types::address::Address;
-use crate::types::dec::{Dec, POS_DECIMAL_PRECISION};
-use crate::types::hash::Hash;
-use crate::types::storage;
-use crate::types::storage::{DbKeySeg, KeySeg};
-use crate::types::uint::{self, Uint, I256};
+use crate::storage;
+use crate::storage::{DbKeySeg, KeySeg};
+use crate::uint::{self, Uint, I256};
 
 /// Amount in micro units. For different granularity another representation
 /// might be more appropriate.
@@ -1020,7 +1020,7 @@ pub mod testing {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::types::address::testing::{
+    use crate::address::testing::{
         arb_established_address, arb_non_internal_address,
     };
 

@@ -3,6 +3,8 @@
 use data_encoding::HEXUPPER;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
+use namada::core::key::tm_raw_hash_to_string;
+use namada::core::storage::{BlockHash, BlockResults, Epoch, Header};
 use namada::governance::pgf::inflation as pgf_inflation;
 use namada::ledger::events::EventType;
 use namada::ledger::gas::{GasMetering, TxGasMeter};
@@ -18,8 +20,6 @@ use namada::state::{
     ResultExt, StorageRead, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY,
 };
 use namada::tx::data::protocol::ProtocolTxType;
-use namada::types::key::tm_raw_hash_to_string;
-use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
 use namada::vote_ext::ethereum_events::MultiSignedEthEvent;
 use namada::vote_ext::ethereum_tx_data_variants;
 use namada_sdk::tx::new_tx_event;
@@ -742,6 +742,15 @@ mod test_finalize_block {
     use std::str::FromStr;
 
     use data_encoding::HEXUPPER;
+    use namada::core::dec::{Dec, POS_DECIMAL_PRECISION};
+    use namada::core::ethereum_events::{EthAddress, Uint as ethUint};
+    use namada::core::hash::Hash;
+    use namada::core::keccak::KeccakHash;
+    use namada::core::key::testing::common_sk_from_simple_seed;
+    use namada::core::key::tm_consensus_key_raw_hash;
+    use namada::core::storage::{Epoch, KeySeg};
+    use namada::core::time::{DateTimeUtc, DurationSecs};
+    use namada::core::uint::Uint;
     use namada::eth_bridge::storage::bridge_pool::{
         self, get_key_from_hash, get_nonce_key, get_signed_root_key,
     };
@@ -773,15 +782,6 @@ mod test_finalize_block {
     use namada::token::{Amount, DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
     use namada::tx::data::{Fee, WrapperTx};
     use namada::tx::{Code, Data, Section, Signature};
-    use namada::types::dec::{Dec, POS_DECIMAL_PRECISION};
-    use namada::types::ethereum_events::{EthAddress, Uint as ethUint};
-    use namada::types::hash::Hash;
-    use namada::types::keccak::KeccakHash;
-    use namada::types::key::testing::common_sk_from_simple_seed;
-    use namada::types::key::tm_consensus_key_raw_hash;
-    use namada::types::storage::{Epoch, KeySeg};
-    use namada::types::time::{DateTimeUtc, DurationSecs};
-    use namada::types::uint::Uint;
     use namada::vote_ext::{ethereum_events, EthereumTxData};
     use namada_sdk::eth_bridge::MinimumConfirmations;
     use namada_sdk::governance::ProposalVote;
@@ -1431,7 +1431,7 @@ mod test_finalize_block {
             }
             // write transfer to storage
             let transfer = {
-                use namada::types::eth_bridge_pool::{
+                use namada::core::eth_bridge_pool::{
                     GasFee, PendingTransfer, TransferToEthereum,
                     TransferToEthereumKind,
                 };
@@ -5008,7 +5008,7 @@ mod test_finalize_block {
 
         // we advance forward to the next epoch
         let mut req = FinalizeBlock::default();
-        req.header.time = namada::types::time::DateTimeUtc::now();
+        req.header.time = namada::core::time::DateTimeUtc::now();
         let current_decision_height = shell.get_current_decision_height();
         if let Some(b) = shell.wl_storage.storage.last_block.as_mut() {
             b.height = current_decision_height + 11;

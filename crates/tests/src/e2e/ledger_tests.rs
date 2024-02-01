@@ -21,15 +21,15 @@ use borsh_ext::BorshSerializeExt;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use data_encoding::HEXLOWER;
+use namada::core::address::Address;
+use namada::core::storage::Epoch;
 use namada::governance::cli::onchain::{PgfFunding, StewardsUpdate};
 use namada::governance::storage::proposal::{PGFInternalTarget, PGFTarget};
 use namada::token;
-use namada::types::address::Address;
-use namada::types::storage::Epoch;
 use namada_apps::config::ethereum_bridge;
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
-use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
+use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_sdk::governance::pgf::cli::steward::Commission;
 use namada_sdk::masp::fs::FsShieldedUtils;
 use namada_test_utils::TestWasms;
@@ -536,7 +536,7 @@ fn ledger_txs_and_queries() -> Result<()> {
         vec![
             "init-account",
             "--public-keys",
-            // Value obtained from `namada::types::key::ed25519::tests::gen_keypair`
+            // Value obtained from `namada::core::key::ed25519::tests::gen_keypair`
             "tpknam1qpqfzxu3gt05jx2mvg82f4anf90psqerkwqhjey4zlqv0qfgwuvkzt5jhkp",
             "--threshold",
             "1",
@@ -2662,7 +2662,7 @@ fn double_signing_gets_slashed() -> Result<()> {
     use std::net::SocketAddr;
     use std::str::FromStr;
 
-    use namada::types::key::{self, ed25519, SigScheme};
+    use namada::core::key::{self, ed25519, SigScheme};
     use namada_apps::client;
     use namada_apps::config::Config;
 

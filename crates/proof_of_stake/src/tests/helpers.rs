@@ -1,13 +1,13 @@
 use std::cmp::max;
 use std::ops::Range;
 
-use namada_core::types::address::testing::address_from_simple_seed;
-use namada_core::types::dec::Dec;
-use namada_core::types::key::testing::common_sk_from_simple_seed;
-use namada_core::types::key::{self, RefTo};
-use namada_core::types::storage::Epoch;
-use namada_core::types::token;
-use namada_core::types::token::testing::arb_amount_non_zero_ceiled;
+use namada_core::address::testing::address_from_simple_seed;
+use namada_core::dec::Dec;
+use namada_core::key::testing::common_sk_from_simple_seed;
+use namada_core::key::{self, RefTo};
+use namada_core::storage::Epoch;
+use namada_core::token;
+use namada_core::token::testing::arb_amount_non_zero_ceiled;
 use namada_state::testing::TestWlStorage;
 use proptest::strategy::{Just, Strategy};
 

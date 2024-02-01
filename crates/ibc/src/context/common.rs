@@ -24,9 +24,9 @@ use namada_core::ibc::core::host::types::identifiers::{
 };
 use namada_core::ibc::primitives::proto::{Any, Protobuf};
 use namada_core::ibc::primitives::Timestamp;
+use namada_core::storage::{BlockHeight, Key};
 use namada_core::tendermint::Time as TmTime;
-use namada_core::types::storage::{BlockHeight, Key};
-use namada_core::types::time::DurationSecs;
+use namada_core::time::DurationSecs;
 use namada_parameters::storage::get_max_expected_time_per_block_key;
 use prost::Message;
 use sha2::Digest;

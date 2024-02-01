@@ -15,6 +15,15 @@ use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::{Node, ViewingKey};
 use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::zip32::ExtendedFullViewingKey;
+use namada::core::address::{Address, InternalAddress, MASP};
+use namada::core::hash::Hash;
+use namada::core::ibc::{is_ibc_denom, IbcTokenHash};
+use namada::core::key::*;
+use namada::core::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
+use namada::core::storage::{
+    BlockHeight, BlockResults, Epoch, IndexedTx, Key, KeySeg,
+};
+use namada::core::token::{Change, MaspDigitPos};
 use namada::governance::cli::offline::{
     find_offline_proposal, find_offline_votes, read_offline_files,
     OfflineSignedProposal, OfflineVote,
@@ -29,6 +38,7 @@ use namada::governance::storage::proposal::{
 use namada::governance::utils::{
     compute_proposal_result, ProposalVotes, TallyType, TallyVote, VotePower,
 };
+use namada::io::Io;
 use namada::ledger::events::Event;
 use namada::ledger::ibc::storage::{
     ibc_denom_key, ibc_denom_key_prefix, is_ibc_denom_key,
@@ -38,16 +48,6 @@ use namada::ledger::pos::types::{CommissionPair, Slash};
 use namada::ledger::pos::PosParams;
 use namada::ledger::queries::RPC;
 use namada::proof_of_stake::types::{ValidatorState, WeightedValidator};
-use namada::types::address::{Address, InternalAddress, MASP};
-use namada::types::hash::Hash;
-use namada::types::ibc::{is_ibc_denom, IbcTokenHash};
-use namada::types::io::Io;
-use namada::types::key::*;
-use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
-use namada::types::storage::{
-    BlockHeight, BlockResults, Epoch, IndexedTx, Key, KeySeg,
-};
-use namada::types::token::{Change, MaspDigitPos};
 use namada::{state as storage, token};
 use namada_sdk::error::{
     is_pinned_error, Error, PinnedBalanceError, QueryError,
@@ -329,7 +329,7 @@ pub async fn query_transparent_balance(
     args: args::QueryBalance,
 ) {
     let prefix = Key::from(
-        Address::Internal(namada::types::address::InternalAddress::Multitoken)
+        Address::Internal(namada::core::address::InternalAddress::Multitoken)
             .to_db_key(),
     );
     match (args.token, args.owner) {

@@ -22,11 +22,11 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
 mod tests {
     use std::cmp;
 
+    use namada::core::dec::{Dec, POS_DECIMAL_PRECISION};
+    use namada::core::storage::Epoch;
     use namada::ledger::pos::{OwnedPosParams, PosVP};
     use namada::proof_of_stake::storage::validator_commission_rate_handle;
     use namada::proof_of_stake::types::GenesisValidator;
-    use namada::types::dec::{Dec, POS_DECIMAL_PRECISION};
-    use namada::types::storage::Epoch;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::native_vp::TestNativeVpEnv;

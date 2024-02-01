@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 use std::fmt::Display;
 
+use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::types::address::Address;
-use namada_core::types::dec::Dec;
-use namada_core::types::storage::Epoch;
-use namada_core::types::token;
+use namada_core::dec::Dec;
+use namada_core::storage::Epoch;
+use namada_core::token;
 
 use super::cli::offline::OfflineVote;
 use super::storage::proposal::ProposalType;
@@ -455,7 +455,7 @@ pub fn is_valid_validator_voting_period(
 mod test {
     use std::ops::{Add, Sub};
 
-    use namada_core::types::address;
+    use namada_core::address;
 
     use super::*;
 

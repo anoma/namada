@@ -9,8 +9,8 @@ pub mod vp;
 pub mod whitelist;
 pub mod wrapped_erc20s;
 
-use namada_core::types::address::Address;
-use namada_core::types::storage::{DbKeySeg, Key, KeySeg};
+use namada_core::address::Address;
+use namada_core::storage::{DbKeySeg, Key, KeySeg};
 pub use namada_parameters::native_erc20_key;
 use namada_parameters::storage::*;
 use namada_parameters::ADDRESS as PARAM_ADDRESS;
@@ -68,9 +68,9 @@ pub fn bridge_contract_key() -> Key {
 
 #[cfg(test)]
 mod test {
-    use namada_core::types::address;
-    use namada_core::types::address::nam;
-    use namada_core::types::ethereum_events::testing::arbitrary_eth_address;
+    use namada_core::address;
+    use namada_core::address::nam;
+    use namada_core::ethereum_events::testing::arbitrary_eth_address;
 
     use super::*;
 

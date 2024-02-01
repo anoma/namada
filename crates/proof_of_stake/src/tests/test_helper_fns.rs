@@ -1,11 +1,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use namada_core::types::address::testing::{
+use namada_core::address::testing::{
     established_address_1, established_address_2, established_address_3,
 };
-use namada_core::types::dec::Dec;
-use namada_core::types::storage::{Epoch, Key};
-use namada_core::types::token;
+use namada_core::dec::Dec;
+use namada_core::storage::{Epoch, Key};
+use namada_core::token;
 use namada_state::testing::TestWlStorage;
 use namada_storage::collections::lazy_map::NestedMap;
 use namada_storage::collections::LazyCollection;
@@ -1927,7 +1927,7 @@ fn test_compute_amount_after_slashing_withdraw() {
 /// SM test case 1 from Brent
 #[test]
 fn test_from_sm_case_1() {
-    use namada_core::types::address::testing::established_address_4;
+    use namada_core::address::testing::established_address_4;
 
     let mut storage = TestWlStorage::default();
     let gov_params =

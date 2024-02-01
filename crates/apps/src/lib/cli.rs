@@ -15,7 +15,7 @@ pub mod wallet;
 
 use clap::{ArgGroup, ArgMatches, ColorChoice};
 use color_eyre::eyre::Result;
-use namada::types::io::StdIo;
+use namada::io::StdIo;
 use utils::*;
 pub use utils::{safe_exit, Cmd};
 
@@ -2826,19 +2826,19 @@ pub mod args {
     use std::path::PathBuf;
     use std::str::FromStr;
 
+    use namada::core::address::{Address, EstablishedAddress};
+    use namada::core::chain::{ChainId, ChainIdPrefix};
+    use namada::core::dec::Dec;
+    use namada::core::ethereum_events::EthAddress;
+    use namada::core::keccak::KeccakHash;
+    use namada::core::key::*;
+    use namada::core::masp::PaymentAddress;
+    use namada::core::storage::{self, BlockHeight, Epoch};
+    use namada::core::time::DateTimeUtc;
+    use namada::core::token;
+    use namada::core::token::NATIVE_MAX_DECIMAL_PLACES;
     use namada::ibc::core::host::types::identifiers::{ChannelId, PortId};
     use namada::tx::data::GasLimit;
-    use namada::types::address::{Address, EstablishedAddress};
-    use namada::types::chain::{ChainId, ChainIdPrefix};
-    use namada::types::dec::Dec;
-    use namada::types::ethereum_events::EthAddress;
-    use namada::types::keccak::KeccakHash;
-    use namada::types::key::*;
-    use namada::types::masp::PaymentAddress;
-    use namada::types::storage::{self, BlockHeight, Epoch};
-    use namada::types::time::DateTimeUtc;
-    use namada::types::token;
-    use namada::types::token::NATIVE_MAX_DECIMAL_PLACES;
     pub use namada_sdk::args::*;
     pub use namada_sdk::tx::{
         TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,

@@ -667,16 +667,16 @@ where
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_process_proposal {
+    use namada::core::ethereum_events::EthereumEvent;
+    use namada::core::key::*;
+    use namada::core::storage::Epoch;
+    use namada::core::time::DateTimeUtc;
     use namada::state::StorageWrite;
     use namada::token::{read_denom, Amount, DenominatedAmount};
     use namada::tx::data::{Fee, WrapperTx};
     use namada::tx::{
         Code, Data, Section, SignableEthMessage, Signature, Signed,
     };
-    use namada::types::ethereum_events::EthereumEvent;
-    use namada::types::key::*;
-    use namada::types::storage::Epoch;
-    use namada::types::time::DateTimeUtc;
     use namada::vote_ext::{
         bridge_pool_roots, ethereum_events, EthereumTxData,
     };
@@ -2176,7 +2176,7 @@ mod test_process_proposal {
     /// not validated by `ProcessProposal`.
     #[test]
     fn test_outdated_nonce_process_proposal() {
-        use namada::types::storage::InnerEthEventsQueue;
+        use namada::core::storage::InnerEthEventsQueue;
 
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
 

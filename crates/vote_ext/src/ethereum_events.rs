@@ -4,11 +4,11 @@
 use std::collections::{BTreeSet, HashMap};
 use std::ops::Deref;
 
+use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use namada_core::types::address::Address;
-use namada_core::types::ethereum_events::EthereumEvent;
-use namada_core::types::key::common::{self, Signature};
-use namada_core::types::storage::BlockHeight;
+use namada_core::ethereum_events::EthereumEvent;
+use namada_core::key::common::{self, Signature};
+use namada_core::storage::BlockHeight;
 use namada_tx::Signed;
 
 /// Type alias for an [`EthereumEventsVext`].
@@ -153,10 +153,10 @@ impl VextDigest {
 
 #[cfg(test)]
 mod tests {
-    use namada_core::types::address::{self, Address};
-    use namada_core::types::ethereum_events::{EthereumEvent, Uint};
-    use namada_core::types::hash::Hash;
-    use namada_core::types::key;
+    use namada_core::address::{self, Address};
+    use namada_core::ethereum_events::{EthereumEvent, Uint};
+    use namada_core::hash::Hash;
+    use namada_core::key;
     use namada_tx::Signed;
 
     use super::*;

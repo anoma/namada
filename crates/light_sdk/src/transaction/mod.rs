@@ -2,15 +2,15 @@ use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use borsh::BorshSerialize;
+use namada_sdk::address::Address;
+use namada_sdk::chain::ChainId;
+use namada_sdk::hash::Hash;
+use namada_sdk::key::common;
+use namada_sdk::storage::Epoch;
+use namada_sdk::time::DateTimeUtc;
+use namada_sdk::token::DenominatedAmount;
 use namada_sdk::tx::data::{Fee, GasLimit};
 use namada_sdk::tx::{Section, Signature, Signer, Tx};
-use namada_sdk::types::address::Address;
-use namada_sdk::types::chain::ChainId;
-use namada_sdk::types::hash::Hash;
-use namada_sdk::types::key::common;
-use namada_sdk::types::storage::Epoch;
-use namada_sdk::types::time::DateTimeUtc;
-use namada_sdk::types::token::DenominatedAmount;
 
 pub mod account;
 pub mod bridge;

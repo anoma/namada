@@ -56,6 +56,11 @@ where
 
 #[cfg(test)]
 mod test_bp_vote_extensions {
+    use namada::core::ethereum_events::Uint;
+    use namada::core::keccak::{keccak_hash, KeccakHash};
+    use namada::core::key::*;
+    use namada::core::storage::BlockHeight;
+    use namada::core::token;
     use namada::ethereum_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
     use namada::ethereum_bridge::storage::bridge_pool::get_key_from_hash;
     use namada::ethereum_bridge::storage::eth_bridge_queries::EthBridgeQueries;
@@ -71,11 +76,6 @@ mod test_bp_vote_extensions {
     use namada::state::StorageWrite;
     use namada::tendermint::abci::types::VoteInfo;
     use namada::tx::{SignableEthMessage, Signed};
-    use namada::types::ethereum_events::Uint;
-    use namada::types::keccak::{keccak_hash, KeccakHash};
-    use namada::types::key::*;
-    use namada::types::storage::BlockHeight;
-    use namada::types::token;
     use namada::vote_ext::bridge_pool_roots;
 
     use crate::node::ledger::shell::test_utils::*;

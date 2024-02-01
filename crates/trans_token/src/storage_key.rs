@@ -1,7 +1,7 @@
 //! Transparent token storage keys
 
-use namada_core::types::address::{Address, InternalAddress};
-use namada_core::types::storage::{self, DbKeySeg, KeySeg};
+use namada_core::address::{Address, InternalAddress};
+use namada_core::storage::{self, DbKeySeg, KeySeg};
 
 /// Key segment for a balance key
 pub const BALANCE_STORAGE_KEY: &str = "balance";
@@ -196,7 +196,7 @@ pub fn is_any_shielded_action_balance_key(
                 [
                     token,
                     &Address::Internal(
-                        namada_core::types::address::InternalAddress::Ibc,
+                        namada_core::address::InternalAddress::Ibc,
                     ),
                 ]
             })

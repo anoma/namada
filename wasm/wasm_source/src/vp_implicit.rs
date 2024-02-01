@@ -286,11 +286,11 @@ fn validate_pos_changes(
 #[cfg(test)]
 mod tests {
     // Use this as `#[test]` annotation to enable logging
+    use namada::core::dec::Dec;
+    use namada::core::storage::Epoch;
     use namada::ledger::pos::{GenesisValidator, PosParams};
     use namada::tx::data::TxType;
     use namada::tx::{Code, Data, Signature};
-    use namada::types::dec::Dec;
-    use namada::types::storage::Epoch;
     use namada_test_utils::TestWasms;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;

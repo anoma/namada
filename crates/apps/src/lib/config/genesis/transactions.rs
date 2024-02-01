@@ -11,22 +11,22 @@ use ledger_namada_rs::NamadaApp;
 use ledger_transport_hid::hidapi::HidApi;
 use ledger_transport_hid::TransportNativeHID;
 use namada::account::AccountPublicKeysMap;
+use namada::core::address::{nam, Address, EstablishedAddress};
+use namada::core::chain::ChainId;
+use namada::core::dec::Dec;
+use namada::core::key::{
+    common, ed25519, RefTo, SerializeWithBorsh, SigScheme,
+};
+use namada::core::string_encoding::StringEncoded;
+use namada::core::time::DateTimeUtc;
+use namada::core::token;
+use namada::core::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
 use namada::ledger::pos::common::PublicKey;
 use namada::ledger::pos::types::ValidatorMetaData;
 use namada::tx::data::{pos, Fee, TxType};
 use namada::tx::{
     verify_standalone_sig, Code, Commitment, Data, Section, SignatureIndex, Tx,
 };
-use namada::types::address::{nam, Address, EstablishedAddress};
-use namada::types::chain::ChainId;
-use namada::types::dec::Dec;
-use namada::types::key::{
-    common, ed25519, RefTo, SerializeWithBorsh, SigScheme,
-};
-use namada::types::string_encoding::StringEncoded;
-use namada::types::time::DateTimeUtc;
-use namada::types::token;
-use namada::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
 use namada_sdk::args::Tx as TxArgs;
 use namada_sdk::signing::{sign_tx, SigningTxData};
 use namada_sdk::tx::{TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM};

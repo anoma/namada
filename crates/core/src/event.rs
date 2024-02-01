@@ -8,8 +8,8 @@ use std::str::FromStr;
 use thiserror::Error;
 
 use crate::borsh::{BorshDeserialize, BorshSerialize};
-use crate::types::ethereum_structs::{BpTransferStatus, EthBridgeEvent};
-use crate::types::ibc::IbcEvent;
+use crate::ethereum_structs::{BpTransferStatus, EthBridgeEvent};
+use crate::ibc::IbcEvent;
 
 /// Used in sub-systems that may emit events.
 pub trait EmitEvents {

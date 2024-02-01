@@ -1,7 +1,7 @@
 //! Parameters storage
 
-use namada_core::types::address::Address;
-use namada_core::types::storage::{DbKeySeg, Key};
+use namada_core::address::Address;
+use namada_core::storage::{DbKeySeg, Key};
 use namada_macros::StorageKeys;
 use namada_storage::StorageRead;
 

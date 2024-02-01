@@ -269,10 +269,10 @@ fn derive_storage_keys_inner(struct_def: TokenStream2) -> TokenStream2 {
                 let id = syn::Ident::new(&id, ident.span());
                 quote! {
                     #[allow(missing_docs)]
-                    pub fn #id(key: &namada_core::types::storage::Key, address: &Address) -> bool {
+                    pub fn #id(key: &namada_core::storage::Key, address: &Address) -> bool {
                         matches!(&key.segments[..], [
-                            namada_core::types::storage::DbKeySeg::AddressSeg(a),
-                            namada_core::types::storage::DbKeySeg::StringSeg(#ident),
+                            namada_core::storage::DbKeySeg::AddressSeg(a),
+                            namada_core::storage::DbKeySeg::StringSeg(#ident),
                         ] if a == address && #ident == #struct_def_ident::VALUES.#ident)
                     }
                 }
@@ -282,11 +282,11 @@ fn derive_storage_keys_inner(struct_def: TokenStream2) -> TokenStream2 {
                 let id = syn::Ident::new(&id, ident.span());
                 quote! {
                     #[allow(missing_docs)]
-                    pub fn #id(address: Address) -> namada_core::types::storage::Key {
-                        namada_core::types::storage::Key {
+                    pub fn #id(address: Address) -> namada_core::storage::Key {
+                        namada_core::storage::Key {
                             segments: vec![
-                                namada_core::types::storage::DbKeySeg::AddressSeg(address),
-                                namada_core::types::storage::DbKeySeg::StringSeg(#struct_def_ident::VALUES.#ident.to_string()),
+                                namada_core::storage::DbKeySeg::AddressSeg(address),
+                                namada_core::storage::DbKeySeg::StringSeg(#struct_def_ident::VALUES.#ident.to_string()),
                             ],
                         }
                     }
@@ -403,66 +403,66 @@ mod test_proc_macros {
                 };
             }
             #[allow(missing_docs)]
-            pub fn is_bird_key_at_addr(key: &namada_core::types::storage::Key, address: &Address) -> bool {
+            pub fn is_bird_key_at_addr(key: &namada_core::storage::Key, address: &Address) -> bool {
                 matches!(&key.segments[..], [
-                    namada_core::types::storage::DbKeySeg::AddressSeg(a),
-                    namada_core::types::storage::DbKeySeg::StringSeg(bird),
+                    namada_core::storage::DbKeySeg::AddressSeg(a),
+                    namada_core::storage::DbKeySeg::StringSeg(bird),
                 ] if a == address && bird == Keys::VALUES.bird)
             }
             #[allow(missing_docs)]
-            pub fn get_bird_key_at_addr(address: Address) -> namada_core::types::storage::Key {
-                namada_core::types::storage::Key {
+            pub fn get_bird_key_at_addr(address: Address) -> namada_core::storage::Key {
+                namada_core::storage::Key {
                     segments: vec![
-                        namada_core::types::storage::DbKeySeg::AddressSeg(address),
-                        namada_core::types::storage::DbKeySeg::StringSeg(Keys::VALUES.bird.to_string()),
+                        namada_core::storage::DbKeySeg::AddressSeg(address),
+                        namada_core::storage::DbKeySeg::StringSeg(Keys::VALUES.bird.to_string()),
                     ],
                 }
             }
             #[allow(missing_docs)]
-            pub fn is_is_key_at_addr(key: &namada_core::types::storage::Key, address: &Address) -> bool {
+            pub fn is_is_key_at_addr(key: &namada_core::storage::Key, address: &Address) -> bool {
                 matches!(&key.segments[..], [
-                    namada_core::types::storage::DbKeySeg::AddressSeg(a),
-                    namada_core::types::storage::DbKeySeg::StringSeg(is),
+                    namada_core::storage::DbKeySeg::AddressSeg(a),
+                    namada_core::storage::DbKeySeg::StringSeg(is),
                 ] if a == address && is == Keys::VALUES.is)
             }
             #[allow(missing_docs)]
-            pub fn get_is_key_at_addr(address: Address) -> namada_core::types::storage::Key {
-                namada_core::types::storage::Key {
+            pub fn get_is_key_at_addr(address: Address) -> namada_core::storage::Key {
+                namada_core::storage::Key {
                     segments: vec![
-                        namada_core::types::storage::DbKeySeg::AddressSeg(address),
-                        namada_core::types::storage::DbKeySeg::StringSeg(Keys::VALUES.is.to_string()),
+                        namada_core::storage::DbKeySeg::AddressSeg(address),
+                        namada_core::storage::DbKeySeg::StringSeg(Keys::VALUES.is.to_string()),
                     ],
                 }
             }
             #[allow(missing_docs)]
-            pub fn is_the_key_at_addr(key: &namada_core::types::storage::Key, address: &Address) -> bool {
+            pub fn is_the_key_at_addr(key: &namada_core::storage::Key, address: &Address) -> bool {
                 matches!(&key.segments[..], [
-                    namada_core::types::storage::DbKeySeg::AddressSeg(a),
-                    namada_core::types::storage::DbKeySeg::StringSeg(the),
+                    namada_core::storage::DbKeySeg::AddressSeg(a),
+                    namada_core::storage::DbKeySeg::StringSeg(the),
                 ] if a == address && the == Keys::VALUES.the)
             }
             #[allow(missing_docs)]
-            pub fn get_the_key_at_addr(address: Address) -> namada_core::types::storage::Key {
-                namada_core::types::storage::Key {
+            pub fn get_the_key_at_addr(address: Address) -> namada_core::storage::Key {
+                namada_core::storage::Key {
                     segments: vec![
-                        namada_core::types::storage::DbKeySeg::AddressSeg(address),
-                        namada_core::types::storage::DbKeySeg::StringSeg(Keys::VALUES.the.to_string()),
+                        namada_core::storage::DbKeySeg::AddressSeg(address),
+                        namada_core::storage::DbKeySeg::StringSeg(Keys::VALUES.the.to_string()),
                     ],
                 }
             }
             #[allow(missing_docs)]
-            pub fn is_word_key_at_addr(key: &namada_core::types::storage::Key, address: &Address) -> bool {
+            pub fn is_word_key_at_addr(key: &namada_core::storage::Key, address: &Address) -> bool {
                 matches!(&key.segments[..], [
-                    namada_core::types::storage::DbKeySeg::AddressSeg(a),
-                    namada_core::types::storage::DbKeySeg::StringSeg(word),
+                    namada_core::storage::DbKeySeg::AddressSeg(a),
+                    namada_core::storage::DbKeySeg::StringSeg(word),
                 ] if a == address && word == Keys::VALUES.word)
             }
             #[allow(missing_docs)]
-            pub fn get_word_key_at_addr(address: Address) -> namada_core::types::storage::Key {
-                namada_core::types::storage::Key {
+            pub fn get_word_key_at_addr(address: Address) -> namada_core::storage::Key {
+                namada_core::storage::Key {
                     segments: vec![
-                        namada_core::types::storage::DbKeySeg::AddressSeg(address),
-                        namada_core::types::storage::DbKeySeg::StringSeg(Keys::VALUES.word.to_string()),
+                        namada_core::storage::DbKeySeg::AddressSeg(address),
+                        namada_core::storage::DbKeySeg::StringSeg(Keys::VALUES.word.to_string()),
                     ],
                 }
             }
@@ -531,34 +531,34 @@ mod test_proc_macros {
                 };
             }
             #[allow(missing_docs)]
-            pub fn is_param1_key_at_addr(key: &namada_core::types::storage::Key, address: &Address) -> bool {
+            pub fn is_param1_key_at_addr(key: &namada_core::storage::Key, address: &Address) -> bool {
                 matches!(&key.segments[..], [
-                    namada_core::types::storage::DbKeySeg::AddressSeg(a),
-                    namada_core::types::storage::DbKeySeg::StringSeg(param1),
+                    namada_core::storage::DbKeySeg::AddressSeg(a),
+                    namada_core::storage::DbKeySeg::StringSeg(param1),
                 ] if a == address && param1 == Keys::VALUES.param1)
             }
             #[allow(missing_docs)]
-            pub fn get_param1_key_at_addr(address: Address) -> namada_core::types::storage::Key {
-                namada_core::types::storage::Key {
+            pub fn get_param1_key_at_addr(address: Address) -> namada_core::storage::Key {
+                namada_core::storage::Key {
                     segments: vec![
-                        namada_core::types::storage::DbKeySeg::AddressSeg(address),
-                        namada_core::types::storage::DbKeySeg::StringSeg(Keys::VALUES.param1.to_string()),
+                        namada_core::storage::DbKeySeg::AddressSeg(address),
+                        namada_core::storage::DbKeySeg::StringSeg(Keys::VALUES.param1.to_string()),
                     ],
                 }
             }
             #[allow(missing_docs)]
-            pub fn is_param2_key_at_addr(key: &namada_core::types::storage::Key, address: &Address) -> bool {
+            pub fn is_param2_key_at_addr(key: &namada_core::storage::Key, address: &Address) -> bool {
                 matches!(&key.segments[..], [
-                    namada_core::types::storage::DbKeySeg::AddressSeg(a),
-                    namada_core::types::storage::DbKeySeg::StringSeg(param2),
+                    namada_core::storage::DbKeySeg::AddressSeg(a),
+                    namada_core::storage::DbKeySeg::StringSeg(param2),
                 ] if a == address && param2 == Keys::VALUES.param2)
             }
             #[allow(missing_docs)]
-            pub fn get_param2_key_at_addr(address: Address) -> namada_core::types::storage::Key {
-                namada_core::types::storage::Key {
+            pub fn get_param2_key_at_addr(address: Address) -> namada_core::storage::Key {
+                namada_core::storage::Key {
                     segments: vec![
-                        namada_core::types::storage::DbKeySeg::AddressSeg(address),
-                        namada_core::types::storage::DbKeySeg::StringSeg(Keys::VALUES.param2.to_string()),
+                        namada_core::storage::DbKeySeg::AddressSeg(address),
+                        namada_core::storage::DbKeySeg::StringSeg(Keys::VALUES.param2.to_string()),
                     ],
                 }
             }

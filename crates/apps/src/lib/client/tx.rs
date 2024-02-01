@@ -7,6 +7,9 @@ use borsh_ext::BorshSerializeExt;
 use ledger_namada_rs::{BIP44Path, NamadaApp};
 use ledger_transport_hid::hidapi::HidApi;
 use ledger_transport_hid::TransportNativeHID;
+use namada::core::address::{Address, ImplicitAddress};
+use namada::core::dec::Dec;
+use namada::core::key::{self, *};
 use namada::governance::cli::offline::{
     OfflineProposal, OfflineSignedProposal, OfflineVote,
 };
@@ -15,13 +18,10 @@ use namada::governance::cli::onchain::{
 };
 use namada::governance::ProposalVote;
 use namada::ibc::apps::transfer::types::Memo;
+use namada::io::Io;
 use namada::state::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::tx::data::pos::{BecomeValidator, ConsensusKeyChange};
 use namada::tx::{CompressedSignature, Section, Signer, Tx};
-use namada::types::address::{Address, ImplicitAddress};
-use namada::types::dec::Dec;
-use namada::types::io::Io;
-use namada::types::key::{self, *};
 use namada_sdk::rpc::{InnerTxResult, TxBroadcastData, TxResponse};
 use namada_sdk::wallet::alias::validator_consensus_key;
 use namada_sdk::wallet::{Wallet, WalletIo};

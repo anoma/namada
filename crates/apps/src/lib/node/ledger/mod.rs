@@ -14,10 +14,10 @@ use std::thread;
 
 use byte_unit::Byte;
 use futures::future::TryFutureExt;
+use namada::core::storage::Key;
+use namada::core::time::DateTimeUtc;
 use namada::eth_bridge::ethers::providers::{Http, Provider};
 use namada::governance::storage::keys as governance_storage;
-use namada::types::storage::Key;
-use namada::types::time::DateTimeUtc;
 use namada_sdk::tendermint::abci::request::CheckTxKind;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
@@ -753,8 +753,8 @@ pub fn test_genesis_files(
     genesis: config::genesis::chain::Finalized,
     wasm_dir: PathBuf,
 ) {
+    use namada::core::hash::Sha256Hasher;
     use namada::state::mockdb::MockDB;
-    use namada::types::hash::Sha256Hasher;
 
     // Channels for validators to send protocol txs to be broadcast to the
     // broadcaster service

@@ -1,10 +1,10 @@
 //! Storage API for querying data about Proof-of-stake related
 //! data. This includes validator and epoch related data.
 
-use namada_core::types::address::Address;
-use namada_core::types::chain::ProposalBytes;
-use namada_core::types::storage::{BlockHeight, Epoch};
-use namada_core::types::{key, token};
+use namada_core::address::Address;
+use namada_core::chain::ProposalBytes;
+use namada_core::storage::{BlockHeight, Epoch};
+use namada_core::{key, token};
 use namada_parameters::storage::get_max_proposal_bytes_key;
 use namada_storage::collections::lazy_map::NestedSubKey;
 use namada_storage::StorageRead;

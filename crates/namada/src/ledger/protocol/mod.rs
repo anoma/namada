@@ -4,8 +4,8 @@ use std::collections::BTreeSet;
 use borsh_ext::BorshSerializeExt;
 use eyre::{eyre, WrapErr};
 use masp_primitives::transaction::Transaction;
-use namada_core::types::hash::Hash;
-use namada_core::types::storage::Key;
+use namada_core::hash::Hash;
+use namada_core::storage::Key;
 use namada_gas::TxGasMeter;
 use namada_sdk::tx::TX_TRANSFER_WASM;
 use namada_state::wl_storage::WriteLogAndStorage;
@@ -19,6 +19,7 @@ use namada_vote_ext::EthereumTxData;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
+use crate::address::{Address, InternalAddress};
 use crate::ledger::gas::{GasMetering, VpGasMeter};
 use crate::ledger::governance::GovernanceVp;
 use crate::ledger::native_vp::ethereum_bridge::bridge_pool_vp::BridgePoolVp;
@@ -33,10 +34,9 @@ use crate::ledger::pgf::PgfVp;
 use crate::ledger::pos::{self, PosVP};
 use crate::state::write_log::WriteLog;
 use crate::state::{DBIter, State, StorageHasher, WlStorage, DB};
+use crate::storage;
+use crate::storage::TxIndex;
 use crate::token::Amount;
-use crate::types::address::{Address, InternalAddress};
-use crate::types::storage;
-use crate::types::storage::TxIndex;
 use crate::vm::wasm::{TxCache, VpCache};
 use crate::vm::{self, wasm, WasmCacheAccess};
 
@@ -1151,15 +1151,13 @@ mod tests {
 
     use borsh::BorshDeserialize;
     use eyre::Result;
-    use namada_core::types::chain::ChainId;
-    use namada_core::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
-    use namada_core::types::ethereum_events::{
-        EthereumEvent, TransferToNamada,
-    };
-    use namada_core::types::keccak::keccak_hash;
-    use namada_core::types::storage::BlockHeight;
-    use namada_core::types::voting_power::FractionalVotingPower;
-    use namada_core::types::{address, key};
+    use namada_core::chain::ChainId;
+    use namada_core::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
+    use namada_core::ethereum_events::{EthereumEvent, TransferToNamada};
+    use namada_core::keccak::keccak_hash;
+    use namada_core::storage::BlockHeight;
+    use namada_core::voting_power::FractionalVotingPower;
+    use namada_core::{address, key};
     use namada_ethereum_bridge::protocol::transactions::votes::{
         EpochedVotingPower, Votes,
     };

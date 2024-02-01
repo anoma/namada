@@ -27,13 +27,13 @@ use std::cmp::{self};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 pub use error::*;
+use namada_core::address::{Address, InternalAddress};
+use namada_core::dec::Dec;
 use namada_core::event::EmitEvents;
+use namada_core::key::{common, tm_raw_hash_to_string};
+use namada_core::storage::BlockHeight;
+pub use namada_core::storage::{Epoch, Key, KeySeg};
 use namada_core::tendermint::abci::types::{Misbehavior, MisbehaviorKind};
-use namada_core::types::address::{Address, InternalAddress};
-use namada_core::types::dec::Dec;
-use namada_core::types::key::{common, tm_raw_hash_to_string};
-use namada_core::types::storage::BlockHeight;
-pub use namada_core::types::storage::{Epoch, Key, KeySeg};
 use namada_storage::collections::lazy_map::{self, Collectable, LazyMap};
 use namada_storage::{StorageRead, StorageWrite};
 pub use namada_trans_token as token;
@@ -163,7 +163,7 @@ where
 pub fn is_delegator<S>(
     storage: &S,
     address: &Address,
-    epoch: Option<namada_core::types::storage::Epoch>,
+    epoch: Option<namada_core::storage::Epoch>,
 ) -> namada_storage::Result<bool>
 where
     S: StorageRead,
@@ -2498,7 +2498,7 @@ pub mod test_utils {
         storage: &mut S,
         params: &PosParams,
         validators: impl Iterator<Item = GenesisValidator>,
-        current_epoch: namada_core::types::storage::Epoch,
+        current_epoch: namada_core::storage::Epoch,
     ) -> namada_storage::Result<()>
     where
         S: StorageRead + StorageWrite,
@@ -2561,7 +2561,7 @@ pub mod test_utils {
         storage: &mut S,
         owned: OwnedPosParams,
         validators: impl Iterator<Item = GenesisValidator> + Clone,
-        current_epoch: namada_core::types::storage::Epoch,
+        current_epoch: namada_core::storage::Epoch,
     ) -> namada_storage::Result<PosParams>
     where
         S: StorageRead + StorageWrite,

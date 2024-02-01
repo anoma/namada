@@ -4,12 +4,12 @@ use std::collections::HashMap;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use ethers::abi::Tokenizable;
-use namada_core::types::eth_abi::Encode;
-use namada_core::types::ethereum_events::Uint;
-use namada_core::types::keccak::KeccakHash;
-use namada_core::types::key::{common, secp256k1};
-use namada_core::types::storage::Epoch;
-use namada_core::types::{eth_abi, ethereum_structs};
+use namada_core::eth_abi::Encode;
+use namada_core::ethereum_events::Uint;
+use namada_core::keccak::KeccakHash;
+use namada_core::key::{common, secp256k1};
+use namada_core::storage::Epoch;
+use namada_core::{eth_abi, ethereum_structs};
 use namada_vote_ext::validator_set_update::{
     valset_upd_toks_to_hashes, EthAddrBook, VotingPowersMap, VotingPowersMapExt,
 };
@@ -123,8 +123,8 @@ mod test_ethbridge_proofs {
     //! Test ethereum bridge proofs.
 
     use assert_matches::assert_matches;
-    use namada_core::types::ethereum_events::EthAddress;
-    use namada_core::types::key;
+    use namada_core::ethereum_events::EthAddress;
+    use namada_core::key;
     use namada_tx::Signed;
 
     use super::*;

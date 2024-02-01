@@ -30,7 +30,13 @@ use std::rc::Rc;
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::transaction::Transaction;
-use namada::core::hints;
+use namada::core::address::Address;
+use namada::core::chain::ChainId;
+use namada::core::ethereum_events::EthereumEvent;
+use namada::core::key::*;
+use namada::core::storage::{BlockHeight, Key, TxIndex};
+use namada::core::time::DateTimeUtc;
+use namada::core::{address, hints};
 use namada::ethereum_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
 use namada::ethereum_bridge::protocol::validation::ethereum_events::validate_eth_events_vext;
 use namada::ethereum_bridge::protocol::validation::validator_set_update::validate_valset_upd_vext;
@@ -59,13 +65,6 @@ use namada::token;
 pub use namada::tx::data::ResultCode;
 use namada::tx::data::{DecryptedTx, TxType, WrapperTx, WrapperTxErr};
 use namada::tx::{Section, Tx};
-use namada::types::address;
-use namada::types::address::Address;
-use namada::types::chain::ChainId;
-use namada::types::ethereum_events::EthereumEvent;
-use namada::types::key::*;
-use namada::types::storage::{BlockHeight, Key, TxIndex};
-use namada::types::time::DateTimeUtc;
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::{WasmCacheAccess, WasmCacheRwAccess};
 use namada::vote_ext::EthereumTxData;
@@ -358,7 +357,7 @@ where
 
 /// Merkle tree storage key filter. Return `false` for keys that shouldn't be
 /// merklized.
-pub fn is_merklized_storage_key(key: &namada_sdk::types::storage::Key) -> bool {
+pub fn is_merklized_storage_key(key: &namada_sdk::storage::Key) -> bool {
     !token::storage_key::is_masp_key(key)
         && !namada::ibc::storage::is_ibc_counter_key(key)
 }
@@ -616,8 +615,8 @@ where
     /// Get the next epoch for which we can request validator set changed
     pub fn get_validator_set_update_epoch(
         &self,
-        current_epoch: namada_sdk::types::storage::Epoch,
-    ) -> namada_sdk::types::storage::Epoch {
+        current_epoch: namada_sdk::storage::Epoch,
+    ) -> namada_sdk::storage::Epoch {
         if let Some(delay) = self.wl_storage.storage.update_epoch_blocks_delay {
             if delay == EPOCH_SWITCH_BLOCKS_DELAY {
                 // If we're about to update validator sets for the
@@ -1423,6 +1422,14 @@ mod test_utils {
     use std::path::PathBuf;
 
     use data_encoding::HEXUPPER;
+    use namada::core::address;
+    use namada::core::chain::ChainId;
+    use namada::core::ethereum_events::Uint;
+    use namada::core::hash::Hash;
+    use namada::core::keccak::KeccakHash;
+    use namada::core::key::*;
+    use namada::core::storage::{BlockHash, Epoch, Header};
+    use namada::core::time::{DateTimeUtc, DurationSecs};
     use namada::ledger::parameters::{EpochDuration, Parameters};
     use namada::proof_of_stake::parameters::PosParams;
     use namada::proof_of_stake::storage::validator_consensus_key_handle;
@@ -1434,14 +1441,6 @@ mod test_utils {
     use namada::token::conversion::update_allowed_conversions;
     use namada::tx::data::{Fee, TxType, WrapperTx};
     use namada::tx::{Code, Data};
-    use namada::types::address;
-    use namada::types::chain::ChainId;
-    use namada::types::ethereum_events::Uint;
-    use namada::types::hash::Hash;
-    use namada::types::keccak::KeccakHash;
-    use namada::types::key::*;
-    use namada::types::storage::{BlockHash, Epoch, Header};
-    use namada::types::time::{DateTimeUtc, DurationSecs};
     use tempfile::tempdir;
     use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
@@ -1537,7 +1536,7 @@ mod test_utils {
 
     /// Get the default bridge pool vext bytes to be signed.
     pub fn get_bp_bytes_to_sign() -> KeccakHash {
-        use namada::types::keccak::{Hasher, Keccak};
+        use namada::core::keccak::{Hasher, Keccak};
 
         let root = [0; 32];
         let nonce = Uint::from(0).to_bytes();
@@ -2095,15 +2094,15 @@ mod test_utils {
 
 #[cfg(test)]
 mod shell_tests {
+    use namada::core::ethereum_events::EthereumEvent;
+    use namada::core::key::RefTo;
+    use namada::core::storage::{BlockHeight, Epoch};
     use namada::token::read_denom;
     use namada::tx::data::protocol::{ProtocolTx, ProtocolTxType};
     use namada::tx::data::{Fee, WrapperTx};
     use namada::tx::{
         Code, Data, Section, SignableEthMessage, Signature, Signed, Tx,
     };
-    use namada::types::ethereum_events::EthereumEvent;
-    use namada::types::key::RefTo;
-    use namada::types::storage::{BlockHeight, Epoch};
     use namada::vote_ext::{
         bridge_pool_roots, ethereum_events, ethereum_tx_data_variants,
     };
@@ -2202,7 +2201,7 @@ mod shell_tests {
     /// not validated by `CheckTx`.
     #[test]
     fn test_outdated_nonce_mempool_validate() {
-        use namada::types::storage::InnerEthEventsQueue;
+        use namada::core::storage::InnerEthEventsQueue;
 
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
 

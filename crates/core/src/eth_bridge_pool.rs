@@ -13,14 +13,14 @@ use super::address::InternalAddress;
 use super::keccak::KeccakHash;
 use super::storage::{self, KeySeg};
 use crate as namada_core; // This is needed for `StorageKeys` macro
-use crate::types::address::Address;
-use crate::types::eth_abi::Encode;
-use crate::types::ethereum_events::{
+use crate::address::Address;
+use crate::eth_abi::Encode;
+use crate::ethereum_events::{
     EthAddress, TransferToEthereum as TransferToEthereumEvent,
 };
-use crate::types::hash::Hash as HashDigest;
-use crate::types::storage::{DbKeySeg, Key};
-use crate::types::token::Amount;
+use crate::hash::Hash as HashDigest;
+use crate::storage::{DbKeySeg, Key};
+use crate::token::Amount;
 
 /// The main address of the Ethereum bridge pool
 pub const BRIDGE_POOL_ADDRESS: Address =
@@ -364,11 +364,11 @@ pub mod testing {
     use proptest::strategy::Strategy;
 
     use super::*;
-    use crate::types::address::testing::{
+    use crate::address::testing::{
         arb_established_address, arb_non_internal_address,
     };
-    use crate::types::ethereum_events::testing::arb_eth_address;
-    use crate::types::token::testing::arb_amount;
+    use crate::ethereum_events::testing::arb_eth_address;
+    use crate::token::testing::arb_amount;
 
     prop_compose! {
         /// Generate an arbitrary pending transfer
@@ -434,8 +434,8 @@ pub mod testing {
 #[cfg(test)]
 mod test_eth_bridge_pool_types {
     use super::*;
-    use crate::types::address::nam;
-    use crate::types::address::testing::established_address_1;
+    use crate::address::nam;
+    use crate::address::testing::established_address_1;
 
     /// Test that [`PendingTransfer`] and [`TransferToEthereum`]
     /// have the same keccak hash, after being ABI encoded.

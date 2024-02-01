@@ -10,18 +10,18 @@ use masp_primitives::transaction::builder::Builder;
 use masp_primitives::transaction::components::sapling::builder::SaplingMetadata;
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::ExtendedFullViewingKey;
+use namada_core::account::AccountPublicKeysMap;
+use namada_core::address::Address;
 use namada_core::borsh::schema::{add_definition, Declaration, Definition};
 use namada_core::borsh::{
     BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
 };
-use namada_core::types::account::AccountPublicKeysMap;
-use namada_core::types::address::Address;
-use namada_core::types::chain::ChainId;
-use namada_core::types::key::*;
-use namada_core::types::masp::AssetData;
-use namada_core::types::sign::SignatureIndex;
-use namada_core::types::storage::Epoch;
-use namada_core::types::time::DateTimeUtc;
+use namada_core::chain::ChainId;
+use namada_core::key::*;
+use namada_core::masp::AssetData;
+use namada_core::sign::SignatureIndex;
+use namada_core::storage::Epoch;
+use namada_core::time::DateTimeUtc;
 use serde::de::Error as SerdeError;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -36,7 +36,7 @@ use crate::proto;
 #[derive(Error, Debug)]
 pub enum VerifySigError {
     #[error("{0}")]
-    VerifySig(#[from] namada_core::types::key::VerifySigError),
+    VerifySig(#[from] namada_core::key::VerifySigError),
     #[error("{0}")]
     Gas(#[from] namada_gas::Error),
     #[error("The wrapper signature is invalid.")]
@@ -249,7 +249,7 @@ pub struct CommitmentError;
 )]
 pub enum Commitment {
     /// Result of applying hash function to bytes
-    Hash(namada_core::types::hash::Hash),
+    Hash(namada_core::hash::Hash),
     /// Result of applying identity function to bytes
     Id(Vec<u8>),
 }
@@ -279,7 +279,7 @@ impl Commitment {
     }
 
     /// Return the contained hash commitment
-    pub fn hash(&self) -> namada_core::types::hash::Hash {
+    pub fn hash(&self) -> namada_core::hash::Hash {
         match self {
             Self::Id(code) => hash_tx(code),
             Self::Hash(hash) => *hash,
@@ -327,7 +327,7 @@ impl Code {
 
     /// Make a new code section with the given hash
     pub fn from_hash(
-        hash: namada_core::types::hash::Hash,
+        hash: namada_core::hash::Hash,
         tag: Option<String>,
     ) -> Self {
         Self {
@@ -377,7 +377,7 @@ pub enum Signer {
 )]
 pub struct Signature {
     /// The hash of the section being signed
-    pub targets: Vec<namada_core::types::hash::Hash>,
+    pub targets: Vec<namada_core::hash::Hash>,
     /// The public keys against which the signatures should be verified
     pub signer: Signer,
     /// The signature over the above hash
@@ -387,7 +387,7 @@ pub struct Signature {
 impl Signature {
     /// Sign the given section hash with the given key and return a section
     pub fn new(
-        targets: Vec<namada_core::types::hash::Hash>,
+        targets: Vec<namada_core::hash::Hash>,
         secret_keys: BTreeMap<u8, common::SecretKey>,
         signer: Option<Address>,
     ) -> Self {
@@ -437,13 +437,13 @@ impl Signature {
     }
 
     /// Get the hash of this section
-    pub fn get_hash(&self) -> namada_core::types::hash::Hash {
-        namada_core::types::hash::Hash(
+    pub fn get_hash(&self) -> namada_core::hash::Hash {
+        namada_core::hash::Hash(
             self.hash(&mut Sha256::new()).finalize_reset().into(),
         )
     }
 
-    pub fn get_raw_hash(&self) -> namada_core::types::hash::Hash {
+    pub fn get_raw_hash(&self) -> namada_core::hash::Hash {
         Self {
             signer: Signer::PubKeys(vec![]),
             signatures: BTreeMap::new(),
@@ -657,7 +657,7 @@ impl From<SaplingMetadataSerde> for Vec<u8> {
 )]
 pub struct MaspBuilder {
     /// The MASP transaction that this section witnesses
-    pub target: namada_core::types::hash::Hash,
+    pub target: namada_core::hash::Hash,
     /// The decoded set of asset types used by the transaction. Useful for
     /// offline wallets trying to display AssetTypes.
     pub asset_types: HashSet<AssetData>,
@@ -757,8 +757,8 @@ impl Section {
     }
 
     /// Get the hash of this section
-    pub fn get_hash(&self) -> namada_core::types::hash::Hash {
-        namada_core::types::hash::Hash(
+    pub fn get_hash(&self) -> namada_core::hash::Hash {
+        namada_core::hash::Hash(
             self.hash(&mut Sha256::new()).finalize_reset().into(),
         )
     }
@@ -864,14 +864,14 @@ pub struct Header {
     /// A transaction timestamp
     pub timestamp: DateTimeUtc,
     /// The SHA-256 hash of the transaction's code section
-    pub code_hash: namada_core::types::hash::Hash,
+    pub code_hash: namada_core::hash::Hash,
     /// The SHA-256 hash of the transaction's data section
-    pub data_hash: namada_core::types::hash::Hash,
+    pub data_hash: namada_core::hash::Hash,
     /// The SHA-256 hash of the transaction's memo section
     ///
     /// In case a memo is not present in the transaction, a
     /// byte array filled with zeroes is present instead
-    pub memo_hash: namada_core::types::hash::Hash,
+    pub memo_hash: namada_core::hash::Hash,
     /// The type of this transaction
     pub tx_type: TxType,
 }
@@ -884,9 +884,9 @@ impl Header {
             chain_id: ChainId::default(),
             expiration: None,
             timestamp: DateTimeUtc::now(),
-            code_hash: namada_core::types::hash::Hash::default(),
-            data_hash: namada_core::types::hash::Hash::default(),
-            memo_hash: namada_core::types::hash::Hash::default(),
+            code_hash: namada_core::hash::Hash::default(),
+            data_hash: namada_core::hash::Hash::default(),
+            memo_hash: namada_core::hash::Hash::default(),
         }
     }
 
@@ -1024,12 +1024,12 @@ impl Tx {
     }
 
     /// Get the transaction header hash
-    pub fn header_hash(&self) -> namada_core::types::hash::Hash {
+    pub fn header_hash(&self) -> namada_core::hash::Hash {
         Section::Header(self.header.clone()).get_hash()
     }
 
     /// Gets the hash of the decrypted transaction's header
-    pub fn raw_header_hash(&self) -> namada_core::types::hash::Hash {
+    pub fn raw_header_hash(&self) -> namada_core::hash::Hash {
         let mut raw_header = self.header();
         raw_header.tx_type = TxType::Raw;
 
@@ -1037,7 +1037,7 @@ impl Tx {
     }
 
     /// Get hashes of all the sections in this transaction
-    pub fn sechashes(&self) -> Vec<namada_core::types::hash::Hash> {
+    pub fn sechashes(&self) -> Vec<namada_core::hash::Hash> {
         let mut hashes = vec![self.header_hash()];
         for sec in &self.sections {
             hashes.push(sec.get_hash());
@@ -1054,7 +1054,7 @@ impl Tx {
     /// Get the transaction section with the given hash
     pub fn get_section(
         &self,
-        hash: &namada_core::types::hash::Hash,
+        hash: &namada_core::hash::Hash,
     ) -> Option<Cow<Section>> {
         if self.header_hash() == *hash {
             return Some(Cow::Owned(Section::Header(self.header.clone())));
@@ -1072,18 +1072,18 @@ impl Tx {
     }
 
     /// Set the transaction memo hash stored in the header
-    pub fn set_memo_sechash(&mut self, hash: namada_core::types::hash::Hash) {
+    pub fn set_memo_sechash(&mut self, hash: namada_core::hash::Hash) {
         self.header.memo_hash = hash;
     }
 
     /// Get the hash of this transaction's memo from the heeader
-    pub fn memo_sechash(&self) -> &namada_core::types::hash::Hash {
+    pub fn memo_sechash(&self) -> &namada_core::hash::Hash {
         &self.header.memo_hash
     }
 
     /// Get the memo designated by the memo hash in the header
     pub fn memo(&self) -> Option<Vec<u8>> {
-        if self.memo_sechash() == &namada_core::types::hash::Hash::default() {
+        if self.memo_sechash() == &namada_core::hash::Hash::default() {
             return None;
         }
         match self
@@ -1103,12 +1103,12 @@ impl Tx {
     }
 
     /// Get the hash of this transaction's code from the heeader
-    pub fn code_sechash(&self) -> &namada_core::types::hash::Hash {
+    pub fn code_sechash(&self) -> &namada_core::hash::Hash {
         &self.header.code_hash
     }
 
     /// Set the transaction code hash stored in the header
-    pub fn set_code_sechash(&mut self, hash: namada_core::types::hash::Hash) {
+    pub fn set_code_sechash(&mut self, hash: namada_core::hash::Hash) {
         self.header.code_hash = hash
     }
 
@@ -1133,12 +1133,12 @@ impl Tx {
     }
 
     /// Get the transaction data hash stored in the header
-    pub fn data_sechash(&self) -> &namada_core::types::hash::Hash {
+    pub fn data_sechash(&self) -> &namada_core::hash::Hash {
         &self.header.data_hash
     }
 
     /// Set the transaction data hash stored in the header
-    pub fn set_data_sechash(&mut self, hash: namada_core::types::hash::Hash) {
+    pub fn set_data_sechash(&mut self, hash: namada_core::hash::Hash) {
         self.header.data_hash = hash
     }
 
@@ -1179,7 +1179,7 @@ impl Tx {
     /// public key
     pub fn verify_signatures<F>(
         &self,
-        hashes: &[namada_core::types::hash::Hash],
+        hashes: &[namada_core::hash::Hash],
         public_keys_index_map: AccountPublicKeysMap,
         signer: &Option<Address>,
         threshold: u8,
@@ -1252,7 +1252,7 @@ impl Tx {
     pub fn verify_signature(
         &self,
         public_key: &common::PublicKey,
-        hashes: &[namada_core::types::hash::Hash],
+        hashes: &[namada_core::hash::Hash],
     ) -> Result<&Signature, VerifySigError> {
         self.verify_signatures(
             hashes,
@@ -1390,9 +1390,9 @@ impl Tx {
     /// Add an extra section to the tx builder by hash
     pub fn add_extra_section_from_hash(
         &mut self,
-        hash: namada_core::types::hash::Hash,
+        hash: namada_core::hash::Hash,
         tag: Option<String>,
-    ) -> namada_core::types::hash::Hash {
+    ) -> namada_core::hash::Hash {
         let sechash = self
             .add_section(Section::ExtraData(Code::from_hash(hash, tag)))
             .get_hash();
@@ -1404,7 +1404,7 @@ impl Tx {
         &mut self,
         code: Vec<u8>,
         tag: Option<String>,
-    ) -> (&mut Self, namada_core::types::hash::Hash) {
+    ) -> (&mut Self, namada_core::hash::Hash) {
         let sechash = self
             .add_section(Section::ExtraData(Code::new(code, tag)))
             .get_hash();
@@ -1415,7 +1415,7 @@ impl Tx {
     pub fn add_memo(
         &mut self,
         memo: &[u8],
-    ) -> (&mut Self, namada_core::types::hash::Hash) {
+    ) -> (&mut Self, namada_core::hash::Hash) {
         let sechash = self
             .add_section(Section::ExtraData(Code::new(memo.to_vec(), None)))
             .get_hash();
@@ -1427,7 +1427,7 @@ impl Tx {
     pub fn add_masp_tx_section(
         &mut self,
         tx: Transaction,
-    ) -> (&mut Self, namada_core::types::hash::Hash) {
+    ) -> (&mut Self, namada_core::hash::Hash) {
         let sechash = self.add_section(Section::MaspTx(tx)).get_hash();
         (self, sechash)
     }
@@ -1441,7 +1441,7 @@ impl Tx {
     /// Add wasm code to the tx builder from hash
     pub fn add_code_from_hash(
         &mut self,
-        code_hash: namada_core::types::hash::Hash,
+        code_hash: namada_core::hash::Hash,
         tag: Option<String>,
     ) -> &mut Self {
         self.set_code(Code::from_hash(code_hash, tag));
@@ -1478,7 +1478,7 @@ impl Tx {
         fee_payer: common::PublicKey,
         epoch: Epoch,
         gas_limit: GasLimit,
-        fee_unshield_hash: Option<namada_core::types::hash::Hash>,
+        fee_unshield_hash: Option<namada_core::hash::Hash>,
     ) -> &mut Self {
         self.header.tx_type = TxType::Wrapper(Box::new(WrapperTx::new(
             fee,

@@ -2,9 +2,9 @@
 
 use std::collections::{BTreeMap, HashMap};
 
+use namada::core::ethereum_events::EthereumEvent;
 use namada::state::{DBIter, StorageHasher, DB};
 use namada::tx::Signed;
-use namada::types::ethereum_events::EthereumEvent;
 use namada::vote_ext::ethereum_events::{self, MultiSignedEthEvent};
 use namada_sdk::eth_bridge::EthBridgeQueries;
 
@@ -143,6 +143,13 @@ mod test_vote_extensions {
     use std::convert::TryInto;
 
     use borsh_ext::BorshSerializeExt;
+    use namada::core::address::testing::gen_established_address;
+    use namada::core::ethereum_events::{
+        EthAddress, EthereumEvent, TransferToEthereum, Uint,
+    };
+    use namada::core::hash::Hash;
+    use namada::core::key::*;
+    use namada::core::storage::{Epoch, InnerEthEventsQueue};
     use namada::eth_bridge::storage::bridge_pool;
     use namada::ledger::eth_bridge::EthBridgeQueries;
     use namada::ledger::pos::PosQueries;
@@ -153,13 +160,6 @@ mod test_vote_extensions {
     use namada::proof_of_stake::types::WeightedValidator;
     use namada::state::collections::lazy_map::{NestedSubKey, SubKey};
     use namada::tendermint::abci::types::VoteInfo;
-    use namada::types::address::testing::gen_established_address;
-    use namada::types::ethereum_events::{
-        EthAddress, EthereumEvent, TransferToEthereum, Uint,
-    };
-    use namada::types::hash::Hash;
-    use namada::types::key::*;
-    use namada::types::storage::{Epoch, InnerEthEventsQueue};
     use namada::vote_ext::ethereum_events;
 
     use super::validate_eth_events_vext;

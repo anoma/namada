@@ -9,15 +9,15 @@ use borsh_ext::BorshSerializeExt;
 use ethbridge_bridge_contract::Bridge;
 use ethers::providers::Middleware;
 use futures::future::FutureExt;
-use namada_core::types::address::{Address, InternalAddress};
-use namada_core::types::eth_abi::Encode;
-use namada_core::types::eth_bridge_pool::{
+use namada_core::address::{Address, InternalAddress};
+use namada_core::eth_abi::Encode;
+use namada_core::eth_bridge_pool::{
     erc20_token_address, GasFee, PendingTransfer, TransferToEthereum,
     TransferToEthereumKind,
 };
-use namada_core::types::ethereum_events::EthAddress;
-use namada_core::types::keccak::KeccakHash;
-use namada_core::types::voting_power::FractionalVotingPower;
+use namada_core::ethereum_events::EthAddress;
+use namada_core::keccak::KeccakHash;
+use namada_core::voting_power::FractionalVotingPower;
 use namada_ethereum_bridge::storage::bridge_pool::get_pending_key;
 use namada_token::storage_key::balance_key;
 use namada_token::Amount;
@@ -737,9 +737,9 @@ mod recommendations {
     use std::collections::BTreeSet;
 
     use borsh::BorshDeserialize;
-    use namada_core::types::ethereum_events::Uint as EthUint;
-    use namada_core::types::storage::BlockHeight;
-    use namada_core::types::uint::{self, Uint, I256};
+    use namada_core::ethereum_events::Uint as EthUint;
+    use namada_core::storage::BlockHeight;
+    use namada_core::uint::{self, Uint, I256};
     use namada_vote_ext::validator_set_update::{
         EthAddrBook, VotingPowersMap, VotingPowersMapExt,
     };
@@ -1213,7 +1213,7 @@ mod recommendations {
 
     #[cfg(test)]
     mod test_recommendations {
-        use namada_core::types::address::Address;
+        use namada_core::address::Address;
 
         use super::*;
         use crate::io::StdIo;
@@ -1236,7 +1236,7 @@ mod recommendations {
                     amount: Default::default(),
                 },
                 gas_fee: GasFee {
-                    token: namada_core::types::address::nam(),
+                    token: namada_core::address::nam(),
                     amount: gas_amount.into(),
                     payer: bertha_address(),
                 },
@@ -1279,7 +1279,7 @@ mod recommendations {
             /// Add ETH to a conversion table.
             fn add_eth_to_conversion_table(&mut self) {
                 self.conversion_table.insert(
-                    namada_core::types::address::eth(),
+                    namada_core::address::eth(),
                     args::BpConversionTableEntry {
                         alias: "ETH".into(),
                         conversion_rate: 1e9, // 1 ETH = 1e9 GWEI
@@ -1304,7 +1304,7 @@ mod recommendations {
                     amount: Default::default(),
                 },
                 gas_fee: GasFee {
-                    token: namada_core::types::address::eth(),
+                    token: namada_core::address::eth(),
                     amount: 1_000_000_000_u64.into(), // 1 GWEI
                     payer: bertha_address(),
                 },
@@ -1537,14 +1537,14 @@ mod recommendations {
             let conversion_table = {
                 let mut t = HashMap::new();
                 t.insert(
-                    namada_core::types::address::apfel(),
+                    namada_core::address::apfel(),
                     args::BpConversionTableEntry {
                         alias: APFEL.into(),
                         conversion_rate: APF_RATE,
                     },
                 );
                 t.insert(
-                    namada_core::types::address::schnitzel(),
+                    namada_core::address::schnitzel(),
                     args::BpConversionTableEntry {
                         alias: SCHNITZEL.into(),
                         conversion_rate: SCH_RATE,
@@ -1559,15 +1559,13 @@ mod recommendations {
                 let transfer_paid_in_apfel = {
                     let mut pending = ctx.pending.clone();
                     pending.transfer.amount = 1.into();
-                    pending.gas_fee.token =
-                        namada_core::types::address::apfel();
+                    pending.gas_fee.token = namada_core::address::apfel();
                     pending
                 };
                 let transfer_paid_in_schnitzel = {
                     let mut pending = ctx.pending.clone();
                     pending.transfer.amount = 2.into();
-                    pending.gas_fee.token =
-                        namada_core::types::address::schnitzel();
+                    pending.gas_fee.token = namada_core::address::schnitzel();
                     pending
                 };
                 // add the transfers to the pool, and expect them to

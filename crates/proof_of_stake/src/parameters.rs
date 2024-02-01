@@ -3,10 +3,10 @@
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::types::dec::Dec;
-use namada_core::types::storage::Epoch;
-use namada_core::types::token;
-use namada_core::types::uint::Uint;
+use namada_core::dec::Dec;
+use namada_core::storage::Epoch;
+use namada_core::token;
+use namada_core::uint::Uint;
 use namada_governance::parameters::GovernanceParameters;
 use thiserror::Error;
 
@@ -297,7 +297,7 @@ mod tests {
 /// Testing helpers
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-    use namada_core::types::dec::Dec;
+    use namada_core::dec::Dec;
     use proptest::prelude::*;
 
     use super::*;
