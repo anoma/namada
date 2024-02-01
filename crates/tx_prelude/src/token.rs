@@ -2,9 +2,10 @@ use namada_core::types::address::Address;
 use namada_proof_of_stake::token::storage_key::{
     balance_key, minted_balance_key, minter_key,
 };
+use namada_storage::{Error as StorageError, ResultExt};
 pub use namada_token::*;
 
-use crate::{log_string, Ctx, StorageRead, StorageWrite, TxResult};
+use crate::{Ctx, StorageRead, StorageWrite, TxResult};
 
 #[allow(clippy::too_many_arguments)]
 /// A token transfer that can be used in a transaction.
@@ -19,13 +20,12 @@ pub fn transfer(
         let src_key = balance_key(token, src);
         let dest_key = balance_key(token, dest);
         let src_bal: Option<Amount> = ctx.read(&src_key)?;
-        let mut src_bal = src_bal.unwrap_or_else(|| {
-            log_string(format!("src {} has no balance", src_key));
-            unreachable!()
-        });
-        src_bal.spend(&amount);
+        let mut src_bal = src_bal.ok_or_else(|| {
+            StorageError::new_const("the source has no balance")
+        })?;
+        src_bal.spend(&amount).into_storage_result()?;
         let mut dest_bal: Amount = ctx.read(&dest_key)?.unwrap_or_default();
-        dest_bal.receive(&amount);
+        dest_bal.receive(&amount).into_storage_result()?;
         ctx.write(&src_key, src_bal)?;
         ctx.write(&dest_key, dest_bal)?;
     }
@@ -44,13 +44,12 @@ pub fn undenominated_transfer(
         let src_key = balance_key(token, src);
         let dest_key = balance_key(token, dest);
         let src_bal: Option<Amount> = ctx.read(&src_key)?;
-        let mut src_bal = src_bal.unwrap_or_else(|| {
-            log_string(format!("src {} has no balance", src_key));
-            unreachable!()
-        });
-        src_bal.spend(&amount);
+        let mut src_bal = src_bal.ok_or_else(|| {
+            StorageError::new_const("the source has no balance")
+        })?;
+        src_bal.spend(&amount).into_storage_result()?;
         let mut dest_bal: Amount = ctx.read(&dest_key)?.unwrap_or_default();
-        dest_bal.receive(&amount);
+        dest_bal.receive(&amount).into_storage_result()?;
         ctx.write(&src_key, src_bal)?;
         ctx.write(&dest_key, dest_bal)?;
     }
@@ -67,11 +66,11 @@ pub fn mint(
 ) -> TxResult {
     let target_key = balance_key(token, target);
     let mut target_bal: Amount = ctx.read(&target_key)?.unwrap_or_default();
-    target_bal.receive(&amount);
+    target_bal.receive(&amount).into_storage_result()?;
 
     let minted_key = minted_balance_key(token);
     let mut minted_bal: Amount = ctx.read(&minted_key)?.unwrap_or_default();
-    minted_bal.receive(&amount);
+    minted_bal.receive(&amount).into_storage_result()?;
 
     ctx.write(&target_key, target_bal)?;
     ctx.write(&minted_key, minted_bal)?;
@@ -91,12 +90,12 @@ pub fn burn(
 ) -> TxResult {
     let target_key = balance_key(token, target);
     let mut target_bal: Amount = ctx.read(&target_key)?.unwrap_or_default();
-    target_bal.spend(&amount);
+    target_bal.spend(&amount).into_storage_result()?;
 
     // burn the minted amount
     let minted_key = minted_balance_key(token);
     let mut minted_bal: Amount = ctx.read(&minted_key)?.unwrap_or_default();
-    minted_bal.spend(&amount);
+    minted_bal.spend(&amount).into_storage_result()?;
 
     ctx.write(&target_key, target_bal)?;
     ctx.write(&minted_key, minted_bal)?;

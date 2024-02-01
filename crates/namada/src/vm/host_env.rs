@@ -16,7 +16,7 @@ use namada_gas::{
     MEMORY_ACCESS_GAS_PER_BYTE,
 };
 use namada_state::write_log::{self, WriteLog};
-use namada_state::{self, ResultExt, State, StorageHasher};
+use namada_state::{self, ResultExt, State, StorageError, StorageHasher};
 use namada_token::storage_key::is_any_token_parameter_key;
 use namada_tx::data::TxSentinel;
 use namada_tx::Tx;
@@ -61,7 +61,7 @@ pub enum TxRuntimeError {
     #[error("State error: {0}")]
     StateError(#[from] namada_state::Error),
     #[error("Storage error: {0}")]
-    StorageError(#[from] namada_state::StorageError),
+    StorageError(#[from] StorageError),
     #[error("Storage data error: {0}")]
     StorageDataError(crate::types::storage::Error),
     #[error("Encoding error: {0}")]
@@ -2382,7 +2382,7 @@ where
     fn read_bytes(
         &self,
         key: &Key,
-    ) -> std::result::Result<Option<Vec<u8>>, namada_state::StorageError> {
+    ) -> std::result::Result<Option<Vec<u8>>, StorageError> {
         let write_log = unsafe { self.write_log.get() };
         let (log_val, gas) = write_log.read(key);
         ibc_tx_charge_gas(self, gas)?;
@@ -2407,7 +2407,7 @@ where
         })
     }
 
-    fn has_key(&self, key: &Key) -> Result<bool, namada_state::StorageError> {
+    fn has_key(&self, key: &Key) -> Result<bool, StorageError> {
         // try to read from the write log first
         let write_log = unsafe { self.write_log.get() };
         let (log_val, gas) = write_log.read(key);
@@ -2431,7 +2431,7 @@ where
     fn iter_prefix<'iter>(
         &'iter self,
         prefix: &Key,
-    ) -> Result<Self::PrefixIter<'iter>, namada_state::StorageError> {
+    ) -> Result<Self::PrefixIter<'iter>, StorageError> {
         let write_log = unsafe { self.write_log.get() };
         let storage = unsafe { self.storage.get() };
         let (iter, gas) =
@@ -2445,7 +2445,7 @@ where
     fn iter_next<'iter>(
         &'iter self,
         iter_id: &mut Self::PrefixIter<'iter>,
-    ) -> Result<Option<(String, Vec<u8>)>, namada_state::StorageError> {
+    ) -> Result<Option<(String, Vec<u8>)>, StorageError> {
         let write_log = unsafe { self.write_log.get() };
         let iterators = unsafe { self.iterators.get() };
         let iter_id = PrefixIteratorId::new(*iter_id);
@@ -2478,16 +2478,14 @@ where
         Ok(None)
     }
 
-    fn get_chain_id(&self) -> Result<String, namada_state::StorageError> {
+    fn get_chain_id(&self) -> Result<String, StorageError> {
         let storage = unsafe { self.storage.get() };
         let (chain_id, gas) = storage.get_chain_id();
         ibc_tx_charge_gas(self, gas)?;
         Ok(chain_id)
     }
 
-    fn get_block_height(
-        &self,
-    ) -> Result<BlockHeight, namada_state::StorageError> {
+    fn get_block_height(&self) -> Result<BlockHeight, StorageError> {
         let storage = unsafe { self.storage.get() };
         let (height, gas) = storage.get_block_height();
         ibc_tx_charge_gas(self, gas)?;
@@ -2497,10 +2495,7 @@ where
     fn get_block_header(
         &self,
         height: BlockHeight,
-    ) -> Result<
-        Option<namada_core::types::storage::Header>,
-        namada_state::StorageError,
-    > {
+    ) -> Result<Option<namada_core::types::storage::Header>, StorageError> {
         let storage = unsafe { self.storage.get() };
         let (header, gas) = storage
             .get_block_header(Some(height))
@@ -2509,21 +2504,21 @@ where
         Ok(header)
     }
 
-    fn get_block_hash(&self) -> Result<BlockHash, namada_state::StorageError> {
+    fn get_block_hash(&self) -> Result<BlockHash, StorageError> {
         let storage = unsafe { self.storage.get() };
         let (hash, gas) = storage.get_block_hash();
         ibc_tx_charge_gas(self, gas)?;
         Ok(hash)
     }
 
-    fn get_block_epoch(&self) -> Result<Epoch, namada_state::StorageError> {
+    fn get_block_epoch(&self) -> Result<Epoch, StorageError> {
         let storage = unsafe { self.storage.get() };
         let (epoch, gas) = storage.get_current_epoch();
         ibc_tx_charge_gas(self, gas)?;
         Ok(epoch)
     }
 
-    fn get_tx_index(&self) -> Result<TxIndex, namada_state::StorageError> {
+    fn get_tx_index(&self) -> Result<TxIndex, StorageError> {
         let tx_index = unsafe { self.tx_index.get() };
         ibc_tx_charge_gas(
             self,
@@ -2532,7 +2527,7 @@ where
         Ok(TxIndex(tx_index.0))
     }
 
-    fn get_native_token(&self) -> Result<Address, namada_state::StorageError> {
+    fn get_native_token(&self) -> Result<Address, StorageError> {
         let storage = unsafe { self.storage.get() };
         let native_token = storage.native_token.clone();
         ibc_tx_charge_gas(
@@ -2564,7 +2559,7 @@ where
         &mut self,
         key: &Key,
         data: impl AsRef<[u8]>,
-    ) -> Result<(), namada_state::StorageError> {
+    ) -> Result<(), StorageError> {
         let write_log = unsafe { self.write_log.get() };
         let (gas, _size_diff) = write_log
             .write(key, data.as_ref().to_vec())
@@ -2572,7 +2567,7 @@ where
         ibc_tx_charge_gas(self, gas)
     }
 
-    fn delete(&mut self, key: &Key) -> Result<(), namada_state::StorageError> {
+    fn delete(&mut self, key: &Key) -> Result<(), StorageError> {
         if key.is_validity_predicate().is_some() {
             return Err(TxRuntimeError::CannotDeleteVp).into_storage_result();
         }
@@ -2590,10 +2585,7 @@ where
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
-    fn emit_ibc_event(
-        &mut self,
-        event: IbcEvent,
-    ) -> Result<(), namada_state::StorageError> {
+    fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), StorageError> {
         let write_log = unsafe { self.write_log.get() };
         let gas = write_log.emit_ibc_event(event);
         ibc_tx_charge_gas(self, gas)
@@ -2602,7 +2594,7 @@ where
     fn get_ibc_events(
         &self,
         event_type: impl AsRef<str>,
-    ) -> Result<Vec<IbcEvent>, namada_state::StorageError> {
+    ) -> Result<Vec<IbcEvent>, StorageError> {
         let write_log = unsafe { self.write_log.get() };
         Ok(write_log
             .get_ibc_events()
@@ -2618,21 +2610,20 @@ where
         dest: &Address,
         token: &Address,
         amount: crate::token::Amount,
-    ) -> Result<(), namada_state::StorageError> {
+    ) -> Result<(), StorageError> {
         use crate::token;
 
         if amount != token::Amount::default() && src != dest {
             let src_key = balance_key(token, src);
             let dest_key = balance_key(token, dest);
             let src_bal = self.read::<token::Amount>(&src_key)?;
-            let mut src_bal = src_bal.unwrap_or_else(|| {
-                self.log_string(format!("src {} has no balance", src_key));
-                unreachable!()
-            });
-            src_bal.spend(&amount);
+            let mut src_bal = src_bal.ok_or_else(|| {
+                StorageError::new_const("the source has no balance")
+            })?;
+            src_bal.spend(&amount).into_storage_result()?;
             let mut dest_bal =
                 self.read::<token::Amount>(&dest_key)?.unwrap_or_default();
-            dest_bal.receive(&amount);
+            dest_bal.receive(&amount).into_storage_result()?;
             self.write(&src_key, src_bal)?;
             self.write(&dest_key, dest_bal)?;
         }
@@ -2643,7 +2634,7 @@ where
         &mut self,
         shielded: &masp_primitives::transaction::Transaction,
         pin_key: Option<&str>,
-    ) -> Result<(), namada_state::StorageError> {
+    ) -> Result<(), StorageError> {
         crate::token::utils::handle_masp_tx(self, shielded, pin_key)?;
         crate::token::utils::update_note_commitment_tree(self, shielded)
     }
@@ -2653,18 +2644,18 @@ where
         target: &Address,
         token: &Address,
         amount: crate::token::Amount,
-    ) -> Result<(), namada_state::StorageError> {
+    ) -> Result<(), StorageError> {
         use crate::token;
 
         let target_key = balance_key(token, target);
         let mut target_bal =
             self.read::<token::Amount>(&target_key)?.unwrap_or_default();
-        target_bal.receive(&amount);
+        target_bal.receive(&amount).into_storage_result()?;
 
         let minted_key = minted_balance_key(token);
         let mut minted_bal =
             self.read::<token::Amount>(&minted_key)?.unwrap_or_default();
-        minted_bal.receive(&amount);
+        minted_bal.receive(&amount).into_storage_result()?;
 
         self.write(&target_key, target_bal)?;
         self.write(&minted_key, minted_bal)?;
@@ -2681,19 +2672,19 @@ where
         target: &Address,
         token: &Address,
         amount: crate::token::Amount,
-    ) -> Result<(), namada_state::StorageError> {
+    ) -> Result<(), StorageError> {
         use crate::token;
 
         let target_key = balance_key(token, target);
         let mut target_bal =
             self.read::<token::Amount>(&target_key)?.unwrap_or_default();
-        target_bal.spend(&amount);
+        target_bal.spend(&amount).into_storage_result()?;
 
         // burn the minted amount
         let minted_key = minted_balance_key(token);
         let mut minted_bal =
             self.read::<token::Amount>(&minted_key)?.unwrap_or_default();
-        minted_bal.spend(&amount);
+        minted_bal.spend(&amount).into_storage_result()?;
 
         self.write(&target_key, target_bal)?;
         self.write(&minted_key, minted_bal)
@@ -2709,7 +2700,7 @@ where
 fn ibc_tx_charge_gas<'a, DB, H, CA>(
     ctx: &TxCtx<'a, DB, H, CA>,
     used_gas: u64,
-) -> Result<(), namada_state::StorageError>
+) -> Result<(), StorageError>
 where
     DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
     H: StorageHasher,

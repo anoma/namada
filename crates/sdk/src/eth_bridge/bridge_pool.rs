@@ -537,7 +537,7 @@ pub async fn construct_proof(
         relayer_address: args.relayer,
         total_fees: appendices
             .map(|appendices| {
-                appendices.into_iter().fold(
+                appendices.into_iter().try_fold(
                     HashMap::new(),
                     |mut total_fees, app| {
                         let GasFee { token, amount, .. } =
@@ -545,11 +545,13 @@ pub async fn construct_proof(
                         let fees = total_fees
                             .entry(token)
                             .or_insert_with(Amount::zero);
-                        fees.receive(&amount);
-                        total_fees
+                        fees.receive(&amount)
+                            .map_err(|e| Error::Other(e.to_string()))?;
+                        Ok::<_, Error>(total_fees)
                     },
                 )
             })
+            .transpose()?
             .unwrap_or_default(),
         abi_encoded_args,
     };

@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::ibc::apps::transfer::types::Amount as IbcAmount;
-use crate::types::address::{Address, DecodeError as AddressError};
+use crate::types::address::Address;
 use crate::types::dec::{Dec, POS_DECIMAL_PRECISION};
 use crate::types::hash::Hash;
 use crate::types::storage;
@@ -99,9 +99,12 @@ impl Amount {
     }
 
     /// Spend a given amount.
-    /// Panics when given `amount` > `self.raw` amount.
-    pub fn spend(&mut self, amount: &Amount) {
-        self.raw = self.raw.checked_sub(amount.raw).unwrap();
+    pub fn spend(&mut self, amount: &Amount) -> Result<(), AmountError> {
+        self.raw = self
+            .raw
+            .checked_sub(amount.raw)
+            .ok_or(AmountError::Insufficient)?;
+        Ok(())
     }
 
     /// Check if there are enough funds.
@@ -110,9 +113,12 @@ impl Amount {
     }
 
     /// Receive a given amount.
-    /// Panics on overflow and when [`uint::MAX_SIGNED_VALUE`] is exceeded.
-    pub fn receive(&mut self, amount: &Amount) {
-        self.raw = self.raw.checked_add(amount.raw).unwrap();
+    pub fn receive(&mut self, amount: &Amount) -> Result<(), AmountError> {
+        self.raw = self
+            .raw
+            .checked_add(amount.raw)
+            .ok_or(AmountError::Overflow)?;
+        Ok(())
     }
 
     /// Create a new amount of native token from whole number of tokens
@@ -149,6 +155,11 @@ impl Amount {
     /// Check if [`Amount`] is zero.
     pub fn is_zero(&self) -> bool {
         self.raw == Uint::from(0)
+    }
+
+    /// Check if [`Amount`] is greater than zero.
+    pub fn is_positive(&self) -> bool {
+        !self.is_zero()
     }
 
     /// Checked addition. Returns `None` on overflow or if
@@ -1060,13 +1071,11 @@ pub struct Transfer {
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
-pub enum TransferError {
-    #[error("Invalid address is specified: {0}")]
-    Address(AddressError),
-    #[error("Invalid amount: {0}")]
-    Amount(AmountParseError),
-    #[error("No token is specified")]
-    NoToken,
+pub enum AmountError {
+    #[error("Insufficient amount")]
+    Insufficient,
+    #[error("Amount overlofow")]
+    Overflow,
 }
 
 #[cfg(any(test, feature = "testing"))]

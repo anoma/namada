@@ -3,7 +3,7 @@ use eyre::Result;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::types::hash::StorageHasher;
 use namada_core::types::storage;
-use namada_core::types::token::Amount;
+use namada_core::types::token::{Amount, AmountError};
 use namada_state::{DBIter, WlStorage, DB};
 use namada_storage::StorageWrite;
 
@@ -11,14 +11,14 @@ use namada_storage::StorageWrite;
 pub fn amount<D, H>(
     wl_storage: &mut WlStorage<D, H>,
     key: &storage::Key,
-    update: impl FnOnce(&mut Amount),
+    update: impl FnOnce(&mut Amount) -> Result<(), AmountError>,
 ) -> Result<Amount>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
     let mut amount = super::read::amount_or_default(wl_storage, key)?;
-    update(&mut amount);
+    update(&mut amount)?;
     wl_storage.write(key, amount)?;
     Ok(amount)
 }
