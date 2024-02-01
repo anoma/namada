@@ -3,14 +3,14 @@ pub mod storage;
 mod wasm_allowlist;
 use std::collections::BTreeMap;
 
-use namada_core::types::address::{Address, InternalAddress};
-use namada_core::types::chain::ProposalBytes;
-use namada_core::types::dec::Dec;
-use namada_core::types::hash::Hash;
-pub use namada_core::types::parameters::*;
-use namada_core::types::storage::Key;
-use namada_core::types::time::DurationSecs;
-use namada_core::types::token;
+use namada_core::address::{Address, InternalAddress};
+use namada_core::chain::ProposalBytes;
+use namada_core::dec::Dec;
+use namada_core::hash::Hash;
+pub use namada_core::parameters::*;
+use namada_core::storage::Key;
+use namada_core::time::DurationSecs;
+use namada_core::token;
 use namada_storage::{self, ResultExt, StorageRead, StorageWrite};
 pub use storage::get_max_block_gas;
 use thiserror::Error;
@@ -26,7 +26,7 @@ pub enum ReadError {
     #[error("Storage error: {0}")]
     StorageError(namada_storage::Error),
     #[error("Storage type error: {0}")]
-    StorageTypeError(namada_core::types::storage::Error),
+    StorageTypeError(namada_core::storage::Error),
     #[error("Protocol parameters are missing, they must be always set")]
     ParametersMissing,
 }

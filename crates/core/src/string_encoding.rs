@@ -112,19 +112,15 @@ macro_rules! impl_display_and_from_str_via_format {
     ($t:path) => {
         impl std::fmt::Display for $t {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(
-                    f,
-                    "{}",
-                    $crate::types::string_encoding::Format::encode(self)
-                )
+                write!(f, "{}", $crate::string_encoding::Format::encode(self))
             }
         }
 
         impl std::str::FromStr for $t {
-            type Err = $crate::types::string_encoding::DecodeError;
+            type Err = $crate::string_encoding::DecodeError;
 
             fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-                $crate::types::string_encoding::Format::decode(s)
+                $crate::string_encoding::Format::decode(s)
             }
         }
     };

@@ -17,10 +17,9 @@ use super::{
     ParseSignatureError, RefTo, SchemeType, SigScheme as SigSchemeTrait,
     VerifySigError,
 };
-use crate::impl_display_and_from_str_via_format;
-use crate::types::ethereum_events::EthAddress;
-use crate::types::key::{SignableBytes, StorageHasher};
-use crate::types::string_encoding;
+use crate::ethereum_events::EthAddress;
+use crate::key::{SignableBytes, StorageHasher};
+use crate::{impl_display_and_from_str_via_format, string_encoding};
 
 /// Public key
 #[derive(
@@ -456,14 +455,14 @@ impl super::SigScheme for SigScheme {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::key::ed25519;
+    use crate::key::ed25519;
 
     /// Run `cargo test gen_ed25519_keypair -- --nocapture` to generate a
     /// new ed25519 keypair wrapped in `common` key types.
     #[test]
     fn gen_ed25519_keypair() {
         let secret_key =
-            SecretKey::Ed25519(crate::types::key::testing::gen_keypair::<
+            SecretKey::Ed25519(crate::key::testing::gen_keypair::<
                 ed25519::SigScheme,
             >());
         let public_key = secret_key.to_public();

@@ -5,19 +5,19 @@ use std::str::FromStr;
 
 use borsh::BorshDeserialize;
 use eyre::{Result, WrapErr};
-use namada_core::hints;
-use namada_core::types::address::Address;
-use namada_core::types::eth_abi::Encode;
-use namada_core::types::eth_bridge_pool::{
+use namada_core::address::Address;
+use namada_core::eth_abi::Encode;
+use namada_core::eth_bridge_pool::{
     erc20_nut_address, erc20_token_address, PendingTransfer,
     TransferToEthereumKind,
 };
-use namada_core::types::ethereum_events::{
+use namada_core::ethereum_events::{
     EthAddress, EthereumEvent, TransferToEthereum, TransferToNamada,
     TransfersToNamada,
 };
-use namada_core::types::ethereum_structs::EthBridgeEvent;
-use namada_core::types::storage::{BlockHeight, Key, KeySeg};
+use namada_core::ethereum_structs::EthBridgeEvent;
+use namada_core::hints;
+use namada_core::storage::{BlockHeight, Key, KeySeg};
 use namada_parameters::read_epoch_duration_parameter;
 use namada_state::{DBIter, StorageHasher, WlStorage, DB};
 use namada_storage::{StorageRead, StorageWrite};
@@ -585,16 +585,16 @@ mod tests {
 
     use assert_matches::assert_matches;
     use eyre::Result;
+    use namada_core::address::testing::gen_implicit_address;
+    use namada_core::address::{gen_established_address, nam, wnam};
     use namada_core::borsh::BorshSerializeExt;
-    use namada_core::types::address::testing::gen_implicit_address;
-    use namada_core::types::address::{gen_established_address, nam, wnam};
-    use namada_core::types::eth_bridge_pool::GasFee;
-    use namada_core::types::ethereum_events::testing::{
+    use namada_core::eth_bridge_pool::GasFee;
+    use namada_core::ethereum_events::testing::{
         arbitrary_keccak_hash, arbitrary_nonce, DAI_ERC20_ETH_ADDRESS,
     };
-    use namada_core::types::time::DurationSecs;
-    use namada_core::types::token::Amount;
-    use namada_core::types::{address, eth_bridge_pool};
+    use namada_core::time::DurationSecs;
+    use namada_core::token::Amount;
+    use namada_core::{address, eth_bridge_pool};
     use namada_parameters::{update_epoch_parameter, EpochDuration};
     use namada_state::testing::TestWlStorage;
     use namada_storage::mockdb::MockDBWriteBatch;

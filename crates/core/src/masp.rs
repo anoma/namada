@@ -9,14 +9,14 @@ use masp_primitives::asset_type::AssetType;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::address::{Address, DecodeError, HASH_HEX_LEN, MASP};
 use crate::impl_display_and_from_str_via_format;
-use crate::types::address::{Address, DecodeError, HASH_HEX_LEN, MASP};
-use crate::types::storage::Epoch;
-use crate::types::string_encoding::{
+use crate::storage::Epoch;
+use crate::string_encoding::{
     self, MASP_EXT_FULL_VIEWING_KEY_HRP, MASP_EXT_SPENDING_KEY_HRP,
     MASP_PAYMENT_ADDRESS_HRP,
 };
-use crate::types::token::{Denomination, MaspDigitPos};
+use crate::token::{Denomination, MaspDigitPos};
 
 /// The plain representation of a MASP aaset
 #[derive(

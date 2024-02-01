@@ -1,7 +1,10 @@
 //! Implementation of the [`RequestPrepareProposal`] ABCI++ method for the Shell
 
 use masp_primitives::transaction::Transaction;
+use namada::core::address::Address;
 use namada::core::hints;
+use namada::core::key::tm_raw_hash_to_string;
+use namada::core::time::DateTimeUtc;
 use namada::gas::TxGasMeter;
 use namada::ledger::protocol;
 use namada::ledger::storage::tx_queue::TxInQueue;
@@ -9,9 +12,6 @@ use namada::proof_of_stake::storage::find_validator_by_raw_hash;
 use namada::state::{DBIter, StorageHasher, TempWlStorage, DB};
 use namada::tx::data::{DecryptedTx, TxType, WrapperTx};
 use namada::tx::Tx;
-use namada::types::address::Address;
-use namada::types::key::tm_raw_hash_to_string;
-use namada::types::time::DateTimeUtc;
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::WasmCacheAccess;
 
@@ -431,6 +431,10 @@ mod test_prepare_proposal {
     use std::collections::BTreeSet;
 
     use borsh_ext::BorshSerializeExt;
+    use namada::core::address::{self, Address};
+    use namada::core::ethereum_events::EthereumEvent;
+    use namada::core::key::RefTo;
+    use namada::core::storage::{BlockHeight, InnerEthEventsQueue};
     use namada::ledger::gas::Gas;
     use namada::ledger::pos::PosQueries;
     use namada::proof_of_stake::storage::{
@@ -443,10 +447,6 @@ mod test_prepare_proposal {
     use namada::token::{read_denom, Amount, DenominatedAmount};
     use namada::tx::data::{Fee, TxType, WrapperTx};
     use namada::tx::{Code, Data, Header, Section, Signature, Signed};
-    use namada::types::address::{self, Address};
-    use namada::types::ethereum_events::EthereumEvent;
-    use namada::types::key::RefTo;
-    use namada::types::storage::{BlockHeight, InnerEthEventsQueue};
     use namada::vote_ext::{ethereum_events, ethereum_tx_data_variants};
     use namada::{replay_protection, token};
 
@@ -1183,7 +1183,7 @@ mod test_prepare_proposal {
             // Remove the allowed btc
             *local_config = Some(ValidatorLocalConfig {
                 accepted_gas_tokens: std::collections::HashMap::from([(
-                    namada::types::address::nam(),
+                    namada::core::address::nam(),
                     Amount::from(1),
                 )]),
             });
@@ -1289,7 +1289,7 @@ mod test_prepare_proposal {
             // Remove btc and increase minimum for nam
             *local_config = Some(ValidatorLocalConfig {
                 accepted_gas_tokens: std::collections::HashMap::from([(
-                    namada::types::address::nam(),
+                    namada::core::address::nam(),
                     Amount::from(100),
                 )]),
             });

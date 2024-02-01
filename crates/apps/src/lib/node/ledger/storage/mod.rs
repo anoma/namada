@@ -54,6 +54,13 @@ mod tests {
 
     use borsh::BorshDeserialize;
     use itertools::Itertools;
+    use namada::core::chain::ChainId;
+    use namada::core::ethereum_events::Uint;
+    use namada::core::hash::Hash;
+    use namada::core::keccak::KeccakHash;
+    use namada::core::storage::{BlockHash, BlockHeight, Key};
+    use namada::core::time::DurationSecs;
+    use namada::core::{address, storage};
     use namada::eth_bridge::storage::proof::BridgePoolRootProof;
     use namada::ledger::eth_bridge::storage::bridge_pool;
     use namada::ledger::gas::STORAGE_ACCESS_GAS_PER_BYTE;
@@ -64,14 +71,7 @@ mod tests {
         self, StorageRead, StorageWrite, StoreType, WlStorage, DB,
     };
     use namada::token::conversion::update_allowed_conversions;
-    use namada::types::chain::ChainId;
-    use namada::types::ethereum_events::Uint;
-    use namada::types::hash::Hash;
-    use namada::types::keccak::KeccakHash;
-    use namada::types::storage::{BlockHash, BlockHeight, Key};
-    use namada::types::time::DurationSecs;
-    use namada::types::{address, storage};
-    use namada::{parameters, types};
+    use namada::{decode, encode, parameters};
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::test_runner::Config;
@@ -94,7 +94,7 @@ mod tests {
         );
         let key = Key::parse("key").expect("cannot parse the key string");
         let value: u64 = 1;
-        let value_bytes = types::encode(&value);
+        let value_bytes = encode(&value);
         let value_bytes_len = value_bytes.len();
 
         // before insertion
@@ -113,9 +113,8 @@ mod tests {
         assert!(result);
         assert_eq!(gas, key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE);
         let (result, gas) = storage.read(&key).expect("read failed");
-        let read_value: u64 =
-            types::decode(result.expect("value doesn't exist"))
-                .expect("decoding failed");
+        let read_value: u64 = decode(result.expect("value doesn't exist"))
+            .expect("decoding failed");
         assert_eq!(read_value, value);
         assert_eq!(
             gas,
@@ -150,7 +149,7 @@ mod tests {
             .expect("begin_block failed");
         let key = Key::parse("key").expect("cannot parse the key string");
         let value: u64 = 1;
-        let value_bytes = types::encode(&value);
+        let value_bytes = encode(&value);
         let mut wl_storage = WlStorage::new(WriteLog::default(), storage);
         // initialize parameter storage
         let params = Parameters {
@@ -242,7 +241,7 @@ mod tests {
             let key = prefix
                 .push(&format!("{}", i))
                 .expect("cannot push the key segment");
-            let value_bytes = types::encode(&(i as u64));
+            let value_bytes = encode(&(i as u64));
             // insert
             storage
                 .write(&key, value_bytes.clone())
@@ -373,7 +372,7 @@ mod tests {
             );
 
             if write_value {
-                let value_bytes = types::encode(&storage.block.height);
+                let value_bytes = encode(&storage.block.height);
                 storage.write(&key, value_bytes)?;
             } else {
                 storage.delete(&key)?;
@@ -391,11 +390,10 @@ mod tests {
                 let value_bytes = value_bytes.unwrap_or_else(|| {
                     panic!("Couldn't read from height {height}")
                 });
-                let value: BlockHeight = types::decode(value_bytes).unwrap();
+                let value: BlockHeight = decode(value_bytes).unwrap();
                 assert_eq!(value, height);
             } else if value_bytes.is_some() {
-                let value: BlockHeight =
-                    types::decode(value_bytes.unwrap()).unwrap();
+                let value: BlockHeight = decode(value_bytes.unwrap()).unwrap();
                 panic!("Expected no value at height {height}, got {}", value,);
             }
         }
@@ -415,11 +413,10 @@ mod tests {
             if is_last_write {
                 let value_bytes =
                     value_bytes.expect("Should have been written");
-                let value: BlockHeight = types::decode(value_bytes).unwrap();
+                let value: BlockHeight = decode(value_bytes).unwrap();
                 assert_eq!(value, storage.get_last_block_height());
             } else if value_bytes.is_some() {
-                let value: BlockHeight =
-                    types::decode(value_bytes.unwrap()).unwrap();
+                let value: BlockHeight = decode(value_bytes.unwrap()).unwrap();
                 panic!("Expected no value at height {height}, got {}", value,);
             }
         }
@@ -458,13 +455,13 @@ mod tests {
         // write values at Height 0 like init_storage
         for i in 0..num_keys {
             let key = ibc_key(format!("key{}", i)).unwrap();
-            let value_bytes = types::encode(&storage.block.height);
+            let value_bytes = encode(&storage.block.height);
             storage.write(&key, value_bytes)?;
         }
         let key = bridge_pool::get_signed_root_key();
         let root_proof =
             BridgePoolRootProof::new((KeccakHash::default(), Uint::default()));
-        let bytes = types::encode(&root_proof);
+        let bytes = encode(&root_proof);
         storage.write(&key, bytes)?;
 
         // Update and commit
@@ -497,14 +494,14 @@ mod tests {
                     storage.delete(&key)?;
                 }
                 2 => {
-                    let value_bytes = types::encode(&storage.block.height);
+                    let value_bytes = encode(&storage.block.height);
                     storage.write(&key, value_bytes)?;
                 }
                 3 => {
                     storage.batch_delete_subspace_val(&mut batch, &key)?;
                 }
                 _ => {
-                    let value_bytes = types::encode(&storage.block.height);
+                    let value_bytes = encode(&storage.block.height);
                     storage.batch_write_subspace_val(
                         &mut batch,
                         &key,
@@ -571,9 +568,7 @@ mod tests {
 
         let key = ibc_key("key").unwrap();
         let value: u64 = 1;
-        storage
-            .write(&key, types::encode(&value))
-            .expect("write failed");
+        storage.write(&key, encode(&value)).expect("write failed");
 
         storage.block.pred_epochs.new_epoch(new_epoch_start);
         let batch = PersistentStorage::batch();
@@ -586,9 +581,7 @@ mod tests {
 
         let key = ibc_key("key2").unwrap();
         let value: u64 = 2;
-        storage
-            .write(&key, types::encode(&value))
-            .expect("write failed");
+        storage.write(&key, encode(&value)).expect("write failed");
 
         // the second nonce isn't written for a test skipping pruning
         let nonce = nonce + 1;
@@ -609,7 +602,7 @@ mod tests {
         let nonce = nonce + 1;
         let root_proof =
             BridgePoolRootProof::new((KeccakHash::default(), nonce));
-        let bytes = types::encode(&root_proof);
+        let bytes = encode(&root_proof);
         storage.write(&signed_root_key, bytes).unwrap();
 
         storage.block.epoch = storage.block.epoch.next();
@@ -637,7 +630,7 @@ mod tests {
         let nonce = nonce + 1;
         let root_proof =
             BridgePoolRootProof::new((KeccakHash::default(), nonce));
-        let bytes = types::encode(&root_proof);
+        let bytes = encode(&root_proof);
         storage.write(&signed_root_key, bytes).unwrap();
         storage.block.epoch = storage.block.epoch.next();
         storage.block.pred_epochs.new_epoch(BlockHeight(12));

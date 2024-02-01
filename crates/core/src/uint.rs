@@ -12,8 +12,8 @@ use num_traits::{CheckedAdd, CheckedMul, CheckedSub};
 use uint::construct_uint;
 
 use super::dec::{Dec, POS_DECIMAL_PRECISION};
-use crate::types::token;
-use crate::types::token::{Amount, AmountParseError, MaspDigitPos};
+use crate::token;
+use crate::token::{Amount, AmountParseError, MaspDigitPos};
 
 /// The value zero.
 pub const ZERO: Uint = Uint::from_u64(0);

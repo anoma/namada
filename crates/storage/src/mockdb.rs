@@ -8,18 +8,17 @@ use std::str::FromStr;
 
 use itertools::Either;
 use namada_core::borsh::{BorshDeserialize, BorshSerializeExt};
-use namada_core::types;
-use namada_core::types::hash::Hash;
-use namada_core::types::storage::{
+use namada_core::hash::Hash;
+use namada_core::storage::{
     BlockHeight, BlockResults, Epoch, EthEventsQueue, Header, Key, KeySeg,
     KEY_SEGMENT_SEPARATOR,
 };
-use namada_core::types::time::DateTimeUtc;
-use namada_core::types::{ethereum_events, ethereum_structs};
+use namada_core::time::DateTimeUtc;
+use namada_core::{decode, encode, ethereum_events, ethereum_structs};
 use namada_merkle_tree::{
     base_tree_key_prefix, subtree_key_prefix, MerkleTreeStoresRead, StoreType,
 };
-use namada_replay_protection as replay_protection;
+use {namada_core, namada_replay_protection as replay_protection};
 
 use crate::conversion_state::ConversionState;
 use crate::db::{
@@ -67,66 +66,52 @@ impl DB for MockDB {
     fn read_last_block(&self) -> Result<Option<BlockStateRead>> {
         // Block height
         let height: BlockHeight = match self.0.borrow().get("height") {
-            Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
+            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
             None => return Ok(None),
         };
         // Block results
         let results_path = format!("results/{}", height.raw());
         let results: BlockResults =
             match self.0.borrow().get(results_path.as_str()) {
-                Some(bytes) => {
-                    types::decode(bytes).map_err(Error::CodingError)?
-                }
+                Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
                 None => return Ok(None),
             };
 
         // Epoch start height and time
         let next_epoch_min_start_height: BlockHeight =
             match self.0.borrow().get("next_epoch_min_start_height") {
-                Some(bytes) => {
-                    types::decode(bytes).map_err(Error::CodingError)?
-                }
+                Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
                 None => return Ok(None),
             };
         let next_epoch_min_start_time: DateTimeUtc =
             match self.0.borrow().get("next_epoch_min_start_time") {
-                Some(bytes) => {
-                    types::decode(bytes).map_err(Error::CodingError)?
-                }
+                Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
                 None => return Ok(None),
             };
         let update_epoch_blocks_delay: Option<u32> =
             match self.0.borrow().get("update_epoch_blocks_delay") {
-                Some(bytes) => {
-                    types::decode(bytes).map_err(Error::CodingError)?
-                }
+                Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
                 None => return Ok(None),
             };
         let conversion_state: ConversionState =
             match self.0.borrow().get("conversion_state") {
-                Some(bytes) => {
-                    types::decode(bytes).map_err(Error::CodingError)?
-                }
+                Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
                 None => return Ok(None),
             };
         let tx_queue: TxQueue = match self.0.borrow().get("tx_queue") {
-            Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
+            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
             None => return Ok(None),
         };
 
         let ethereum_height: Option<ethereum_structs::BlockHeight> =
             match self.0.borrow().get("ethereum_height") {
-                Some(bytes) => {
-                    types::decode(bytes).map_err(Error::CodingError)?
-                }
+                Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
                 None => return Ok(None),
             };
 
         let eth_events_queue: EthEventsQueue =
             match self.0.borrow().get("ethereum_height") {
-                Some(bytes) => {
-                    types::decode(bytes).map_err(Error::CodingError)?
-                }
+                Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
                 None => return Ok(None),
             };
 
@@ -154,7 +139,7 @@ impl DB for MockDB {
                             match segments.get(3) {
                                 Some(&"root") => merkle_tree_stores.set_root(
                                     &st,
-                                    types::decode(bytes)
+                                    decode(bytes)
                                         .map_err(Error::CodingError)?,
                                 ),
                                 Some(&"store") => merkle_tree_stores
@@ -168,29 +153,21 @@ impl DB for MockDB {
                         // the block header doesn't have to be restored
                     }
                     "hash" => {
-                        hash = Some(
-                            types::decode(bytes).map_err(Error::CodingError)?,
-                        )
+                        hash = Some(decode(bytes).map_err(Error::CodingError)?)
                     }
                     "time" => {
-                        time = Some(
-                            types::decode(bytes).map_err(Error::CodingError)?,
-                        )
+                        time = Some(decode(bytes).map_err(Error::CodingError)?)
                     }
                     "epoch" => {
-                        epoch = Some(
-                            types::decode(bytes).map_err(Error::CodingError)?,
-                        )
+                        epoch = Some(decode(bytes).map_err(Error::CodingError)?)
                     }
                     "pred_epochs" => {
-                        pred_epochs = Some(
-                            types::decode(bytes).map_err(Error::CodingError)?,
-                        )
+                        pred_epochs =
+                            Some(decode(bytes).map_err(Error::CodingError)?)
                     }
                     "address_gen" => {
-                        address_gen = Some(
-                            types::decode(bytes).map_err(Error::CodingError)?,
-                        );
+                        address_gen =
+                            Some(decode(bytes).map_err(Error::CodingError)?);
                     }
                     _ => unknown_key_error(path)?,
                 },
@@ -207,7 +184,7 @@ impl DB for MockDB {
                 {
                     merkle_tree_stores.set_root(
                         st,
-                        types::decode(bytes).map_err(Error::CodingError)?,
+                        decode(bytes).map_err(Error::CodingError)?,
                     );
                 }
                 let store_key = prefix_key.with_segment("store".to_owned());
@@ -276,29 +253,28 @@ impl DB for MockDB {
         // Epoch start height and time
         self.0.borrow_mut().insert(
             "next_epoch_min_start_height".into(),
-            types::encode(&next_epoch_min_start_height),
+            encode(&next_epoch_min_start_height),
         );
         self.0.borrow_mut().insert(
             "next_epoch_min_start_time".into(),
-            types::encode(&next_epoch_min_start_time),
+            encode(&next_epoch_min_start_time),
         );
         self.0.borrow_mut().insert(
             "update_epoch_blocks_delay".into(),
-            types::encode(&update_epoch_blocks_delay),
+            encode(&update_epoch_blocks_delay),
         );
         self.0
             .borrow_mut()
-            .insert("ethereum_height".into(), types::encode(&ethereum_height));
-        self.0.borrow_mut().insert(
-            "eth_events_queue".into(),
-            types::encode(&eth_events_queue),
-        );
+            .insert("ethereum_height".into(), encode(&ethereum_height));
         self.0
             .borrow_mut()
-            .insert("tx_queue".into(), types::encode(&tx_queue));
+            .insert("eth_events_queue".into(), encode(&eth_events_queue));
         self.0
             .borrow_mut()
-            .insert("conversion_state".into(), types::encode(conversion_state));
+            .insert("tx_queue".into(), encode(&tx_queue));
+        self.0
+            .borrow_mut()
+            .insert("conversion_state".into(), encode(conversion_state));
 
         let prefix_key = Key::from(height.to_db_key());
         // Merkle tree
@@ -314,7 +290,7 @@ impl DB for MockDB {
                         key_prefix.clone().with_segment("root".to_owned());
                     self.0.borrow_mut().insert(
                         root_key.to_string(),
-                        types::encode(merkle_tree_stores.root(st)),
+                        encode(merkle_tree_stores.root(st)),
                     );
                     let store_key = key_prefix.with_segment("store".to_owned());
                     self.0.borrow_mut().insert(
@@ -340,27 +316,21 @@ impl DB for MockDB {
             let key = prefix_key
                 .push(&"hash".to_owned())
                 .map_err(Error::KeyError)?;
-            self.0
-                .borrow_mut()
-                .insert(key.to_string(), types::encode(&hash));
+            self.0.borrow_mut().insert(key.to_string(), encode(&hash));
         }
         // Block time
         {
             let key = prefix_key
                 .push(&"time".to_owned())
                 .map_err(Error::KeyError)?;
-            self.0
-                .borrow_mut()
-                .insert(key.to_string(), types::encode(&time));
+            self.0.borrow_mut().insert(key.to_string(), encode(&time));
         }
         // Block epoch
         {
             let key = prefix_key
                 .push(&"epoch".to_owned())
                 .map_err(Error::KeyError)?;
-            self.0
-                .borrow_mut()
-                .insert(key.to_string(), types::encode(&epoch));
+            self.0.borrow_mut().insert(key.to_string(), encode(&epoch));
         }
         // Predecessor block epochs
         {
@@ -369,7 +339,7 @@ impl DB for MockDB {
                 .map_err(Error::KeyError)?;
             self.0
                 .borrow_mut()
-                .insert(key.to_string(), types::encode(&pred_epochs));
+                .insert(key.to_string(), encode(&pred_epochs));
         }
         // Address gen
         {
@@ -377,19 +347,15 @@ impl DB for MockDB {
                 .push(&"address_gen".to_owned())
                 .map_err(Error::KeyError)?;
             let value = &address_gen;
-            self.0
-                .borrow_mut()
-                .insert(key.to_string(), types::encode(value));
+            self.0.borrow_mut().insert(key.to_string(), encode(value));
         }
         self.0
             .borrow_mut()
-            .insert("height".to_owned(), types::encode(&height));
+            .insert("height".to_owned(), encode(&height));
         // Block results
         {
             let results_path = format!("results/{}", height.raw());
-            self.0
-                .borrow_mut()
-                .insert(results_path, types::encode(&results));
+            self.0.borrow_mut().insert(results_path, encode(&results));
         }
         Ok(())
     }
@@ -430,7 +396,7 @@ impl DB for MockDB {
             let bytes = self.0.borrow().get(&root_key.to_string()).cloned();
             match bytes {
                 Some(b) => {
-                    let root = types::decode(b).map_err(Error::CodingError)?;
+                    let root = decode(b).map_err(Error::CodingError)?;
                     merkle_tree_stores.set_root(st, root);
                 }
                 None => return Ok(None),

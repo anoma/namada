@@ -4,12 +4,12 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use eyre::eyre;
 use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use namada_core::types::eth_abi::{Encode, Token};
-use namada_core::types::eth_bridge_pool::PendingTransfer;
-use namada_core::types::hash::Hash;
-use namada_core::types::keccak::{keccak_hash, KeccakHash};
-use namada_core::types::storage;
-use namada_core::types::storage::{BlockHeight, DbKeySeg};
+use namada_core::eth_abi::{Encode, Token};
+use namada_core::eth_bridge_pool::PendingTransfer;
+use namada_core::hash::Hash;
+use namada_core::keccak::{keccak_hash, KeccakHash};
+use namada_core::storage;
+use namada_core::storage::{BlockHeight, DbKeySeg};
 
 #[derive(thiserror::Error, Debug)]
 #[error(transparent)]
@@ -373,12 +373,12 @@ mod test_bridge_pool_tree {
 
     use assert_matches::assert_matches;
     use itertools::Itertools;
-    use namada_core::types::address::{nam, Address};
-    use namada_core::types::eth_bridge_pool::{
+    use namada_core::address::{nam, Address};
+    use namada_core::eth_bridge_pool::{
         GasFee, TransferToEthereum, TransferToEthereumKind,
     };
-    use namada_core::types::ethereum_events::EthAddress;
-    use namada_core::types::storage::Key;
+    use namada_core::ethereum_events::EthAddress;
+    use namada_core::storage::Key;
     use proptest::prelude::*;
 
     use super::*;

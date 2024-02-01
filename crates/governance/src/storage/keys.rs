@@ -1,5 +1,5 @@
-use namada_core::types::address::Address;
-use namada_core::types::storage::{DbKeySeg, Key, KeySeg};
+use namada_core::address::Address;
+use namada_core::storage::{DbKeySeg, Key, KeySeg};
 use namada_macros::StorageKeys;
 
 use crate::ADDRESS;

@@ -46,7 +46,7 @@ mod dry_run_tx {
         use namada_tx::Tx;
 
         use crate::ledger::protocol::ShellParams;
-        use crate::types::storage::TxIndex;
+        use crate::storage::TxIndex;
 
         let mut tx = Tx::try_from(&request.data[..]).into_storage_result()?;
         tx.validate_tx().into_storage_result()?;
@@ -134,9 +134,9 @@ mod dry_run_tx {
 mod test {
     use borsh::BorshDeserialize;
     use borsh_ext::BorshSerializeExt;
-    use namada_core::types::address;
-    use namada_core::types::hash::Hash;
-    use namada_core::types::storage::{BlockHeight, Key};
+    use namada_core::address;
+    use namada_core::hash::Hash;
+    use namada_core::storage::{BlockHeight, Key};
     use namada_sdk::queries::{
         EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
     };
@@ -191,10 +191,7 @@ mod test {
                 namada_parameters::storage::get_max_block_gas_key();
             wl_storage
                 .storage
-                .write(
-                    &max_block_gas_key,
-                    namada_core::types::encode(&20_000_000_u64),
-                )
+                .write(&max_block_gas_key, namada_core::encode(&20_000_000_u64))
                 .expect(
                     "Max block gas parameter must be initialized in storage",
                 );

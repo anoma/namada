@@ -8,8 +8,8 @@
 
 use std::collections::HashMap;
 
-use namada_core::types::hash::Hash;
-use namada_core::types::storage::BlockHeight;
+use namada_core::hash::Hash;
+use namada_core::storage::BlockHeight;
 
 use crate::events::{Event, EventType};
 use crate::ibc::core::client::types::Height as IbcHeight;

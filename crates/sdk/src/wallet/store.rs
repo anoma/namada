@@ -7,9 +7,9 @@ use std::str::FromStr;
 use bimap::BiBTreeMap;
 use itertools::Itertools;
 use masp_primitives::zip32;
-use namada_core::types::address::{Address, ImplicitAddress};
-use namada_core::types::key::*;
-use namada_core::types::masp::{
+use namada_core::address::{Address, ImplicitAddress};
+use namada_core::key::*;
+use namada_core::masp::{
     ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
 };
 use serde::{Deserialize, Serialize};

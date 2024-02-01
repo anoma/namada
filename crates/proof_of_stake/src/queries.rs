@@ -4,10 +4,10 @@ use std::cmp;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use borsh::BorshDeserialize;
-use namada_core::types::address::Address;
-use namada_core::types::dec::Dec;
-use namada_core::types::storage::Epoch;
-use namada_core::types::token;
+use namada_core::address::Address;
+use namada_core::dec::Dec;
+use namada_core::storage::Epoch;
+use namada_core::token;
 use namada_storage::collections::lazy_map::{NestedSubKey, SubKey};
 use namada_storage::{self, StorageRead};
 

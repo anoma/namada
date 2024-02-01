@@ -7,24 +7,24 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSerialize};
 use color_eyre::eyre::{eyre, Result};
 use expectrl::ControlCode;
+use namada::control_flow::time::{Constant, Sleep};
+use namada::core::address::wnam;
+use namada::core::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
+use namada::core::ethereum_events::EthAddress;
+use namada::core::storage::{self, Epoch};
+use namada::core::{address, token};
 use namada::eth_bridge::oracle;
 use namada::eth_bridge::storage::vote_tallies;
 use namada::ledger::eth_bridge::{
     ContractVersion, Contracts, EthereumBridgeParams, MinimumConfirmations,
     UpgradeableContract,
 };
-use namada::types::address::wnam;
-use namada::types::control_flow::time::{Constant, Sleep};
-use namada::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
-use namada::types::ethereum_events::EthAddress;
-use namada::types::storage::{self, Epoch};
-use namada::types::{address, token};
 use namada_apps::config::ethereum_bridge;
-use namada_core::types::address::Address;
-use namada_core::types::ethereum_events::{
+use namada_core::address::Address;
+use namada_core::ethereum_events::{
     EthereumEvent, TransferToEthereum, TransferToNamada,
 };
-use namada_core::types::token::Amount;
+use namada_core::token::Amount;
 use namada_test_utils::tx_data::TxWriteData;
 use namada_test_utils::TestWasms;
 use tokio::time::{Duration, Instant};

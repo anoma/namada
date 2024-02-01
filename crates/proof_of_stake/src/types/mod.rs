@@ -10,12 +10,12 @@ use std::hash::Hash;
 use std::ops::Sub;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use namada_core::types::address::Address;
-use namada_core::types::dec::Dec;
-use namada_core::types::key::common;
-use namada_core::types::storage::{Epoch, KeySeg};
-use namada_core::types::token;
-use namada_core::types::token::Amount;
+use namada_core::address::Address;
+use namada_core::dec::Dec;
+use namada_core::key::common;
+use namada_core::storage::{Epoch, KeySeg};
+use namada_core::token;
+use namada_core::token::Amount;
 use namada_storage::collections::lazy_map::NestedMap;
 use namada_storage::collections::{LazyMap, LazySet, LazyVec};
 pub use rev_order::ReverseOrdTokenAmount;
@@ -469,7 +469,7 @@ impl Display for WeightedValidator {
 pub struct Position(pub u64);
 
 impl KeySeg for Position {
-    fn parse(string: String) -> namada_core::types::storage::Result<Self>
+    fn parse(string: String) -> namada_core::storage::Result<Self>
     where
         Self: Sized,
     {
@@ -481,7 +481,7 @@ impl KeySeg for Position {
         self.0.raw()
     }
 
-    fn to_db_key(&self) -> namada_core::types::storage::DbKeySeg {
+    fn to_db_key(&self) -> namada_core::storage::DbKeySeg {
         self.0.to_db_key()
     }
 }

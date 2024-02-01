@@ -16,13 +16,13 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::key::common;
+use crate::address::{self, Address};
 use crate::bytes::ByteBuf;
+use crate::ethereum_events::{GetEventNonce, TransfersToNamada, Uint};
+use crate::hash::Hash;
 use crate::hints;
-use crate::types::address::{self, Address};
-use crate::types::ethereum_events::{GetEventNonce, TransfersToNamada, Uint};
-use crate::types::hash::Hash;
-use crate::types::keccak::{KeccakHash, TryFromError};
-use crate::types::time::DateTimeUtc;
+use crate::keccak::{KeccakHash, TryFromError};
+use crate::time::DateTimeUtc;
 
 /// The maximum size of an IBC key (in bytes) allowed in merkle-ized storage
 pub const IBC_KEY_LIMIT: usize = 240;
@@ -900,9 +900,8 @@ impl KeySeg for Address {
 
 impl KeySeg for Hash {
     fn parse(seg: String) -> Result<Self> {
-        seg.try_into().map_err(|e: crate::types::hash::Error| {
-            Error::ParseKeySeg(e.to_string())
-        })
+        seg.try_into()
+            .map_err(|e: crate::hash::Error| Error::ParseKeySeg(e.to_string()))
     }
 
     fn raw(&self) -> String {
@@ -1477,7 +1476,7 @@ pub mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::types::address::testing::arb_address;
+    use crate::address::testing::arb_address;
 
     proptest! {
         /// Tests that any key that doesn't contain reserved prefixes is valid.
@@ -1906,9 +1905,7 @@ pub mod testing {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::types::address::testing::{
-        arb_address, arb_non_internal_address,
-    };
+    use crate::address::testing::{arb_address, arb_non_internal_address};
 
     prop_compose! {
         /// Generate an arbitrary epoch

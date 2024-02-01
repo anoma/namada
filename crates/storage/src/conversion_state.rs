@@ -2,14 +2,14 @@
 
 use std::collections::BTreeMap;
 
+use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::masp_primitives::asset_type::AssetType;
 use namada_core::masp_primitives::convert::AllowedConversion;
 use namada_core::masp_primitives::merkle_tree::FrozenCommitmentTree;
 use namada_core::masp_primitives::sapling;
-use namada_core::types::address::Address;
-use namada_core::types::storage::Epoch;
-use namada_core::types::token::{Denomination, MaspDigitPos};
+use namada_core::storage::Epoch;
+use namada_core::token::{Denomination, MaspDigitPos};
 
 /// A representation of the conversion state
 #[derive(Debug, Default, BorshSerialize, BorshDeserialize)]

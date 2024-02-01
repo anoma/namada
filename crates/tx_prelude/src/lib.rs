@@ -17,20 +17,20 @@ use core::slice;
 use std::marker::PhantomData;
 
 use masp_primitives::transaction::Transaction;
+use namada_core::account::AccountPublicKeysMap;
+pub use namada_core::address::Address;
 pub use namada_core::borsh::{
     BorshDeserialize, BorshSerialize, BorshSerializeExt,
 };
-use namada_core::types::account::AccountPublicKeysMap;
-pub use namada_core::types::address::Address;
-use namada_core::types::chain::CHAIN_ID_LENGTH;
-pub use namada_core::types::ethereum_events::EthAddress;
-use namada_core::types::internal::HostEnvResult;
-use namada_core::types::key::common;
-use namada_core::types::storage::TxIndex;
-pub use namada_core::types::storage::{
+use namada_core::chain::CHAIN_ID_LENGTH;
+pub use namada_core::ethereum_events::EthAddress;
+use namada_core::internal::HostEnvResult;
+use namada_core::key::common;
+use namada_core::storage::TxIndex;
+pub use namada_core::storage::{
     self, BlockHash, BlockHeight, Epoch, Header, BLOCK_HASH_LENGTH,
 };
-pub use namada_core::types::{encode, eth_bridge_pool, *};
+pub use namada_core::{encode, eth_bridge_pool, *};
 pub use namada_governance::storage as gov_storage;
 pub use namada_macros::transaction;
 pub use namada_parameters::storage as parameters_storage;
@@ -160,9 +160,7 @@ impl StorageRead for Ctx {
         }
     }
 
-    fn get_block_hash(
-        &self,
-    ) -> Result<namada_core::types::storage::BlockHash, Error> {
+    fn get_block_hash(&self) -> Result<namada_core::storage::BlockHash, Error> {
         let result = Vec::with_capacity(BLOCK_HASH_LENGTH);
         unsafe {
             namada_tx_get_block_hash(result.as_ptr() as _);
@@ -173,22 +171,17 @@ impl StorageRead for Ctx {
         Ok(BlockHash::try_from(slice).expect("Cannot convert the hash"))
     }
 
-    fn get_block_epoch(
-        &self,
-    ) -> Result<namada_core::types::storage::Epoch, Error> {
+    fn get_block_epoch(&self) -> Result<namada_core::storage::Epoch, Error> {
         Ok(Epoch(unsafe { namada_tx_get_block_epoch() }))
     }
 
-    fn get_pred_epochs(
-        &self,
-    ) -> Result<namada_core::types::storage::Epochs, Error> {
+    fn get_pred_epochs(&self) -> Result<namada_core::storage::Epochs, Error> {
         let read_result = unsafe { namada_tx_get_pred_epochs() };
         let bytes = read_from_buffer(read_result, namada_tx_result_buffer)
             .ok_or(Error::SimpleMessage(
                 "Missing result from `namada_tx_get_pred_epochs` call",
             ))?;
-        Ok(namada_core::types::decode(bytes)
-            .expect("Cannot decode pred epochs"))
+        Ok(namada_core::decode(bytes).expect("Cannot decode pred epochs"))
     }
 
     /// Get the native token address

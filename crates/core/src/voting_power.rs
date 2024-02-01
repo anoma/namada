@@ -14,8 +14,8 @@ use num_traits::ops::checked::CheckedAdd;
 use serde::de::Visitor;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::types::token::Amount;
-use crate::types::uint::Uint;
+use crate::token::Amount;
+use crate::uint::Uint;
 
 /// Namada voting power, normalized to the range `0 - 2^32`.
 #[derive(

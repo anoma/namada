@@ -1,6 +1,6 @@
 //! Validator set update validation.
 
-use namada_core::types::storage::Epoch;
+use namada_core::storage::Epoch;
 use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_state::{DBIter, StorageHasher, WlStorage, DB};
 use namada_vote_ext::validator_set_update;
@@ -132,8 +132,8 @@ where
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
-    use namada_core::types::ethereum_events::EthAddress;
-    use namada_core::types::key::{common, RefTo};
+    use namada_core::ethereum_events::EthAddress;
+    use namada_core::key::{common, RefTo};
     use namada_vote_ext::validator_set_update::{EthAddrBook, VotingPowersMap};
 
     use super::*;

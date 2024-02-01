@@ -1,11 +1,11 @@
 use std::collections::{HashMap, HashSet};
 
 use eyre::Result;
-use namada_core::types::address::Address;
-use namada_core::types::keccak::keccak_hash;
-use namada_core::types::key::{common, SignableEthMessage};
-use namada_core::types::storage::BlockHeight;
-use namada_core::types::token::Amount;
+use namada_core::address::Address;
+use namada_core::keccak::keccak_hash;
+use namada_core::key::{common, SignableEthMessage};
+use namada_core::storage::BlockHeight;
+use namada_core::token::Amount;
 use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_state::{DBIter, StorageHasher, WlStorage, DB};
 use namada_storage::{StorageRead, StorageWrite};
@@ -259,11 +259,11 @@ mod test_apply_bp_roots_to_storage {
 
     use assert_matches::assert_matches;
     use borsh::BorshDeserialize;
-    use namada_core::types::address;
-    use namada_core::types::ethereum_events::Uint;
-    use namada_core::types::keccak::{keccak_hash, KeccakHash};
-    use namada_core::types::storage::Key;
-    use namada_core::types::voting_power::FractionalVotingPower;
+    use namada_core::address;
+    use namada_core::ethereum_events::Uint;
+    use namada_core::keccak::{keccak_hash, KeccakHash};
+    use namada_core::storage::Key;
+    use namada_core::voting_power::FractionalVotingPower;
     use namada_proof_of_stake::parameters::OwnedPosParams;
     use namada_proof_of_stake::storage::write_pos_params;
     use namada_state::testing::TestWlStorage;

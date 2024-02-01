@@ -2,10 +2,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Display;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::address::Address;
+use namada_core::hash::Hash;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
-use namada_core::types::address::Address;
-use namada_core::types::hash::Hash;
-use namada_core::types::storage::Epoch;
+use namada_core::storage::Epoch;
 use namada_trans_token::Amount;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -565,10 +565,10 @@ impl Display for StorageProposal {
 #[cfg(any(test, feature = "testing"))]
 /// Testing helpers and and strategies for governance proposals
 pub mod testing {
-    use namada_core::types::address::testing::arb_non_internal_address;
-    use namada_core::types::hash::testing::arb_hash;
-    use namada_core::types::storage::testing::arb_epoch;
-    use namada_core::types::token::testing::arb_amount;
+    use namada_core::address::testing::arb_non_internal_address;
+    use namada_core::hash::testing::arb_hash;
+    use namada_core::storage::testing::arb_epoch;
+    use namada_core::token::testing::arb_amount;
     use proptest::prelude::*;
     use proptest::{collection, option, prop_compose};
 

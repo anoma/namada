@@ -24,14 +24,14 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
 mod tests {
     use std::collections::BTreeSet;
 
+    use namada::core::dec::Dec;
+    use namada::core::storage::Epoch;
     use namada::ledger::pos::{OwnedPosParams, PosVP};
     use namada::proof_of_stake::storage::{
         bond_handle, read_consensus_validator_set_addresses_with_stake,
         read_total_stake, read_validator_stake, unbond_handle,
     };
     use namada::proof_of_stake::types::{GenesisValidator, WeightedValidator};
-    use namada::types::dec::Dec;
-    use namada::types::storage::Epoch;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::native_vp::TestNativeVpEnv;

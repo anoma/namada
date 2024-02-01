@@ -4,12 +4,10 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use itertools::Itertools;
-use namada_core::types::address::{
-    Address, EstablishedAddressGen, InternalAddress,
-};
-use namada_core::types::hash::{Hash, StorageHasher};
-use namada_core::types::ibc::IbcEvent;
-use namada_core::types::storage;
+use namada_core::address::{Address, EstablishedAddressGen, InternalAddress};
+use namada_core::hash::{Hash, StorageHasher};
+use namada_core::ibc::IbcEvent;
+use namada_core::storage;
 use namada_gas::{MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE};
 use namada_replay_protection as replay_protection;
 use namada_trans_token::storage_key::{
@@ -731,8 +729,8 @@ impl WriteLog {
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
-    use namada_core::types::hash::Hash;
-    use namada_core::types::{address, storage};
+    use namada_core::hash::Hash;
+    use namada_core::{address, storage};
     use pretty_assertions::assert_eq;
     use proptest::prelude::*;
 
@@ -1108,9 +1106,9 @@ mod tests {
 /// Helpers for testing with write log.
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-    use namada_core::types::address::testing::arb_address;
-    use namada_core::types::hash::HASH_LENGTH;
-    use namada_core::types::storage::testing::arb_key;
+    use namada_core::address::testing::arb_address;
+    use namada_core::hash::HASH_LENGTH;
+    use namada_core::storage::testing::arb_key;
     use proptest::collection;
     use proptest::prelude::{any, prop_oneof, Just, Strategy};
 

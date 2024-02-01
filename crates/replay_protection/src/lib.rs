@@ -1,7 +1,7 @@
 //! Replay protection storage keys
 
-use namada_core::types::hash::Hash;
-use namada_core::types::storage::Key;
+use namada_core::hash::Hash;
+use namada_core::storage::Key;
 
 const ERROR_MSG: &str = "Cannot obtain a valid db key";
 

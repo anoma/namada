@@ -4,7 +4,7 @@
 use namada_core::borsh::{
     BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
 };
-use namada_core::types::key::*;
+use namada_core::key::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 

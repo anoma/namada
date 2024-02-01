@@ -1,6 +1,10 @@
 use std::borrow::Borrow;
 use std::collections::BTreeSet;
 
+use namada::core::address::Address;
+use namada::core::hash::Hash;
+use namada::core::storage::{Key, TxIndex};
+use namada::core::time::DurationSecs;
 use namada::ledger::gas::TxGasMeter;
 use namada::ledger::parameters::{self, EpochDuration};
 use namada::ledger::storage::mockdb::MockDB;
@@ -9,10 +13,6 @@ use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{Sha256Hasher, WlStorage};
 pub use namada::tx::data::TxType;
 use namada::tx::Tx;
-use namada::types::address::Address;
-use namada::types::hash::Hash;
-use namada::types::storage::{Key, TxIndex};
-use namada::types::time::DurationSecs;
 use namada::vm::prefix_iter::PrefixIterators;
 use namada::vm::wasm::run::Error;
 use namada::vm::wasm::{self, TxCache, VpCache};
@@ -524,8 +524,8 @@ mod native_tx_host_env {
 
 #[cfg(test)]
 mod tests {
+    use namada::core::storage;
     use namada::ledger::storage::mockdb::MockDB;
-    use namada::types::storage;
     use namada::vm::host_env::{self, TxVmEnv};
     use namada::vm::memory::VmMemory;
     use proptest::prelude::*;
@@ -772,7 +772,7 @@ mod tests {
             any::<bool>(),
             any::<bool>(),
             any::<bool>(),
-            namada::types::storage::testing::arb_key(),
+            namada::core::storage::testing::arb_key(),
             arb_u64(),
             arb_u64(),
             any::<Vec<u8>>(),

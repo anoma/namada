@@ -11,12 +11,10 @@ pub mod types;
 
 pub use db::{Error as DbError, Result as DbResult, *};
 pub use error::{CustomError, Error, OptionExt, Result, ResultExt};
+use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
-use namada_core::types::address::Address;
-pub use namada_core::types::hash::StorageHasher;
-use namada_core::types::storage::{
-    self, BlockHash, BlockHeight, Epoch, Epochs, Header, TxIndex,
-};
+pub use namada_core::hash::StorageHasher;
+pub use namada_core::storage::*;
 
 /// Common storage read interface
 ///
@@ -40,10 +38,7 @@ pub trait StorageRead {
 
     /// Storage read Borsh encoded value. It will try to read from the storage
     /// and decode it if found.
-    fn read<T: BorshDeserialize>(
-        &self,
-        key: &storage::Key,
-    ) -> Result<Option<T>> {
+    fn read<T: BorshDeserialize>(&self, key: &Key) -> Result<Option<T>> {
         let bytes = self.read_bytes(key)?;
         match bytes {
             Some(bytes) => {
@@ -55,10 +50,10 @@ pub trait StorageRead {
     }
 
     /// Storage read raw bytes. It will try to read from the storage.
-    fn read_bytes(&self, key: &storage::Key) -> Result<Option<Vec<u8>>>;
+    fn read_bytes(&self, key: &Key) -> Result<Option<Vec<u8>>>;
 
     /// Storage `has_key` in. It will try to read from the storage.
-    fn has_key(&self, key: &storage::Key) -> Result<bool>;
+    fn has_key(&self, key: &Key) -> Result<bool>;
 
     /// Storage prefix iterator ordered by the storage keys. It will try to get
     /// an iterator from the storage.
@@ -67,7 +62,7 @@ pub trait StorageRead {
     /// [`fn@iter_prefix_bytes`] instead.
     fn iter_prefix<'iter>(
         &'iter self,
-        prefix: &storage::Key,
+        prefix: &Key,
     ) -> Result<Self::PrefixIter<'iter>>;
 
     /// Storage prefix iterator. It will try to read from the storage.
@@ -135,27 +130,19 @@ pub trait StorageRead {
 /// Common storage write interface
 pub trait StorageWrite {
     /// Write a value to be encoded with Borsh at the given key to storage.
-    fn write<T: BorshSerialize>(
-        &mut self,
-        key: &storage::Key,
-        val: T,
-    ) -> Result<()> {
+    fn write<T: BorshSerialize>(&mut self, key: &Key, val: T) -> Result<()> {
         let bytes = val.serialize_to_vec();
         self.write_bytes(key, bytes)
     }
 
     /// Write a value as bytes at the given key to storage.
-    fn write_bytes(
-        &mut self,
-        key: &storage::Key,
-        val: impl AsRef<[u8]>,
-    ) -> Result<()>;
+    fn write_bytes(&mut self, key: &Key, val: impl AsRef<[u8]>) -> Result<()>;
 
     /// Delete a value at the given key from storage.
-    fn delete(&mut self, key: &storage::Key) -> Result<()>;
+    fn delete(&mut self, key: &Key) -> Result<()>;
 
     /// Delete all key-vals with a matching prefix.
-    fn delete_prefix(&mut self, prefix: &storage::Key) -> Result<()>
+    fn delete_prefix(&mut self, prefix: &Key) -> Result<()>
     where
         Self: StorageRead + Sized,
     {
@@ -164,7 +151,7 @@ pub trait StorageWrite {
                 let (key, _val) = res?;
                 Ok(key)
             })
-            .collect::<Result<Vec<storage::Key>>>();
+            .collect::<Result<Vec<Key>>>();
         for key in keys? {
             // Skip validity predicates as they cannot be deleted
             if key.is_validity_predicate().is_none() {
@@ -178,13 +165,13 @@ pub trait StorageWrite {
 /// Iterate items matching the given prefix, ordered by the storage keys.
 pub fn iter_prefix_bytes<'a>(
     storage: &'a impl StorageRead,
-    prefix: &storage::Key,
-) -> Result<impl Iterator<Item = Result<(storage::Key, Vec<u8>)>> + 'a> {
+    prefix: &Key,
+) -> Result<impl Iterator<Item = Result<(Key, Vec<u8>)>> + 'a> {
     let iter = storage.iter_prefix(prefix)?;
     let iter = itertools::unfold(iter, |iter| {
         match storage.iter_next(iter) {
             Ok(Some((key, val))) => {
-                let key = match storage::Key::parse(key).into_storage_result() {
+                let key = match Key::parse(key).into_storage_result() {
                     Ok(key) => key,
                     Err(err) => {
                         // Propagate key encoding errors into Iterator's Item
@@ -207,8 +194,8 @@ pub fn iter_prefix_bytes<'a>(
 /// storage keys.
 pub fn iter_prefix<'a, T>(
     storage: &'a impl StorageRead,
-    prefix: &storage::Key,
-) -> Result<impl Iterator<Item = Result<(storage::Key, T)>> + 'a>
+    prefix: &Key,
+) -> Result<impl Iterator<Item = Result<(Key, T)>> + 'a>
 where
     T: BorshDeserialize,
 {
@@ -216,7 +203,7 @@ where
     let iter = itertools::unfold(iter, |iter| {
         match storage.iter_next(iter) {
             Ok(Some((key, val))) => {
-                let key = match storage::Key::parse(key).into_storage_result() {
+                let key = match Key::parse(key).into_storage_result() {
                     Ok(key) => key,
                     Err(err) => {
                         // Propagate key encoding errors into Iterator's Item
@@ -253,12 +240,12 @@ where
 /// don't pass the filter. For `iter_prefix_bytes`, `filter` works fine.
 pub fn iter_prefix_with_filter<'a, T, F>(
     storage: &'a impl StorageRead,
-    prefix: &storage::Key,
+    prefix: &Key,
     filter: F,
-) -> Result<impl Iterator<Item = Result<(storage::Key, T)>> + 'a>
+) -> Result<impl Iterator<Item = Result<(Key, T)>> + 'a>
 where
     T: BorshDeserialize,
-    F: Fn(&storage::Key) -> bool + 'a,
+    F: Fn(&Key) -> bool + 'a,
 {
     let iter = storage.iter_prefix(prefix)?;
     let iter = itertools::unfold(iter, move |iter| {
@@ -267,15 +254,14 @@ where
         loop {
             match storage.iter_next(iter) {
                 Ok(Some((key, val))) => {
-                    let key =
-                        match storage::Key::parse(key).into_storage_result() {
-                            Ok(key) => key,
-                            Err(err) => {
-                                // Propagate key encoding errors into Iterator's
-                                // Item
-                                return Some(Err(err));
-                            }
-                        };
+                    let key = match Key::parse(key).into_storage_result() {
+                        Ok(key) => key,
+                        Err(err) => {
+                            // Propagate key encoding errors into Iterator's
+                            // Item
+                            return Some(Err(err));
+                        }
+                    };
                     // Check the predicate
                     if !filter(&key) {
                         continue;
@@ -305,9 +291,9 @@ where
 /// Helpers for testing components that depend on storage
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-
-    use namada_core::types::address;
-    use namada_core::types::chain::ChainId;
+    use namada_core::address;
+    use namada_core::chain::ChainId;
+    pub use namada_core::storage::testing::*;
 
     use super::mockdb::MockDB;
     use super::*;
@@ -322,10 +308,10 @@ pub mod testing {
         pred_epochs: Epochs,
         native_token: Address,
         conversion_state: ConversionState,
-        merkle_tree_key_filter: fn(&storage::Key) -> bool,
+        merkle_tree_key_filter: fn(&Key) -> bool,
     }
 
-    fn merklize_all_keys(_key: &storage::Key) -> bool {
+    fn merklize_all_keys(_key: &Key) -> bool {
         true
     }
 
@@ -348,17 +334,17 @@ pub mod testing {
     impl StorageRead for TestStorage {
         type PrefixIter<'iter> = PrefixIter<'iter> where Self: 'iter;
 
-        fn read_bytes(&self, key: &storage::Key) -> Result<Option<Vec<u8>>> {
+        fn read_bytes(&self, key: &Key) -> Result<Option<Vec<u8>>> {
             self.db.read_subspace_val(key).into_storage_result()
         }
 
-        fn has_key(&self, key: &storage::Key) -> Result<bool> {
+        fn has_key(&self, key: &Key) -> Result<bool> {
             Ok(self.read_bytes(key)?.is_some())
         }
 
         fn iter_prefix<'iter>(
             &'iter self,
-            prefix: &storage::Key,
+            prefix: &Key,
         ) -> Result<Self::PrefixIter<'iter>> {
             let storage_iter = self.db.iter_prefix(Some(prefix));
             Ok(PrefixIter {
@@ -412,7 +398,7 @@ pub mod testing {
     impl StorageWrite for TestStorage {
         fn write_bytes(
             &mut self,
-            key: &storage::Key,
+            key: &Key,
             val: impl AsRef<[u8]>,
         ) -> Result<()> {
             let is_key_merklized = (self.merkle_tree_key_filter)(key);
@@ -422,7 +408,7 @@ pub mod testing {
             Ok(())
         }
 
-        fn delete(&mut self, key: &storage::Key) -> Result<()> {
+        fn delete(&mut self, key: &Key) -> Result<()> {
             let is_key_merklized = (self.merkle_tree_key_filter)(key);
             self.db
                 .delete_subspace_val(self.height, key, is_key_merklized)

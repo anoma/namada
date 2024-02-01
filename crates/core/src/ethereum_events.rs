@@ -12,13 +12,13 @@ use ethabi::Token;
 use eyre::{eyre, Context};
 use serde::{Deserialize, Serialize};
 
-use crate::types::address::Address;
-use crate::types::eth_abi::Encode;
-use crate::types::ethereum_structs::Erc20Transfer;
-use crate::types::hash::Hash;
-use crate::types::keccak::KeccakHash;
-use crate::types::storage::{DbKeySeg, KeySeg};
-use crate::types::token::Amount;
+use crate::address::Address;
+use crate::eth_abi::Encode;
+use crate::ethereum_structs::Erc20Transfer;
+use crate::hash::Hash;
+use crate::keccak::KeccakHash;
+use crate::storage::{DbKeySeg, KeySeg};
+use crate::token::Amount;
 
 /// Namada native type to replace the ethabi::Uint type
 #[derive(
@@ -197,9 +197,9 @@ impl From<EthAddress> for String {
 }
 
 impl KeySeg for EthAddress {
-    fn parse(string: String) -> crate::types::storage::Result<Self> {
+    fn parse(string: String) -> crate::storage::Result<Self> {
         Self::from_str(string.as_str())
-            .map_err(|_| crate::types::storage::Error::ParseKeySeg(string))
+            .map_err(|_| crate::storage::Error::ParseKeySeg(string))
     }
 
     fn raw(&self) -> String {
@@ -373,7 +373,7 @@ impl From<Erc20Transfer> for TransferToEthereum {
         Self {
             amount: {
                 let uint = {
-                    use crate::types::uint::Uint as NamadaUint;
+                    use crate::uint::Uint as NamadaUint;
                     let mut num_buf = [0; 32];
                     transfer.amount.to_little_endian(&mut num_buf);
                     NamadaUint::from_little_endian(&num_buf)
@@ -450,7 +450,7 @@ pub mod testing {
     use proptest::prop_compose;
 
     use super::*;
-    use crate::types::token::{self, Amount};
+    use crate::token::{self, Amount};
 
     pub const DAI_ERC20_ETH_ADDRESS_CHECKSUMMED: &str =
         "0x6B175474E89094C44Da98b954EedeAC495271d0F";

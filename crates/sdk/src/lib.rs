@@ -1,6 +1,6 @@
 extern crate alloc;
 
-pub use namada_core::{borsh, ibc, tendermint, tendermint_proto, types};
+pub use namada_core::*;
 #[cfg(feature = "tendermint-rpc")]
 pub use tendermint_rpc;
 pub use {
@@ -36,13 +36,12 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use args::{InputAmount, SdkTypes};
+use namada_core::address::Address;
+use namada_core::dec::Dec;
+use namada_core::ethereum_events::EthAddress;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
-use namada_core::types::address::Address;
-use namada_core::types::dec::Dec;
-use namada_core::types::ethereum_events::EthAddress;
-use namada_core::types::key::*;
-use namada_core::types::masp::{TransferSource, TransferTarget};
-use namada_core::types::token;
+use namada_core::key::*;
+use namada_core::masp::{TransferSource, TransferTarget};
 use namada_tx::data::wrapper::GasLimit;
 use namada_tx::Tx;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -767,17 +766,15 @@ pub mod testing {
     use ibc::primitives::proto::Any;
     use masp_primitives::transaction::TransparentAddress;
     use namada_account::{InitAccount, UpdateAccount};
-    use namada_core::types::address::testing::{
+    use namada_core::address::testing::{
         arb_established_address, arb_non_internal_address,
     };
-    use namada_core::types::address::MASP;
-    use namada_core::types::eth_bridge_pool::PendingTransfer;
-    use namada_core::types::hash::testing::arb_hash;
-    use namada_core::types::storage::testing::arb_epoch;
-    use namada_core::types::token::testing::{
-        arb_denominated_amount, arb_transfer,
-    };
-    use namada_core::types::token::Transfer;
+    use namada_core::address::MASP;
+    use namada_core::eth_bridge_pool::PendingTransfer;
+    use namada_core::hash::testing::arb_hash;
+    use namada_core::storage::testing::arb_epoch;
+    use namada_core::token::testing::{arb_denominated_amount, arb_transfer};
+    use namada_core::token::Transfer;
     use namada_governance::storage::proposal::testing::{
         arb_init_proposal, arb_vote_proposal,
     };
@@ -797,9 +794,13 @@ pub mod testing {
 
     use super::*;
     use crate::account::tests::{arb_init_account, arb_update_account};
+    use crate::chain::ChainId;
+    use crate::eth_bridge_pool::testing::arb_pending_transfer;
+    use crate::key::testing::arb_common_pk;
     use crate::masp::testing::{
         arb_deshielding_transfer, arb_shielded_transfer, arb_shielding_transfer,
     };
+    use crate::time::{DateTime, DateTimeUtc, Utc};
     use crate::tx::data::pgf::tests::arb_update_steward_commission;
     use crate::tx::data::pos::tests::{
         arb_become_validator, arb_bond, arb_commission_change,
@@ -807,10 +808,6 @@ pub mod testing {
         arb_withdraw,
     };
     use crate::tx::{Code, Commitment, Header, MaspBuilder, Section};
-    use crate::types::chain::ChainId;
-    use crate::types::eth_bridge_pool::testing::arb_pending_transfer;
-    use crate::types::key::testing::arb_common_pk;
-    use crate::types::time::{DateTime, DateTimeUtc, Utc};
 
     #[derive(Debug)]
     #[allow(clippy::large_enum_variant)]

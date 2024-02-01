@@ -6,20 +6,17 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
-use namada_core::hints;
-use namada_core::types::address::Address;
-use namada_core::types::eth_abi::{Encode, EncodeCell};
-use namada_core::types::eth_bridge_pool::{
-    PendingTransfer, PendingTransferAppendix,
-};
-use namada_core::types::ethereum_events::{
+use namada_core::address::Address;
+use namada_core::eth_abi::{Encode, EncodeCell};
+use namada_core::eth_bridge_pool::{PendingTransfer, PendingTransferAppendix};
+use namada_core::ethereum_events::{
     EthAddress, EthereumEvent, TransferToEthereum,
 };
-use namada_core::types::ethereum_structs;
-use namada_core::types::keccak::KeccakHash;
-use namada_core::types::storage::{BlockHeight, DbKeySeg, Epoch, Key};
-use namada_core::types::token::Amount;
-use namada_core::types::voting_power::FractionalVotingPower;
+use namada_core::keccak::KeccakHash;
+use namada_core::storage::{BlockHeight, DbKeySeg, Epoch, Key};
+use namada_core::token::Amount;
+use namada_core::voting_power::FractionalVotingPower;
+use namada_core::{ethereum_structs, hints};
 use namada_ethereum_bridge::protocol::transactions::votes::{
     EpochedVotingPower, EpochedVotingPowerExt,
 };
@@ -837,15 +834,15 @@ mod test_ethbridge_router {
     use std::collections::BTreeMap;
 
     use assert_matches::assert_matches;
-    use namada_core::types::address::nam;
-    use namada_core::types::address::testing::established_address_1;
-    use namada_core::types::eth_abi::Encode;
-    use namada_core::types::eth_bridge_pool::{
+    use namada_core::address::nam;
+    use namada_core::address::testing::established_address_1;
+    use namada_core::eth_abi::Encode;
+    use namada_core::eth_bridge_pool::{
         GasFee, PendingTransfer, TransferToEthereum, TransferToEthereumKind,
     };
-    use namada_core::types::ethereum_events::EthAddress;
-    use namada_core::types::storage::BlockHeight;
-    use namada_core::types::voting_power::{
+    use namada_core::ethereum_events::EthAddress;
+    use namada_core::storage::BlockHeight;
+    use namada_core::voting_power::{
         EthBridgeVotingPower, FractionalVotingPower,
     };
     use namada_ethereum_bridge::protocol::transactions::validator_set_update::aggregate_votes;
@@ -1443,8 +1440,8 @@ mod test_ethbridge_router {
             .write(&get_pending_key(&transfer), &transfer)
             .expect("Test failed");
 
-        let event_transfer: namada_core::types::ethereum_events::TransferToEthereum
-            = (&transfer).into();
+        let event_transfer: namada_core::ethereum_events::TransferToEthereum =
+            (&transfer).into();
         let eth_event = EthereumEvent::TransfersToEthereum {
             nonce: Default::default(),
             transfers: vec![event_transfer.clone()],
@@ -1791,7 +1788,7 @@ mod test_ethbridge_router {
 #[cfg(any(feature = "testing", test))]
 #[allow(dead_code)]
 mod test_utils {
-    use namada_core::types::address::Address;
+    use namada_core::address::Address;
     pub use namada_ethereum_bridge::test_utils::*;
 
     /// An established user address for testing & development

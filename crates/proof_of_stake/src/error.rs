@@ -1,9 +1,9 @@
 /// Custom error types
 use std::num::TryFromIntError;
 
-use namada_core::types::address::Address;
-use namada_core::types::dec::Dec;
-use namada_core::types::storage::Epoch;
+use namada_core::address::Address;
+use namada_core::dec::Dec;
+use namada_core::storage::Epoch;
 use thiserror::Error;
 
 use crate::rewards;

@@ -17,9 +17,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use crate::types::address;
-use crate::types::hash::{KeccakHasher, Sha256Hasher, StorageHasher};
-use crate::types::keccak::{keccak_hash, KeccakHash};
+use crate::address;
+use crate::hash::{KeccakHasher, Sha256Hasher, StorageHasher};
+use crate::keccak::{keccak_hash, KeccakHash};
 
 /// Represents an error in signature verification
 #[allow(missing_docs)]
@@ -458,25 +458,25 @@ impl SignableBytes for &[u8] {}
 impl<const N: usize> SignableBytes for [u8; N] {}
 impl<const N: usize> SignableBytes for &[u8; N] {}
 
-impl SignableBytes for crate::types::hash::Hash {
+impl SignableBytes for crate::hash::Hash {
     fn signable_hash<H: StorageHasher>(&self) -> [u8; 32] {
         self.0
     }
 }
 
-impl SignableBytes for &crate::types::hash::Hash {
+impl SignableBytes for &crate::hash::Hash {
     fn signable_hash<H: StorageHasher>(&self) -> [u8; 32] {
         self.0
     }
 }
 
-impl SignableBytes for crate::types::keccak::KeccakHash {
+impl SignableBytes for crate::keccak::KeccakHash {
     fn signable_hash<H: StorageHasher>(&self) -> [u8; 32] {
         self.0
     }
 }
 
-impl SignableBytes for &crate::types::keccak::KeccakHash {
+impl SignableBytes for &crate::keccak::KeccakHash {
     fn signable_hash<H: StorageHasher>(&self) -> [u8; 32] {
         self.0
     }
@@ -491,7 +491,7 @@ pub mod testing {
     use rand::{thread_rng, SeedableRng};
 
     use super::SigScheme;
-    use crate::types::key::*;
+    use crate::key::*;
 
     /// Generate an arbitrary public key
     pub fn arb_pk<S: SigScheme>()

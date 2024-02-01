@@ -8,15 +8,15 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
 use namada_account::{Account, AccountPublicKeysMap};
+use namada_core::address::Address;
+use namada_core::dec::Dec;
+use namada_core::hash::Hash;
 use namada_core::hints;
-use namada_core::types::address::Address;
-use namada_core::types::dec::Dec;
-use namada_core::types::hash::Hash;
-use namada_core::types::storage::{
+use namada_core::storage::{
     self, BlockHeight, BlockResults, Epoch, KeySeg, PrefixValue,
 };
-use namada_core::types::token::{Denomination, MaspDigitPos};
-use namada_core::types::uint::Uint;
+use namada_core::token::{Denomination, MaspDigitPos};
+use namada_core::uint::Uint;
 use namada_state::{DBIter, LastBlock, StorageHasher, DB};
 use namada_storage::{self, ResultExt, StorageRead};
 #[cfg(any(test, feature = "async-client"))]
@@ -615,7 +615,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use namada_core::types::address;
+    use namada_core::address;
     use namada_token::storage_key::balance_key;
 
     use crate::queries::RPC;
