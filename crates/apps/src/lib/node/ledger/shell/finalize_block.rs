@@ -742,7 +742,6 @@ mod test_finalize_block {
     use std::str::FromStr;
 
     use data_encoding::HEXUPPER;
-    use namada::core::ledger::replay_protection;
     use namada::eth_bridge::storage::bridge_pool::{
         self, get_key_from_hash, get_nonce_key, get_signed_root_key,
     };
@@ -769,6 +768,7 @@ mod test_finalize_block {
         BondId, SlashType, ValidatorState, WeightedValidator,
     };
     use namada::proof_of_stake::{unjail_validator, ADDRESS as pos_address};
+    use namada::replay_protection;
     use namada::state::StorageWrite;
     use namada::token::{Amount, DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
     use namada::tx::data::{Fee, WrapperTx};

@@ -8,7 +8,6 @@ use std::str::FromStr;
 
 use itertools::Either;
 use namada_core::borsh::{BorshDeserialize, BorshSerializeExt};
-use namada_core::ledger::replay_protection;
 use namada_core::types;
 use namada_core::types::hash::Hash;
 use namada_core::types::storage::{
@@ -20,6 +19,7 @@ use namada_core::types::{ethereum_events, ethereum_structs};
 use namada_merkle_tree::{
     base_tree_key_prefix, subtree_key_prefix, MerkleTreeStoresRead, StoreType,
 };
+use namada_replay_protection as replay_protection;
 
 use crate::conversion_state::ConversionState;
 use crate::db::{

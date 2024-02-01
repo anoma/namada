@@ -83,6 +83,7 @@ namada_governance = { path = "../governance" }
 namada_ibc = { path = "../ibc" }
 namada_parameters = { path = "../parameters" }
 namada_proof_of_stake = { path = "../proof_of_stake" }
+namada_replay_protection = { path = "../replay_protection" }
 namada_sdk = { path = "../sdk", default-features = false }
 namada_state = { path = "../state" }
 namada_token = { path = "../token" }

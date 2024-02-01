@@ -50,7 +50,6 @@ use data_encoding::HEXLOWER;
 use itertools::Either;
 use namada::eth_bridge::storage::proof::BridgePoolRootProof;
 use namada::ledger::eth_bridge::storage::bridge_pool;
-use namada::ledger::replay_protection;
 use namada::ledger::storage::tx_queue::TxQueue;
 use namada::state::merkle_tree::{base_tree_key_prefix, subtree_key_prefix};
 use namada::state::types::PrefixIterator;
@@ -59,13 +58,13 @@ use namada::state::{
     DbResult as Result, MerkleTreeStoresRead, StoreType, DB,
 };
 use namada::token::ConversionState;
-use namada::types;
 use namada::types::storage::{
     BlockHeight, BlockResults, Epoch, EthEventsQueue, Header, Key, KeySeg,
     KEY_SEGMENT_SEPARATOR,
 };
 use namada::types::time::DateTimeUtc;
 use namada::types::{ethereum_events, ethereum_structs};
+use namada::{replay_protection, types};
 use rayon::prelude::*;
 use rocksdb::{
     BlockBasedOptions, ColumnFamily, ColumnFamilyDescriptor, DBCompactionStyle,

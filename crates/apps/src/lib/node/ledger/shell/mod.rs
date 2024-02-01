@@ -2095,7 +2095,6 @@ mod test_utils {
 
 #[cfg(test)]
 mod shell_tests {
-    use namada::core::ledger::replay_protection;
     use namada::token::read_denom;
     use namada::tx::data::protocol::{ProtocolTx, ProtocolTxType};
     use namada::tx::data::{Fee, WrapperTx};
@@ -2108,7 +2107,7 @@ mod shell_tests {
     use namada::vote_ext::{
         bridge_pool_roots, ethereum_events, ethereum_tx_data_variants,
     };
-    use namada::{parameters, token};
+    use namada::{parameters, replay_protection, token};
 
     use super::*;
     use crate::node::ledger::shell::test_utils;

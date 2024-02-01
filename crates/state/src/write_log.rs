@@ -4,7 +4,6 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use itertools::Itertools;
-use namada_core::ledger::replay_protection;
 use namada_core::types::address::{
     Address, EstablishedAddressGen, InternalAddress,
 };
@@ -12,6 +11,7 @@ use namada_core::types::hash::{Hash, StorageHasher};
 use namada_core::types::ibc::IbcEvent;
 use namada_core::types::storage;
 use namada_gas::{MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE};
+use namada_replay_protection as replay_protection;
 use namada_trans_token::storage_key::{
     is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
     is_any_token_parameter_key,
