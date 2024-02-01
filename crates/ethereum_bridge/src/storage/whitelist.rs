@@ -5,7 +5,6 @@
 
 use std::str::FromStr;
 
-use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_core::types::eth_bridge_pool::erc20_token_address;
 use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::storage;
@@ -13,6 +12,7 @@ use namada_core::types::storage::DbKeySeg;
 use namada_trans_token::storage_key::{denom_key, minted_balance_key};
 
 use super::prefix as ethbridge_key_prefix;
+use crate::ADDRESS as BRIDGE_ADDRESS;
 
 mod segments {
     //! Storage key segments under the token whitelist.

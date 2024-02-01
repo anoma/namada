@@ -64,6 +64,8 @@ pub const GOV: Address = Address::Internal(InternalAddress::Governance);
 pub const MASP: Address = Address::Internal(InternalAddress::Masp);
 /// Internal Multitoken address
 pub const MULTITOKEN: Address = Address::Internal(InternalAddress::Multitoken);
+/// Internal Eth bridge address
+pub const ETH_BRIDGE: Address = Address::Internal(InternalAddress::EthBridge);
 
 /// Error from decoding address from string
 pub type DecodeError = string_encoding::DecodeError;

@@ -20,7 +20,6 @@ use masp_primitives::transaction::Transaction;
 pub use namada_core::borsh::{
     BorshDeserialize, BorshSerialize, BorshSerializeExt,
 };
-pub use namada_core::ledger::eth_bridge;
 use namada_core::types::account::AccountPublicKeysMap;
 pub use namada_core::types::address::Address;
 use namada_core::types::chain::CHAIN_ID_LENGTH;
