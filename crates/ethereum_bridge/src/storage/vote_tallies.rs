@@ -4,7 +4,6 @@ use std::io::{Read, Write};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::ledger::eth_bridge::ADDRESS;
 use namada_core::types::address::Address;
 use namada_core::types::ethereum_events::{EthereumEvent, Uint};
 use namada_core::types::hash::Hash;
@@ -14,6 +13,7 @@ use namada_macros::StorageKeys;
 use namada_vote_ext::validator_set_update::VotingPowersMap;
 
 use crate::storage::proof::{BridgePoolRootProof, EthereumProof};
+use crate::ADDRESS;
 
 /// Storage sub-key space reserved to keeping track of the
 /// voting power assigned to Ethereum events.

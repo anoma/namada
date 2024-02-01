@@ -20,7 +20,6 @@ use namada::types::ethereum_events::EthAddress;
 use namada::types::storage::{self, Epoch};
 use namada::types::{address, token};
 use namada_apps::config::ethereum_bridge;
-use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_core::types::address::Address;
 use namada_core::types::ethereum_events::{
     EthereumEvent, TransferToEthereum, TransferToNamada,
@@ -49,7 +48,7 @@ use crate::e2e::setup::{Bin, Who};
 use crate::strings::{
     LEDGER_STARTED, TX_ACCEPTED, TX_APPLIED_SUCCESS, VALIDATOR_NODE,
 };
-use crate::{run, run_as};
+use crate::{run, run_as, ADDRESS as BRIDGE_ADDRESS};
 
 /// # Examples
 ///

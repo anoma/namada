@@ -9,13 +9,14 @@ pub mod vp;
 pub mod whitelist;
 pub mod wrapped_erc20s;
 
-use namada_core::ledger::eth_bridge::ADDRESS;
 use namada_core::types::address::Address;
 use namada_core::types::storage::{DbKeySeg, Key, KeySeg};
 pub use namada_parameters::native_erc20_key;
 use namada_parameters::storage::*;
 use namada_parameters::ADDRESS as PARAM_ADDRESS;
 use namada_trans_token::storage_key::balance_key;
+
+use crate::ADDRESS;
 
 /// Key prefix for the storage subspace
 pub fn prefix() -> Key {

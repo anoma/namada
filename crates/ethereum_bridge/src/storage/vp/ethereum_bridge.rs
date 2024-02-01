@@ -1,9 +1,10 @@
-use namada_core::ledger::eth_bridge::ADDRESS;
 use namada_core::types::hash::StorageHasher;
 use namada_state::{DBIter, WlStorage, DB};
 use namada_storage::StorageWrite;
 use namada_trans_token::storage_key::balance_key;
 use namada_trans_token::Amount;
+
+use crate::ADDRESS;
 
 /// Initialize the storage owned by the Ethereum Bridge VP.
 ///

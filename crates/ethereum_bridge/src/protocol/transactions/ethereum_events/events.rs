@@ -6,7 +6,6 @@ use std::str::FromStr;
 use borsh::BorshDeserialize;
 use eyre::{Result, WrapErr};
 use namada_core::hints;
-use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_core::types::address::Address;
 use namada_core::types::eth_abi::Encode;
 use namada_core::types::eth_bridge_pool::{
@@ -31,7 +30,7 @@ use crate::storage::bridge_pool::{
 use crate::storage::eth_bridge_queries::{EthAssetMint, EthBridgeQueries};
 use crate::storage::parameters::read_native_erc20_address;
 use crate::storage::{self as bridge_storage};
-use crate::token;
+use crate::{token, ADDRESS as BRIDGE_ADDRESS};
 
 /// Updates storage based on the given confirmed `event`. For example, for a
 /// confirmed [`EthereumEvent::TransfersToNamada`], mint the corresponding
