@@ -14,8 +14,9 @@ pub use {
     namada_ethereum_bridge as ethereum_bridge, namada_gas as gas,
     namada_governance as governance, namada_ibc as ibc,
     namada_parameters as parameters, namada_proof_of_stake as proof_of_stake,
-    namada_sdk as sdk, namada_state as state, namada_token as token,
-    namada_tx as tx, namada_vote_ext as vote_ext,
+    namada_replay_protection as replay_protection, namada_sdk as sdk,
+    namada_state as state, namada_token as token, namada_tx as tx,
+    namada_vote_ext as vote_ext,
 };
 
 pub mod ledger;

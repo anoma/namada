@@ -14,7 +14,6 @@ pub mod vp_host_fns;
 
 #[cfg(feature = "wasm-runtime")]
 pub use dry_run_tx::dry_run_tx;
-pub use namada_core::ledger::replay_protection;
 pub use {
     namada_gas as gas, namada_parameters as parameters,
     namada_tx_env as tx_env, namada_vp_env as vp_env,

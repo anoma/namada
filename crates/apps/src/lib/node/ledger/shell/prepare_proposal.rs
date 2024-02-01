@@ -433,7 +433,6 @@ mod test_prepare_proposal {
     use borsh_ext::BorshSerializeExt;
     use namada::ledger::gas::Gas;
     use namada::ledger::pos::PosQueries;
-    use namada::ledger::replay_protection;
     use namada::proof_of_stake::storage::{
         consensus_validator_set_handle,
         read_consensus_validator_set_addresses_with_stake,
@@ -441,7 +440,6 @@ mod test_prepare_proposal {
     use namada::proof_of_stake::types::WeightedValidator;
     use namada::proof_of_stake::Epoch;
     use namada::state::collections::lazy_map::{NestedSubKey, SubKey};
-    use namada::token;
     use namada::token::{read_denom, Amount, DenominatedAmount};
     use namada::tx::data::{Fee, TxType, WrapperTx};
     use namada::tx::{Code, Data, Header, Section, Signature, Signed};
@@ -450,6 +448,7 @@ mod test_prepare_proposal {
     use namada::types::key::RefTo;
     use namada::types::storage::{BlockHeight, InnerEthEventsQueue};
     use namada::vote_ext::{ethereum_events, ethereum_tx_data_variants};
+    use namada::{replay_protection, token};
 
     use super::*;
     use crate::config::ValidatorLocalConfig;

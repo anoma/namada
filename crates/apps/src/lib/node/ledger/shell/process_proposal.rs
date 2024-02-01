@@ -667,9 +667,7 @@ where
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_process_proposal {
-    use namada::ledger::replay_protection;
     use namada::state::StorageWrite;
-    use namada::token;
     use namada::token::{read_denom, Amount, DenominatedAmount};
     use namada::tx::data::{Fee, WrapperTx};
     use namada::tx::{
@@ -682,6 +680,7 @@ mod test_process_proposal {
     use namada::vote_ext::{
         bridge_pool_roots, ethereum_events, EthereumTxData,
     };
+    use namada::{replay_protection, token};
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{
