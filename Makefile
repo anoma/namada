@@ -48,6 +48,7 @@ crates += namada_macros
 crates += namada_merkle_tree
 crates += namada_parameters
 crates += namada_proof_of_stake
+crates += namada_replay_protection
 crates += namada_sdk
 crates += namada_shielded_token
 crates += namada_state

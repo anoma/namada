@@ -3343,6 +3343,7 @@ dependencies = [
  "namada_ibc",
  "namada_parameters",
  "namada_proof_of_stake",
+ "namada_replay_protection",
  "namada_sdk",
  "namada_state",
  "namada_token",
@@ -3580,6 +3581,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "namada_replay_protection"
+version = "0.31.1"
+dependencies = [
+ "namada_core",
+]
+
+[[package]]
 name = "namada_sdk"
 version = "0.31.5"
 dependencies = [
@@ -3664,6 +3672,7 @@ dependencies = [
  "namada_gas",
  "namada_merkle_tree",
  "namada_parameters",
+ "namada_replay_protection",
  "namada_storage",
  "namada_trans_token",
  "namada_tx",
@@ -3684,6 +3693,7 @@ dependencies = [
  "namada_core",
  "namada_gas",
  "namada_merkle_tree",
+ "namada_replay_protection",
  "namada_tx",
  "thiserror",
  "tracing",
