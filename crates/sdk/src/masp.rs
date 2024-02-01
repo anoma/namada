@@ -1231,9 +1231,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     pub async fn precompute_asset_types<N: Namada>(
         &mut self,
         context: &N,
+        tokens: Vec<&Address>,
     ) -> Result<(), Error> {
         // To facilitate lookups of human-readable token names
-        for token in context.wallet().await.get_addresses().values() {
+        for token in tokens {
             let Some(denom) = query_denom(context.client(), token).await else {
                 return Err(Error::Query(QueryError::General(format!(
                     "denomination for token {token}"

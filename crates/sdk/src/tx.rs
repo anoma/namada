@@ -2423,10 +2423,12 @@ async fn construct_shielded_parts<N: Namada>(
     amount: token::DenominatedAmount,
 ) -> Result<Option<(ShieldedTransfer, HashSet<AssetData>)>> {
     // Precompute asset types to increase chances of success in decoding
+    let token_map = context.wallet().await.get_addresses();
+    let tokens = token_map.values().collect();
     let _ = context
         .shielded_mut()
         .await
-        .precompute_asset_types(context)
+        .precompute_asset_types(context, tokens)
         .await;
     let stx_result =
         ShieldedContext::<N::ShieldedUtils>::gen_shielded_transfer(
@@ -2690,10 +2692,12 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
         validate_amount(context, args.amount, &token, false).await?;
 
     // Precompute asset types to increase chances of success in decoding
+    let token_map = context.wallet().await.get_addresses();
+    let tokens = token_map.values().collect();
     let _ = context
         .shielded_mut()
         .await
-        .precompute_asset_types(context)
+        .precompute_asset_types(context, tokens)
         .await;
 
     let shielded_transfer =
