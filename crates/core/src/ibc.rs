@@ -20,10 +20,14 @@ use crate::ibc::apps::nft_transfer::types::{
 };
 use crate::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use crate::ibc::apps::transfer::types::{PrefixedDenom, TracePath};
-use crate::ibc::core::channel::types::msgs::MsgRecvPacket as IbcMsgRecvPacket;
+use crate::ibc::core::channel::types::msgs::{
+    MsgAcknowledgement as IbcMsgAcknowledgement,
+    MsgRecvPacket as IbcMsgRecvPacket, MsgTimeout as IbcMsgTimeout,
+};
 use crate::ibc::core::handler::types::events::{
     Error as IbcEventError, IbcEvent as RawIbcEvent,
 };
+use crate::ibc::core::handler::types::msgs::MsgEnvelope;
 use crate::ibc::primitives::proto::Protobuf;
 use crate::tendermint::abci::Event as AbciEvent;
 use crate::token::Transfer;
@@ -120,6 +124,22 @@ impl std::fmt::Display for IbcEvent {
             self.event_type, attributes
         )
     }
+}
+
+/// The different variants of an Ibc message
+pub enum IbcMessage {
+    /// Ibc Envelop
+    Envelope(Box<MsgEnvelope>),
+    /// Ibc transaprent transfer
+    Transfer(MsgTransfer),
+    /// NFT transfer
+    NftTransfer(MsgNftTransfer),
+    /// Receiving a packet
+    RecvPacket(MsgRecvPacket),
+    /// Acknowledgement
+    AckPacket(MsgAcknowledgement),
+    /// Timeout
+    Timeout(MsgTimeout),
 }
 
 /// IBC transfer message with `IbcShieldedTransfer`
@@ -222,6 +242,78 @@ impl BorshDeserialize for MsgRecvPacket {
         let (msg, shielded_transfer): (Vec<u8>, Option<IbcShieldedTransfer>) =
             BorshDeserialize::deserialize_reader(reader)?;
         let message = IbcMsgRecvPacket::decode_vec(&msg)
+            .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
+        Ok(Self {
+            message,
+            shielded_transfer,
+        })
+    }
+}
+
+/// IBC acknowledgement message with `IbcShieldedTransfer`
+#[derive(Debug, Clone)]
+pub struct MsgAcknowledgement {
+    /// IBC acknowledgement message
+    pub message: IbcMsgAcknowledgement,
+    /// MASP tx with token transfer
+    pub shielded_transfer: Option<IbcShieldedTransfer>,
+}
+
+impl BorshSerialize for MsgAcknowledgement {
+    fn serialize<W: std::io::Write>(
+        &self,
+        writer: &mut W,
+    ) -> std::io::Result<()> {
+        let encoded_msg = self.message.clone().encode_vec();
+        let members = (encoded_msg, self.shielded_transfer.clone());
+        BorshSerialize::serialize(&members, writer)
+    }
+}
+
+impl BorshDeserialize for MsgAcknowledgement {
+    fn deserialize_reader<R: std::io::Read>(
+        reader: &mut R,
+    ) -> std::io::Result<Self> {
+        use std::io::{Error, ErrorKind};
+        let (msg, shielded_transfer): (Vec<u8>, Option<IbcShieldedTransfer>) =
+            BorshDeserialize::deserialize_reader(reader)?;
+        let message = IbcMsgAcknowledgement::decode_vec(&msg)
+            .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
+        Ok(Self {
+            message,
+            shielded_transfer,
+        })
+    }
+}
+
+/// IBC timeout packet message with `IbcShieldedTransfer` for refunding
+#[derive(Debug, Clone)]
+pub struct MsgTimeout {
+    /// IBC timeout message
+    pub message: IbcMsgTimeout,
+    /// MASP tx with token transfer
+    pub shielded_transfer: Option<IbcShieldedTransfer>,
+}
+
+impl BorshSerialize for MsgTimeout {
+    fn serialize<W: std::io::Write>(
+        &self,
+        writer: &mut W,
+    ) -> std::io::Result<()> {
+        let encoded_msg = self.message.clone().encode_vec();
+        let members = (encoded_msg, self.shielded_transfer.clone());
+        BorshSerialize::serialize(&members, writer)
+    }
+}
+
+impl BorshDeserialize for MsgTimeout {
+    fn deserialize_reader<R: std::io::Read>(
+        reader: &mut R,
+    ) -> std::io::Result<Self> {
+        use std::io::{Error, ErrorKind};
+        let (msg, shielded_transfer): (Vec<u8>, Option<IbcShieldedTransfer>) =
+            BorshDeserialize::deserialize_reader(reader)?;
+        let message = IbcMsgTimeout::decode_vec(&msg)
             .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
         Ok(Self {
             message,

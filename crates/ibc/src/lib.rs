@@ -38,6 +38,9 @@ use namada_core::ibc::apps::transfer::types::packet::PacketData;
 use namada_core::ibc::apps::transfer::types::{
     is_receiver_chain_source, TracePrefix,
 };
+use namada_core::ibc::core::channel::types::acknowledgement::{
+    Acknowledgement, AcknowledgementStatus,
+};
 use namada_core::ibc::core::channel::types::msgs::{
     MsgRecvPacket as IbcMsgRecvPacket, PacketMsg,
 };
@@ -155,6 +158,31 @@ where
                     if let Some(shielded_transfer) = &msg.shielded_transfer {
                         self.handle_masp_tx(shielded_transfer)?;
                     }
+                }
+                Ok(())
+            }
+            IbcMessage::AckPacket(msg) => {
+                let envelope =
+                    MsgEnvelope::Packet(PacketMsg::Ack(msg.message.clone()));
+                execute(&mut self.ctx, &mut self.router, envelope)
+                    .map_err(|e| Error::Context(Box::new(e)))?;
+                if !is_ack_successful(&msg.message.acknowledgement)? {
+                    // For refunding the token to a shielded address
+                    if let Some(shielded_transfer) = &msg.shielded_transfer {
+                        self.handle_masp_tx(shielded_transfer)?;
+                    }
+                }
+                Ok(())
+            }
+            IbcMessage::Timeout(msg) => {
+                let envelope = MsgEnvelope::Packet(PacketMsg::Timeout(
+                    msg.message.clone(),
+                ));
+                execute(&mut self.ctx, &mut self.router, envelope)
+                    .map_err(|e| Error::Context(Box::new(e)))?;
+                // For refunding the token to a shielded address
+                if let Some(shielded_transfer) = &msg.shielded_transfer {
+                    self.handle_masp_tx(shielded_transfer)?;
                 }
                 Ok(())
             }
@@ -326,6 +354,18 @@ where
                 MsgEnvelope::Packet(PacketMsg::Recv(msg.message)),
             )
             .map_err(|e| Error::Context(Box::new(e))),
+            IbcMessage::AckPacket(msg) => validate(
+                &self.ctx,
+                &self.router,
+                MsgEnvelope::Packet(PacketMsg::Ack(msg.message)),
+            )
+            .map_err(|e| Error::Context(Box::new(e))),
+            IbcMessage::Timeout(msg) => validate(
+                &self.ctx,
+                &self.router,
+                MsgEnvelope::Packet(PacketMsg::Timeout(msg.message)),
+            )
+            .map_err(|e| Error::Context(Box::new(e))),
             IbcMessage::Envelope(envelope) => {
                 validate(&self.ctx, &self.router, *envelope)
                     .map_err(|e| Error::Context(Box::new(e)))
@@ -351,16 +391,16 @@ where
     }
 }
 
-/// The different variants of an Ibc message
-pub enum IbcMessage {
-    /// Ibc Envelop
-    Envelope(Box<MsgEnvelope>),
-    /// Ibc transaprent transfer
-    Transfer(MsgTransfer),
-    /// NFT transfer
-    NftTransfer(MsgNftTransfer),
-    /// Receiving a packet
-    RecvPacket(MsgRecvPacket),
+fn is_ack_successful(ack: &Acknowledgement) -> Result<bool, Error> {
+    let acknowledgement = serde_json::from_slice::<AcknowledgementStatus>(
+        ack.as_ref(),
+    )
+    .map_err(|e| {
+        Error::TokenTransfer(TokenTransferError::Other(format!(
+            "Decoding the acknowledgement failed: {e}"
+        )))
+    })?;
+    Ok(acknowledgement.is_successful())
 }
 
 /// Tries to decode transaction data to an `IbcMessage`
