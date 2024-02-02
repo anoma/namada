@@ -434,8 +434,7 @@ pub mod testing {
 #[cfg(test)]
 mod test_eth_bridge_pool_types {
     use super::*;
-    use crate::address::nam;
-    use crate::address::testing::established_address_1;
+    use crate::address::testing::{established_address_1, nam};
 
     /// Test that [`PendingTransfer`] and [`TransferToEthereum`]
     /// have the same keccak hash, after being ABI encoded.

@@ -324,7 +324,7 @@ pub mod testing {
                 height: BlockHeight::first(),
                 epoch: Epoch::default(),
                 pred_epochs: Epochs::default(),
-                native_token: address::nam(),
+                native_token: address::testing::nam(),
                 conversion_state: ConversionState::default(),
                 merkle_tree_key_filter: merklize_all_keys,
             }

@@ -834,8 +834,7 @@ mod test_ethbridge_router {
     use std::collections::BTreeMap;
 
     use assert_matches::assert_matches;
-    use namada_core::address::nam;
-    use namada_core::address::testing::established_address_1;
+    use namada_core::address::testing::{established_address_1, nam};
     use namada_core::eth_abi::Encode;
     use namada_core::eth_bridge_pool::{
         GasFee, PendingTransfer, TransferToEthereum, TransferToEthereumKind,

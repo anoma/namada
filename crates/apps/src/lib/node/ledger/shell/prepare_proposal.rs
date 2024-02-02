@@ -1183,13 +1183,13 @@ mod test_prepare_proposal {
             // Remove the allowed btc
             *local_config = Some(ValidatorLocalConfig {
                 accepted_gas_tokens: std::collections::HashMap::from([(
-                    namada::core::address::nam(),
+                    namada::core::address::testing::nam(),
                     Amount::from(1),
                 )]),
             });
         }
 
-        let btc_denom = read_denom(&shell.wl_storage, &address::btc())
+        let btc_denom = read_denom(&shell.wl_storage, &address::testing::btc())
             .expect("unable to read denomination from storage")
             .expect("unable to find denomination of btcs");
 
@@ -1199,7 +1199,7 @@ mod test_prepare_proposal {
                     100.into(),
                     btc_denom,
                 ),
-                token: address::btc(),
+                token: address::testing::btc(),
             },
             crate::wallet::defaults::albert_keypair().ref_to(),
             Epoch(0),
@@ -1237,9 +1237,10 @@ mod test_prepare_proposal {
     fn test_fee_non_whitelisted_token() {
         let (shell, _recv, _, _) = test_utils::setup();
 
-        let apfel_denom = read_denom(&shell.wl_storage, &address::apfel())
-            .expect("unable to read denomination from storage")
-            .expect("unable to find denomination of apfels");
+        let apfel_denom =
+            read_denom(&shell.wl_storage, &address::testing::apfel())
+                .expect("unable to read denomination from storage")
+                .expect("unable to find denomination of apfels");
 
         let wrapper = WrapperTx::new(
             Fee {
@@ -1247,7 +1248,7 @@ mod test_prepare_proposal {
                     100.into(),
                     apfel_denom,
                 ),
-                token: address::apfel(),
+                token: address::testing::apfel(),
             },
             crate::wallet::defaults::albert_keypair().ref_to(),
             Epoch(0),
@@ -1289,7 +1290,7 @@ mod test_prepare_proposal {
             // Remove btc and increase minimum for nam
             *local_config = Some(ValidatorLocalConfig {
                 accepted_gas_tokens: std::collections::HashMap::from([(
-                    namada::core::address::nam(),
+                    namada::core::address::testing::nam(),
                     Amount::from(100),
                 )]),
             });

@@ -631,13 +631,13 @@ mod tests {
 
     pub fn tokens() -> HashMap<Address, (&'static str, Denomination)> {
         vec![
-            (address::nam(), ("nam", 6.into())),
-            (address::btc(), ("btc", 8.into())),
-            (address::eth(), ("eth", 18.into())),
-            (address::dot(), ("dot", 10.into())),
-            (address::schnitzel(), ("schnitzel", 6.into())),
-            (address::apfel(), ("apfel", 6.into())),
-            (address::kartoffel(), ("kartoffel", 6.into())),
+            (address::testing::nam(), ("nam", 6.into())),
+            (address::testing::btc(), ("btc", 8.into())),
+            (address::testing::eth(), ("eth", 18.into())),
+            (address::testing::dot(), ("dot", 10.into())),
+            (address::testing::schnitzel(), ("schnitzel", 6.into())),
+            (address::testing::apfel(), ("apfel", 6.into())),
+            (address::testing::kartoffel(), ("kartoffel", 6.into())),
         ]
         .into_iter()
         .collect()

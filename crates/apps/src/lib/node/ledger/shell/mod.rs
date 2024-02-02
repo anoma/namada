@@ -411,16 +411,24 @@ where
             std::fs::create_dir(&base_dir)
                 .expect("Creating directory for Namada should not fail");
         }
-        let native_token = if cfg!(feature = "integration")
-            || (!cfg!(test) && !cfg!(feature = "benches"))
-        {
+
+        // For all tests except integration use hard-coded native token addr ...
+        #[cfg(all(
+            any(test, feature = "testing", feature = "benches"),
+            not(feature = "integration"),
+        ))]
+        let native_token = address::testing::nam();
+        // ... Otherwise, look it up from the genesis file
+        #[cfg(not(all(
+            any(test, feature = "testing", feature = "benches"),
+            not(feature = "integration"),
+        )))]
+        let native_token = {
             let chain_dir = base_dir.join(chain_id.as_str());
             let genesis =
                 genesis::chain::Finalized::read_toml_files(&chain_dir)
                     .expect("Missing genesis files");
             genesis.get_native_token().clone()
-        } else {
-            address::nam()
         };
 
         // load last state from storage
@@ -1940,7 +1948,7 @@ mod test_utils {
         );
         let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
         let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
-        let native_token = address::nam();
+        let native_token = address::testing::nam();
         let mut shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
             config::Ledger::new(
                 base_dir.clone(),
@@ -2747,9 +2755,10 @@ mod shell_tests {
     #[test]
     fn test_fee_non_whitelisted_token() {
         let (shell, _recv, _, _) = test_utils::setup();
-        let apfel_denom = read_denom(&shell.wl_storage, &address::apfel())
-            .expect("unable to read denomination from storage")
-            .expect("unable to find denomination of apfels");
+        let apfel_denom =
+            read_denom(&shell.wl_storage, &address::testing::apfel())
+                .expect("unable to read denomination from storage")
+                .expect("unable to find denomination of apfels");
 
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
@@ -2758,7 +2767,7 @@ mod shell_tests {
                         100.into(),
                         apfel_denom,
                     ),
-                    token: address::apfel(),
+                    token: address::testing::apfel(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 Epoch(0),

@@ -237,7 +237,7 @@ mod testing {
     #[test]
     fn test_burn_native_tokens() {
         let mut storage = TestStorage::default();
-        let native_token = address::nam();
+        let native_token = address::testing::nam();
 
         // Get some addresses
         let addr1 = address::testing::gen_implicit_address();
