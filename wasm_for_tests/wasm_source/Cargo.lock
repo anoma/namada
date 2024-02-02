@@ -3491,7 +3491,7 @@ dependencies = [
  "namada_core",
  "namada_macros",
  "namada_parameters",
- "namada_state",
+ "namada_storage",
  "namada_trans_token",
  "proptest",
  "serde",
