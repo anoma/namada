@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## v0.31.1
+
+Namada 0.31.1 is a patch release that fixes the memo processing for some transactions and improves logs related to ledger startup and the wallet.
+
+### BUG FIXES
+
+- Wallet: respect the optional bip39-flag for key derivation.
+  ([\#2489](https://github.com/anoma/namada/pull/2489))
+
+### IMPROVEMENTS
+
+- Wallet: print the generated payment address.
+  ([\#2490](https://github.com/anoma/namada/pull/2490))
+- Reworks the way the ledger waits for genesis start. It now fully initializes the node and 
+  outputs logs before sleeping until genesis start time. Previously it would not start any 
+  processes until genesis times, giving no feedback to users until genesis time was reached.
+  ([\#2502](https://github.com/anoma/namada/pull/2502))
+
 ## v0.31.0
 
 Namada 0.31.0 is a minor release that fixes wasm host function execution and upgrades some CLI functions and the Masp VP.
