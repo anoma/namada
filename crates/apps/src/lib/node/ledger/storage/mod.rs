@@ -87,7 +87,7 @@ mod tests {
         let mut storage = PersistentStorage::open(
             db_path.path(),
             ChainId::default(),
-            address::nam(),
+            address::testing::nam(),
             None,
             None,
             is_merklized_storage_key,
@@ -139,7 +139,7 @@ mod tests {
         let mut storage = PersistentStorage::open(
             db_path.path(),
             ChainId::default(),
-            address::nam(),
+            address::testing::nam(),
             None,
             None,
             is_merklized_storage_key,
@@ -201,7 +201,7 @@ mod tests {
         let mut storage = PersistentStorage::open(
             db_path.path(),
             ChainId::default(),
-            address::nam(),
+            address::testing::nam(),
             None,
             None,
             is_merklized_storage_key,
@@ -226,7 +226,7 @@ mod tests {
         let mut storage = PersistentStorage::open(
             db_path.path(),
             ChainId::default(),
-            address::nam(),
+            address::testing::nam(),
             None,
             None,
             is_merklized_storage_key,
@@ -273,7 +273,7 @@ mod tests {
         let mut storage = PersistentStorage::open(
             db_path.path(),
             ChainId::default(),
-            address::nam(),
+            address::testing::nam(),
             None,
             None,
             is_merklized_storage_key,
@@ -341,7 +341,7 @@ mod tests {
         let mut storage = PersistentStorage::open(
             db_path.path(),
             ChainId::default(),
-            address::nam(),
+            address::testing::nam(),
             None,
             None,
             is_merklized_storage_key,
@@ -433,7 +433,7 @@ mod tests {
         let mut storage = PersistentStorage::open(
             db_path.path(),
             ChainId::default(),
-            address::nam(),
+            address::testing::nam(),
             None,
             None,
             is_merklized_storage_key,
@@ -552,7 +552,7 @@ mod tests {
         let mut storage = PersistentStorage::open(
             db_path.path(),
             ChainId::default(),
-            address::nam(),
+            address::testing::nam(),
             None,
             Some(5),
             is_merklized_storage_key,
@@ -654,7 +654,7 @@ mod tests {
         let storage = PersistentStorage::open(
             db_path.path(),
             ChainId::default(),
-            address::nam(),
+            address::testing::nam(),
             None,
             None,
             is_merklized_storage_key,
@@ -769,7 +769,7 @@ mod tests {
         let storage = PersistentStorage::open(
             db_path.path(),
             ChainId::default(),
-            address::nam(),
+            address::testing::nam(),
             None,
             None,
             merkle_tree_key_filter,

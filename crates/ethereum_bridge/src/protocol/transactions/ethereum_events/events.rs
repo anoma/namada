@@ -585,8 +585,8 @@ mod tests {
 
     use assert_matches::assert_matches;
     use eyre::Result;
-    use namada_core::address::testing::gen_implicit_address;
-    use namada_core::address::{gen_established_address, nam, wnam};
+    use namada_core::address::gen_established_address;
+    use namada_core::address::testing::{gen_implicit_address, nam, wnam};
     use namada_core::borsh::BorshSerializeExt;
     use namada_core::eth_bridge_pool::GasFee;
     use namada_core::ethereum_events::testing::{

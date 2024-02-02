@@ -3,7 +3,6 @@
 
 mod raw;
 
-use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::str::FromStr;
@@ -18,7 +17,6 @@ use crate::ethereum_events::EthAddress;
 use crate::ibc::primitives::Signer;
 use crate::ibc::IbcTokenHash;
 use crate::key::PublicKeyHash;
-use crate::token::Denomination;
 use crate::{impl_display_and_from_str_via_format, key, string_encoding};
 
 /// The length of an established [`Address`] encoded with Borsh.
@@ -586,74 +584,6 @@ impl InternalAddress {
     }
 }
 
-/// Temporary helper for testing
-pub fn nam() -> Address {
-    Address::decode("tnam1q99c37u38grkdcc2qze0hz4zjjd8zr3yucd3mzgz")
-        .expect("The token address decoding shouldn't fail")
-}
-
-/// Temporary helper for testing
-pub fn btc() -> Address {
-    Address::decode("tnam1qy7jxng788scr4fdqxqxtc2ze2guq5478cml9cd9")
-        .expect("The token address decoding shouldn't fail")
-}
-
-/// Temporary helper for testing
-pub fn eth() -> Address {
-    Address::decode("tnam1qyr9vd8ltunq72qc7pk58v7jdsedt4mggqqpxs03")
-        .expect("The token address decoding shouldn't fail")
-}
-
-/// Temporary helper for testing
-pub fn dot() -> Address {
-    Address::decode("tnam1qx6k4wau5t6m8g2hjq55fje2ynpvh5t27s8p3p0l")
-        .expect("The token address decoding shouldn't fail")
-}
-
-/// Temporary helper for testing
-pub fn schnitzel() -> Address {
-    Address::decode("tnam1q9euzsu2qfv4y6p0dqaga20n0u0yp8c3ec006yg2")
-        .expect("The token address decoding shouldn't fail")
-}
-
-/// Temporary helper for testing
-pub fn apfel() -> Address {
-    Address::decode("tnam1qxlmdmw2y6hzvjg34zca8r6d4s6zmtkhty8myzu4")
-        .expect("The token address decoding shouldn't fail")
-}
-
-/// Temporary helper for testing
-pub fn kartoffel() -> Address {
-    Address::decode("tnam1q87teqzjytwa9xd9qk8u558xxnrwuzdjzs7zvhzr")
-        .expect("The token address decoding shouldn't fail")
-}
-
-/// Temporary helper for testing
-pub const fn wnam() -> EthAddress {
-    // TODO: Replace this with the real wNam ERC20 address once it exists
-    // "DEADBEEF DEADBEEF DEADBEEF DEADBEEF DEADBEEF"
-    EthAddress([
-        222, 173, 190, 239, 222, 173, 190, 239, 222, 173, 190, 239, 222, 173,
-        190, 239, 222, 173, 190, 239,
-    ])
-}
-
-/// Temporary helper for testing, a hash map of tokens addresses with their
-/// informal currency codes and number of decimal places.
-pub fn tokens() -> HashMap<&'static str, Denomination> {
-    vec![
-        ("nam", 6.into()),
-        ("btc", 8.into()),
-        ("eth", 18.into()),
-        ("dot", 10.into()),
-        ("schnitzel", 6.into()),
-        ("apfel", 6.into()),
-        ("kartoffel", 6.into()),
-    ]
-    .into_iter()
-    .collect()
-}
-
 #[cfg(test)]
 pub mod tests {
     use proptest::prelude::*;
@@ -745,10 +675,13 @@ pub fn gen_deterministic_established_address(seed: impl AsRef<str>) -> Address {
 /// Helpers for testing with addresses.
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
+    use std::collections::HashMap;
+
     use proptest::prelude::*;
 
     use super::*;
     use crate::key::*;
+    use crate::token::Denomination;
 
     /// Generate a new established address.
     pub fn gen_established_address() -> Address {
@@ -906,5 +839,73 @@ pub mod testing {
         use crate::ethereum_events::testing::arbitrary_eth_address;
         // TODO: generate random erc20 addr data
         InternalAddress::Nut(arbitrary_eth_address())
+    }
+
+    /// NAM token address for testing
+    pub fn nam() -> Address {
+        Address::decode("tnam1q99c37u38grkdcc2qze0hz4zjjd8zr3yucd3mzgz")
+            .expect("The token address decoding shouldn't fail")
+    }
+
+    /// BTC token address for testing
+    pub fn btc() -> Address {
+        Address::decode("tnam1qy7jxng788scr4fdqxqxtc2ze2guq5478cml9cd9")
+            .expect("The token address decoding shouldn't fail")
+    }
+
+    /// ETH token address for testing
+    pub fn eth() -> Address {
+        Address::decode("tnam1qyr9vd8ltunq72qc7pk58v7jdsedt4mggqqpxs03")
+            .expect("The token address decoding shouldn't fail")
+    }
+
+    /// DOT token address for testing
+    pub fn dot() -> Address {
+        Address::decode("tnam1qx6k4wau5t6m8g2hjq55fje2ynpvh5t27s8p3p0l")
+            .expect("The token address decoding shouldn't fail")
+    }
+
+    /// Imaginary token address for testing
+    pub fn schnitzel() -> Address {
+        Address::decode("tnam1q9euzsu2qfv4y6p0dqaga20n0u0yp8c3ec006yg2")
+            .expect("The token address decoding shouldn't fail")
+    }
+
+    /// Imaginary token address for testing
+    pub fn apfel() -> Address {
+        Address::decode("tnam1qxlmdmw2y6hzvjg34zca8r6d4s6zmtkhty8myzu4")
+            .expect("The token address decoding shouldn't fail")
+    }
+
+    /// Imaginary token address for testing
+    pub fn kartoffel() -> Address {
+        Address::decode("tnam1q87teqzjytwa9xd9qk8u558xxnrwuzdjzs7zvhzr")
+            .expect("The token address decoding shouldn't fail")
+    }
+
+    /// Imaginary eth address for testing
+    pub const fn wnam() -> EthAddress {
+        // TODO: Replace this with the real wNam ERC20 address once it exists
+        // "DEADBEEF DEADBEEF DEADBEEF DEADBEEF DEADBEEF"
+        EthAddress([
+            222, 173, 190, 239, 222, 173, 190, 239, 222, 173, 190, 239, 222,
+            173, 190, 239, 222, 173, 190, 239,
+        ])
+    }
+
+    /// A hash map of tokens addresses with their informal currency codes and
+    /// number of decimal places.
+    pub fn tokens() -> HashMap<&'static str, Denomination> {
+        vec![
+            ("nam", 6.into()),
+            ("btc", 8.into()),
+            ("eth", 18.into()),
+            ("dot", 10.into()),
+            ("schnitzel", 6.into()),
+            ("apfel", 6.into()),
+            ("kartoffel", 6.into()),
+        ]
+        .into_iter()
+        .collect()
     }
 }

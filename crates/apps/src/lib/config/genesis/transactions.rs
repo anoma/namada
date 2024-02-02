@@ -11,7 +11,7 @@ use ledger_namada_rs::NamadaApp;
 use ledger_transport_hid::hidapi::HidApi;
 use ledger_transport_hid::TransportNativeHID;
 use namada::account::AccountPublicKeysMap;
-use namada::core::address::{nam, Address, EstablishedAddress};
+use namada::core::address::{Address, EstablishedAddress};
 use namada::core::chain::ChainId;
 use namada::core::dec::Dec;
 use namada::core::key::{
@@ -81,7 +81,7 @@ fn get_tx_args(use_device: bool) -> TxArgs {
         wallet_alias_force: false,
         fee_amount: None,
         wrapper_fee_payer: None,
-        fee_token: nam(),
+        fee_token: genesis_fee_token_address(),
         fee_unshield: None,
         gas_limit: Default::default(),
         expiration: None,
@@ -120,13 +120,13 @@ fn get_tx_to_sign(tag: impl AsRef<str>, data: impl BorshSerialize) -> Tx {
         salt: [0; 8],
         data: data.serialize_to_vec(),
     });
-    let pk = get_sentinel_pubkey();
+    let fee_payer = genesis_fee_payer_pk();
     tx.add_wrapper(
         Fee {
             amount_per_gas_unit: DenominatedAmount::native(0.into()),
-            token: Address::from(&pk),
+            token: genesis_fee_token_address(),
         },
-        pk,
+        fee_payer,
         Default::default(),
         Default::default(),
         None,
@@ -134,10 +134,15 @@ fn get_tx_to_sign(tag: impl AsRef<str>, data: impl BorshSerialize) -> Tx {
     tx
 }
 
-/// Get a dummy public key.
+/// Get a dummy public key for a fee payer - there are no fees for genesis tx
 #[inline]
-fn get_sentinel_pubkey() -> common::PublicKey {
+fn genesis_fee_payer_pk() -> common::PublicKey {
     common::SecretKey::Ed25519(ed25519::SigScheme::from_bytes([0; 32])).ref_to()
+}
+
+/// Dummy genesis fee token address - there are no fees for genesis tx
+fn genesis_fee_token_address() -> Address {
+    Address::from(&genesis_fee_payer_pk())
 }
 
 pub struct GenesisValidatorData {
@@ -741,7 +746,7 @@ impl<T> Signed<T> {
             account_public_keys_map: Some(pks.iter().cloned().collect()),
             public_keys: pks.clone(),
             threshold,
-            fee_payer: get_sentinel_pubkey(),
+            fee_payer: genesis_fee_payer_pk(),
         };
 
         let mut tx = self.data.tx_to_sign();
@@ -769,7 +774,7 @@ impl<T> Signed<T> {
                 _parts: HashSet<namada_sdk::signing::Signable>,
                 _user: (),
             ) -> Result<Tx, namada_sdk::error::Error> {
-                if pubkey == get_sentinel_pubkey() {
+                if pubkey == genesis_fee_payer_pk() {
                     Ok(tx)
                 } else {
                     Err(namada_sdk::error::Error::Other(format!(
