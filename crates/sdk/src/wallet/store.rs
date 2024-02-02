@@ -310,7 +310,8 @@ impl Store {
             .unwrap_or_else(|| Address::Implicit(ImplicitAddress(pkh.clone())));
         if !force {
             if self.pkhs.contains_key(&pkh) {
-                println!("The key already exists.");
+                let alias = self.pkhs.get(&pkh).unwrap();
+                println!("The key already exists with alias {}", alias);
                 return None;
             } else if let Some(alias) = self.addresses.get_by_right(&address) {
                 println!(
@@ -324,7 +325,7 @@ impl Store {
 
         // abort if the alias is reserved
         if Alias::is_reserved(&alias).is_some() {
-            println!("The alias {} is reserved", alias);
+            println!("The alias {} is reserved.", alias);
             return None;
         }
 
@@ -371,7 +372,7 @@ impl Store {
     ) -> Option<Alias> {
         // abort if the alias is reserved
         if Alias::is_reserved(&alias).is_some() {
-            println!("The alias {} is reserved", alias);
+            println!("The alias {} is reserved.", alias);
             return None;
         }
         // abort if the alias is empty
@@ -412,7 +413,7 @@ impl Store {
     ) -> Option<Alias> {
         // abort if the alias is reserved
         if Alias::is_reserved(&alias).is_some() {
-            println!("The alias {} is reserved", alias);
+            println!("The alias {} is reserved.", alias);
             return None;
         }
 
@@ -449,7 +450,8 @@ impl Store {
             .unwrap_or_else(|| Address::Implicit(ImplicitAddress(pkh.clone())));
         if !force {
             if self.pkhs.contains_key(&pkh) {
-                println!("The key already exists.");
+                let alias = self.pkhs.get(&pkh).unwrap();
+                println!("The key already exists with alias {}", alias);
                 return None;
             } else if let Some(alias) = self.addresses.get_by_right(&address) {
                 println!(
@@ -496,7 +498,7 @@ impl Store {
     ) -> Option<Alias> {
         // abort if the alias is reserved
         if Alias::is_reserved(&alias).is_some() {
-            println!("The alias {} is reserved", alias);
+            println!("The alias {} is reserved.", alias);
             return None;
         }
 
@@ -534,7 +536,7 @@ impl Store {
     ) -> Option<Alias> {
         // abort if the alias is reserved
         if Alias::is_reserved(&alias).is_some() {
-            println!("The alias {} is reserved", alias);
+            println!("The alias {} is reserved.", alias);
             return None;
         }
         // abort if the address already exists in the wallet
