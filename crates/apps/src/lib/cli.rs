@@ -501,6 +501,8 @@ pub mod cmds {
         KeyAddrFind(WalletFindKeysAddresses),
         /// Key export
         KeyExport(WalletExportKey),
+        /// Key convert
+        KeyConvert(WalletConvertKey),
         /// Key import
         KeyImport(WalletImportKey),
         /// Key / address add
@@ -517,6 +519,7 @@ pub mod cmds {
                 .subcommand(WalletListKeysAddresses::def())
                 .subcommand(WalletFindKeysAddresses::def())
                 .subcommand(WalletExportKey::def())
+                .subcommand(WalletConvertKey::def())
                 .subcommand(WalletImportKey::def())
                 .subcommand(WalletAddKeyAddress::def())
                 .subcommand(WalletRemoveKeyAddress::def())
@@ -529,6 +532,7 @@ pub mod cmds {
             let key_addr_list = SubCmd::parse(matches).map(Self::KeyAddrList);
             let key_addr_find = SubCmd::parse(matches).map(Self::KeyAddrFind);
             let export = SubCmd::parse(matches).map(Self::KeyExport);
+            let convert = SubCmd::parse(matches).map(Self::KeyConvert);
             let import = SubCmd::parse(matches).map(Self::KeyImport);
             let key_addr_add = SubCmd::parse(matches).map(Self::KeyAddrAdd);
             let key_addr_remove =
@@ -538,6 +542,7 @@ pub mod cmds {
                 .or(key_addr_list)
                 .or(key_addr_find)
                 .or(export)
+                .or(convert)
                 .or(import)
                 .or(key_addr_add)
                 .or(key_addr_remove)
@@ -701,6 +706,26 @@ pub mod cmds {
                      a file.",
                 )
                 .add_args::<args::KeyExport>()
+        }
+    }
+
+    /// Export key to a file
+    #[derive(Clone, Debug)]
+    pub struct WalletConvertKey(pub args::KeyConvert);
+
+    impl SubCmd for WalletConvertKey {
+        const CMD: &'static str = "convert";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| (Self(args::KeyConvert::parse(matches))))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Convert to tendermint priv_validator_key.json with your consensus key alias")
+                .add_args::<args::KeyConvert>()
         }
     }
 
@@ -6570,6 +6595,19 @@ pub mod args {
     }
 
     impl Args for KeyExport {
+        fn parse(matches: &ArgMatches) -> Self {
+            let alias = ALIAS.parse(matches);
+            Self { alias }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                ALIAS.def().help("The alias of the key you wish to export."),
+            )
+        }
+    }
+
+    impl Args for KeyConvert {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
             Self { alias }
