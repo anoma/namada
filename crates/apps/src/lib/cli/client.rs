@@ -752,6 +752,15 @@ impl CliApi {
                 Utils::SignGenesisTxs(SignGenesisTxs(args)) => {
                     utils::sign_genesis_tx(global_args, args).await
                 }
+                Utils::CreateOnlineProposalJson(CreateOnlineProposalJson(
+                    args,
+                )) => {
+                    utils::create_online_governance_proposal_json(
+                        global_args,
+                        args,
+                    )
+                    .await
+                }
             },
         }
         Ok(())

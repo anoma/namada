@@ -2069,6 +2069,7 @@ pub mod cmds {
         ValidateGenesisTemplates(ValidateGenesisTemplates),
         TestGenesis(TestGenesis),
         SignGenesisTxs(SignGenesisTxs),
+        CreateOnlineProposalJson(CreateOnlineProposalJson),
     }
 
     impl SubCmd for Utils {
@@ -2362,6 +2363,28 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Sign genesis transaction(s).")
                 .add_args::<args::SignGenesisTxs>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct CreateOnlineProposalJson(pub args::CreateOnlineProposalJson);
+
+    impl SubCmd for CreateOnlineProposalJson {
+        const CMD: &'static str = "create-proposal-json";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                Self(args::CreateOnlineProposalJson::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Create a template json file for the initialization of an \
+                     online governance proposal.",
+                )
+                .add_args::<args::CreateOnlineProposalJson>()
         }
     }
 
@@ -3019,10 +3042,16 @@ pub mod args {
         DefaultFn(|| PortId::from_str("transfer").unwrap()),
     );
     pub const PRE_GENESIS: ArgFlag = flag("pre-genesis");
+    pub const PROPOSAL_AUTHOR: Arg<Address> = arg("author");
+    pub const PROPOSAL_DATA_FILENAME: Arg<String> =
+        arg("proposal-data-filename");
     pub const PROPOSAL_ETH: ArgFlag = flag("eth");
     pub const PROPOSAL_PGF_STEWARD: ArgFlag = flag("pgf-stewards");
     pub const PROPOSAL_PGF_FUNDING: ArgFlag = flag("pgf-funding");
     pub const PROPOSAL_OFFLINE: ArgFlag = flag("offline");
+    pub const PROPOSAL_VOTING_START: Arg<Epoch> = arg("voting-start-epoch");
+    pub const PROPOSAL_VOTING_END: Arg<Epoch> = arg("voting-end-epoch");
+    pub const PROPOSAL_GRACE_EPOCH: Arg<Epoch> = arg("grace-epoch");
     pub const PROTOCOL_KEY: ArgOpt<WalletPublicKey> = arg_opt("protocol-key");
     pub const PRE_GENESIS_PATH: ArgOpt<PathBuf> = arg_opt("pre-genesis-path");
     pub const PUBLIC_KEY: Arg<WalletPublicKey> = arg("public-key");
@@ -7083,6 +7112,74 @@ pub mod args {
                 "Derive an address and public key from the seed stored on the \
                  connected hardware wallet.",
             ))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct CreateOnlineProposalJson {
+        pub path: PathBuf,
+        pub output_file: String,
+        pub author: Address,
+        pub voting_start_epoch: Epoch,
+        pub voting_end_epoch: Epoch,
+        pub grace_epoch: Epoch,
+        pub is_pgf_stewards: bool,
+        pub is_pgf_funding: bool,
+    }
+
+    impl Args for CreateOnlineProposalJson {
+        fn parse(matches: &ArgMatches) -> Self {
+            let path = PATH.parse(matches);
+            let output_file = PROPOSAL_DATA_FILENAME.parse(matches);
+            let author = PROPOSAL_AUTHOR.parse(matches);
+            let voting_start_epoch = PROPOSAL_VOTING_START.parse(matches);
+            let voting_end_epoch = PROPOSAL_VOTING_END.parse(matches);
+            let grace_epoch = PROPOSAL_GRACE_EPOCH.parse(matches);
+            let is_pgf_stewards = PROPOSAL_PGF_STEWARD.parse(matches);
+            let is_pgf_funding = PROPOSAL_PGF_FUNDING.parse(matches);
+            Self {
+                path,
+                output_file,
+                author,
+                voting_start_epoch,
+                voting_end_epoch,
+                grace_epoch,
+                is_pgf_stewards,
+                is_pgf_funding,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                PATH.def()
+                    .help("Path to the proposal TOML file to be converted."),
+            )
+            .arg(PROPOSAL_DATA_FILENAME.def().help(
+                "The name of the output file. The file will be saved in the \
+                 current working directory.",
+            ))
+            .arg(
+                PROPOSAL_OFFLINE
+                    .def()
+                    .help(
+                        "Toggle to create a proposal without fetching the \
+                         current chain state.",
+                    )
+                    .conflicts_with_all([
+                        PROPOSAL_PGF_FUNDING.name,
+                        PROPOSAL_PGF_STEWARD.name,
+                    ]),
+            )
+            .arg(
+                PROPOSAL_PGF_STEWARD
+                    .def()
+                    .help("Toggle to create a proposal for the PGF stewards."),
+            )
+            .arg(
+                PROPOSAL_PGF_FUNDING
+                    .def()
+                    .help("Toggle to create a proposal for the PGF funding."),
+            )
         }
     }
 }

@@ -1149,6 +1149,124 @@ pub async fn sign_genesis_tx(
     }
 }
 
+/// Create a template json file for a governance proposal
+pub async fn create_online_governance_proposal_json(
+    global_args: args::Global,
+    args::CreateOnlineProposalJson {
+        path,
+        output_file,
+        is_pgf_stewards,
+        is_pgf_funding,
+        author,
+        voting_start_epoch,
+        voting_end_epoch,
+        grace_epoch,
+        // code: Option<Vec<u8>>,
+    }: args::CreateOnlineProposalJson,
+) {
+    let json = if is_pgf_stewards {
+        json!(
+            {
+                "proposal": {
+                "id": "Arbitrary",
+                "content": {
+                    "title": "Text",
+                    "authors": "Text",
+                    "discussions-to": "URL",
+                    "created": "YYYY--DDTHH:MM:SSZ",
+                    "license": "<insert-license>",
+                    "abstract": "Text",
+                    "motivation": "Text",
+                    "details": "Text",
+                    "requires": "Number"
+                },
+                "author": author,
+                "voting_start_epoch": voting_start_epoch,
+                "voting_end_epoch": voting_end_epoch,
+                "grace_epoch": grace_epoch,
+                },
+                "data": {
+                    "add": "address",
+                    "remove": ["address1", "address2"]
+                }
+            }
+        )
+    } else if is_pgf_funding {
+        json!(
+            {
+                "proposal": {
+                "id": "Arbitrary",
+                "content": {
+                    "title": "Text",
+                    "authors": "Text",
+                    "discussions-to": "URL",
+                    "created": "YYYY--DDTHH:MM:SSZ",
+                    "license": "<insert-license>",
+                    "abstract": "Text",
+                    "motivation": "Text",
+                    "details": "Text",
+                    "requires": "Number"
+                },
+                "author": author,
+                "voting_start_epoch": voting_start_epoch,
+                "voting_end_epoch": voting_end_epoch,
+                "grace_epoch": grace_epoch,
+                },
+                "data": {
+                    "continuous": [
+                        {
+                            "target": {
+                                "amount": "num (remove quotations)",
+                                "address": "address1"
+                            },
+                            "action": "add"
+                        },
+                        {
+                            "target": {
+                                "amount": "num (remove quotations)",
+                                "address": "address2"
+                            },
+                            "action": "add"
+                        }
+                    ],
+                    "retro": [
+                        {
+                            "target": {
+                                "amount": "num (remove quotations)",
+                                "address": "address3"
+                            },
+                        }
+                    ]
+                }
+            }
+        )
+    } else {
+        json!(
+            {
+                "proposal": {
+                "id": "Arbitrary",
+                "content": {
+                    "title": "Text",
+                    "authors": "Text",
+                    "discussions-to": "URL",
+                    "created": "YYYY--DDTHH:MM:SSZ",
+                    "license": "<insert-license>",
+                    "abstract": "Text",
+                    "motivation": "Text",
+                    "details": "Text",
+                    "requires": "Number"
+                },
+                "author": author,
+                "voting_start_epoch": voting_start_epoch,
+                "voting_end_epoch": voting_end_epoch,
+                "grace_epoch": grace_epoch,
+                },
+                "data": "TODO-ADD-DATA-IF-NEEDED"
+            }
+        )
+    };
+}
+
 /// Add a spinning wheel to a message for long running commands.
 /// Can be turned off for E2E tests by setting the `REDUCED_CLI_PRINTING`
 /// environment variable.
