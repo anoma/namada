@@ -25,8 +25,8 @@ use sha2::Digest as Sha2Digest;
 use thiserror::Error;
 use token::storage_key::{
     balance_key, is_any_shielded_action_balance_key, is_masp_allowed_key,
-    is_masp_key, is_masp_nullifier_key, is_masp_tx_pin_key,
-    masp_commitment_anchor_key, masp_commitment_tree_key,
+    is_masp_commitment_anchor_key, is_masp_key, is_masp_nullifier_key,
+    is_masp_tx_pin_key, masp_commitment_anchor_key, masp_commitment_tree_key,
     masp_convert_anchor_key, masp_nullifier_key,
 };
 use token::Amount;
@@ -135,6 +135,7 @@ where
     // the tree and anchor in storage
     fn valid_note_commitment_update(
         &self,
+        keys_changed: &BTreeSet<Key>,
         transaction: &Transaction,
     ) -> Result<bool> {
         // Check that the merkle tree in storage has been correctly updated with
@@ -169,6 +170,35 @@ where
         if previous_tree != post_tree {
             tracing::debug!("The note commitment tree was incorrectly updated");
             return Ok(false);
+        }
+
+        let expected_anchor_key =
+            token::storage_key::masp_commitment_anchor_key(post_tree.root());
+        let changed_anchor_keys: Vec<_> = keys_changed
+            .iter()
+            .filter(|key| is_masp_commitment_anchor_key(key))
+            .collect();
+        // Check that at most one anchor was modified, the anchor is indeed
+        // committed (no temp write and no delete), it is the expected
+        // one and carries no associated data (the latter not
+        // strictly necessary for validation, but we don't expect any
+        // value for this key anyway)
+        match changed_anchor_keys.len() {
+            0 => (),
+            1 => {
+                if changed_anchor_keys.first().unwrap() != &&expected_anchor_key
+                {
+                    tracing::debug!(
+                        "The masp transaction wrote an unexpected anchor key"
+                    );
+                    return Ok(false);
+                }
+            }
+            _ => return Ok(false),
+        }
+        match self.ctx.read_bytes_post(&expected_anchor_key)? {
+            Some(value) if value.is_empty() => (),
+            _ => return Ok(false),
         }
 
         Ok(true)
@@ -588,7 +618,7 @@ where
 
         // The transaction must correctly update the note commitment tree
         // in storage with the new output descriptions
-        if !self.valid_note_commitment_update(&shielded_tx)? {
+        if !self.valid_note_commitment_update(keys_changed, &shielded_tx)? {
             return Ok(false);
         }
 

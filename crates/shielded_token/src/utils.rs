@@ -7,7 +7,8 @@ use namada_core::types::storage::IndexedTx;
 use namada_storage::{Error, Result, StorageRead, StorageWrite};
 
 use crate::storage_key::{
-    masp_commitment_tree_key, masp_nullifier_key, masp_pin_tx_key,
+    masp_commitment_anchor_key, masp_commitment_tree_key, masp_nullifier_key,
+    masp_pin_tx_key,
 };
 
 // Writes the nullifiers of the provided masp transaction to storage
@@ -50,7 +51,9 @@ pub fn update_note_commitment_tree(
                     })?;
             }
 
+            let anchor_key = masp_commitment_anchor_key(commitment_tree.root());
             ctx.write(&tree_key, commitment_tree)?;
+            ctx.write(&anchor_key, ())?;
         }
     }
 

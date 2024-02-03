@@ -1,8 +1,6 @@
 //! Implementation of the `FinalizeBlock` ABCI++ method for the Shell
 
 use data_encoding::HEXUPPER;
-use masp_primitives::merkle_tree::CommitmentTree;
-use masp_primitives::sapling::Node;
 use namada::governance::pgf::inflation as pgf_inflation;
 use namada::ledger::events::EventType;
 use namada::ledger::gas::{GasMetering, TxGasMeter};
@@ -13,10 +11,7 @@ use namada::proof_of_stake::storage::{
     write_last_block_proposer_address,
 };
 use namada::state::wl_storage::WriteLogAndStorage;
-use namada::state::write_log::StorageModification;
-use namada::state::{
-    ResultExt, StorageRead, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY,
-};
+use namada::state::{StorageRead, EPOCH_SWITCH_BLOCKS_DELAY};
 use namada::token::conversion::update_allowed_conversions;
 use namada::tx::data::protocol::ProtocolTxType;
 use namada::types::key::tm_raw_hash_to_string;
@@ -598,19 +593,6 @@ where
 
         tracing::info!("{}", stats);
         tracing::info!("{}", stats.format_tx_executed());
-
-        // Update the MASP commitment tree anchor if the tree was updated
-        let tree_key = token::storage_key::masp_commitment_tree_key();
-        if let Some(StorageModification::Write { value }) =
-            self.wl_storage.write_log.read(&tree_key).0
-        {
-            let updated_tree = CommitmentTree::<Node>::try_from_slice(value)
-                .into_storage_result()?;
-            let anchor_key = token::storage_key::masp_commitment_anchor_key(
-                updated_tree.root(),
-            );
-            self.wl_storage.write(&anchor_key, ())?;
-        }
 
         if update_for_tendermint {
             self.update_epoch(&mut response);

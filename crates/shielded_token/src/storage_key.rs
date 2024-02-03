@@ -85,8 +85,13 @@ pub fn is_masp_allowed_key(key: &storage::Key) -> bool {
         [
             DbKeySeg::AddressSeg(addr),
             DbKeySeg::StringSeg(key),
-            DbKeySeg::StringSeg(_nullifier),
-        ] if *addr == address::MASP && key == MASP_NULLIFIERS_KEY => true,
+            DbKeySeg::StringSeg(_value),
+        ] if *addr == address::MASP
+            && (key == MASP_NULLIFIERS_KEY
+                || key == MASP_NOTE_COMMITMENT_ANCHOR_PREFIX) =>
+        {
+            true
+        }
         _ => false,
     }
 }
@@ -104,8 +109,17 @@ pub fn is_masp_nullifier_key(key: &storage::Key) -> bool {
     matches!(&key.segments[..],
     [DbKeySeg::AddressSeg(addr),
              DbKeySeg::StringSeg(prefix),
-             ..
+                DbKeySeg::StringSeg(_nullifier)
         ] if *addr == address::MASP && prefix == MASP_NULLIFIERS_KEY)
+}
+
+/// Check if the given storage key is a masp commtimentr tree anchor key
+pub fn is_masp_commitment_anchor_key(key: &storage::Key) -> bool {
+    matches!(&key.segments[..],
+    [DbKeySeg::AddressSeg(addr), 
+            DbKeySeg::StringSeg(prefix), 
+            DbKeySeg::StringSeg(_anchor)
+        ] if *addr == address::MASP && prefix == MASP_NOTE_COMMITMENT_ANCHOR_PREFIX)
 }
 
 /// Get a key for a masp pin
