@@ -68,7 +68,7 @@ use rand_core::{CryptoRng, OsRng, RngCore};
 use ripemd::Digest as RipemdDigest;
 use sha2::Digest;
 use thiserror::Error;
-use token::storage_key::is_any_shielded_action_balance_key;
+use token::storage_key::{balance_key, is_any_shielded_action_balance_key};
 use token::Amount;
 
 #[cfg(feature = "testing")]
@@ -461,14 +461,26 @@ pub trait ShieldedUtils:
     /// Get a MASP transaction prover
     fn local_tx_prover(&self) -> LocalTxProver;
 
-    /// Load up the currently saved ShieldedContext
+    /// Load up the currently confirmed saved ShieldedContext
     async fn load<U: ShieldedUtils + MaybeSend>(
         &self,
         ctx: &mut ShieldedContext<U>,
     ) -> std::io::Result<()>;
 
-    /// Save the given ShieldedContext for future loads
+    /// Load up the currently saved speculative ShieldedContext
+    async fn load_speculative<U: ShieldedUtils + MaybeSend>(
+        &self,
+        ctx: &mut ShieldedContext<U>,
+    ) -> std::io::Result<()>;
+
+    /// Save the given confirmed ShieldedContext for future loads
     async fn save<U: ShieldedUtils + MaybeSync>(
+        &self,
+        ctx: &ShieldedContext<U>,
+    ) -> std::io::Result<()>;
+
+    /// Save the given speculative ShieldedContext for future loads
+    async fn save_speculative<U: ShieldedUtils + MaybeSync>(
         &self,
         ctx: &ShieldedContext<U>,
     ) -> std::io::Result<()>;
@@ -575,6 +587,16 @@ impl IntoIterator for Unscanned {
     }
 }
 
+#[derive(BorshSerialize, BorshDeserialize, Debug)]
+/// The possible sync states of the shielded context
+pub enum ContextSyncStatus {
+    /// The context contains only data that has been confirmed by the protocol
+    Confirmed,
+    /// The context contains that that has not yet been confirmed by the
+    /// protocol and could end up being invalid
+    Speculative,
+}
+
 /// Represents the current state of the shielded pool from the perspective of
 /// the chosen viewing keys.
 #[derive(BorshSerialize, BorshDeserialize, Debug)]
@@ -612,6 +634,8 @@ pub struct ShieldedContext<U: ShieldedUtils> {
     pub tx_note_map: BTreeMap<IndexedTx, usize>,
     /// A cache of fetched indexed txs.
     pub unscanned: Unscanned,
+    /// The sync state of the context
+    pub sync_status: ContextSyncStatus,
 }
 
 /// Default implementation to ease construction of TxContexts. Derive cannot be
@@ -634,6 +658,7 @@ impl<U: ShieldedUtils + Default> Default for ShieldedContext<U> {
             asset_types: HashMap::default(),
             vk_map: HashMap::default(),
             unscanned: Default::default(),
+            sync_status: ContextSyncStatus::Confirmed,
         }
     }
 }
@@ -642,12 +667,51 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     /// Try to load the last saved shielded context from the given context
     /// directory. If this fails, then leave the current context unchanged.
     pub async fn load(&mut self) -> std::io::Result<()> {
-        self.utils.clone().load(self).await
+        match self.sync_status {
+            ContextSyncStatus::Confirmed => {
+                eprintln!("LOADIGN CONFIRMED CONTEXT"); //FIXME: remove
+                self.utils.clone().load(self).await
+            }
+            ContextSyncStatus::Speculative => {
+                eprintln!("LOADING SPECULATIVE CONTEXT"); //FIXME: remove
+                self.utils.clone().load_speculative(self).await
+            }
+        }
     }
 
-    /// Save this shielded context into its associated context directory
+    /// Try to load the last saved confirmed shielded context from the given
+    /// context directory. If this fails, then leave the current context
+    /// unchanged.
+    pub async fn load_confirmed(&mut self) -> std::io::Result<()> {
+        self.utils.clone().load(self).await?;
+        // self.sync_status = ContextSyncStatus::Confirmed; //FIXME: change this directly inside the function we call here above
+
+        Ok(())
+    }
+
+    // FIXME: what' the first state that we load when we start this thing? The
+    // confirmed or the speculative FIXME: copy this logic in the docstring
+    // of the ContextSync enum FIXME: the logic should be the following:
+    //    - save are fine, I just save whatever state I am in and if it is
+    //      confirmed than I also delete the speculative one if available
+    //    - load, I should try to load the speculative state all the times and
+    //      fallback to the confirmed one?
+    //    - Only in fetching I should always load the confirmed state
+    //    - At startup if I have a speculative file I load that one, otherwise I
+    //      fallback to the confirmed one
+
+    //FIXME: probably I query the conversions everytime so the speculative context works anyway
+
+    /// Save this shielded context into its associated context directory. If the
+    /// state to be saved is confirmed than also delete the speculative one (if
+    /// available)
     pub async fn save(&self) -> std::io::Result<()> {
-        self.utils.save(self).await
+        match self.sync_status {
+            ContextSyncStatus::Confirmed => self.utils.save(self).await,
+            ContextSyncStatus::Speculative => {
+                self.utils.save_speculative(self).await
+            }
+        }
     }
 
     /// Update the merkle tree of witnesses the first time we
@@ -672,9 +736,27 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     Error::Other("note commitment tree is full".to_string())
                 })?;
             }
+            //FIXME: probably need to review validation and update the merkle root for every masp transaction
+            //FIXME: No wait, I still belive this should work even with the current protocol logic of updating the anchor only once per block
+            //FIXME: I probably just need to construct the wrapper before the inner, at the moment I'm switching them but than the wrapper is executed first and it carries invalida data (wrong commitment anchor)
+            //FIXME: also because an unshielding does not update the commitment tree
+            // if let ContextSyncStatus::Confirmed = self.sync_status {
+            //FIXME: so in here we effectively update the merkle tree with ALL the notes, not just the ones I can decrypt
+
+            //FIXME: BIG PROBLEM, if I use the speculative context I produce some new output descriptions that I cache for usage. The problem is that I don't have the merkle tree for these new notes and therefore I don't have the anchor and a valid markle path, because to have those I would need to fetch all the notes (even the ones from the other transactions) and reconstruct the merkle tree locally to produce a valid merkle path. SO I would still need to fetch data from the blockchain in the end
+            //FIXME: what I can do is to just invalidate the spend descriptions I've used so that if I have more than one I can use the others, so in some cases I will still be able to construct a valid transaction, but not always unfortunatly
+
+            //FIXME: regarding the choice to not update the commitment tree anchor with every transaction:
+            // - for fee unshielding the one above is the only solution, because the inner is executed in the next block, so unless the previous block had only my transaction, I would still need to fetch data (which is impossible), actually is this the case? NO it would actually work, I would just need to refer to the merkle tree of my fee unshielding!!
+            // - for sequential masp transaction in a same block (no fee unshielding) it's the same thing, if I use the speculative notes than I don't have a valid anchor and merkle path
+
+            //FIXME: to conclude, if I want to use the speculative notes I need to update che ledger to update the anchor with every transaction, because otherwise the notes that I used are still unkown to the ledger in the case of sequential txs and have an invalid anchor in case of fee unshielding. I also need to revert the construciton of the wrapper and the inner, must construct the inner first and wrapper after
+
+            //FIXME: for the conversion tree, at the epoch boundary that changes and if I need to use conversions in my txs those would be invalid, but I could query just the new anchor without querying everything else and still preserve my specyulative context. I could do that if I see that the transactio nfails because of epoch
             self.tree.append(node).map_err(|()| {
                 Error::Other("note commitment tree is full".to_string())
             })?;
+            // }
             // Finally, make it easier to construct merkle paths to this new
             // note
             let witness = IncrementalWitness::<Node>::from_tree(&self.tree);
@@ -696,6 +778,26 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         fvks: &[ViewingKey],
     ) -> Result<(), Error> {
         // add new viewing keys
+        //FIXME: reload alwyas cause I could have parallel clients!
+        // if let ContextSyncStatus::Speculative = self.sync_status {
+        // Reload the state from file to get the last confirmed state and
+        // discard any speculative data, we cannot fetch on top of a
+        // speculative state
+        // eprintln!("IN FETCH, RELOADING CONFIRMED FROM SPECULATIVE"); //FIXME: remove
+        // Always reload the confirmed context or initialize a new one if not found
+        if self.load_confirmed().await.is_err() {
+            // Initialize a default context if we couldn't load a valid one
+            // from storage
+            *self = Self {
+                utils: std::mem::take(&mut self.utils),
+                ..Default::default()
+            };
+        }
+        // } else {
+        //     //FIXME :remove else branch
+        //     eprintln!("IN FETCH, FOUND CONFIRMED STATE"); //FIXME: remove
+        // }
+
         for esk in sks {
             let vk = to_viewing_key(esk).vk;
             self.vk_heights.entry(vk).or_default();
@@ -703,10 +805,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         for vk in fvks {
             self.vk_heights.entry(*vk).or_default();
         }
-        self.utils
-            .save(self)
-            .await
-            .map_err(|e| Error::Other(e.to_string()))?;
+        let _ = self.save().await;
         let native_token = query_native_token(client).await?;
         // the latest block height which has been added to the witness Merkle
         // tree
@@ -729,10 +828,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             .await?,
         );
         // persist the cache in case of interruptions.
-        self.utils
-            .save(self)
-            .await
-            .map_err(|e| Error::Other(e.to_string()))?;
+        let _ = self.save().await;
 
         let txs = logger.scan(self.unscanned.clone());
         for (indexed_tx, (epoch, tx, stx)) in txs {
@@ -753,15 +849,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     vk,
                     native_token.clone(),
                 )?;
-                *h = Some(indexed_tx);
+                *h = Some(indexed_tx); //FIXME: probably this is the part I'm missing in prefetch
             }
             // possibly remove unneeded elements from the cache.
             self.unscanned.scanned(&indexed_tx);
             std::mem::swap(&mut vk_heights, &mut self.vk_heights);
-            self.utils
-                .save(self)
-                .await
-                .map_err(|e| Error::Other(e.to_string()))?;
+            let _ = self.save().await;
         }
 
         Ok(())
@@ -1594,7 +1687,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let mut val_acc = I128Sum::zero();
         let mut normed_val_acc = I128Sum::zero();
         let mut notes = Vec::new();
-        // Retrieve the notes that can be spent by this key
+        eprintln!(
+            "BEFORE LOOP IN COLLECT UNSPENT. POS MASP: {:#?}",
+            self.pos_map
+        ); //FIXME: remove
+           //FIXME: error here, I never enter the Some branch, am I passing the wrong viewing key? No the pos map is actually empty!!!
+           // Retrieve the notes that can be spent by this key
         if let Some(avail_notes) = self.pos_map.get(vk).cloned() {
             for note_idx in &avail_notes {
                 // No more transaction inputs are required once we have met
@@ -1606,6 +1704,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 if self.spents.contains(note_idx) {
                     continue;
                 }
+                //FIXME: the masp vp must verify the merkle path somewhere oterwise it's useless, verifying only the merkle root is only half of the check
                 // Get note, merkle path, diversifier associated with this ID
                 let note = *self.note_map.get(note_idx).ok_or_else(|| {
                     Error::Other(format!("Unable to get note {note_idx}"))
@@ -1642,6 +1741,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     normed_val_acc += normed_contr;
                     // Commit the conversions that were used to exchange
                     conversions = proposed_convs;
+                    //FIXME: problem here, I take the merkle path from the witness map but this is invalid if we are in a speculative context
                     let merkle_path = self
                         .witness_map
                         .get(note_idx)
@@ -1664,6 +1764,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                             ))
                         })?;
                     // Commit this note to our transaction
+                    eprintln!("FOUND UNSPENT NOTE: {:#?}", note); //FIXME: remove
                     notes.push((*diversifier, note, merkle_path));
                 }
             }
@@ -1926,7 +2027,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         {
             // Load the current shielded context given the spending key we
             // possess
+            //FIXME: it's more complicated than this. I could have multiple parallels clients loading and storing contexts in differents status (speculative or confirmed). So what should I do?
             let mut shielded = context.shielded_mut().await;
+            eprintln!("BEFORE CONTEXT LOAD IN GEN SHIELDD"); //FIXME: remove
+                                                             //FIXME: really need to reload here???
             let _ = shielded.load().await;
         }
         // Determine epoch in which to submit potential shielded transaction
@@ -2024,6 +2128,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             amount
         };
 
+        //FIXME: does the speculative context work across epochs? IN this case the protocol updates the conversion tree root and therefore I'm not sure the speculative context can still produce valid transactions, verify it
+        //FIXME: maybe we can just query the updated conversion tree without fetching everything else?
         // If there are shielded inputs
         if let Some(sk) = spending_key {
             // Locate unspent notes that can help us meet the transaction amount
@@ -2144,7 +2250,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 // We want to take at most the remaining quota for the
                 // current denomination to the receiver
                 let contr = std::cmp::min(*rem_amount as u128, val) as u64;
-                // Make transaction output tied to thee currentt token,
+                // Make transaction output tied to the current token,
                 // denomination, and epoch.
                 if let Some(pa) = payment_address {
                     // If there is a shielded output
@@ -2245,28 +2351,27 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
         // To speed up integration tests, we can save and load proofs
         #[cfg(feature = "testing")]
-        let load_or_save = if let Ok(masp_proofs) =
-            env::var(ENV_VAR_MASP_TEST_PROOFS)
-        {
-            let parsed = match masp_proofs.to_ascii_lowercase().as_str() {
-                "load" => LoadOrSaveProofs::Load,
-                "save" => LoadOrSaveProofs::Save,
-                env_var => Err(Error::Other(format!(
+        let load_or_save =
+            if let Ok(masp_proofs) = env::var(ENV_VAR_MASP_TEST_PROOFS) {
+                let parsed = match masp_proofs.to_ascii_lowercase().as_str() {
+                    "load" => LoadOrSaveProofs::Load,
+                    "save" => LoadOrSaveProofs::Save,
+                    env_var => Err(Error::Other(format!(
                     "Unexpected value for {ENV_VAR_MASP_TEST_PROOFS} env var. \
                      Expecting \"save\" or \"load\", but got \"{env_var}\"."
                 )))?,
-            };
-            if env::var(ENV_VAR_MASP_TEST_SEED).is_err() {
-                Err(Error::Other(format!(
+                };
+                if env::var(ENV_VAR_MASP_TEST_SEED).is_err() {
+                    Err(Error::Other(format!(
                     "Ensure to set a seed with {ENV_VAR_MASP_TEST_SEED} env \
                      var when using {ENV_VAR_MASP_TEST_PROOFS} for \
                      deterministic proofs."
                 )))?;
-            }
-            parsed
-        } else {
-            LoadOrSaveProofs::Neither
-        };
+                }
+                parsed
+            } else {
+                LoadOrSaveProofs::Neither
+            };
 
         let builder_clone = builder.clone().map_builder(WalletMap);
         #[cfg(feature = "testing")]
@@ -2325,6 +2430,22 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     BorshDeserialize::try_from_slice(&loaded_bytes)
                         .map_err(|_e| Error::Other(exp_str))?;
 
+                // Cache the generated transfer
+                let native_token = query_native_token(context.client()).await?;
+                let mut shielded_ctx = context.shielded_mut().await;
+                shielded_ctx
+                    .pre_cache_transaction(
+                        spending_key,
+                        payment_address,
+                        &loaded.masp_tx,
+                        source,
+                        target,
+                        token,
+                        epoch,
+                        native_token,
+                    )
+                    .await?;
+
                 Ok(Some(loaded))
             } else {
                 // Build and return the constructed transaction
@@ -2339,6 +2460,23 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                         .await
                         .map_err(|e| Error::Other(e.to_string()))?;
                 }
+
+                // Cache the generated transfer
+                let native_token = query_native_token(context.client()).await?;
+                let mut shielded_ctx = context.shielded_mut().await;
+                shielded_ctx
+                    .pre_cache_transaction(
+                        spending_key,
+                        payment_address,
+                        &built.masp_tx,
+                        source,
+                        target,
+                        token,
+                        epoch,
+                        native_token,
+                    )
+                    .await?;
+
                 Ok(Some(built))
             }
         }
@@ -2349,8 +2487,122 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             let built = build_transfer(
                 context.shielded().await.utils.local_tx_prover(),
             )?;
+
+            let native_token = query_native_token(context.client()).await?;
+            let mut shielded_ctx = context.shielded_mut().await;
+            shielded_ctx
+                .pre_cache_transaction(
+                    spending_key,
+                    payment_address,
+                    &built.masp_tx,
+                    source,
+                    target,
+                    token,
+                    epoch,
+                    native_token,
+                )
+                .await?;
+
             Ok(Some(built))
         }
+    }
+
+    // Updates the internal state with the data of the newly generated
+    // transaction
+    async fn pre_cache_transaction(
+        &mut self,
+        esk: Option<ExtendedSpendingKey>,
+        payment_address: Option<PaymentAddress>,
+        masp_tx: &Transaction,
+        source: &TransferSource,
+        target: &TransferTarget,
+        token: &Address,
+        epoch: Epoch,
+        native_token: Address,
+    ) -> Result<(), Error> {
+        //FIXME: somehting wrong in here, I'm not saving the data correctly because whe ntrying to construct from a speculative context it doesn't work
+        eprintln!("IN PRECACHE TRANSACTIONS"); //FIXME: remove
+                                               // Need to mock the changed balance keys
+        let mut changed_balance_keys = BTreeSet::default();
+        match (source.effective_address(), target.effective_address()) {
+            // Shielded transactions don't write balance keys
+            (MASP, MASP) => (),
+            (source, target) => {
+                changed_balance_keys.insert(balance_key(token, &source));
+                changed_balance_keys.insert(balance_key(token, &target));
+            }
+        }
+        eprintln!("PRE CACHE CHANGED KEYS: {:#?}", changed_balance_keys); //FIXME: remove
+
+        let mut vks = Vec::with_capacity(2);
+        if let Some(esk) = esk {
+            vks.push(to_viewing_key(&esk).vk);
+        }
+        //FIXME: don't do it like that, get the viewing key from the wallet which is inside the Namada contexts in gen_shielded_transfer!
+        // FIXME: clane up this, use find on iterators
+        if let Some(pa) = payment_address {
+            // Try to look for the viewing key associated to this payent address
+            // in the shielded context
+            'outer: for (vk, positions) in &self.pos_map {
+                for pos in positions {
+                    if let Some(div) = self.div_map.get(pos) {
+                        if let Some(ref p) = vk.to_payment_address(*div) {
+                            if p == &masp_primitives::sapling::PaymentAddress::from(pa) {
+                                vks.push(*vk);
+                                break 'outer;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        //FIXME: I never enter this loop!!!
+        eprintln!("ABOUT OT ITERATE ON VKS"); //FIXME: remove
+        for vk in vks {
+            eprintln!("IN ITERATE VKS: {:#?}", vk); //FIXME: RMEOVE
+                                                    //FIXME: can share this code with fetch?
+            self.vk_heights.entry(vk).or_default();
+            // This data will be discarded at the next fetch so we don't need to
+            // populate it accurately
+            let indexed_tx = self.vk_heights.get(&vk).unwrap().map_or_else(
+                || IndexedTx {
+                    height: BlockHeight::first(),
+                    index: TxIndex(0),
+                },
+                // FIXME: I should try to mock the correct block height? yes
+                |indexed| IndexedTx {
+                    height: indexed.height,
+                    index: indexed.index + 1, /* FIXME: this seems to never
+                                               * be updated, is it ok?
+                                               * Probably because I'm not
+                                               * saving the speculative
+                                               * context */
+                },
+            );
+            eprintln!("NED INDEXED TX: {:#?}", indexed_tx); //FIXME: remove
+
+            self.update_witness_map(indexed_tx, masp_tx)?;
+
+            self.scan_tx(
+                indexed_tx,
+                epoch,
+                &changed_balance_keys,
+                masp_tx,
+                &vk,
+                native_token.clone(),
+            )?;
+
+            *self.vk_heights.get_mut(&vk).unwrap() = Some(indexed_tx);
+        }
+        //FIXME: I'm probably forgetting to update vk height!
+        self.sync_status = ContextSyncStatus::Speculative;
+        // Save the speculative state for future usage
+        eprintln!("BEFORE SAVE SPECULATIVE"); //FIXME: remove
+        self.save().await.map_err(|e| Error::Other(e.to_string()))?; //FIXME: error here
+        eprintln!("AFTER SAVE SPECULATIVE"); //FIXME: remove
+
+        Ok(())
     }
 
     /// Obtain the known effects of all accepted shielded and transparent
@@ -3558,6 +3810,8 @@ pub mod fs {
     /// Shielded context file name
     const FILE_NAME: &str = "shielded.dat";
     const TMP_FILE_NAME: &str = "shielded.tmp";
+    const SPECULATIVE_FILE_NAME: &str = "speculative_shielded.dat";
+    const SPECULATIVE_TMP_FILE_NAME: &str = "speculative_shielded.tmp";
 
     #[derive(Debug, BorshSerialize, BorshDeserialize, Clone)]
     /// An implementation of ShieldedUtils for standard filesystems
@@ -3588,9 +3842,23 @@ pub mod fs {
                 );
             }
             // Finally initialize a shielded context with the supplied directory
+
+            let sync_status =
+                if std::fs::read(context_dir.join(SPECULATIVE_FILE_NAME))
+                    .is_ok()
+                {
+                    eprintln!("FOUND SPECULATIVE FILE"); //FIXME: remove
+                                                         // Load speculative state
+                    ContextSyncStatus::Speculative
+                } else {
+                    eprintln!("LOADING CONFIRMED FILE"); //FIXME: remove
+                    ContextSyncStatus::Confirmed
+                };
+
             let utils = Self { context_dir };
             ShieldedContext {
                 utils,
+                sync_status,
                 ..Default::default()
             }
         }
@@ -3606,6 +3874,8 @@ pub mod fs {
 
     #[cfg_attr(feature = "async-send", async_trait::async_trait)]
     #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
+    // FIXME: I can probably refactor everything to have the associated
+    // contextsSycn state on this trait
     impl ShieldedUtils for FsShieldedUtils {
         fn local_tx_prover(&self) -> LocalTxProver {
             if let Ok(params_dir) = env::var(ENV_VAR_MASP_PARAMS_DIR) {
@@ -3623,6 +3893,7 @@ pub mod fs {
         /// Try to load the last saved shielded context from the given context
         /// directory. If this fails, then leave the current context unchanged.
         async fn load<U: ShieldedUtils + MaybeSend>(
+            //FIXME: review the use of this!
             &self,
             ctx: &mut ShieldedContext<U>,
         ) -> std::io::Result<()> {
@@ -3638,12 +3909,34 @@ pub mod fs {
             Ok(())
         }
 
-        /// Save this shielded context into its associated context directory
+        /// Try to load the last saved speculative shielded context from the
+        /// given context directory. If this fails, then leave the
+        /// current context unchanged.
+        async fn load_speculative<U: ShieldedUtils + MaybeSend>(
+            &self,
+            ctx: &mut ShieldedContext<U>,
+        ) -> std::io::Result<()> {
+            // Try to load shielded context from file
+            let mut ctx_file =
+                File::open(self.context_dir.join(SPECULATIVE_FILE_NAME))?;
+            let mut bytes = Vec::new();
+            ctx_file.read_to_end(&mut bytes)?;
+            // Fill the supplied context with the deserialized object
+            *ctx = ShieldedContext {
+                utils: ctx.utils.clone(),
+                ..ShieldedContext::<U>::deserialize(&mut &bytes[..])?
+            };
+            Ok(())
+        }
+
+        /// Save this confirmed shielded context into its associated context
+        /// directory. At the same time, delete the speculative file if present   
         async fn save<U: ShieldedUtils + MaybeSync>(
             &self,
             ctx: &ShieldedContext<U>,
         ) -> std::io::Result<()> {
             // TODO: use mktemp crate?
+            eprintln!("IN INNER SAVE CONFIMRED!"); //FIXME: remove
             let tmp_path = self.context_dir.join(TMP_FILE_NAME);
             {
                 // First serialize the shielded context into a temporary file.
@@ -3664,7 +3957,63 @@ pub mod fs {
             // Atomically update the old shielded context file with new data.
             // Atomicity is required to prevent other client instances from
             // reading corrupt data.
-            std::fs::rename(tmp_path, self.context_dir.join(FILE_NAME))
+            std::fs::rename(tmp_path, self.context_dir.join(FILE_NAME))?;
+
+            // Remove the speculative file if present since it's state is
+            // overruled by the confirmed one we just saved
+            // let _ = std::fs::remove_file(SPECULATIVE_FILE_NAME); //FIXME: uncomment
+            //FIXME: remove block
+            if let Err(e) = std::fs::remove_file(
+                self.context_dir.join(SPECULATIVE_FILE_NAME),
+            ) {
+                eprintln!("COULD NOT REMOTE SPECULATVE FILE!: {}", e);
+            } else {
+                eprintln!("SUCCEFULY REMOVED SPECULATIVE FILE");
+            }
+
+            Ok(())
+        }
+
+        // FIXME: refactor, the functions are exactly the same, just pass the
+        // enum and modify the filename based on that
+        /// Save this speculative shielded context into its associated context
+        /// directory
+        async fn save_speculative<U: ShieldedUtils + MaybeSync>(
+            &self,
+            ctx: &ShieldedContext<U>,
+        ) -> std::io::Result<()> {
+            // TODO: use mktemp crate?
+            eprintln!("IN INNER SAVE SPECULATIVE!"); //FIXME: remove
+            let tmp_path = self.context_dir.join(SPECULATIVE_TMP_FILE_NAME);
+            {
+                // First serialize the shielded context into a temporary file.
+                // Inability to create this file implies a simultaneuous write
+                // is in progress. In this case, immediately
+                // fail. This is unproblematic because the data
+                // intended to be stored can always be re-fetched
+                // from the blockchain.
+                let mut ctx_file = OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(tmp_path.clone())?;
+                let mut bytes = Vec::new();
+                ctx.serialize(&mut bytes)
+                    .expect("cannot serialize shielded context");
+                ctx_file.write_all(&bytes[..])?;
+            }
+            // FIXME: there's an error here somewhere
+            // Atomically update the old shielded context file with new data.
+            // Atomicity is required to prevent other client instances from
+            // reading corrupt data.
+            eprintln!("BEFORE RENAME"); //FIXME: remove
+            std::fs::rename(
+                tmp_path,
+                self.context_dir.join(SPECULATIVE_FILE_NAME),
+            )?;
+            // std::fs::remove_file(tmp_path)?; //FIXME: breaks here, why? I
+            // renamed the file, why do I even delete it? FIXME: but
+            // it works for the confirmed file
+            Ok(())
         }
     }
 }

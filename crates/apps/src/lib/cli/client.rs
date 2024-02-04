@@ -1,6 +1,7 @@
 use color_eyre::eyre::Result;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::types::io::Io;
+use namada_sdk::masp::ContextSyncStatus;
 use namada_sdk::{Namada, NamadaImpl};
 
 use crate::cli;
@@ -317,6 +318,7 @@ impl CliApi {
                             .await?;
                     }
                     Sub::ShieldedSync(ShieldedSync(args)) => {
+                        eprintln!("IN SHIELDED SYNC"); //FIXME :remove
                         let client = client.unwrap_or_else(|| {
                             C::from_tendermint_address(&args.ledger_address)
                         });
@@ -338,7 +340,18 @@ impl CliApi {
                             .into_iter()
                             .map(|sk| sk.into())
                             .collect::<Vec<_>>();
-                        let _ = chain_ctx.shielded.load().await;
+                        // //FIXME: make sure this laod the confirmed one, never the speculative, it does
+                        //FIXME: if I enable this I get a stack overflow!!!
+                        //FIXME: atually I don't get the overflow anymore
+                        // let _ = chain_ctx.shielded.load_confirmed().await; //FIXME: probably unneeeded since we reload it later anyway
+                        //FIXME: remove block
+                        if let ContextSyncStatus::Confirmed =
+                            chain_ctx.shielded.sync_status
+                        {
+                            eprintln!("FOUND OCNFIRMED STATUS");
+                        } else {
+                            eprintln!("FOUND SPECULATIVE STATUS");
+                        }
                         crate::client::masp::syncing(
                             chain_ctx.shielded,
                             &client,

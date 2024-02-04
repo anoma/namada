@@ -47,6 +47,7 @@ use namada_ibc::storage::channel_key;
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
 use namada_token::storage_key::balance_key;
+use namada_token::DenominatedAmount;
 use namada_tx::data::pgf::UpdateStewardCommission;
 use namada_tx::data::{pos, ResultCode, TxResult};
 pub use namada_tx::{Signature, *};
@@ -62,7 +63,9 @@ use crate::rpc::{
     self, query_wasm_code_hash, validate_amount, InnerTxResult,
     TxBroadcastData, TxResponse,
 };
-use crate::signing::{self, SigningTxData, TxSourcePostBalance};
+use crate::signing::{
+    self, validate_fee_and_gen_unshield, SigningTxData, TxSourcePostBalance,
+};
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_rpc::error::Error as RpcError;
 use crate::wallet::WalletIo;
@@ -185,14 +188,17 @@ pub async fn prepare_tx(
     context: &impl Namada,
     args: &args::Tx,
     tx: &mut Tx,
+    unshield: Option<masp_primitives::transaction::Transaction>,
+    fee_amount: DenominatedAmount,
     fee_payer: common::PublicKey,
-    tx_source_balance: Option<TxSourcePostBalance>,
 ) -> Result<()> {
     if !args.dry_run {
         let epoch = rpc::query_epoch(context.client()).await?;
 
-        signing::wrap_tx(context, tx, args, tx_source_balance, epoch, fee_payer)
-            .await
+        signing::wrap_tx(
+            context, tx, args, epoch, unshield, fee_amount, fee_payer,
+        )
+        .await
     } else {
         Ok(())
     }
@@ -286,6 +292,9 @@ pub async fn build_reveal_pk(
     let signing_data =
         signing::aux_signing_data(context, args, None, Some(public_key.into()))
             .await?;
+    let (fee_amount, _, unshield) =
+        validate_fee_and_gen_unshield(context, &args, &signing_data.fee_payer)
+            .await?;
 
     build(
         context,
@@ -293,8 +302,9 @@ pub async fn build_reveal_pk(
         args.tx_reveal_code_path.clone(),
         public_key,
         do_nothing,
+        unshield,
+        fee_amount,
         &signing_data.fee_payer,
-        None,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -348,6 +358,7 @@ pub async fn broadcast_tx(
         }
         Ok(response)
     } else {
+        eprintln!("TX NOT ADDED TO MEMPOOL"); //FIXME: remove
         Err(Error::from(TxSubmitError::TxBroadcast(RpcError::server(
             serde_json::to_string(&response).map_err(|err| {
                 Error::from(EncodingError::Serde(err.to_string()))
@@ -575,6 +586,12 @@ pub async fn build_validator_commission_change(
         default_signer,
     )
     .await?;
+    let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
+        context,
+        &tx_args,
+        &signing_data.fee_payer,
+    )
+    .await?;
 
     let epoch = rpc::query_epoch(context.client()).await?;
 
@@ -664,8 +681,9 @@ pub async fn build_validator_commission_change(
         tx_code_path.clone(),
         data,
         do_nothing,
+        unshield,
+        fee_amount,
         &signing_data.fee_payer,
-        None,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -692,6 +710,12 @@ pub async fn build_validator_metadata_change(
         tx_args,
         Some(validator.clone()),
         default_signer,
+    )
+    .await?;
+    let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
+        context,
+        &tx_args,
+        &signing_data.fee_payer,
     )
     .await?;
 
@@ -797,8 +821,9 @@ pub async fn build_validator_metadata_change(
         tx_code_path.clone(),
         data,
         do_nothing,
+        unshield,
+        fee_amount,
         &signing_data.fee_payer,
-        None,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -820,6 +845,12 @@ pub async fn build_update_steward_commission(
         tx_args,
         Some(steward.clone()),
         default_signer,
+    )
+    .await?;
+    let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
+        context,
+        &tx_args,
+        &signing_data.fee_payer,
     )
     .await?;
 
@@ -858,8 +889,9 @@ pub async fn build_update_steward_commission(
         tx_code_path.clone(),
         data,
         do_nothing,
+        unshield,
+        fee_amount,
         &signing_data.fee_payer,
-        None,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -882,6 +914,12 @@ pub async fn build_resign_steward(
         default_signer,
     )
     .await?;
+    let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
+        context,
+        &tx_args,
+        &signing_data.fee_payer,
+    )
+    .await?;
 
     if !rpc::is_steward(context.client(), steward).await && !tx_args.force {
         edisplay_line!(
@@ -900,8 +938,9 @@ pub async fn build_resign_steward(
         tx_code_path.clone(),
         steward.clone(),
         do_nothing,
+        unshield,
+        fee_amount,
         &signing_data.fee_payer,
-        None,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -922,6 +961,12 @@ pub async fn build_unjail_validator(
         tx_args,
         Some(validator.clone()),
         default_signer,
+    )
+    .await?;
+    let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
+        context,
+        &tx_args,
+        &signing_data.fee_payer,
     )
     .await?;
 
@@ -1002,8 +1047,9 @@ pub async fn build_unjail_validator(
         tx_code_path.clone(),
         validator.clone(),
         do_nothing,
+        unshield,
+        fee_amount,
         &signing_data.fee_payer,
-        None,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -1024,6 +1070,12 @@ pub async fn build_deactivate_validator(
         tx_args,
         Some(validator.clone()),
         default_signer,
+    )
+    .await?;
+    let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
+        context,
+        &tx_args,
+        &signing_data.fee_payer,
     )
     .await?;
 
@@ -1073,8 +1125,9 @@ pub async fn build_deactivate_validator(
         tx_code_path.clone(),
         validator.clone(),
         do_nothing,
+        unshield,
+        fee_amount,
         &signing_data.fee_payer,
-        None,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -1095,6 +1148,12 @@ pub async fn build_reactivate_validator(
         tx_args,
         Some(validator.clone()),
         default_signer,
+    )
+    .await?;
+    let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
+        context,
+        &tx_args,
+        &signing_data.fee_payer,
     )
     .await?;
 
@@ -1143,8 +1202,9 @@ pub async fn build_reactivate_validator(
         tx_code_path.clone(),
         validator.clone(),
         do_nothing,
+        unshield,
+        fee_amount,
         &signing_data.fee_payer,
-        None,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -1313,6 +1373,12 @@ pub async fn build_redelegation(
         default_signer,
     )
     .await?;
+    let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
+        context,
+        &tx_args,
+        &signing_data.fee_payer,
+    )
+    .await?;
 
     let data = pos::Redelegation {
         src_validator,
@@ -1327,8 +1393,9 @@ pub async fn build_redelegation(
         tx_code_path.clone(),
         data,
         do_nothing,
+        unshield,
+        fee_amount,
         &signing_data.fee_payer,
-        None,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -1351,6 +1418,12 @@ pub async fn build_withdraw(
         tx_args,
         Some(default_address),
         default_signer,
+    )
+    .await?;
+    let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
+        context,
+        &tx_args,
+        &signing_data.fee_payer,
     )
     .await?;
 
@@ -1410,8 +1483,9 @@ pub async fn build_withdraw(
         tx_code_path.clone(),
         data,
         do_nothing,
+        unshield,
+        fee_amount,
         &signing_data.fee_payer,
-        None,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -1436,6 +1510,12 @@ pub async fn build_claim_rewards(
         default_signer,
     )
     .await?;
+    let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
+        context,
+        &tx_args,
+        &signing_data.fee_payer,
+    )
+    .await?;
 
     // Check that the validator address is actually a validator
     let validator =
@@ -1458,8 +1538,9 @@ pub async fn build_claim_rewards(
         tx_code_path.clone(),
         data,
         do_nothing,
+        unshield,
+        fee_amount,
         &signing_data.fee_payer,
-        None,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -1508,6 +1589,12 @@ pub async fn build_unbond(
         tx_args,
         Some(default_address),
         default_signer,
+    )
+    .await?;
+    let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
+        context,
+        &tx_args,
+        &signing_data.fee_payer,
     )
     .await?;
 
@@ -1560,8 +1647,9 @@ pub async fn build_unbond(
         tx_code_path.clone(),
         data,
         do_nothing,
+        unshield,
+        fee_amount,
         &signing_data.fee_payer,
-        None,
     )
     .await?;
     Ok((tx, signing_data, latest_withdrawal_pre))
@@ -1710,6 +1798,13 @@ pub async fn build_bond(
         default_signer,
     )
     .await?;
+    let (fee_amount, updated_balance, unshield) =
+        validate_fee_and_gen_unshield(
+            context,
+            &tx_args,
+            &signing_data.fee_payer,
+        )
+        .await?;
 
     // Check bond's source (source for delegation or validator for self-bonds)
     // balance
@@ -1718,6 +1813,7 @@ pub async fn build_bond(
     let balance_key = balance_key(&native_token, bond_source);
 
     // TODO Should we state the same error message for the native token?
+    //FIXME: use the updated balance here if it's the same source and token
     let post_balance = check_balance_too_low_err(
         &native_token,
         bond_source,
@@ -1745,8 +1841,9 @@ pub async fn build_bond(
         tx_code_path.clone(),
         data,
         do_nothing,
+        unshield,
+        fee_amount,
         &signing_data.fee_payer,
-        tx_source_balance,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -1773,6 +1870,9 @@ pub async fn build_default_proposal(
         default_signer,
     )
     .await?;
+    let (fee_amount, updated_balance, unshield) =
+        validate_fee_and_gen_unshield(context, &tx, &signing_data.fee_payer)
+            .await?;
 
     let init_proposal_data = InitProposalData::try_from(proposal.clone())
         .map_err(|e| TxSubmitError::InvalidProposal(e.to_string()))?;
@@ -1791,14 +1891,16 @@ pub async fn build_default_proposal(
             };
             Ok(())
         };
+    // TODO: need to pay the fee to submit a proposal, check enough balance
     build(
         context,
         tx,
         tx_code_path.clone(),
         init_proposal_data,
         push_data,
+        unshield,
+        fee_amount,
         &signing_data.fee_payer,
-        None, // TODO: need to pay the fee to submit a proposal
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -1826,6 +1928,9 @@ pub async fn build_vote_proposal(
         default_signer.clone(),
     )
     .await?;
+    let (fee_amount, _, unshield) =
+        validate_fee_and_gen_unshield(context, &tx, &signing_data.fee_payer)
+            .await?;
 
     let proposal_vote = ProposalVote::try_from(vote.clone())
         .map_err(|_| TxSubmitError::InvalidProposalVote)?;
@@ -1884,8 +1989,9 @@ pub async fn build_vote_proposal(
         tx_code_path.clone(),
         data,
         do_nothing,
+        unshield,
+        fee_amount,
         &signing_data.fee_payer,
-        None,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -1912,7 +2018,11 @@ pub async fn build_pgf_funding_proposal(
         default_signer,
     )
     .await?;
+    let (fee_amount, updated_balance, unshield) =
+        validate_fee_and_gen_unshield(context, &tx, &signing_data.fee_payer)
+            .await?;
 
+    // TODO: need to pay the fee to submit a proposal, check enough balance
     let init_proposal_data = InitProposalData::try_from(proposal.clone())
         .map_err(|e| TxSubmitError::InvalidProposal(e.to_string()))?;
 
@@ -1928,8 +2038,9 @@ pub async fn build_pgf_funding_proposal(
         tx_code_path.clone(),
         init_proposal_data,
         add_section,
+        unshield,
+        fee_amount,
         &signing_data.fee_payer,
-        None, // TODO: need to pay the fee to submit a proposal
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -1956,7 +2067,11 @@ pub async fn build_pgf_stewards_proposal(
         default_signer,
     )
     .await?;
+    let (fee_amount, updated_balance, unshield) =
+        validate_fee_and_gen_unshield(context, &tx, &signing_data.fee_payer)
+            .await?;
 
+    // TODO: need to pay the fee to submit a proposal, check enough balance
     let init_proposal_data = InitProposalData::try_from(proposal.clone())
         .map_err(|e| TxSubmitError::InvalidProposal(e.to_string()))?;
 
@@ -1973,8 +2088,9 @@ pub async fn build_pgf_stewards_proposal(
         tx_code_path.clone(),
         init_proposal_data,
         add_section,
+        unshield,
+        fee_amount,
         &signing_data.fee_payer,
-        None, // TODO: need to pay the fee to submit a proposal
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -1993,6 +2109,14 @@ pub async fn build_ibc_transfer(
         Some(source.clone()),
     )
     .await?;
+    let (fee_amount, updated_balance, unshield) =
+        validate_fee_and_gen_unshield(
+            context,
+            &args.tx,
+            &signing_data.fee_payer,
+        )
+        .await?;
+
     // Check that the source address exists on chain
     let source =
         source_exists_or_err(source.clone(), args.tx.force, context).await?;
@@ -2013,6 +2137,7 @@ pub async fn build_ibc_transfer(
     // Check source balance
     let balance_key = balance_key(&args.token, &source);
 
+    //FIXME: use updated balance if fee payer is also source
     let post_balance = check_balance_too_low_err(
         &args.token,
         &source,
@@ -2152,8 +2277,9 @@ pub async fn build_ibc_transfer(
         context,
         &args.tx,
         &mut tx,
+        unshield,
+        fee_amount,
         signing_data.fee_payer.clone(),
-        tx_source_balance,
     )
     .await?;
 
@@ -2168,21 +2294,16 @@ pub async fn build<F, D>(
     path: PathBuf,
     data: D,
     on_tx: F,
+    unshield: Option<masp_primitives::transaction::Transaction>,
+    fee_amount: DenominatedAmount,
     gas_payer: &common::PublicKey,
-    tx_source_balance: Option<TxSourcePostBalance>,
 ) -> Result<Tx>
 where
     F: FnOnce(&mut Tx, &mut D) -> Result<()>,
     D: BorshSerialize,
 {
     build_pow_flag(
-        context,
-        tx_args,
-        path,
-        data,
-        on_tx,
-        gas_payer,
-        tx_source_balance,
+        context, tx_args, path, data, on_tx, unshield, fee_amount, gas_payer,
     )
     .await
 }
@@ -2194,8 +2315,9 @@ async fn build_pow_flag<F, D>(
     path: PathBuf,
     mut data: D,
     on_tx: F,
+    unshield: Option<masp_primitives::transaction::Transaction>,
+    fee_amount: DenominatedAmount,
     gas_payer: &common::PublicKey,
-    tx_source_balance: Option<TxSourcePostBalance>,
 ) -> Result<Tx>
 where
     F: FnOnce(&mut Tx, &mut D) -> Result<()>,
@@ -2225,8 +2347,9 @@ where
         context,
         tx_args,
         &mut tx_builder,
+        unshield,
+        fee_amount,
         gas_payer.clone(),
-        tx_source_balance,
     )
     .await?;
     Ok(tx_builder)
@@ -2301,6 +2424,14 @@ pub async fn build_transfer<N: Namada>(
     )
     .await?;
 
+    let (fee_amount, updated_balance, unshield) =
+        validate_fee_and_gen_unshield(
+            context,
+            &args.tx,
+            &signing_data.fee_payer,
+        )
+        .await?;
+
     let source = args.source.effective_address();
     let target = args.target.effective_address();
 
@@ -2317,6 +2448,8 @@ pub async fn build_transfer<N: Namada>(
             .await?;
 
     args.amount = InputAmount::Validated(validated_amount);
+    //FIXME: here use the updated balance if the source matches the fee payer
+    //FIXME: don't need to return the post_balane naymore
     let post_balance = check_balance_too_low_err(
         &args.token,
         &source,
@@ -2326,11 +2459,6 @@ pub async fn build_transfer<N: Namada>(
         context,
     )
     .await?;
-    let tx_source_balance = Some(TxSourcePostBalance {
-        post_balance,
-        source: source.clone(),
-        token: args.token.clone(),
-    });
 
     let masp_addr = MASP;
 
@@ -2407,8 +2535,9 @@ pub async fn build_transfer<N: Namada>(
         args.tx_code_path.clone(),
         transfer,
         add_shielded,
+        unshield,
+        fee_amount,
         &signing_data.fee_payer,
-        tx_source_balance,
     )
     .await?;
     Ok((tx, signing_data, shielded_tx_epoch))
@@ -2438,6 +2567,7 @@ async fn construct_shielded_parts<N: Namada>(
         Ok(Some(stx)) => stx,
         Ok(None) => return Ok(None),
         Err(Build(builder::Error::InsufficientFunds(_))) => {
+            //FIXME: I'm failing here
             return Err(TxSubmitError::NegativeBalanceAfterTransfer(
                 Box::new(source.effective_address()),
                 amount.amount().to_string_native(),
@@ -2472,6 +2602,12 @@ pub async fn build_init_account(
 ) -> Result<(Tx, SigningTxData)> {
     let signing_data =
         signing::aux_signing_data(context, tx_args, None, None).await?;
+    let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
+        context,
+        &tx_args,
+        &signing_data.fee_payer,
+    )
+    .await?;
 
     let vp_code_hash = query_wasm_code_hash_buf(context, vp_code_path).await?;
 
@@ -2509,8 +2645,9 @@ pub async fn build_init_account(
         tx_code_path.clone(),
         data,
         add_code_hash,
+        unshield,
+        fee_amount,
         &signing_data.fee_payer,
-        None,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -2534,6 +2671,12 @@ pub async fn build_update_account(
         tx_args,
         Some(addr.clone()),
         default_signer,
+    )
+    .await?;
+    let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
+        context,
+        &tx_args,
+        &signing_data.fee_payer,
     )
     .await?;
 
@@ -2596,8 +2739,9 @@ pub async fn build_update_account(
         tx_code_path.clone(),
         data,
         add_code_hash,
+        unshield,
+        fee_amount,
         &signing_data.fee_payer,
-        None,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -2620,6 +2764,12 @@ pub async fn build_custom(
         tx_args,
         Some(owner.clone()),
         default_signer,
+    )
+    .await?;
+    let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
+        context,
+        &tx_args,
+        &signing_data.fee_payer,
     )
     .await?;
 
@@ -2649,8 +2799,9 @@ pub async fn build_custom(
         context,
         tx_args,
         &mut tx,
+        unshield,
+        fee_amount,
         signing_data.fee_payer.clone(),
-        None,
     )
     .await?;
 

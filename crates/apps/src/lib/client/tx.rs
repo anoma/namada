@@ -23,6 +23,7 @@ use namada::types::dec::Dec;
 use namada::types::io::Io;
 use namada::types::key::{self, *};
 use namada_sdk::rpc::{InnerTxResult, TxBroadcastData, TxResponse};
+use namada_sdk::signing::validate_fee_and_gen_unshield;
 use namada_sdk::wallet::alias::validator_consensus_key;
 use namada_sdk::wallet::{Wallet, WalletIo};
 use namada_sdk::{display_line, edisplay_line, error, signing, tx, Namada};
@@ -414,13 +415,20 @@ pub async fn submit_change_consensus_key(
 
     let signing_data =
         init_validator_signing_data(namada, &tx_args, vec![new_key]).await?;
+    let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
+        namada,
+        &tx_args,
+        &signing_data.fee_payer,
+    )
+    .await?;
 
     tx::prepare_tx(
         namada,
         &tx_args,
         &mut tx,
+        unshield,
+        fee_amount,
         signing_data.fee_payer.clone(),
-        None,
     )
     .await?;
 
@@ -742,13 +750,20 @@ pub async fn submit_become_validator(
 
     let signing_data =
         init_validator_signing_data(namada, &tx_args, all_pks).await?;
+    let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
+        namada,
+        &tx_args,
+        &signing_data.fee_payer,
+    )
+    .await?;
 
     tx::prepare_tx(
         namada,
         &tx_args,
         &mut tx,
+        unshield,
+        fee_amount,
         signing_data.fee_payer.clone(),
-        None,
     )
     .await?;
 
@@ -931,7 +946,9 @@ pub async fn submit_transfer(
         } else {
             sign(namada, &mut tx, &args.tx, signing_data).await?;
 
+            eprintln!("BEFORE SUBMIT"); //FIXME: remove
             let result = namada.submit(tx, &args.tx).await?;
+            eprintln!("AFTER SUBMIT"); //FIXME: remove
 
             match result {
                 ProcessTxResponse::Applied(resp) if
@@ -943,6 +960,7 @@ pub async fn submit_transfer(
                     let submission_epoch = rpc::query_and_print_epoch(namada).await;
                     // And its submission epoch doesn't match construction epoch
                     if tx_epoch.unwrap() != submission_epoch {
+                        //FIXME: here if in sepculative context fetch the updated conversion anchor
                         // Then we probably straddled an epoch boundary. Let's retry...
                         edisplay_line!(namada.io(),
                             "MASP transaction rejected and this may be due to the \
