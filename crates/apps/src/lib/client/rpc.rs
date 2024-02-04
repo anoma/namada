@@ -1704,7 +1704,10 @@ pub async fn query_bonds(
     .await
     .unwrap();
 
+    dbg!(&bonds_and_unbonds);
+
     for (bond_id, details) in &bonds_and_unbonds.data {
+        dbg!(bond_id);
         let bond_type = if bond_id.source == bond_id.validator {
             format!("Self-bonds from {}", bond_id.validator)
         } else {

@@ -1339,7 +1339,7 @@ fn test_bond_queries() -> Result<()> {
     let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
     let validator_alias = "validator-0";
 
-    // 2. Submit a delegation to the genesis validator
+    // 2. Submit a self-bond of the genesis validator
     let tx_args = vec![
         "bond",
         "--validator",
@@ -1434,6 +1434,15 @@ fn test_bond_queries() -> Result<()> {
             break;
         }
     }
+
+    let tx_args = vec![
+        "bonds",
+        "--validator",
+        validator_alias,
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
 
     // 7. Check the output of the bonds query
     let tx_args = vec!["bonds", "--ledger-address", &validator_one_rpc];

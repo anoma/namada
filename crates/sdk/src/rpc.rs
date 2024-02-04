@@ -1162,6 +1162,7 @@ pub async fn enriched_bonds_and_unbonds<C: crate::queries::Client + Sync>(
     source: &Option<Address>,
     validator: &Option<Address>,
 ) -> Result<EnrichedBondsAndUnbondsDetails, error::Error> {
+    dbg!(&source, &validator);
     convert_response::<C, _>(
         RPC.vp()
             .pos()

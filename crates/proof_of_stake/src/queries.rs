@@ -149,6 +149,7 @@ pub fn bonds_and_unbonds<S>(
 where
     S: StorageRead,
 {
+    println!("\nBONDS AND UNBONDS\n");
     let params = read_pos_params(storage)?;
 
     match (source.clone(), validator.clone()) {
@@ -170,6 +171,7 @@ fn get_multiple_bonds_and_unbonds<S>(
 where
     S: StorageRead,
 {
+    println!("\nGET MULTIPLE BONDS AND UNBONDS\n");
     debug_assert!(
         source.is_none() || validator.is_none(),
         "Use `find_bonds_and_unbonds_details` when full bond ID is known"
@@ -185,6 +187,7 @@ where
         Some(source) => storage_key::bonds_for_source_prefix(source),
         None => storage_key::bonds_prefix(),
     };
+
     // We have to iterate raw bytes, cause the epoched data `last_update` field
     // gets matched here too
     let mut raw_bonds = namada_storage::iter_prefix_bytes(storage, &prefix)?
@@ -257,6 +260,7 @@ where
         HashMap::<BondId, (Vec<BondDetails>, Vec<UnbondDetails>)>::new();
 
     raw_bonds.try_for_each(|(bond_id, start, change)| {
+        // dbg!(&bond_id);
         if !slashes_cache.contains_key(&bond_id.validator) {
             let slashes = find_validator_slashes(storage, &bond_id.validator)?;
             slashes_cache.insert(bond_id.validator.clone(), slashes);
@@ -325,6 +329,8 @@ where
 {
     let slashes = find_validator_slashes(storage, &validator)?;
     let mut applied_slashes = HashMap::<Address, Vec<Slash>>::new();
+
+    dbg!(&slashes);
 
     let bonds = find_bonds(storage, &source, &validator)?
         .into_iter()

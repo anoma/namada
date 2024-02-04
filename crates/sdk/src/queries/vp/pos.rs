@@ -571,11 +571,14 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    namada_proof_of_stake::queries::bonds_and_unbonds(
+    dbg!(&source, &validator);
+    let a = namada_proof_of_stake::queries::bonds_and_unbonds(
         ctx.wl_storage,
         source,
         validator,
-    )
+    )?;
+    dbg!(&a);
+    Ok(a)
 }
 
 /// Find all the validator addresses to whom the given `owner` address has
@@ -700,11 +703,13 @@ pub mod client_only_methods {
         where
             CLIENT: Client + Sync,
         {
+            dbg!(&source, &validator);
             let data = RPC
                 .vp()
                 .pos()
                 .bonds_and_unbonds(client, source, validator)
                 .await?;
+            dbg!(&data);
             Ok(enrich_bonds_and_unbonds(current_epoch, data))
         }
     }
