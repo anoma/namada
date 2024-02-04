@@ -1452,7 +1452,6 @@ fn masp_txs_and_queries() -> Result<()> {
 /// shielded transfer with the same source
 /// 4. Submit a new wrapper with an invalid unshielding tx and assert the
 /// failure
-//FIXME: do a separate test without the syncs
 #[test]
 fn wrapper_fee_unshielding() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
@@ -1471,7 +1470,6 @@ fn wrapper_fee_unshielding() -> Result<()> {
             "--source",
             ALBERT_KEY,
             "--target",
-            //FIXME: I believe this is not known to the context yet so it doesn't get fetched. But it could be knwn if I take it from somewhere else? Meybe from wallet?
             AA_PAYMENT_ADDRESS,
             "--token",
             NAM,
@@ -1494,7 +1492,6 @@ fn wrapper_fee_unshielding() -> Result<()> {
             "shielded-sync",
             "--viewing-keys",
             AA_VIEWING_KEY,
-            // AB_VIEWING_KEY, //FIXME: remove if not needed
             "--node",
             validator_one_rpc,
         ],
@@ -1535,8 +1532,6 @@ fn wrapper_fee_unshielding() -> Result<()> {
     assert!(captured.result.is_ok());
     assert!(captured.contains("nam: 1979999"));
 
-    //FIXME: seems like the speculative context is not working, if I don't fetch this doesn't pass
-    //FIXME: ah it's because the viewing key is unknown
     _ = node.next_epoch();
     // 2. Valid unshielding
     run(
@@ -1608,7 +1603,6 @@ fn wrapper_fee_unshielding() -> Result<()> {
     // 3. Try another valid fee unshielding and masp transaction in the same tx,
     // with the same source. This tests that the client can properly fetch data
     // and construct these kind of transactions
-    //FIXME: I break here, it succesfuly executes the wrapper but I've got a broadcast error before the inner gets executed
     run(
         &node,
         Bin::Client,
@@ -1654,7 +1648,6 @@ fn wrapper_fee_unshielding() -> Result<()> {
     assert!(captured.contains("nam: 1939998"));
 
     // 4. Invalid unshielding
-    eprintln!("BEFORE THE LAST ONE"); //FIXME: remove
     let tx_args = vec![
         "transfer",
         "--source",
@@ -1689,6 +1682,8 @@ fn wrapper_fee_unshielding() -> Result<()> {
 }
 
 //FIXME: add a test that checks that two transactions generated from sequential notes can be applied in the same block
+//FIXME: do a separate test without the syncs
+//FIXME: test for seculative context over epoch boundary (check that the tx still passes and I don't need to manulaly requery the conversions)
 
 // Test that a masp unshield transaction can be succesfully executed even across
 // an epoch boundary.

@@ -772,9 +772,6 @@ impl ShieldedUtils for BenchShieldedUtils {
                 .to_path_buf()
                 .join(SPECULATIVE_FILE_NAME),
         )?;
-        // // Finally, remove our temporary file to allow future saving of
-        // // shielded contexts.
-        // std::fs::remove_file(tmp_path)?; //FIXME: probably not needed
         Ok(())
     }
 }

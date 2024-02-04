@@ -577,7 +577,7 @@ pub async fn validate_fee_and_gen_unshield<N: Namada>(
                             ));
                         }
 
-                //FIXME: should update the balance to 0 here?
+            updated_balance.post_balance = Amount::zero();
                         None
                     }
                     Err(e) => {
@@ -586,7 +586,7 @@ pub async fn validate_fee_and_gen_unshield<N: Namada>(
                                 TxSubmitError::FeeUnshieldingError(e.to_string()),
                             ));
                         }
-                //FIXME: should update the balance to 0 here?
+            updated_balance.post_balance = Amount::zero();
                         None
                     }
                 }
@@ -608,7 +608,7 @@ pub async fn validate_fee_and_gen_unshield<N: Namada>(
                     ));
                 }
 
-                //FIXME: should update the balance to 0 here?
+                updated_balance.post_balance = Amount::zero();
                 None
             }
         }

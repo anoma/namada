@@ -358,7 +358,6 @@ pub async fn broadcast_tx(
         }
         Ok(response)
     } else {
-        eprintln!("TX NOT ADDED TO MEMPOOL"); //FIXME: remove
         Err(Error::from(TxSubmitError::TxBroadcast(RpcError::server(
             serde_json::to_string(&response).map_err(|err| {
                 Error::from(EncodingError::Serde(err.to_string()))
@@ -1810,24 +1809,49 @@ pub async fn build_bond(
     // balance
     let bond_source = source.as_ref().unwrap_or(&validator);
     let native_token = context.native_token();
-    let balance_key = balance_key(&native_token, bond_source);
+    if &updated_balance.source == bond_source
+        && updated_balance.token == native_token
+    {
+        if *amount > updated_balance.post_balance {
+            if tx_args.force {
+                edisplay_line!(
+                    context.io(),
+                    "The balance of the source {} of token {} is lower \
+                         than the amount to be transferred. Amount to \
+                         transfer is {} and the balance is {}.",
+                    bond_source,
+                    native_token,
+                    context.format_amount(&native_token, *amount).await,
+                    context
+                        .format_amount(
+                            &native_token,
+                            updated_balance.post_balance
+                        )
+                        .await,
+                );
+            } else {
+                return Err(Error::from(TxSubmitError::BalanceTooLow(
+                    bond_source.clone(),
+                    native_token,
+                    amount.to_string_native(),
+                    updated_balance.post_balance.to_string_native(),
+                )));
+            }
+        }
+    } else {
+        let balance_key = balance_key(&native_token, bond_source);
 
-    // TODO Should we state the same error message for the native token?
-    //FIXME: use the updated balance here if it's the same source and token
-    let post_balance = check_balance_too_low_err(
-        &native_token,
-        bond_source,
-        *amount,
-        balance_key,
-        tx_args.force,
-        context,
-    )
-    .await?;
-    let tx_source_balance = Some(TxSourcePostBalance {
-        post_balance,
-        source: bond_source.clone(),
-        token: native_token,
-    });
+        // TODO Should we state the same error message for the native token?
+        check_balance_too_low_err(
+            &native_token,
+            bond_source,
+            *amount,
+            balance_key,
+            tx_args.force,
+            context,
+        )
+        .await?;
+    }
 
     let data = pos::Bond {
         validator,
@@ -2134,24 +2158,49 @@ pub async fn build_ibc_transfer(
         )));
     }
 
-    // Check source balance
-    let balance_key = balance_key(&args.token, &source);
+    if updated_balance.source == source && updated_balance.token == args.token {
+        if validated_amount.amount() > updated_balance.post_balance {
+            if args.tx.force {
+                edisplay_line!(
+                    context.io(),
+                    "The balance of the source {} of token {} is lower \
+                         than the amount to be transferred. Amount to \
+                         transfer is {} and the balance is {}.",
+                    source,
+                    args.token,
+                    context
+                        .format_amount(&args.token, validated_amount.amount())
+                        .await,
+                    context
+                        .format_amount(
+                            &args.token,
+                            updated_balance.post_balance
+                        )
+                        .await,
+                );
+            } else {
+                return Err(Error::from(TxSubmitError::BalanceTooLow(
+                    source.clone(),
+                    args.token.clone(),
+                    validated_amount.amount().to_string_native(),
+                    updated_balance.post_balance.to_string_native(),
+                )));
+            }
+        }
+    } else {
+        // Check source balance
+        let balance_key = balance_key(&args.token, &source);
 
-    //FIXME: use updated balance if fee payer is also source
-    let post_balance = check_balance_too_low_err(
-        &args.token,
-        &source,
-        validated_amount.amount(),
-        balance_key,
-        args.tx.force,
-        context,
-    )
-    .await?;
-    let tx_source_balance = Some(TxSourcePostBalance {
-        post_balance,
-        source: source.clone(),
-        token: args.token.clone(),
-    });
+        check_balance_too_low_err(
+            &args.token,
+            &source,
+            validated_amount.amount(),
+            balance_key,
+            args.tx.force,
+            context,
+        )
+        .await?;
+    }
 
     let tx_code_hash =
         query_wasm_code_hash(context, args.tx_code_path.to_str().unwrap())
@@ -2439,8 +2488,6 @@ pub async fn build_transfer<N: Namada>(
     source_exists_or_err(source.clone(), args.tx.force, context).await?;
     // Check that the target address exists on chain
     target_exists_or_err(target.clone(), args.tx.force, context).await?;
-    // Check source balance
-    let balance_key = balance_key(&args.token, &source);
 
     // validate the amount given
     let validated_amount =
@@ -2448,17 +2495,49 @@ pub async fn build_transfer<N: Namada>(
             .await?;
 
     args.amount = InputAmount::Validated(validated_amount);
-    //FIXME: here use the updated balance if the source matches the fee payer
-    //FIXME: don't need to return the post_balane naymore
-    let post_balance = check_balance_too_low_err(
-        &args.token,
-        &source,
-        validated_amount.amount(),
-        balance_key,
-        args.tx.force,
-        context,
-    )
-    .await?;
+
+    // Check source balance
+    if updated_balance.source == source && updated_balance.token == args.token {
+        if validated_amount.amount() > updated_balance.post_balance {
+            if args.tx.force {
+                edisplay_line!(
+                    context.io(),
+                    "The balance of the source {} of token {} is lower \
+                         than the amount to be transferred. Amount to \
+                         transfer is {} and the balance is {}.",
+                    source,
+                    args.token,
+                    context
+                        .format_amount(&args.token, validated_amount.amount())
+                        .await,
+                    context
+                        .format_amount(
+                            &args.token,
+                            updated_balance.post_balance
+                        )
+                        .await,
+                );
+            } else {
+                return Err(Error::from(TxSubmitError::BalanceTooLow(
+                    source.clone(),
+                    args.token.clone(),
+                    validated_amount.amount().to_string_native(),
+                    updated_balance.post_balance.to_string_native(),
+                )));
+            }
+        }
+    } else {
+        let balance_key = balance_key(&args.token, &source);
+        check_balance_too_low_err(
+            &args.token,
+            &source,
+            validated_amount.amount(),
+            balance_key,
+            args.tx.force,
+            context,
+        )
+        .await?;
+    }
 
     let masp_addr = MASP;
 
@@ -2567,7 +2646,6 @@ async fn construct_shielded_parts<N: Namada>(
         Ok(Some(stx)) => stx,
         Ok(None) => return Ok(None),
         Err(Build(builder::Error::InsufficientFunds(_))) => {
-            //FIXME: I'm failing here
             return Err(TxSubmitError::NegativeBalanceAfterTransfer(
                 Box::new(source.effective_address()),
                 amount.amount().to_string_native(),
@@ -3029,7 +3107,7 @@ async fn target_exists_or_err(
 
 /// Checks the balance at the given address is enough to transfer the
 /// given amount, along with the balance even existing. Force
-/// overrides this. Returns the updated balance for fee check if necessary
+/// overrides this.
 async fn check_balance_too_low_err<N: Namada>(
     token: &Address,
     source: &Address,
@@ -3037,7 +3115,7 @@ async fn check_balance_too_low_err<N: Namada>(
     balance_key: storage::Key,
     force: bool,
     context: &N,
-) -> Result<token::Amount> {
+) -> Result<()> {
     match rpc::query_storage_value::<N::Client, token::Amount>(
         context.client(),
         &balance_key,
@@ -3045,7 +3123,7 @@ async fn check_balance_too_low_err<N: Namada>(
     .await
     {
         Ok(balance) => match balance.checked_sub(amount) {
-            Some(diff) => Ok(diff),
+            Some(_) => Ok(()),
             None => {
                 if force {
                     edisplay_line!(
@@ -3058,7 +3136,7 @@ async fn check_balance_too_low_err<N: Namada>(
                         context.format_amount(token, amount).await,
                         context.format_amount(token, balance).await,
                     );
-                    Ok(token::Amount::zero())
+                    Ok(())
                 } else {
                     Err(Error::from(TxSubmitError::BalanceTooLow(
                         source.clone(),
@@ -3079,7 +3157,7 @@ async fn check_balance_too_low_err<N: Namada>(
                     source,
                     token
                 );
-                Ok(token::Amount::zero())
+                Ok(())
             } else {
                 Err(Error::from(TxSubmitError::NoBalanceForToken(
                     source.clone(),

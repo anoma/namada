@@ -946,9 +946,7 @@ pub async fn submit_transfer(
         } else {
             sign(namada, &mut tx, &args.tx, signing_data).await?;
 
-            eprintln!("BEFORE SUBMIT"); //FIXME: remove
             let result = namada.submit(tx, &args.tx).await?;
-            eprintln!("AFTER SUBMIT"); //FIXME: remove
 
             match result {
                 ProcessTxResponse::Applied(resp) if
@@ -961,6 +959,7 @@ pub async fn submit_transfer(
                     // And its submission epoch doesn't match construction epoch
                     if tx_epoch.unwrap() != submission_epoch {
                         //FIXME: here if in sepculative context fetch the updated conversion anchor
+                        //FIXME: actually probably not needed, make an e2e test to test this
                         // Then we probably straddled an epoch boundary. Let's retry...
                         edisplay_line!(namada.io(),
                             "MASP transaction rejected and this may be due to the \
