@@ -1495,30 +1495,24 @@ pub async fn to_ledger_vector(
         tv.output.extend(vec!["Type : Change metadata".to_string()]);
 
         let mut other_items = vec![];
+        other_items.push(format!("Validator : {}", metadata_change.validator));
         if let Some(email) = metadata_change.email {
-            other_items.push(format!("New email : {}", email));
+            other_items.push(format!("Email : {}", email));
         }
         if let Some(description) = metadata_change.description {
-            if description.is_empty() {
-                other_items.push("Description removed".to_string());
-            } else {
-                other_items.push(format!("New description : {}", description));
-            }
+            other_items.push(format!("Description : {}", description));
         }
         if let Some(website) = metadata_change.website {
-            if website.is_empty() {
-                other_items.push("Website removed".to_string());
-            } else {
-                other_items.push(format!("New website : {}", website));
-            }
+            other_items.push(format!("Website : {}", website));
         }
         if let Some(discord_handle) = metadata_change.discord_handle {
-            if discord_handle.is_empty() {
-                other_items.push("Discord handle removed".to_string());
-            } else {
-                other_items
-                    .push(format!("New discord handle : {}", discord_handle));
-            }
+            other_items.push(format!("Discord handle : {}", discord_handle));
+        }
+        if let Some(avatar) = metadata_change.avatar {
+            other_items.push(format!("Avatar : {}", avatar));
+        }
+        if let Some(commission_rate) = metadata_change.commission_rate {
+            other_items.push(format!("Commission rate : {}", commission_rate));
         }
 
         tv.output.extend(other_items.clone());
@@ -1646,15 +1640,19 @@ pub async fn to_ledger_vector(
             format!("Type : Update Steward Commission"),
             format!("Steward : {}", update.steward),
         ]);
-        for (address, dec) in &update.commission {
-            tv.output.push(format!("Commission : {} {}", address, dec));
+        let mut commission = update.commission.iter().collect::<Vec<_>>();
+        // Print the test vectors in the same order as the serializations
+        commission.sort_by(|(a, _), (b, _)| a.cmp(b));
+        for (address, dec) in &commission {
+            tv.output.push(format!("Validator : {}", address));
+            tv.output.push(format!("Commission Rate : {}", dec));
         }
 
         tv.output_expert
             .push(format!("Steward : {}", update.steward));
-        for (address, dec) in &update.commission {
-            tv.output_expert
-                .push(format!("Commission : {} {}", address, dec));
+        for (address, dec) in &commission {
+            tv.output_expert.push(format!("Validator : {}", address));
+            tv.output_expert.push(format!("Commission Rate : {}", dec));
         }
     } else if code_sec.tag == Some(TX_RESIGN_STEWARD.to_string()) {
         let address = Address::try_from_slice(
