@@ -10,6 +10,7 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::transaction::components::sapling::fees::{
     InputView, OutputView,
 };
+use masp_primitives::transaction::Transaction;
 use namada_account::{AccountPublicKeysMap, InitAccount, UpdateAccount};
 use namada_core::types::address::{
     Address, ImplicitAddress, InternalAddress, MASP,
@@ -403,8 +404,8 @@ pub async fn init_validator_signing_data(
     })
 }
 
-/// Information about the post-tx balance of the tx's source. Used to correctly
-/// handle fee validation in the wrapper tx
+/// Information about the post-fee balance of the tx's source. Used to correctly
+/// handle balance validation in the inner tx
 pub struct TxSourcePostBalance {
     /// The balance of the tx source after the tx has been applied
     pub post_balance: Amount,
@@ -414,19 +415,15 @@ pub struct TxSourcePostBalance {
     pub token: Address,
 }
 
-/// Create a wrapper tx from a normal tx. Get the hash of the
-/// wrapper and its payload which is needed for monitoring its
-/// progress on chain.
-#[allow(clippy::too_many_arguments)]
-pub async fn wrap_tx<N: Namada>(
+/// Validate the fee of the transaction and generate the fee unshielding
+/// transaction if needed
+pub async fn validate_fee_and_gen_unshield<N: Namada>(
     context: &N,
-    tx: &mut Tx,
     args: &args::Tx<SdkTypes>,
-    tx_source_balance: Option<TxSourcePostBalance>,
-    epoch: Epoch,
-    fee_payer: common::PublicKey,
-) -> Result<(), Error> {
-    let fee_payer_address = Address::from(&fee_payer);
+    fee_payer: &common::PublicKey,
+) -> Result<(DenominatedAmount, TxSourcePostBalance, Option<Transaction>), Error>
+{
+    let fee_payer_address = Address::from(fee_payer);
     // Validate fee amount and token
     let gas_cost_key = parameter_storage::get_gas_cost_key();
     let minimum_fee = match rpc::query_storage_value::<
@@ -482,27 +479,22 @@ pub async fn wrap_tx<N: Namada>(
         None => validated_minimum_fee,
     };
 
-    let mut updated_balance = match tx_source_balance {
-        Some(TxSourcePostBalance {
-            post_balance: balance,
-            source,
-            token,
-        }) if token == args.fee_token && source == fee_payer_address => balance,
-        _ => {
-            let balance_key = balance_key(&args.fee_token, &fee_payer_address);
-
-            rpc::query_storage_value::<_, token::Amount>(
-                context.client(),
-                &balance_key,
-            )
-            .await
-            .unwrap_or_default()
-        }
-    };
+    let balance_key = balance_key(&args.fee_token, &fee_payer_address);
+    let balance = rpc::query_storage_value::<_, token::Amount>(
+        context.client(),
+        &balance_key,
+    )
+    .await
+    .unwrap_or_default();
 
     let total_fee = fee_amount.amount() * u64::from(args.gas_limit);
+    let mut updated_balance = TxSourcePostBalance {
+        post_balance: balance,
+        source: fee_payer_address.clone(),
+        token: args.fee_token.clone(),
+    };
 
-    let unshield = match total_fee.checked_sub(updated_balance) {
+    let unshield = match total_fee.checked_sub(balance) {
         Some(diff) if !diff.is_zero() => {
             if let Some(spending_key) = args.fee_unshield.clone() {
                 // Unshield funds for fee payment
@@ -574,8 +566,7 @@ pub async fn wrap_tx<N: Namada>(
                             ));
                         }
 
-                        updated_balance += total_fee;
-                        Some(transaction)
+                                                Some(transaction)
                     }
                     Ok(None) => {
                         if !args.force {
@@ -587,6 +578,7 @@ pub async fn wrap_tx<N: Namada>(
                             ));
                         }
 
+            updated_balance.post_balance = Amount::zero();
                         None
                     }
                     Err(e) => {
@@ -595,7 +587,7 @@ pub async fn wrap_tx<N: Namada>(
                                 TxSubmitError::FeeUnshieldingError(e.to_string()),
                             ));
                         }
-
+            updated_balance.post_balance = Amount::zero();
                         None
                     }
                 }
@@ -605,9 +597,8 @@ pub async fn wrap_tx<N: Namada>(
                     let fee_amount =
                         context.format_amount(&token_addr, total_fee).await;
 
-                    let balance = context
-                        .format_amount(&token_addr, updated_balance)
-                        .await;
+                    let balance =
+                        context.format_amount(&token_addr, balance).await;
                     return Err(Error::from(
                         TxSubmitError::BalanceTooLowForFees(
                             fee_payer_address,
@@ -618,6 +609,7 @@ pub async fn wrap_tx<N: Namada>(
                     ));
                 }
 
+                updated_balance.post_balance = Amount::zero();
                 None
             }
         }
@@ -629,10 +621,26 @@ pub async fn wrap_tx<N: Namada>(
                         .to_string(),
                 ));
             }
+            updated_balance.post_balance -= total_fee;
             None
         }
     };
 
+    Ok((fee_amount, updated_balance, unshield))
+}
+
+/// Create a wrapper tx from a normal tx. Get the hash of the
+/// wrapper and its payload which is needed for monitoring its
+/// progress on chain.
+#[allow(clippy::too_many_arguments)]
+pub async fn wrap_tx(
+    tx: &mut Tx,
+    args: &args::Tx<SdkTypes>,
+    epoch: Epoch,
+    unshield: Option<Transaction>,
+    fee_amount: DenominatedAmount,
+    fee_payer: common::PublicKey,
+) -> Result<(), Error> {
     let unshield_section_hash = unshield.map(|masp_tx| {
         let section = Section::MaspTx(masp_tx);
         let mut hasher = sha2::Sha256::new();

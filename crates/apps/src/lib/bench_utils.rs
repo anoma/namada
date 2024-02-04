@@ -117,6 +117,8 @@ const BERTHA_SPENDING_KEY: &str = "bertha_spending";
 
 const FILE_NAME: &str = "shielded.dat";
 const TMP_FILE_NAME: &str = "shielded.tmp";
+const SPECULATIVE_FILE_NAME: &str = "speculative_shielded.dat";
+const SPECULATIVE_TMP_FILE_NAME: &str = "speculative_shielded.tmp";
 
 /// For `tracing_subscriber`, which fails if called more than once in the same
 /// process
@@ -669,6 +671,31 @@ impl ShieldedUtils for BenchShieldedUtils {
         Ok(())
     }
 
+    /// Try to load the last saved speculative shielded context from the given
+    /// context directory. If this fails, then leave the current context
+    /// unchanged.
+    async fn load_speculative<U: ShieldedUtils>(
+        &self,
+        ctx: &mut ShieldedContext<U>,
+    ) -> std::io::Result<()> {
+        // Try to load shielded context from file
+        let mut ctx_file = File::open(
+            self.context_dir
+                .0
+                .path()
+                .to_path_buf()
+                .join(SPECULATIVE_FILE_NAME),
+        )?;
+        let mut bytes = Vec::new();
+        ctx_file.read_to_end(&mut bytes)?;
+        // Fill the supplied context with the deserialized object
+        *ctx = ShieldedContext {
+            utils: ctx.utils.clone(),
+            ..ShieldedContext::<U>::deserialize(&mut &bytes[..])?
+        };
+        Ok(())
+    }
+
     /// Save this shielded context into its associated context directory
     async fn save<U: ShieldedUtils>(
         &self,
@@ -697,6 +724,53 @@ impl ShieldedUtils for BenchShieldedUtils {
         std::fs::rename(
             tmp_path,
             self.context_dir.0.path().to_path_buf().join(FILE_NAME),
+        )?;
+
+        // Remove the speculative file if present since it's state is
+        // overwritten by the confirmed one we just saved
+        let _ = std::fs::remove_file(SPECULATIVE_FILE_NAME);
+        Ok(())
+    }
+
+    /// Save this speculative shielded context into its associated context
+    /// directory
+    async fn save_speculative<U: ShieldedUtils>(
+        &self,
+        ctx: &ShieldedContext<U>,
+    ) -> std::io::Result<()> {
+        // TODO: use mktemp crate?
+        let tmp_path = self
+            .context_dir
+            .0
+            .path()
+            .to_path_buf()
+            .join(SPECULATIVE_TMP_FILE_NAME);
+        {
+            // First serialize the shielded context into a temporary file.
+            // Inability to create this file implies a simultaneuous write
+            // is in progress. In this case, immediately
+            // fail. This is unproblematic because the data
+            // intended to be stored can always be re-fetched
+            // from the blockchain.
+            let mut ctx_file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(tmp_path.clone())?;
+            let mut bytes = Vec::new();
+            ctx.serialize(&mut bytes)
+                .expect("cannot serialize shielded context");
+            ctx_file.write_all(&bytes[..])?;
+        }
+        // Atomically update the old shielded context file with new data.
+        // Atomicity is required to prevent other client instances from
+        // reading corrupt data.
+        std::fs::rename(
+            tmp_path,
+            self.context_dir
+                .0
+                .path()
+                .to_path_buf()
+                .join(SPECULATIVE_FILE_NAME),
         )?;
         Ok(())
     }

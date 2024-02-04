@@ -438,7 +438,26 @@ impl MockNode {
             votes,
         };
 
-        locked.finalize_block(req).expect("Test failed");
+        let resp = locked.finalize_block(req).expect("Test failed");
+        let mut error_codes = resp
+            .events
+            .into_iter()
+            .map(|e| {
+                let code = ResultCode::from_u32(
+                    e.attributes
+                        .get("code")
+                        .map(|e| u32::from_str(e).unwrap())
+                        .unwrap_or_default(),
+                )
+                .unwrap();
+                if code == ResultCode::Ok {
+                    NodeResults::Ok
+                } else {
+                    NodeResults::Failed(code)
+                }
+            })
+            .collect::<Vec<_>>();
+        self.results.lock().unwrap().append(&mut error_codes);
         locked.commit();
 
         // Cache the block
@@ -501,7 +520,7 @@ impl MockNode {
 
     /// Send a tx through Process Proposal and Finalize Block
     /// and register the results.
-    fn submit_txs(&self, txs: Vec<Vec<u8>>) {
+    pub fn submit_txs(&self, txs: Vec<Vec<u8>>) {
         // The block space allocator disallows encrypted txs in certain blocks.
         // Advance to block height that allows txs.
         self.advance_to_allowed_block();
