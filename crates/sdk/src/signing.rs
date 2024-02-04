@@ -770,9 +770,6 @@ fn format_outputs(output: &mut Vec<String>) {
         let key = key.trim().chars().take(MAX_KEY_LEN - 1).collect::<String>();
         // Trim value because we will insert spaces later
         value = value.trim();
-        if value.is_empty() {
-            value = "(none)"
-        }
         if value.chars().count() < MAX_VALUE_LEN {
             // No need to split the line in this case
             output[pos] = format!("{} | {} : {}", i, key, value);

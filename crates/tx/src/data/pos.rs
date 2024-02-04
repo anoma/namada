@@ -267,11 +267,11 @@ pub mod tests {
         /// Generate an arbitrary metadata change
         pub fn arb_metadata_change()(
             validator in arb_non_internal_address(),
-            email in option::of("[a-zA-Z0-9_]*"),
-            description in option::of("[a-zA-Z0-9_]*"),
-            website in option::of("[a-zA-Z0-9_]*"),
-            discord_handle in option::of("[a-zA-Z0-9_]*"),
-            avatar in option::of("[a-zA-Z0-9_]*"),
+            email in option::of("[a-zA-Z0-9_]+"),
+            description in option::of("[a-zA-Z0-9_]+"),
+            website in option::of("[a-zA-Z0-9_]+"),
+            discord_handle in option::of("[a-zA-Z0-9_]+"),
+            avatar in option::of("[a-zA-Z0-9_]+"),
             commission_rate in option::of(arb_dec()),
         ) -> MetaDataChange {
             MetaDataChange {
@@ -309,11 +309,11 @@ pub mod tests {
             protocol_key in arb_common_pk(),
             commission_rate in arb_dec(),
             max_commission_rate_change in arb_dec(),
-            email in "[a-zA-Z0-9_]*",
-            description in option::of("[a-zA-Z0-9_]*"),
-            website in option::of("[a-zA-Z0-9_]*"),
-            discord_handle in option::of("[a-zA-Z0-9_]*"),
-            avatar in option::of("[a-zA-Z0-9_]*"),
+            email in "[a-zA-Z0-9_]+",
+            description in option::of("[a-zA-Z0-9_]+"),
+            website in option::of("[a-zA-Z0-9_]+"),
+            discord_handle in option::of("[a-zA-Z0-9_]+"),
+            avatar in option::of("[a-zA-Z0-9_]+"),
         ) -> BecomeValidator {
             BecomeValidator {
                 address,
