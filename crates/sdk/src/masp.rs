@@ -1075,7 +1075,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             .sapling_bundle()
             .map_or(&vec![], |x| &x.shielded_outputs)
         {
-            // Let's try to see if any of our viewing keys can decrypt latest
+            // Let's try to see if this viewing key can decrypt latest
             // note
             let notes = self.pos_map.entry(*vk).or_default();
             let decres = try_sapling_note_decryption::<_, OutputDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>>(
@@ -2381,18 +2381,15 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                         .map_err(|_e| Error::Other(exp_str))?;
 
                 // Cache the generated transfer
-                let native_token = query_native_token(context.client()).await?;
                 let mut shielded_ctx = context.shielded_mut().await;
                 shielded_ctx
                     .pre_cache_transaction(
-                        spending_key,
-                        payment_address,
+                        context,
                         &loaded.masp_tx,
                         source,
                         target,
                         token,
                         epoch,
-                        native_token,
                     )
                     .await?;
 
@@ -2412,18 +2409,15 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 }
 
                 // Cache the generated transfer
-                let native_token = query_native_token(context.client()).await?;
                 let mut shielded_ctx = context.shielded_mut().await;
                 shielded_ctx
                     .pre_cache_transaction(
-                        spending_key,
-                        payment_address,
+                        context,
                         &built.masp_tx,
                         source,
                         target,
                         token,
                         epoch,
-                        native_token,
                     )
                     .await?;
 
@@ -2438,18 +2432,15 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 context.shielded().await.utils.local_tx_prover(),
             )?;
 
-            let native_token = query_native_token(context.client()).await?;
             let mut shielded_ctx = context.shielded_mut().await;
             shielded_ctx
                 .pre_cache_transaction(
-                    spending_key,
-                    payment_address,
+                    context,
                     &built.masp_tx,
                     source,
                     target,
                     token,
                     epoch,
-                    native_token,
                 )
                 .await?;
 
@@ -2461,14 +2452,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     // transaction
     async fn pre_cache_transaction(
         &mut self,
-        esk: Option<ExtendedSpendingKey>,
-        payment_address: Option<PaymentAddress>,
+        context: &impl Namada,
         masp_tx: &Transaction,
         source: &TransferSource,
         target: &TransferTarget,
         token: &Address,
         epoch: Epoch,
-        native_token: Address,
     ) -> Result<(), Error> {
         // Need to mock the changed balance keys
         let mut changed_balance_keys = BTreeSet::default();
@@ -2482,28 +2471,20 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         }
 
         let mut vks = Vec::with_capacity(2);
-        if let Some(esk) = esk {
-            vks.push(to_viewing_key(&esk).vk);
+        if let Some(esk) = source.spending_key() {
+            vks.push(to_viewing_key(&esk.into()).vk);
         }
-        //FIXME: don't do it like that, get the viewing key from the wallet which is inside the Namada contexts in gen_shielded_transfer!
-        // FIXME: clane up this, use find on iterators
-        if let Some(pa) = payment_address {
-            // Try to look for the viewing key associated to this payent address
-            // in the shielded context
-            'outer: for (vk, positions) in &self.pos_map {
-                for pos in positions {
-                    if let Some(div) = self.div_map.get(pos) {
-                        if let Some(ref p) = vk.to_payment_address(*div) {
-                            if p == &masp_primitives::sapling::PaymentAddress::from(pa) {
-                                vks.push(*vk);
-                                break 'outer;
-                            }
-                        }
-                    }
+
+        if let Some(pa) = target.payment_address() {
+            let wallet = context.wallet().await;
+            if let Some(alias) = wallet.find_alias_by_payment_addr(&pa) {
+                if let Ok(vk) = wallet.find_viewing_key(alias) {
+                    vks.push(vk.clone().into());
                 }
             }
         }
 
+        let native_token = query_native_token(context.client()).await?;
         //FIXME: I never enter this loop!!!
         eprintln!("ABOUT OT ITERATE ON VKS"); //FIXME: remove
         for vk in vks {
@@ -2517,7 +2498,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     height: BlockHeight::first(),
                     index: TxIndex(0),
                 },
-                // FIXME: I should try to mock the correct block height? yes
                 |indexed| IndexedTx {
                     height: indexed.height,
                     index: indexed.index + 1,
