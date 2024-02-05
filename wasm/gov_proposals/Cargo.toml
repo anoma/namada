@@ -1,0 +1,25 @@
+[package]
+authors = ["Heliax AG <hello@heliax.dev>"]
+name = "gov_proposals"
+license = "GPL-3.0"
+edition = "2021"
+resolver = "2"
+version = "0.31.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+param_change_gov_proposal = ["namada_tx_prelude"]
+
+[dependencies]
+namada_core = { path = "../../crates/core" }
+namada_proof_of_stake = {path = "../../crates/proof_of_stake"}
+namada_tx_prelude = {path = "../../crates/tx_prelude", optional = true}
+
+wee_alloc = "0.4.5"
+getrandom = { version = "0.2", features = ["custom"] }
+
+[dev-dependencies]
+namada = {path = "../../crates/namada"}
+namada_tx_prelude = {path = "../../crates/tx_prelude"}

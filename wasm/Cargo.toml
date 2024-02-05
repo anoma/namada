@@ -5,6 +5,7 @@ members = [
     "wasm_source",
     "tx_template",
     "vp_template",
+    "gov_proposals",
 ]
 
 [profile.release]
