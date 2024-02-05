@@ -92,7 +92,7 @@ router! {POS,
     ( "bond_deltas" / [source: Address] / [validator: Address] )
         -> HashMap<Epoch, token::Change> = bond_deltas,
 
-    ( "bond" / [source: Address] / "to" / [validator: Address] / [epoch: opt Epoch] )
+    ( "bond" / [source: Address] / [validator: Address] / [epoch: opt Epoch] )
         -> token::Amount = bond,
 
     ( "rewards" / [validator: Address] / [source: opt Address] )
