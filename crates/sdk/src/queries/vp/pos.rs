@@ -92,7 +92,7 @@ router! {POS,
     ( "bond_deltas" / [source: Address] / [validator: Address] )
         -> HashMap<Epoch, token::Change> = bond_deltas,
 
-    ( "bond" / [source: Address] / [validator: Address] / [epoch: opt Epoch] )
+    ( "bond" / [source: Address] / "to" / [validator: Address] / [epoch: opt Epoch] )
         -> token::Amount = bond,
 
     ( "rewards" / [validator: Address] / [source: opt Address] )
@@ -110,7 +110,11 @@ router! {POS,
     ( "withdrawable_tokens" / [source: Address] / [validator: Address] / [epoch: opt Epoch] )
         -> token::Amount = withdrawable_tokens,
 
-    ( "bonds_and_unbonds" / [source: opt Address] / [validator: opt Address] )
+    // NOTE: The literal "to" between source and validator is needed because
+    // they are both optional and have the same types so when only one is
+    // specified, without the  separator it wouldn't be clear which one (and
+    // would always parse as `source`)
+    ( "bonds_and_unbonds" / [source: opt Address] / "to" / [validator: opt Address] )
         -> BondsAndUnbondsDetails = bonds_and_unbonds,
 
     ( "enqueued_slashes" )
