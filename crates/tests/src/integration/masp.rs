@@ -4,9 +4,11 @@ use std::str::FromStr;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use namada::state::StorageWrite;
-use namada::token;
+use namada::token::{self, DenominatedAmount};
 use namada_apps::node::ledger::shell::testing::client::run;
+use namada_apps::node::ledger::shell::testing::node::NodeResults;
 use namada_apps::node::ledger::shell::testing::utils::{Bin, CapturedOutput};
+use namada_apps::wallet::defaults::christel_keypair;
 use namada_core::types::dec::Dec;
 use namada_sdk::masp::fs::FsShieldedUtils;
 use test_log::test;
@@ -1461,6 +1463,35 @@ fn wrapper_fee_unshielding() -> Result<()> {
     let (mut node, _services) = setup::setup()?;
     _ = node.next_epoch();
 
+    // Add the relevant viewing keys to the wallet otherwise the shielded
+    // context won't precache the masp data
+    run(
+        &node,
+        Bin::Wallet,
+        vec![
+            "add",
+            "--alias",
+            "alias_a",
+            "--value",
+            AA_VIEWING_KEY,
+            "--unsafe-dont-encrypt",
+        ],
+    )?;
+    node.assert_success();
+    run(
+        &node,
+        Bin::Wallet,
+        vec![
+            "add",
+            "--alias",
+            "alias_b",
+            "--value",
+            AB_VIEWING_KEY,
+            "--unsafe-dont-encrypt",
+        ],
+    )?;
+    node.assert_success();
+
     // 1. Shield some tokens
     run(
         &node,
@@ -1681,14 +1712,317 @@ fn wrapper_fee_unshielding() -> Result<()> {
     Ok(())
 }
 
-//FIXME: add a test that checks that two transactions generated from sequential notes can be applied in the same block
-//FIXME: do a separate test without the syncs
-//FIXME: test for seculative context over epoch boundary (check that the tx still passes and I don't need to manulaly requery the conversions)
+/// Tests that multiple chained transactions can be constructed from the
+/// shielded context and executed in the same block
+#[test]
+fn chained_txs_same_block() -> Result<()> {
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "127.0.0.1:26567";
+    // Download the shielded pool parameters before starting node
+    let _ = FsShieldedUtils::new(PathBuf::new());
+    let (mut node, _services) = setup::setup()?;
+    _ = node.next_epoch();
+
+    // Add the relevant viewing keys to the wallet otherwise the shielded
+    // context won't precache the masp data
+    run(
+        &node,
+        Bin::Wallet,
+        vec![
+            "add",
+            "--alias",
+            "alias_a",
+            "--value",
+            AA_VIEWING_KEY,
+            "--unsafe-dont-encrypt",
+        ],
+    )?;
+    node.assert_success();
+    run(
+        &node,
+        Bin::Wallet,
+        vec![
+            "add",
+            "--alias",
+            "alias_b",
+            "--value",
+            AB_VIEWING_KEY,
+            "--unsafe-dont-encrypt",
+        ],
+    )?;
+    node.assert_success();
+
+    // 1. Shield tokens
+    _ = node.next_epoch();
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            ALBERT_KEY,
+            "--target",
+            AA_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "100",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+
+    // 2. Shielded consecutive operations without fetching. The second and third
+    // operations are constructed by the speculative context based on the notes
+    // produces by the previous one. Dump the txs to than reload and submit in
+    // the same block
+    let tempdir = tempfile::tempdir().unwrap();
+    let mut txs_bytes = vec![];
+
+    _ = node.next_epoch();
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            A_SPENDING_KEY,
+            "--target",
+            AB_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "50",
+            "--gas-payer",
+            ALBERT_KEY,
+            "--output-folder-path",
+            tempdir.path().to_str().unwrap(),
+            "--dump-tx",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+    let file_path = tempdir
+        .path()
+        .read_dir()
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    txs_bytes.push(std::fs::read(&file_path).unwrap());
+    std::fs::remove_file(&file_path).unwrap();
+
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            A_SPENDING_KEY,
+            "--target",
+            AC_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "50",
+            "--gas-payer",
+            CHRISTEL_KEY,
+            "--output-folder-path",
+            tempdir.path().to_str().unwrap(),
+            "--dump-tx",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+    let file_path = tempdir
+        .path()
+        .read_dir()
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    txs_bytes.push(std::fs::read(&file_path).unwrap());
+    std::fs::remove_file(&file_path).unwrap();
+
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            B_SPENDING_KEY,
+            "--target",
+            AC_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "50",
+            "--gas-payer",
+            CHRISTEL_KEY,
+            "--output-folder-path",
+            tempdir.path().to_str().unwrap(),
+            "--dump-tx",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+    let file_path = tempdir
+        .path()
+        .read_dir()
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    txs_bytes.push(std::fs::read(&file_path).unwrap());
+    std::fs::remove_file(&file_path).unwrap();
+
+    let sk = christel_keypair();
+    let pk = sk.to_public();
+
+    let native_token = node
+        .shell
+        .lock()
+        .unwrap()
+        .wl_storage
+        .storage
+        .native_token
+        .clone();
+    let mut txs = vec![];
+    for bytes in txs_bytes {
+        let mut tx = namada::tx::Tx::deserialize(&bytes).unwrap();
+        tx.add_wrapper(
+            namada::tx::data::wrapper_tx::Fee {
+                amount_per_gas_unit: DenominatedAmount::native(1.into()),
+                token: native_token.clone(),
+            },
+            pk.clone(),
+            Default::default(),
+            20000.into(),
+            None,
+        );
+        tx.sign_wrapper(sk.clone());
+
+        txs.push(tx.to_bytes());
+    }
+
+    node.clear_results();
+    node.submit_txs(txs);
+    {
+        let results = node.results.lock().unwrap();
+        // If empty than failed in process proposal
+        assert!(!results.is_empty());
+
+        for result in results.iter() {
+            assert!(matches!(result, NodeResults::Ok));
+        }
+    }
+    // Finalize the next block to actually execute the decrypted txs
+    node.clear_results();
+    node.finalize_and_commit();
+    {
+        let results = node.results.lock().unwrap();
+        for result in results.iter() {
+            assert!(matches!(result, NodeResults::Ok));
+        }
+    }
+
+    Ok(())
+}
+
+// Test that the shielded context can spend some notes produced in a previous tx
+// without fetching and in a different epoch (the second requirement to test
+// that conversions are correctly queried)
+#[test]
+fn unfetched_cross_epoch_shielded() -> Result<()> {
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "127.0.0.1:26567";
+    // Download the shielded pool parameters before starting node
+    let _ = FsShieldedUtils::new(PathBuf::new());
+    let (mut node, _services) = setup::setup()?;
+    _ = node.next_epoch();
+
+    // Add the relevant viewing key to the wallet otherwise the shielded context
+    // won't precache the masp data
+    run(
+        &node,
+        Bin::Wallet,
+        vec![
+            "add",
+            "--alias",
+            "alias",
+            "--value",
+            AA_VIEWING_KEY,
+            "--unsafe-dont-encrypt",
+        ],
+    )?;
+    node.assert_success();
+
+    // 1. Shield tokens
+    _ = node.next_epoch();
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            ALBERT_KEY,
+            "--target",
+            AA_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "1980000", // Reduce the balance of the fee payer artificially to 0
+            "--gas-price",
+            "1",
+            "--gas-limit",
+            "20000",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+
+    _ = node.next_epoch();
+    // 2. Shielded operation in the next epoch without fetching
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            A_SPENDING_KEY,
+            "--target",
+            AB_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "1",
+            "--gas-payer",
+            ALBERT_KEY,
+            // fee unshielding with the same source key to add more stress to
+            // the test
+            "--gas-spending-key",
+            A_SPENDING_KEY,
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+
+    Ok(())
+}
 
 // Test that a masp unshield transaction can be succesfully executed even across
 // an epoch boundary.
 #[test]
-fn cross_epoch_tx() -> Result<()> {
+fn cross_epoch_unshield() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
     let validator_one_rpc = "127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
