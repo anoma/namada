@@ -787,7 +787,7 @@ pub mod testing {
     };
     use namada_tx::data::{DecryptedTx, Fee, TxType, WrapperTx};
     use proptest::prelude::{Just, Strategy};
-    use proptest::{option, prop_compose, prop_oneof};
+    use proptest::{arbitrary, option, prop_compose, prop_oneof};
     use prost::Message;
     use ripemd::Digest as RipemdDigest;
     use sha2::Digest;
@@ -841,9 +841,12 @@ pub mod testing {
     prop_compose! {
         // Generate an arbitrary commitment
         pub fn arb_commitment()(
-            hash in arb_hash(),
+            commitment in prop_oneof![
+                arb_hash().prop_map(Commitment::Hash),
+                arbitrary::any::<Vec<u8>>().prop_map(Commitment::Id),
+            ],
         ) -> Commitment {
-            Commitment::Hash(hash)
+            commitment
         }
     }
 
@@ -852,6 +855,33 @@ pub mod testing {
         pub fn arb_code()(
             salt: [u8; 8],
             code in arb_commitment(),
+            tag in option::of("[a-zA-Z0-9_]*"),
+        ) -> Code {
+            Code {
+                salt,
+                code,
+                tag,
+            }
+        }
+    }
+
+    prop_compose! {
+        // Generate an arbitrary uttf8 commitment
+        pub fn arb_utf8_commitment()(
+            commitment in prop_oneof![
+                arb_hash().prop_map(Commitment::Hash),
+                "[a-zA-Z0-9_]*".prop_map(|x| Commitment::Id(x.into_bytes())),
+            ],
+        ) -> Commitment {
+            commitment
+        }
+    }
+
+    prop_compose! {
+        // Generate an arbitrary code section
+        pub fn arb_utf8_code()(
+            salt: [u8; 8],
+            code in arb_utf8_commitment(),
             tag in option::of("[a-zA-Z0-9_]*"),
         ) -> Code {
             Code {
@@ -969,11 +999,20 @@ pub mod testing {
             wrapper in arb_wrapper_tx(),
             transfer in arb_transfer(),
             code_hash in arb_hash(),
+            memo in option::of(arb_utf8_code()),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
             tx.add_data(transfer.clone());
             tx.add_code_from_hash(code_hash, Some(TX_TRANSFER_WASM.to_owned()));
+            if let Some(memo) = memo {
+                let sechash = tx
+                    .add_section(Section::ExtraData(memo))
+                    .get_hash();
+                tx.set_memo_sechash(sechash);
+            } else {
+                tx.set_memo_sechash(Default::default());
+            }
             (tx, TxData::Transfer(transfer))
         }
     }
@@ -1012,6 +1051,7 @@ pub mod testing {
                 (Just(MaspTxType::Deshielding), arb_deshielding_transfer(encode_address(&transfer.target), 1)),
             ],
             mut transfer in Just(transfer),
+            memo in option::of(arb_utf8_code()),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
@@ -1055,6 +1095,14 @@ pub mod testing {
                 // Link the Builder to the Transaction by hash code
                 target: masp_tx_hash,
             });
+            if let Some(memo) = memo {
+                let sechash = tx
+                    .add_section(Section::ExtraData(memo))
+                    .get_hash();
+                tx.set_memo_sechash(sechash);
+            } else {
+                tx.set_memo_sechash(Default::default());
+            }
             (tx, TxData::Transfer(transfer))
         }
     }
@@ -1066,11 +1114,20 @@ pub mod testing {
             wrapper in arb_wrapper_tx(),
             bond in arb_bond(),
             code_hash in arb_hash(),
+            memo in option::of(arb_utf8_code()),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
             tx.add_data(bond.clone());
             tx.add_code_from_hash(code_hash, Some(TX_BOND_WASM.to_owned()));
+            if let Some(memo) = memo {
+                let sechash = tx
+                    .add_section(Section::ExtraData(memo))
+                    .get_hash();
+                tx.set_memo_sechash(sechash);
+            } else {
+                tx.set_memo_sechash(Default::default());
+            }
             (tx, TxData::Bond(bond))
         }
     }
@@ -1082,11 +1139,20 @@ pub mod testing {
             wrapper in arb_wrapper_tx(),
             unbond in arb_bond(),
             code_hash in arb_hash(),
+            memo in option::of(arb_utf8_code()),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
             tx.add_data(unbond.clone());
             tx.add_code_from_hash(code_hash, Some(TX_UNBOND_WASM.to_owned()));
+            if let Some(memo) = memo {
+                let sechash = tx
+                    .add_section(Section::ExtraData(memo))
+                    .get_hash();
+                tx.set_memo_sechash(sechash);
+            } else {
+                tx.set_memo_sechash(Default::default());
+            }
             (tx, TxData::Unbond(unbond))
         }
     }
@@ -1099,6 +1165,7 @@ pub mod testing {
             mut init_account in arb_init_account(),
             extra_data in arb_code(),
             code_hash in arb_hash(),
+            memo in option::of(arb_utf8_code()),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
@@ -1106,6 +1173,14 @@ pub mod testing {
             init_account.vp_code_hash = vp_code_hash;
             tx.add_data(init_account.clone());
             tx.add_code_from_hash(code_hash, Some(TX_INIT_ACCOUNT_WASM.to_owned()));
+            if let Some(memo) = memo {
+                let sechash = tx
+                    .add_section(Section::ExtraData(memo))
+                    .get_hash();
+                tx.set_memo_sechash(sechash);
+            } else {
+                tx.set_memo_sechash(Default::default());
+            }
             (tx, TxData::InitAccount(init_account))
         }
     }
@@ -1117,11 +1192,20 @@ pub mod testing {
             wrapper in arb_wrapper_tx(),
             become_validator in arb_become_validator(),
             code_hash in arb_hash(),
+            memo in option::of(arb_utf8_code()),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
             tx.add_data(become_validator.clone());
             tx.add_code_from_hash(code_hash, Some(TX_BECOME_VALIDATOR_WASM.to_owned()));
+            if let Some(memo) = memo {
+                let sechash = tx
+                    .add_section(Section::ExtraData(memo))
+                    .get_hash();
+                tx.set_memo_sechash(sechash);
+            } else {
+                tx.set_memo_sechash(Default::default());
+            }
             (tx, TxData::InitValidator(become_validator))
         }
     }
@@ -1135,6 +1219,7 @@ pub mod testing {
             content_extra_data in arb_code(),
             type_extra_data in arb_code(),
             code_hash in arb_hash(),
+            memo in option::of(arb_utf8_code()),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
@@ -1146,6 +1231,14 @@ pub mod testing {
             }
             tx.add_data(init_proposal.clone());
             tx.add_code_from_hash(code_hash, Some(TX_INIT_PROPOSAL.to_owned()));
+            if let Some(memo) = memo {
+                let sechash = tx
+                    .add_section(Section::ExtraData(memo))
+                    .get_hash();
+                tx.set_memo_sechash(sechash);
+            } else {
+                tx.set_memo_sechash(Default::default());
+            }
             (tx, TxData::InitProposal(init_proposal))
         }
     }
@@ -1157,11 +1250,20 @@ pub mod testing {
             wrapper in arb_wrapper_tx(),
             vote_proposal in arb_vote_proposal(),
             code_hash in arb_hash(),
+            memo in option::of(arb_utf8_code()),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
             tx.add_data(vote_proposal.clone());
             tx.add_code_from_hash(code_hash, Some(TX_VOTE_PROPOSAL.to_owned()));
+            if let Some(memo) = memo {
+                let sechash = tx
+                    .add_section(Section::ExtraData(memo))
+                    .get_hash();
+                tx.set_memo_sechash(sechash);
+            } else {
+                tx.set_memo_sechash(Default::default());
+            }
             (tx, TxData::VoteProposal(vote_proposal))
         }
     }
@@ -1173,11 +1275,20 @@ pub mod testing {
             wrapper in arb_wrapper_tx(),
             pk in arb_common_pk(),
             code_hash in arb_hash(),
+            memo in option::of(arb_utf8_code()),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
             tx.add_data(pk.clone());
             tx.add_code_from_hash(code_hash, Some(TX_REVEAL_PK.to_owned()));
+            if let Some(memo) = memo {
+                let sechash = tx
+                    .add_section(Section::ExtraData(memo))
+                    .get_hash();
+                tx.set_memo_sechash(sechash);
+            } else {
+                tx.set_memo_sechash(Default::default());
+            }
             (tx, TxData::RevealPk(pk))
         }
     }
@@ -1190,6 +1301,7 @@ pub mod testing {
             mut update_account in arb_update_account(),
             extra_data in arb_code(),
             code_hash in arb_hash(),
+            memo in option::of(arb_utf8_code()),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
@@ -1199,6 +1311,14 @@ pub mod testing {
             }
             tx.add_data(update_account.clone());
             tx.add_code_from_hash(code_hash, Some(TX_UPDATE_ACCOUNT_WASM.to_owned()));
+            if let Some(memo) = memo {
+                let sechash = tx
+                    .add_section(Section::ExtraData(memo))
+                    .get_hash();
+                tx.set_memo_sechash(sechash);
+            } else {
+                tx.set_memo_sechash(Default::default());
+            }
             (tx, TxData::UpdateAccount(update_account))
         }
     }
@@ -1210,11 +1330,20 @@ pub mod testing {
             wrapper in arb_wrapper_tx(),
             withdraw in arb_withdraw(),
             code_hash in arb_hash(),
+            memo in option::of(arb_utf8_code()),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
             tx.add_data(withdraw.clone());
             tx.add_code_from_hash(code_hash, Some(TX_WITHDRAW_WASM.to_owned()));
+            if let Some(memo) = memo {
+                let sechash = tx
+                    .add_section(Section::ExtraData(memo))
+                    .get_hash();
+                tx.set_memo_sechash(sechash);
+            } else {
+                tx.set_memo_sechash(Default::default());
+            }
             (tx, TxData::Withdraw(withdraw))
         }
     }
@@ -1226,11 +1355,20 @@ pub mod testing {
             wrapper in arb_wrapper_tx(),
             claim_rewards in arb_withdraw(),
             code_hash in arb_hash(),
+            memo in option::of(arb_utf8_code()),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
             tx.add_data(claim_rewards.clone());
             tx.add_code_from_hash(code_hash, Some(TX_CLAIM_REWARDS_WASM.to_owned()));
+            if let Some(memo) = memo {
+                let sechash = tx
+                    .add_section(Section::ExtraData(memo))
+                    .get_hash();
+                tx.set_memo_sechash(sechash);
+            } else {
+                tx.set_memo_sechash(Default::default());
+            }
             (tx, TxData::ClaimRewards(claim_rewards))
         }
     }
@@ -1242,11 +1380,20 @@ pub mod testing {
             wrapper in arb_wrapper_tx(),
             commission_change in arb_commission_change(),
             code_hash in arb_hash(),
+            memo in option::of(arb_utf8_code()),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
             tx.add_data(commission_change.clone());
             tx.add_code_from_hash(code_hash, Some(TX_CHANGE_COMMISSION_WASM.to_owned()));
+            if let Some(memo) = memo {
+                let sechash = tx
+                    .add_section(Section::ExtraData(memo))
+                    .get_hash();
+                tx.set_memo_sechash(sechash);
+            } else {
+                tx.set_memo_sechash(Default::default());
+            }
             (tx, TxData::CommissionChange(commission_change))
         }
     }
@@ -1258,11 +1405,20 @@ pub mod testing {
             wrapper in arb_wrapper_tx(),
             metadata_change in arb_metadata_change(),
             code_hash in arb_hash(),
+            memo in option::of(arb_utf8_code()),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
             tx.add_data(metadata_change.clone());
             tx.add_code_from_hash(code_hash, Some(TX_CHANGE_METADATA_WASM.to_owned()));
+            if let Some(memo) = memo {
+                let sechash = tx
+                    .add_section(Section::ExtraData(memo))
+                    .get_hash();
+                tx.set_memo_sechash(sechash);
+            } else {
+                tx.set_memo_sechash(Default::default());
+            }
             (tx, TxData::MetaDataChange(metadata_change))
         }
     }
@@ -1274,11 +1430,20 @@ pub mod testing {
             wrapper in arb_wrapper_tx(),
             address in arb_non_internal_address(),
             code_hash in arb_hash(),
+            memo in option::of(arb_utf8_code()),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
             tx.add_data(address.clone());
             tx.add_code_from_hash(code_hash, Some(TX_UNJAIL_VALIDATOR_WASM.to_owned()));
+            if let Some(memo) = memo {
+                let sechash = tx
+                    .add_section(Section::ExtraData(memo))
+                    .get_hash();
+                tx.set_memo_sechash(sechash);
+            } else {
+                tx.set_memo_sechash(Default::default());
+            }
             (tx, TxData::UnjailValidator(address))
         }
     }
@@ -1290,11 +1455,20 @@ pub mod testing {
             wrapper in arb_wrapper_tx(),
             address in arb_non_internal_address(),
             code_hash in arb_hash(),
+            memo in option::of(arb_utf8_code()),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
             tx.add_data(address.clone());
             tx.add_code_from_hash(code_hash, Some(TX_DEACTIVATE_VALIDATOR_WASM.to_owned()));
+            if let Some(memo) = memo {
+                let sechash = tx
+                    .add_section(Section::ExtraData(memo))
+                    .get_hash();
+                tx.set_memo_sechash(sechash);
+            } else {
+                tx.set_memo_sechash(Default::default());
+            }
             (tx, TxData::DeactivateValidator(address))
         }
     }
@@ -1306,11 +1480,20 @@ pub mod testing {
             wrapper in arb_wrapper_tx(),
             address in arb_non_internal_address(),
             code_hash in arb_hash(),
+            memo in option::of(arb_utf8_code()),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
             tx.add_data(address.clone());
             tx.add_code_from_hash(code_hash, Some(TX_REACTIVATE_VALIDATOR_WASM.to_owned()));
+            if let Some(memo) = memo {
+                let sechash = tx
+                    .add_section(Section::ExtraData(memo))
+                    .get_hash();
+                tx.set_memo_sechash(sechash);
+            } else {
+                tx.set_memo_sechash(Default::default());
+            }
             (tx, TxData::ReactivateValidator(address))
         }
     }
@@ -1322,11 +1505,20 @@ pub mod testing {
             wrapper in arb_wrapper_tx(),
             consensus_key_change in arb_consensus_key_change(),
             code_hash in arb_hash(),
+            memo in option::of(arb_utf8_code()),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
             tx.add_data(consensus_key_change.clone());
             tx.add_code_from_hash(code_hash, Some(TX_CHANGE_CONSENSUS_KEY_WASM.to_owned()));
+            if let Some(memo) = memo {
+                let sechash = tx
+                    .add_section(Section::ExtraData(memo))
+                    .get_hash();
+                tx.set_memo_sechash(sechash);
+            } else {
+                tx.set_memo_sechash(Default::default());
+            }
             (tx, TxData::ConsensusKeyChange(consensus_key_change))
         }
     }
@@ -1338,11 +1530,20 @@ pub mod testing {
             wrapper in arb_wrapper_tx(),
             redelegation in arb_redelegation(),
             code_hash in arb_hash(),
+            memo in option::of(arb_utf8_code()),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
             tx.add_data(redelegation.clone());
             tx.add_code_from_hash(code_hash, Some(TX_REDELEGATE_WASM.to_owned()));
+            if let Some(memo) = memo {
+                let sechash = tx
+                    .add_section(Section::ExtraData(memo))
+                    .get_hash();
+                tx.set_memo_sechash(sechash);
+            } else {
+                tx.set_memo_sechash(Default::default());
+            }
             (tx, TxData::Redelegation(redelegation))
         }
     }
@@ -1354,11 +1555,20 @@ pub mod testing {
             wrapper in arb_wrapper_tx(),
             update_steward_commission in arb_update_steward_commission(),
             code_hash in arb_hash(),
+            memo in option::of(arb_utf8_code()),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
             tx.add_data(update_steward_commission.clone());
             tx.add_code_from_hash(code_hash, Some(TX_UPDATE_STEWARD_COMMISSION.to_owned()));
+            if let Some(memo) = memo {
+                let sechash = tx
+                    .add_section(Section::ExtraData(memo))
+                    .get_hash();
+                tx.set_memo_sechash(sechash);
+            } else {
+                tx.set_memo_sechash(Default::default());
+            }
             (tx, TxData::UpdateStewardCommission(update_steward_commission))
         }
     }
@@ -1370,11 +1580,20 @@ pub mod testing {
             wrapper in arb_wrapper_tx(),
             steward in arb_non_internal_address(),
             code_hash in arb_hash(),
+            memo in option::of(arb_utf8_code()),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
             tx.add_data(steward.clone());
             tx.add_code_from_hash(code_hash, Some(TX_RESIGN_STEWARD.to_owned()));
+            if let Some(memo) = memo {
+                let sechash = tx
+                    .add_section(Section::ExtraData(memo))
+                    .get_hash();
+                tx.set_memo_sechash(sechash);
+            } else {
+                tx.set_memo_sechash(Default::default());
+            }
             (tx, TxData::ResignSteward(steward))
         }
     }
@@ -1386,11 +1605,20 @@ pub mod testing {
             wrapper in arb_wrapper_tx(),
             pending_transfer in arb_pending_transfer(),
             code_hash in arb_hash(),
+            memo in option::of(arb_utf8_code()),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
             tx.add_data(pending_transfer.clone());
             tx.add_code_from_hash(code_hash, Some(TX_BRIDGE_POOL_WASM.to_owned()));
+            if let Some(memo) = memo {
+                let sechash = tx
+                    .add_section(Section::ExtraData(memo))
+                    .get_hash();
+                tx.set_memo_sechash(sechash);
+            } else {
+                tx.set_memo_sechash(Default::default());
+            }
             (tx, TxData::PendingTransfer(pending_transfer))
         }
     }
@@ -1402,6 +1630,7 @@ pub mod testing {
             wrapper in arb_wrapper_tx(),
             ibc_any in arb_ibc_any(),
             code_hash in arb_hash(),
+            memo in option::of(arb_utf8_code()),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
@@ -1409,6 +1638,14 @@ pub mod testing {
             ibc_any.encode(&mut tx_data).expect("unable to encode IBC data");
             tx.add_serialized_data(tx_data);
             tx.add_code_from_hash(code_hash, Some(TX_IBC_WASM.to_owned()));
+            if let Some(memo) = memo {
+                let sechash = tx
+                    .add_section(Section::ExtraData(memo))
+                    .get_hash();
+                tx.set_memo_sechash(sechash);
+            } else {
+                tx.set_memo_sechash(Default::default());
+            }
             (tx, TxData::IbcAny(ibc_any))
         }
     }

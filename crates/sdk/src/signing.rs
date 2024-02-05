@@ -46,7 +46,7 @@ use crate::ibc::primitives::proto::Any;
 use crate::io::*;
 use crate::rpc::validate_amount;
 use crate::tx::{
-    TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
+    Commitment, TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
     TX_CHANGE_COMMISSION_WASM, TX_CHANGE_CONSENSUS_KEY_WASM,
     TX_CHANGE_METADATA_WASM, TX_CLAIM_REWARDS_WASM,
     TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
@@ -1707,6 +1707,30 @@ pub async fn to_ledger_vector(
     } else {
         tv.name = "Custom_0".to_string();
         tv.output.push("Type : Custom".to_string());
+    }
+
+    if tx.memo_sechash() != &namada_core::types::hash::Hash::default() {
+        match tx
+            .get_section(tx.memo_sechash())
+            .unwrap()
+            .extra_data_sec()
+            .unwrap()
+            .code
+        {
+            Commitment::Hash(hash) => {
+                tv.output
+                    .push(format!("Memo Hash : {}", HEXLOWER.encode(&hash.0)));
+                tv.output_expert
+                    .push(format!("Memo Hash : {}", HEXLOWER.encode(&hash.0)));
+            }
+            Commitment::Id(id) => {
+                let memo = String::from_utf8(id).map_err(|err| {
+                    Error::from(EncodingError::Conversion(err.to_string()))
+                })?;
+                tv.output.push(format!("Memo : {}", memo));
+                tv.output_expert.push(format!("Memo : {}", memo));
+            }
+        }
     }
 
     if let Some(wrapper) = tx.header.wrapper() {
