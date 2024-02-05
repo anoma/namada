@@ -765,7 +765,7 @@ impl ShieldedUtils for BenchShieldedUtils {
         // Atomicity is required to prevent other client instances from
         // reading corrupt data.
         std::fs::rename(
-            tmp_path.clone(),
+            tmp_path,
             self.context_dir
                 .0
                 .path()

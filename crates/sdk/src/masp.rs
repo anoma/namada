@@ -668,12 +668,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     /// directory. If this fails, then leave the current context unchanged.
     pub async fn load(&mut self) -> std::io::Result<()> {
         match self.sync_status {
-            ContextSyncStatus::Confirmed => {
-                eprintln!("LOADIGN CONFIRMED CONTEXT"); //FIXME: remove
-                self.utils.clone().load(self).await
-            }
+            ContextSyncStatus::Confirmed => self.utils.clone().load(self).await,
             ContextSyncStatus::Speculative => {
-                eprintln!("LOADING SPECULATIVE CONTEXT"); //FIXME: remove
                 self.utils.clone().load_speculative(self).await
             }
         }
@@ -687,8 +683,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
         Ok(())
     }
-
-    //FIXME: probably I query the conversions everytime so the speculative context works anyway
 
     /// Save this shielded context into its associated context directory. If the
     /// state to be saved is confirmed than also delete the speculative one (if
@@ -751,7 +745,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         // Reload the state from file to get the last confirmed state and
         // discard any speculative data, we cannot fetch on top of a
         // speculative state
-        // Always reload the confirmed context or initialize a new one if not found
+        // Always reload the confirmed context or initialize a new one if not
+        // found
         if self.load_confirmed().await.is_err() {
             // Initialize a default context if we couldn't load a valid one
             // from storage
@@ -2301,27 +2296,28 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
         // To speed up integration tests, we can save and load proofs
         #[cfg(feature = "testing")]
-        let load_or_save =
-            if let Ok(masp_proofs) = env::var(ENV_VAR_MASP_TEST_PROOFS) {
-                let parsed = match masp_proofs.to_ascii_lowercase().as_str() {
-                    "load" => LoadOrSaveProofs::Load,
-                    "save" => LoadOrSaveProofs::Save,
-                    env_var => Err(Error::Other(format!(
+        let load_or_save = if let Ok(masp_proofs) =
+            env::var(ENV_VAR_MASP_TEST_PROOFS)
+        {
+            let parsed = match masp_proofs.to_ascii_lowercase().as_str() {
+                "load" => LoadOrSaveProofs::Load,
+                "save" => LoadOrSaveProofs::Save,
+                env_var => Err(Error::Other(format!(
                     "Unexpected value for {ENV_VAR_MASP_TEST_PROOFS} env var. \
                      Expecting \"save\" or \"load\", but got \"{env_var}\"."
                 )))?,
-                };
-                if env::var(ENV_VAR_MASP_TEST_SEED).is_err() {
-                    Err(Error::Other(format!(
+            };
+            if env::var(ENV_VAR_MASP_TEST_SEED).is_err() {
+                Err(Error::Other(format!(
                     "Ensure to set a seed with {ENV_VAR_MASP_TEST_SEED} env \
                      var when using {ENV_VAR_MASP_TEST_PROOFS} for \
                      deterministic proofs."
                 )))?;
-                }
-                parsed
-            } else {
-                LoadOrSaveProofs::Neither
-            };
+            }
+            parsed
+        } else {
+            LoadOrSaveProofs::Neither
+        };
 
         let builder_clone = builder.clone().map_builder(WalletMap);
         #[cfg(feature = "testing")]
@@ -2470,42 +2466,30 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             }
         }
 
-        let mut vks = Vec::with_capacity(2);
-        if let Some(esk) = source.spending_key() {
-            vks.push(to_viewing_key(&esk.into()).vk);
-        }
-
-        if let Some(pa) = target.payment_address() {
-            let wallet = context.wallet().await;
-            if let Some(alias) = wallet.find_alias_by_payment_addr(&pa) {
-                if let Ok(vk) = wallet.find_viewing_key(alias) {
-                    vks.push(vk.clone().into());
-                }
-            }
-        }
-
         let native_token = query_native_token(context.client()).await?;
-        //FIXME: I never enter this loop!!!
-        eprintln!("ABOUT OT ITERATE ON VKS"); //FIXME: remove
+        let vks: Vec<_> = context
+            .wallet()
+            .await
+            .get_viewing_keys()
+            .values()
+            .map(|evk| ExtendedFullViewingKey::from(*evk).fvk.vk)
+            .collect();
+        let last_witnessed_tx = self.tx_note_map.keys().max();
+        // This data will be discarded at the next fetch so we don't need to
+        // populate it accurately
+        let indexed_tx = last_witnessed_tx.map_or_else(
+            || IndexedTx {
+                height: BlockHeight::first(),
+                index: TxIndex(0),
+            },
+            |indexed| IndexedTx {
+                height: indexed.height,
+                index: indexed.index + 1,
+            },
+        );
+        self.update_witness_map(indexed_tx, masp_tx)?;
         for vk in vks {
-            eprintln!("IN ITERATE VKS: {:#?}", vk); //FIXME: RMEOVE
-                                                    //FIXME: can share this code with fetch?
             self.vk_heights.entry(vk).or_default();
-            // This data will be discarded at the next fetch so we don't need to
-            // populate it accurately
-            let indexed_tx = self.vk_heights.get(&vk).unwrap().map_or_else(
-                || IndexedTx {
-                    height: BlockHeight::first(),
-                    index: TxIndex(0),
-                },
-                |indexed| IndexedTx {
-                    height: indexed.height,
-                    index: indexed.index + 1,
-                },
-            );
-            eprintln!("NED INDEXED TX: {:#?}", indexed_tx); //FIXME: remove
-
-            self.update_witness_map(indexed_tx, masp_tx)?;
 
             self.scan_tx(
                 indexed_tx,
@@ -3847,7 +3831,7 @@ pub mod fs {
         }
 
         /// Save this confirmed shielded context into its associated context
-        /// directory. At the same time, delete the speculative file if present   
+        /// directory. At the same time, delete the speculative file if present
         async fn save<U: ShieldedUtils + MaybeSync>(
             &self,
             ctx: &ShieldedContext<U>,

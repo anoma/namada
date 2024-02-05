@@ -63,9 +63,7 @@ use crate::rpc::{
     self, query_wasm_code_hash, validate_amount, InnerTxResult,
     TxBroadcastData, TxResponse,
 };
-use crate::signing::{
-    self, validate_fee_and_gen_unshield, SigningTxData, TxSourcePostBalance,
-};
+use crate::signing::{self, validate_fee_and_gen_unshield, SigningTxData};
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_rpc::error::Error as RpcError;
 use crate::wallet::WalletIo;
@@ -184,8 +182,8 @@ pub fn dump_tx<IO: Io>(io: &IO, args: &args::Tx, tx: Tx) {
 /// Prepare a transaction for signing and submission by adding a wrapper header
 /// to it.
 #[allow(clippy::too_many_arguments)]
-pub async fn prepare_tx(
-    context: &impl Namada,
+pub async fn prepare_tx<C: crate::queries::Client + Sync>(
+    client: &C,
     args: &args::Tx,
     tx: &mut Tx,
     unshield: Option<masp_primitives::transaction::Transaction>,
@@ -193,12 +191,9 @@ pub async fn prepare_tx(
     fee_payer: common::PublicKey,
 ) -> Result<()> {
     if !args.dry_run {
-        let epoch = rpc::query_epoch(context.client()).await?;
+        let epoch = rpc::query_epoch(client).await?;
 
-        signing::wrap_tx(
-            context, tx, args, epoch, unshield, fee_amount, fee_payer,
-        )
-        .await
+        signing::wrap_tx(tx, args, epoch, unshield, fee_amount, fee_payer).await
     } else {
         Ok(())
     }
@@ -293,7 +288,7 @@ pub async fn build_reveal_pk(
         signing::aux_signing_data(context, args, None, Some(public_key.into()))
             .await?;
     let (fee_amount, _, unshield) =
-        validate_fee_and_gen_unshield(context, &args, &signing_data.fee_payer)
+        validate_fee_and_gen_unshield(context, args, &signing_data.fee_payer)
             .await?;
 
     build(
@@ -587,7 +582,7 @@ pub async fn build_validator_commission_change(
     .await?;
     let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
         context,
-        &tx_args,
+        tx_args,
         &signing_data.fee_payer,
     )
     .await?;
@@ -713,7 +708,7 @@ pub async fn build_validator_metadata_change(
     .await?;
     let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
         context,
-        &tx_args,
+        tx_args,
         &signing_data.fee_payer,
     )
     .await?;
@@ -848,7 +843,7 @@ pub async fn build_update_steward_commission(
     .await?;
     let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
         context,
-        &tx_args,
+        tx_args,
         &signing_data.fee_payer,
     )
     .await?;
@@ -915,7 +910,7 @@ pub async fn build_resign_steward(
     .await?;
     let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
         context,
-        &tx_args,
+        tx_args,
         &signing_data.fee_payer,
     )
     .await?;
@@ -964,7 +959,7 @@ pub async fn build_unjail_validator(
     .await?;
     let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
         context,
-        &tx_args,
+        tx_args,
         &signing_data.fee_payer,
     )
     .await?;
@@ -1073,7 +1068,7 @@ pub async fn build_deactivate_validator(
     .await?;
     let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
         context,
-        &tx_args,
+        tx_args,
         &signing_data.fee_payer,
     )
     .await?;
@@ -1151,7 +1146,7 @@ pub async fn build_reactivate_validator(
     .await?;
     let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
         context,
-        &tx_args,
+        tx_args,
         &signing_data.fee_payer,
     )
     .await?;
@@ -1374,7 +1369,7 @@ pub async fn build_redelegation(
     .await?;
     let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
         context,
-        &tx_args,
+        tx_args,
         &signing_data.fee_payer,
     )
     .await?;
@@ -1421,7 +1416,7 @@ pub async fn build_withdraw(
     .await?;
     let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
         context,
-        &tx_args,
+        tx_args,
         &signing_data.fee_payer,
     )
     .await?;
@@ -1511,7 +1506,7 @@ pub async fn build_claim_rewards(
     .await?;
     let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
         context,
-        &tx_args,
+        tx_args,
         &signing_data.fee_payer,
     )
     .await?;
@@ -1592,7 +1587,7 @@ pub async fn build_unbond(
     .await?;
     let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
         context,
-        &tx_args,
+        tx_args,
         &signing_data.fee_payer,
     )
     .await?;
@@ -1800,7 +1795,7 @@ pub async fn build_bond(
     let (fee_amount, updated_balance, unshield) =
         validate_fee_and_gen_unshield(
             context,
-            &tx_args,
+            tx_args,
             &signing_data.fee_payer,
         )
         .await?;
@@ -1816,9 +1811,9 @@ pub async fn build_bond(
             if tx_args.force {
                 edisplay_line!(
                     context.io(),
-                    "The balance of the source {} of token {} is lower \
-                         than the amount to be transferred. Amount to \
-                         transfer is {} and the balance is {}.",
+                    "The balance of the source {} of token {} is lower than \
+                     the amount to be transferred. Amount to transfer is {} \
+                     and the balance is {}.",
                     bond_source,
                     native_token,
                     context.format_amount(&native_token, *amount).await,
@@ -1894,8 +1889,8 @@ pub async fn build_default_proposal(
         default_signer,
     )
     .await?;
-    let (fee_amount, updated_balance, unshield) =
-        validate_fee_and_gen_unshield(context, &tx, &signing_data.fee_payer)
+    let (fee_amount, _updated_balance, unshield) =
+        validate_fee_and_gen_unshield(context, tx, &signing_data.fee_payer)
             .await?;
 
     let init_proposal_data = InitProposalData::try_from(proposal.clone())
@@ -1953,7 +1948,7 @@ pub async fn build_vote_proposal(
     )
     .await?;
     let (fee_amount, _, unshield) =
-        validate_fee_and_gen_unshield(context, &tx, &signing_data.fee_payer)
+        validate_fee_and_gen_unshield(context, tx, &signing_data.fee_payer)
             .await?;
 
     let proposal_vote = ProposalVote::try_from(vote.clone())
@@ -2042,8 +2037,8 @@ pub async fn build_pgf_funding_proposal(
         default_signer,
     )
     .await?;
-    let (fee_amount, updated_balance, unshield) =
-        validate_fee_and_gen_unshield(context, &tx, &signing_data.fee_payer)
+    let (fee_amount, _updated_balance, unshield) =
+        validate_fee_and_gen_unshield(context, tx, &signing_data.fee_payer)
             .await?;
 
     // TODO: need to pay the fee to submit a proposal, check enough balance
@@ -2091,8 +2086,8 @@ pub async fn build_pgf_stewards_proposal(
         default_signer,
     )
     .await?;
-    let (fee_amount, updated_balance, unshield) =
-        validate_fee_and_gen_unshield(context, &tx, &signing_data.fee_payer)
+    let (fee_amount, _updated_balance, unshield) =
+        validate_fee_and_gen_unshield(context, tx, &signing_data.fee_payer)
             .await?;
 
     // TODO: need to pay the fee to submit a proposal, check enough balance
@@ -2163,9 +2158,9 @@ pub async fn build_ibc_transfer(
             if args.tx.force {
                 edisplay_line!(
                     context.io(),
-                    "The balance of the source {} of token {} is lower \
-                         than the amount to be transferred. Amount to \
-                         transfer is {} and the balance is {}.",
+                    "The balance of the source {} of token {} is lower than \
+                     the amount to be transferred. Amount to transfer is {} \
+                     and the balance is {}.",
                     source,
                     args.token,
                     context
@@ -2323,7 +2318,7 @@ pub async fn build_ibc_transfer(
     .add_serialized_data(data);
 
     prepare_tx(
-        context,
+        context.client(),
         &args.tx,
         &mut tx,
         unshield,
@@ -2393,7 +2388,7 @@ where
         .add_data(data);
 
     prepare_tx(
-        context,
+        context.client(),
         tx_args,
         &mut tx_builder,
         unshield,
@@ -2502,9 +2497,9 @@ pub async fn build_transfer<N: Namada>(
             if args.tx.force {
                 edisplay_line!(
                     context.io(),
-                    "The balance of the source {} of token {} is lower \
-                         than the amount to be transferred. Amount to \
-                         transfer is {} and the balance is {}.",
+                    "The balance of the source {} of token {} is lower than \
+                     the amount to be transferred. Amount to transfer is {} \
+                     and the balance is {}.",
                     source,
                     args.token,
                     context
@@ -2682,7 +2677,7 @@ pub async fn build_init_account(
         signing::aux_signing_data(context, tx_args, None, None).await?;
     let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
         context,
-        &tx_args,
+        tx_args,
         &signing_data.fee_payer,
     )
     .await?;
@@ -2753,7 +2748,7 @@ pub async fn build_update_account(
     .await?;
     let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
         context,
-        &tx_args,
+        tx_args,
         &signing_data.fee_payer,
     )
     .await?;
@@ -2846,7 +2841,7 @@ pub async fn build_custom(
     .await?;
     let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
         context,
-        &tx_args,
+        tx_args,
         &signing_data.fee_payer,
     )
     .await?;
@@ -2874,7 +2869,7 @@ pub async fn build_custom(
     };
 
     prepare_tx(
-        context,
+        context.client(),
         tx_args,
         &mut tx,
         unshield,

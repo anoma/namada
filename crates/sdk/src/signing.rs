@@ -415,7 +415,8 @@ pub struct TxSourcePostBalance {
     pub token: Address,
 }
 
-/// Validate the fee of the transaction and generate the fee unshielding transaction if needed
+/// Validate the fee of the transaction and generate the fee unshielding
+/// transaction if needed
 pub async fn validate_fee_and_gen_unshield<N: Namada>(
     context: &N,
     args: &args::Tx<SdkTypes>,
@@ -632,8 +633,7 @@ pub async fn validate_fee_and_gen_unshield<N: Namada>(
 /// wrapper and its payload which is needed for monitoring its
 /// progress on chain.
 #[allow(clippy::too_many_arguments)]
-pub async fn wrap_tx<N: Namada>(
-    context: &N,
+pub async fn wrap_tx(
     tx: &mut Tx,
     args: &args::Tx<SdkTypes>,
     epoch: Epoch,

@@ -110,7 +110,7 @@ pub async fn build_bridge_pool_tx(
     .add_data(transfer);
 
     prepare_tx(
-        context,
+        context.client(),
         &tx_args,
         &mut tx,
         unshield,

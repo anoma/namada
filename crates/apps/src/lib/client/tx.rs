@@ -423,7 +423,7 @@ pub async fn submit_change_consensus_key(
     .await?;
 
     tx::prepare_tx(
-        namada,
+        namada.client(),
         &tx_args,
         &mut tx,
         unshield,
@@ -758,7 +758,7 @@ pub async fn submit_become_validator(
     .await?;
 
     tx::prepare_tx(
-        namada,
+        namada.client(),
         &tx_args,
         &mut tx,
         unshield,
@@ -958,8 +958,6 @@ pub async fn submit_transfer(
                     let submission_epoch = rpc::query_and_print_epoch(namada).await;
                     // And its submission epoch doesn't match construction epoch
                     if tx_epoch.unwrap() != submission_epoch {
-                        //FIXME: here if in sepculative context fetch the updated conversion anchor
-                        //FIXME: actually probably not needed, make an e2e test to test this
                         // Then we probably straddled an epoch boundary. Let's retry...
                         edisplay_line!(namada.io(),
                             "MASP transaction rejected and this may be due to the \
