@@ -87,7 +87,7 @@ jobs:
       - name: Download namada release binaries
         run: |
           unset AWS_SESSION_TOKEN
-          aws --endpoint-url $S3_ENDPOINT_URL s3 cp s3://$BUCKET_NAME $ZIP_FILENAME --region $AWS_REGION
+          aws --endpoint-url $S3_ENDPOINT_URL s3 cp s3://$BUCKET_NAME/$ZIP_FILENAME $ZIP_FILENAME --region $AWS_REGION
           unzip $ZIP_FILENAME
         env:
           BUCKET_NAME: namada-binaries
