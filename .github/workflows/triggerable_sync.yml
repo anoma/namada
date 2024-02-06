@@ -41,9 +41,10 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        mold_version: [2.4.0]
-        name: ["Run chain sync test"]
         nightly_version: [nightly-2023-06-01]
+        mold_version: [2.4.0]
+        comet_bft: [0.37.2]
+        name: ["Run chain sync test"]
         timeout: [360]
 
     steps:
@@ -96,6 +97,11 @@ jobs:
           ZIP_FILENAME: "${{ inputs.binaries_name }}.zip"
           AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+      - name: Download CometBFT
+        run: |
+          curl -o cometbft.tar.gz -LO https://github.com/cometbft/cometbft/releases/download/v${{ matrix.comet_bft }}/cometbft_${{ matrix.comet_bft }}_linux_amd64.tar.gz
+          tar -xvzf cometbft.tar.gz
+          mv cometbft /usr/local/bin
       - name: Run the test
         run: cargo +${{ matrix.nightly_version }}
                test e2e::ledger_tests::test_sync_chain -- --exact --ignored
