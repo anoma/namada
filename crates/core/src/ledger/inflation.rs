@@ -311,7 +311,7 @@ mod test {
     }
 
     #[test]
-    fn test_inflation_playground() {
+    fn test_pos_inflation_playground() {
         let init_locked_ratio = Dec::from_str("0.1").unwrap();
         let total_tokens = 1_000_000_000_000_000_u64;
         let epochs_per_year = 365_u64;
@@ -393,5 +393,57 @@ mod test {
         // controller.last_inflation_amount = inflation_1;
         // controller.total_tokens += inflation_1;
         // controller.locked_tokens += inflation_1;
+    }
+
+    #[test]
+    fn test_masp_inflation_playground() {
+        let denom = Uint::from(1_000_000); // token denomination (usually 6)
+        let total_tokens = 10_000_000_000_u64; // 10B naan
+        let total_tokens = Uint::from(total_tokens) * denom;
+        let locked_tokens_target = Uint::from(500_000) * denom; // Dependent on the token type
+        let init_locked_tokens =
+            (Dec::from_str("0.1").unwrap() // Arbitrary amount to play around with
+            * Dec::try_from(locked_tokens_target).unwrap())
+            .to_uint()
+            .unwrap();
+        let epochs_per_year = 730_u64; // SE configuration
+
+        let num_rounds = 10;
+
+        let mut controller = ShieldedRewardsController {
+            locked_tokens: init_locked_tokens,
+            total_native_tokens: total_tokens,
+            max_reward_rate: Dec::from_str("0.01").unwrap(), /* Pre-determined based on token type */
+            last_inflation_amount: Uint::zero(),
+            p_gain_nom: Dec::from_str("25000").unwrap(), // To be configured
+            d_gain_nom: Dec::from_str("25000").unwrap(), // To be configured
+            epochs_per_year,
+            locked_tokens_target,
+            locked_tokens_last: init_locked_tokens,
+        };
+        dbg!(&controller);
+
+        for round in 0..num_rounds {
+            let ShieldedValsToUpdate { inflation } = controller.clone().run();
+            // dbg!(&inflation);
+            let rate = Dec::try_from(inflation).unwrap()
+                * Dec::from(epochs_per_year)
+                / Dec::try_from(total_tokens).unwrap();
+            let locked = controller.locked_tokens;
+
+            println!(
+                "Round {round}: Locked amount: {locked}, inflation rate: \
+                 {rate} -- (raw infl: {inflation})",
+            );
+            // dbg!(&controller);
+
+            controller.last_inflation_amount = inflation;
+            controller.total_native_tokens += inflation;
+            controller.locked_tokens_last = locked;
+
+            let change_staked_tokens =
+                Uint::from(2) * controller.locked_tokens_target;
+            controller.locked_tokens += change_staked_tokens;
+        }
     }
 }
