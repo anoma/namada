@@ -2062,6 +2062,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "gov_proposals"
+version = "0.31.0"
+dependencies = [
+ "getrandom 0.2.11",
+ "namada",
+ "namada_core",
+ "namada_proof_of_stake",
+ "namada_tx_prelude",
+ "wee_alloc",
+]
+
+[[package]]
 name = "group"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
