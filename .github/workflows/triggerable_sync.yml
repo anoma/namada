@@ -89,7 +89,7 @@ jobs:
           BUCKET_NAME: namada-binaries
           AWS_REGION: us-east-1
           S3_ENDPOINT_URL: https://minio.heliax.click
-          ZIP_FILENAME: binaries-$COMMIT_SHA.zip
+          ZIP_FILENAME: binaries-{{ $env.COMMIT_SHA }}.zip
           AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
       - name: Run the test
@@ -106,7 +106,7 @@ jobs:
         if: success() || failure()
         uses: actions/upload-artifact@v3
         with:
-          name: logs-sync-$COMMIT_SHA
+          name: logs-sync-{{ $env.COMMIT_SHA }}
           path: |
             /tmp/.*/logs/
             /tmp/.*/setup/validator-*/logs/
