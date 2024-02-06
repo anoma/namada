@@ -461,26 +461,15 @@ pub trait ShieldedUtils:
     /// Get a MASP transaction prover
     fn local_tx_prover(&self) -> LocalTxProver;
 
-    /// Load up the currently confirmed saved ShieldedContext
+    /// Load up the currently saved ShieldedContext
     async fn load<U: ShieldedUtils + MaybeSend>(
         &self,
         ctx: &mut ShieldedContext<U>,
+        force_confirmed: bool,
     ) -> std::io::Result<()>;
 
-    /// Load up the currently saved speculative ShieldedContext
-    async fn load_speculative<U: ShieldedUtils + MaybeSend>(
-        &self,
-        ctx: &mut ShieldedContext<U>,
-    ) -> std::io::Result<()>;
-
-    /// Save the given confirmed ShieldedContext for future loads
+    /// Save the given ShieldedContext for future loads
     async fn save<U: ShieldedUtils + MaybeSync>(
-        &self,
-        ctx: &ShieldedContext<U>,
-    ) -> std::io::Result<()>;
-
-    /// Save the given speculative ShieldedContext for future loads
-    async fn save_speculative<U: ShieldedUtils + MaybeSync>(
         &self,
         ctx: &ShieldedContext<U>,
     ) -> std::io::Result<()>;
@@ -667,19 +656,14 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     /// Try to load the last saved shielded context from the given context
     /// directory. If this fails, then leave the current context unchanged.
     pub async fn load(&mut self) -> std::io::Result<()> {
-        match self.sync_status {
-            ContextSyncStatus::Confirmed => self.utils.clone().load(self).await,
-            ContextSyncStatus::Speculative => {
-                self.utils.clone().load_speculative(self).await
-            }
-        }
+        self.utils.clone().load(self, false).await
     }
 
     /// Try to load the last saved confirmed shielded context from the given
     /// context directory. If this fails, then leave the current context
     /// unchanged.
     pub async fn load_confirmed(&mut self) -> std::io::Result<()> {
-        self.utils.clone().load(self).await?;
+        self.utils.clone().load(self, true).await?;
 
         Ok(())
     }
@@ -688,12 +672,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     /// state to be saved is confirmed than also delete the speculative one (if
     /// available)
     pub async fn save(&self) -> std::io::Result<()> {
-        match self.sync_status {
-            ContextSyncStatus::Confirmed => self.utils.save(self).await,
-            ContextSyncStatus::Speculative => {
-                self.utils.save_speculative(self).await
-            }
-        }
+        self.utils.save(self).await
     }
 
     /// Update the merkle tree of witnesses the first time we
@@ -3793,8 +3772,6 @@ pub mod fs {
 
     #[cfg_attr(feature = "async-send", async_trait::async_trait)]
     #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
-    // FIXME: I can probably refactor everything to have the associated
-    // contextsSycn state on this trait
     impl ShieldedUtils for FsShieldedUtils {
         fn local_tx_prover(&self) -> LocalTxProver {
             if let Ok(params_dir) = env::var(ENV_VAR_MASP_PARAMS_DIR) {
@@ -3814,29 +3791,18 @@ pub mod fs {
         async fn load<U: ShieldedUtils + MaybeSend>(
             &self,
             ctx: &mut ShieldedContext<U>,
+            force_confirmed: bool,
         ) -> std::io::Result<()> {
             // Try to load shielded context from file
-            let mut ctx_file = File::open(self.context_dir.join(FILE_NAME))?;
-            let mut bytes = Vec::new();
-            ctx_file.read_to_end(&mut bytes)?;
-            // Fill the supplied context with the deserialized object
-            *ctx = ShieldedContext {
-                utils: ctx.utils.clone(),
-                ..ShieldedContext::<U>::deserialize(&mut &bytes[..])?
+            let file_name = if force_confirmed {
+                FILE_NAME
+            } else {
+                match ctx.sync_status {
+                    ContextSyncStatus::Confirmed => FILE_NAME,
+                    ContextSyncStatus::Speculative => SPECULATIVE_FILE_NAME,
+                }
             };
-            Ok(())
-        }
-
-        /// Try to load the last saved speculative shielded context from the
-        /// given context directory. If this fails, then leave the
-        /// current context unchanged.
-        async fn load_speculative<U: ShieldedUtils + MaybeSend>(
-            &self,
-            ctx: &mut ShieldedContext<U>,
-        ) -> std::io::Result<()> {
-            // Try to load shielded context from file
-            let mut ctx_file =
-                File::open(self.context_dir.join(SPECULATIVE_FILE_NAME))?;
+            let mut ctx_file = File::open(self.context_dir.join(file_name))?;
             let mut bytes = Vec::new();
             ctx_file.read_to_end(&mut bytes)?;
             // Fill the supplied context with the deserialized object
@@ -3854,7 +3820,13 @@ pub mod fs {
             ctx: &ShieldedContext<U>,
         ) -> std::io::Result<()> {
             // TODO: use mktemp crate?
-            let tmp_path = self.context_dir.join(TMP_FILE_NAME);
+            let (tmp_file_name, file_name) = match ctx.sync_status {
+                ContextSyncStatus::Confirmed => (TMP_FILE_NAME, FILE_NAME),
+                ContextSyncStatus::Speculative => {
+                    (SPECULATIVE_TMP_FILE_NAME, SPECULATIVE_FILE_NAME)
+                }
+            };
+            let tmp_path = self.context_dir.join(tmp_file_name);
             {
                 // First serialize the shielded context into a temporary file.
                 // Inability to create this file implies a simultaneuous write
@@ -3874,50 +3846,16 @@ pub mod fs {
             // Atomically update the old shielded context file with new data.
             // Atomicity is required to prevent other client instances from
             // reading corrupt data.
-            std::fs::rename(tmp_path, self.context_dir.join(FILE_NAME))?;
+            std::fs::rename(tmp_path, self.context_dir.join(file_name))?;
 
             // Remove the speculative file if present since it's state is
             // overruled by the confirmed one we just saved
-            let _ = std::fs::remove_file(
-                self.context_dir.join(SPECULATIVE_FILE_NAME),
-            );
-
-            Ok(())
-        }
-
-        // FIXME: refactor, the functions are exactly the same, just pass the
-        // enum and modify the filename based on that
-        /// Save this speculative shielded context into its associated context
-        /// directory
-        async fn save_speculative<U: ShieldedUtils + MaybeSync>(
-            &self,
-            ctx: &ShieldedContext<U>,
-        ) -> std::io::Result<()> {
-            // TODO: use mktemp crate?
-            let tmp_path = self.context_dir.join(SPECULATIVE_TMP_FILE_NAME);
-            {
-                // First serialize the shielded context into a temporary file.
-                // Inability to create this file implies a simultaneuous write
-                // is in progress. In this case, immediately
-                // fail. This is unproblematic because the data
-                // intended to be stored can always be re-fetched
-                // from the blockchain.
-                let mut ctx_file = OpenOptions::new()
-                    .write(true)
-                    .create_new(true)
-                    .open(tmp_path.clone())?;
-                let mut bytes = Vec::new();
-                ctx.serialize(&mut bytes)
-                    .expect("cannot serialize shielded context");
-                ctx_file.write_all(&bytes[..])?;
+            if let ContextSyncStatus::Confirmed = ctx.sync_status {
+                let _ = std::fs::remove_file(
+                    self.context_dir.join(SPECULATIVE_FILE_NAME),
+                );
             }
-            // Atomically update the old shielded context file with new data.
-            // Atomicity is required to prevent other client instances from
-            // reading corrupt data.
-            std::fs::rename(
-                tmp_path,
-                self.context_dir.join(SPECULATIVE_FILE_NAME),
-            )?;
+
             Ok(())
         }
     }

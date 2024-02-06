@@ -76,7 +76,7 @@ use namada::types::token::{Amount, DenominatedAmount, Transfer};
 use namada::vm::wasm::run;
 use namada::{proof_of_stake, tendermint};
 use namada_sdk::masp::{
-    self, ShieldedContext, ShieldedTransfer, ShieldedUtils,
+    self, ContextSyncStatus, ShieldedContext, ShieldedTransfer, ShieldedUtils,
 };
 pub use namada_sdk::tx::{
     TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
@@ -656,10 +656,19 @@ impl ShieldedUtils for BenchShieldedUtils {
     async fn load<U: ShieldedUtils>(
         &self,
         ctx: &mut ShieldedContext<U>,
+        force_confirmed: bool,
     ) -> std::io::Result<()> {
         // Try to load shielded context from file
+        let file_name = if force_confirmed {
+            FILE_NAME
+        } else {
+            match ctx.sync_status {
+                ContextSyncStatus::Confirmed => FILE_NAME,
+                ContextSyncStatus::Speculative => SPECULATIVE_FILE_NAME,
+            }
+        };
         let mut ctx_file = File::open(
-            self.context_dir.0.path().to_path_buf().join(FILE_NAME),
+            self.context_dir.0.path().to_path_buf().join(file_name),
         )?;
         let mut bytes = Vec::new();
         ctx_file.read_to_end(&mut bytes)?;
@@ -671,38 +680,19 @@ impl ShieldedUtils for BenchShieldedUtils {
         Ok(())
     }
 
-    /// Try to load the last saved speculative shielded context from the given
-    /// context directory. If this fails, then leave the current context
-    /// unchanged.
-    async fn load_speculative<U: ShieldedUtils>(
-        &self,
-        ctx: &mut ShieldedContext<U>,
-    ) -> std::io::Result<()> {
-        // Try to load shielded context from file
-        let mut ctx_file = File::open(
-            self.context_dir
-                .0
-                .path()
-                .to_path_buf()
-                .join(SPECULATIVE_FILE_NAME),
-        )?;
-        let mut bytes = Vec::new();
-        ctx_file.read_to_end(&mut bytes)?;
-        // Fill the supplied context with the deserialized object
-        *ctx = ShieldedContext {
-            utils: ctx.utils.clone(),
-            ..ShieldedContext::<U>::deserialize(&mut &bytes[..])?
-        };
-        Ok(())
-    }
-
     /// Save this shielded context into its associated context directory
     async fn save<U: ShieldedUtils>(
         &self,
         ctx: &ShieldedContext<U>,
     ) -> std::io::Result<()> {
+        let (tmp_file_name, file_name) = match ctx.sync_status {
+            ContextSyncStatus::Confirmed => (TMP_FILE_NAME, FILE_NAME),
+            ContextSyncStatus::Speculative => {
+                (SPECULATIVE_TMP_FILE_NAME, SPECULATIVE_FILE_NAME)
+            }
+        };
         let tmp_path =
-            self.context_dir.0.path().to_path_buf().join(TMP_FILE_NAME);
+            self.context_dir.0.path().to_path_buf().join(tmp_file_name);
         {
             // First serialize the shielded context into a temporary file.
             // Inability to create this file implies a simultaneuous write is in
@@ -723,55 +713,20 @@ impl ShieldedUtils for BenchShieldedUtils {
         // corrupt data.
         std::fs::rename(
             tmp_path,
-            self.context_dir.0.path().to_path_buf().join(FILE_NAME),
+            self.context_dir.0.path().to_path_buf().join(file_name),
         )?;
 
         // Remove the speculative file if present since it's state is
         // overwritten by the confirmed one we just saved
-        let _ = std::fs::remove_file(SPECULATIVE_FILE_NAME);
-        Ok(())
-    }
-
-    /// Save this speculative shielded context into its associated context
-    /// directory
-    async fn save_speculative<U: ShieldedUtils>(
-        &self,
-        ctx: &ShieldedContext<U>,
-    ) -> std::io::Result<()> {
-        // TODO: use mktemp crate?
-        let tmp_path = self
-            .context_dir
-            .0
-            .path()
-            .to_path_buf()
-            .join(SPECULATIVE_TMP_FILE_NAME);
-        {
-            // First serialize the shielded context into a temporary file.
-            // Inability to create this file implies a simultaneuous write
-            // is in progress. In this case, immediately
-            // fail. This is unproblematic because the data
-            // intended to be stored can always be re-fetched
-            // from the blockchain.
-            let mut ctx_file = OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(tmp_path.clone())?;
-            let mut bytes = Vec::new();
-            ctx.serialize(&mut bytes)
-                .expect("cannot serialize shielded context");
-            ctx_file.write_all(&bytes[..])?;
+        if let ContextSyncStatus::Confirmed = ctx.sync_status {
+            let _ = std::fs::remove_file(
+                self.context_dir
+                    .0
+                    .path()
+                    .to_path_buf()
+                    .join(SPECULATIVE_FILE_NAME),
+            );
         }
-        // Atomically update the old shielded context file with new data.
-        // Atomicity is required to prevent other client instances from
-        // reading corrupt data.
-        std::fs::rename(
-            tmp_path,
-            self.context_dir
-                .0
-                .path()
-                .to_path_buf()
-                .join(SPECULATIVE_FILE_NAME),
-        )?;
         Ok(())
     }
 }
