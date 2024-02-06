@@ -7,6 +7,10 @@ on:
         description: 'Branch name'
         required: true
         type: string
+      binaries_name:
+        description: 'Binaries file name without extension (e.g. for branch with open PR #2535, the binaries name is `binaries-2535`)'
+        required: true
+        type: string
       chain_id:
         description: 'Chain ID'
         required: true
@@ -89,7 +93,7 @@ jobs:
           BUCKET_NAME: namada-binaries
           AWS_REGION: us-east-1
           S3_ENDPOINT_URL: https://minio.heliax.click
-          ZIP_FILENAME: "binaries-${{ env.COMMIT_SHA }}.zip"
+          ZIP_FILENAME: "${{ inputs.binaries_name }}.zip"
           AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
       - name: Run the test
