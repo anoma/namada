@@ -14,6 +14,7 @@ use namada::types::hash::Hash;
 use namada::types::key::{common, RefTo};
 use namada::types::time::{DateTimeUtc, DurationNanos, Rfc3339String};
 use namada::types::token::Amount;
+use namada_sdk::types::address::InternalAddress;
 use namada_sdk::wallet::store::AddressVpType;
 use namada_sdk::wallet::{pre_genesis, Wallet};
 use serde::{Deserialize, Serialize};
@@ -154,6 +155,24 @@ impl Finalized {
                 validator_wallet,
             )
         }
+
+        // Add some internal addresses to the wallet
+        for int_add in &[
+            InternalAddress::PoS,
+            InternalAddress::Masp,
+            InternalAddress::Ibc,
+            InternalAddress::EthBridge,
+            InternalAddress::EthBridgePool,
+            InternalAddress::Governance,
+            InternalAddress::Pgf,
+        ] {
+            wallet.insert_address(
+                int_add.to_string().to_lowercase(),
+                Address::Internal(int_add.clone()),
+                false,
+            );
+        }
+
         wallet
     }
 
