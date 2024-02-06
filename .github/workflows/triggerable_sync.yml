@@ -97,7 +97,7 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
       - name: Run the test
-        run: cargo +{{ matrix.nightly_version }}
+        run: cargo +${{ matrix.nightly_version }}
                test e2e::ledger_tests::test_sync_chain -- --exact --ignored
         env:
           NAMADA_E2E_USE_PREBUILT_BINARIES: "true"
