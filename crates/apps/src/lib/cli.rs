@@ -243,6 +243,7 @@ pub mod cmds {
                 .subcommand(TxResignSteward::def().display_order(4))
                 // Queries
                 .subcommand(QueryEpoch::def().display_order(5))
+                .subcommand(QueryStatus::def().display_order(5))
                 .subcommand(QueryAccount::def().display_order(5))
                 .subcommand(QueryTransfers::def().display_order(5))
                 .subcommand(QueryConversions::def().display_order(5))
@@ -311,6 +312,7 @@ pub mod cmds {
             let redelegate = Self::parse_with_ctx(matches, Redelegate);
             let claim_rewards = Self::parse_with_ctx(matches, ClaimRewards);
             let query_epoch = Self::parse_with_ctx(matches, QueryEpoch);
+            let query_status = Self::parse_with_ctx(matches, QueryStatus);
             let query_account = Self::parse_with_ctx(matches, QueryAccount);
             let query_transfers = Self::parse_with_ctx(matches, QueryTransfers);
             let query_conversions =
@@ -374,6 +376,7 @@ pub mod cmds {
                 .or(tx_update_steward_commission)
                 .or(tx_resign_steward)
                 .or(query_epoch)
+                .or(query_status)
                 .or(query_transfers)
                 .or(query_conversions)
                 .or(query_masp_reward_tokens)
@@ -461,6 +464,7 @@ pub mod cmds {
         TxUpdateStewardCommission(TxUpdateStewardCommission),
         TxResignSteward(TxResignSteward),
         QueryEpoch(QueryEpoch),
+        QueryStatus(QueryStatus),
         QueryAccount(QueryAccount),
         QueryTransfers(QueryTransfers),
         QueryConversions(QueryConversions),
@@ -1459,6 +1463,25 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query the epoch of the last committed block.")
+                .add_args::<args::Query<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryStatus(pub args::Query<args::CliTypes>);
+
+    impl SubCmd for QueryStatus {
+        const CMD: &'static str = "status";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| QueryStatus(args::Query::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query the node's status.")
                 .add_args::<args::Query<args::CliTypes>>()
         }
     }
