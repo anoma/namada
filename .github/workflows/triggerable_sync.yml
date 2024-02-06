@@ -103,8 +103,8 @@ jobs:
           NAMADA_E2E_USE_PREBUILT_BINARIES: "true"
           NAMADA_E2E_KEEP_TEMP: "true"
           NAMADA_LOG_COLOR: "false"
-          NAMADA_ADD_PEER: "{{ inputs.add_peer }}"
-          NAMADA_CHAIN_ID: "{{ inputs.chain_id }}"
+          NAMADA_ADD_PEER: "${{ inputs.add_peer }}"
+          NAMADA_CHAIN_ID: "${{ inputs.chain_id }}"
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Upload logs
         if: success() || failure()
