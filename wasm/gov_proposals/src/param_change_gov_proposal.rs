@@ -42,8 +42,7 @@ fn apply_tx(ctx: &mut Ctx, _tx_data: Tx) -> TxResult {
 
     // Write to storage
     ctx.write(&shielded_naan_max_rewards_key, Dec::from_str("0.01").unwrap())?;
-    // todo: determine
-    ctx.write(&shielded_naan_target_locked_amount_key, token::Amount::native_whole(1_000_000))?;
+    ctx.write(&shielded_naan_target_locked_amount_key, token::Amount::native_whole(10_000_000))?;
     // todo : determine
     ctx.write(&shielded_naan_kp_gain_key, Dec::from_str("0.25").unwrap())?;
     ctx.write(&shielded_naan_kd_gain_key, Dec::from_str("0.25").unwrap())?;
