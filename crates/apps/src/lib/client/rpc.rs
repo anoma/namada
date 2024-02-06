@@ -54,9 +54,11 @@ use namada_sdk::error::{
 };
 use namada_sdk::masp::{Conversions, MaspChange, MaspTokenRewardData};
 use namada_sdk::proof_of_stake::types::ValidatorMetaData;
+use namada_sdk::queries::Client;
 use namada_sdk::rpc::{
     self, enriched_bonds_and_unbonds, query_epoch, TxResponse,
 };
+use namada_sdk::tendermint_rpc::endpoint::status;
 use namada_sdk::tx::{display_inner_resp, display_wrapper_resp_and_get_result};
 use namada_sdk::wallet::AddressVpType;
 use namada_sdk::{display, display_line, edisplay_line, error, prompt, Namada};
@@ -85,6 +87,23 @@ pub async fn query_and_print_epoch(context: &impl Namada) -> Epoch {
     let epoch = rpc::query_epoch(context.client()).await.unwrap();
     display_line!(context.io(), "Last committed epoch: {}", epoch);
     epoch
+}
+
+/// Query and print node's status.
+pub async fn query_and_print_status(
+    context: &impl Namada,
+) -> Option<status::Response> {
+    let status = context.client().status().await;
+    match status {
+        Ok(status) => {
+            display_line!(context.io(), "Node's status {status:#?}");
+            Some(status)
+        }
+        Err(err) => {
+            edisplay_line!(context.io(), "Status query failed with {err:#?}");
+            None
+        }
+    }
 }
 
 /// Query the last committed block

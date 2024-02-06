@@ -26,9 +26,11 @@ use namada::governance::storage::proposal::{PGFInternalTarget, PGFTarget};
 use namada::token;
 use namada::types::address::Address;
 use namada::types::storage::Epoch;
+use namada_apps::cli::context::ENV_VAR_CHAIN_ID;
 use namada_apps::config::ethereum_bridge;
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
+use namada_core::types::chain::ChainId;
 use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_sdk::governance::pgf::cli::steward::Commission;
 use namada_sdk::masp::fs::FsShieldedUtils;
@@ -59,6 +61,8 @@ use crate::strings::{
     TX_APPLIED_SUCCESS, TX_FAILED, TX_REJECTED, VALIDATOR_NODE,
 };
 use crate::{run, run_as};
+
+const ENV_VAR_NAMADA_ADD_PEER: &str = "NAMADA_ADD_PEER";
 
 fn start_namada_ledger_node(
     test: &Test,
@@ -3940,6 +3944,92 @@ fn proposal_change_shielded_reward() -> Result<()> {
     let mut client = run!(test, Bin::Client, query_masp_rewards, Some(30))?;
     client.exp_regex(".*Max reward rate: 0.05.*")?;
     client.assert_success();
+
+    Ok(())
+}
+
+/// Test sync with a chain.
+///
+/// The chain ID must be set via `NAMADA_CHAIN_ID` env var.
+/// Additionally, `NAMADA_ADD_PEER` maybe be specified with a string that must
+/// be parsable into `TendermintAddress`.
+///
+/// To run this test use `--ignored`.
+#[test]
+#[ignore = "This test is only ran when explicitly triggered"]
+fn test_sync_chain() -> Result<()> {
+    let chain_id_raw = std::env::var(ENV_VAR_CHAIN_ID).unwrap_or_else(|_| {
+        panic!("Set `{ENV_VAR_CHAIN_ID}` env var to sync with.")
+    });
+    let chain_id = ChainId::from_str(chain_id_raw.trim())?;
+    let working_dir = setup::working_dir();
+    let test_dir = setup::TestDir::new();
+    let test = Test {
+        working_dir,
+        test_dir,
+        net: setup::Network { chain_id },
+        async_runtime: Default::default(),
+    };
+    let base_dir = test.test_dir.path();
+
+    // Setup the chain
+    let mut join_network = setup::run_cmd(
+        Bin::Client,
+        [
+            "utils",
+            "join-network",
+            "--chain-id",
+            chain_id_raw.as_str(),
+            "--dont-prefetch-wasm",
+        ],
+        Some(60),
+        &test.working_dir,
+        base_dir,
+        format!("{}:{}", std::file!(), std::line!()),
+    )?;
+    join_network.exp_string("Successfully configured for chain")?;
+    join_network.assert_success();
+
+    // Add peer if any given
+    if let Ok(add_peer) = std::env::var(ENV_VAR_NAMADA_ADD_PEER) {
+        let mut config = namada_apps::config::Config::load(
+            base_dir,
+            &test.net.chain_id,
+            None,
+        );
+        config.ledger.cometbft.p2p.persistent_peers.push(
+            TendermintAddress::from_str(&add_peer).unwrap_or_else(|_| {
+                panic!(
+                    "Invalid `{ENV_VAR_NAMADA_ADD_PEER}` value. Must be a \
+                     valid `TendermintAddress`."
+                )
+            }),
+        );
+        config.write(base_dir, &test.net.chain_id, true).unwrap();
+    }
+
+    // Start a non-validator node
+    let mut ledger = start_namada_ledger_node_wait_wasm(
+        &test,
+        None,
+        // init-chain may take a long time for large setups
+        Some(1200),
+    )?;
+    ledger.exp_string("finalize_block: Block height: 1")?;
+    let _bg_ledger = ledger.background();
+
+    // Wait to be synced
+    loop {
+        let mut client = run!(test, Bin::Client, ["status"], Some(30))?;
+        if client.exp_string("catching_up: false").is_ok() {
+            println!("Node is synced!");
+            break;
+        } else {
+            let sleep_secs = 300;
+            println!("Not synced yet. Sleeping for {sleep_secs} secs.");
+            sleep(sleep_secs);
+        }
+    }
 
     Ok(())
 }
