@@ -1,6 +1,6 @@
+use namada_core::address::{Address, InternalAddress};
 use namada_core::hints;
-use namada_core::types::address::{Address, InternalAddress};
-use namada_core::types::token::{self, Amount, DenominatedAmount};
+use namada_core::token::{self, Amount, DenominatedAmount};
 use namada_storage as storage;
 use namada_storage::{StorageRead, StorageWrite};
 
@@ -229,7 +229,7 @@ pub fn denom_to_amount(
 
 #[cfg(test)]
 mod testing {
-    use namada_core::types::{address, token};
+    use namada_core::{address, token};
     use namada_storage::testing::TestStorage;
 
     use super::{burn_tokens, credit_tokens, read_balance, read_total_supply};
@@ -237,7 +237,7 @@ mod testing {
     #[test]
     fn test_burn_native_tokens() {
         let mut storage = TestStorage::default();
-        let native_token = address::nam();
+        let native_token = address::testing::nam();
 
         // Get some addresses
         let addr1 = address::testing::gen_implicit_address();

@@ -7,7 +7,7 @@ use std::io::Read;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::types::address::{Address, InternalAddress};
+use namada_core::address::{Address, InternalAddress};
 use serde::{Deserialize, Serialize};
 
 /// Aliases created from raw strings are kept in-memory as given, but their

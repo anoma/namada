@@ -5,14 +5,13 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use futures::future::FutureExt;
+use namada::core::hash::Hash;
+use namada::core::key::tm_raw_hash_to_string;
+use namada::core::storage::{BlockHash, BlockHeight};
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
+use namada::time::{DateTimeUtc, Utc};
 use namada::tx::data::hash_tx;
 use namada::tx::Tx;
-use namada::types::hash::Hash;
-use namada::types::key::tm_raw_hash_to_string;
-use namada::types::storage::{BlockHash, BlockHeight};
-use namada::types::time::Utc;
-use namada_sdk::types::time::DateTimeUtc;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc::UnboundedSender;
 use tower::Service;

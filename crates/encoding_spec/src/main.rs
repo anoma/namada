@@ -25,12 +25,12 @@ use itertools::Itertools;
 use lazy_static::lazy_static;
 use madato::types::TableRow;
 use namada::account;
+use namada::core::address::Address;
+use namada::core::key::ed25519::{PublicKey, Signature};
+use namada::core::storage::{self, Epoch};
+use namada::core::token;
 use namada::ledger::parameters::Parameters;
 use namada::tx::data::{pos, TxType, WrapperTx};
-use namada::types::address::Address;
-use namada::types::key::ed25519::{PublicKey, Signature};
-use namada::types::storage::{self, Epoch};
-use namada::types::token;
 
 /// This generator will write output into this `docs` file.
 const OUTPUT_PATH: &str =

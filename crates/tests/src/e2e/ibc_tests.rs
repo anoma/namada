@@ -17,6 +17,10 @@ use std::path::{Path, PathBuf};
 
 use color_eyre::eyre::Result;
 use eyre::eyre;
+use namada::core::address::{Address, InternalAddress};
+use namada::core::key::PublicKey;
+use namada::core::storage::{BlockHeight, Epoch, Key};
+use namada::core::token::Amount;
 use namada::governance::cli::onchain::PgfFunding;
 use namada::governance::storage::proposal::{PGFIbcTarget, PGFTarget};
 use namada::ibc::apps::transfer::types::VERSION as ICS20_VERSION;
@@ -63,10 +67,6 @@ use namada::ledger::storage::ics23_specs::ibc_proof_specs;
 use namada::state::Sha256Hasher;
 use namada::tendermint::abci::Event as AbciEvent;
 use namada::tendermint::block::Height as TmHeight;
-use namada::types::address::{Address, InternalAddress};
-use namada::types::key::PublicKey;
-use namada::types::storage::{BlockHeight, Epoch, Key};
-use namada::types::token::Amount;
 use namada_apps::cli::context::ENV_VAR_CHAIN_ID;
 use namada_apps::client::rpc::{
     query_pos_parameters, query_storage_value, query_storage_value_bytes,
@@ -79,7 +79,7 @@ use namada_apps::facade::tendermint::block::Header as TmHeader;
 use namada_apps::facade::tendermint::merkle::proof::ProofOps as TmProof;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
 use namada_apps::facade::tendermint_rpc::{Client, HttpClient, Url};
-use namada_core::types::string_encoding::StringEncoded;
+use namada_core::string_encoding::StringEncoded;
 use namada_sdk::masp::fs::FsShieldedUtils;
 use prost::Message;
 use setup::constants::*;

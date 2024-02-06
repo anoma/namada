@@ -23,7 +23,6 @@ mod vote_extensions;
 
 use std::collections::{BTreeSet, HashSet};
 use std::convert::{TryFrom, TryInto};
-use std::mem;
 use std::path::{Path, PathBuf};
 #[allow(unused_imports)]
 use std::rc::Rc;
@@ -31,7 +30,13 @@ use std::rc::Rc;
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::transaction::Transaction;
-use namada::core::hints;
+use namada::core::address::Address;
+use namada::core::chain::ChainId;
+use namada::core::ethereum_events::EthereumEvent;
+use namada::core::key::*;
+use namada::core::storage::{BlockHeight, Key, TxIndex};
+use namada::core::time::DateTimeUtc;
+use namada::core::{address, hints};
 use namada::ethereum_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
 use namada::ethereum_bridge::protocol::validation::ethereum_events::validate_eth_events_vext;
 use namada::ethereum_bridge::protocol::validation::validator_set_update::validate_valset_upd_vext;
@@ -46,11 +51,9 @@ use namada::ledger::protocol::{
     apply_wasm_tx, get_fee_unshielding_transaction,
     get_transfer_hash_from_storage, ShellParams,
 };
-use namada::ledger::{parameters, pos, protocol};
+use namada::ledger::{parameters, protocol};
 use namada::parameters::validate_tx_bytes;
-use namada::proof_of_stake::slashing::{process_slashes, slash};
 use namada::proof_of_stake::storage::read_pos_params;
-use namada::proof_of_stake::{self};
 use namada::state::tx_queue::{ExpiredTx, TxInQueue};
 use namada::state::wl_storage::WriteLogAndStorage;
 use namada::state::write_log::WriteLog;
@@ -62,13 +65,6 @@ use namada::token;
 pub use namada::tx::data::ResultCode;
 use namada::tx::data::{DecryptedTx, TxType, WrapperTx, WrapperTxErr};
 use namada::tx::{Section, Tx};
-use namada::types::address;
-use namada::types::address::Address;
-use namada::types::chain::ChainId;
-use namada::types::ethereum_events::EthereumEvent;
-use namada::types::key::*;
-use namada::types::storage::{BlockHeight, Key, TxIndex};
-use namada::types::time::DateTimeUtc;
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::{WasmCacheAccess, WasmCacheRwAccess};
 use namada::vote_ext::EthereumTxData;
@@ -79,7 +75,6 @@ use tokio::sync::mpsc::{Receiver, UnboundedSender};
 
 use super::ethereum_oracle::{self as oracle, last_processed_block};
 use crate::config::{self, genesis, TendermintMode, ValidatorLocalConfig};
-use crate::facade::tendermint::abci::types::{Misbehavior, MisbehaviorKind};
 use crate::facade::tendermint::v0_37::abci::{request, response};
 use crate::facade::tendermint::{self, validator};
 use crate::facade::tendermint_proto::v0_37::crypto::public_key;
@@ -338,9 +333,6 @@ where
     pub chain_id: ChainId,
     /// The persistent storage with write log
     pub wl_storage: WlStorage<D, H>,
-    /// Byzantine validators given from ABCI++ `prepare_proposal` are stored in
-    /// this field. They will be slashed when we finalize the block.
-    byzantine_validators: Vec<Misbehavior>,
     /// Path to the base directory with DB data and configs
     #[allow(dead_code)]
     pub(crate) base_dir: PathBuf,
@@ -365,7 +357,7 @@ where
 
 /// Merkle tree storage key filter. Return `false` for keys that shouldn't be
 /// merklized.
-pub fn is_merklized_storage_key(key: &namada_sdk::types::storage::Key) -> bool {
+pub fn is_merklized_storage_key(key: &namada_sdk::storage::Key) -> bool {
     !token::storage_key::is_masp_key(key)
         && !namada::ibc::storage::is_ibc_counter_key(key)
 }
@@ -419,16 +411,24 @@ where
             std::fs::create_dir(&base_dir)
                 .expect("Creating directory for Namada should not fail");
         }
-        let native_token = if cfg!(feature = "integration")
-            || (!cfg!(test) && !cfg!(feature = "benches"))
-        {
+
+        // For all tests except integration use hard-coded native token addr ...
+        #[cfg(all(
+            any(test, feature = "testing", feature = "benches"),
+            not(feature = "integration"),
+        ))]
+        let native_token = address::testing::nam();
+        // ... Otherwise, look it up from the genesis file
+        #[cfg(not(all(
+            any(test, feature = "testing", feature = "benches"),
+            not(feature = "integration"),
+        )))]
+        let native_token = {
             let chain_dir = base_dir.join(chain_id.as_str());
             let genesis =
                 genesis::chain::Finalized::read_toml_files(&chain_dir)
                     .expect("Missing genesis files");
             genesis.get_native_token().clone()
-        } else {
-            address::nam()
         };
 
         // load last state from storage
@@ -521,7 +521,6 @@ where
         let mut shell = Self {
             chain_id,
             wl_storage,
-            byzantine_validators: vec![],
             base_dir,
             wasm_dir,
             mode,
@@ -621,120 +620,11 @@ where
         }
     }
 
-    /// Apply PoS slashes from the evidence
-    fn record_slashes_from_evidence(&mut self) {
-        if !self.byzantine_validators.is_empty() {
-            let byzantine_validators =
-                mem::take(&mut self.byzantine_validators);
-            // TODO: resolve this unwrap() better
-            let pos_params = read_pos_params(&self.wl_storage).unwrap();
-            let current_epoch = self.wl_storage.storage.block.epoch;
-            for evidence in byzantine_validators {
-                // dbg!(&evidence);
-                tracing::info!("Processing evidence {evidence:?}.");
-                let evidence_height = match u64::try_from(evidence.height) {
-                    Ok(height) => height,
-                    Err(err) => {
-                        tracing::error!(
-                            "Unexpected evidence block height {}",
-                            err
-                        );
-                        continue;
-                    }
-                };
-                let evidence_epoch = match self
-                    .wl_storage
-                    .storage
-                    .block
-                    .pred_epochs
-                    .get_epoch(BlockHeight(evidence_height))
-                {
-                    Some(epoch) => epoch,
-                    None => {
-                        tracing::error!(
-                            "Couldn't find epoch for evidence block height {}",
-                            evidence_height
-                        );
-                        continue;
-                    }
-                };
-                // Disregard evidences that should have already been processed
-                // at this time
-                if evidence_epoch + pos_params.slash_processing_epoch_offset()
-                    - pos_params.cubic_slashing_window_length
-                    <= current_epoch
-                {
-                    tracing::info!(
-                        "Skipping outdated evidence from epoch \
-                         {evidence_epoch}"
-                    );
-                    continue;
-                }
-                let slash_type = match evidence.kind {
-                    MisbehaviorKind::DuplicateVote => {
-                        pos::types::SlashType::DuplicateVote
-                    }
-                    MisbehaviorKind::LightClientAttack => {
-                        pos::types::SlashType::LightClientAttack
-                    }
-                    MisbehaviorKind::Unknown => {
-                        tracing::error!("Unknown evidence: {:#?}", evidence);
-                        continue;
-                    }
-                };
-                let validator_raw_hash =
-                    tm_raw_hash_to_string(evidence.validator.address);
-                let validator =
-                    match proof_of_stake::storage::find_validator_by_raw_hash(
-                        &self.wl_storage,
-                        &validator_raw_hash,
-                    )
-                    .expect("Must be able to read storage")
-                    {
-                        Some(validator) => validator,
-                        None => {
-                            tracing::error!(
-                                "Cannot find validator's address from raw \
-                                 hash {}",
-                                validator_raw_hash
-                            );
-                            continue;
-                        }
-                    };
-                // Check if we're gonna switch to a new epoch after a delay
-                let validator_set_update_epoch =
-                    self.get_validator_set_update_epoch(current_epoch);
-                tracing::info!(
-                    "Slashing {} for {} in epoch {}, block height {} (current \
-                     epoch = {}, validator set update epoch = \
-                     {validator_set_update_epoch})",
-                    validator,
-                    slash_type,
-                    evidence_epoch,
-                    evidence_height,
-                    current_epoch
-                );
-                if let Err(err) = slash(
-                    &mut self.wl_storage,
-                    &pos_params,
-                    current_epoch,
-                    evidence_epoch,
-                    evidence_height,
-                    slash_type,
-                    &validator,
-                    validator_set_update_epoch,
-                ) {
-                    tracing::error!("Error in slashing: {}", err);
-                }
-            }
-        }
-    }
-
     /// Get the next epoch for which we can request validator set changed
     pub fn get_validator_set_update_epoch(
         &self,
-        current_epoch: namada_sdk::types::storage::Epoch,
-    ) -> namada_sdk::types::storage::Epoch {
+        current_epoch: namada_sdk::storage::Epoch,
+    ) -> namada_sdk::storage::Epoch {
         if let Some(delay) = self.wl_storage.storage.update_epoch_blocks_delay {
             if delay == EPOCH_SWITCH_BLOCKS_DELAY {
                 // If we're about to update validator sets for the
@@ -749,20 +639,6 @@ where
             }
         } else {
             current_epoch.next()
-        }
-    }
-
-    /// Process and apply slashes that have already been recorded for the
-    /// current epoch
-    fn process_slashes(&mut self) {
-        let current_epoch = self.wl_storage.storage.block.epoch;
-        if let Err(err) = process_slashes(&mut self.wl_storage, current_epoch) {
-            tracing::error!(
-                "Error while processing slashes queued for epoch {}: {}",
-                current_epoch,
-                err
-            );
-            panic!("Error while processing slashes");
         }
     }
 
@@ -1554,6 +1430,14 @@ mod test_utils {
     use std::path::PathBuf;
 
     use data_encoding::HEXUPPER;
+    use namada::core::address;
+    use namada::core::chain::ChainId;
+    use namada::core::ethereum_events::Uint;
+    use namada::core::hash::Hash;
+    use namada::core::keccak::KeccakHash;
+    use namada::core::key::*;
+    use namada::core::storage::{BlockHash, Epoch, Header};
+    use namada::core::time::{DateTimeUtc, DurationSecs};
     use namada::ledger::parameters::{EpochDuration, Parameters};
     use namada::proof_of_stake::parameters::PosParams;
     use namada::proof_of_stake::storage::validator_consensus_key_handle;
@@ -1565,14 +1449,6 @@ mod test_utils {
     use namada::token::conversion::update_allowed_conversions;
     use namada::tx::data::{Fee, TxType, WrapperTx};
     use namada::tx::{Code, Data};
-    use namada::types::address;
-    use namada::types::chain::ChainId;
-    use namada::types::ethereum_events::Uint;
-    use namada::types::hash::Hash;
-    use namada::types::keccak::KeccakHash;
-    use namada::types::key::*;
-    use namada::types::storage::{BlockHash, Epoch, Header};
-    use namada::types::time::{DateTimeUtc, DurationSecs};
     use tempfile::tempdir;
     use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
@@ -1668,7 +1544,7 @@ mod test_utils {
 
     /// Get the default bridge pool vext bytes to be signed.
     pub fn get_bp_bytes_to_sign() -> KeccakHash {
-        use namada::types::keccak::{Hasher, Keccak};
+        use namada::core::keccak::{Hasher, Keccak};
 
         let root = [0; 32];
         let nonce = Uint::from(0).to_bytes();
@@ -2072,7 +1948,7 @@ mod test_utils {
         );
         let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
         let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
-        let native_token = address::nam();
+        let native_token = address::testing::nam();
         let mut shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
             config::Ledger::new(
                 base_dir.clone(),
@@ -2226,20 +2102,19 @@ mod test_utils {
 
 #[cfg(test)]
 mod shell_tests {
-    use namada::core::ledger::replay_protection;
+    use namada::core::ethereum_events::EthereumEvent;
+    use namada::core::key::RefTo;
+    use namada::core::storage::{BlockHeight, Epoch};
     use namada::token::read_denom;
     use namada::tx::data::protocol::{ProtocolTx, ProtocolTxType};
     use namada::tx::data::{Fee, WrapperTx};
     use namada::tx::{
         Code, Data, Section, SignableEthMessage, Signature, Signed, Tx,
     };
-    use namada::types::ethereum_events::EthereumEvent;
-    use namada::types::key::RefTo;
-    use namada::types::storage::{BlockHeight, Epoch};
     use namada::vote_ext::{
         bridge_pool_roots, ethereum_events, ethereum_tx_data_variants,
     };
-    use namada::{parameters, token};
+    use namada::{parameters, replay_protection, token};
 
     use super::*;
     use crate::node::ledger::shell::test_utils;
@@ -2334,7 +2209,7 @@ mod shell_tests {
     /// not validated by `CheckTx`.
     #[test]
     fn test_outdated_nonce_mempool_validate() {
-        use namada::types::storage::InnerEthEventsQueue;
+        use namada::core::storage::InnerEthEventsQueue;
 
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
 
@@ -2880,9 +2755,10 @@ mod shell_tests {
     #[test]
     fn test_fee_non_whitelisted_token() {
         let (shell, _recv, _, _) = test_utils::setup();
-        let apfel_denom = read_denom(&shell.wl_storage, &address::apfel())
-            .expect("unable to read denomination from storage")
-            .expect("unable to find denomination of apfels");
+        let apfel_denom =
+            read_denom(&shell.wl_storage, &address::testing::apfel())
+                .expect("unable to read denomination from storage")
+                .expect("unable to find denomination of apfels");
 
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
@@ -2891,7 +2767,7 @@ mod shell_tests {
                         100.into(),
                         apfel_denom,
                     ),
-                    token: address::apfel(),
+                    token: address::testing::apfel(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 Epoch(0),

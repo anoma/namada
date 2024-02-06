@@ -286,11 +286,11 @@ fn validate_pos_changes(
 #[cfg(test)]
 mod tests {
     // Use this as `#[test]` annotation to enable logging
+    use namada::core::dec::Dec;
+    use namada::core::storage::Epoch;
     use namada::ledger::pos::{GenesisValidator, PosParams};
     use namada::tx::data::TxType;
     use namada::tx::{Code, Data, Signature};
-    use namada::types::dec::Dec;
-    use namada::types::storage::Epoch;
     use namada_test_utils::TestWasms;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
@@ -433,7 +433,7 @@ mod tests {
         let public_key = secret_key.ref_to();
         let vp_owner: Address = (&public_key).into();
         let source = address::testing::established_address_2();
-        let token = address::nam();
+        let token = address::testing::nam();
         let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner, &source, &token]);
@@ -517,7 +517,7 @@ mod tests {
         let public_key = secret_key.ref_to();
         let vp_owner: Address = (&public_key).into();
         let target = address::testing::established_address_2();
-        let token = address::nam();
+        let token = address::testing::nam();
         let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
         let bond_amount = token::Amount::from_uint(5_098_123, 0).unwrap();
         let unbond_amount = token::Amount::from_uint(3_098_123, 0).unwrap();
@@ -601,7 +601,7 @@ mod tests {
         let public_key = secret_key.ref_to();
         let vp_owner: Address = (&public_key).into();
         let target = address::testing::established_address_2();
-        let token = address::nam();
+        let token = address::testing::nam();
         let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
         let bond_amount = token::Amount::from_uint(5_098_123, 0).unwrap();
         let unbond_amount = token::Amount::from_uint(3_098_123, 0).unwrap();
@@ -666,7 +666,7 @@ mod tests {
         let public_key = secret_key.ref_to();
         let vp_owner: Address = (&public_key).into();
         let target = address::testing::established_address_2();
-        let token = address::nam();
+        let token = address::testing::nam();
         let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage
@@ -725,7 +725,7 @@ mod tests {
         let public_key = secret_key.ref_to();
         let vp_owner: Address = (&public_key).into();
         let target = address::testing::established_address_2();
-        let token = address::nam();
+        let token = address::testing::nam();
         let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
 
         tx_env.init_parameters(None, None, None, None);
@@ -798,7 +798,7 @@ mod tests {
         let vp_owner: Address = (&public_key).into();
         let source = address::testing::established_address_2();
         let target = address::testing::established_address_3();
-        let token = address::nam();
+        let token = address::testing::nam();
         let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage

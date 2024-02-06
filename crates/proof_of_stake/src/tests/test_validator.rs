@@ -1,14 +1,14 @@
 use std::cmp::min;
 
-use namada_core::types::address::testing::arb_established_address;
-use namada_core::types::address::{self, Address, EstablishedAddressGen};
-use namada_core::types::dec::Dec;
-use namada_core::types::key::testing::{
+use namada_core::address::testing::arb_established_address;
+use namada_core::address::{self, Address, EstablishedAddressGen};
+use namada_core::dec::Dec;
+use namada_core::key::testing::{
     arb_common_keypair, common_sk_from_simple_seed,
 };
-use namada_core::types::key::{self, common, RefTo};
-use namada_core::types::storage::Epoch;
-use namada_core::types::token;
+use namada_core::key::{self, common, RefTo};
+use namada_core::storage::Epoch;
+use namada_core::token;
 use namada_state::testing::TestWlStorage;
 use namada_storage::collections::lazy_map;
 use proptest::prelude::*;

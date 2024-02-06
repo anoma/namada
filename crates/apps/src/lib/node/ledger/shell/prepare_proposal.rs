@@ -1,7 +1,10 @@
 //! Implementation of the [`RequestPrepareProposal`] ABCI++ method for the Shell
 
 use masp_primitives::transaction::Transaction;
+use namada::core::address::Address;
 use namada::core::hints;
+use namada::core::key::tm_raw_hash_to_string;
+use namada::core::time::DateTimeUtc;
 use namada::gas::TxGasMeter;
 use namada::ledger::protocol;
 use namada::ledger::storage::tx_queue::TxInQueue;
@@ -9,9 +12,6 @@ use namada::proof_of_stake::storage::find_validator_by_raw_hash;
 use namada::state::{DBIter, StorageHasher, TempWlStorage, DB};
 use namada::tx::data::{DecryptedTx, TxType, WrapperTx};
 use namada::tx::Tx;
-use namada::types::address::Address;
-use namada::types::key::tm_raw_hash_to_string;
-use namada::types::time::DateTimeUtc;
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::WasmCacheAccess;
 
@@ -431,9 +431,12 @@ mod test_prepare_proposal {
     use std::collections::BTreeSet;
 
     use borsh_ext::BorshSerializeExt;
+    use namada::core::address::{self, Address};
+    use namada::core::ethereum_events::EthereumEvent;
+    use namada::core::key::RefTo;
+    use namada::core::storage::{BlockHeight, InnerEthEventsQueue};
     use namada::ledger::gas::Gas;
     use namada::ledger::pos::PosQueries;
-    use namada::ledger::replay_protection;
     use namada::proof_of_stake::storage::{
         consensus_validator_set_handle,
         read_consensus_validator_set_addresses_with_stake,
@@ -441,15 +444,11 @@ mod test_prepare_proposal {
     use namada::proof_of_stake::types::WeightedValidator;
     use namada::proof_of_stake::Epoch;
     use namada::state::collections::lazy_map::{NestedSubKey, SubKey};
-    use namada::token;
     use namada::token::{read_denom, Amount, DenominatedAmount};
     use namada::tx::data::{Fee, TxType, WrapperTx};
     use namada::tx::{Code, Data, Header, Section, Signature, Signed};
-    use namada::types::address::{self, Address};
-    use namada::types::ethereum_events::EthereumEvent;
-    use namada::types::key::RefTo;
-    use namada::types::storage::{BlockHeight, InnerEthEventsQueue};
     use namada::vote_ext::{ethereum_events, ethereum_tx_data_variants};
+    use namada::{replay_protection, token};
 
     use super::*;
     use crate::config::ValidatorLocalConfig;
@@ -1184,13 +1183,13 @@ mod test_prepare_proposal {
             // Remove the allowed btc
             *local_config = Some(ValidatorLocalConfig {
                 accepted_gas_tokens: std::collections::HashMap::from([(
-                    namada::types::address::nam(),
+                    namada::core::address::testing::nam(),
                     Amount::from(1),
                 )]),
             });
         }
 
-        let btc_denom = read_denom(&shell.wl_storage, &address::btc())
+        let btc_denom = read_denom(&shell.wl_storage, &address::testing::btc())
             .expect("unable to read denomination from storage")
             .expect("unable to find denomination of btcs");
 
@@ -1200,7 +1199,7 @@ mod test_prepare_proposal {
                     100.into(),
                     btc_denom,
                 ),
-                token: address::btc(),
+                token: address::testing::btc(),
             },
             crate::wallet::defaults::albert_keypair().ref_to(),
             Epoch(0),
@@ -1238,9 +1237,10 @@ mod test_prepare_proposal {
     fn test_fee_non_whitelisted_token() {
         let (shell, _recv, _, _) = test_utils::setup();
 
-        let apfel_denom = read_denom(&shell.wl_storage, &address::apfel())
-            .expect("unable to read denomination from storage")
-            .expect("unable to find denomination of apfels");
+        let apfel_denom =
+            read_denom(&shell.wl_storage, &address::testing::apfel())
+                .expect("unable to read denomination from storage")
+                .expect("unable to find denomination of apfels");
 
         let wrapper = WrapperTx::new(
             Fee {
@@ -1248,7 +1248,7 @@ mod test_prepare_proposal {
                     100.into(),
                     apfel_denom,
                 ),
-                token: address::apfel(),
+                token: address::testing::apfel(),
             },
             crate::wallet::defaults::albert_keypair().ref_to(),
             Epoch(0),
@@ -1290,7 +1290,7 @@ mod test_prepare_proposal {
             // Remove btc and increase minimum for nam
             *local_config = Some(ValidatorLocalConfig {
                 accepted_gas_tokens: std::collections::HashMap::from([(
-                    namada::types::address::nam(),
+                    namada::core::address::testing::nam(),
                     Amount::from(100),
                 )]),
             });

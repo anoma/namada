@@ -12,9 +12,9 @@ use std::str::FromStr;
 use alias::Alias;
 use bip39::{Language, Mnemonic, MnemonicType, Seed};
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::types::address::Address;
-use namada_core::types::key::*;
-use namada_core::types::masp::{
+use namada_core::address::Address;
+use namada_core::key::*;
+use namada_core::masp::{
     ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
 };
 pub use pre_genesis::gen_key_to_store;

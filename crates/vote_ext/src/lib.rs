@@ -7,8 +7,8 @@ pub mod validator_set_update;
 use namada_core::borsh::{
     BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
 };
-use namada_core::types::chain::ChainId;
-use namada_core::types::key::common;
+use namada_core::chain::ChainId;
+use namada_core::key::common;
 use namada_tx::data::protocol::{ProtocolTx, ProtocolTxType};
 use namada_tx::data::TxType;
 use namada_tx::{Signature, Signed, Tx, TxError};

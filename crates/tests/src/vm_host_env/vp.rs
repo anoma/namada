@@ -1,5 +1,7 @@
 use std::collections::BTreeSet;
 
+use namada::core::address::{self, Address};
+use namada::core::storage::{self, Key, TxIndex};
 use namada::gas::TxGasMeter;
 use namada::ledger::gas::VpGasMeter;
 use namada::ledger::storage::mockdb::MockDB;
@@ -8,8 +10,6 @@ use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{Sha256Hasher, WlStorage};
 use namada::tx::data::TxType;
 use namada::tx::Tx;
-use namada::types::address::{self, Address};
-use namada::types::storage::{self, Key, TxIndex};
 use namada::vm::prefix_iter::PrefixIterators;
 use namada::vm::wasm::{self, VpCache};
 use namada::vm::{self, WasmCacheRwAccess};
@@ -239,7 +239,7 @@ mod native_vp_host_env {
             _ctx: VpCtx<'static, Self::Db, Self::H, Self::Eval, Self::CA>,
             _vp_code_hash: Vec<u8>,
             _input_data: Vec<u8>,
-        ) -> namada::types::internal::HostEnvResult {
+        ) -> namada::core::internal::HostEnvResult {
             unimplemented!(
                 "The \"wasm-runtime\" feature must be enabled to test with \
                  the `eval` function."

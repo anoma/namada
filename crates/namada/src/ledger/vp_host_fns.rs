@@ -2,22 +2,22 @@
 
 use std::num::TryFromIntError;
 
-use namada_core::types::address::{Address, ESTABLISHED_ADDRESS_BYTES_LEN};
-use namada_core::types::hash::{Hash, HASH_LENGTH};
-use namada_core::types::storage::{
+use namada_core::address::{Address, ESTABLISHED_ADDRESS_BYTES_LEN};
+use namada_core::hash::{Hash, HASH_LENGTH};
+use namada_core::storage::{
     BlockHash, BlockHeight, Epoch, Epochs, Header, Key, TxIndex,
     TX_INDEX_LENGTH,
 };
-use namada_core::types::validity_predicate::VpSentinel;
+use namada_core::validity_predicate::VpSentinel;
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use namada_state::write_log::WriteLog;
 use namada_state::{write_log, State, StorageHasher};
 use namada_tx::{Section, Tx};
 use thiserror::Error;
 
+use crate::ibc::IbcEvent;
 use crate::ledger::gas;
 use crate::ledger::gas::{GasMetering, VpGasMeter};
-use crate::types::ibc::IbcEvent;
 
 /// These runtime errors will abort VP execution immediately
 #[allow(missing_docs)]
@@ -28,7 +28,7 @@ pub enum RuntimeError {
     #[error("Storage error: {0}")]
     StorageError(namada_state::Error),
     #[error("Storage data error: {0}")]
-    StorageDataError(crate::types::storage::Error),
+    StorageDataError(crate::storage::Error),
     #[error("Encoding error: {0}")]
     EncodingError(std::io::Error),
     #[error("Numeric conversion error: {0}")]

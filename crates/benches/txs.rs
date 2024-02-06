@@ -3,9 +3,15 @@ use std::str::FromStr;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use namada::account::{InitAccount, UpdateAccount};
-use namada::core::types::key::{
-    common, SecretKey as SecretKeyInterface, SigScheme,
+use namada::core::address::{self, Address};
+use namada::core::eth_bridge_pool::{GasFee, PendingTransfer};
+use namada::core::hash::Hash;
+use namada::core::key::{
+    common, ed25519, secp256k1, PublicKey, RefTo,
+    SecretKey as SecretKeyInterface, SigScheme,
 };
+use namada::core::masp::{TransferSource, TransferTarget};
+use namada::core::storage::Key;
 use namada::governance::pgf::storage::steward::StewardDetail;
 use namada::governance::storage::proposal::ProposalType;
 use namada::governance::storage::vote::ProposalVote;
@@ -31,12 +37,6 @@ use namada::tx::data::pos::{
     MetaDataChange, Redelegation, Withdraw,
 };
 use namada::tx::{Code, Section};
-use namada::types::address::{self, Address};
-use namada::types::eth_bridge_pool::{GasFee, PendingTransfer};
-use namada::types::hash::Hash;
-use namada::types::key::{ed25519, secp256k1, PublicKey, RefTo};
-use namada::types::masp::{TransferSource, TransferTarget};
-use namada::types::storage::Key;
 use namada_apps::bench_utils::{
     BenchShell, BenchShieldedCtx, ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY,
     BERTHA_PAYMENT_ADDRESS, TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM,
@@ -617,8 +617,8 @@ fn become_validator(c: &mut Criterion) {
         eth_cold_key,
         eth_hot_key,
         protocol_key,
-        commission_rate: namada::types::dec::Dec::default(),
-        max_commission_rate_change: namada::types::dec::Dec::default(),
+        commission_rate: namada::core::dec::Dec::default(),
+        max_commission_rate_change: namada::core::dec::Dec::default(),
         email: "null@null.net".to_string(),
         description: None,
         website: None,
@@ -647,7 +647,7 @@ fn become_validator(c: &mut Criterion) {
                 shell
                     .wl_storage
                     .write_bytes(
-                        &namada::types::storage::Key::validity_predicate(
+                        &namada::core::storage::Key::validity_predicate(
                             &address,
                         ),
                         vec![],
@@ -667,7 +667,7 @@ fn change_validator_commission(c: &mut Criterion) {
         TX_CHANGE_VALIDATOR_COMMISSION_WASM,
         CommissionChange {
             validator: defaults::validator_address(),
-            new_rate: namada::types::dec::Dec::new(6, 2).unwrap(),
+            new_rate: namada::core::dec::Dec::new(6, 2).unwrap(),
         },
         None,
         None,
@@ -794,8 +794,8 @@ fn ibc(c: &mut Criterion) {
                     match bench_name {
                         "open_connection" => {
                             let _ = shell.init_ibc_client_state(
-                                namada::core::types::storage::Key::from(
-                                    Address::Internal(namada::types::address::InternalAddress::Ibc).to_db_key(),
+                                namada::core::storage::Key::from(
+                                    Address::Internal(namada::core::address::InternalAddress::Ibc).to_db_key(),
                                 ),
                             );
                         }
@@ -866,10 +866,10 @@ fn tx_bridge_pool(c: &mut Criterion) {
     let shell = BenchShell::default();
 
     let data = PendingTransfer {
-        transfer: namada::types::eth_bridge_pool::TransferToEthereum {
-            kind: namada::types::eth_bridge_pool::TransferToEthereumKind::Erc20,
+        transfer: namada::core::eth_bridge_pool::TransferToEthereum {
+            kind: namada::core::eth_bridge_pool::TransferToEthereumKind::Erc20,
             asset: read_native_erc20_address(&shell.wl_storage).unwrap(),
-            recipient: namada::types::ethereum_events::EthAddress([1u8; 20]),
+            recipient: namada::core::ethereum_events::EthAddress([1u8; 20]),
             sender: defaults::albert_address(),
             amount: Amount::from(1),
         },
@@ -941,7 +941,7 @@ fn update_steward_commission(c: &mut Criterion) {
                     steward: defaults::albert_address(),
                     commission: HashMap::from([(
                         defaults::albert_address(),
-                        namada::types::dec::Dec::zero(),
+                        namada::core::dec::Dec::zero(),
                     )]),
                 };
                 let tx = shell.generate_tx(

@@ -667,21 +667,20 @@ where
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_process_proposal {
-    use namada::ledger::replay_protection;
+    use namada::core::ethereum_events::EthereumEvent;
+    use namada::core::key::*;
+    use namada::core::storage::Epoch;
+    use namada::core::time::DateTimeUtc;
     use namada::state::StorageWrite;
-    use namada::token;
     use namada::token::{read_denom, Amount, DenominatedAmount};
     use namada::tx::data::{Fee, WrapperTx};
     use namada::tx::{
         Code, Data, Section, SignableEthMessage, Signature, Signed,
     };
-    use namada::types::ethereum_events::EthereumEvent;
-    use namada::types::key::*;
-    use namada::types::storage::Epoch;
-    use namada::types::time::DateTimeUtc;
     use namada::vote_ext::{
         bridge_pool_roots, ethereum_events, EthereumTxData,
     };
+    use namada::{replay_protection, token};
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{
@@ -1869,9 +1868,10 @@ mod test_process_proposal {
     fn test_fee_non_whitelisted_token() {
         let (shell, _recv, _, _) = test_utils::setup();
 
-        let apfel_denom = read_denom(&shell.wl_storage, &address::apfel())
-            .expect("unable to read denomination from storage")
-            .expect("unable to find denomination of apfels");
+        let apfel_denom =
+            read_denom(&shell.wl_storage, &address::testing::apfel())
+                .expect("unable to read denomination from storage")
+                .expect("unable to find denomination of apfels");
 
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
@@ -1880,7 +1880,7 @@ mod test_process_proposal {
                         100.into(),
                         apfel_denom,
                     ),
-                    token: address::apfel(),
+                    token: address::testing::apfel(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 Epoch(0),
@@ -2177,7 +2177,7 @@ mod test_process_proposal {
     /// not validated by `ProcessProposal`.
     #[test]
     fn test_outdated_nonce_process_proposal() {
-        use namada::types::storage::InnerEthEventsQueue;
+        use namada::core::storage::InnerEthEventsQueue;
 
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
 

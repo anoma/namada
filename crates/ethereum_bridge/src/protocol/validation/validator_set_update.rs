@@ -1,6 +1,6 @@
 //! Validator set update validation.
 
-use namada_core::types::storage::Epoch;
+use namada_core::storage::Epoch;
 use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_state::{DBIter, StorageHasher, WlStorage, DB};
 use namada_vote_ext::validator_set_update;

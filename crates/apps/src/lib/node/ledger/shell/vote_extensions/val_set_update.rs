@@ -113,6 +113,7 @@ where
 
 #[cfg(test)]
 mod test_vote_extensions {
+    use namada::core::key::RefTo;
     use namada::ledger::pos::PosQueries;
     use namada::proof_of_stake::storage::{
         consensus_validator_set_handle,
@@ -122,7 +123,6 @@ mod test_vote_extensions {
     use namada::proof_of_stake::Epoch;
     use namada::state::collections::lazy_map::{NestedSubKey, SubKey};
     use namada::tendermint::abci::types::VoteInfo;
-    use namada::types::key::RefTo;
     use namada::vote_ext::validator_set_update;
     use namada_sdk::eth_bridge::EthBridgeQueries;
 

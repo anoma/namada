@@ -14,6 +14,16 @@ use borsh_ext::BorshSerializeExt;
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use masp_proofs::prover::LocalTxProver;
+use namada::core::address::{self, Address, InternalAddress};
+use namada::core::chain::ChainId;
+use namada::core::hash::Hash;
+use namada::core::key::common::SecretKey;
+use namada::core::masp::{
+    ExtendedViewingKey, PaymentAddress, TransferSource, TransferTarget,
+};
+use namada::core::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
+use namada::core::time::DateTimeUtc;
+use namada::core::token::{Amount, DenominatedAmount, Transfer};
 use namada::governance::storage::proposal::ProposalType;
 use namada::governance::InitProposalData;
 use namada::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
@@ -50,6 +60,7 @@ use namada::ibc::core::host::types::path::{
 use namada::ibc::primitives::proto::{Any, Protobuf};
 use namada::ibc::primitives::{Msg, Timestamp as IbcTimestamp};
 use namada::ibc::storage::port_key;
+use namada::io::StdIo;
 use namada::ledger::dry_run_tx;
 use namada::ledger::gas::TxGasMeter;
 use namada::ledger::ibc::storage::{channel_key, connection_key};
@@ -62,17 +73,6 @@ use namada::tendermint_rpc::{self};
 use namada::tx::data::pos::Bond;
 use namada::tx::data::{TxResult, VpsResult};
 use namada::tx::{Code, Data, Section, Signature, Tx};
-use namada::types::address::{self, Address, InternalAddress};
-use namada::types::chain::ChainId;
-use namada::types::hash::Hash;
-use namada::types::io::StdIo;
-use namada::types::key::common::SecretKey;
-use namada::types::masp::{
-    ExtendedViewingKey, PaymentAddress, TransferSource, TransferTarget,
-};
-use namada::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
-use namada::types::time::DateTimeUtc;
-use namada::types::token::{Amount, DenominatedAmount, Transfer};
 use namada::vm::wasm::run;
 use namada::{proof_of_stake, tendermint};
 use namada_sdk::masp::{
@@ -350,7 +350,7 @@ impl BenchShell {
 
     pub fn generate_ibc_transfer_tx(&self) -> Tx {
         let token = PrefixedCoin {
-            denom: address::nam().to_string().parse().unwrap(),
+            denom: address::testing::nam().to_string().parse().unwrap(),
             amount: Amount::native_whole(1000)
                 .to_string_native()
                 .split('.')
@@ -412,6 +412,11 @@ impl BenchShell {
             &params,
             current_epoch,
             current_epoch + params.pipeline_len,
+        )
+        .unwrap();
+
+        namada::token::conversion::update_allowed_conversions(
+            &mut self.wl_storage,
         )
         .unwrap();
     }
@@ -887,7 +892,7 @@ impl Client for BenchShell {
 
 impl Default for BenchShieldedCtx {
     fn default() -> Self {
-        let mut shell = BenchShell::default();
+        let shell = BenchShell::default();
         let base_dir = shell.tempdir.as_ref().canonicalize().unwrap();
 
         // Create a global config and an empty wallet in the chain dir - this is
@@ -957,10 +962,6 @@ impl Default for BenchShieldedCtx {
         }
 
         crate::wallet::save(&chain_ctx.wallet).unwrap();
-        namada::token::conversion::update_allowed_conversions(
-            &mut shell.wl_storage,
-        )
-        .unwrap();
 
         Self {
             shielded: ShieldedContext::default(),
@@ -1004,7 +1005,7 @@ impl BenchShieldedCtx {
                     &namada,
                     &source,
                     &target,
-                    &address::nam(),
+                    &address::testing::nam(),
                     denominated_amount,
                 ),
             )
@@ -1020,7 +1021,7 @@ impl BenchShieldedCtx {
 
         let mut hasher = Sha256::new();
         let shielded_section_hash = shielded.clone().map(|transaction| {
-            namada::types::hash::Hash(
+            namada::core::hash::Hash(
                 Section::MaspTx(transaction)
                     .hash(&mut hasher)
                     .finalize_reset()
@@ -1033,7 +1034,7 @@ impl BenchShieldedCtx {
             Transfer {
                 source: source.effective_address(),
                 target: target.effective_address(),
-                token: address::nam(),
+                token: address::testing::nam(),
                 amount: DenominatedAmount::native(amount),
                 key: None,
                 shielded: shielded_section_hash,

@@ -18,9 +18,9 @@ use namada_state::StorageRead;
 use namada_tx::Tx;
 use thiserror::Error;
 
+use crate::address::{Address, InternalAddress};
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
-use crate::types::address::{Address, InternalAddress};
-use crate::types::storage::{Key, KeySeg};
+use crate::storage::{Key, KeySeg};
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]

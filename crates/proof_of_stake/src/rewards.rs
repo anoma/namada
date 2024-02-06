@@ -2,12 +2,11 @@
 
 use std::collections::{HashMap, HashSet};
 
-use namada_core::ledger::inflation;
-use namada_core::types::address::{self, Address};
-use namada_core::types::dec::Dec;
-use namada_core::types::storage::Epoch;
-use namada_core::types::token::{self, Amount};
-use namada_core::types::uint::{Uint, I256};
+use namada_core::address::{self, Address};
+use namada_core::dec::Dec;
+use namada_core::storage::Epoch;
+use namada_core::token::{self, Amount};
+use namada_core::uint::{Uint, I256};
 use namada_parameters::storage as params_storage;
 use namada_storage::collections::lazy_map::NestedSubKey;
 use namada_storage::{ResultExt, StorageRead, StorageWrite};
@@ -19,8 +18,8 @@ use crate::storage::{
     rewards_accumulator_handle, validator_commission_rate_handle,
     validator_rewards_products_handle, validator_state_handle,
 };
-use crate::token::credit_tokens;
 use crate::token::storage_key::minted_balance_key;
+use crate::token::{credit_tokens, inflation};
 use crate::types::{into_tm_voting_power, BondId, ValidatorState, VoteInfo};
 use crate::{
     bond_amounts_for_rewards, get_total_consensus_stake, staking_token_address,

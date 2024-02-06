@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use namada_core::types::address::Address;
+use namada_core::address::Address;
 
 use crate::ledger::events::EventType;
 use crate::token;

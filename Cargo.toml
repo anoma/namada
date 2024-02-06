@@ -17,6 +17,7 @@ members = [
   "crates/merkle_tree",
   "crates/parameters",
   "crates/proof_of_stake",
+  "crates/replay_protection",
   "crates/sdk",
   "crates/namada",
   "crates/shielded_token",

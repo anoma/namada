@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use namada::core::types::account::AccountPublicKeysMap;
-use namada::core::types::address;
+use namada::core::account::AccountPublicKeysMap;
+use namada::core::address;
 use namada::ledger::storage::DB;
 use namada::token::{Amount, Transfer};
 use namada::tx::Signature;
@@ -21,7 +21,7 @@ fn tx_section_signature_validation(c: &mut Criterion) {
     let transfer_data = Transfer {
         source: defaults::albert_address(),
         target: defaults::bertha_address(),
-        token: address::nam(),
+        token: address::testing::nam(),
         amount: Amount::native_whole(500).native_denominated(),
         key: None,
         shielded: None,
@@ -183,7 +183,7 @@ fn write_log_read(c: &mut Criterion) {
     let mut shell = BenchShell::default();
 
     for (key, value_len) in generate_random_keys_sized() {
-        let key = namada::core::types::storage::Key::parse(key).unwrap();
+        let key = namada::core::storage::Key::parse(key).unwrap();
         // Extract the throughput, together with the wall-time, so that we can
         // than invert it to calculate the desired metric (time/byte)
         // NOTE: criterion states that the throughput is measured on the
@@ -214,7 +214,7 @@ fn storage_read(c: &mut Criterion) {
     let mut shell = BenchShell::default();
 
     for (key, value_len) in generate_random_keys_sized() {
-        let key = namada::core::types::storage::Key::parse(key).unwrap();
+        let key = namada::core::storage::Key::parse(key).unwrap();
         // Extract the throughput, together with the wall-time, so that we can
         // than invert it to calculate the desired metric (time/byte)
         // NOTE: criterion states that the throughput is measured on the
@@ -254,7 +254,7 @@ fn write_log_write(c: &mut Criterion) {
     let mut shell = BenchShell::default();
 
     for (key, value_len) in generate_random_keys_sized() {
-        let key = namada::core::types::storage::Key::parse(key).unwrap();
+        let key = namada::core::storage::Key::parse(key).unwrap();
         // Extract the throughput, together with the wall-time, so that we can
         // than invert it to calculate the desired metric (time/byte)
         // NOTE: criterion states that the throughput is measured on the
@@ -289,7 +289,7 @@ fn storage_write(c: &mut Criterion) {
     let mut shell = BenchShell::default();
 
     for (key, value_len) in generate_random_keys_sized() {
-        let key = namada::core::types::storage::Key::parse(key).unwrap();
+        let key = namada::core::storage::Key::parse(key).unwrap();
         // Extract the throughput, together with the wall-time, so that we can
         // than invert it to calculate the desired metric (time/byte)
         // NOTE: criterion states that the throughput is measured on the

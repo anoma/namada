@@ -1,16 +1,17 @@
-use namada_core::types::address::Address;
-use namada_core::types::token;
-use namada_core::types::token::Amount;
-use namada_core::types::uint::Uint;
+use namada_core::address::Address;
+use namada_core::token;
+use namada_core::token::Amount;
+use namada_core::uint::Uint;
 use namada_storage as storage;
 use namada_storage::{StorageRead, StorageWrite};
 use storage::ResultExt;
 
 use crate::storage_key::*;
+use crate::ShieldedParams;
 
 /// Initialize parameters for the token in storage during the genesis block.
 pub fn write_params<S>(
-    params: &token::MaspParams,
+    params: &ShieldedParams,
     storage: &mut S,
     address: &Address,
     denom: &token::Denomination,
@@ -18,7 +19,7 @@ pub fn write_params<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    let token::MaspParams {
+    let ShieldedParams {
         max_reward_rate: max_rate,
         kd_gain_nom,
         kp_gain_nom,
