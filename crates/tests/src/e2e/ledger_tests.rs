@@ -4013,7 +4013,7 @@ fn test_sync_chain() -> Result<()> {
         &test,
         None,
         // init-chain may take a long time for large setups
-        Some(1200),
+        Some(1800),
     )?;
     ledger.exp_string("finalize_block: Block height: 1")?;
     let _bg_ledger = ledger.background();
