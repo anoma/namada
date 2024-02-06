@@ -724,34 +724,43 @@ fn wrapper_disposable_signer() -> Result<()> {
 
     let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
 
-    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
-
+    // Add the relevant viewing keys to the wallet otherwise the shielded
+    // context won't precache the masp data
     let tx_args = vec![
-        "transfer",
-        "--source",
-        ALBERT,
-        "--target",
-        AA_PAYMENT_ADDRESS,
-        "--token",
-        NAM,
-        "--amount",
-        "50",
-        "--ledger-address",
-        &validator_one_rpc,
-    ];
-    let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
-
-    client.exp_string(TX_ACCEPTED)?;
-    client.exp_string(TX_APPLIED_SUCCESS)?;
-
-    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
-    let tx_args = vec![
-        "shielded-sync",
-        "--viewing-keys",
+        "add",
+        "--alias",
+        "alias_a",
+        "--value",
         AA_VIEWING_KEY,
-        "--node",
-        &validator_one_rpc,
+        "--unsafe-dont-encrypt",
     ];
+    let mut client = run!(test, Bin::Wallet, tx_args, Some(120))?;
+    client.assert_success();
+
+    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+
+    // Produce three different output descriptions to spend
+    for _ in 0..3 {
+        let tx_args = vec![
+            "transfer",
+            "--source",
+            ALBERT,
+            "--target",
+            AA_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "50",
+            "--ledger-address",
+            &validator_one_rpc,
+        ];
+        let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
+        client.exp_string(TX_ACCEPTED)?;
+        client.exp_string(TX_APPLIED_SUCCESS)?;
+    }
+
+    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let tx_args = vec!["shielded-sync", "--node", &validator_one_rpc];
     let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
     client.assert_success();
 
@@ -809,8 +818,8 @@ fn wrapper_disposable_signer() -> Result<()> {
     client.exp_string("Error while processing transaction's fees")?;
 
     // Try another valid fee unshielding and masp transaction in the same tx,
-    // with the same source. This tests that the client can properly fetch data
-    // and construct these kind of transactions
+    // with the same source. This tests that the client can properly
+    // construct multiple transactions together
     let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
     let tx_args = vec![
         "transfer",
