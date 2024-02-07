@@ -25,11 +25,6 @@ struct Keys {
     /// Sub-lkey for storing the Ethereum address of the bridge contract.
     bridge_contract_address: &'static str,
     // ========================================
-    // PoS parameters
-    // ========================================
-    pos_inflation_amount: &'static str,
-    staked_ratio: &'static str,
-    // ========================================
     // Core parameters
     // ========================================
     epoch_duration: &'static str,
@@ -95,16 +90,6 @@ pub fn is_epochs_per_year_key(key: &Key) -> bool {
     is_epochs_per_year_key_at_addr(key, &ADDRESS)
 }
 
-/// Returns if the key is the staked ratio key.
-pub fn is_staked_ratio_key(key: &Key) -> bool {
-    is_staked_ratio_key_at_addr(key, &ADDRESS)
-}
-
-/// Returns if the key is the PoS reward rate key.
-pub fn is_pos_inflation_amount_key(key: &Key) -> bool {
-    is_pos_inflation_amount_key_at_addr(key, &ADDRESS)
-}
-
 /// Returns if the key is the max proposal bytes key.
 pub fn is_max_proposal_bytes_key(key: &Key) -> bool {
     is_max_proposal_bytes_key_at_addr(key, &ADDRESS)
@@ -153,16 +138,6 @@ pub fn get_implicit_vp_key() -> Key {
 /// Storage key used for epochs_per_year parameter.
 pub fn get_epochs_per_year_key() -> Key {
     get_epochs_per_year_key_at_addr(ADDRESS)
-}
-
-/// Storage key used for staked ratio parameter.
-pub fn get_staked_ratio_key() -> Key {
-    get_staked_ratio_key_at_addr(ADDRESS)
-}
-
-/// Storage key used for the inflation amount parameter.
-pub fn get_pos_inflation_amount_key() -> Key {
-    get_pos_inflation_amount_key_at_addr(ADDRESS)
 }
 
 /// Storage key used for the max proposal bytes.
