@@ -295,7 +295,7 @@ impl AbciService {
     /// forward it normally.
     fn forward_request(&mut self, req: Req) -> <Self as Service<Req>>::Future {
         let (resp_send, recv) = tokio::sync::oneshot::channel();
-        let shell_send = self.shell_send.clone();
+        let result = self.shell_send.send((req.clone(), resp_send));
         async move {
             let genesis_time = if let Req::InitChain(ref init) = req {
                 Some(
@@ -305,7 +305,6 @@ impl AbciService {
             } else {
                 None
             };
-            let result = shell_send.send((req, resp_send));
             if let Err(err) = result {
                 // The shell has shut-down
                 return Err(err.into());
