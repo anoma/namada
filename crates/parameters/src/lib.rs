@@ -5,7 +5,6 @@ use std::collections::BTreeMap;
 
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::chain::ProposalBytes;
-use namada_core::types::dec::Dec;
 use namada_core::types::hash::Hash;
 pub use namada_core::types::parameters::*;
 use namada_core::types::storage::Key;
@@ -59,8 +58,6 @@ where
         implicit_vp_code_hash,
         epochs_per_year,
         max_signatures_per_transaction,
-        staked_ratio,
-        pos_inflation_amount,
         minimum_gas_price,
         fee_unshielding_gas_limit,
         fee_unshielding_descriptions_limit,
@@ -137,12 +134,6 @@ where
         &max_signatures_per_transaction_key,
         max_signatures_per_transaction,
     )?;
-
-    let staked_ratio_key = storage::get_staked_ratio_key();
-    storage.write(&staked_ratio_key, staked_ratio)?;
-
-    let pos_inflation_key = storage::get_pos_inflation_amount_key();
-    storage.write(&pos_inflation_key, pos_inflation_amount)?;
 
     let gas_cost_key = storage::get_gas_cost_key();
     storage.write(&gas_cost_key, minimum_gas_price)?;
@@ -235,32 +226,6 @@ where
     S: StorageRead + StorageWrite,
 {
     let key = storage::get_epochs_per_year_key();
-    storage.write(&key, value)
-}
-
-/// Update the PoS staked ratio parameter in storage. Returns the parameters and
-/// gas cost.
-pub fn update_staked_ratio_parameter<S>(
-    storage: &mut S,
-    value: &Dec,
-) -> namada_storage::Result<()>
-where
-    S: StorageRead + StorageWrite,
-{
-    let key = storage::get_staked_ratio_key();
-    storage.write(&key, value)
-}
-
-/// Update the PoS inflation rate parameter in storage. Returns the parameters
-/// and gas cost.
-pub fn update_pos_inflation_amount_parameter<S>(
-    storage: &mut S,
-    value: &u64,
-) -> namada_storage::Result<()>
-where
-    S: StorageRead + StorageWrite,
-{
-    let key = storage::get_pos_inflation_amount_key();
     storage.write(&key, value)
 }
 
@@ -409,20 +374,6 @@ where
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 
-    // read staked ratio
-    let staked_ratio_key = storage::get_staked_ratio_key();
-    let value = storage.read(&staked_ratio_key)?;
-    let staked_ratio = value
-        .ok_or(ReadError::ParametersMissing)
-        .into_storage_result()?;
-
-    // read PoS inflation rate
-    let pos_inflation_key = storage::get_pos_inflation_amount_key();
-    let value = storage.read(&pos_inflation_key)?;
-    let pos_inflation_amount = value
-        .ok_or(ReadError::ParametersMissing)
-        .into_storage_result()?;
-
     // read gas cost
     let gas_cost_key = storage::get_gas_cost_key();
     let value = storage.read(&gas_cost_key)?;
@@ -448,8 +399,6 @@ where
         implicit_vp_code_hash: Some(implicit_vp_code_hash),
         epochs_per_year,
         max_signatures_per_transaction,
-        staked_ratio,
-        pos_inflation_amount,
         minimum_gas_price,
         fee_unshielding_gas_limit,
         fee_unshielding_descriptions_limit,

@@ -1172,9 +1172,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use chrono::{TimeZone, Utc};
-    use namada_core::types::dec::Dec;
     use namada_core::types::time::{self, Duration};
-    use namada_core::types::token;
     use namada_parameters::Parameters;
     use proptest::prelude::*;
     use proptest::test_runner::Config;
@@ -1261,8 +1259,6 @@ mod tests {
                 implicit_vp_code_hash: Some(Hash::zero()),
                 epochs_per_year: 100,
                 max_signatures_per_transaction: 15,
-                staked_ratio: Dec::new(1,1).expect("Cannot fail"),
-                pos_inflation_amount: token::Amount::zero(),
                 fee_unshielding_gas_limit: 20_000,
                 fee_unshielding_descriptions_limit: 15,
                 minimum_gas_price: BTreeMap::default(),
