@@ -41,6 +41,7 @@ use tokio::sync::RwLock;
 use super::masp::{ShieldedContext, ShieldedTransfer};
 use crate::args::SdkTypes;
 use crate::error::{EncodingError, Error, TxSubmitError};
+use crate::governance::storage::proposal::{AddRemove, PGFAction, PGFTarget};
 use crate::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
 use crate::ibc::primitives::proto::Any;
 use crate::io::*;
@@ -925,6 +926,136 @@ impl<'a> Display for LedgerProposalType<'a> {
     }
 }
 
+fn proposal_type_to_ledger_vector(
+    proposal_type: &ProposalType,
+    tx: &Tx,
+    output: &mut Vec<String>,
+) {
+    match proposal_type {
+        ProposalType::Default(None) => {
+            output.push("Proposal type : Default".to_string())
+        }
+        ProposalType::Default(Some(hash)) => {
+            output.push("Proposal type : Default".to_string());
+            let extra = tx
+                .get_section(hash)
+                .and_then(|x| Section::extra_data_sec(x.as_ref()))
+                .expect("unable to load vp code")
+                .code
+                .hash();
+            output
+                .push(format!("Proposal hash : {}", HEXLOWER.encode(&extra.0)));
+        }
+        ProposalType::PGFSteward(actions) => {
+            output.push("Proposal type : PGF Steward".to_string());
+            for action in actions {
+                match action {
+                    AddRemove::Add(addr) => {
+                        output.push(format!("Add : {}", addr))
+                    }
+                    AddRemove::Remove(addr) => {
+                        output.push(format!("Remove : {}", addr))
+                    }
+                }
+            }
+        }
+        ProposalType::PGFPayment(actions) => {
+            output.push("Proposal type : PGF Payment".to_string());
+            for action in actions {
+                match action {
+                    PGFAction::Continuous(AddRemove::Add(
+                        PGFTarget::Internal(target),
+                    )) => {
+                        output.push(
+                            "PGF Action : Add Continuous Payment".to_string(),
+                        );
+                        output.push(format!("Target: {}", target.target));
+                        output.push(format!(
+                            "Amount: {}",
+                            to_ledger_decimal(
+                                &target.amount.to_string_native()
+                            )
+                        ));
+                    }
+                    PGFAction::Continuous(AddRemove::Add(PGFTarget::Ibc(
+                        target,
+                    ))) => {
+                        output.push(
+                            "PGF Action : Add Continuous Payment".to_string(),
+                        );
+                        output.push(format!("Target: {}", target.target));
+                        output.push(format!(
+                            "Amount: {}",
+                            to_ledger_decimal(
+                                &target.amount.to_string_native()
+                            )
+                        ));
+                        output.push(format!("Port ID: {}", target.port_id));
+                        output
+                            .push(format!("Channel ID: {}", target.channel_id));
+                    }
+                    PGFAction::Continuous(AddRemove::Remove(
+                        PGFTarget::Internal(target),
+                    )) => {
+                        output.push(
+                            "PGF Action : Remove Continuous Payment"
+                                .to_string(),
+                        );
+                        output.push(format!("Target: {}", target.target));
+                        output.push(format!(
+                            "Amount: {}",
+                            to_ledger_decimal(
+                                &target.amount.to_string_native()
+                            )
+                        ));
+                    }
+                    PGFAction::Continuous(AddRemove::Remove(
+                        PGFTarget::Ibc(target),
+                    )) => {
+                        output.push(
+                            "PGF Action : Remove Continuous Payment"
+                                .to_string(),
+                        );
+                        output.push(format!("Target: {}", target.target));
+                        output.push(format!(
+                            "Amount: {}",
+                            to_ledger_decimal(
+                                &target.amount.to_string_native()
+                            )
+                        ));
+                        output.push(format!("Port ID: {}", target.port_id));
+                        output
+                            .push(format!("Channel ID: {}", target.channel_id));
+                    }
+                    PGFAction::Retro(PGFTarget::Internal(target)) => {
+                        output.push("PGF Action : Retro Payment".to_string());
+                        output.push(format!("Target: {}", target.target));
+                        output.push(format!(
+                            "Amount: {}",
+                            to_ledger_decimal(
+                                &target.amount.to_string_native()
+                            )
+                        ));
+                    }
+                    PGFAction::Retro(PGFTarget::Ibc(target)) => {
+                        output.push("PGF Action : Retro Payment".to_string());
+                        output.push(format!("Target: {}", target.target));
+                        output.push(format!(
+                            "Amount: {}",
+                            to_ledger_decimal(
+                                &target.amount.to_string_native()
+                            )
+                        ));
+                        output.push(format!("Port ID: {}", target.port_id));
+                        output
+                            .push(format!("Channel ID: {}", target.channel_id));
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Converts the given transaction to the form that is displayed on the Ledger
 /// device
 pub async fn to_ledger_vector(
@@ -1083,11 +1214,12 @@ pub async fn to_ledger_vector(
 
         tv.output.push("Type : Init proposal".to_string());
         tv.output.push(format!("ID : {}", init_proposal_data.id));
+        proposal_type_to_ledger_vector(
+            &init_proposal_data.r#type,
+            &tx,
+            &mut tv.output,
+        );
         tv.output.extend(vec![
-            format!(
-                "Proposal type : {}",
-                LedgerProposalType(&init_proposal_data.r#type, tx)
-            ),
             format!("Author : {}", init_proposal_data.author),
             format!(
                 "Voting start epoch : {}",
@@ -1103,11 +1235,12 @@ pub async fn to_ledger_vector(
 
         tv.output_expert
             .push(format!("ID : {}", init_proposal_data.id));
+        proposal_type_to_ledger_vector(
+            &init_proposal_data.r#type,
+            &tx,
+            &mut tv.output_expert,
+        );
         tv.output_expert.extend(vec![
-            format!(
-                "Proposal type : {}",
-                LedgerProposalType(&init_proposal_data.r#type, tx)
-            ),
             format!("Author : {}", init_proposal_data.author),
             format!(
                 "Voting start epoch : {}",
