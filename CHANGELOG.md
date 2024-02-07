@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## v0.31.2
+
+Namada 0.31.2 is a patch release that fixes an issue with request ordering introduced in 0.31.1.
+
+### BUG FIXES
+
+- ABCI calls must be executed synchronously.
+  ([\#2547](https://github.com/anoma/namada/pull/2547))
+
+### FEATURES
+
+- Added a client command "status" to query a node's status.
+  ([\#2511](https://github.com/anoma/namada/pull/2511))
+
 ## v0.31.1
 
 Namada 0.31.1 is a patch release that fixes the memo processing for some transactions and improves logs related to ledger startup and the wallet.
