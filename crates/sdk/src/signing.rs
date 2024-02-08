@@ -948,6 +948,9 @@ fn proposal_type_to_ledger_vector(
         }
         ProposalType::PGFSteward(actions) => {
             output.push("Proposal type : PGF Steward".to_string());
+            let mut actions = actions.iter().collect::<Vec<_>>();
+            // Print the test vectors in the same order as the serializations
+            actions.sort();
             for action in actions {
                 match action {
                     AddRemove::Add(addr) => {
@@ -971,7 +974,7 @@ fn proposal_type_to_ledger_vector(
                         );
                         output.push(format!("Target: {}", target.target));
                         output.push(format!(
-                            "Amount: {}",
+                            "Amount: NAM {}",
                             to_ledger_decimal(
                                 &target.amount.to_string_native()
                             )
@@ -985,7 +988,7 @@ fn proposal_type_to_ledger_vector(
                         );
                         output.push(format!("Target: {}", target.target));
                         output.push(format!(
-                            "Amount: {}",
+                            "Amount: NAM {}",
                             to_ledger_decimal(
                                 &target.amount.to_string_native()
                             )
@@ -1003,7 +1006,7 @@ fn proposal_type_to_ledger_vector(
                         );
                         output.push(format!("Target: {}", target.target));
                         output.push(format!(
-                            "Amount: {}",
+                            "Amount: NAM {}",
                             to_ledger_decimal(
                                 &target.amount.to_string_native()
                             )
@@ -1018,7 +1021,7 @@ fn proposal_type_to_ledger_vector(
                         );
                         output.push(format!("Target: {}", target.target));
                         output.push(format!(
-                            "Amount: {}",
+                            "Amount: NAM {}",
                             to_ledger_decimal(
                                 &target.amount.to_string_native()
                             )
@@ -1031,7 +1034,7 @@ fn proposal_type_to_ledger_vector(
                         output.push("PGF Action : Retro Payment".to_string());
                         output.push(format!("Target: {}", target.target));
                         output.push(format!(
-                            "Amount: {}",
+                            "Amount: NAM {}",
                             to_ledger_decimal(
                                 &target.amount.to_string_native()
                             )
@@ -1041,7 +1044,7 @@ fn proposal_type_to_ledger_vector(
                         output.push("PGF Action : Retro Payment".to_string());
                         output.push(format!("Target: {}", target.target));
                         output.push(format!(
-                            "Amount: {}",
+                            "Amount: NAM {}",
                             to_ledger_decimal(
                                 &target.amount.to_string_native()
                             )
