@@ -4459,7 +4459,6 @@ pub mod args {
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
             TxUpdateAccount::<SdkTypes> {
                 tx,
-                vp_code_path: self.vp_code_path,
                 tx_code_path: self.tx_code_path,
                 addr: chain_ctx.get(&self.addr),
                 public_keys: self
@@ -4475,14 +4474,12 @@ pub mod args {
     impl Args for TxUpdateAccount<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
-            let vp_code_path = CODE_PATH_OPT.parse(matches);
             let addr = ADDRESS.parse(matches);
             let tx_code_path = PathBuf::from(TX_UPDATE_ACCOUNT_WASM);
             let public_keys = PUBLIC_KEYS.parse(matches);
             let threshold = THRESHOLD.parse(matches);
             Self {
                 tx,
-                vp_code_path,
                 addr,
                 tx_code_path,
                 public_keys,

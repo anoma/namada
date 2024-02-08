@@ -11,7 +11,6 @@ use namada::governance::VoteProposalData;
 use namada::ledger::gas::{TxGasMeter, VpGasMeter};
 use namada::token::{Amount, Transfer};
 use namada::tx::data::pos::{Bond, CommissionChange};
-use namada::tx::{Code, Section};
 use namada::types::hash::Hash;
 use namada::types::key::ed25519;
 use namada::types::storage::{Key, TxIndex};
@@ -23,7 +22,6 @@ use namada_apps::bench_utils::{
     VP_USER_WASM,
 };
 use namada_apps::wallet::defaults;
-use sha2::Digest;
 
 const VP_IMPLICIT_WASM: &str = "vp_implicit.wasm";
 
@@ -67,21 +65,8 @@ fn vp_user(c: &mut Criterion) {
         vec![&defaults::bertha_keypair()],
     );
 
-    let vp_validator_hash = shell
-        .read_storage_key(&Key::wasm_hash(VP_USER_WASM))
-        .unwrap();
-    let extra_section = Section::ExtraData(Code::from_hash(
-        vp_validator_hash,
-        Some(VP_USER_WASM.to_string()),
-    ));
     let data = UpdateAccount {
         addr: defaults::albert_address(),
-        vp_code_hash: Some(Hash(
-            extra_section
-                .hash(&mut sha2::Sha256::new())
-                .finalize_reset()
-                .into(),
-        )),
         public_keys: vec![defaults::albert_keypair().to_public()],
         threshold: None,
     };
@@ -89,7 +74,7 @@ fn vp_user(c: &mut Criterion) {
         TX_UPDATE_ACCOUNT_WASM,
         data,
         None,
-        Some(vec![extra_section]),
+        None,
         vec![&defaults::albert_keypair()],
     );
 
@@ -356,18 +341,8 @@ fn vp_validator(c: &mut Criterion) {
         vec![&defaults::bertha_keypair()],
     );
 
-    let extra_section = Section::ExtraData(Code::from_hash(
-        vp_code_hash,
-        Some(VP_USER_WASM.to_string()),
-    ));
     let data = UpdateAccount {
         addr: defaults::validator_address(),
-        vp_code_hash: Some(Hash(
-            extra_section
-                .hash(&mut sha2::Sha256::new())
-                .finalize_reset()
-                .into(),
-        )),
         public_keys: vec![defaults::validator_account_keypair().to_public()],
         threshold: None,
     };
@@ -375,7 +350,7 @@ fn vp_validator(c: &mut Criterion) {
         TX_UPDATE_ACCOUNT_WASM,
         data,
         None,
-        Some(vec![extra_section]),
+        None,
         vec![&defaults::validator_account_keypair()],
     );
 

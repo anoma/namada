@@ -284,7 +284,6 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     fn new_update_account(&self, addr: Address) -> args::TxUpdateAccount {
         args::TxUpdateAccount {
             addr,
-            vp_code_path: None,
             public_keys: vec![],
             threshold: None,
             tx_code_path: PathBuf::from(TX_UPDATE_ACCOUNT_WASM),
@@ -1186,20 +1185,15 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary account initialization transaction
+        // Generate an arbitrary account update transaction
         pub fn arb_update_account_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
-            mut update_account in arb_update_account(),
-            extra_data in arb_code(),
+            update_account in arb_update_account(),
             code_hash in arb_hash(),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
-            if let Some(vp_code_hash) = &mut update_account.vp_code_hash {
-                let new_code_hash = tx.add_section(Section::ExtraData(extra_data)).get_hash();
-                *vp_code_hash = new_code_hash;
-            }
             tx.add_data(update_account.clone());
             tx.add_code_from_hash(code_hash, Some(TX_UPDATE_ACCOUNT_WASM.to_owned()));
             (tx, TxData::UpdateAccount(update_account))

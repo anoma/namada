@@ -21,12 +21,13 @@ pub struct InitAccount {
     /// account.
     pub public_keys: Vec<common::PublicKey>,
     /// The VP code hash
+    // FIXME: remove this too?
     pub vp_code_hash: Hash,
     /// The account signature threshold
     pub threshold: u8,
 }
 
-/// A tx data type to update an account's validity predicate
+/// A tx data type to update an account's signature threshold and keys
 #[derive(
     Debug,
     Clone,
@@ -40,8 +41,6 @@ pub struct InitAccount {
 pub struct UpdateAccount {
     /// An address of the account
     pub addr: Address,
-    /// The new VP code hash
-    pub vp_code_hash: Option<Hash>,
     /// Public keys to be written into the account's storage. This can be used
     /// for signature verification of transactions for the newly created
     /// account.
@@ -84,13 +83,11 @@ pub mod tests {
             public_keys in collection::vec(arb_common_pk(), 0..10),
         )(
             addr in arb_non_internal_address(),
-            vp_code_hash in option::of(arb_hash()),
             threshold in option::of(0..=public_keys.len() as u8),
             public_keys in Just(public_keys),
         ) -> UpdateAccount {
             UpdateAccount {
                 addr,
-                vp_code_hash,
                 public_keys,
                 threshold,
             }

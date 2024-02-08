@@ -1206,26 +1206,6 @@ pub async fn to_ledger_vector(
             )])
         }
 
-        let vp_code_data = match &update_account.vp_code_hash {
-            Some(hash) => {
-                let extra = tx
-                    .get_section(hash)
-                    .and_then(|x| Section::extra_data_sec(x.as_ref()))
-                    .ok_or_else(|| {
-                        Error::Other("unable to load vp code".to_string())
-                    })?;
-                let vp_code = if extra.tag == Some(VP_USER_WASM.to_string()) {
-                    "User".to_string()
-                } else {
-                    HEXLOWER.encode(&extra.code.hash().0)
-                };
-                Some((vp_code, extra.code.hash()))
-            }
-            None => None,
-        };
-        if let Some((vp_code, _)) = &vp_code_data {
-            tv.output.extend(vec![format!("VP type : {}", vp_code)]);
-        }
         tv.output_expert
             .extend(vec![format!("Address : {}", update_account.addr)]);
         tv.output_expert.extend(
@@ -1237,12 +1217,6 @@ pub async fn to_ledger_vector(
         if let Some(threshold) = update_account.threshold {
             tv.output_expert
                 .extend(vec![format!("Threshold : {}", threshold,)])
-        }
-        if let Some((_, extra_code_hash)) = vp_code_data {
-            tv.output_expert.extend(vec![format!(
-                "VP type : {}",
-                HEXLOWER.encode(&extra_code_hash.0)
-            )]);
         }
     } else if code_sec.tag == Some(TX_TRANSFER_WASM.to_string()) {
         let transfer = Transfer::try_from_slice(

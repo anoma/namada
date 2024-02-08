@@ -174,14 +174,12 @@ impl UpdateAccount {
     /// Build a raw UpdateAccount transaction from the given parameters
     pub fn new(
         addr: Address,
-        vp_code_hash: Option<Hash>,
         public_keys: Vec<common::PublicKey>,
         threshold: Option<u8>,
         args: GlobalArgs,
     ) -> Self {
         let update_account = namada_sdk::account::UpdateAccount {
             addr,
-            vp_code_hash,
             public_keys,
             threshold,
         };

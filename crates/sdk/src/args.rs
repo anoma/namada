@@ -801,8 +801,6 @@ pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
 pub struct TxUpdateAccount<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
-    /// Path to the VP WASM code file
-    pub vp_code_path: Option<PathBuf>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
     /// Address of the account whose VP is to be updated
@@ -826,14 +824,6 @@ impl<C: NamadaTypes> TxBuilder<C> for TxUpdateAccount<C> {
 }
 
 impl<C: NamadaTypes> TxUpdateAccount<C> {
-    /// Path to the VP WASM code file
-    pub fn vp_code_path(self, vp_code_path: PathBuf) -> Self {
-        Self {
-            vp_code_path: Some(vp_code_path),
-            ..self
-        }
-    }
-
     /// Path to the TX WASM code file
     pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
         Self {
