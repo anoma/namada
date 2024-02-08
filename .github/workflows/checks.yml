@@ -36,7 +36,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        nightly_version: [nightly-2023-06-01]
+        nightly_version: [nightly-2024-02-08]
         make:
           - name: Clippy
             command: clippy
