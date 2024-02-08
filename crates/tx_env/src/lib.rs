@@ -40,14 +40,6 @@ pub trait TxEnv: StorageRead + StorageWrite {
         code_tag: &Option<String>,
     ) -> Result<Address>;
 
-    /// Update a validity predicate
-    fn update_validity_predicate(
-        &mut self,
-        addr: &Address,
-        code: impl AsRef<[u8]>,
-        code_tag: &Option<String>,
-    ) -> Result<()>;
-
     /// Emit an IBC event. On multiple calls, these emitted event will be added.
     fn emit_ibc_event(&mut self, event: &IbcEvent) -> Result<()>;
 

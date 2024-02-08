@@ -842,6 +842,9 @@ where
     tracing::debug!("tx_update {}, {:?}", key, value);
 
     let key = Key::parse(key).map_err(TxRuntimeError::StorageDataError)?;
+    // FIXME: should remove this? Basically, should we allow txs to write vps to
+    // storage? FIXME: probably also depends if we need this for init
+    // account
     if key.is_validity_predicate().is_some() {
         tx_validate_vp_code_hash(env, &value, &None)?;
     }
@@ -1439,55 +1442,6 @@ where
     Ok(())
 }
 
-/// Update a validity predicate function exposed to the wasm VM Tx environment
-pub fn tx_update_validity_predicate<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
-    addr_ptr: u64,
-    addr_len: u64,
-    code_hash_ptr: u64,
-    code_hash_len: u64,
-    code_tag_ptr: u64,
-    code_tag_len: u64,
-) -> TxResult<()>
-where
-    MEM: VmMemory,
-    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: StorageHasher,
-    CA: WasmCacheAccess,
-{
-    let (addr, gas) = env
-        .memory
-        .read_string(addr_ptr, addr_len as _)
-        .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_charge_gas(env, gas)?;
-
-    let addr = Address::decode(addr).map_err(TxRuntimeError::AddressError)?;
-    tracing::debug!("tx_update_validity_predicate for addr {}", addr);
-
-    let (code_tag, gas) = env
-        .memory
-        .read_bytes(code_tag_ptr, code_tag_len as _)
-        .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_charge_gas(env, gas)?;
-    let code_tag = Option::<String>::try_from_slice(&code_tag)
-        .map_err(TxRuntimeError::EncodingError)?;
-
-    let key = Key::validity_predicate(&addr);
-    let (code_hash, gas) = env
-        .memory
-        .read_bytes(code_hash_ptr, code_hash_len as _)
-        .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_charge_gas(env, gas)?;
-
-    tx_validate_vp_code_hash(env, &code_hash, &code_tag)?;
-
-    let write_log = unsafe { env.ctx.write_log.get() };
-    let (gas, _size_diff) = write_log
-        .write(&key, code_hash)
-        .map_err(TxRuntimeError::StorageModificationError)?;
-    tx_charge_gas(env, gas)
-}
-
 /// Initialize a new account established address.
 pub fn tx_init_account<MEM, DB, H, CA>(
     env: &TxVmEnv<MEM, DB, H, CA>,
@@ -1517,6 +1471,7 @@ where
     let code_tag = Option::<String>::try_from_slice(&code_tag)
         .map_err(TxRuntimeError::EncodingError)?;
 
+    // FIXME: if I rmove from init maybe no need for this
     tx_validate_vp_code_hash(env, &code_hash, &code_tag)?;
 
     tracing::debug!("tx_init_account");
@@ -2082,6 +2037,7 @@ where
 }
 
 /// Validate a VP WASM code hash in a tx environment.
+// FIXME: should remove this function?
 fn tx_validate_vp_code_hash<MEM, DB, H, CA>(
     env: &TxVmEnv<MEM, DB, H, CA>,
     code_hash: &[u8],

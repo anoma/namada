@@ -1268,10 +1268,9 @@ mod tests {
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
-            // Update VP in a transaction
-            tx::ctx()
-                .update_validity_predicate(address, vp_hash, &None)
-                .unwrap();
+            // Update threshold in a transaction
+            let threshold_key = account::threshold_key(address);
+            tx::ctx().write(&threshold_key, 10).unwrap();
         });
 
         let vp_env = vp_host_env::take();
@@ -1310,66 +1309,9 @@ mod tests {
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
-            // Update VP in a transaction
-            tx::ctx()
-                .update_validity_predicate(address, vp_hash, &None)
-                .unwrap();
-        });
-
-        let pks_map = AccountPublicKeysMap::from_iter(vec![public_key]);
-
-        let mut vp_env = vp_host_env::take();
-        let mut tx = vp_env.tx.clone();
-        tx.set_data(Data::new(vec![]));
-        tx.set_code(Code::new(vec![], None));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![tx.raw_header_hash()],
-            pks_map.index_secret_keys(vec![keypair]),
-            None,
-        )));
-        let signed_tx = tx.clone();
-        vp_env.tx = signed_tx.clone();
-        let keys_changed: BTreeSet<storage::Key> =
-            vp_env.all_touched_storage_keys();
-        let verifiers: BTreeSet<Address> = BTreeSet::default();
-        vp_host_env::set(vp_env);
-        assert!(
-            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
-                .unwrap()
-        );
-    }
-
-    /// Test that a validity predicate update is accepted if allowed
-    #[test]
-    fn test_signed_vp_update_allowed_accepted() {
-        // Initialize a tx environment
-        let mut tx_env = TestTxEnv::default();
-
-        let vp_owner = address::testing::established_address_1();
-        let keypair = key::testing::keypair_1();
-        let public_key = keypair.ref_to();
-        let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
-        let vp_hash = sha256(&vp_code);
-        // for the update
-        tx_env.store_wasm_code(vp_code);
-
-        tx_env.init_parameters(
-            None,
-            Some(vec![vp_hash.to_string()]),
-            None,
-            None,
-        );
-
-        // Spawn the accounts to be able to modify their storage
-        tx_env.spawn_accounts([&vp_owner]);
-        tx_env.init_account_storage(&vp_owner, vec![public_key.clone()], 1);
-
-        // Initialize VP environment from a transaction
-        vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
-            // Update VP in a transaction
-            tx::ctx()
-                .update_validity_predicate(address, vp_hash, &None)
-                .unwrap();
+            // Update threshold in a transaction
+            let threshold_key = account::threshold_key(address);
+            tx::ctx().write(&threshold_key, 10).unwrap();
         });
 
         let pks_map = AccountPublicKeysMap::from_iter(vec![public_key]);

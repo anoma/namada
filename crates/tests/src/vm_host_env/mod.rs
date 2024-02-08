@@ -232,41 +232,6 @@ mod tests {
         tx::ctx().init_account(code_hash, &None).unwrap();
     }
 
-    /// Test that a tx updating validity predicate that is not in the allowlist
-    /// fails.
-    #[test]
-    #[should_panic = "DisallowedVp"]
-    fn test_tx_update_vp_not_allowed_rejected() {
-        // Initialize a tx environment
-        tx_host_env::init();
-
-        let vp_owner = address::testing::established_address_1();
-        let keypair = key::testing::keypair_1();
-        let public_key = keypair.ref_to();
-        let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
-        let vp_hash = sha256(&vp_code);
-
-        tx_host_env::with(|tx_env| {
-            // let mut tx_env = TestTxEnv::default();
-            tx_env.init_parameters(
-                None,
-                Some(vec!["some_hash".to_string()]),
-                None,
-                None,
-            );
-
-            // Spawn the accounts to be able to modify their storage
-            tx_env.spawn_accounts([&vp_owner]);
-            tx_env.init_account_storage(&vp_owner, vec![public_key.clone()], 1);
-        });
-
-        // Update VP in a transaction.
-        // Panics only due to unwrap in `native_host_fn!` test macro
-        tx::ctx()
-            .update_validity_predicate(&vp_owner, vp_hash, &None)
-            .unwrap()
-    }
-
     /// Test that a tx writing validity predicate that is not in the allowlist
     /// directly to storage fails
     #[test]

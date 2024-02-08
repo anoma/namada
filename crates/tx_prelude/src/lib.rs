@@ -321,28 +321,6 @@ impl TxEnv for Ctx {
             .expect("Decoding address created by the ledger shouldn't fail"))
     }
 
-    fn update_validity_predicate(
-        &mut self,
-        addr: &Address,
-        code_hash: impl AsRef<[u8]>,
-        code_tag: &Option<String>,
-    ) -> Result<(), Error> {
-        let addr = addr.encode();
-        let code_hash = code_hash.as_ref();
-        let code_tag = code_tag.serialize_to_vec();
-        unsafe {
-            namada_tx_update_validity_predicate(
-                addr.as_ptr() as _,
-                addr.len() as _,
-                code_hash.as_ptr() as _,
-                code_hash.len() as _,
-                code_tag.as_ptr() as _,
-                code_tag.len() as _,
-            )
-        };
-        Ok(())
-    }
-
     fn emit_ibc_event(&mut self, event: &ibc::IbcEvent) -> Result<(), Error> {
         let event = borsh::to_vec(event).unwrap();
         unsafe {
