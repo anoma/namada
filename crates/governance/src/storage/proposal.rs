@@ -121,7 +121,7 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
     type Error = ProposalError;
 
     fn try_from(value: PgfFundingProposal) -> Result<Self, Self::Error> {
-        let mut continous_fundings = value
+        let mut continuous_fundings = value
             .data
             .continuous
             .iter()
@@ -143,13 +143,13 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
             .map(PGFAction::Retro)
             .collect::<BTreeSet<PGFAction>>();
 
-        continous_fundings.extend(retro_fundings);
+        continuous_fundings.extend(retro_fundings);
 
         Ok(InitProposalData {
             id: value.proposal.id,
             content: Hash::default(),
             author: value.proposal.author,
-            r#type: ProposalType::PGFPayment(continous_fundings), /* here continous_fundings is contains also the retro funding */
+            r#type: ProposalType::PGFPayment(continuous_fundings), /* here continuous_fundings also contains the retro funding */
             voting_start_epoch: value.proposal.voting_start_epoch,
             voting_end_epoch: value.proposal.voting_end_epoch,
             grace_epoch: value.proposal.grace_epoch,
