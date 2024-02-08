@@ -17,28 +17,6 @@ fn apply_tx(ctx: &mut Ctx, tx: Tx) -> TxResult {
     let owner = &tx_data.addr;
     debug_log!("update VP for: {:#?}", tx_data.addr);
 
-    if let Some(hash) = tx_data.vp_code_hash {
-        let vp_code_sec = signed
-            .get_section(&hash)
-            .ok_or_err_msg("vp code section not found")
-            .map_err(|err| {
-                ctx.set_commitment_sentinel();
-                err
-            })?
-            .extra_data_sec()
-            .ok_or_err_msg("vp code section must be tagged as extra")
-            .map_err(|err| {
-                ctx.set_commitment_sentinel();
-                err
-            })?;
-
-        ctx.update_validity_predicate(
-            owner,
-            vp_code_sec.code.hash(),
-            &vp_code_sec.tag,
-        )?;
-    }
-
     if let Some(threshold) = tx_data.threshold {
         let threshold_key = account::threshold_key(owner);
         ctx.write(&threshold_key, threshold)?;

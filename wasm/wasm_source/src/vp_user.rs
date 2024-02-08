@@ -134,14 +134,7 @@ fn validate_tx(
             KeyType::PoS => validate_pos_changes(ctx, &addr, key, &valid_sig)?,
             KeyType::PgfSteward(address) => address != &addr || *valid_sig,
             KeyType::GovernanceVote(voter) => voter != &addr || *valid_sig,
-            KeyType::Vp(owner) => {
-                let has_post: bool = ctx.has_key_post(key)?;
-                if owner == &addr {
-                    has_post && *valid_sig
-                } else {
-                    true
-                }
-            }
+            KeyType::Vp(owner) => !(owner == &addr),
             KeyType::Masp | KeyType::Ibc => true,
             KeyType::Unknown => {
                 // Unknown changes require a valid signature
