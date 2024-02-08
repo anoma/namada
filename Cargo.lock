@@ -4442,6 +4442,7 @@ name = "namada_governance"
 version = "0.31.4"
 dependencies = [
  "borsh",
+ "itertools 0.10.5",
  "namada_core",
  "namada_macros",
  "namada_parameters",
