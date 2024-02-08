@@ -727,17 +727,26 @@ macro_rules! router_type {
 ///   // parsed with `FromStr` into `ArgType`.
 ///   ( "pattern_a" / [typed_dynamic_arg: ArgType] ) -> ReturnType = handler,
 ///
+///   // Optional arguments.
 ///   ( "pattern_b" / [optional_dynamic_arg: opt ArgType] ) -> ReturnType =
-/// handler,
+///     handler,
+///
+///   // NOTE: In paths optional arguments that have `None` value are skipped.
+///   // Because of this if there are two consecutive `opt` args of the same
+///   // type it is ambiguous which one is specified if only one has a value.
+///   // To work-around this, simply insert a literal pattern in between the
+///   // args (`"separator"`) like:
+///   ( "pattern_c" / [arg1: opt ArgType] / "separator" / [arg2: opt ArgType] ) -> ReturnType =
+///     handler,
 ///
 ///   // Untyped dynamic arg is a string slice `&str`
-///   ( "pattern_c" / [untyped_dynamic_arg] ) -> ReturnType = handler,
+///   ( "pattern_d" / [untyped_dynamic_arg] ) -> ReturnType = handler,
 ///
 ///   // The handler additionally receives the `RequestQuery`, which can have
 ///   // some data attached, specified block height and ask for a proof. It
 ///   // returns `EncodedResponseQuery` (the `data` must be encoded, if
 ///   // necessary), which can have some `info` string and a proof.
-///   ( "pattern_d" ) -> ReturnType = (with_options handler),
+///   ( "pattern_e" ) -> ReturnType = (with_options handler),
 ///
 ///   ( "another" / "pattern" / "that" / "goes" / "deep" ) -> ReturnType = handler,
 ///
