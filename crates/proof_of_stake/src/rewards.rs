@@ -15,9 +15,11 @@ use thiserror::Error;
 
 use crate::storage::{
     consensus_validator_set_handle, get_last_reward_claim_epoch,
-    read_pos_params, read_total_stake, read_validator_stake,
-    rewards_accumulator_handle, validator_commission_rate_handle,
-    validator_rewards_products_handle, validator_state_handle,
+    read_last_pos_inflation_amount, read_last_staked_ratio, read_pos_params,
+    read_total_stake, read_validator_stake, rewards_accumulator_handle,
+    validator_commission_rate_handle, validator_rewards_products_handle,
+    validator_state_handle, write_last_pos_inflation_amount,
+    write_last_staked_ratio,
 };
 use crate::token::credit_tokens;
 use crate::token::storage_key::minted_balance_key;
@@ -270,26 +272,26 @@ where
     // Read from Parameters storage
     let epochs_per_year: u64 = storage
         .read(&params_storage::get_epochs_per_year_key())?
-        .expect("Epochs per year should exist in storage");
-    let pos_last_staked_ratio: Dec = storage
-        .read(&params_storage::get_staked_ratio_key())?
-        .expect("PoS staked ratio should exist in storage");
-    let pos_last_inflation_amount: token::Amount = storage
-        .read(&params_storage::get_pos_inflation_amount_key())?
-        .expect("PoS inflation amount should exist in storage");
+        .expect("Epochs per year should exist in parameters storage");
 
-    // Read from PoS storage
-    let params = read_pos_params(storage)?;
     let staking_token = staking_token_address(storage);
-    let pos_p_gain_nom = params.rewards_gain_p;
-    let pos_d_gain_nom = params.rewards_gain_d;
-
     let total_tokens: token::Amount = storage
         .read(&minted_balance_key(&staking_token))?
         .expect("Total NAM balance should exist in storage");
+
+    // Read from PoS storage
+    let params = read_pos_params(storage)?;
     let pos_locked_supply = read_total_stake(storage, &params, last_epoch)?;
+
+    let pos_last_staked_ratio = read_last_staked_ratio(storage)?
+        .expect("Last staked ratio should exist in PoS storage");
+    let pos_last_inflation_amount = read_last_pos_inflation_amount(storage)?
+        .expect("Last inflation amount should exist in PoS storage");
+
     let pos_locked_ratio_target = params.target_staked_ratio;
     let pos_max_inflation_rate = params.max_inflation_rate;
+    let pos_p_gain_nom = params.rewards_gain_p;
+    let pos_d_gain_nom = params.rewards_gain_d;
 
     // Run rewards PD controller
     let pos_controller = inflation::PosRewardsController {
@@ -325,9 +327,8 @@ where
 
     // Write new rewards parameters that will be used for the inflation of
     // the current new epoch
-    storage
-        .write(&params_storage::get_pos_inflation_amount_key(), inflation)?;
-    storage.write(&params_storage::get_staked_ratio_key(), locked_ratio)?;
+    write_last_staked_ratio(storage, locked_ratio)?;
+    write_last_pos_inflation_amount(storage, inflation)?;
 
     Ok(())
 }

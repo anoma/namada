@@ -387,6 +387,52 @@ where
     storage.write(&key, address)
 }
 
+/// Read last epoch's staked ratio.
+pub fn read_last_staked_ratio<S>(
+    storage: &S,
+) -> namada_storage::Result<Option<Dec>>
+where
+    S: StorageRead,
+{
+    let key = storage_key::last_staked_ratio_key();
+    storage.read(&key)
+}
+
+/// Write last epoch's staked ratio.
+pub fn write_last_staked_ratio<S>(
+    storage: &mut S,
+    ratio: Dec,
+) -> namada_storage::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = storage_key::last_staked_ratio_key();
+    storage.write(&key, ratio)
+}
+
+/// Read last epoch's PoS inflation amount.
+pub fn read_last_pos_inflation_amount<S>(
+    storage: &S,
+) -> namada_storage::Result<Option<token::Amount>>
+where
+    S: StorageRead,
+{
+    let key = storage_key::last_pos_inflation_amount_key();
+    storage.read(&key)
+}
+
+/// Write last epoch's pos inflation amount.
+pub fn write_last_pos_inflation_amount<S>(
+    storage: &mut S,
+    inflation: token::Amount,
+) -> namada_storage::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = storage_key::last_pos_inflation_amount_key();
+    storage.write(&key, inflation)
+}
+
 /// Read PoS validator's delta value.
 pub fn read_validator_deltas_value<S>(
     storage: &S,

@@ -9,7 +9,6 @@ use namada::types::address::{
     Address, EstablishedAddress, EstablishedAddressGen,
 };
 use namada::types::chain::{ChainId, ChainIdPrefix};
-use namada::types::dec::Dec;
 use namada::types::hash::Hash;
 use namada::types::key::{common, RefTo};
 use namada::types::time::{DateTimeUtc, DurationNanos, Rfc3339String};
@@ -318,8 +317,6 @@ impl Finalized {
                 .into();
         let vp_allowlist = vp_allowlist.unwrap_or_default();
         let tx_allowlist = tx_allowlist.unwrap_or_default();
-        let staked_ratio = Dec::zero();
-        let pos_inflation_amount = 0;
 
         namada::ledger::parameters::Parameters {
             max_tx_bytes,
@@ -329,8 +326,6 @@ impl Finalized {
             tx_allowlist,
             implicit_vp_code_hash,
             epochs_per_year,
-            staked_ratio,
-            pos_inflation_amount: Amount::native_whole(pos_inflation_amount),
             max_proposal_bytes,
             max_signatures_per_transaction,
             fee_unshielding_gas_limit,

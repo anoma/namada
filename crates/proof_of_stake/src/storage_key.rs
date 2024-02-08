@@ -58,6 +58,8 @@ const VALIDATOR_AVATAR_KEY: &str = "avatar";
 const LIVENESS_PREFIX: &str = "liveness";
 const LIVENESS_MISSED_VOTES: &str = "missed_votes";
 const LIVENESS_MISSED_VOTES_SUM: &str = "sum_missed_votes";
+const LAST_STAKED_RATIO_KEY: &str = "last_staked_ratio";
+const LAST_POS_INFLATION_AMOUNT_KEY: &str = "last_inflation_amount";
 
 /// Is the given key a PoS storage key?
 pub fn is_pos_key(key: &Key) -> bool {
@@ -1042,5 +1044,19 @@ pub fn liveness_missed_votes_key() -> Key {
 pub fn liveness_sum_missed_votes_key() -> Key {
     liveness_data_prefix()
         .push(&LIVENESS_MISSED_VOTES_SUM.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key for the last epoch's staked ratio.
+pub fn last_staked_ratio_key() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&LAST_STAKED_RATIO_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key for the last epoch's PoS inflation amount.
+pub fn last_pos_inflation_amount_key() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&LAST_POS_INFLATION_AMOUNT_KEY.to_owned())
         .expect("Cannot obtain a storage key")
 }
