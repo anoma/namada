@@ -1394,7 +1394,7 @@ pub async fn query_protocol_parameters(
 ) {
     let governance_parameters =
         query_governance_parameters(context.client()).await;
-    display_line!(context.io(), "Governance Parameters\n");
+    display_line!(context.io(), "\nGovernance Parameters");
     display_line!(
         context.io(),
         "{:4}Min. proposal fund: {}",
@@ -1433,7 +1433,7 @@ pub async fn query_protocol_parameters(
     );
 
     let pgf_parameters = query_pgf_parameters(context.client()).await;
-    display_line!(context.io(), "Public Goods Funding Parameters\n");
+    display_line!(context.io(), "\nPublic Goods Funding Parameters");
     display_line!(
         context.io(),
         "{:4}Pgf inflation rate: {}",
@@ -1447,7 +1447,7 @@ pub async fn query_protocol_parameters(
         pgf_parameters.stewards_inflation_rate
     );
 
-    display_line!(context.io(), "Protocol parameters");
+    display_line!(context.io(), "\nProtocol parameters");
     let key = param_storage::get_epoch_duration_storage_key();
     let epoch_duration: EpochDuration =
         query_storage_value(context.client(), &key)
@@ -1538,15 +1538,33 @@ pub async fn query_protocol_parameters(
     let pos_params = query_pos_parameters(context.client()).await;
     display_line!(
         context.io(),
-        "{:4}Block proposer reward: {}",
+        "{:4}Pipeline length: {}",
         "",
-        pos_params.block_proposer_reward
+        pos_params.pipeline_len
     );
     display_line!(
         context.io(),
-        "{:4}Block vote reward: {}",
+        "{:4}Unbonding length: {}",
         "",
-        pos_params.block_vote_reward
+        pos_params.unbonding_len
+    );
+    display_line!(
+        context.io(),
+        "{:4}Cubic slashing window length: {}",
+        "",
+        pos_params.cubic_slashing_window_length
+    );
+    display_line!(
+        context.io(),
+        "{:4}Max. consensus validator slots: {}",
+        "",
+        pos_params.max_validator_slots
+    );
+    display_line!(
+        context.io(),
+        "{:4}Validator stake threshold: {}",
+        "",
+        pos_params.validator_stake_threshold
     );
     display_line!(
         context.io(),
@@ -1562,25 +1580,55 @@ pub async fn query_protocol_parameters(
     );
     display_line!(
         context.io(),
-        "{:4}Max. validator slots: {}",
+        "{:4}Liveness window: {} blocks",
         "",
-        pos_params.max_validator_slots
+        pos_params.liveness_window_check
     );
     display_line!(
         context.io(),
-        "{:4}Pipeline length: {}",
+        "{:4}Liveness threshold: {}",
         "",
-        pos_params.pipeline_len
+        pos_params.liveness_threshold
     );
     display_line!(
         context.io(),
-        "{:4}Unbonding length: {}",
+        "{:4}Block proposer reward: {}",
         "",
-        pos_params.unbonding_len
+        pos_params.block_proposer_reward
     );
     display_line!(
         context.io(),
-        "{:4}Votes per token: {}",
+        "{:4}Block vote reward: {}",
+        "",
+        pos_params.block_vote_reward
+    );
+    display_line!(
+        context.io(),
+        "{:4}Max inflation rate: {}",
+        "",
+        pos_params.max_inflation_rate
+    );
+    display_line!(
+        context.io(),
+        "{:4}Target staked ratio: {}",
+        "",
+        pos_params.target_staked_ratio
+    );
+    display_line!(
+        context.io(),
+        "{:4}Inflation kP gain: {}",
+        "",
+        pos_params.rewards_gain_p
+    );
+    display_line!(
+        context.io(),
+        "{:4}Inflation kD gain: {}",
+        "",
+        pos_params.rewards_gain_d
+    );
+    display_line!(
+        context.io(),
+        "{:4}Votes per raw token: {}",
         "",
         pos_params.tm_votes_per_token
     );
