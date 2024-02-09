@@ -215,16 +215,21 @@ impl Display for ProposalResult {
             _ => self.total_voting_power.mul_ceil(Dec::one() / 3),
         };
 
+        let thresh_frac =
+            Dec::from(threshold) / Dec::from(self.total_voting_power);
+
         write!(
             f,
             "{} with {} yay votes, {} nay votes and {} abstain votes, total \
-             voting power: {} threshold: {}",
+             voting power: {}, threshold (fraction) of total voting power \
+             needed to tally: {} ({})",
             self.result,
             self.total_yay_power.to_string_native(),
             self.total_nay_power.to_string_native(),
             self.total_abstain_power.to_string_native(),
             self.total_voting_power.to_string_native(),
-            threshold.to_string_native()
+            threshold.to_string_native(),
+            thresh_frac
         )
     }
 }
