@@ -650,8 +650,6 @@ impl VoteProposal {
 pub struct TxInitAccount<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
-    /// Path to the VP WASM code file for the new account
-    pub vp_code_path: PathBuf,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
     /// Public key for the new account
@@ -685,14 +683,6 @@ impl<C: NamadaTypes> TxInitAccount<C> {
     pub fn threshold(self, threshold: u8) -> Self {
         Self {
             threshold: Some(threshold),
-            ..self
-        }
-    }
-
-    /// Path to the VP WASM code file
-    pub fn vp_code_path(self, vp_code_path: PathBuf) -> Self {
-        Self {
-            vp_code_path,
             ..self
         }
     }
@@ -786,8 +776,6 @@ pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
     pub discord_handle: Option<String>,
     /// The validator's avatar
     pub avatar: Option<String>,
-    /// Path to the VP WASM code file
-    pub validator_vp_code_path: PathBuf,
     /// Path to the TX WASM code file
     pub tx_init_account_code_path: PathBuf,
     /// Path to the TX WASM code file

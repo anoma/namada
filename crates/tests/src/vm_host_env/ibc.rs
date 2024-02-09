@@ -234,11 +234,11 @@ pub fn init_storage() -> (Address, Address) {
     });
 
     // initialize a token
-    let token = tx_host_env::ctx().init_account(code_hash, &None).unwrap();
+    let token = tx_host_env::ctx().init_account().unwrap();
     let denom_key = token::storage_key::denom_key(&token);
     let token_denom = token::Denomination(ANY_DENOMINATION);
     // initialize an account
-    let account = tx_host_env::ctx().init_account(code_hash, &None).unwrap();
+    let account = tx_host_env::ctx().init_account().unwrap();
     let key = token::storage_key::balance_key(&token, &account);
     let init_bal = Amount::from_uint(100, token_denom).unwrap();
     tx_host_env::with(|env| {

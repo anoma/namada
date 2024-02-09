@@ -874,7 +874,6 @@ pub async fn submit_init_validator(
         description,
         discord_handle,
         avatar,
-        validator_vp_code_path,
         unsafe_dont_encrypt,
         tx_init_account_code_path,
         tx_become_validator_code_path,
@@ -884,7 +883,6 @@ pub async fn submit_init_validator(
         namada,
         args::TxInitAccount {
             tx: tx_args.clone(),
-            vp_code_path: validator_vp_code_path,
             tx_code_path: tx_init_account_code_path,
             public_keys: account_keys,
             threshold,

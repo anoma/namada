@@ -483,13 +483,7 @@ mod native_tx_host_env {
     native_host_fn!(tx_iter_prefix(prefix_ptr: u64, prefix_len: u64) -> u64);
     native_host_fn!(tx_iter_next(iter_id: u64) -> i64);
     native_host_fn!(tx_insert_verifier(addr_ptr: u64, addr_len: u64));
-    native_host_fn!(tx_init_account(
-        code_hash_ptr: u64,
-        code_hash_len: u64,
-        code_tag_ptr: u64,
-        code_tag_len: u64,
-        result_ptr: u64
-    ));
+    native_host_fn!(tx_init_account(result_ptr: u64));
     native_host_fn!(tx_emit_ibc_event(event_ptr: u64, event_len: u64));
     native_host_fn!(tx_get_ibc_events(event_type_ptr: u64, event_type_len: u64) -> i64);
     native_host_fn!(tx_get_chain_id(result_ptr: u64));

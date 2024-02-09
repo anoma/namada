@@ -741,7 +741,6 @@ pub fn init_genesis_established_account(
         .collect();
 
     let (address, txs) = genesis::transactions::init_established_account(
-        args.vp,
         public_keys,
         args.threshold,
     );

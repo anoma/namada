@@ -1,5 +1,4 @@
-//! A tx to initialize a new established address with a given public key and
-//! a validity predicate.
+//! A tx to initialize a new established address with a given public key.
 
 use namada_tx_prelude::*;
 
@@ -14,22 +13,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         .wrap_err("failed to decode InitAccount")?;
     debug_log!("apply_tx called to init a new established account");
 
-    let vp_code_sec = signed
-        .get_section(&tx_data.vp_code_hash)
-        .ok_or_err_msg("vp code section not found")
-        .map_err(|err| {
-            ctx.set_commitment_sentinel();
-            err
-        })?
-        .extra_data_sec()
-        .ok_or_err_msg("vp code section must be tagged as extra")
-        .map_err(|err| {
-            ctx.set_commitment_sentinel();
-            err
-        })?;
-
-    let address =
-        ctx.init_account(vp_code_sec.code.hash(), &vp_code_sec.tag)?;
+    let address = ctx.init_account()?;
 
     match account::init_account(ctx, &address, tx_data) {
         Ok(address) => {

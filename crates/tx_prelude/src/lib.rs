@@ -294,23 +294,9 @@ impl TxEnv for Ctx {
         Ok(())
     }
 
-    fn init_account(
-        &mut self,
-        code_hash: impl AsRef<[u8]>,
-        code_tag: &Option<String>,
-    ) -> Result<Address, Error> {
-        let code_hash = code_hash.as_ref();
-        let code_tag = code_tag.serialize_to_vec();
+    fn init_account(&mut self) -> Result<Address, Error> {
         let result = Vec::with_capacity(address::ESTABLISHED_ADDRESS_BYTES_LEN);
-        unsafe {
-            namada_tx_init_account(
-                code_hash.as_ptr() as _,
-                code_hash.len() as _,
-                code_tag.as_ptr() as _,
-                code_tag.len() as _,
-                result.as_ptr() as _,
-            )
-        };
+        unsafe { namada_tx_init_account(result.as_ptr() as _) };
         let slice = unsafe {
             slice::from_raw_parts(
                 result.as_ptr(),

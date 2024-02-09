@@ -511,14 +511,14 @@ where
     fn apply_genesis_txs_established_account(
         &mut self,
         genesis: &genesis::chain::Finalized,
-        vp_cache: &mut HashMap<String, Vec<u8>>,
+        // FIXME: remove if not needed
+        _vp_cache: &mut HashMap<String, Vec<u8>>,
     ) -> ControlFlow<()> {
         if let Some(txs) = genesis.transactions.established_account.as_ref() {
             for FinalizedEstablishedAccountTx {
                 address,
                 tx:
                     EstablishedAccountTx {
-                        vp,
                         threshold,
                         public_keys,
                     },
@@ -528,8 +528,14 @@ where
                     "Applying genesis tx to init an established account \
                      {address}"
                 );
-                let vp_code = self.lookup_vp(vp, genesis, vp_cache)?;
-                let code_hash = CodeHash::sha256(&vp_code);
+                // FIXME: can't we get directly the has of vp_user from storage
+                // without loading the code and recomputing it?
+                let vp_hash_key = Key::wasm_hash("vp_user.wasm");
+                let code_hash: CodeHash =
+                    self.wl_storage.read(&vp_hash_key).unwrap().unwrap();
+                // FIXME: remove if unneeded
+                // let vp_code = self.lookup_vp("vp_user", genesis, vp_cache)?;
+                // let code_hash = CodeHash::sha256(&vp_code);
                 self.wl_storage
                     .write_bytes(&Key::validity_predicate(address), code_hash)
                     .unwrap();

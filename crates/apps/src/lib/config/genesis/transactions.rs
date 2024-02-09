@@ -228,12 +228,10 @@ pub fn parse_unsigned(
 
 /// Create signed [`Transactions`] for an established account.
 pub fn init_established_account(
-    vp: String,
     public_keys: Vec<StringEncoded<common::PublicKey>>,
     threshold: u8,
 ) -> (Address, UnsignedTransactions) {
     let unsigned_tx = EstablishedAccountTx {
-        vp,
         threshold,
         public_keys,
     };
@@ -672,7 +670,6 @@ impl TxToSign for ValidatorAccountTx<SignedPk> {
     Ord,
 )]
 pub struct EstablishedAccountTx {
-    pub vp: String,
     #[serde(default = "default_threshold")]
     pub threshold: u8,
     /// PKs have to come last in TOML to avoid `ValueAfterTable` error
@@ -1241,7 +1238,7 @@ pub struct TokenBalancesForValidation {
 
 pub fn validate_established_account(
     tx: &EstablishedAccountTx,
-    vps: Option<&ValidityPredicates>,
+    _vps: Option<&ValidityPredicates>,
     all_used_addresses: &mut BTreeSet<Address>,
     established_accounts: &mut BTreeMap<Address, (Vec<common::PublicKey>, u8)>,
 ) -> bool {
@@ -1297,19 +1294,6 @@ pub fn validate_established_account(
         is_valid = false;
     } else {
         all_used_addresses.insert(established_address);
-    }
-
-    // Check the VP exists
-    if !vps
-        .map(|vps| vps.wasm.contains_key(&tx.vp))
-        .unwrap_or_default()
-    {
-        eprintln!(
-            "An `established_account` tx `vp` \"{}\" not found in Validity \
-             predicates file.",
-            tx.vp
-        );
-        is_valid = false;
     }
 
     // If PK is used, check the authorization

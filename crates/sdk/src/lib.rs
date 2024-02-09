@@ -63,7 +63,6 @@ use crate::tx::{
     TX_REDELEGATE_WASM, TX_RESIGN_STEWARD, TX_REVEAL_PK, TX_TRANSFER_WASM,
     TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
     TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
-    VP_USER_WASM,
 };
 use crate::wallet::{Wallet, WalletIo, WalletStorage};
 
@@ -176,7 +175,6 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     ) -> args::TxInitAccount {
         args::TxInitAccount {
             tx: self.tx_builder(),
-            vp_code_path: PathBuf::from(VP_USER_WASM),
             tx_code_path: PathBuf::from(TX_INIT_ACCOUNT_WASM),
             public_keys,
             threshold,
@@ -398,7 +396,6 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             eth_cold_key: None,
             eth_hot_key: None,
             protocol_key: None,
-            validator_vp_code_path: PathBuf::from(VP_USER_WASM),
             unsafe_dont_encrypt: false,
             tx_init_account_code_path: PathBuf::from(TX_INIT_ACCOUNT_WASM),
             tx_become_validator_code_path: PathBuf::from(
@@ -1098,14 +1095,13 @@ pub mod testing {
         pub fn arb_init_account_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
-            mut init_account in arb_init_account(),
+            init_account in arb_init_account(),
             extra_data in arb_code(),
             code_hash in arb_hash(),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
-            let vp_code_hash = tx.add_section(Section::ExtraData(extra_data)).get_hash();
-            init_account.vp_code_hash = vp_code_hash;
+            let _vp_code_hash = tx.add_section(Section::ExtraData(extra_data)).get_hash();
             tx.add_data(init_account.clone());
             tx.add_code_from_hash(code_hash, Some(TX_INIT_ACCOUNT_WASM.to_owned()));
             (tx, TxData::InitAccount(init_account))

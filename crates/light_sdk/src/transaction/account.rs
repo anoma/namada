@@ -20,13 +20,11 @@ impl InitAccount {
     /// Build a raw InitAccount transaction from the given parameters
     pub fn new(
         public_keys: Vec<common::PublicKey>,
-        vp_code_hash: Hash,
         threshold: u8,
         args: GlobalArgs,
     ) -> Self {
         let init_account = namada_sdk::account::InitAccount {
             public_keys,
-            vp_code_hash,
             threshold,
         };
 

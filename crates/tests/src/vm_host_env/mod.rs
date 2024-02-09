@@ -207,33 +207,9 @@ mod tests {
         );
     }
 
-    #[test]
-    #[should_panic]
-    fn test_tx_init_account_with_invalid_vp() {
-        // The environment must be initialized first
-        tx_host_env::init();
-
-        let code = vec![];
-        tx::ctx().init_account(code, &None).unwrap();
-    }
-
-    #[test]
-    fn test_tx_init_account_with_valid_vp() {
-        // The environment must be initialized first
-        tx_host_env::init();
-
-        let code = TestWasms::VpAlwaysTrue.read_bytes();
-        let code_hash = Hash::sha256(&code);
-        tx_host_env::with(|env| {
-            // store wasm code
-            let key = Key::wasm_code(&code_hash);
-            env.wl_storage.storage.write(&key, code.clone()).unwrap();
-        });
-        tx::ctx().init_account(code_hash, &None).unwrap();
-    }
-
     /// Test that a tx writing validity predicate that is not in the allowlist
     /// directly to storage fails
+    // FIXME: should probably remove this
     #[test]
     #[should_panic = "DisallowedVp"]
     fn test_tx_write_vp_not_allowed_rejected() {
@@ -269,6 +245,7 @@ mod tests {
     /// is not in the allowlist fails
     #[test]
     #[should_panic = "DisallowedVp"]
+    // FIXME: should probably remove this
     fn test_tx_init_vp_not_allowed_rejected() {
         // Initialize a tx environment
         tx_host_env::init();
@@ -276,8 +253,6 @@ mod tests {
         let vp_owner = address::testing::established_address_1();
         let keypair = key::testing::keypair_1();
         let public_key = keypair.ref_to();
-        let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
-        let vp_hash = sha256(&vp_code);
 
         tx_host_env::with(|tx_env| {
             // let mut tx_env = TestTxEnv::default();
@@ -294,7 +269,7 @@ mod tests {
         });
 
         // Initializing a new account with the VP should fail
-        tx::ctx().init_account(vp_hash, &None).unwrap();
+        tx::ctx().init_account().unwrap();
     }
 
     #[test]

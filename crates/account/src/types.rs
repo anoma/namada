@@ -1,6 +1,5 @@
 use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::types::address::Address;
-use namada_core::types::hash::Hash;
 use namada_core::types::key::common;
 use serde::{Deserialize, Serialize};
 
@@ -20,9 +19,6 @@ pub struct InitAccount {
     /// for signature verification of transactions for the newly created
     /// account.
     pub public_keys: Vec<common::PublicKey>,
-    /// The VP code hash
-    // FIXME: remove this too?
-    pub vp_code_hash: Hash,
     /// The account signature threshold
     pub threshold: u8,
 }
@@ -53,7 +49,6 @@ pub struct UpdateAccount {
 /// Tests and strategies for accounts
 pub mod tests {
     use namada_core::types::address::testing::arb_non_internal_address;
-    use namada_core::types::hash::testing::arb_hash;
     use namada_core::types::key::testing::arb_common_pk;
     use proptest::prelude::Just;
     use proptest::{collection, option, prop_compose};
@@ -67,11 +62,9 @@ pub mod tests {
         )(
             threshold in 0..=public_keys.len() as u8,
             public_keys in Just(public_keys),
-            vp_code_hash in arb_hash(),
         ) -> InitAccount {
             InitAccount {
                 public_keys,
-                vp_code_hash,
                 threshold,
             }
         }

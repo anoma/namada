@@ -61,13 +61,7 @@ pub mod tx {
         pub fn namada_tx_insert_verifier(addr_ptr: u64, addr_len: u64);
 
         // Initialize a new account
-        pub fn namada_tx_init_account(
-            code_hash_ptr: u64,
-            code_hash_len: u64,
-            code_tag_ptr: u64,
-            code_tag_len: u64,
-            result_ptr: u64,
-        );
+        pub fn namada_tx_init_account(result_ptr: u64);
 
         // Emit an IBC event
         pub fn namada_tx_emit_ibc_event(event_ptr: u64, event_len: u64);

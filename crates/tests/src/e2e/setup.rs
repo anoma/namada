@@ -178,7 +178,6 @@ where
         let validator_address = {
             use namada_apps::config::genesis::chain::DeriveEstablishedAddress;
             let pre_genesis_tx = transactions::EstablishedAccountTx {
-                vp: "vp_user".to_string(),
                 threshold: 1,
                 public_keys: vec![StringEncoded::new(sk.ref_to())],
             };

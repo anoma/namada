@@ -34,11 +34,7 @@ pub trait TxEnv: StorageRead + StorageWrite {
 
     /// Initialize a new account generates a new established address and
     /// writes the given code as its validity predicate into the storage.
-    fn init_account(
-        &mut self,
-        code_hash: impl AsRef<[u8]>,
-        code_tag: &Option<String>,
-    ) -> Result<Address>;
+    fn init_account(&mut self) -> Result<Address>;
 
     /// Emit an IBC event. On multiple calls, these emitted event will be added.
     fn emit_ibc_event(&mut self, event: &IbcEvent) -> Result<()>;

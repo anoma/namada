@@ -842,9 +842,6 @@ where
     tracing::debug!("tx_update {}, {:?}", key, value);
 
     let key = Key::parse(key).map_err(TxRuntimeError::StorageDataError)?;
-    // FIXME: should remove this? Basically, should we allow txs to write vps to
-    // storage? FIXME: probably also depends if we need this for init
-    // account
     if key.is_validity_predicate().is_some() {
         tx_validate_vp_code_hash(env, &value, &None)?;
     }
@@ -1445,10 +1442,6 @@ where
 /// Initialize a new account established address.
 pub fn tx_init_account<MEM, DB, H, CA>(
     env: &TxVmEnv<MEM, DB, H, CA>,
-    code_hash_ptr: u64,
-    code_hash_len: u64,
-    code_tag_ptr: u64,
-    code_tag_len: u64,
     result_ptr: u64,
 ) -> TxResult<()>
 where
@@ -1457,29 +1450,28 @@ where
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
-    let (code_hash, gas) = env
-        .memory
-        .read_bytes(code_hash_ptr, code_hash_len as _)
-        .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_charge_gas(env, gas)?;
-
-    let (code_tag, gas) = env
-        .memory
-        .read_bytes(code_tag_ptr, code_tag_len as _)
-        .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_charge_gas(env, gas)?;
-    let code_tag = Option::<String>::try_from_slice(&code_tag)
-        .map_err(TxRuntimeError::EncodingError)?;
-
-    // FIXME: if I rmove from init maybe no need for this
-    tx_validate_vp_code_hash(env, &code_hash, &code_tag)?;
-
     tracing::debug!("tx_init_account");
 
     let storage = unsafe { env.ctx.storage.get() };
     let write_log = unsafe { env.ctx.write_log.get() };
-    let code_hash = Hash::try_from(&code_hash[..])
-        .map_err(|e| TxRuntimeError::InvalidVpCodeHash(e.to_string()))?;
+    // //FIXME: not sure if this works
+    let hash_key = Key::wasm_hash("vp_user.wasm");
+    let (vp_hash, gas) = storage
+        .read(&hash_key)
+        .map_err(TxRuntimeError::StateError)?;
+    // FIXME: remove if unused
+    // let hash_key =
+    //     namada_core::types::storage::Key::wasm_code_name("vp_user".
+    // to_string()); let (vp_hash, gas) = storage
+    //     .read(&hash_key)
+    //     .map_err(TxRuntimeError::StateError)?;
+    tx_charge_gas(env, gas)?;
+    let code_hash = Hash::try_from(
+        &vp_hash.ok_or(TxRuntimeError::StorageError(
+            StorageError::SimpleMessage("Missing hash of vp_user in storage"),
+        ))?[..],
+    )
+    .map_err(|e| TxRuntimeError::InvalidVpCodeHash(e.to_string()))?;
     let (addr, gas) = write_log.init_account(&storage.address_gen, code_hash);
     let addr_bytes = addr.serialize_to_vec();
     tx_charge_gas(env, gas)?;
@@ -2037,7 +2029,6 @@ where
 }
 
 /// Validate a VP WASM code hash in a tx environment.
-// FIXME: should remove this function?
 fn tx_validate_vp_code_hash<MEM, DB, H, CA>(
     env: &TxVmEnv<MEM, DB, H, CA>,
     code_hash: &[u8],

@@ -444,7 +444,6 @@ pub fn make_dev_genesis(
                 genesis.transactions.established_account.as_mut().unwrap();
 
             let tx = transactions::EstablishedAccountTx {
-                vp: utils::VP_USER.to_string(),
                 public_keys: vec![StringEncoded::new(
                     consensus_keypair.ref_to(),
                 )],

@@ -50,7 +50,7 @@ use namada_apps::bench_utils::{
     VP_USER_WASM,
 };
 use namada_apps::wallet::defaults;
-use sha2::Digest;
+// FIXME: check if all the dependencies of the bench crate are still needed
 
 fn transfer(c: &mut Criterion) {
     let mut group = c.benchmark_group("transfer");
@@ -403,15 +403,8 @@ fn init_account(c: &mut Criterion) {
         vp_code_hash,
         Some(VP_USER_WASM.to_string()),
     ));
-    let extra_hash = Hash(
-        extra_section
-            .hash(&mut sha2::Sha256::new())
-            .finalize_reset()
-            .into(),
-    );
     let data = InitAccount {
         public_keys: vec![new_account.to_public()],
-        vp_code_hash: extra_hash,
         threshold: 1,
     };
     let tx = shell.generate_tx(
