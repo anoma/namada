@@ -3953,6 +3953,7 @@ mod test_finalize_block {
         let enqueued_slash = enqueued_slashes_handle()
             .at(&processing_epoch)
             .at(&val1.address)
+            .at(&height.0)
             .front(&shell.state)
             .unwrap()
             .unwrap();
@@ -3990,7 +3991,7 @@ mod test_finalize_block {
                     address: pkh1,
                     power: Default::default(),
                 },
-                height: height.try_into().unwrap(),
+                height: height.next_height().try_into().unwrap(),
                 time: tendermint::Time::unix_epoch(),
                 total_voting_power: Default::default(),
             },
@@ -4023,8 +4024,13 @@ mod test_finalize_block {
             .at(&processing_epoch.next())
             .at(&val1.address);
 
-        assert_eq!(enqueued_slashes_8.len(&shell.state).unwrap(), 2_u64);
-        assert_eq!(enqueued_slashes_9.len(&shell.state).unwrap(), 1_u64);
+        let num_enqueued_8 =
+            enqueued_slashes_8.iter(&shell.state).unwrap().count();
+        let num_enqueued_9 =
+            enqueued_slashes_9.iter(&shell.state).unwrap().count();
+
+        assert_eq!(num_enqueued_8, 2);
+        assert_eq!(num_enqueued_9, 1);
         let last_slash =
             namada_proof_of_stake::storage::read_validator_last_slash_epoch(
                 &shell.state,
