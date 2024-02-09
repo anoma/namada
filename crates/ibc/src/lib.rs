@@ -20,7 +20,7 @@ pub use context::token_transfer::TokenTransferContext;
 pub use context::transfer_mod::{ModuleWrapper, TransferModule};
 use context::IbcContext;
 pub use context::ValidationParams;
-use namada_core::address::Address;
+use namada_core::address::{Address, MASP};
 use namada_core::ibc::apps::nft_transfer::handler::{
     send_nft_transfer_execute, send_nft_transfer_validate,
 };
@@ -427,6 +427,15 @@ pub fn decode_message(tx_data: &[u8]) -> Result<IbcMessage, Error> {
         return Ok(IbcMessage::RecvPacket(msg));
     }
 
+    // Acknowledge packet message with `IbcShieldedTransfer`
+    if let Ok(msg) = MsgAcknowledgement::try_from_slice(tx_data) {
+        return Ok(IbcMessage::AckPacket(msg));
+    }
+    // Timeout packet message with `IbcShieldedTransfer`
+    if let Ok(msg) = MsgTimeout::try_from_slice(tx_data) {
+        return Ok(IbcMessage::Timeout(msg));
+    }
+
     Err(Error::DecodingData)
 }
 
@@ -505,7 +514,13 @@ pub fn received_ibc_token(
         dest_port_id,
         dest_channel_id,
     )?;
-    Ok(storage::ibc_token(ibc_trace))
+    if ibc_trace.contains('/') {
+        Ok(storage::ibc_token(ibc_trace))
+    } else {
+        // the token is a base token
+        Address::decode(&ibc_trace)
+            .map_err(|e| Error::Trace(format!("Invalid token: {e}")))
+    }
 }
 
 #[cfg(any(test, feature = "testing"))]

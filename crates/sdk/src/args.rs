@@ -317,6 +317,8 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
     pub timeout_height: Option<u64>,
     /// Timeout timestamp offset
     pub timeout_sec_offset: Option<u64>,
+    /// Refund target address when the shielded transfer failure
+    pub refund_target: Option<C::TransferTarget>,
     /// Memo
     pub memo: Option<String>,
     /// Path to the TX WASM code file
@@ -378,6 +380,14 @@ impl<C: NamadaTypes> TxIbcTransfer<C> {
     pub fn timeout_sec_offset(self, timeout_sec_offset: u64) -> Self {
         Self {
             timeout_sec_offset: Some(timeout_sec_offset),
+            ..self
+        }
+    }
+
+    /// Refund target address
+    pub fn refund_target(self, refund_target: C::TransferTarget) -> Self {
+        Self {
+            refund_target: Some(refund_target),
             ..self
         }
     }

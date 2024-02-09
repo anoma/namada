@@ -35,7 +35,7 @@ use namada::ibc::core::channel::types::channel::Order as ChanOrder;
 use namada::ibc::core::channel::types::msgs::{
     MsgAcknowledgement, MsgChannelOpenAck, MsgChannelOpenConfirm,
     MsgChannelOpenInit, MsgChannelOpenTry, MsgRecvPacket as IbcMsgRecvPacket,
-    MsgTimeout,
+    MsgTimeout as IbcMsgTimeout,
 };
 use namada::ibc::core::channel::types::packet::Packet;
 use namada::ibc::core::channel::types::timeout::TimeoutHeight;
@@ -60,7 +60,7 @@ use namada::ibc::core::host::types::identifiers::{
 };
 use namada::ibc::primitives::proto::Any;
 use namada::ibc::primitives::{Signer, Timestamp, ToProto};
-use namada::ibc::{IbcShieldedTransfer, MsgRecvPacket};
+use namada::ibc::{IbcShieldedTransfer, MsgRecvPacket, MsgTimeout};
 use namada::ledger::events::EventType;
 use namada::ledger::ibc::storage::*;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
@@ -202,6 +202,21 @@ fn run_ledger_ibc() -> Result<()> {
         &test_b,
     )?;
 
+    shielded_transfer_timeout(
+        &test_a,
+        &test_b,
+        &client_id_a,
+        &port_id_a,
+        &channel_id_a,
+    )?;
+    // The balance should not be changed
+    check_shielded_balances_after_back(
+        &port_id_b,
+        &channel_id_b,
+        &test_a,
+        &test_b,
+    )?;
+
     // Skip tests for closing a channel and timeout_on_close since the transfer
     // channel cannot be closed
 
@@ -227,7 +242,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
 
     // Start relaying
     let hermes = run_hermes(&test_a)?;
-    let _bg_hermes = hermes.background();
+    let bg_hermes = hermes.background();
 
     // Transfer 100000 from the normal account on Chain A to Chain B
     std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
@@ -304,7 +319,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         ALBERT,
         AA_PAYMENT_ADDRESS,
         BTC,
-        10,
+        100,
         ALBERT_KEY,
     )?;
     // Shieded transfer from Chain A to Chain B
@@ -323,6 +338,53 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         false,
     )?;
     wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
+    check_shielded_balances(&port_id_b, &channel_id_b, &test_a, &test_b)?;
+
+    // Shielded transfer to an invalid receiver address
+    transfer(
+        &test_a,
+        A_SPENDING_KEY,
+        "invalid_receiver",
+        BTC,
+        "10",
+        ALBERT_KEY,
+        &port_id_a,
+        &channel_id_a,
+        None,
+        None,
+        false,
+    )?;
+    wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
+    // The balance should not be changed
+    check_shielded_balances(&port_id_b, &channel_id_b, &test_a, &test_b)?;
+
+    // Stop Hermes for timeout test
+    let mut hermes = bg_hermes.foreground();
+    hermes.interrupt()?;
+
+    // Send transfer will be timed out
+    transfer(
+        &test_a,
+        A_SPENDING_KEY,
+        AB_PAYMENT_ADDRESS,
+        BTC,
+        "10",
+        ALBERT_KEY,
+        &port_id_a,
+        &channel_id_a,
+        Some(Duration::new(10, 0)),
+        None,
+        false,
+    )?;
+    // wait for the timeout
+    sleep(10);
+
+    // Restart relaying
+    let hermes = run_hermes(&test_a)?;
+    let _bg_hermes = hermes.background();
+
+    wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
+    // The balance should not be changed
     check_shielded_balances(&port_id_b, &channel_id_b, &test_a, &test_b)?;
 
     Ok(())
@@ -1369,7 +1431,7 @@ fn transfer_timeout(
     let height_b = query_height(test_b)?;
     let proof_unreceived_on_b =
         get_receipt_absence_proof(test_b, &packet, height_b)?;
-    let msg = MsgTimeout {
+    let msg = IbcMsgTimeout {
         packet,
         next_seq_recv_on_b: 1.into(), // not used
         proof_unreceived_on_b,
@@ -1572,7 +1634,6 @@ fn shielded_transfer_back(
         ALBERT_KEY,
         port_id_b,
         channel_id_b,
-        Some(&file_path.to_string_lossy()),
         None,
         None,
         false,
@@ -1584,17 +1645,26 @@ fn shielded_transfer_back(
     let proof_commitment_on_b =
         get_commitment_proof(test_b, &packet, height_b)?;
     // the message member names are confusing, "_a" means the source
-    let msg = MsgRecvPacket {
+    let message = IbcMsgRecvPacket {
         packet,
         proof_commitment_on_a: proof_commitment_on_b,
         proof_height_on_a: height_b,
         signer: signer(),
     };
+    let shielded_transfer = IbcShieldedTransfer::try_from_slice(
+        &std::fs::read(file_path)
+            .expect("Reading a shielded transfer file failed"),
+    )
+    .expect("Decoding IbcShieldedTransfer failed");
+    let data = MsgRecvPacket {
+        message,
+        shielded_transfer: Some(shielded_transfer),
+    }
+    .serialize_to_vec();
     // Update the client state of Chain B on Chain A
     update_client_with_height(test_b, test_a, client_id_a, height_b)?;
     // Receive the token on Chain A
-    let height =
-        submit_ibc_tx(test_a, msg.to_any(), ALBERT, ALBERT_KEY, false)?;
+    let height = submit_ibc_tx(test_a, data, ALBERT, ALBERT_KEY, false)?;
     let events = get_events(test_a, height)?;
     let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
     let ack = get_ack_from_events(&events).ok_or(eyre!(TX_FAILED))?;
@@ -1613,7 +1683,101 @@ fn shielded_transfer_back(
     // Update the client state of Chain A on Chain B
     update_client_with_height(test_a, test_b, client_id_b, height_a)?;
     // Acknowledge on Chain B
-    submit_ibc_tx(test_b, msg.to_any(), ALBERT, ALBERT_KEY, false)?;
+    submit_ibc_tx(
+        test_b,
+        make_ibc_data(msg.to_any()),
+        ALBERT,
+        ALBERT_KEY,
+        false,
+    )?;
+
+    Ok(())
+}
+
+fn shielded_transfer_timeout(
+    test_a: &Test,
+    test_b: &Test,
+    client_id_a: &ClientId,
+    port_id_a: &PortId,
+    channel_id_a: &ChannelId,
+) -> Result<()> {
+    // Send a token from SP(A) on Chain A to PA(B) on Chain B
+    let amount = Amount::native_whole(10).to_string_native();
+    let height = transfer(
+        test_a,
+        A_SPENDING_KEY,
+        AB_PAYMENT_ADDRESS,
+        BTC,
+        amount,
+        ALBERT_KEY,
+        port_id_a,
+        channel_id_a,
+        Some(Duration::new(10, 0)),
+        None,
+        false,
+    )?;
+    let events = get_events(test_a, height)?;
+    let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
+
+    // wait for the timeout
+    sleep(10);
+
+    // Get masp proof on the source chain to refunding the token
+    let rpc_a = get_actor_rpc(test_a, Who::Validator(0));
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
+    let output_folder = test_a.test_dir.path().to_string_lossy();
+    // PA(A) on Chain A will receive BTC on chain A
+    let amount = Amount::native_whole(10).to_string_native();
+    let token_addr = find_address(test_a, BTC)?.to_string();
+    // the token is prefixed for refunding
+    let token = format!("{port_id_a}/{channel_id_a}/{token_addr}");
+    let args = [
+        "ibc-gen-shielded",
+        "--output-folder-path",
+        &output_folder,
+        "--target",
+        AA_PAYMENT_ADDRESS,
+        "--token",
+        &token,
+        "--amount",
+        &amount,
+        "--port-id",
+        port_id_a.as_ref(),
+        "--channel-id",
+        channel_id_a.as_ref(),
+        "--node",
+        &rpc_a,
+    ];
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
+    let mut client = run!(test_b, Bin::Client, args, Some(120))?;
+    let file_path = get_shielded_transfer_path(&mut client)?;
+    client.assert_success();
+
+    let height_b = query_height(test_b)?;
+    let proof_unreceived_on_b =
+        get_receipt_absence_proof(test_b, &packet, height_b)?;
+    let message = IbcMsgTimeout {
+        packet,
+        next_seq_recv_on_b: 1.into(), // not used
+        proof_unreceived_on_b,
+        proof_height_on_b: height_b,
+        signer: signer(),
+    };
+    let shielded_transfer = IbcShieldedTransfer::try_from_slice(
+        &std::fs::read(file_path)
+            .expect("Reading a shielded transfer file failed"),
+    )
+    .expect("Decoding IbcShieldedTransfer failed");
+    let data = MsgTimeout {
+        message,
+        shielded_transfer: Some(shielded_transfer),
+    }
+    .serialize_to_vec();
+
+    // Update the client state of Chain B on Chain A
+    update_client_with_height(test_b, test_a, client_id_a, height_b)?;
+    // Timeout on Chain A
+    submit_ibc_tx(test_a, data, ALBERT, ALBERT_KEY, false)?;
 
     Ok(())
 }
@@ -2144,8 +2308,24 @@ fn check_shielded_balances(
     test_a: &Test,
     test_b: &Test,
 ) -> Result<()> {
-    // Check the balance on Chain B
+    // Check the balance on Chain A
     std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
+    let rpc_a = get_actor_rpc(test_a, Who::Validator(0));
+    let query_args = vec![
+        "balance",
+        "--owner",
+        AA_VIEWING_KEY,
+        "--token",
+        BTC,
+        "--no-conversions",
+        "--node",
+        &rpc_a,
+    ];
+    let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
+    client.exp_string("btc: 90")?;
+    client.assert_success();
+
+    // Check the balance on Chain B
     // PA(B) on Chain B has received BTC on chain A
     let token_addr = find_address(test_a, BTC)?.to_string();
     std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());

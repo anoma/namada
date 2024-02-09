@@ -17,6 +17,7 @@ use namada::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
 use namada::governance::ProposalVote;
+use namada::io::Io;
 use namada::state::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::tx::data::pos::{BecomeValidator, ConsensusKeyChange};
 use namada::tx::{CompressedSignature, Section, Signer, Tx};

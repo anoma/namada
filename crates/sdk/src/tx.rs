@@ -18,6 +18,7 @@ use masp_primitives::transaction::components::transparent::fees::{
     InputView as TransparentInputView, OutputView as TransparentOutputView,
 };
 use masp_primitives::transaction::components::I128Sum;
+use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada_account::{InitAccount, UpdateAccount};
 use namada_core::address::{Address, InternalAddress, MASP};
 use namada_core::dec::Dec;
@@ -36,7 +37,9 @@ use namada_core::ibc::{
     is_nft_trace, IbcShieldedTransfer, MsgNftTransfer, MsgTransfer,
 };
 use namada_core::key::*;
-use namada_core::masp::{AssetData, TransferSource, TransferTarget};
+use namada_core::masp::{
+    AssetData, PaymentAddress, TransferSource, TransferTarget,
+};
 use namada_core::storage::Epoch;
 use namada_core::time::DateTimeUtc;
 use namada_core::{storage, token};
@@ -56,6 +59,7 @@ use namada_token::DenominatedAmount;
 use namada_tx::data::pgf::UpdateStewardCommission;
 use namada_tx::data::{pos, ResultCode, TxResult};
 pub use namada_tx::{Signature, *};
+use rand_core::{OsRng, RngCore};
 
 use crate::args::{self, InputAmount};
 use crate::control_flow::time;
@@ -2149,6 +2153,14 @@ pub async fn build_ibc_transfer(
     context: &impl Namada,
     args: &args::TxIbcTransfer,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+    let refund_target =
+        get_refund_target(context, &args.source, &args.refund_target).await?;
+    if refund_target.is_some() && args.memo.is_some() {
+        return Err(Error::Other(
+            "IBC shielded transfer can't set IBC memo".to_string(),
+        ));
+    }
+
     let source = args.source.effective_address();
     let signing_data = signing::aux_signing_data(
         context,
@@ -2295,7 +2307,11 @@ pub async fn build_ibc_transfer(
             token,
             sender: source.to_string().into(),
             receiver: args.receiver.clone().into(),
-            memo: args.memo.clone().unwrap_or_default().into(),
+            memo: refund_target
+                .map(|t| t.to_string())
+                .or(args.memo.clone())
+                .unwrap_or_default()
+                .into(),
         };
         let message = IbcMsgTransfer {
             port_id_on_a: args.port_id.clone(),
@@ -2330,7 +2346,9 @@ pub async fn build_ibc_transfer(
             token_data: None,
             sender: source.to_string().into(),
             receiver: args.receiver.clone().into(),
-            memo: args.memo.clone().map(|m| m.into()),
+            memo: refund_target
+                .map(|t| t.to_string().into())
+                .or(args.memo.clone().map(|m| m.into())),
         };
         let message = IbcMsgNftTransfer {
             port_id_on_a: args.port_id.clone(),
@@ -3114,6 +3132,62 @@ async fn target_exists_or_err(
         Error::from(TxSubmitError::TargetLocationDoesNotExist(err))
     })
     .await
+}
+
+/// Returns the given refund target address if the given address is valid for
+/// the IBC shielded transfer. Returns an error if the address is transparent
+/// or the address is given for non-shielded transfer.
+async fn get_refund_target(
+    context: &impl Namada,
+    source: &TransferSource,
+    refund_target: &Option<TransferTarget>,
+) -> Result<Option<PaymentAddress>> {
+    match (source, refund_target) {
+        (
+            TransferSource::ExtendedSpendingKey(_),
+            Some(TransferTarget::PaymentAddress(pa)),
+        ) => Ok(Some(*pa)),
+        (
+            TransferSource::ExtendedSpendingKey(_),
+            Some(TransferTarget::Address(addr)),
+        ) => Err(Error::Other(format!(
+            "Transparent address can't be specified as a refund target: {}",
+            addr,
+        ))),
+        (TransferSource::ExtendedSpendingKey(spending_key), None) => {
+            // Generate a new payment address
+            let viewing_key =
+                ExtendedFullViewingKey::from(&(*spending_key).into()).fvk.vk;
+            let mut rng = OsRng;
+            let (div, _g_d) = crate::masp::find_valid_diversifier(&mut rng);
+            let payment_addr: PaymentAddress = viewing_key
+                .to_payment_address(div)
+                .ok_or_else(|| {
+                    Error::Other(
+                        "Converting to a payment address failed".to_string(),
+                    )
+                })?
+                .into();
+            let alias = format!("ibc-refund-target-{}", rng.next_u64());
+            let mut wallet = context.wallet_mut().await;
+            wallet
+                .insert_payment_addr(alias, payment_addr, false)
+                .ok_or_else(|| {
+                    Error::Other(
+                        "Adding a new payment address failed".to_string(),
+                    )
+                })?;
+            wallet.save().map_err(|e| {
+                Error::Other(format!("Saving wallet error: {e}"))
+            })?;
+            Ok(Some(payment_addr))
+        }
+        (_, Some(_)) => Err(Error::Other(
+            "Refund target can't be specified for non-shielded transfer"
+                .to_string(),
+        )),
+        (_, None) => Ok(None),
+    }
 }
 
 enum CheckBalance {
