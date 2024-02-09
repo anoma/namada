@@ -44,7 +44,7 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// A storage modification
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StorageModification {
     /// Write a new value
     Write {
@@ -68,7 +68,7 @@ pub enum StorageModification {
     },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 /// A replay protection storage modification
 enum ReProtStorageModification {
     /// Write an entry
@@ -80,7 +80,7 @@ enum ReProtStorageModification {
 }
 
 /// The write log storage
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WriteLog {
     /// The generator of established addresses
     address_gen: Option<EstablishedAddressGen>,
