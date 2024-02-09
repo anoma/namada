@@ -1219,7 +1219,7 @@ pub async fn to_ledger_vector(
         tv.output.push(format!("ID : {}", init_proposal_data.id));
         proposal_type_to_ledger_vector(
             &init_proposal_data.r#type,
-            &tx,
+            tx,
             &mut tv.output,
         );
         tv.output.extend(vec![
@@ -1240,7 +1240,7 @@ pub async fn to_ledger_vector(
             .push(format!("ID : {}", init_proposal_data.id));
         proposal_type_to_ledger_vector(
             &init_proposal_data.r#type,
-            &tx,
+            tx,
             &mut tv.output_expert,
         );
         tv.output_expert.extend(vec![

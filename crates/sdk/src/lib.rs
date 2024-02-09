@@ -770,6 +770,7 @@ pub mod testing {
     use namada_core::types::address::MASP;
     use namada_core::types::eth_bridge_pool::PendingTransfer;
     use namada_core::types::hash::testing::arb_hash;
+    use namada_core::types::key::testing::arb_common_keypair;
     use namada_core::types::storage::testing::arb_epoch;
     use namada_core::types::token::testing::{
         arb_denominated_amount, arb_transfer,
@@ -787,7 +788,7 @@ pub mod testing {
     };
     use namada_tx::data::{DecryptedTx, Fee, TxType, WrapperTx};
     use proptest::prelude::{Just, Strategy};
-    use proptest::{arbitrary, option, prop_compose, prop_oneof};
+    use proptest::{arbitrary, collection, option, prop_compose, prop_oneof};
     use prost::Message;
     use ripemd::Digest as RipemdDigest;
     use sha2::Digest;
@@ -803,13 +804,15 @@ pub mod testing {
         arb_consensus_key_change, arb_metadata_change, arb_redelegation,
         arb_withdraw,
     };
-    use crate::tx::{Code, Commitment, Header, MaspBuilder, Section};
+    use crate::tx::{
+        Code, Commitment, Header, MaspBuilder, Section, Signature,
+    };
     use crate::types::chain::ChainId;
     use crate::types::eth_bridge_pool::testing::arb_pending_transfer;
     use crate::types::key::testing::arb_common_pk;
     use crate::types::time::{DateTime, DateTimeUtc, Utc};
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     #[allow(clippy::large_enum_variant)]
     // To facilitate propagating debugging information
     pub enum TxData {
@@ -835,7 +838,7 @@ pub mod testing {
         ResignSteward(Address),
         PendingTransfer(PendingTransfer),
         IbcAny(Any),
-        Custom(Box<dyn std::fmt::Debug>),
+        Custom,
     }
 
     prop_compose! {
@@ -1677,5 +1680,43 @@ pub mod testing {
             arb_pending_transfer_tx(),
             arb_ibc_any_tx(),
         ]
+    }
+
+    prop_compose! {
+        // Generate an arbitrary signature section
+        pub fn arb_signature(targets: Vec<namada_core::types::hash::Hash>)(
+            targets in Just(targets),
+            secret_keys in collection::btree_map(
+                arbitrary::any::<u8>(),
+                arb_common_keypair(),
+                1..3,
+            ),
+            signer in option::of(arb_non_internal_address()),
+        ) -> Signature {
+            if signer.is_some() {
+                Signature::new(targets, secret_keys, signer)
+            } else {
+                let secret_keys = secret_keys
+                    .into_values()
+                    .enumerate()
+                    .map(|(k, v)| (k as u8, v))
+                    .collect();
+                Signature::new(targets, secret_keys, signer)
+            }
+        }
+    }
+
+    prop_compose! {
+        // Generate an arbitrary signed tx
+        pub fn arb_signed_tx()(tx in arb_tx())(
+            sigs in collection::vec(arb_signature(tx.0.sechashes()), 0..3),
+            mut tx in Just(tx),
+        ) -> (Tx, TxData) {
+            for sig in sigs {
+                // Add all the generated signature sections
+                tx.0.add_section(Section::Signature(sig));
+            }
+            (tx.0, tx.1)
+        }
     }
 }
