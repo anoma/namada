@@ -64,6 +64,7 @@ where
     }
     // verify if the new epoch validators' voting powers in storage match
     // the voting powers in the vote extension
+    let mut no_local_consensus_eth_addresses = 0;
     for (eth_addr_book, namada_addr, namada_power) in wl_storage
         .ethbridge_queries()
         .get_consensus_eth_addresses(Some(signing_epoch.next()))
@@ -89,6 +90,16 @@ where
             );
             return Err(VoteExtensionError::DivergesFromStorage);
         }
+        no_local_consensus_eth_addresses += 1;
+    }
+    if no_local_consensus_eth_addresses != ext.data.voting_powers.len() {
+        tracing::debug!(
+            no_ext_consensus_eth_addresses = ext.data.voting_powers.len(),
+            no_local_consensus_eth_addresses,
+            "Superset of the next validator set was included in the validator \
+             set update vote extension",
+        );
+        return Err(VoteExtensionError::ExtraValidatorsInExtension);
     }
     // get the public key associated with this validator
     let validator = &ext.data.validator_addr;
