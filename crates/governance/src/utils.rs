@@ -333,19 +333,11 @@ impl ProposalVotes {
         voting_power: VotePower,
         vote: TallyVote,
     ) {
-        match self.delegators_vote.insert(address.clone(), vote) {
-            None => {
-                self.delegator_voting_power
-                    .entry(address.clone())
-                    .or_default()
-                    .insert(validator_address.clone(), voting_power);
-            }
-            // the value was update, this should never happen
-            _ => tracing::error!(
-                "Duplicate vote for delegator {}",
-                address.clone()
-            ),
-        }
+        self.delegator_voting_power
+            .entry(address.clone())
+            .or_default()
+            .insert(validator_address.clone(), voting_power);
+        self.delegators_vote.insert(address.clone(), vote);
     }
 }
 
