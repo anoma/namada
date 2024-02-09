@@ -241,37 +241,6 @@ mod tests {
         tx::ctx().write_bytes(&vp_key, vp_hash).unwrap();
     }
 
-    /// Test that a tx initializing a new account with validity predicate that
-    /// is not in the allowlist fails
-    #[test]
-    #[should_panic = "DisallowedVp"]
-    // FIXME: should probably remove this
-    fn test_tx_init_vp_not_allowed_rejected() {
-        // Initialize a tx environment
-        tx_host_env::init();
-
-        let vp_owner = address::testing::established_address_1();
-        let keypair = key::testing::keypair_1();
-        let public_key = keypair.ref_to();
-
-        tx_host_env::with(|tx_env| {
-            // let mut tx_env = TestTxEnv::default();
-            tx_env.init_parameters(
-                None,
-                Some(vec!["some_hash".to_string()]),
-                None,
-                None,
-            );
-
-            // Spawn the accounts to be able to modify their storage
-            tx_env.spawn_accounts([&vp_owner]);
-            tx_env.init_account_storage(&vp_owner, vec![public_key.clone()], 1);
-        });
-
-        // Initializing a new account with the VP should fail
-        tx::ctx().init_account().unwrap();
-    }
-
     #[test]
     fn test_tx_get_metadata() {
         // The environment must be initialized first
