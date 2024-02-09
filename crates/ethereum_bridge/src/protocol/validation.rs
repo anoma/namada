@@ -36,6 +36,11 @@ pub enum VoteExtensionError {
     )]
     ValidatorMissingFromExtension,
     #[error(
+        "Vote extension provides a superset of the available validators in \
+         storage"
+    )]
+    ExtraValidatorsInExtension,
+    #[error(
         "Found value for a field in the vote extension diverging from the \
          equivalent field in storage"
     )]
