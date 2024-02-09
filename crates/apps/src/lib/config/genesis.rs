@@ -316,7 +316,6 @@ pub fn make_dev_genesis(
     use crate::config::genesis::chain::{finalize, DeriveEstablishedAddress};
     use crate::wallet::defaults;
 
-    eprintln!("IN MAKE DEV GENESIS FILE"); //FIXME: remove
     let mut current_path = std::env::current_dir()
         .expect("Current directory should exist")
         .canonicalize()
@@ -326,18 +325,14 @@ pub fn make_dev_genesis(
         current_path.pop();
     }
     let chain_dir = current_path.join("genesis").join("localnet");
-    eprintln!("BEFORE LOAD AND VALIDATE"); //FIXME: remove
-    // FIXME: error here in load and validate
     let templates = templates::load_and_validate(&chain_dir)
         .expect("Missing genesis files");
-    eprintln!("AFTER LOAD AND VALIDATE"); //FIXME: remove
     let mut genesis = finalize(
         templates,
         ChainIdPrefix::from_str("test").unwrap(),
         DateTimeUtc::now(),
         Duration::from_secs(30).into(),
     );
-    eprintln!("AFTER FINALIZE"); //FIXME: remove
 
     // Add Ethereum bridge params.
     genesis.parameters.eth_bridge_params = Some(templates::EthBridgeParams {
@@ -353,7 +348,6 @@ pub fn make_dev_genesis(
         erc20_whitelist: vec![],
     });
 
-    eprintln!("AFTER EHTEREUM"); //FIXME: remove
     // Use the default token address for matching tokens
     let default_tokens: HashMap<Alias, Address> = defaults::tokens()
         .into_iter()
@@ -385,7 +379,6 @@ pub fn make_dev_genesis(
             ));
         bonds.retain(|bond| bond.source != fat_alberts_address);
     };
-    eprintln!("AFTER ALBERT"); //FIXME: remove
     // fetch validator's balances
     let (first_val_balance, first_val_bonded) = {
         let nam_balances = genesis
@@ -427,7 +420,6 @@ pub fn make_dev_genesis(
             ),
         },
     };
-    eprintln!("BEFORE VALIDATORS"); //FIXME: remove
     // Add other validators with randomly generated keys if needed
     for _val in 0..(num_validators - 1) {
         let consensus_keypair: common::SecretKey =
@@ -455,9 +447,6 @@ pub fn make_dev_genesis(
                 tx,
             };
             established_accounts.push(established_account_tx);
-
-            // FIXME: user utils::VP_USER.to_strin() instead of the string
-            // vp_user
 
             let validator_account_tx = transactions::ValidatorAccountTx {
                 address: StringEncoded::new(address.clone()),
@@ -510,7 +499,6 @@ pub fn make_dev_genesis(
             });
             address
         };
-        eprintln!("BEFORE NAM"); //FIXME: remove
         // credit nam tokens to validators such that they can bond
         {
             let nam_balances = genesis

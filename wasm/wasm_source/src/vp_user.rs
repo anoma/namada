@@ -134,7 +134,7 @@ fn validate_tx(
             KeyType::PoS => validate_pos_changes(ctx, &addr, key, &valid_sig)?,
             KeyType::PgfSteward(address) => address != &addr || *valid_sig,
             KeyType::GovernanceVote(voter) => voter != &addr || *valid_sig,
-            KeyType::Vp(owner) => !(owner == &addr),
+            KeyType::Vp(owner) => owner != &addr,
             KeyType::Masp | KeyType::Ibc => true,
             KeyType::Unknown => {
                 // Unknown changes require a valid signature
@@ -330,7 +330,6 @@ mod tests {
     use namada::tx::{Code, Data, Signature};
     use namada::types::dec::Dec;
     use namada::types::storage::Epoch;
-    use namada_test_utils::TestWasms;
     // Use this as `#[test]` annotation to enable logging
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
@@ -1258,10 +1257,6 @@ mod tests {
         let mut tx_env = TestTxEnv::default();
 
         let vp_owner = address::testing::established_address_1();
-        let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
-        let vp_hash = sha256(&vp_code);
-        // for the update
-        tx_env.store_wasm_code(vp_code);
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
@@ -1298,10 +1293,6 @@ mod tests {
         let vp_owner = address::testing::established_address_1();
         let keypair = key::testing::keypair_1();
         let public_key = keypair.ref_to();
-        let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
-        let vp_hash = sha256(&vp_code);
-        // for the update
-        tx_env.store_wasm_code(vp_code);
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);

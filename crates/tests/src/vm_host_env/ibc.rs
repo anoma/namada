@@ -203,7 +203,7 @@ pub fn validate_multitoken_vp_from_tx<'a>(
 
 /// Initialize the test storage. Requires initialized [`tx_host_env::ENV`].
 pub fn init_storage() -> (Address, Address) {
-    // wasm for init_account
+    // wasm for init_account, mock vp_user
     let code = TestWasms::VpAlwaysTrue.read_bytes();
     let code_hash = Hash::sha256(&code);
 
@@ -220,7 +220,14 @@ pub fn init_storage() -> (Address, Address) {
         .unwrap();
         // store wasm code
         let key = Key::wasm_code(&code_hash);
+        let hash_key = Key::wasm_hash("vp_user.wasm");
+        let code_name_key = Key::wasm_code_name("vp_user.wasm".to_owned());
         env.wl_storage.storage.write(&key, code.clone()).unwrap();
+        env.wl_storage.storage.write(&hash_key, code_hash).unwrap();
+        env.wl_storage
+            .storage
+            .write(&code_name_key, code_hash)
+            .unwrap();
 
         // block header to check timeout timestamp
         env.wl_storage

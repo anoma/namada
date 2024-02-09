@@ -209,7 +209,6 @@ mod tests {
 
     /// Test that a tx writing validity predicate that is not in the allowlist
     /// directly to storage fails
-    // FIXME: should probably remove this
     #[test]
     #[should_panic = "DisallowedVp"]
     fn test_tx_write_vp_not_allowed_rejected() {
@@ -223,7 +222,6 @@ mod tests {
         let vp_hash = sha256(&vp_code);
 
         tx_host_env::with(|tx_env| {
-            // let mut tx_env = TestTxEnv::default();
             tx_env.init_parameters(
                 None,
                 Some(vec!["some_hash".to_string()]),

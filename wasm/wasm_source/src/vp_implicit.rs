@@ -292,7 +292,6 @@ mod tests {
     use namada::tx::{Code, Data, Signature};
     use namada::types::dec::Dec;
     use namada::types::storage::Epoch;
-    use namada_test_utils::TestWasms;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::tx::{self, tx_host_env, TestTxEnv};

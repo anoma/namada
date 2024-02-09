@@ -50,7 +50,6 @@ use namada_apps::bench_utils::{
     VP_USER_WASM,
 };
 use namada_apps::wallet::defaults;
-// FIXME: check if all the dependencies of the bench crate are still needed
 
 fn transfer(c: &mut Criterion) {
     let mut group = c.benchmark_group("transfer");

@@ -887,8 +887,6 @@ where
         &self,
         established_accounts: &[EstablishedAccountTx],
     ) -> (Vec<PublicKey>, u8) {
-        eprintln!("EST ACCOUNTS: {:#?}", established_accounts); //FIXME: remove
-        eprintln!("SOURCE: {}", self.source); //FIXME: remove
         match &self.source {
             GenesisAddress::PublicKey(pk) => (vec![pk.raw.clone()], 1),
             GenesisAddress::EstablishedAddress(owner) => established_accounts
@@ -1334,7 +1332,6 @@ pub fn validate_validator_account(
     let mut is_valid = {
         let maybe_threshold = {
             let established_addr = Address::Established(tx.address.raw.clone());
-            eprintln!("ESTABLISHED ACCOUNTS: {:#?}", established_accounts); //FIXME: remove
             established_accounts.get(&established_addr).map(|(pks, t)| {
                 let all_ed25519_keys = pks
                     .iter()
@@ -1391,7 +1388,6 @@ pub fn validate_validator_account(
 
     // Check keys authorizations
     let unsigned = UnsignedValidatorAccountTx::from(tx);
-    // FIXME: error here
     if !validate_signature(
         &unsigned,
         &tx.consensus_key.pk.raw,
