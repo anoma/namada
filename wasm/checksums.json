@@ -9,7 +9,7 @@
     "tx_deactivate_validator.wasm": "tx_deactivate_validator.5b2f89c71022263d3a1dd22527ef261a7200caa5288342379dd6900bb43b4439.wasm",
     "tx_ibc.wasm": "tx_ibc.105779425007c10abd03f1af31b4bb7d348b93b46227f31666005976f12f6b1d.wasm",
     "tx_init_account.wasm": "tx_init_account.6b950cdd74c8d2d4503b7025bd6ca1c3c9b200e6d9768ea5b07fd616f91ad5a8.wasm",
-    "tx_init_proposal.wasm": "tx_init_proposal.eeac43cea91a7721fb99e32907efe6fd623c3d7ae2de822e435cdc2c8f74bf3d.wasm",
+    "tx_init_proposal.wasm": "tx_init_proposal.41e477842647986b858dc00347e006e80865308db797af5122c974ec94d5e86c.wasm",
     "tx_reactivate_validator.wasm": "tx_reactivate_validator.c309b4c75873a9cd9f1edd153c846a4d2cfcf556d70d6187df03a35bfbfe2656.wasm",
     "tx_redelegate.wasm": "tx_redelegate.94fb0c5929c6f1b955ca92c94c0eae0e57cbd8ae104e34f2056098f9f3d995ca.wasm",
     "tx_resign_steward.wasm": "tx_resign_steward.cb5e3684f95316a4b61557e80244bcacc58ac454a7ef12221e32faa4035e8b8c.wasm",
