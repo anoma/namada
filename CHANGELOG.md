@@ -1,5 +1,27 @@
 # CHANGELOG
 
+## v0.31.3
+
+Namada 0.31.3 is a patch release that fixes various issues.
+
+### BUG FIXES
+
+- Fix PoS bonds and unbonds query to return delegations when only a validator
+  address is specified. ([\#2522](https://github.com/anoma/namada/pull/2522))
+- PoS: fixed the order of iteration when slashing validators for liveness.
+  ([\#2577](https://github.com/anoma/namada/pull/2577))
+- Reject validator set updates signing over a superset of the next validator
+  set. ([\#2578](https://github.com/anoma/namada/pull/2578))
+- Governance tallying for delegators now works.
+  ([\#2579](https://github.com/anoma/namada/pull/2579))
+
+### IMPROVEMENTS
+
+- Adds some useful internal addresses, such as PoS, to the wallet upon join-
+  network. ([\#2543](https://github.com/anoma/namada/pull/2543))
+- Fixes query-protocol-parameters to include some missing PoS data and a better-
+  formatted output. ([\#2558](https://github.com/anoma/namada/pull/2558))
+
 ## v0.31.2
 
 Namada 0.31.2 is a patch release that fixes an issue with request ordering introduced in 0.31.1.
