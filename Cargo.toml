@@ -75,6 +75,7 @@ byte-unit = "4.0.13"
 byteorder = "1.4.2"
 borsh = {version = "1.2.0", features = ["unstable__schema", "derive"]}
 borsh-ext = { git = "https://github.com/heliaxdev/borsh-ext", tag = "v1.2.0" }
+borsh-serde-adapter = "1.0.1"
 chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}
 circular-queue = "0.2.6"
 clap = "4.3.4"

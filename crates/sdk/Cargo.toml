@@ -73,11 +73,13 @@ bimap.workspace = true
 bls12_381 = { workspace = true, optional = true }
 borsh.workspace = true
 borsh-ext.workspace = true
+borsh-serde-adapter.workspace = true
 circular-queue.workspace = true
 data-encoding.workspace = true
 derivation-path.workspace = true
 ethbridge-bridge-contract.workspace = true
 ethers.workspace = true
+eyre.workspace = true
 fd-lock = { workspace = true, optional = true }
 futures.workspace = true
 itertools.workspace = true
