@@ -1237,7 +1237,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             let Some(denom) = query_denom(context.client(), token).await else {
                 return Err(Error::Query(QueryError::General(format!(
                     "denomination for token {token}"
-                ))))
+                ))));
             };
             for position in MaspDigitPos::iter() {
                 let asset_type =
@@ -1304,7 +1304,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         {
             // Query for the ID of the last accepted transaction
             let Some((token, denom, position, ep, conv, path)) =
-                query_conversion(client, asset_type).await else { return };
+                query_conversion(client, asset_type).await
+            else {
+                return;
+            };
             self.asset_types.insert(
                 asset_type,
                 AssetData {
@@ -1968,9 +1971,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
         // Convert transaction amount into MASP types
         let Some(denom) = query_denom(context.client(), token).await else {
-            return Err(TransferErr::General(Error::from(QueryError::General(format!(
-                "denomination for token {token}"
-            )))))
+            return Err(TransferErr::General(Error::from(
+                QueryError::General(format!("denomination for token {token}")),
+            )));
         };
         let (asset_types, masp_amount) = {
             let mut shielded = context.shielded_mut().await;

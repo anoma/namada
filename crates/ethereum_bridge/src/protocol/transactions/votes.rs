@@ -57,7 +57,8 @@ pub trait EpochedVotingPowerExt {
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
     {
-        let Some(max_voting_power) = self.epoch_max_voting_power(wl_storage) else {
+        let Some(max_voting_power) = self.epoch_max_voting_power(wl_storage)
+        else {
             return FractionalVotingPower::NULL;
         };
         FractionalVotingPower::new(
@@ -75,7 +76,8 @@ pub trait EpochedVotingPowerExt {
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
     {
-        let Some(max_voting_power) = self.epoch_max_voting_power(wl_storage) else {
+        let Some(max_voting_power) = self.epoch_max_voting_power(wl_storage)
+        else {
             return false;
         };
         // NB: Preserve the safety property of the Tendermint protocol across

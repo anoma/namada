@@ -346,8 +346,8 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 }
 
 /// In this test we
-///   1. Run the ledger node until a pre-configured height,
-///      at which point it should suspend.
+///   1. Run the ledger node until a pre-configured height, at which point it
+///      should suspend.
 ///   2. Check that we can still query the ledger.
 ///   3. Check that we can shutdown the ledger normally afterwards.
 #[test]
@@ -1544,8 +1544,8 @@ fn pos_init_validator() -> Result<()> {
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
-    // 3. Submit a delegation to the new validator
-    //    First, transfer some tokens to the validator's key for fees:
+    // 3. Submit a delegation to the new validator First, transfer some tokens
+    //    to the validator's key for fees:
     let tx_args = vec![
         "transfer",
         "--source",
@@ -2963,13 +2963,12 @@ fn double_signing_gets_slashed() -> Result<()> {
 
 /// In this test we:
 /// 1. Run the ledger node
-/// 2. For some transactions that need signature authorization:
-///    2a. Generate a new key for an implicit account.
-///    2b. Send some funds to the implicit account.
-///    2c. Submit the tx with the implicit account as the source, that
-///        requires that the account has revealed its PK. This should be done
-///        by the client automatically.
-///    2d. Submit same tx again, this time the client shouldn't reveal again.
+/// 2. For some transactions that need signature authorization: 2a. Generate a
+///    new key for an implicit account. 2b. Send some funds to the implicit
+///    account. 2c. Submit the tx with the implicit account as the source, that
+///    requires that the account has revealed its PK. This should be done by the
+///    client automatically. 2d. Submit same tx again, this time the client
+///    shouldn't reveal again.
 #[test]
 fn implicit_account_reveal_pk() -> Result<()> {
     let test = setup::single_node_net()?;

@@ -134,7 +134,9 @@ where
     };
     let valset_upd_keys = vote_tallies::Keys::from(&next_epoch);
     let maybe_proof = 'check_storage: {
-        let Some(seen) = votes::storage::maybe_read_seen(wl_storage, &valset_upd_keys)? else {
+        let Some(seen) =
+            votes::storage::maybe_read_seen(wl_storage, &valset_upd_keys)?
+        else {
             break 'check_storage None;
         };
         if seen {

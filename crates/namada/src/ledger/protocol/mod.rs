@@ -683,9 +683,9 @@ where
     use namada_vote_ext::{ethereum_events, validator_set_update};
 
     let Some(data) = data else {
-        return Err(Error::ProtocolTxError(
-            eyre!("Protocol tx data must be present")),
-        );
+        return Err(Error::ProtocolTxError(eyre!(
+            "Protocol tx data must be present"
+        )));
     };
     let ethereum_tx_data = EthereumTxData::deserialize(&tx, &data)
         .wrap_err_with(|| {

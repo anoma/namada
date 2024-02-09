@@ -368,8 +368,8 @@ where
 {
     let Some(contract) = StorageRead::read(ctx.wl_storage, key)? else {
         return Err(namada_storage::Error::SimpleMessage(
-            "Failed to read contract: The Ethereum bridge \
-             storage is not initialized",
+            "Failed to read contract: The Ethereum bridge storage is not \
+             initialized",
         ));
     };
     Ok(contract)

@@ -2,12 +2,10 @@
 //! memory.
 //!
 //! These are either:
-//! 1. Module call types
-//!    The module call inputs are passed host-to-guest.
+//! 1. Module call types The module call inputs are passed host-to-guest.
 //!
-//! 2. Execution environment types
-//!    The environment inputs are passed guest-to-host and outputs back from
-//!    host-to-guest.
+//! 2. Execution environment types The environment inputs are passed
+//!    guest-to-host and outputs back from host-to-guest.
 
 use std::collections::BTreeSet;
 

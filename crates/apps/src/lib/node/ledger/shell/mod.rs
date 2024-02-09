@@ -932,8 +932,12 @@ where
                 );
                 return;
             }
-            let Some(config) = EthereumOracleConfig::read(&self.wl_storage) else {
-                tracing::info!("Not starting oracle as the Ethereum bridge config couldn't be found in storage");
+            let Some(config) = EthereumOracleConfig::read(&self.wl_storage)
+            else {
+                tracing::info!(
+                    "Not starting oracle as the Ethereum bridge config \
+                     couldn't be found in storage"
+                );
                 return;
             };
             let active =

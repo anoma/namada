@@ -282,8 +282,8 @@ where
         vp_cache: &mut HashMap<String, Vec<u8>>,
     ) -> ControlFlow<(), Vec<u8>> {
         use std::collections::hash_map::Entry;
-        let Some(vp_filename) =
-            self.validate(
+        let Some(vp_filename) = self
+            .validate(
                 genesis
                     .vps
                     .wasm
@@ -291,8 +291,10 @@ where
                     .map(|conf| conf.filename.clone())
                     .ok_or_else(|| {
                         Panic::MissingVpWasmConfig(name.to_string())
-                }))
-                .or_placeholder(None)? else {
+                    }),
+            )
+            .or_placeholder(None)?
+        else {
             return self.proceed_with(vec![]);
         };
         let code = match vp_cache.entry(vp_filename.clone()) {
@@ -322,10 +324,13 @@ where
         } = params;
         let mut is_implicit_vp_stored = false;
 
-        let Some(checksums) = self.validate(
-            wasm_loader::Checksums::read_checksums(&self.wasm_dir)
-                .map_err(|_| Panic::ChecksumsFile)
-        ).or_placeholder(None)? else {
+        let Some(checksums) = self
+            .validate(
+                wasm_loader::Checksums::read_checksums(&self.wasm_dir)
+                    .map_err(|_| Panic::ChecksumsFile),
+            )
+            .or_placeholder(None)?
+        else {
             return self.proceed_with(());
         };
 
@@ -459,15 +464,20 @@ where
         for (token_alias, TokenBalances(balances)) in &genesis.balances.token {
             tracing::debug!("Initializing token balances {token_alias}");
 
-            let Some(token_address) = self.validate(genesis
-                .tokens
-                .token
-                .get(token_alias)
-                .ok_or_else(|| Panic::MissingTokenConfig(token_alias.to_string()))
-                .map(|conf| &conf.address)
-            )
-            .or_placeholder(None)? else {
-                continue
+            let Some(token_address) = self
+                .validate(
+                    genesis
+                        .tokens
+                        .token
+                        .get(token_alias)
+                        .ok_or_else(|| {
+                            Panic::MissingTokenConfig(token_alias.to_string())
+                        })
+                        .map(|conf| &conf.address),
+                )
+                .or_placeholder(None)?
+            else {
+                continue;
             };
 
             let mut total_token_balance = token::Amount::zero();
@@ -998,10 +1008,9 @@ mod test {
             *vp_cache.get("vp_user.wasm").expect("Test failed"),
             Vec::<u8>::new()
         );
-        let [Panic::ReadingWasm(_, _)]: [Panic; 1] = initializer.panics
-            .clone()
-            .try_into()
-            .expect("Test failed") else {
+        let [Panic::ReadingWasm(_, _)]: [Panic; 1] =
+            initializer.panics.clone().try_into().expect("Test failed")
+        else {
             panic!("Test failed")
         };
 
@@ -1009,10 +1018,9 @@ mod test {
         genesis.vps.wasm.remove("vp_user").expect("Test failed");
         let code = initializer.lookup_vp("vp_user", &genesis, &mut vp_cache);
         assert_eq!(code, ControlFlow::Continue(vec![]));
-        let [Panic::MissingVpWasmConfig(_)]: [Panic; 1] = initializer.panics
-            .clone()
-            .try_into()
-            .expect("Test failed") else {
+        let [Panic::MissingVpWasmConfig(_)]: [Panic; 1] =
+            initializer.panics.clone().try_into().expect("Test failed")
+        else {
             panic!("Test failed")
         };
     }
@@ -1053,10 +1061,9 @@ mod test {
             .store_wasms(&genesis.get_chain_parameters(test_dir.path()));
         assert_eq!(res, ControlFlow::Continue(()));
         let errors = initializer.errors.iter().collect::<Vec<_>>();
-        let [
-            Error::ReadingWasm(_),
-            Error::LoadingWasm(_),
-        ]: [&Error; 2] = errors.try_into().expect("Test failed") else {
+        let [Error::ReadingWasm(_), Error::LoadingWasm(_)]: [&Error; 2] =
+            errors.try_into().expect("Test failed")
+        else {
             panic!("Test failed");
         };
         let expected_panics = vec![
@@ -1083,7 +1090,8 @@ mod test {
             Error::ReadingWasm(_),
             Error::LoadingWasm(_),
             Error::LoadingWasm(_),
-        ]: [&Error; 3] = errors.try_into().expect("Test failed") else {
+        ]: [&Error; 3] = errors.try_into().expect("Test failed")
+        else {
             panic!("Test failed");
         };
         let expected_panics = vec![Panic::MissingImplicitVP("None".into())];
@@ -1107,10 +1115,9 @@ mod test {
             .expect("Test failed");
         let res = initializer.init_token_balances(&genesis);
         assert_eq!(res, ControlFlow::Continue(()));
-        let [Panic::MissingTokenConfig(_)]: [Panic; 1] = initializer.panics
-            .clone()
-            .try_into()
-            .expect("Test failed") else {
+        let [Panic::MissingTokenConfig(_)]: [Panic; 1] =
+            initializer.panics.clone().try_into().expect("Test failed")
+        else {
             panic!("Test failed")
         };
     }
