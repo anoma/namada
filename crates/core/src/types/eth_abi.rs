@@ -38,6 +38,7 @@ impl<T> ::std::cmp::PartialEq for EncodeCell<T> {
     }
 }
 
+#[allow(clippy::non_canonical_partial_ord_impl)]
 impl<T> ::std::cmp::PartialOrd for EncodeCell<T> {
     fn partial_cmp(&self, other: &Self) -> Option<::std::cmp::Ordering> {
         self.encoded_data.partial_cmp(&other.encoded_data)

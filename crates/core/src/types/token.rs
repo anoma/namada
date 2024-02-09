@@ -570,6 +570,7 @@ impl FromStr for DenominatedAmount {
     }
 }
 
+#[allow(clippy::non_canonical_partial_ord_impl)]
 impl PartialOrd for DenominatedAmount {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         if self.denom < other.denom {

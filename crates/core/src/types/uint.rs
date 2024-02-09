@@ -634,6 +634,7 @@ impl Neg for I256 {
     }
 }
 
+#[allow(clippy::non_canonical_partial_ord_impl)]
 impl PartialOrd for I256 {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self.non_negative(), other.non_negative()) {

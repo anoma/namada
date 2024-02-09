@@ -116,6 +116,7 @@ impl Hash for PublicKey {
     }
 }
 
+#[allow(clippy::non_canonical_partial_ord_impl)]
 impl PartialOrd for PublicKey {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.0.to_sec1_bytes().partial_cmp(&other.0.to_sec1_bytes())
@@ -488,6 +489,7 @@ impl Hash for Signature {
     }
 }
 
+#[allow(clippy::non_canonical_partial_ord_impl)]
 impl PartialOrd for Signature {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match self.0.to_bytes().partial_cmp(&other.0.to_bytes()) {

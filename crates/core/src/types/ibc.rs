@@ -80,6 +80,7 @@ pub struct IbcEvent {
     pub attributes: HashMap<String, String>,
 }
 
+#[allow(clippy::non_canonical_partial_ord_impl)]
 impl std::cmp::PartialOrd for IbcEvent {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.event_type.partial_cmp(&other.event_type)
