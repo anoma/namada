@@ -9,6 +9,7 @@ use namada_core::types::storage::Epoch;
 use namada_core::types::token;
 use namada_core::types::token::testing::arb_amount_non_zero_ceiled;
 use namada_state::testing::TestWlStorage;
+use proptest::prop_oneof;
 use proptest::strategy::{Just, Strategy};
 
 use crate::parameters::testing::arb_pos_params;
@@ -85,13 +86,20 @@ pub fn arb_genesis_validators(
         .unwrap_or_else(|| PosParams::default().validator_stake_threshold);
     let tokens: Vec<_> = (0..size.end)
         .map(|ix| {
+            let threshold = threshold.raw_amount().as_u64();
             if ix == 0 {
                 // Make sure that at least one validator has at least a stake
                 // greater or equal to the threshold to avoid having an empty
                 // consensus set.
-                threshold.raw_amount().as_u64()..=10_000_000_u64
+                (threshold..=10_000_000_u64).boxed()
             } else {
-                1..=10_000_000_u64
+                prop_oneof![
+                    // More like to have validators with the same stake
+                    Just(threshold),
+                    Just(threshold - 1),
+                    1..=10_000_000_u64,
+                ]
+                .boxed()
             }
             .prop_map(token::Amount::from)
         })

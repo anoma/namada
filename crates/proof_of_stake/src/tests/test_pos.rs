@@ -28,7 +28,8 @@ use crate::rewards::{
 };
 use crate::slashing::{process_slashes, slash};
 use crate::storage::{
-    get_consensus_key_set, read_below_threshold_validator_set_addresses,
+    get_consensus_key_set, liveness_sum_missed_votes_handle,
+    read_below_threshold_validator_set_addresses,
     read_consensus_validator_set_addresses_with_stake, read_total_stake,
     read_validator_deltas_value, rewards_accumulator_handle,
     total_deltas_handle,
@@ -46,7 +47,7 @@ use crate::types::{
 use crate::{
     below_capacity_validator_set_handle, bond_handle, bond_tokens,
     change_consensus_key, consensus_validator_set_handle, is_delegator,
-    is_validator, read_validator_stake, redelegate_tokens,
+    is_validator, jail_for_liveness, read_validator_stake, redelegate_tokens,
     staking_token_address, token, unbond_handle, unbond_tokens,
     unjail_validator, validator_consensus_key_handle,
     validator_set_positions_handle, validator_state_handle, withdraw_tokens,
@@ -177,6 +178,19 @@ proptest! {
 
     ) {
         test_is_delegator_aux(genesis_validators)
+    }
+}
+
+proptest! {
+    // Generate arb valid input for `test_jail_for_liveness_aux`
+    #![proptest_config(Config {
+        .. Config::default()
+    })]
+    #[test]
+    fn test_jail_for_liveness(
+        genesis_validators in arb_genesis_validators(4..12, None),
+    ) {
+        test_jail_for_liveness_aux(genesis_validators)
     }
 }
 
@@ -1651,4 +1665,59 @@ fn test_is_delegator_aux(mut validators: Vec<GenesisValidator>) {
         )
         .unwrap()
     );
+}
+
+/// A test that jailing for liveness has a deterministic result
+fn test_jail_for_liveness_aux(validators: Vec<GenesisValidator>) {
+    let params = OwnedPosParams {
+        max_validator_slots: 2,
+        liveness_window_check: 1,
+        liveness_threshold: Dec::one(),
+        ..Default::default()
+    };
+    // 1 missed vote with the above params should get validators jailed
+    let missed_votes = 1_u64;
+
+    // Open 2 storages
+    let mut storage = TestWlStorage::default();
+    let mut storage_clone = TestWlStorage::default();
+
+    // Apply the same changes to each storage
+    for s in [&mut storage, &mut storage_clone] {
+        // Genesis
+        let current_epoch = s.storage.block.epoch;
+        let jail_epoch = current_epoch.next();
+        let params = test_init_genesis(
+            s,
+            params.clone(),
+            validators.clone().into_iter(),
+            current_epoch,
+        )
+        .unwrap();
+        s.commit_block().unwrap();
+
+        // Add missed votes to about half of the validators
+        let half_len = validators.len() / 2;
+        let validators_who_missed_votes: Vec<_> =
+            validators.iter().take(half_len).collect();
+
+        for GenesisValidator { address, .. } in &validators_who_missed_votes {
+            liveness_sum_missed_votes_handle()
+                .insert(s, address.clone(), missed_votes)
+                .unwrap();
+        }
+
+        jail_for_liveness(s, &params, current_epoch, jail_epoch).unwrap();
+
+        for GenesisValidator { address, .. } in &validators_who_missed_votes {
+            let state_jail_epoch = validator_state_handle(address)
+                .get(s, jail_epoch, &params)
+                .unwrap()
+                .expect("Validator should have a state for the jail epoch");
+            assert_eq!(state_jail_epoch, ValidatorState::Jailed);
+        }
+    }
+
+    // Assert that the changes from `jail_for_liveness` are the same
+    pretty_assertions::assert_eq!(&storage.write_log, &storage_clone.write_log);
 }
