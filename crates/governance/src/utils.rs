@@ -218,7 +218,7 @@ impl Display for ProposalResult {
         write!(
             f,
             "{} with {} yay votes, {} nay votes and {} abstain votes, total \
-             voting power: {} threshold was: {}",
+             voting power: {} threshold: {}",
             self.result,
             self.total_yay_power.to_string_native(),
             self.total_nay_power.to_string_native(),
