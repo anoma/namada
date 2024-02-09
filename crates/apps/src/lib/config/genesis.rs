@@ -191,10 +191,6 @@ pub struct Validator {
     /// These tokens are not staked and hence do not contribute to the
     /// validator's voting power
     pub non_staked_balance: token::Amount,
-    /// Validity predicate code WASM
-    pub validator_vp_code_path: String,
-    /// Expected SHA-256 hash of the validator VP
-    pub validator_vp_sha256: [u8; 32],
 }
 
 #[derive(
@@ -204,10 +200,6 @@ pub struct Validator {
 pub struct EstablishedAccount {
     /// Address
     pub address: Address,
-    /// Validity predicate code WASM
-    pub vp_code_path: String,
-    /// Expected SHA-256 hash of the validity predicate wasm
-    pub vp_sha256: [u8; 32],
     /// A public key to be stored in the account's storage, if any
     pub public_key: Option<common::PublicKey>,
     /// Account's sub-space storage. The values must be borsh encoded bytes.
@@ -324,6 +316,7 @@ pub fn make_dev_genesis(
     use crate::config::genesis::chain::{finalize, DeriveEstablishedAddress};
     use crate::wallet::defaults;
 
+    eprintln!("IN MAKE DEV GENESIS FILE"); //FIXME: remove
     let mut current_path = std::env::current_dir()
         .expect("Current directory should exist")
         .canonicalize()
@@ -333,14 +326,18 @@ pub fn make_dev_genesis(
         current_path.pop();
     }
     let chain_dir = current_path.join("genesis").join("localnet");
+    eprintln!("BEFORE LOAD AND VALIDATE"); //FIXME: remove
+    // FIXME: error here in load and validate
     let templates = templates::load_and_validate(&chain_dir)
         .expect("Missing genesis files");
+    eprintln!("AFTER LOAD AND VALIDATE"); //FIXME: remove
     let mut genesis = finalize(
         templates,
         ChainIdPrefix::from_str("test").unwrap(),
         DateTimeUtc::now(),
         Duration::from_secs(30).into(),
     );
+    eprintln!("AFTER FINALIZE"); //FIXME: remove
 
     // Add Ethereum bridge params.
     genesis.parameters.eth_bridge_params = Some(templates::EthBridgeParams {
@@ -356,6 +353,7 @@ pub fn make_dev_genesis(
         erc20_whitelist: vec![],
     });
 
+    eprintln!("AFTER EHTEREUM"); //FIXME: remove
     // Use the default token address for matching tokens
     let default_tokens: HashMap<Alias, Address> = defaults::tokens()
         .into_iter()
@@ -387,6 +385,7 @@ pub fn make_dev_genesis(
             ));
         bonds.retain(|bond| bond.source != fat_alberts_address);
     };
+    eprintln!("AFTER ALBERT"); //FIXME: remove
     // fetch validator's balances
     let (first_val_balance, first_val_bonded) = {
         let nam_balances = genesis
@@ -428,6 +427,7 @@ pub fn make_dev_genesis(
             ),
         },
     };
+    eprintln!("BEFORE VALIDATORS"); //FIXME: remove
     // Add other validators with randomly generated keys if needed
     for _val in 0..(num_validators - 1) {
         let consensus_keypair: common::SecretKey =
@@ -456,9 +456,11 @@ pub fn make_dev_genesis(
             };
             established_accounts.push(established_account_tx);
 
+            // FIXME: user utils::VP_USER.to_strin() instead of the string
+            // vp_user
+
             let validator_account_tx = transactions::ValidatorAccountTx {
                 address: StringEncoded::new(address.clone()),
-                vp: utils::VP_USER.to_string(),
                 commission_rate: Dec::new(5, 2).expect("This can't fail"),
                 max_commission_rate_change: Dec::new(1, 2)
                     .expect("This can't fail"),
@@ -493,7 +495,6 @@ pub fn make_dev_genesis(
                 tx: transactions::Signed::new(
                     transactions::ValidatorAccountTx {
                         address: StringEncoded::new(address.clone()),
-                        vp: validator_account_tx.vp,
                         commission_rate: validator_account_tx.commission_rate,
                         max_commission_rate_change: validator_account_tx
                             .max_commission_rate_change,
@@ -509,6 +510,7 @@ pub fn make_dev_genesis(
             });
             address
         };
+        eprintln!("BEFORE NAM"); //FIXME: remove
         // credit nam tokens to validators such that they can bond
         {
             let nam_balances = genesis

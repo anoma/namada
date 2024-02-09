@@ -1455,7 +1455,7 @@ where
     let storage = unsafe { env.ctx.storage.get() };
     let write_log = unsafe { env.ctx.write_log.get() };
     // //FIXME: not sure if this works
-    let hash_key = Key::wasm_hash("vp_user.wasm");
+    let hash_key = Key::wasm_hash("vp_user");
     let (vp_hash, gas) = storage
         .read(&hash_key)
         .map_err(TxRuntimeError::StateError)?;

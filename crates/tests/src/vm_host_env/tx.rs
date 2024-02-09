@@ -19,7 +19,7 @@ use namada::vm::wasm::{self, TxCache, VpCache};
 use namada::vm::{self, WasmCacheRwAccess};
 use namada::{account, token};
 use namada_tx_prelude::transaction::TxSentinel;
-use namada_tx_prelude::{BorshSerializeExt, Ctx};
+use namada_tx_prelude::{BorshSerializeExt, Ctx, StorageWrite};
 use namada_vp_prelude::key::common;
 use tempfile::TempDir;
 
@@ -62,14 +62,29 @@ pub struct TestTxEnv {
 }
 impl Default for TestTxEnv {
     fn default() -> Self {
+        eprintln!("In defauklt TestTxEnv"); //FIXME: remove
         let (vp_wasm_cache, vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
         let (tx_wasm_cache, tx_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
-        let wl_storage = WlStorage {
+        let mut wl_storage = WlStorage {
             storage: TestStorage::default(),
             write_log: WriteLog::default(),
         };
+        // Mock vp_user in storage
+        let code_hash = Hash::zero();
+        let code_key = Key::wasm_code(&code_hash);
+        let code_len_key = Key::wasm_code_len(&code_hash);
+        let hash_key = Key::wasm_hash("vp_user");
+        let code_name_key = Key::wasm_code_name("vp_user".to_owned());
+
+        wl_storage.write_bytes(&code_key, vec![]).unwrap();
+        wl_storage.write(&code_len_key, 0).unwrap();
+        wl_storage.write(&hash_key, code_hash).unwrap();
+        wl_storage.write(&code_name_key, code_hash).unwrap();
+        wl_storage.commit_tx();
+        wl_storage.commit_block().unwrap();
+
         let mut tx = Tx::from_type(TxType::Raw);
         tx.header.chain_id = wl_storage.storage.chain_id.clone();
         Self {

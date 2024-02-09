@@ -296,8 +296,6 @@ pub fn init_validator(
         eth_cold_key: StringEncoded::new(
             validator_wallet.eth_cold_key.ref_to(),
         ),
-        // No custom validator VPs yet
-        vp: utils::VP_USER.to_string(),
         commission_rate,
         max_commission_rate_change,
         net_address,
@@ -376,7 +374,6 @@ pub async fn sign_validator_account_tx(
                 consensus_key,
                 protocol_key,
                 tendermint_node_key,
-                vp,
                 commission_rate,
                 max_commission_rate_change,
                 net_address,
@@ -413,7 +410,6 @@ pub async fn sign_validator_account_tx(
                 consensus_key,
                 protocol_key,
                 tendermint_node_key,
-                vp,
                 commission_rate,
                 max_commission_rate_change,
                 net_address,
@@ -577,8 +573,6 @@ pub type SignedBondTx<T> = Signed<BondTx<T>>;
 pub struct ValidatorAccountTx<PK: Ord> {
     /// The address of the validator.
     pub address: StringEncoded<EstablishedAddress>,
-    // TODO: remove the vp field
-    pub vp: String,
     /// Commission rate charged on rewards for delegators (bounded inside
     /// 0-1)
     pub commission_rate: Dec,
@@ -893,6 +887,8 @@ where
         &self,
         established_accounts: &[EstablishedAccountTx],
     ) -> (Vec<PublicKey>, u8) {
+        eprintln!("EST ACCOUNTS: {:#?}", established_accounts); //FIXME: remove
+        eprintln!("SOURCE: {}", self.source); //FIXME: remove
         match &self.source {
             GenesisAddress::PublicKey(pk) => (vec![pk.raw.clone()], 1),
             GenesisAddress::EstablishedAddress(owner) => established_accounts
@@ -1100,7 +1096,6 @@ pub fn validate(
                         signatures: acct.signatures,
                         data: ValidatorAccountTx {
                             address: acct.data.address,
-                            vp: acct.data.vp,
                             commission_rate: acct.data.commission_rate,
                             max_commission_rate_change: acct
                                 .data
@@ -1306,7 +1301,7 @@ pub fn validate_established_account(
 
 pub fn validate_validator_account(
     signed_tx: &SignedValidatorAccountTx,
-    vps: Option<&ValidityPredicates>,
+    _vps: Option<&ValidityPredicates>,
     all_used_addresses: &BTreeSet<Address>,
     established_accounts: &BTreeMap<Address, (Vec<common::PublicKey>, u8)>,
     validator_accounts: &mut BTreeSet<Address>,
@@ -1339,6 +1334,7 @@ pub fn validate_validator_account(
     let mut is_valid = {
         let maybe_threshold = {
             let established_addr = Address::Established(tx.address.raw.clone());
+            eprintln!("ESTABLISHED ACCOUNTS: {:#?}", established_accounts); //FIXME: remove
             established_accounts.get(&established_addr).map(|(pks, t)| {
                 let all_ed25519_keys = pks
                     .iter()
@@ -1393,21 +1389,9 @@ pub fn validate_validator_account(
         established_address
     };
 
-    // Check the VP exists
-    if !vps
-        .map(|vps| vps.wasm.contains_key(&tx.vp))
-        .unwrap_or_default()
-    {
-        eprintln!(
-            "A `validator_account` tx `vp` \"{}\" not found in Validity \
-             predicates file.",
-            tx.vp
-        );
-        is_valid = false;
-    }
-
     // Check keys authorizations
     let unsigned = UnsignedValidatorAccountTx::from(tx);
+    // FIXME: error here
     if !validate_signature(
         &unsigned,
         &tx.consensus_key.pk.raw,
@@ -1494,7 +1478,6 @@ impl From<&ValidatorAccountTx<SignedPk>> for UnsignedValidatorAccountTx {
     fn from(tx: &ValidatorAccountTx<SignedPk>) -> Self {
         let ValidatorAccountTx {
             address,
-            vp,
             commission_rate,
             max_commission_rate_change,
             metadata,
@@ -1509,7 +1492,6 @@ impl From<&ValidatorAccountTx<SignedPk>> for UnsignedValidatorAccountTx {
 
         Self {
             address: address.clone(),
-            vp: vp.clone(),
             commission_rate: *commission_rate,
             max_commission_rate_change: *max_commission_rate_change,
             metadata: metadata.clone(),

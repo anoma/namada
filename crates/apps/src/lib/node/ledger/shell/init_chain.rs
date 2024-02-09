@@ -97,6 +97,7 @@ where
             )));
         }
 
+        eprintln!("BEFORE READ TOML FILE"); //FIXME: remove
         // Read the genesis files
         #[cfg(any(
             feature = "integration",
@@ -115,6 +116,8 @@ where
             let chain_dir = self.base_dir.join(chain_id);
             genesis::make_dev_genesis(_num_validators, &chain_dir)
         };
+
+        eprintln!("AFTER READ TOML FILE"); //FIXME: remove
         #[cfg(all(
             any(test, feature = "benches"),
             not(feature = "integration")
@@ -124,6 +127,7 @@ where
             let native_token = genesis.get_native_token().clone();
             self.wl_storage.storage.native_token = native_token;
         }
+        eprintln!("BEFORE VALIDATION"); //FIXME: remove
         let mut validation = InitChainValidation::new(self, false);
         validation.run(
             init,
@@ -133,6 +137,7 @@ where
         );
         // propagate errors or panic
         validation.error_out()?;
+        eprintln!("AFTER VALIDATION"); //FIXME: remove
 
         // Init masp commitment tree and anchor
         let empty_commitment_tree: CommitmentTree<Node> =
@@ -182,6 +187,7 @@ where
     H: StorageHasher + Sync + 'static,
 {
     pub fn run(
+        // FIXME: maybe error here
         &mut self,
         init: request::InitChain,
         genesis: genesis::chain::Finalized,
@@ -512,7 +518,7 @@ where
         &mut self,
         genesis: &genesis::chain::Finalized,
         // FIXME: remove if not needed
-        _vp_cache: &mut HashMap<String, Vec<u8>>,
+        vp_cache: &mut HashMap<String, Vec<u8>>,
     ) -> ControlFlow<()> {
         if let Some(txs) = genesis.transactions.established_account.as_ref() {
             for FinalizedEstablishedAccountTx {
@@ -528,14 +534,20 @@ where
                     "Applying genesis tx to init an established account \
                      {address}"
                 );
+                eprintln!(
+                    "Applying genesis tx to init an established account \
+                     {address}"
+                ); //FIXME: remove
                 // FIXME: can't we get directly the has of vp_user from storage
                 // without loading the code and recomputing it?
-                let vp_hash_key = Key::wasm_hash("vp_user.wasm");
-                let code_hash: CodeHash =
-                    self.wl_storage.read(&vp_hash_key).unwrap().unwrap();
+                // FIXME: probably no need for .wasm
+                // let vp_hash_key = Key::wasm_hash("vp_user");
+                // let code_hash: CodeHash =
+                //     self.wl_storage.read(&vp_hash_key).unwrap().unwrap();
                 // FIXME: remove if unneeded
-                // let vp_code = self.lookup_vp("vp_user", genesis, vp_cache)?;
-                // let code_hash = CodeHash::sha256(&vp_code);
+                let vp_code = self.lookup_vp("vp_user", genesis, vp_cache)?;
+                eprintln!("AFTER VP USER LOOKUP"); //FIXME: remove
+                let code_hash = CodeHash::sha256(&vp_code);
                 self.wl_storage
                     .write_bytes(&Key::validity_predicate(address), code_hash)
                     .unwrap();
@@ -569,7 +581,6 @@ where
                         data:
                             ValidatorAccountTx {
                                 address,
-                                vp,
                                 commission_rate,
                                 max_commission_rate_change,
                                 metadata,
@@ -591,7 +602,7 @@ where
                     "Applying genesis tx to init a validator account {address}"
                 );
 
-                let vp_code = self.lookup_vp(vp, genesis, vp_cache)?;
+                let vp_code = self.lookup_vp("vp_user", genesis, vp_cache)?;
                 let code_hash = CodeHash::sha256(&vp_code);
                 self.wl_storage
                     .write_bytes(&Key::validity_predicate(address), code_hash)
