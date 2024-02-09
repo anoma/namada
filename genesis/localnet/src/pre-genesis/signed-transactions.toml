@@ -1,22 +1,19 @@
 [[established_account]]
-vp = "vp_user"
 threshold = 1
 public_keys = ["tpknam1qqwfpuvn8x7yqtquejhppef4vddv9ghusec2rkaxav38amamxaxpgj9cs79"]
 
 [[established_account]]
-vp = "vp_user"
 threshold = 1
-public_keys = ["tpknam1qq52dx5e290wyh7ngdt6wudtyd502lg6ln49yvg3vz97e8j2ruux5e3yewq"]
+public_keys = ["tpknam1qrtpj7fldnq8dpjukye6jskjlr2f7xsk2atz5y3wa378yv8w0l8xy7rj847"]
 
 [[established_account]]
-vp = "vp_user"
 threshold = 1
-public_keys = ["tpknam1qrnw8mxyqlj60mykgevnldcj5mg2fya7fs5a8xqdkd2gwtxhef0zy8a2wha"]
+public_keys = ["tpknam1qrdn4pnry9tmgrth6azjuwv5f758974ej0j34xtye5wq4fqy202825vmlsn"]
 
 [[bond]]
-source = "tnam1qxfj3sf6a0meahdu9t6znp05g8zx4dkjtgyn9gfu"
-validator = "tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx"
+source = "tnam1qy0rydkctp5nvx5vnjq80rq0w23dn3mrt5c8lzmg"
+validator = "tnam1qy5uswpdgykvmev526vrf8ewczjzwnr0qcyccjwh"
 amount = "20000"
 
 [bond.signatures]
-tpknam1qrnw8mxyqlj60mykgevnldcj5mg2fya7fs5a8xqdkd2gwtxhef0zy8a2wha = "signam1qqv8vvt2yk3gpzth6f5qdtf2g889mk6jv0qrrj0np62czy0qrruj5pgezjhqfvs4vg5f9zmelngpy04c7klschc57upr7zlk9w7647sx4j7x9c"
+tpknam1qrtpj7fldnq8dpjukye6jskjlr2f7xsk2atz5y3wa378yv8w0l8xy7rj847 = "signam1qpu3zdvx6t72uyq4g8q3yavnwwgp50mfvnsnle2ausuvyke2pns6yhujeh0525cs9m0a8h7m3fmswlg8ffq4kxryqpytac4yyv5f5espapz5vv"

@@ -11,17 +11,17 @@ cargo watch -x "test test_validate_localnet_genesis_templates"
 The pre-genesis balances wallet is located at [pre-genesis/wallet.toml](pre-genesis/wallet.toml) and can be re-generated from the repo's root dir with:
 
 ```shell
-cargo run --bin namadaw -- --base-dir "genesis/localnet/src" key gen \
+cargo run --bin namadaw -- --pre-genesis --base-dir "genesis/localnet/src" gen \
   --alias albert-key --unsafe-dont-encrypt
-cargo run --bin namadaw -- --base-dir "genesis/localnet/src" key gen \
+cargo run --bin namadaw -- --pre-genesis --base-dir "genesis/localnet/src" gen \
   --alias bertha-key --unsafe-dont-encrypt
-cargo run --bin namadaw -- --base-dir "genesis/localnet/src" key gen \
+cargo run --bin namadaw -- --pre-genesis --base-dir "genesis/localnet/src" gen \
   --alias christel --unsafe-dont-encrypt
-cargo run --bin namadaw -- --base-dir "genesis/localnet/src" key gen \
+cargo run --bin namadaw -- --pre-genesis --base-dir "genesis/localnet/src" gen \
   --alias daewon --unsafe-dont-encrypt
-cargo run --bin namadaw -- --base-dir "genesis/localnet/src" key gen \
+cargo run --bin namadaw -- --pre-genesis --base-dir "genesis/localnet/src" gen \
   --alias validator-0-account-key --unsafe-dont-encrypt
-cargo run --bin namadaw -- --base-dir "genesis/localnet/src" key gen \
+cargo run --bin namadaw -- --pre-genesis --base-dir "genesis/localnet/src" gen \
   --alias faucet-key --unsafe-dont-encrypt
 ```
 
@@ -79,6 +79,7 @@ A delegation with e.g. 20 000 NAM tokens to a validator account whose address ha
 cargo run --bin namadac -- --base-dir "genesis/localnet/src" utils \
   genesis-bond \
   --validator tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx \
+  --source tnam1qy0rydkctp5nvx5vnjq80rq0w23dn3mrt5c8lzmg\
   --amount 20000 \
   --path "genesis/localnet/src/pre-genesis/bond/bond-tx-albert.toml"
 ```
@@ -100,7 +101,7 @@ The validator transactions are signed using (note the extra `--alias` argument n
 cargo run --bin namadac -- --base-dir "genesis/localnet/src" utils \
   sign-genesis-txs \
   --path "genesis/localnet/src/pre-genesis/validator-0/unsigned-transactions.toml" \
-  --output "genesis/localnet/src/validator-0/signed-transactions.toml"
+  --output "genesis/localnet/src/pre-genesis/validator-0/signed-transactions.toml" \
   --alias validator-0
 ```
 

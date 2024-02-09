@@ -36,27 +36,25 @@ The [transactions.toml file](transactions.toml) contains any transactions that c
 
 ### Genesis tx `established_account`
 
-An established account with some `alias`, a validity predicate `vp` and optionally a `public_key`. When a public key is used, the transaction must be [signed](#signing-genesis-txs) with it to authorize its use.
+An established account with some `alias`  and optionally a `public_key`. When a public key is used, the transaction must be [signed](#signing-genesis-txs) with it to authorize its use.
 
 An unsigned `established_account` tx example:
 
 ```toml
 [[established_account]]
 alias = "Albert" # Aliases are case-insensitive
-vp = "vp_user"
 public_key = "tpknam1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63we33t3r"
 ```
 
 ### Genesis tx `validator_account`
 
-A validator account with some `alias`, a validity predicate `vp`, various keys and validator variables. Public keys used in the transaction must also [sign](#signing-validator-genesis-txs) the transaction to authorize their use.
+A validator account with some `alias`, various keys and validator variables. Public keys used in the transaction must also [sign](#signing-validator-genesis-txs) the transaction to authorize their use.
 
 An unsigned `validator_account` tx example:
 
 ```toml
 [[validator_account]]
 alias = "validator-0"
-vp = "vp_user"
 commission_rate = "0.05"
 max_commission_rate_change = "0.01"
 net_address = "127.0.0.1:27656"

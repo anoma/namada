@@ -93,9 +93,9 @@ min_proposal_grace_epochs = 6
 # Initial set of stewards
 stewards = [
     # bertha
-    "tnam1q9rhgyv3ydq0zu3whnftvllqnvhvhm270qxay5tn",
+    "tnam1q8wnhp0jgpzewqnuwtvw28wj546sx4j73g3lq9ac",
     # validator-0
-    "tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx"
+    "tnam1qy5uswpdgykvmev526vrf8ewczjzwnr0qcyccjwh"
 ]
 # The pgf funding inflation rate
 pgf_inflation_rate = "0.1"
