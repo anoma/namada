@@ -51,8 +51,7 @@ dependencies = [
 [[package]]
 name = "ahash"
 version = "0.7.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a824f2aa7e75a0c98c5a504fceb80649e9c35265d44525b5f94de4771a395cd"
+source = "git+https://github.com/Manishearth/aHash.git?branch=build-time-rm#38427365f6f2ce834b05713493c03055163e7325"
 dependencies = [
  "getrandom 0.2.11",
  "once_cell",

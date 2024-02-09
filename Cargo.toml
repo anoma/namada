@@ -184,3 +184,8 @@ lto = true
 opt-level = 3
 panic = "unwind"
 overflow-checks = true
+
+[patch.crates-io]
+# TEMP: ahash v0.7.7 is not compatible with Rust 1.76.
+#  Update once backport https://github.com/tkaitchuck/aHash/pull/202 is released
+ahash = { git = "https://github.com/Manishearth/aHash.git", branch = "build-time-rm" }
