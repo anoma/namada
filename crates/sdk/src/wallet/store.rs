@@ -534,11 +534,6 @@ impl Store {
         address: Address,
         force: bool,
     ) -> Option<Alias> {
-        // abort if the alias is reserved
-        if Alias::is_reserved(&alias).is_some() {
-            println!("The alias {} is reserved.", alias);
-            return None;
-        }
         // abort if the address already exists in the wallet
         if self.addresses.contains_right(&address) && !force {
             println!(
