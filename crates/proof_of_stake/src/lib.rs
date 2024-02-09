@@ -2457,7 +2457,7 @@ where
                 None
             }
         })
-        .collect::<HashSet<_>>();
+        .collect::<BTreeSet<_>>();
 
     for validator in &validators_to_jail {
         let state_jail_epoch = validator_state_handle(validator)
