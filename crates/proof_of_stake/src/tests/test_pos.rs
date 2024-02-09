@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, HashSet};
 
+use assert_matches::assert_matches;
 use namada_core::types::address::Address;
 use namada_core::types::dec::Dec;
 use namada_core::types::key::testing::{
@@ -852,12 +853,21 @@ fn test_unjail_validator_aux(
     )
     .unwrap();
 
-    assert_eq!(
-        validator_state_handle(val_addr)
-            .get(&s, current_epoch, &params)
-            .unwrap(),
-        Some(ValidatorState::Consensus)
-    );
+    let val_stake =
+        crate::read_validator_stake(&s, &params, val_addr, current_epoch)
+            .unwrap();
+    let state = validator_state_handle(val_addr)
+        .get(&s, current_epoch, &params)
+        .unwrap()
+        .unwrap();
+    if val_stake >= params.validator_stake_threshold {
+        assert_matches!(
+            state,
+            ValidatorState::Consensus | ValidatorState::BelowCapacity
+        );
+    } else {
+        assert_eq!(state, ValidatorState::BelowThreshold);
+    };
 
     for epoch in Epoch::iter_bounds_inclusive(
         current_epoch.next(),
@@ -902,20 +912,32 @@ fn test_unjail_validator_aux(
             Some(ValidatorState::Jailed)
         );
     }
-
-    assert_eq!(
-        validator_state_handle(val_addr)
-            .get(&s, current_epoch + params.pipeline_len, &params)
-            .unwrap(),
-        Some(ValidatorState::Consensus)
-    );
-    assert!(
-        validator_set_positions_handle()
-            .at(&(current_epoch + params.pipeline_len))
-            .get(&s, val_addr)
-            .unwrap()
-            .is_some(),
-    );
+    let val_stake = crate::read_validator_stake(
+        &s,
+        &params,
+        val_addr,
+        current_epoch + params.pipeline_len,
+    )
+    .unwrap();
+    let state = validator_state_handle(val_addr)
+        .get(&s, current_epoch + params.pipeline_len, &params)
+        .unwrap()
+        .unwrap();
+    if val_stake >= params.validator_stake_threshold {
+        assert_matches!(
+            state,
+            ValidatorState::Consensus | ValidatorState::BelowCapacity
+        );
+        assert!(
+            validator_set_positions_handle()
+                .at(&(current_epoch + params.pipeline_len))
+                .get(&s, val_addr)
+                .unwrap()
+                .is_some(),
+        );
+    } else {
+        assert_eq!(state, ValidatorState::BelowThreshold);
+    };
 
     // Advance another epoch
     current_epoch = advance_epoch(&mut s, &params);
