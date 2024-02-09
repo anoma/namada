@@ -133,7 +133,7 @@ pub type ValidatorAddresses = crate::epoched::NestedEpoched<
 
 /// Slashes indexed by validator address and then block height (for easier
 /// retrieval and iteration when processing)
-pub type ValidatorSlashes = NestedMap<Address, Slashes>;
+pub type ValidatorSlashes = NestedMap<Address, NestedMap<u64, Slashes>>;
 
 /// Epoched slashes, where the outer epoch key is the epoch in which the slash
 /// is processed

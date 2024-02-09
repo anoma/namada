@@ -159,12 +159,16 @@ where
         evidence_epoch + params.slash_processing_epoch_offset();
 
     // Add the slash to the list of enqueued slashes to be processed at a later
-    // epoch
-    enqueued_slashes_handle()
+    // epoch. If a slash at the same block height already exists, return early.
+    let enqueued = enqueued_slashes_handle()
         .get_data_handler()
         .at(&processing_epoch)
-        .at(validator)
-        .push(storage, slash)?;
+        .at(validator);
+    if enqueued.contains(storage, &evidence_block_height)? {
+        return Ok(());
+    } else {
+        enqueued.at(&evidence_block_height).push(storage, slash)?;
+    }
 
     // Update the most recent slash (infraction) epoch for the validator
     let last_slash_epoch = read_validator_last_slash_epoch(storage, validator)?;
