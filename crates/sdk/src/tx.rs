@@ -51,7 +51,7 @@ use namada_governance::storage::proposal::{
     InitProposalData, ProposalType, VoteProposalData,
 };
 use namada_governance::storage::vote::ProposalVote;
-use namada_ibc::storage::channel_key;
+use namada_ibc::storage::{channel_key, ibc_token};
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
 use namada_token::storage_key::balance_key;
@@ -2931,16 +2931,27 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
             .await?;
     let ibc_denom =
         rpc::query_ibc_denom(context, &args.token, Some(&source)).await;
-    let token = namada_ibc::received_ibc_token(
-        &ibc_denom,
-        &src_port_id,
-        &src_channel_id,
-        &args.port_id,
-        &args.channel_id,
-    )
-    .map_err(|e| {
-        Error::Other(format!("Getting IBC Token failed: error {e}"))
-    })?;
+    let token = if args.refund {
+        if ibc_denom.contains('/') {
+            ibc_token(ibc_denom)
+        } else {
+            // the token is a base token
+            Address::decode(&ibc_denom)
+                .map_err(|e| Error::Other(format!("Invalid token: {e}")))?
+        }
+    } else {
+        // Need to check the prefix
+        namada_ibc::received_ibc_token(
+            &ibc_denom,
+            &src_port_id,
+            &src_channel_id,
+            &args.port_id,
+            &args.channel_id,
+        )
+        .map_err(|e| {
+            Error::Other(format!("Getting IBC Token failed: error {e}"))
+        })?
+    };
     let validated_amount =
         validate_amount(context, args.amount, &token, false).await?;
 

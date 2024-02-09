@@ -2510,4 +2510,6 @@ pub struct GenIbcShieldedTransfer<C: NamadaTypes = SdkTypes> {
     pub port_id: PortId,
     /// Channel ID via which the token is received
     pub channel_id: ChannelId,
+    /// Generate the shielded transfer for refunding
+    pub refund: bool,
 }

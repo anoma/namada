@@ -3154,6 +3154,7 @@ pub mod args {
     pub const RAW_PUBLIC_KEY_HASH_OPT: ArgOpt<String> =
         RAW_PUBLIC_KEY_HASH.opt();
     pub const RECEIVER: Arg<String> = arg("receiver");
+    pub const REFUND: ArgFlag = flag("refund");
     pub const REFUND_TARGET: ArgOpt<WalletTransferTarget> =
         arg_opt("refund-target");
     pub const RELAYER: Arg<Address> = arg("relayer");
@@ -5798,6 +5799,7 @@ pub mod args {
                 amount: self.amount,
                 port_id: self.port_id,
                 channel_id: self.channel_id,
+                refund: self.refund,
             }
         }
     }
@@ -5811,6 +5813,7 @@ pub mod args {
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let port_id = PORT_ID.parse(matches);
             let channel_id = CHANNEL_ID.parse(matches);
+            let refund = REFUND.parse(matches);
             Self {
                 query,
                 output_folder,
@@ -5819,6 +5822,7 @@ pub mod args {
                 amount,
                 port_id,
                 channel_id,
+                refund,
             }
         }
 
@@ -5839,6 +5843,11 @@ pub mod args {
                     CHANNEL_ID.def().help(
                         "The channel ID via which the token is received.",
                     ),
+                )
+                .arg(
+                    REFUND
+                        .def()
+                        .help("Generate the shielded transfer for refunding."),
                 )
         }
     }
