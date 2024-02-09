@@ -128,3 +128,76 @@ where
     })?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use assert_matches::assert_matches;
+    use namada_core::types::ethereum_events::EthAddress;
+    use namada_core::types::key::{common, RefTo};
+    use namada_vote_ext::validator_set_update::{EthAddrBook, VotingPowersMap};
+
+    use super::*;
+    use crate::test_utils;
+
+    /// Test that we reject vote extensions containing a superset of the
+    /// next validator set in storage.
+    #[test]
+    fn test_superset_valsetupd_rejected() {
+        let (wl_storage, keys) = test_utils::setup_default_storage();
+        let (validator, validator_stake) = test_utils::default_validator();
+
+        let hot_key_addr = {
+            let hot_key = &keys
+                .get(&validator)
+                .expect("Test failed")
+                .eth_bridge
+                .ref_to();
+
+            match hot_key {
+                common::PublicKey::Secp256k1(ref k) => k.into(),
+                _ => panic!("Test failed"),
+            }
+        };
+        let cold_key_addr = {
+            let cold_key =
+                &keys.get(&validator).expect("Test failed").eth_gov.ref_to();
+
+            match cold_key {
+                common::PublicKey::Secp256k1(ref k) => k.into(),
+                _ => panic!("Test failed"),
+            }
+        };
+
+        let voting_powers = {
+            let mut map = VotingPowersMap::new();
+            map.insert(
+                EthAddrBook {
+                    hot_key_addr,
+                    cold_key_addr,
+                },
+                validator_stake,
+            );
+            map.insert(
+                EthAddrBook {
+                    hot_key_addr: EthAddress([0; 20]),
+                    cold_key_addr: EthAddress([0xff; 20]),
+                },
+                validator_stake,
+            );
+            map
+        };
+
+        let ext = validator_set_update::Vext {
+            voting_powers,
+            signing_epoch: 0.into(),
+            validator_addr: validator.clone(),
+        }
+        .sign(&keys.get(&validator).expect("Test failed").eth_bridge);
+
+        let result = validate_valset_upd_vext(&wl_storage, &ext, 0.into());
+        assert_matches!(
+            result,
+            Err(VoteExtensionError::ExtraValidatorsInExtension)
+        );
+    }
+}
