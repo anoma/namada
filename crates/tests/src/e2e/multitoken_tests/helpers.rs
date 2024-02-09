@@ -43,8 +43,6 @@ pub fn init_multitoken_vp(test: &Test, rpc_addr: &str) -> Result<String> {
         // Value obtained from
         // `namada::types::key::ed25519::tests::gen_keypair`
         "001be519a321e29020fa3cbfbfd01bd5e92db134305609270b71dace25b5a21168",
-        "--code-path",
-        &multitoken_vp_wasm_path,
         "--alias",
         multitoken_alias,
         "--gas-limit",
