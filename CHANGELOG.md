@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.31.4
+
+Namada 0.31.4 is a patch release that fixes the result query of an active governance proposal.
+
+### BUG FIXES
+
+- Fixes the query-proposal-result output in the case that a proposal is still
+  voting. ([\#2573](https://github.com/anoma/namada/pull/2573))
+
 ## v0.31.3
 
 Namada 0.31.3 is a patch release that fixes various issues.
