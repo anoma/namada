@@ -1223,15 +1223,43 @@ pub async fn query_proposal_result(
         let proposal_id =
             args.proposal_id.expect("Proposal id should be defined.");
 
+        let current_epoch = query_epoch(context.client()).await.unwrap();
         let proposal_result = namada_sdk::rpc::query_proposal_result(
             context.client(),
             proposal_id,
         )
         .await;
+        let proposal_query = namada_sdk::rpc::query_proposal_by_id(
+            context.client(),
+            proposal_id,
+        )
+        .await;
 
-        if let Ok(Some(proposal_result)) = proposal_result {
+        if let (Ok(Some(proposal_result)), Ok(Some(proposal_query))) =
+            (proposal_result, proposal_query)
+        {
             display_line!(context.io(), "Proposal Id: {} ", proposal_id);
-            display_line!(context.io(), "{:4}{}", "", proposal_result);
+            if current_epoch >= proposal_query.voting_end_epoch {
+                display_line!(context.io(), "{:4}{}", "", proposal_result);
+            } else {
+                display_line!(
+                    context.io(),
+                    "{:4}Still voting until epoch {}",
+                    "",
+                    proposal_query.voting_end_epoch
+                );
+                let res = format!("{}", proposal_result);
+                if let Some(idx) = res.find(' ') {
+                    let slice = &res[idx..];
+                    display_line!(context.io(), "{:4}Currently{}", "", slice);
+                } else {
+                    display_line!(
+                        context.io(),
+                        "{:4}Error parsing the result string",
+                        "",
+                    );
+                }
+            }
         } else {
             edisplay_line!(context.io(), "Proposal {} not found.", proposal_id);
         };

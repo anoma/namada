@@ -2024,8 +2024,9 @@ fn proposal_submission() -> Result<()> {
     client.exp_string("Proposal Id: 0")?;
     client.exp_string(
         "passed with 100000.000000 yay votes, 900.000000 nay votes and \
-         0.000000 abstain votes, total voting power: 100900.000000 threshold \
-         was: 67266.66666",
+         0.000000 abstain votes, total voting power: 100900.000000, threshold \
+         (fraction) of total voting power needed to tally: 67266.666667 \
+         (0.666666666669)",
     )?;
     client.assert_success();
 
@@ -3896,8 +3897,9 @@ fn proposal_change_shielded_reward() -> Result<()> {
     client.exp_string("Proposal Id: 0")?;
     client.exp_string(
         "passed with 100000.000000 yay votes, 900.000000 nay votes and \
-         0.000000 abstain votes, total voting power: 100900.000000 threshold \
-         was: 67266.66666",
+         0.000000 abstain votes, total voting power: 100900.000000, threshold \
+         (fraction) of total voting power needed to tally: 67266.666667 \
+         (0.666666666669)",
     )?;
     client.assert_success();
 
