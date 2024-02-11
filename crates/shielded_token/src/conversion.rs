@@ -1,5 +1,6 @@
 //! MASP rewards conversions
 
+use namada_controller::PDController;
 use namada_core::address::{Address, MASP};
 #[cfg(any(feature = "multicore", test))]
 use namada_core::borsh::BorshSerializeExt;
@@ -23,6 +24,53 @@ use crate::storage_key::{
     masp_max_reward_rate_key,
 };
 use crate::WithConversionState;
+
+struct ShieldedInflation {
+    controller: PDController,
+}
+
+impl ShieldedInflation {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        locked_amount: Uint,
+        total_native_amount: Uint,
+        max_reward_rate: Dec,
+        last_inflation_amount: Uint,
+        p_gain_nom: Dec,
+        d_gain_nom: Dec,
+        epochs_per_year: u64,
+        target_amount: Dec,
+        last_amount: Dec,
+    ) -> ShieldedInflation {
+        ShieldedInflation {
+            controller: PDController::new(
+                locked_amount,
+                total_native_amount,
+                max_reward_rate,
+                last_inflation_amount,
+                p_gain_nom,
+                d_gain_nom,
+                epochs_per_year,
+                target_amount,
+                last_amount,
+            ),
+        }
+    }
+
+    fn get_control(&self) -> Dec {
+        let locked = self.controller.get_locked_amount_dec();
+        let epochs_py: Dec = self.controller.get_epochs_per_year().into();
+
+        let coeff = self.controller.get_max_reward_rate() / epochs_py;
+
+        self.controller.compute_control(coeff, locked)
+    }
+
+    pub fn get_new_inflation(&self) -> Uint {
+        let control = self.get_control();
+        self.controller.compute_inflation(control)
+    }
+}
 
 /// Compute the precision of MASP rewards for the given token. This function
 /// must be a non-zero constant for a given token.
@@ -105,21 +153,24 @@ where
         .read(&masp_locked_amount_target_key(token))?
         .expect("locked ratio target should properly decode");
 
-    // Creating the PD controller for handing out tokens
-    let controller = ShieldedRewardsController {
-        locked_tokens: total_tokens_in_masp.raw_amount(),
-        total_native_tokens: total_native_tokens.raw_amount(),
-        locked_tokens_target: target_locked_amount.raw_amount(),
-        locked_tokens_last: last_locked_amount.raw_amount(),
-        max_reward_rate,
-        last_inflation_amount: last_inflation.raw_amount(),
-        p_gain_nom: kp_gain_nom,
-        d_gain_nom: kd_gain_nom,
-        epochs_per_year,
-    };
+    let target_locked_dec = Dec::try_from(target_locked_amount.raw_amount())
+        .expect("Should not fail to convert Uint to Dec");
+    let last_locked_dec = Dec::try_from(last_locked_amount.raw_amount())
+        .expect("Should not fail to convert Uint to Dec");
 
-    let ShieldedValsToUpdate { inflation } =
-        ShieldedRewardsController::run(controller);
+    // Initial computation of the new shielded inflation
+    let controller = ShieldedInflation::new(
+        total_tokens_in_masp.raw_amount(),
+        total_native_tokens.raw_amount(),
+        max_reward_rate,
+        last_inflation.raw_amount(),
+        kp_gain_nom,
+        kd_gain_nom,
+        epochs_per_year,
+        target_locked_dec,
+        last_locked_dec,
+    );
+    let inflation = controller.get_new_inflation();
 
     // inflation-per-token = inflation / locked tokens = n/PRECISION
     // ∴ n = (inflation * PRECISION) / locked tokens

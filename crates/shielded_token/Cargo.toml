@@ -18,6 +18,7 @@ multicore = ["dep:rayon"]
 testing = ["multicore", "namada_core/testing"]
 
 [dependencies]
+namada_controller = { path = "../controller" }
 namada_core = { path = "../core" }
 namada_parameters = { path = "../parameters" }
 namada_storage = { path = "../storage" }
