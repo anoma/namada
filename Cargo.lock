@@ -4596,6 +4596,7 @@ dependencies = [
  "itertools 0.10.5",
  "linkme",
  "namada_account",
+ "namada_controller",
  "namada_core",
  "namada_governance",
  "namada_macros",

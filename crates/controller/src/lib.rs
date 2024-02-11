@@ -1,7 +1,7 @@
 use namada_core::types::dec::Dec;
 use namada_core::types::uint::Uint;
 
-struct PDController {
+pub struct PDController {
     locked_amount: Uint,
     total_native_amount: Uint,
     max_reward_rate: Dec,
@@ -39,6 +39,24 @@ impl PDController {
         }
     }
 
+    pub fn get_total_native_dec(&self) -> Dec {
+        Dec::try_from(self.total_native_amount)
+            .expect("Should not fail to convert Uint to Dec")
+    }
+
+    pub fn get_locked_amount_dec(&self) -> Dec {
+        Dec::try_from(self.locked_amount)
+            .expect("Should not fail to convert Uint to Dec")
+    }
+
+    pub fn get_epochs_per_year(&self) -> u64 {
+        self.epochs_per_year
+    }
+
+    pub fn get_max_reward_rate(&self) -> Dec {
+        self.max_reward_rate
+    }
+
     fn get_max_inflation(&self) -> Uint {
         let total_native = Dec::try_from(self.total_native_amount)
             .expect("Should not fail to convert Uint to Dec");
@@ -52,7 +70,7 @@ impl PDController {
 
     // TODO: could possibly use I256 instead of Dec here (need to account for
     // negative vals)
-    fn compute_inflation(&self, control: Dec) -> Uint {
+    pub fn compute_inflation(&self, control: Dec) -> Uint {
         let last_inflation_amount = Dec::try_from(self.last_inflation_amount)
             .expect("Should not fail to convert Uint to Dec");
         let new_inflation_amount = last_inflation_amount + control;
@@ -70,7 +88,7 @@ impl PDController {
 
     // NOTE: This formula is the comactification of all the old intermediate
     // computations that were done in multiple steps (as in the specs)
-    fn compute_control(&self, coeff: Dec, current_metric: Dec) -> Dec {
+    pub fn compute_control(&self, coeff: Dec, current_metric: Dec) -> Dec {
         let val = current_metric * (self.d_gain_nom - self.p_gain_nom)
             + (self.target_metric * self.p_gain_nom)
             - (self.last_metric * self.d_gain_nom);
@@ -80,59 +98,8 @@ impl PDController {
 
 // The below can be moved into other appropriate crates
 
-pub struct PosRewardsController {
-    controller: PDController,
-}
-
 pub struct ShieldedRewardsController {
     controller: PDController,
-}
-
-impl PosRewardsController {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        locked_amount: Uint,
-        total_native_amount: Uint,
-        max_reward_rate: Dec,
-        last_inflation_amount: Uint,
-        p_gain_nom: Dec,
-        d_gain_nom: Dec,
-        epochs_per_year: u64,
-        target_ratio: Dec,
-        last_ratio: Dec,
-    ) -> PosRewardsController {
-        PosRewardsController {
-            controller: PDController::new(
-                locked_amount,
-                total_native_amount,
-                max_reward_rate,
-                last_inflation_amount,
-                p_gain_nom,
-                d_gain_nom,
-                epochs_per_year,
-                target_ratio,
-                last_ratio,
-            ),
-        }
-    }
-
-    fn get_control(&self) -> Dec {
-        let total_native = Dec::try_from(self.controller.total_native_amount)
-            .expect("Should not fail to convert Uint to Dec");
-        let locked = Dec::try_from(self.controller.locked_amount)
-            .expect("Should not fail to convert Uint to Dec");
-        let epochs_py: Dec = self.controller.epochs_per_year.into();
-
-        let coeff = total_native * self.controller.max_reward_rate / epochs_py;
-        let locked_ratio = locked / total_native;
-
-        self.controller.compute_control(coeff, locked_ratio)
-    }
-
-    pub fn get_new_inflation(&self) -> Uint {
-        let control = self.get_control();
-        self.controller.compute_inflation(control)
-    }
 }
 
 impl ShieldedRewardsController {

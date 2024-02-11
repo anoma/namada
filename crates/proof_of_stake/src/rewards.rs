@@ -2,6 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use namada_controller::PDController;
 use namada_core::address::{self, Address};
 use namada_core::dec::Dec;
 use namada_core::storage::{BlockHeight, Epoch};
@@ -48,6 +49,58 @@ pub enum RewardsError {
     /// rewards coefficients are not set
     #[error("Rewards coefficients are not properly set.")]
     CoeffsNotSet,
+}
+
+/// PoS wrapper around a PDController for inflation
+pub struct PosInflation {
+    controller: PDController,
+}
+
+impl PosInflation {
+    /// Initialize a new PD Controller for PoS inflation
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        locked_amount: Uint,
+        total_native_amount: Uint,
+        max_reward_rate: Dec,
+        last_inflation_amount: Uint,
+        p_gain_nom: Dec,
+        d_gain_nom: Dec,
+        epochs_per_year: u64,
+        target_ratio: Dec,
+        last_ratio: Dec,
+    ) -> PosInflation {
+        PosInflation {
+            controller: PDController::new(
+                locked_amount,
+                total_native_amount,
+                max_reward_rate,
+                last_inflation_amount,
+                p_gain_nom,
+                d_gain_nom,
+                epochs_per_year,
+                target_ratio,
+                last_ratio,
+            ),
+        }
+    }
+
+    fn get_control(&self) -> Dec {
+        let total_native = self.controller.get_total_native_dec();
+        let locked = self.controller.get_locked_amount_dec();
+        let epochs_py: Dec = self.controller.get_epochs_per_year().into();
+
+        let coeff =
+            total_native * self.controller.get_max_reward_rate() / epochs_py;
+        let locked_ratio = locked / total_native;
+
+        self.controller.compute_control(coeff, locked_ratio)
+    }
+
+    fn get_new_inflation(&self) -> Uint {
+        let control = self.get_control();
+        self.controller.compute_inflation(control)
+    }
 }
 
 /// Holds coefficients for the three different ways to get PoS rewards
@@ -314,42 +367,37 @@ where
         .expect("Epochs per year should exist in parameters storage");
 
     let staking_token = staking_token_address(storage);
-    let total_tokens: token::Amount = storage
+    let total_amount: token::Amount = storage
         .read(&minted_balance_key(&staking_token))?
         .expect("Total NAM balance should exist in storage");
 
     // Read from PoS storage
     let params = read_pos_params(storage)?;
-    let pos_locked_supply = read_total_stake(storage, &params, last_epoch)?;
+    let locked_amount = read_total_stake(storage, &params, last_epoch)?;
 
-    let pos_last_staked_ratio = read_last_staked_ratio(storage)?
+    let last_staked_ratio = read_last_staked_ratio(storage)?
         .expect("Last staked ratio should exist in PoS storage");
-    let pos_last_inflation_amount = read_last_pos_inflation_amount(storage)?
+    let last_inflation_amount = read_last_pos_inflation_amount(storage)?
         .expect("Last inflation amount should exist in PoS storage");
 
-    let pos_locked_ratio_target = params.target_staked_ratio;
-    let pos_max_inflation_rate = params.max_inflation_rate;
-    let pos_p_gain_nom = params.rewards_gain_p;
-    let pos_d_gain_nom = params.rewards_gain_d;
+    let locked_ratio_target = params.target_staked_ratio;
+    let max_inflation_rate = params.max_inflation_rate;
+    let p_gain_nom = params.rewards_gain_p;
+    let d_gain_nom = params.rewards_gain_d;
 
-    // Run rewards PD controller
-    let pos_controller = inflation::PosRewardsController {
-        locked_tokens: pos_locked_supply.raw_amount(),
-        total_native_tokens: total_tokens.raw_amount(),
-        locked_ratio_target: pos_locked_ratio_target,
-        locked_ratio_last: pos_last_staked_ratio,
-        max_reward_rate: pos_max_inflation_rate,
-        last_inflation_amount: pos_last_inflation_amount.raw_amount(),
-        p_gain_nom: pos_p_gain_nom,
-        d_gain_nom: pos_d_gain_nom,
+    // Compute the new inflation
+    let pos_controller = PosInflation::new(
+        locked_amount.raw_amount(),
+        total_amount.raw_amount(),
+        max_inflation_rate,
+        last_inflation_amount.raw_amount(),
+        p_gain_nom,
+        d_gain_nom,
         epochs_per_year,
-    };
-    // Run the rewards controllers
-    let inflation::PosValsToUpdate {
-        locked_ratio,
-        inflation,
-    } = pos_controller.run();
-
+        locked_ratio_target,
+        last_staked_ratio,
+    );
+    let inflation = pos_controller.get_new_inflation();
     let inflation =
         token::Amount::from_uint(inflation, 0).into_storage_result()?;
 
@@ -367,6 +415,10 @@ where
 
     // Write new rewards parameters that will be used for the inflation of
     // the current new epoch
+    let locked_amount = Dec::try_from(locked_amount).into_storage_result()?;
+    let total_amount = Dec::try_from(total_amount).into_storage_result()?;
+    let locked_ratio = locked_amount / total_amount;
+
     write_last_staked_ratio(storage, locked_ratio)?;
     write_last_pos_inflation_amount(storage, inflation)?;
 
