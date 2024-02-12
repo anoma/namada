@@ -1,6 +1,7 @@
 use namada_core::types::dec::Dec;
 use namada_core::types::uint::Uint;
 
+#[derive(Clone, Debug)]
 pub struct PDController {
     locked_amount: Uint,
     total_native_amount: Uint,
