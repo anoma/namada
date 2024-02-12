@@ -708,6 +708,21 @@ impl DB for MockDB {
 
         Ok(())
     }
+
+    fn prune_replay_protection_buffer(
+        &mut self,
+        _batch: &mut Self::WriteBatch,
+    ) -> Result<()> {
+        let buffer_key = Key::parse("replay_protection")
+            .map_err(Error::KeyError)?
+            .push(&"buffer".to_string())
+            .map_err(Error::KeyError)?;
+        self.0
+            .borrow_mut()
+            .retain(|key, _| !key.starts_with(&buffer_key.to_string()));
+
+        Ok(())
+    }
 }
 
 impl<'iter> DBIter<'iter> for MockDB {
@@ -785,6 +800,16 @@ impl<'iter> DBIter<'iter> for MockDB {
     fn iter_replay_protection(&'iter self) -> Self::PrefixIter {
         let stripped_prefix =
             format!("replay_protection/{}/", replay_protection::last_prefix());
+        let prefix = stripped_prefix.clone();
+        let iter = self.0.borrow().clone().into_iter();
+        MockPrefixIterator::new(MockIterator { prefix, iter }, stripped_prefix)
+    }
+
+    fn iter_replay_protection_buffer(&'iter self) -> Self::PrefixIter {
+        let stripped_prefix = format!(
+            "replay_protection/{}/",
+            replay_protection::buffer_prefix()
+        );
         let prefix = stripped_prefix.clone();
         let iter = self.0.borrow().clone().into_iter();
         MockPrefixIterator::new(MockIterator { prefix, iter }, stripped_prefix)

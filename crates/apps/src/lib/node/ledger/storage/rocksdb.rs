@@ -551,11 +551,25 @@ impl RocksDB {
         tracing::info!("Removing last block results");
         batch.delete_cf(block_cf, format!("results/{}", last_block.height));
 
-        // Delete the tx hashes included in the last block
+        // Restore the state of replay protection to the last block
         let reprot_cf = self.get_column_family(REPLAY_PROTECTION_CF)?;
-        tracing::info!("Removing replay protection hashes");
+        tracing::info!("Restoring replay protection state");
+        // Remove the "last" tx hashes
         batch
             .delete_cf(reprot_cf, replay_protection::last_prefix().to_string());
+        for (hash_str, _, _) in self.iter_replay_protection_buffer() {
+            let hash = namada::core::types::hash::Hash::from_str(&hash_str)
+                .expect("Failed hash conversion");
+            let last_key = replay_protection::last_key(&hash);
+            // Restore "buffer" bucket to "last"
+            batch.put_cf(reprot_cf, last_key.to_string(), vec![]);
+
+            // Remove anything in the buffer from the "all" prefix. Note that
+            // some hashes might be missing from "all" if they have been
+            // deleted, this is fine, in this case just continue
+            let all_key = replay_protection::all_key(&hash);
+            batch.delete_cf(reprot_cf, all_key.to_string());
+        }
 
         // Execute next step in parallel
         let batch = Mutex::new(batch);
@@ -1561,6 +1575,21 @@ impl DB for RocksDB {
 
         Ok(())
     }
+
+    fn prune_replay_protection_buffer(
+        &mut self,
+        batch: &mut Self::WriteBatch,
+    ) -> Result<()> {
+        let replay_protection_cf =
+            self.get_column_family(REPLAY_PROTECTION_CF)?;
+
+        batch.0.delete_cf(
+            replay_protection_cf,
+            replay_protection::buffer_prefix().to_string(),
+        );
+
+        Ok(())
+    }
 }
 
 impl<'iter> DBIter<'iter> for RocksDB {
@@ -1611,6 +1640,15 @@ impl<'iter> DBIter<'iter> for RocksDB {
             .expect("{REPLAY_PROTECTION_CF} column family should exist");
 
         let stripped_prefix = Some(replay_protection::last_prefix());
+        iter_prefix(self, replay_protection_cf, stripped_prefix.as_ref(), None)
+    }
+
+    fn iter_replay_protection_buffer(&'iter self) -> Self::PrefixIter {
+        let replay_protection_cf = self
+            .get_column_family(REPLAY_PROTECTION_CF)
+            .expect("{REPLAY_PROTECTION_CF} column family should exist");
+
+        let stripped_prefix = Some(replay_protection::buffer_prefix());
         iter_prefix(self, replay_protection_cf, stripped_prefix.as_ref(), None)
     }
 }

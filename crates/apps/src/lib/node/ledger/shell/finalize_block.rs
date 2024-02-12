@@ -88,7 +88,8 @@ where
             self.wl_storage.storage.update_epoch_blocks_delay
         );
 
-        // Finalize the transactions' hashes from the previous block
+        // Finalize the transactions' hashes from the previous block. Also cache
+        // "last" hashes from the previous block in case of a rollback
         for hash in self.wl_storage.storage.iter_replay_protection() {
             self.wl_storage
                 .write_log

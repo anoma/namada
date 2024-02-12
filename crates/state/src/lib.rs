@@ -1069,8 +1069,7 @@ where
         batch: &mut D::WriteBatch,
         key: &Key,
     ) -> Result<()> {
-        self.db.write_replay_protection_entry(batch, key)?;
-        Ok(())
+        Ok(self.db.write_replay_protection_entry(batch, key)?)
     }
 
     /// Delete the provided tx hash from storage
@@ -1079,8 +1078,14 @@ where
         batch: &mut D::WriteBatch,
         key: &Key,
     ) -> Result<()> {
-        self.db.delete_replay_protection_entry(batch, key)?;
-        Ok(())
+        Ok(self.db.delete_replay_protection_entry(batch, key)?)
+    }
+
+    pub fn prune_replay_protection_buffer(
+        &mut self,
+        batch: &mut D::WriteBatch,
+    ) -> Result<()> {
+        Ok(self.db.prune_replay_protection_buffer(batch)?)
     }
 
     /// Iterate the replay protection storage from the last block
@@ -1090,6 +1095,15 @@ where
         Box::new(self.db.iter_replay_protection().map(|(raw_key, _, _)| {
             raw_key.parse().expect("Failed hash conversion")
         }))
+    }
+
+    /// Iterate the replay protection storage from the buffer
+    pub fn iter_replay_protection_buffer(
+        &self,
+    ) -> Box<dyn Iterator<Item = Hash> + '_> {
+        Box::new(self.db.iter_replay_protection_buffer().map(
+            |(raw_key, _, _)| raw_key.parse().expect("Failed hash conversion"),
+        ))
     }
 }
 

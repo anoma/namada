@@ -526,7 +526,12 @@ impl WriteLog {
             }
         }
 
-        // Replay protections specifically
+        // Replay protections specifically. Starts with pruning the buffer from
+        // the previous block
+        storage
+            .prune_replay_protection_buffer(batch)
+            .map_err(Error::StorageError)?;
+
         for (hash, entry) in self.replay_protection.iter() {
             match entry {
                 ReProtStorageModification::Write => storage
@@ -550,6 +555,13 @@ impl WriteLog {
                         .write_replay_protection_entry(
                             batch,
                             &replay_protection::all_key(hash),
+                        )
+                        .map_err(Error::StorageError)?;
+                    // Cache in case of a rollback
+                    storage
+                        .write_replay_protection_entry(
+                            batch,
+                            &replay_protection::buffer_key(hash),
                         )
                         .map_err(Error::StorageError)?;
                     storage

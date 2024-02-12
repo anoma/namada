@@ -24,3 +24,13 @@ pub fn last_prefix() -> Key {
 pub fn last_key(hash: &Hash) -> Key {
     last_prefix().push(&hash.to_string()).expect(ERROR_MSG)
 }
+
+/// Get the full transaction hash prefix under the `buffer` subkey
+pub fn buffer_prefix() -> Key {
+    Key::parse("buffer").expect(ERROR_MSG)
+}
+
+/// Get the full transaction hash key under the `buffer` subkey
+pub fn buffer_key(hash: &Hash) -> Key {
+    buffer_prefix().push(&hash.to_string()).expect(ERROR_MSG)
+}
