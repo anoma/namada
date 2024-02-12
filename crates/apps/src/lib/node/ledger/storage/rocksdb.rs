@@ -555,10 +555,15 @@ impl RocksDB {
         let reprot_cf = self.get_column_family(REPLAY_PROTECTION_CF)?;
         tracing::info!("Restoring replay protection state");
         // Remove the "last" tx hashes
-        batch
-            .delete_cf(reprot_cf, replay_protection::last_prefix().to_string());
-        for (hash_str, _, _) in self.iter_replay_protection_buffer() {
-            let hash = namada::core::types::hash::Hash::from_str(&hash_str)
+        for (ref hash_str, _, _) in self.iter_replay_protection() {
+            let hash = namada::core::types::hash::Hash::from_str(hash_str)
+                .expect("Failed hash conversion");
+            let key = replay_protection::last_key(&hash);
+            batch.delete_cf(reprot_cf, key.to_string());
+        }
+
+        for (ref hash_str, _, _) in self.iter_replay_protection_buffer() {
+            let hash = namada::core::types::hash::Hash::from_str(hash_str)
                 .expect("Failed hash conversion");
             let last_key = replay_protection::last_key(&hash);
             // Restore "buffer" bucket to "last"
@@ -1583,10 +1588,12 @@ impl DB for RocksDB {
         let replay_protection_cf =
             self.get_column_family(REPLAY_PROTECTION_CF)?;
 
-        batch.0.delete_cf(
-            replay_protection_cf,
-            replay_protection::buffer_prefix().to_string(),
-        );
+        for (ref hash_str, _, _) in self.iter_replay_protection_buffer() {
+            let hash = namada::core::types::hash::Hash::from_str(hash_str)
+                .expect("Failed hash conversion");
+            let key = replay_protection::buffer_key(&hash);
+            batch.0.delete_cf(replay_protection_cf, key.to_string());
+        }
 
         Ok(())
     }
@@ -1856,6 +1863,7 @@ mod test {
     use namada::types::address::{
         gen_established_address, EstablishedAddressGen,
     };
+    use namada::types::hash::Hash;
     use namada::types::storage::{BlockHash, Epoch, Epochs};
     use tempfile::tempdir;
     use test_log::test;
@@ -2087,6 +2095,26 @@ mod test {
             true,
         )
         .unwrap();
+        for tx in [b"tx1", b"tx2"] {
+            db.write_replay_protection_entry(
+                &mut batch,
+                &replay_protection::all_key(&Hash::sha256(tx)),
+            )
+            .unwrap();
+            db.write_replay_protection_entry(
+                &mut batch,
+                &replay_protection::buffer_key(&Hash::sha256(tx)),
+            )
+            .unwrap();
+        }
+
+        for tx in [b"tx3", b"tx4"] {
+            db.write_replay_protection_entry(
+                &mut batch,
+                &replay_protection::last_key(&Hash::sha256(tx)),
+            )
+            .unwrap();
+        }
 
         add_block_to_batch(
             &db,
@@ -2124,6 +2152,34 @@ mod test {
         db.batch_delete_subspace_val(&mut batch, height_1, &delete_key, true)
             .unwrap();
 
+        db.prune_replay_protection_buffer(&mut batch).unwrap();
+        db.write_replay_protection_entry(
+            &mut batch,
+            &replay_protection::all_key(&Hash::sha256(b"tx3")),
+        )
+        .unwrap();
+
+        for tx in [b"tx3", b"tx4"] {
+            db.delete_replay_protection_entry(
+                &mut batch,
+                &replay_protection::last_key(&Hash::sha256(tx)),
+            )
+            .unwrap();
+            db.write_replay_protection_entry(
+                &mut batch,
+                &replay_protection::buffer_key(&Hash::sha256(tx)),
+            )
+            .unwrap();
+        }
+
+        for tx in [b"tx5", b"tx6"] {
+            db.write_replay_protection_entry(
+                &mut batch,
+                &replay_protection::last_key(&Hash::sha256(tx)),
+            )
+            .unwrap();
+        }
+
         add_block_to_batch(
             &db,
             &mut batch,
@@ -2143,6 +2199,14 @@ mod test {
         let deleted = db.read_subspace_val(&delete_key).unwrap();
         assert_eq!(deleted, None);
 
+        for tx in [b"tx1", b"tx2", b"tx3", b"tx5", b"tx6"] {
+            assert!(db.has_replay_protection_entry(&Hash::sha256(tx)).unwrap());
+        }
+        assert!(
+            !db.has_replay_protection_entry(&Hash::sha256(b"tx4"))
+                .unwrap()
+        );
+
         // Rollback to the first block height
         db.rollback(height_0).unwrap();
 
@@ -2160,6 +2224,15 @@ mod test {
                 .unwrap()
                 .unwrap();
         assert_eq!(conversion_state, types::encode(&conversion_state_0));
+        for tx in [b"tx1", b"tx2", b"tx3", b"tx4"] {
+            assert!(db.has_replay_protection_entry(&Hash::sha256(tx)).unwrap());
+        }
+
+        for tx in [b"tx5", b"tx6"] {
+            assert!(
+                !db.has_replay_protection_entry(&Hash::sha256(tx)).unwrap()
+            );
+        }
     }
 
     #[test]
