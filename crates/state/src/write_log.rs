@@ -542,14 +542,24 @@ impl WriteLog {
                         &replay_protection::last_key(hash),
                     )
                     .map_err(Error::StorageError)?,
-                ReProtStorageModification::Delete => storage
-                    .delete_replay_protection_entry(
-                        batch,
-                        // Can only delete tx hashes from the previous block,
-                        // no further
-                        &replay_protection::last_key(hash),
-                    )
-                    .map_err(Error::StorageError)?,
+                ReProtStorageModification::Delete => {
+                    // Cache in case of a rollback
+                    storage
+                        .write_replay_protection_entry(
+                            batch,
+                            &replay_protection::buffer_key(hash),
+                        )
+                        .map_err(Error::StorageError)?;
+
+                    storage
+                        .delete_replay_protection_entry(
+                            batch,
+                            // Can only delete tx hashes from the previous
+                            // block, no further
+                            &replay_protection::last_key(hash),
+                        )
+                        .map_err(Error::StorageError)?;
+                }
                 ReProtStorageModification::Finalize => {
                     storage
                         .write_replay_protection_entry(
