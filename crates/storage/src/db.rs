@@ -264,7 +264,7 @@ pub trait DB: Debug {
     /// Overwrite a new value in storage, taking into
     /// account values stored at a previous height
     fn overwrite_entry(
-        &mut self,
+        &self,
         batch: &mut Self::WriteBatch,
         height: Option<BlockHeight>,
         key: &Key,

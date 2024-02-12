@@ -1,4 +1,4 @@
-use core::fmt::{Formatter, Write};
+use core::fmt::Formatter;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh::schema::BorshSchemaContainer;
@@ -82,7 +82,7 @@ impl<'de> serde::Deserialize<'de> for DbSerializedValue {
 
 pub trait DBUpdateVisitor {
     fn read(&self, key: &Key) -> Option<Vec<u8>>;
-    fn write(&mut self, key: &Key, value: impl AsRef<u8>);
+    fn write(&mut self, key: &Key, value: impl AsRef<[u8]>);
     fn delete(&mut self, key: &Key);
 }
 
@@ -93,6 +93,7 @@ pub enum DbUpdateType {
 }
 
 impl DbUpdateType {
+    #[allow(dead_code)]
     fn update<DB: DBUpdateVisitor>(&self, db: &mut DB) -> eyre::Result<()>{
         match self {
             Self::Add{key, value, fixed_type} => {
@@ -102,14 +103,14 @@ impl DbUpdateType {
                         "The updated DB value could not be deserialized with the provided schema due to: {}",
                         e,
                     ))?;
-                if let Some(val) = db.read(&key) {
+                if let Some(val) = db.read(key) {
                     if *fixed_type && !value.is_same_type(&mut val.as_slice()) {
-                        eyre::eyre!("The value under the key <{}> does not have the same type as {}", key, json_value)?;
+                        return Err(eyre::eyre!("The value under the key <{}> does not have the same type as {}", key, json_value));
                     }
                 }
                 db.write(key, &value.data);
             }
-            Self::Delete(key) => db.delete(&key),
+            Self::Delete(key) => db.delete(key),
         }
         Ok(())
     }

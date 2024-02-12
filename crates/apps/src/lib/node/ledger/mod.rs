@@ -244,9 +244,10 @@ pub fn update_db_keys(
     use namada::ledger::storage::DB;
 
     let mut update_json = String::new();
-    let mut file = std::fs::File::open(updates);
+    let mut file = std::fs::File::open(updates).expect("Could not fine updates file at the specified path.");
     file.read_to_string(&mut update_json).expect("Unable to read the updates json file");
-
+    let updates: std::collections::HashMap<Key, String>  = serde_json::from_str(&update_json)
+        .expect("Could not parse the updates file as json");
     let cometbft_path = config.cometbft_dir();
     let chain_id = config.chain_id;
     let db_path = config.shell.db_dir(&chain_id);

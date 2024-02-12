@@ -1598,6 +1598,7 @@ pub struct RocksDBUpdateVisitor<'db> {
 }
 
 impl<'db> RocksDBUpdateVisitor<'db> {
+    #[allow(dead_code)]
     pub fn new(db: &'db RocksDB) -> Self {
         Self {
             db,
@@ -1612,29 +1613,30 @@ impl<'db> DBUpdateVisitor for RocksDBUpdateVisitor<'db> {
         self.db.read_subspace_val(key).expect("Failed to read from storage")
     }
 
-    fn write(&mut self, key: &Key, value: impl AsRef<u8>) {
+    fn write(&mut self, key: &Key, value: impl AsRef<[u8]>) {
         self.db.overwrite_entry(&mut self.batch, None, key, value)
             .expect("Failed to overwrite a key in storage")
     }
 
     fn delete(&mut self, key: &Key) {
         let last_height: BlockHeight = {
-            let state_cf = self.db.get_column_family(STATE_CF)?;
+            let state_cf = self.db.get_column_family(STATE_CF).unwrap();
 
             types::decode(
                 self.db.0
                     .get_cf(state_cf, "height")
-                    .map_err(|e| Error::DBError(e.to_string()))?
+                    .map_err(|e| Error::DBError(e.to_string()))
+                    .unwrap()
                     .ok_or_else(|| {
                         Error::DBError("No block height found".to_string())
-                    })?,
+                    }).unwrap(),
             )
-                .map_err(|e| {
-                    Error::DBError(format!("Unable to decode block height: {e}"))
-                })?
+            .map_err(|e| {
+                Error::DBError(format!("Unable to decode block height: {e}"))
+            }).unwrap()
         };
         self.db.batch_delete_subspace_val(&mut self.batch, last_height, key, true)
-            .expect("Failed to delet key from storage");
+            .expect("Failed to delete key from storage");
     }
 }
 

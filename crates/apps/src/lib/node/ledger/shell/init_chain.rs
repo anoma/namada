@@ -110,7 +110,7 @@ where
                 ..Default::default()
             };
             debug_assert!(!rsp.validators.is_empty());
-            debug_assert!(!rsp.app_hash.iter().all(|&b| b == 0));
+            debug_assert!(!Vec::<u8>::from(rsp.app_hash.clone()).iter().all(|&b| b == 0));
             return Ok(rsp);
         }
 

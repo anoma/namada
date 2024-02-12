@@ -1,6 +1,5 @@
 extern crate alloc;
 extern crate core;
-extern crate core;
 
 pub use namada_core::*;
 #[cfg(feature = "tendermint-rpc")]

@@ -3,6 +3,7 @@
 use eyre::{Context, Result};
 use namada::core::time::{DateTimeUtc, Utc};
 use namada_apps::cli::{self, cmds};
+use namada_apps::cli::cmds::Ledger;
 use namada_apps::config::ValidatorLocalConfig;
 use namada_apps::node::ledger;
 
@@ -38,6 +39,7 @@ pub fn main() -> Result<()> {
                 ledger::rollback(chain_ctx.config.ledger)
                     .wrap_err("Failed to rollback the Namada node")?;
             }
+            Ledger::UpdateDB(_) => {}
         },
         cmds::NamadaNode::Config(sub) => match sub {
             cmds::Config::Gen(cmds::ConfigGen) => {
