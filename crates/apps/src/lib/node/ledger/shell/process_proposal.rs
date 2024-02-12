@@ -656,12 +656,17 @@ where
 mod test_process_proposal {
     use namada::core::key::*;
     use namada::core::storage::Epoch;
+    use namada::eth_bridge::storage::eth_bridge_queries::{
+        is_bridge_comptime_enabled, EthBridgeQueries,
+    };
     use namada::replay_protection;
     use namada::state::StorageWrite;
     use namada::token::{read_denom, Amount, DenominatedAmount};
     use namada::tx::data::Fee;
     use namada::tx::{Code, Data, Signature, Signed};
-    use namada::vote_ext::{bridge_pool_roots, ethereum_events};
+    use namada::vote_ext::{
+        bridge_pool_roots, ethereum_events, validator_set_update,
+    };
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{
@@ -672,6 +677,69 @@ mod test_process_proposal {
     use crate::wallet;
 
     const GAS_LIMIT_MULTIPLIER: u64 = 100_000;
+
+    /// Check that we reject a validator set update protocol tx
+    /// if the bridge is not active.
+    #[test]
+    fn check_rejected_valset_upd_bridge_inactive() {
+        if is_bridge_comptime_enabled() {
+            // NOTE: validator set updates are always signed
+            // when the bridge is enabled at compile time
+            return;
+        }
+
+        let (shell, _, _, _) = test_utils::setup_at_height(3);
+        let ext = {
+            let eth_hot_key =
+                shell.mode.get_eth_bridge_keypair().expect("Test failed");
+            let signing_epoch = shell.state.in_mem().get_current_epoch().0;
+            let next_epoch = signing_epoch.next();
+            let voting_powers = shell
+                .state
+                .ethbridge_queries()
+                .get_consensus_eth_addresses(Some(next_epoch))
+                .iter()
+                .map(|(eth_addr_book, _, voting_power)| {
+                    (eth_addr_book, voting_power)
+                })
+                .collect();
+            let validator_addr = shell
+                .mode
+                .get_validator_address()
+                .expect("Test failed")
+                .clone();
+            let ext = validator_set_update::Vext {
+                voting_powers,
+                validator_addr,
+                signing_epoch,
+            };
+            ext.sign(eth_hot_key)
+        };
+        let request = {
+            let protocol_key =
+                shell.mode.get_protocol_key().expect("Test failed");
+            let tx = EthereumTxData::ValSetUpdateVext(ext)
+                .sign(protocol_key, shell.chain_id.clone())
+                .to_bytes();
+            ProcessProposal { txs: vec![tx] }
+        };
+
+        let response = if let Err(TestError::RejectProposal(resp)) =
+            shell.process_proposal(request)
+        {
+            if let [resp] = resp.as_slice() {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
+        } else {
+            panic!("Test failed")
+        };
+        assert_eq!(
+            response.result.code,
+            u32::from(ResultCode::InvalidVoteExtension)
+        );
+    }
 
     /// Check that we reject an eth events protocol tx
     /// if the bridge is not active.
@@ -695,13 +763,15 @@ mod test_process_proposal {
             .to_bytes();
         let request = ProcessProposal { txs: vec![tx] };
 
-        let [resp]: [ProcessedTx; 1] = shell
-            .process_proposal(request.clone())
-            .expect("Test failed")
-            .try_into()
-            .expect("Test failed");
-        assert_eq!(resp.result.code, u32::from(ResultCode::Ok));
-        deactivate_bridge(&mut shell);
+        if is_bridge_comptime_enabled() {
+            let [resp]: [ProcessedTx; 1] = shell
+                .process_proposal(request.clone())
+                .expect("Test failed")
+                .try_into()
+                .expect("Test failed");
+            assert_eq!(resp.result.code, u32::from(ResultCode::Ok));
+            deactivate_bridge(&mut shell);
+        }
         let response = if let Err(TestError::RejectProposal(resp)) =
             shell.process_proposal(request)
         {
@@ -746,14 +816,16 @@ mod test_process_proposal {
             .to_bytes();
         let request = ProcessProposal { txs: vec![tx] };
 
-        let [resp]: [ProcessedTx; 1] = shell
-            .process_proposal(request.clone())
-            .expect("Test failed")
-            .try_into()
-            .expect("Test failed");
+        if is_bridge_comptime_enabled() {
+            let [resp]: [ProcessedTx; 1] = shell
+                .process_proposal(request.clone())
+                .expect("Test failed")
+                .try_into()
+                .expect("Test failed");
 
-        assert_eq!(resp.result.code, u32::from(ResultCode::Ok));
-        deactivate_bridge(&mut shell);
+            assert_eq!(resp.result.code, u32::from(ResultCode::Ok));
+            deactivate_bridge(&mut shell);
+        }
         let response = if let Err(TestError::RejectProposal(resp)) =
             shell.process_proposal(request)
         {
@@ -2157,6 +2229,12 @@ mod test_process_proposal {
         use namada::core::storage::InnerEthEventsQueue;
 
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
+
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
 
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
         shell

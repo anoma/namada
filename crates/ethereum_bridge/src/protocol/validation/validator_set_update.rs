@@ -147,12 +147,19 @@ mod tests {
     use namada_vote_ext::validator_set_update::{EthAddrBook, VotingPowersMap};
 
     use super::*;
+    use crate::storage::eth_bridge_queries::is_bridge_comptime_enabled;
     use crate::test_utils;
 
     /// Test that we reject vote extensions containing a superset of the
     /// next validator set in storage.
     #[test]
     fn test_superset_valsetupd_rejected() {
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
+
         let (state, keys) = test_utils::setup_default_storage();
         let (validator, validator_stake) = test_utils::default_validator();
 
