@@ -207,9 +207,9 @@ test-unit:
 		-Z unstable-options --report-time
 
 test-unit-with-coverage:
-	$(cargo) +$(nightly) llvm-cov --output-dir target \
+	$(cargo) +$(nightly) llvm-cov --output-path lcov.info \
 		--features namada/testing \
-		--html \
+		--lcov \
 		-- --skip e2e --skip pos_state_machine_test --skip integration \
 		-Z unstable-options --report-time
 
