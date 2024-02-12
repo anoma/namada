@@ -80,6 +80,7 @@ use namada_apps::facade::tendermint::merkle::proof::ProofOps as TmProof;
 use namada_apps::facade::tendermint_rpc::{Client, HttpClient, Url};
 use namada_core::types::string_encoding::StringEncoded;
 use namada_sdk::masp::fs::FsShieldedUtils;
+use namada_test_utils::TestWasms;
 use prost::Message;
 use setup::constants::*;
 use tendermint_light_client::components::io::{Io, ProdIo as TmLightClientIo};
@@ -353,6 +354,117 @@ fn pgf_over_ibc_with_hermes() -> Result<()> {
 
     // Check balances after funding over IBC
     check_funded_balances(&port_id_b, &channel_id_b, &test_b)?;
+
+    Ok(())
+}
+
+#[test]
+fn proposal_ibc_token_inflation() -> Result<()> {
+    let update_genesis =
+        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(10);
+            // for the trusting period of IBC client
+            genesis.parameters.pos_params.pipeline_len = 10;
+            genesis.parameters.parameters.max_proposal_bytes =
+                Default::default();
+            genesis.parameters.pgf_params.stewards =
+                BTreeSet::from_iter([get_established_addr_from_pregenesis(
+                    ALBERT_KEY, base_dir, &genesis,
+                )
+                .unwrap()]);
+            setup::set_validators(1, genesis, base_dir, |_| 0)
+        };
+    let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
+    let _bg_ledger_a = ledger_a.background();
+    let _bg_ledger_b = ledger_b.background();
+
+    setup_hermes(&test_a, &test_b)?;
+    let port_id_a = "transfer".parse().unwrap();
+    let port_id_b: PortId = "transfer".parse().unwrap();
+    let (channel_id_a, channel_id_b) =
+        create_channel_with_hermes(&test_a, &test_b)?;
+
+    // Start relaying
+    let hermes = run_hermes(&test_a)?;
+    let _bg_hermes = hermes.background();
+
+    // Get masp proof for the following IBC transfer from the destination chain
+    // It will send 10000 APFEL to PA(B) on Chain B
+    let rpc_b = get_actor_rpc(&test_b, Who::Validator(0));
+    // Chain B will receive Chain A's APFEL
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
+    let output_folder = test_b.test_dir.path().to_string_lossy();
+    // PA(B) on Chain B will receive APFEL on chain A
+    let token_addr = find_address(&test_a, APFEL)?;
+    let args = [
+        "ibc-gen-shielded",
+        "--output-folder-path",
+        &output_folder,
+        "--target",
+        AB_PAYMENT_ADDRESS,
+        "--token",
+        &token_addr.to_string(),
+        "--amount",
+        "10000",
+        "--port-id",
+        port_id_b.as_ref(),
+        "--channel-id",
+        channel_id_b.as_ref(),
+        "--node",
+        &rpc_b,
+    ];
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
+    let mut client = run!(test_b, Bin::Client, args, Some(120))?;
+    let file_path = get_shielded_transfer_path(&mut client)?;
+    client.assert_success();
+
+    // Transfer 10000 from Chain A to a z-address on Chain B
+    transfer(
+        &test_a,
+        ALBERT,
+        AB_PAYMENT_ADDRESS,
+        APFEL,
+        "10000",
+        ALBERT_KEY,
+        &port_id_a,
+        &channel_id_a,
+        Some(&file_path.to_string_lossy()),
+        None,
+        None,
+        false,
+    )?;
+    wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
+
+    // Proposal on Chain B
+    // Delegate some token
+    delegate_token(&test_b)?;
+    let mut epoch = get_epoch(&test_b, &rpc_b).unwrap();
+    let delegated = epoch + 10u64;
+    while epoch <= delegated {
+        sleep(5);
+        epoch = get_epoch(&test_b, &rpc_b).unwrap();
+    }
+    // inflation proposal on Chain B
+    let start_epoch = propose_inflation(&test_b)?;
+    let mut epoch = get_epoch(&test_b, &rpc_b).unwrap();
+    // Vote
+    while epoch <= start_epoch {
+        sleep(5);
+        epoch = get_epoch(&test_b, &rpc_b).unwrap();
+    }
+    submit_votes(&test_b)?;
+
+    // wait for the grace
+    let grace_epoch = start_epoch + 12u64 + 6u64;
+    while epoch <= grace_epoch {
+        sleep(5);
+        epoch = get_epoch(&test_b, &rpc_b).unwrap();
+    }
+    sleep(5);
+
+    // Check balances after funding over IBC
+    check_inflated_balance(&port_id_b, &channel_id_b, &test_b)?;
 
     Ok(())
 }
@@ -1602,6 +1714,36 @@ fn propose_funding(
     Ok(start_epoch.into())
 }
 
+fn propose_inflation(test: &Test) -> Result<Epoch> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
+    let albert = find_address(test, ALBERT)?;
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+    let epoch = get_epoch(test, &rpc)?;
+    let start_epoch = (epoch.0 + 6) / 3 * 3;
+    let proposal_json_path = prepare_proposal_data(
+        test,
+        0,
+        albert,
+        TestWasms::TxProposalIbcTokenInflation.read_bytes(),
+        start_epoch,
+    );
+
+    let submit_proposal_args = vec![
+        "init-proposal",
+        "--data-path",
+        proposal_json_path.to_str().unwrap(),
+        "--gas-limit",
+        "2000000",
+        "--node",
+        &rpc,
+    ];
+    let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
+    client.exp_string(TX_ACCEPTED)?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
+    client.assert_success();
+    Ok(start_epoch.into())
+}
+
 fn submit_votes(test: &Test) -> Result<()> {
     std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let rpc = get_actor_rpc(test, Who::Validator(0));
@@ -1957,6 +2099,31 @@ fn check_funded_balances(
     ];
     let expected = format!("{ibc_denom}: 5");
     let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
+    client.exp_string(&expected)?;
+    client.assert_success();
+
+    Ok(())
+}
+
+fn check_inflated_balance(
+    dest_port_id: &PortId,
+    dest_channel_id: &ChannelId,
+    test: &Test,
+) -> Result<()> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
+    let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/apfel");
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+    let query_args = vec![
+        "balance",
+        "--owner",
+        AB_VIEWING_KEY,
+        "--token",
+        &ibc_denom,
+        "--node",
+        &rpc,
+    ];
+    let expected = format!("{ibc_denom}: 10010");
+    let mut client = run!(test, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
 

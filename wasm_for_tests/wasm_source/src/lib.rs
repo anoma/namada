@@ -75,6 +75,53 @@ pub mod main {
     }
 }
 
+/// A tx to be used as proposal_code to set the inflation params for a token
+/// over IBC
+#[cfg(feature = "tx_proposal_ibc_token_inflation")]
+pub mod main {
+    use std::str::FromStr;
+
+    use dec::Dec;
+    use namada_tx_prelude::*;
+
+    // Denom of tokens over IBC is always zero
+    const IBC_TOKEN_DENOM: u8 = 0;
+    const CHANNEL_ID: &str = "channel-0";
+    const BASE_TOKEN: &str = "tnam1qyvfwdkz8zgs9n3qn9xhp8scyf8crrxwuq26r6gy";
+
+    #[transaction(gas = 1000)]
+    fn apply_tx(ctx: &mut Ctx, _tx_data: Tx) -> TxResult {
+        let ibc_token =
+            ibc::ibc_token(format!("transfer/{CHANNEL_ID}/{BASE_TOKEN}"));
+        let shielded_token_max_rewards_key =
+            token::storage_key::masp_max_reward_rate_key(&ibc_token);
+        let shielded_token_target_locked_amount_key =
+            token::storage_key::masp_locked_amount_target_key(&ibc_token);
+        let shielded_token_kp_gain_key =
+            token::storage_key::masp_kp_gain_key(&ibc_token);
+        let shielded_token_kd_gain_key =
+            token::storage_key::masp_kd_gain_key(&ibc_token);
+
+        ctx.write(
+            &shielded_token_max_rewards_key,
+            Dec::from_str("0.01").unwrap(),
+        )?;
+        ctx.write(
+            &shielded_token_target_locked_amount_key,
+            token::Amount::from_uint(100_000, IBC_TOKEN_DENOM).unwrap(),
+        )?;
+        ctx.write(
+            &shielded_token_kp_gain_key,
+            Dec::from_str("120000").unwrap(),
+        )?;
+        ctx.write(
+            &shielded_token_kd_gain_key,
+            Dec::from_str("120000").unwrap(),
+        )?;
+        Ok(())
+    }
+}
+
 /// A tx that attempts to read the given key from storage.
 #[cfg(feature = "tx_read_storage_key")]
 pub mod main {

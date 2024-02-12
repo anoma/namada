@@ -6,7 +6,7 @@ use std::rc::Rc;
 use namada_core::types::address::{Address, InternalAddress};
 pub use namada_core::types::ibc::{IbcEvent, IbcShieldedTransfer};
 use namada_core::types::token::DenominatedAmount;
-pub use namada_ibc::storage::is_ibc_key;
+pub use namada_ibc::storage::{ibc_token, is_ibc_key};
 pub use namada_ibc::{
     IbcActions, IbcCommonContext, IbcStorageContext, ProofSpec, TransferModule,
 };
