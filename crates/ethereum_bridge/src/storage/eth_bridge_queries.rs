@@ -22,6 +22,11 @@ use namada_vote_ext::validator_set_update::{
 use crate::storage::proof::BridgePoolRootProof;
 use crate::storage::{active_key, bridge_pool, vote_tallies, whitelist};
 
+/// Check if the Ethereum Bridge has been enabled at compile time.
+pub const fn is_bridge_comptime_enabled() -> bool {
+    cfg!(feature = "namada-eth-bridge")
+}
+
 /// This enum is used as a parameter to
 /// [`EthBridgeQueriesHook::must_send_valset_upd`].
 pub enum SendValsetUpd {
@@ -141,6 +146,9 @@ where
     /// Check if the bridge is disabled, enabled, or
     /// scheduled to be enabled at a specified epoch.
     pub fn check_bridge_status(self) -> EthBridgeStatus {
+        if !is_bridge_comptime_enabled() {
+            return EthBridgeStatus::Disabled;
+        }
         BorshDeserialize::try_from_slice(
             self.state
                 .read_bytes(&active_key())
@@ -262,7 +270,11 @@ where
     /// extension at the provided [`BlockHeight`] in [`SendValsetUpd`].
     #[inline]
     pub fn must_send_valset_upd(self, can_send: SendValsetUpd) -> bool {
-        if matches!(can_send, SendValsetUpd::AtPrevHeight) {
+        if !is_bridge_comptime_enabled() {
+            // the bridge is disabled at compile time, therefore
+            // we must never submit validator set updates
+            false
+        } else if matches!(can_send, SendValsetUpd::AtPrevHeight) {
             // when checking vote extensions in Prepare
             // and ProcessProposal, we simply return true
             true
