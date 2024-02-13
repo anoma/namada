@@ -501,26 +501,12 @@ impl MockNode {
         );
     }
 
-    /// Advance to a block height that allows
-    /// txs
-    fn advance_to_allowed_block(&self) {
-        loop {
-            let not_allowed =
-                { self.shell.lock().unwrap().encrypted_txs_not_allowed() };
-            if not_allowed {
-                self.finalize_and_commit();
-            } else {
-                break;
-            }
-        }
-    }
-
     /// Send a tx through Process Proposal and Finalize Block
     /// and register the results.
     pub fn submit_txs(&self, txs: Vec<Vec<u8>>) {
         // The block space allocator disallows encrypted txs in certain blocks.
         // Advance to block height that allows txs.
-        self.advance_to_allowed_block();
+        self.finalize_and_commit();
         let (proposer_address, votes) = self.prepare_request();
 
         let time = DateTimeUtc::now();
@@ -972,7 +958,7 @@ fn parse_tm_query(
     query: namada::tendermint_rpc::query::Query,
 ) -> dumb_queries::QueryMatcher {
     const QUERY_PARSING_REGEX_STR: &str =
-        r"^tm\.event='NewBlock' AND (accepted|applied)\.hash='([^']+)'$";
+        r"^tm\.event='NewBlock' AND (applied)\.hash='([^']+)'$";
 
     lazy_static! {
         /// Compiled regular expression used to parse Tendermint queries.
@@ -983,13 +969,10 @@ fn parse_tm_query(
     let captures = QUERY_PARSING_REGEX.captures(&query).unwrap();
 
     match captures.get(0).unwrap().as_str() {
-        "accepted" => dumb_queries::QueryMatcher::accepted(
-            captures.get(1).unwrap().as_str().try_into().unwrap(),
-        ),
         "applied" => dumb_queries::QueryMatcher::applied(
             captures.get(1).unwrap().as_str().try_into().unwrap(),
         ),
-        _ => unreachable!("We only query accepted or applied txs"),
+        _ => unreachable!("We only query applied txs"),
     }
 }
 

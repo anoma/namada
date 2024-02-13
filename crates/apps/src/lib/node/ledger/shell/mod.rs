@@ -55,14 +55,14 @@ use namada::ledger::protocol::{
 use namada::ledger::{parameters, protocol};
 use namada::parameters::validate_tx_bytes;
 use namada::proof_of_stake::storage::read_pos_params;
-use namada::state::tx_queue::{ExpiredTx, TxInQueue};
+use namada::state::tx_queue::ExpiredTx;
 use namada::state::{
     DBIter, FullAccessState, Sha256Hasher, StorageHasher, StorageRead,
     TempWlState, WlState, DB, EPOCH_SWITCH_BLOCKS_DELAY,
 };
 use namada::token;
 pub use namada::tx::data::ResultCode;
-use namada::tx::data::{DecryptedTx, TxType, WrapperTx, WrapperTxErr};
+use namada::tx::data::{TxType, WrapperTx, WrapperTxErr};
 use namada::tx::{Section, Tx};
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::{WasmCacheAccess, WasmCacheRwAccess};
@@ -540,12 +540,6 @@ where
     #[inline]
     pub fn event_log_mut(&mut self) -> &mut EventLog {
         &mut self.event_log
-    }
-
-    /// Iterate over the wrapper txs in order
-    #[allow(dead_code)]
-    fn iter_tx_queue(&mut self) -> impl Iterator<Item = &TxInQueue> {
-        self.state.in_mem().tx_queue.iter()
     }
 
     /// Load the Merkle root hash and the height of the last committed block, if
@@ -1427,12 +1421,10 @@ mod test_utils {
     use crate::facade::tendermint_proto::v0_37::abci::{
         RequestPrepareProposal, RequestProcessProposal,
     };
-    use crate::node::ledger::shell::token::DenominatedAmount;
     use crate::node::ledger::shims::abcipp_shim_types;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
     };
-    use crate::node::ledger::storage::{PersistentDB, PersistentStorageHasher};
 
     #[derive(Error, Debug)]
     pub enum TestError {
@@ -1700,17 +1692,6 @@ mod test_utils {
             self.shell.prepare_proposal(req)
         }
 
-        /// Add a wrapper tx to the queue of txs to be decrypted
-        /// in the current block proposal. Takes the length of the encoded
-        /// wrapper as parameter.
-        #[cfg(test)]
-        pub fn enqueue_tx(&mut self, tx: Tx, inner_tx_gas: Gas) {
-            self.shell.state.in_mem_mut().tx_queue.push(TxInQueue {
-                tx,
-                gas: inner_tx_gas,
-            });
-        }
-
         /// Start a counter for the next epoch in `num_blocks`.
         pub fn start_new_epoch_in(&mut self, num_blocks: u64) {
             self.state.in_mem_mut().next_epoch_min_start_height =
@@ -1896,130 +1877,6 @@ mod test_utils {
             .state
             .write(&active_key(), EthBridgeStatus::Disabled)
             .expect("Test failed");
-    }
-
-    /// We test that on shell shutdown, the tx queue gets persisted in a DB, and
-    /// on startup it is read successfully
-    #[test]
-    fn test_tx_queue_persistence() {
-        let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
-        // we have to use RocksDB for this test
-        let (sender, _) = tokio::sync::mpsc::unbounded_channel();
-        let (_, eth_receiver) =
-            tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
-        let (control_sender, _) = oracle::control::channel();
-        let (_, last_processed_block_receiver) =
-            last_processed_block::channel();
-        let eth_oracle = EthereumOracleChannels::new(
-            eth_receiver,
-            control_sender,
-            last_processed_block_receiver,
-        );
-        let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
-        let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
-        let native_token = address::testing::nam();
-        let mut shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
-            config::Ledger::new(
-                base_dir.clone(),
-                Default::default(),
-                TendermintMode::Validator,
-            ),
-            top_level_directory().join("wasm"),
-            sender.clone(),
-            Some(eth_oracle),
-            None,
-            vp_wasm_compilation_cache,
-            tx_wasm_compilation_cache,
-        );
-        shell
-            .state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(1))
-            .expect("begin_block failed");
-        let keypair = gen_keypair();
-        // enqueue a wrapper tx
-        let mut wrapper =
-            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-                Fee {
-                    amount_per_gas_unit: DenominatedAmount::native(0.into()),
-                    token: native_token,
-                },
-                keypair.ref_to(),
-                Epoch(0),
-                300_000.into(),
-                None,
-            ))));
-        wrapper.header.chain_id = shell.chain_id.clone();
-        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
-        wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-
-        shell.state.in_mem_mut().tx_queue.push(TxInQueue {
-            tx: wrapper,
-            gas: u64::MAX.into(),
-        });
-        // Artificially increase the block height so that chain
-        // will read the new block when restarted
-        shell
-            .state
-            .in_mem_mut()
-            .block
-            .pred_epochs
-            .new_epoch(BlockHeight(1));
-        // initialize parameter storage
-        let params = Parameters {
-            max_tx_bytes: 1024 * 1024,
-            epoch_duration: EpochDuration {
-                min_num_of_blocks: 1,
-                min_duration: DurationSecs(3600),
-            },
-            max_expected_time_per_block: DurationSecs(3600),
-            max_proposal_bytes: Default::default(),
-            max_block_gas: 100,
-            vp_allowlist: vec![],
-            tx_allowlist: vec![],
-            implicit_vp_code_hash: Default::default(),
-            epochs_per_year: 365,
-            max_signatures_per_transaction: 10,
-            staked_ratio: Default::default(),
-            pos_inflation_amount: Default::default(),
-            fee_unshielding_gas_limit: 0,
-            fee_unshielding_descriptions_limit: 0,
-            minimum_gas_price: Default::default(),
-        };
-        parameters::init_storage(&params, &mut shell.state)
-            .expect("Test failed");
-        // make state to update conversion for a new epoch
-        update_allowed_conversions(&mut shell.state)
-            .expect("update conversions failed");
-        shell.state.commit_block().expect("commit failed");
-
-        // Drop the shell
-        std::mem::drop(shell);
-        let (_, eth_receiver) =
-            tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
-        let (control_sender, _) = oracle::control::channel();
-        let (_, last_processed_block_receiver) =
-            last_processed_block::channel();
-        let eth_oracle = EthereumOracleChannels::new(
-            eth_receiver,
-            control_sender,
-            last_processed_block_receiver,
-        );
-        // Reboot the shell and check that the queue was restored from DB
-        let shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
-            config::Ledger::new(
-                base_dir,
-                Default::default(),
-                TendermintMode::Validator,
-            ),
-            top_level_directory().join("wasm"),
-            sender,
-            Some(eth_oracle),
-            None,
-            vp_wasm_compilation_cache,
-            tx_wasm_compilation_cache,
-        );
-        assert!(!shell.state.in_mem().tx_queue.is_empty());
     }
 
     pub(super) fn get_pkh_from_address<S>(

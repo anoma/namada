@@ -6,71 +6,50 @@
 //!
 //! The state machine moves through the following state DAG:
 //!
-//! 1. [`BuildingEncryptedTxBatch`] - the initial state. In this state, we
-//!    populate a block with DKG encrypted txs. This state supports two modes of
-//!    operation, which you can think of as two sub-states:
-//!   * [`WithoutEncryptedTxs`] - When this mode is active, no encrypted txs are
-//!     included in a block proposal.
-//!   * [`WithEncryptedTxs`] - When this mode is active, we are able to include
-//!     encrypted txs in a block proposal.
-//! 2. [`BuildingDecryptedTxBatch`] - the second state. In this state, we
-//!    populate a block with DKG decrypted txs.
-//! 3. [`BuildingProtocolTxBatch`] - the third state. In this state, we populate
-//!    a block with protocol txs.
+//! 1. [`BuildingProtocolTxBatch`] - the initial state. In
+//!    this state, we populate a block with protocol txs.
+//! 2. [`BuildingTxBatch`] - the second state. In
+//!    this state, we populate a block with non-protocol txs.
+//! 3. [`BuildingProtocolTxBatch`] - we return to this state to
+//!    fill up any remaining block space if possible.
 
-mod decrypted_txs;
-mod encrypted_txs;
+mod normal_txs;
 mod protocol_txs;
 
-use super::{AllocFailure, BlockAllocator};
-
-/// Convenience wrapper for a [`BlockAllocator`] state that allocates
-/// encrypted transactions.
-#[allow(dead_code)]
-pub enum EncryptedTxBatchAllocator {
-    WithEncryptedTxs(
-        BlockAllocator<BuildingEncryptedTxBatch<WithEncryptedTxs>>,
-    ),
-    WithoutEncryptedTxs(
-        BlockAllocator<BuildingEncryptedTxBatch<WithoutEncryptedTxs>>,
-    ),
-}
+use super::AllocFailure;
 
 /// The leader of the current Tendermint round is building
-/// a new batch of DKG decrypted transactions.
+/// a new batch of protocol txs.
+///
+/// This happens twice, in the first stage, we fill up to 1/2
+/// of the block. At the end of allocating user txs, we fill
+/// up any remaining space with un-allocated protocol txs.
 ///
 /// For more info, read the module docs of
 /// [`crate::node::ledger::shell::block_alloc::states`].
-pub enum BuildingDecryptedTxBatch {}
-
-/// The leader of the current Tendermint round is building
-/// a new batch of Namada protocol transactions.
-///
-/// For more info, read the module docs of
-/// [`crate::node::ledger::shell::block_alloc::states`].
-pub enum BuildingProtocolTxBatch {}
-
-/// The leader of the current Tendermint round is building
-/// a new batch of DKG encrypted transactions.
-///
-/// For more info, read the module docs of
-/// [`crate::node::ledger::shell::block_alloc::states`].
-pub struct BuildingEncryptedTxBatch<Mode> {
+pub struct BuildingProtocolTxBatch<Mode> {
     /// One of [`WithEncryptedTxs`] and [`WithoutEncryptedTxs`].
     _mode: Mode,
 }
+
+/// Allow block proposals to include user submitted txs.
+///
+/// For more info, read the module docs of
+/// [`crate::node::ledger::shell::block_alloc::states`].
+pub enum WithNormalTxs {}
 
 /// Allow block proposals to include encrypted txs.
 ///
 /// For more info, read the module docs of
 /// [`crate::node::ledger::shell::block_alloc::states`].
-pub enum WithEncryptedTxs {}
+pub enum WithoutNormalTxs {}
 
-/// Prohibit block proposals from including encrypted txs.
+/// The leader of the current Tendermint round is building
+/// a new batch of user submitted (non-protocol) transactions.
 ///
 /// For more info, read the module docs of
 /// [`crate::node::ledger::shell::block_alloc::states`].
-pub enum WithoutEncryptedTxs {}
+pub struct BuildingTxBatch {}
 
 /// Try to allocate a new transaction on a [`BlockAllocator`] state.
 ///
