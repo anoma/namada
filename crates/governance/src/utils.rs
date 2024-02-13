@@ -310,7 +310,7 @@ pub struct ProposalVotes {
 }
 
 impl ProposalVotes {
-    /// Add vote correspoding to a validator
+    /// Add vote corresponding to a validator
     pub fn add_validator(
         &mut self,
         address: &Address,
