@@ -1096,15 +1096,6 @@ where
             raw_key.parse().expect("Failed hash conversion")
         }))
     }
-
-    /// Iterate the replay protection storage from the buffer
-    pub fn iter_replay_protection_buffer(
-        &self,
-    ) -> Box<dyn Iterator<Item = Hash> + '_> {
-        Box::new(self.db.iter_replay_protection_buffer().map(
-            |(raw_key, _, _)| raw_key.parse().expect("Failed hash conversion"),
-        ))
-    }
 }
 
 impl From<MerkleTreeError> for Error {
