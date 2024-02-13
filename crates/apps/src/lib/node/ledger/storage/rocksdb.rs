@@ -731,17 +731,6 @@ impl DB for RocksDB {
                 return Ok(None);
             }
         };
-        let tx_queue: TxQueue = match self
-            .0
-            .get_cf(state_cf, "tx_queue")
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
-            None => {
-                tracing::error!("Couldn't load tx queue from the DB");
-                return Ok(None);
-            }
-        };
 
         let ethereum_height: Option<ethereum_structs::BlockHeight> = match self
             .0
@@ -890,7 +879,6 @@ impl DB for RocksDB {
                 next_epoch_min_start_time,
                 update_epoch_blocks_delay,
                 address_gen,
-                tx_queue,
                 ethereum_height,
                 eth_events_queue,
             })),
@@ -921,7 +909,6 @@ impl DB for RocksDB {
             address_gen,
             results,
             conversion_state,
-            tx_queue,
             ethereum_height,
             eth_events_queue,
         }: BlockStateWrite = state;
@@ -1011,7 +998,6 @@ impl DB for RocksDB {
             // Write the predecessor value for rollback
             batch.0.put_cf(state_cf, "pred/tx_queue", pred_tx_queue);
         }
-        batch.0.put_cf(state_cf, "tx_queue", encode(&tx_queue));
         batch
             .0
             .put_cf(state_cf, "ethereum_height", encode(&ethereum_height));
@@ -2258,7 +2244,6 @@ mod test {
         let next_epoch_min_start_time = DateTimeUtc::now();
         let update_epoch_blocks_delay = None;
         let address_gen = EstablishedAddressGen::new("whatever");
-        let tx_queue = TxQueue::default();
         let results = BlockResults::default();
         let eth_events_queue = EthEventsQueue::default();
         let block = BlockStateWrite {
@@ -2275,7 +2260,6 @@ mod test {
             next_epoch_min_start_time,
             update_epoch_blocks_delay,
             address_gen: &address_gen,
-            tx_queue: &tx_queue,
             ethereum_height: None,
             eth_events_queue: &eth_events_queue,
         };

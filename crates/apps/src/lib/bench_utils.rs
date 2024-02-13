@@ -857,6 +857,7 @@ impl Client for BenchShell {
                     .map(|(idx, (_tx, changed_keys))| {
                         let tx_result = TxResult {
                             gas_used: 0.into(),
+                            wrapper_changed_keys: Default::default(),
                             changed_keys: changed_keys.to_owned(),
                             vps_result: VpsResult::default(),
                             initialized_accounts: vec![],

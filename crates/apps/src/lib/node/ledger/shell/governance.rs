@@ -299,7 +299,7 @@ where
         let pending_execution_key = gov_storage::get_proposal_execution_key(id);
         shell.state.write(&pending_execution_key, ())?;
 
-        let mut tx = Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
+        let mut tx = Tx::from_type(TxType::Raw);
         tx.header.chain_id = shell.chain_id.clone();
         tx.set_data(Data::new(encode(&id)));
         tx.set_code(Code::new(code, None));
