@@ -175,6 +175,8 @@ pub fn hash_tx(tx_bytes: &[u8]) -> Hash {
 pub struct TxResult {
     /// Total gas used by the transaction (includes the gas used by VPs)
     pub gas_used: Gas,
+    /// Storage keys touched by the wrapper transaction
+    pub wrapper_changed_keys: BTreeSet<storage::Key>,
     /// Storage keys touched by the transaction
     pub changed_keys: BTreeSet<storage::Key>,
     /// The results of all the triggered validity predicates by the transaction

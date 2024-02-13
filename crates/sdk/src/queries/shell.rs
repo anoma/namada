@@ -98,9 +98,6 @@ router! {SHELL,
     // Block results access - read bit-vec
     ( "results" ) -> Vec<BlockResults> = read_results,
 
-    // was the transaction accepted?
-    ( "accepted" / [tx_hash: Hash] ) -> Option<Event> = accepted,
-
     // was the transaction applied?
     ( "applied" / [tx_hash: Hash] ) -> Option<Event> = applied,
 
@@ -505,23 +502,6 @@ where
 {
     let data = StorageRead::has_key(ctx.state, &storage_key)?;
     Ok(data)
-}
-
-fn accepted<D, H, V, T>(
-    ctx: RequestCtx<'_, D, H, V, T>,
-    tx_hash: Hash,
-) -> namada_storage::Result<Option<Event>>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
-{
-    let matcher = dumb_queries::QueryMatcher::accepted(tx_hash);
-    Ok(ctx
-        .event_log
-        .iter_with_matcher(matcher)
-        .by_ref()
-        .next()
-        .cloned())
 }
 
 fn applied<D, H, V, T>(

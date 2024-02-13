@@ -91,16 +91,16 @@ mod tests {
         "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF";
 
     /// An accepted tx hash query.
-    macro_rules! accepted {
+    macro_rules! applied {
         ($hash:expr) => {
-            dumb_queries::QueryMatcher::accepted(Hash::try_from($hash).unwrap())
+            dumb_queries::QueryMatcher::applied(Hash::try_from($hash).unwrap())
         };
     }
 
     /// Return a vector of mock `FinalizeBlock` events.
     fn mock_tx_events(hash: &str) -> Vec<Event> {
         let event_1 = Event {
-            event_type: EventType::Accepted,
+            event_type: EventType::Applied,
             level: EventLevel::Block,
             attributes: {
                 let mut attrs = std::collections::HashMap::new();
@@ -109,7 +109,7 @@ mod tests {
             },
         };
         let event_2 = Event {
-            event_type: EventType::Applied,
+            event_type: EventType::Proposal,
             level: EventLevel::Block,
             attributes: {
                 let mut attrs = std::collections::HashMap::new();
@@ -137,7 +137,7 @@ mod tests {
 
         // inspect log
         let events_in_log: Vec<_> =
-            log.iter_with_matcher(accepted!(HASH)).cloned().collect();
+            log.iter_with_matcher(applied!(HASH)).cloned().collect();
 
         assert_eq!(events_in_log.len(), NUM_HEIGHTS);
 
@@ -176,7 +176,7 @@ mod tests {
 
         // inspect log - it should be full
         let events_in_log: Vec<_> =
-            log.iter_with_matcher(accepted!(HASH)).cloned().collect();
+            log.iter_with_matcher(applied!(HASH)).cloned().collect();
 
         assert_eq!(events_in_log.len(), MATCHED_EVENTS);
 
@@ -184,12 +184,12 @@ mod tests {
             assert_eq!(events[0], event);
         }
 
-        // add a new APPLIED event to the log,
-        // pruning the first ACCEPTED event we added
+        // add a new PROPOSAL event to the log,
+        // pruning the first APPLIED event we added
         log.log_events(Some(events[1].clone()));
 
         let events_in_log: Vec<_> =
-            log.iter_with_matcher(accepted!(HASH)).cloned().collect();
+            log.iter_with_matcher(applied!(HASH)).cloned().collect();
 
         const ACCEPTED_EVENTS: usize = MATCHED_EVENTS - 1;
         assert_eq!(events_in_log.len(), ACCEPTED_EVENTS);
