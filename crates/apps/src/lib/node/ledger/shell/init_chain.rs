@@ -1,5 +1,5 @@
 //! Implementation of chain initialization for the Shell
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::ops::ControlFlow;
 
 use masp_primitives::merkle_tree::CommitmentTree;
@@ -10,6 +10,7 @@ use namada::ledger::parameters::Parameters;
 use namada::ledger::{ibc, pos};
 use namada::proof_of_stake::BecomeValidator;
 use namada::state::{DBIter, StorageHasher, StorageWrite, DB};
+use namada::token::storage_key::masp_token_map_key;
 use namada::token::{credit_tokens, write_denom};
 use namada::types::address::Address;
 use namada::types::hash::Hash as CodeHash;
@@ -422,6 +423,7 @@ where
 
     /// Init genesis token accounts
     fn init_token_accounts(&mut self, genesis: &genesis::chain::Finalized) {
+        let mut token_map = BTreeMap::new();
         for (alias, token) in &genesis.tokens.token {
             tracing::debug!("Initializing token {alias}");
 
@@ -442,13 +444,12 @@ where
                 // add token addresses to the masp reward conversions lookup
                 // table.
                 let alias = alias.to_string();
-                self.wl_storage
-                    .storage
-                    .conversion_state
-                    .tokens
-                    .insert(alias, address.clone());
+                token_map.insert(alias, address.clone());
             }
         }
+        self.wl_storage
+            .write(&masp_token_map_key(), token_map)
+            .expect("Couldn't init token accounts");
     }
 
     /// Init genesis token balances

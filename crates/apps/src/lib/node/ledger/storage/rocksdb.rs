@@ -1815,9 +1815,7 @@ mod imp {
 #[cfg(test)]
 mod test {
     use namada::state::{MerkleTree, Sha256Hasher};
-    use namada::types::address::{
-        gen_established_address, EstablishedAddressGen,
-    };
+    use namada::types::address::EstablishedAddressGen;
     use namada::types::storage::{BlockHash, Epoch, Epochs};
     use tempfile::tempdir;
     use test_log::test;
@@ -2027,10 +2025,7 @@ mod test {
         let height_0 = BlockHeight(100);
         let mut pred_epochs = Epochs::default();
         pred_epochs.new_epoch(height_0);
-        let mut conversion_state_0 = ConversionState::default();
-        conversion_state_0
-            .tokens
-            .insert("dummy1".to_string(), gen_established_address("test"));
+        let conversion_state_0 = ConversionState::default();
         let to_delete_val = vec![1_u8, 1, 0, 0];
         let to_overwrite_val = vec![1_u8, 1, 1, 0];
         db.batch_write_subspace_val(
@@ -2065,10 +2060,7 @@ mod test {
         let mut batch = RocksDB::batch();
         let height_1 = BlockHeight(101);
         pred_epochs.new_epoch(height_1);
-        let mut conversion_state_1 = ConversionState::default();
-        conversion_state_1
-            .tokens
-            .insert("dummy2".to_string(), gen_established_address("test"));
+        let conversion_state_1 = ConversionState::default();
         let add_val = vec![1_u8, 0, 0, 0];
         let overwrite_val = vec![1_u8, 1, 1, 1];
         db.batch_write_subspace_val(

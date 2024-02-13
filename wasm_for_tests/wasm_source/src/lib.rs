@@ -91,8 +91,13 @@ pub mod main {
 
     #[transaction(gas = 1000)]
     fn apply_tx(ctx: &mut Ctx, _tx_data: Tx) -> TxResult {
-        let ibc_token =
-            ibc::ibc_token(format!("transfer/{CHANNEL_ID}/{BASE_TOKEN}"));
+        let ibc_denom = format!("transfer/{CHANNEL_ID}/{BASE_TOKEN}");
+        let ibc_token = ibc::ibc_token(&ibc_denom);
+
+        let shielded_token_last_inflation_key =
+            token::storage_key::masp_last_inflation_key(&ibc_token);
+        let shielded_token_last_locked_amount_key =
+            token::storage_key::masp_last_locked_amount_key(&ibc_token);
         let shielded_token_max_rewards_key =
             token::storage_key::masp_max_reward_rate_key(&ibc_token);
         let shielded_token_target_locked_amount_key =
@@ -102,6 +107,19 @@ pub mod main {
         let shielded_token_kd_gain_key =
             token::storage_key::masp_kd_gain_key(&ibc_token);
 
+        let token_map_key = token::storage_key::masp_token_map_key();
+        let mut token_map: masp::TokenMap = ctx.read(&token_map_key)?.unwrap_or_default();
+        token_map.insert(ibc_denom, ibc_token);
+        ctx.write(&token_map_key, token_map)?;
+
+        ctx.write(
+            &shielded_token_last_inflation_key,
+            token::Amount::zero(),
+        )?;
+        ctx.write(
+            &shielded_token_last_locked_amount_key,
+            token::Amount::zero(),
+        )?;
         ctx.write(
             &shielded_token_max_rewards_key,
             Dec::from_str("0.01").unwrap(),

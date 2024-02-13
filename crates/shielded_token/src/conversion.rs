@@ -5,6 +5,8 @@ use namada_core::ledger::inflation::{
 };
 use namada_core::types::address::{Address, MASP};
 use namada_core::types::dec::Dec;
+#[cfg(any(feature = "multicore", test))]
+use namada_core::types::masp::{AssetDataWithTreePos, AssetMap, TokenMap};
 use namada_core::types::uint::Uint;
 use namada_parameters as parameters;
 use namada_state::{DBIter, StorageHasher, WlStorage, DB};
@@ -12,6 +14,8 @@ use namada_storage::{StorageRead, StorageWrite};
 use namada_trans_token::storage_key::{balance_key, minted_balance_key};
 use namada_trans_token::{read_denom, Amount, DenominatedAmount, Denomination};
 
+#[cfg(any(feature = "multicore", test))]
+use crate::storage_key::{masp_asset_map_key, masp_token_map_key};
 use crate::storage_key::{
     masp_kd_gain_key, masp_kp_gain_key, masp_last_inflation_key,
     masp_last_locked_amount_key, masp_locked_amount_target_key,
@@ -212,13 +216,10 @@ where
     // The derived conversions will be placed in MASP address space
     let masp_addr = MASP;
 
-    let mut masp_reward_keys: Vec<_> = wl_storage
-        .storage
-        .conversion_state
-        .tokens
-        .values()
-        .cloned()
-        .collect();
+    let token_map_key = masp_token_map_key();
+    let token_map: TokenMap =
+        wl_storage.read(&token_map_key)?.unwrap_or_default();
+    let mut masp_reward_keys: Vec<_> = token_map.values().cloned().collect();
     let mut masp_reward_denoms = BTreeMap::new();
     // Put the native rewards first because other inflation computations depend
     // on it
@@ -277,6 +278,10 @@ where
     // Native token inflation values are always with respect to this
     let ref_inflation =
         calculate_masp_rewards_precision(wl_storage, &native_token)?.0;
+
+    let asset_map_key = masp_asset_map_key();
+    let mut asset_map: AssetMap =
+        wl_storage.read(&asset_map_key)?.unwrap_or_default();
 
     // Reward all tokens according to above reward rates
     for token in &masp_reward_keys {
@@ -404,14 +409,16 @@ where
                 }
             }
             // Add a conversion from the previous asset type
-            wl_storage.storage.conversion_state.assets.insert(
+            asset_map.insert(
                 old_asset,
-                (
-                    (token.clone(), denom, digit),
-                    wl_storage.storage.last_epoch,
-                    MaspAmount::zero().into(),
-                    0,
-                ),
+                AssetDataWithTreePos {
+                    token: token.clone(),
+                    denom,
+                    pos: digit,
+                    epoch: wl_storage.storage.last_epoch,
+                    conv: MaspAmount::zero().into(),
+                    tree_pos: 0,
+                },
             );
         }
     }
@@ -420,13 +427,7 @@ where
     // multiple cores
     let num_threads = rayon::current_num_threads();
     // Put assets into vector to enable computation batching
-    let assets: Vec<_> = wl_storage
-        .storage
-        .conversion_state
-        .assets
-        .values_mut()
-        .enumerate()
-        .collect();
+    let assets: Vec<_> = asset_map.values_mut().enumerate().collect();
     // ceil(assets.len() / num_threads)
     let notes_per_thread_max = (assets.len() + num_threads - 1) / num_threads;
     // floor(assets.len() / num_threads)
@@ -436,16 +437,20 @@ where
         .into_par_iter()
         .with_min_len(notes_per_thread_min)
         .with_max_len(notes_per_thread_max)
-        .map(|(idx, (asset, _epoch, conv, pos))| {
-            if let Some(current_conv) = current_convs.get(asset) {
+        .map(|(idx, asset)| {
+            if let Some(current_conv) = current_convs.get(&(
+                asset.token.clone(),
+                asset.denom,
+                asset.pos,
+            )) {
                 // Use transitivity to update conversion
-                *conv += current_conv.clone();
+                asset.conv += current_conv.clone();
             }
             // Update conversion position to leaf we are about to create
-            *pos = idx;
+            asset.tree_pos = idx as u64;
             // The merkle tree need only provide the conversion commitment,
             // the remaining information is provided through the storage API
-            Node::new(conv.cmu().to_repr())
+            Node::new(asset.conv.cmu().to_repr())
         })
         .collect();
 
@@ -501,17 +506,21 @@ where
                 Some(wl_storage.storage.block.epoch),
             )
             .into_storage_result()?;
-            wl_storage.storage.conversion_state.assets.insert(
+            asset_map.insert(
                 new_asset,
-                (
-                    (addr.clone(), denom, digit),
-                    wl_storage.storage.block.epoch,
-                    MaspAmount::zero().into(),
-                    wl_storage.storage.conversion_state.tree.size(),
-                ),
+                AssetDataWithTreePos {
+                    token: addr.clone(),
+                    denom,
+                    pos: digit,
+                    epoch: wl_storage.storage.block.epoch,
+                    conv: MaspAmount::zero().into(),
+                    tree_pos: wl_storage.storage.conversion_state.tree.size()
+                        as u64,
+                },
             );
         }
     }
+    wl_storage.write(&asset_map_key, asset_map)?;
 
     Ok(())
 }
@@ -609,10 +618,11 @@ mod tests {
                 .unwrap();
 
                 // Insert tokens into MASP conversion state
-                s.storage
-                    .conversion_state
-                    .tokens
-                    .insert(alias.to_string(), token_addr.clone());
+                let token_map_key = masp_token_map_key();
+                let mut token_map: TokenMap =
+                    s.read(&token_map_key).unwrap().unwrap_or_default();
+                token_map.insert(alias.to_string(), token_addr.clone());
+                s.write(&token_map_key, token_map).unwrap();
             }
         }
 

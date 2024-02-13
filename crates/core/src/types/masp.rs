@@ -1,11 +1,13 @@
 //! MASP types
 
+use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
+use masp_primitives::convert::AllowedConversion;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -88,6 +90,29 @@ pub fn encode_asset_type(
     }
     .encode()
 }
+
+/// MASP asset with the position in Merkle tree
+#[derive(BorshSerialize, BorshDeserialize, Clone, Debug)]
+pub struct AssetDataWithTreePos {
+    /// The token associated with this asset type
+    pub token: Address,
+    /// The denomination associated with the above toke
+    pub denom: Denomination,
+    /// The digit position covered by this asset type
+    pub pos: MaspDigitPos,
+    /// The epoch of the asset type
+    pub epoch: Epoch,
+    /// The allowed conversion
+    pub conv: AllowedConversion,
+    /// The position in Merkle tree
+    pub tree_pos: u64,
+}
+
+/// MASP token map
+pub type TokenMap = BTreeMap<String, Address>;
+
+/// MASP asset map
+pub type AssetMap = BTreeMap<AssetType, AssetDataWithTreePos>;
 
 // enough capacity to store the payment address
 // plus the pinned/unpinned discriminant
