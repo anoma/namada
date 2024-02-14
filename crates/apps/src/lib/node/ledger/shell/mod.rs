@@ -366,6 +366,7 @@ where
 /// merklized.
 pub fn is_merklized_storage_key(key: &namada_sdk::types::storage::Key) -> bool {
     !(token::storage_key::is_masp_key(key)
+        && *key != token::storage_key::masp_convert_anchor_key()
         && *key != token::storage_key::masp_token_map_key()
         && *key != token::storage_key::masp_asset_map_key())
         && !namada::ibc::storage::is_ibc_counter_key(key)
