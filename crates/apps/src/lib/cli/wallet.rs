@@ -188,6 +188,7 @@ fn shielded_key_derive(
         unsafe_dont_encrypt,
         derivation_path,
         allow_non_compliant,
+        prompt_bip39_passphrase,
         use_device,
         ..
     }: args::KeyDerive,
@@ -214,6 +215,7 @@ fn shielded_key_derive(
                 alias_force,
                 derivation_path,
                 None,
+                prompt_bip39_passphrase,
                 encryption_password,
             )
             .unwrap_or_else(|| {
@@ -317,15 +319,12 @@ fn payment_address_gen(
     let alias = alias.to_lowercase();
     let viewing_key = ExtendedFullViewingKey::from(viewing_key).fvk.vk;
     let (div, _g_d) = find_valid_diversifier(&mut OsRng);
-    let payment_addr = viewing_key
+    let masp_payment_addr = viewing_key
         .to_payment_address(div)
         .expect("a PaymentAddress");
+    let payment_addr = PaymentAddress::from(masp_payment_addr).pinned(pin);
     let alias = wallet
-        .insert_payment_addr(
-            alias,
-            PaymentAddress::from(payment_addr).pinned(pin),
-            alias_force,
-        )
+        .insert_payment_addr(alias, payment_addr, alias_force)
         .unwrap_or_else(|| {
             edisplay_line!(io, "Payment address not added");
             cli::safe_exit(1);
@@ -333,7 +332,8 @@ fn payment_address_gen(
     wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
     display_line!(
         io,
-        "Successfully generated a payment address with the following alias: {}",
+        "Successfully generated payment address {} with alias {}",
+        payment_addr,
         alias,
     );
 }
@@ -440,6 +440,7 @@ async fn transparent_key_and_address_derive(
         unsafe_dont_encrypt,
         derivation_path,
         allow_non_compliant,
+        prompt_bip39_passphrase,
         use_device,
         ..
     }: args::KeyDerive,
@@ -470,6 +471,7 @@ async fn transparent_key_and_address_derive(
                 alias_force,
                 derivation_path,
                 None,
+                prompt_bip39_passphrase,
                 encryption_password,
             )
             .unwrap_or_else(|| {

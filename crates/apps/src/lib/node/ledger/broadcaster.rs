@@ -2,6 +2,7 @@ use std::net::SocketAddr;
 use std::ops::ControlFlow;
 
 use namada::types::control_flow::time;
+use namada::types::time::{DateTimeUtc, Utc};
 use tokio::sync::mpsc::UnboundedReceiver;
 
 use crate::facade::tendermint_rpc::{Client, HttpClient};
@@ -27,7 +28,15 @@ impl Broadcaster {
 
     /// Loop forever, broadcasting messages that have been received
     /// by the receiver
-    async fn run_loop(&mut self) {
+    async fn run_loop(&mut self, genesis_time: DateTimeUtc) {
+        // wait for start time if necessary
+        if let Ok(sleep_time) =
+            genesis_time.0.signed_duration_since(Utc::now()).to_std()
+        {
+            if !sleep_time.is_zero() {
+                tokio::time::sleep(sleep_time).await;
+            }
+        }
         let result = time::Sleep {
             strategy: time::ExponentialBackoff {
                 base: 2,
@@ -62,6 +71,8 @@ impl Broadcaster {
         if let Err(()) = result {
             tracing::error!("Broadcaster failed to connect to CometBFT node");
             return;
+        } else {
+            tracing::info!("Broadcaster successfully started.");
         }
         loop {
             if let Some(msg) = self.receiver.recv().await {
@@ -75,10 +86,11 @@ impl Broadcaster {
     pub async fn run(
         &mut self,
         abort_recv: tokio::sync::oneshot::Receiver<()>,
+        genesis_time: DateTimeUtc,
     ) {
         tracing::info!("Starting broadcaster.");
         tokio::select! {
-            _ = self.run_loop() => {
+            _ = self.run_loop(genesis_time) => {
                 tracing::error!("Broadcaster unexpectedly shut down.");
                 tracing::info!("Shutting down broadcaster...");
             },

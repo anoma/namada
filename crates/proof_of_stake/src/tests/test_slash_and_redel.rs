@@ -1246,6 +1246,7 @@ fn test_slashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
     let mut storage = TestWlStorage::default();
     let params = OwnedPosParams {
         unbonding_len: 4,
+        validator_stake_threshold: token::Amount::zero(),
         ..Default::default()
     };
 

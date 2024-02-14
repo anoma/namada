@@ -225,41 +225,11 @@ mod test_vote_extensions {
     #[test]
     fn test_validate_valset_upd_vexts() {
         let (mut shell, _recv, _, _oracle_control_recv) = test_utils::setup();
-        let protocol_key =
-            shell.mode.get_protocol_key().expect("Test failed").clone();
-        let eth_bridge_key = shell
-            .mode
-            .get_eth_bridge_keypair()
-            .expect("Test failed")
-            .clone();
-        let validator_addr = shell
-            .mode
-            .get_validator_address()
-            .expect("Test failed")
-            .clone();
-        let signing_epoch = shell.wl_storage.storage.get_current_epoch().0;
-        let voting_powers = {
-            let next_epoch = signing_epoch.next();
-            shell
-                .wl_storage
-                .ethbridge_queries()
-                .get_consensus_eth_addresses(Some(next_epoch))
-                .iter()
-                .map(|(eth_addr_book, _, voting_power)| {
-                    (eth_addr_book, voting_power)
-                })
-                .collect()
-        };
-        let vote_ext = validator_set_update::Vext {
-            voting_powers,
-            signing_epoch,
-            validator_addr,
-        }
-        .sign(&eth_bridge_key);
 
         // validators from the current epoch sign over validator
         // set of the next epoch
-        assert_eq!(shell.wl_storage.storage.get_current_epoch().0.0, 0);
+        let signing_epoch = shell.wl_storage.storage.get_current_epoch().0;
+        assert_eq!(signing_epoch.0, 0);
 
         // remove all validators of the next epoch
         let validators_handle = consensus_validator_set_handle().at(&1.into());
@@ -283,22 +253,56 @@ mod test_vote_extensions {
                 .remove(&mut shell.wl_storage, &val_position)
                 .expect("Test failed");
         }
+
+        // sign validator set update
+        let protocol_key =
+            shell.mode.get_protocol_key().expect("Test failed").clone();
+        let eth_bridge_key = shell
+            .mode
+            .get_eth_bridge_keypair()
+            .expect("Test failed")
+            .clone();
+        let validator_addr = shell
+            .mode
+            .get_validator_address()
+            .expect("Test failed")
+            .clone();
+        let voting_powers = {
+            let next_epoch = signing_epoch.next();
+            shell
+                .wl_storage
+                .ethbridge_queries()
+                .get_consensus_eth_addresses(Some(next_epoch))
+                .iter()
+                .map(|(eth_addr_book, _, voting_power)| {
+                    (eth_addr_book, voting_power)
+                })
+                .collect()
+        };
+        let vote_ext = validator_set_update::Vext {
+            voting_powers,
+            signing_epoch,
+            validator_addr,
+        }
+        .sign(&eth_bridge_key);
+        assert!(vote_ext.data.voting_powers.is_empty());
+
         // we advance forward to the next epoch
         let params = shell.wl_storage.pos_queries().get_pos_params();
-        let consensus_set: Vec<WeightedValidator> =
+        let mut consensus_set: Vec<WeightedValidator> =
             read_consensus_validator_set_addresses_with_stake(
                 &shell.wl_storage,
-                Epoch::default(),
+                0.into(),
             )
             .unwrap()
             .into_iter()
             .collect();
-
-        let val1 = consensus_set[0].clone();
+        assert_eq!(consensus_set.len(), 1);
+        let val1 = consensus_set.remove(0);
         let pkh1 = get_pkh_from_address(
             &shell.wl_storage,
             &params,
-            val1.address.clone(),
+            val1.address,
             Epoch::default(),
         );
         let votes = vec![VoteInfo {
@@ -334,6 +338,7 @@ mod test_vote_extensions {
                 .is_ok()
         );
 
+        // check validation of the vext passes
         assert!(
             validate_valset_upd_vext(
                 &shell.wl_storage,

@@ -1,5 +1,68 @@
 # CHANGELOG
 
+## v0.31.4
+
+Namada 0.31.4 is a patch release that fixes the result query of an active governance proposal.
+
+### BUG FIXES
+
+- Fixes the query-proposal-result output in the case that a proposal is still
+  voting. ([\#2573](https://github.com/anoma/namada/pull/2573))
+
+## v0.31.3
+
+Namada 0.31.3 is a patch release that fixes various issues.
+
+### BUG FIXES
+
+- Fix PoS bonds and unbonds query to return delegations when only a validator
+  address is specified. ([\#2522](https://github.com/anoma/namada/pull/2522))
+- PoS: fixed the order of iteration when slashing validators for liveness.
+  ([\#2577](https://github.com/anoma/namada/pull/2577))
+- Reject validator set updates signing over a superset of the next validator
+  set. ([\#2578](https://github.com/anoma/namada/pull/2578))
+- Governance tallying for delegators now works.
+  ([\#2579](https://github.com/anoma/namada/pull/2579))
+
+### IMPROVEMENTS
+
+- Adds some useful internal addresses, such as PoS, to the wallet upon join-
+  network. ([\#2543](https://github.com/anoma/namada/pull/2543))
+- Fixes query-protocol-parameters to include some missing PoS data and a better-
+  formatted output. ([\#2558](https://github.com/anoma/namada/pull/2558))
+
+## v0.31.2
+
+Namada 0.31.2 is a patch release that fixes an issue with request ordering introduced in 0.31.1.
+
+### BUG FIXES
+
+- ABCI calls must be executed synchronously.
+  ([\#2547](https://github.com/anoma/namada/pull/2547))
+
+### FEATURES
+
+- Added a client command "status" to query a node's status.
+  ([\#2511](https://github.com/anoma/namada/pull/2511))
+
+## v0.31.1
+
+Namada 0.31.1 is a patch release that fixes the memo processing for some transactions and improves logs related to ledger startup and the wallet.
+
+### BUG FIXES
+
+- Wallet: respect the optional bip39-flag for key derivation.
+  ([\#2489](https://github.com/anoma/namada/pull/2489))
+
+### IMPROVEMENTS
+
+- Wallet: print the generated payment address.
+  ([\#2490](https://github.com/anoma/namada/pull/2490))
+- Reworks the way the ledger waits for genesis start. It now fully initializes the node and 
+  outputs logs before sleeping until genesis start time. Previously it would not start any 
+  processes until genesis times, giving no feedback to users until genesis time was reached.
+  ([\#2502](https://github.com/anoma/namada/pull/2502))
+
 ## v0.31.0
 
 Namada 0.31.0 is a minor release that fixes wasm host function execution and upgrades some CLI functions and the Masp VP.
