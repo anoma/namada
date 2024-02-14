@@ -337,6 +337,7 @@ mod tests {
     use namada::tx::{Code, Data, Signature};
     use namada::types::dec::Dec;
     use namada::types::storage::Epoch;
+    use namada_test_utils::TestWasms;
     // Use this as `#[test]` annotation to enable logging
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
@@ -1256,10 +1257,10 @@ mod tests {
             }
         }
 
-    /// Test that a validity predicate update without a valid signature is
+    /// Test that a threhsold update without a valid signature is
     /// rejected.
     #[test]
-    fn test_unsigned_vp_update_rejected() {
+    fn test_unsigned_threshold_update_rejected() {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
 
@@ -1301,6 +1302,11 @@ mod tests {
         let keypair = key::testing::keypair_1();
         let public_key = keypair.ref_to();
 
+        let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
+        let vp_hash = sha256(&vp_code);
+        // for the update
+        tx_env.store_wasm_code(vp_code);
+
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
         tx_env.init_account_storage(&vp_owner, vec![public_key.clone()], 1);
@@ -1310,6 +1316,15 @@ mod tests {
             // Update threshold in a transaction
             let threshold_key = account::threshold_key(address);
             tx::ctx().write(&threshold_key, 10).unwrap();
+            // Update the vp
+            tx::ctx()
+                .write(
+                    &namada::core::types::storage::Key::validity_predicate(
+                        address,
+                    ),
+                    vp_hash,
+                )
+                .unwrap();
         });
 
         let pks_map = AccountPublicKeysMap::from_iter(vec![public_key]);
