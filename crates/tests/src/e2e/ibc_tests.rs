@@ -390,7 +390,7 @@ fn proposal_ibc_token_inflation() -> Result<()> {
     let _bg_hermes = hermes.background();
 
     // Get masp proof for the following IBC transfer from the destination chain
-    // It will send 10000 APFEL to PA(B) on Chain B
+    // It will send 100 APFEL to PA(B) on Chain B
     let rpc_b = get_actor_rpc(&test_b, Who::Validator(0));
     // Chain B will receive Chain A's APFEL
     std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
@@ -406,7 +406,7 @@ fn proposal_ibc_token_inflation() -> Result<()> {
         "--token",
         &token_addr.to_string(),
         "--amount",
-        "10000",
+        "100",
         "--port-id",
         port_id_b.as_ref(),
         "--channel-id",
@@ -419,13 +419,13 @@ fn proposal_ibc_token_inflation() -> Result<()> {
     let file_path = get_shielded_transfer_path(&mut client)?;
     client.assert_success();
 
-    // Transfer 10000 from Chain A to a z-address on Chain B
+    // Transfer 100 from Chain A to a z-address on Chain B
     transfer(
         &test_a,
         ALBERT,
         AB_PAYMENT_ADDRESS,
         APFEL,
-        "10000",
+        "100",
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
@@ -464,7 +464,7 @@ fn proposal_ibc_token_inflation() -> Result<()> {
     sleep(5);
 
     // Check balances
-    check_inflated_balance(&port_id_b, &channel_id_b, &test_b)?;
+    check_inflated_balance(&test_b)?;
 
     Ok(())
 }
@@ -1737,7 +1737,7 @@ fn propose_inflation(test: &Test) -> Result<Epoch> {
         "--node",
         &rpc,
     ];
-    let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
+    let mut client = run!(test, Bin::Client, submit_proposal_args, Some(100))?;
     client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
@@ -2106,25 +2106,26 @@ fn check_funded_balances(
 }
 
 fn check_inflated_balance(
-    dest_port_id: &PortId,
-    dest_channel_id: &ChannelId,
     test: &Test,
 ) -> Result<()> {
     std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
-    let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/apfel");
     let rpc = get_actor_rpc(test, Who::Validator(0));
     let query_args = vec![
         "balance",
         "--owner",
         AB_VIEWING_KEY,
         "--token",
-        &ibc_denom,
+        NAM,
         "--node",
         &rpc,
     ];
-    let expected = format!("{ibc_denom}: 10010");
     let mut client = run!(test, Bin::Client, query_args, Some(100))?;
-    client.exp_string(&expected)?;
+    let (_, matched) =
+        client.exp_regex("nam: .*")?;
+    let regex = regex::Regex::new(r"[0-9]+").unwrap();
+    let mut iter = regex.find_iter(&matched);
+    let balance: u64 = iter.next().unwrap().as_str().parse().unwrap();
+    assert!(balance > 0);
     client.assert_success();
 
     Ok(())

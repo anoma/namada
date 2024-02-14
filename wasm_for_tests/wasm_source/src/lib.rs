@@ -126,7 +126,7 @@ pub mod main {
         )?;
         ctx.write(
             &shielded_token_target_locked_amount_key,
-            token::Amount::from_uint(100_000, IBC_TOKEN_DENOM).unwrap(),
+            token::Amount::from_uint(1_000_000_000, IBC_TOKEN_DENOM).unwrap(),
         )?;
         ctx.write(
             &shielded_token_kp_gain_key,
