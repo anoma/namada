@@ -517,6 +517,7 @@ where
             );
         }
     }
+    // store only the assets hash because the size is quite large
     let assets_hash = Hash::sha256(
         &wl_storage
             .storage

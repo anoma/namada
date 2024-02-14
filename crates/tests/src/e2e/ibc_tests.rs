@@ -363,9 +363,7 @@ fn proposal_ibc_token_inflation() -> Result<()> {
     let update_genesis =
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
             genesis.parameters.parameters.epochs_per_year =
-                epochs_per_year_from_min_duration(10);
-            // for the trusting period of IBC client
-            genesis.parameters.pos_params.pipeline_len = 10;
+                epochs_per_year_from_min_duration(50);
             genesis.parameters.parameters.max_proposal_bytes =
                 Default::default();
             genesis.parameters.pgf_params.stewards =
@@ -379,68 +377,12 @@ fn proposal_ibc_token_inflation() -> Result<()> {
     let _bg_ledger_a = ledger_a.background();
     let _bg_ledger_b = ledger_b.background();
 
-    setup_hermes(&test_a, &test_b)?;
-    let port_id_a = "transfer".parse().unwrap();
-    let port_id_b: PortId = "transfer".parse().unwrap();
-    let (channel_id_a, channel_id_b) =
-        create_channel_with_hermes(&test_a, &test_b)?;
-
-    // Start relaying
-    let hermes = run_hermes(&test_a)?;
-    let _bg_hermes = hermes.background();
-
-    // Get masp proof for the following IBC transfer from the destination chain
-    // It will send 100 APFEL to PA(B) on Chain B
-    let rpc_b = get_actor_rpc(&test_b, Who::Validator(0));
-    // Chain B will receive Chain A's APFEL
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
-    let output_folder = test_b.test_dir.path().to_string_lossy();
-    // PA(B) on Chain B will receive APFEL on chain A
-    let token_addr = find_address(&test_a, APFEL)?;
-    let args = [
-        "ibc-gen-shielded",
-        "--output-folder-path",
-        &output_folder,
-        "--target",
-        AB_PAYMENT_ADDRESS,
-        "--token",
-        &token_addr.to_string(),
-        "--amount",
-        "100",
-        "--port-id",
-        port_id_b.as_ref(),
-        "--channel-id",
-        channel_id_b.as_ref(),
-        "--node",
-        &rpc_b,
-    ];
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
-    let mut client = run!(test_b, Bin::Client, args, Some(120))?;
-    let file_path = get_shielded_transfer_path(&mut client)?;
-    client.assert_success();
-
-    // Transfer 100 from Chain A to a z-address on Chain B
-    transfer(
-        &test_a,
-        ALBERT,
-        AB_PAYMENT_ADDRESS,
-        APFEL,
-        "100",
-        ALBERT_KEY,
-        &port_id_a,
-        &channel_id_a,
-        Some(&file_path.to_string_lossy()),
-        None,
-        None,
-        false,
-    )?;
-    wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
-
-    // Proposal on Chain B
+    // Proposal on the destination (Chain B)
     // Delegate some token
     delegate_token(&test_b)?;
+    let rpc_b = get_actor_rpc(&test_b, Who::Validator(0));
     let mut epoch = get_epoch(&test_b, &rpc_b).unwrap();
-    let delegated = epoch + 10u64;
+    let delegated = epoch + 2u64;
     while epoch <= delegated {
         sleep(5);
         epoch = get_epoch(&test_b, &rpc_b).unwrap();
@@ -462,6 +404,69 @@ fn proposal_ibc_token_inflation() -> Result<()> {
         epoch = get_epoch(&test_b, &rpc_b).unwrap();
     }
     sleep(5);
+
+    setup_hermes(&test_a, &test_b)?;
+    let port_id_a = "transfer".parse().unwrap();
+    let port_id_b: PortId = "transfer".parse().unwrap();
+    let (channel_id_a, channel_id_b) =
+        create_channel_with_hermes(&test_a, &test_b)?;
+
+    // Start relaying
+    let hermes = run_hermes(&test_a)?;
+    let _bg_hermes = hermes.background();
+
+    // Get masp proof for the following IBC transfer from the destination chain
+    // It will send 1 APFEL to PA(B) on Chain B
+    let output_folder = test_b.test_dir.path().to_string_lossy();
+    // PA(B) on Chain B will receive APFEL on chain A
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
+    let token_addr = find_address(&test_a, APFEL)?;
+    let args = [
+        "ibc-gen-shielded",
+        "--output-folder-path",
+        &output_folder,
+        "--target",
+        AB_PAYMENT_ADDRESS,
+        "--token",
+        &token_addr.to_string(),
+        "--amount",
+        "1",
+        "--port-id",
+        port_id_b.as_ref(),
+        "--channel-id",
+        channel_id_b.as_ref(),
+        "--node",
+        &rpc_b,
+    ];
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
+    let mut client = run!(test_b, Bin::Client, args, Some(120))?;
+    let file_path = get_shielded_transfer_path(&mut client)?;
+    client.assert_success();
+
+    // Transfer 1 from Chain A to a z-address on Chain B
+    transfer(
+        &test_a,
+        ALBERT,
+        AB_PAYMENT_ADDRESS,
+        APFEL,
+        "1",
+        ALBERT_KEY,
+        &port_id_a,
+        &channel_id_a,
+        Some(&file_path.to_string_lossy()),
+        None,
+        None,
+        false,
+    )?;
+    wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
+
+    let mut epoch = get_epoch(&test_b, &rpc_b).unwrap();
+    let next_epoch = epoch.next();
+    // wait the next epoch to dispense the rewrad
+    while epoch < next_epoch {
+        sleep(5);
+        epoch = get_epoch(&test_b, &rpc_b).unwrap();
+    }
 
     // Check balances
     check_inflated_balance(&test_b)?;
