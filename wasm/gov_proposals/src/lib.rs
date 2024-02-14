@@ -1,4 +1,2 @@
-
-
-#[cfg(feature = "param_change_gov_proposal")]
-pub mod param_change_gov_proposal;
+#[cfg(feature = "init_inflation_pos_and_pgf")]
+pub mod init_inflation_pos_and_pgf;

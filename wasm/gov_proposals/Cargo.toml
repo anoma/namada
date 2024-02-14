@@ -10,7 +10,7 @@ version = "0.31.0"
 crate-type = ["cdylib"]
 
 [features]
-param_change_gov_proposal = ["namada_tx_prelude"]
+init_inflation_pos_and_pgf = ["namada_tx_prelude"]
 
 [dependencies]
 namada_core = { path = "../../crates/core" }
