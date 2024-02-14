@@ -8,6 +8,7 @@ use masp_primitives::sapling::Node;
 use namada::core::address::{self, Address, InternalAddress};
 use namada::core::eth_bridge_pool::{GasFee, PendingTransfer};
 use namada::core::masp::{TransferSource, TransferTarget};
+use namada::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
 use namada::eth_bridge::storage::whitelist;
 use namada::governance::pgf::storage::steward::StewardDetail;
 use namada::governance::storage::proposal::ProposalType;
@@ -706,6 +707,10 @@ fn pgf(c: &mut Criterion) {
 }
 
 fn eth_bridge_nut(c: &mut Criterion) {
+    if !is_bridge_comptime_enabled() {
+        return;
+    }
+
     let mut shell = BenchShell::default();
     let native_erc20_addres = read_native_erc20_address(&shell.state).unwrap();
 
@@ -777,6 +782,10 @@ fn eth_bridge_nut(c: &mut Criterion) {
 }
 
 fn eth_bridge(c: &mut Criterion) {
+    if !is_bridge_comptime_enabled() {
+        return;
+    }
+
     let mut shell = BenchShell::default();
     let native_erc20_addres = read_native_erc20_address(&shell.state).unwrap();
 
@@ -848,6 +857,10 @@ fn eth_bridge(c: &mut Criterion) {
 }
 
 fn eth_bridge_pool(c: &mut Criterion) {
+    if !is_bridge_comptime_enabled() {
+        return;
+    }
+
     // NOTE: this vp is one of the most expensive but its cost comes from the
     // numerous accesses to storage that we already account for, so no need to
     // benchmark specific sections of it like for the ibc native vp
