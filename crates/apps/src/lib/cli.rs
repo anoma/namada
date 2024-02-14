@@ -1038,6 +1038,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query votes for the proposal.")
+                .arg_required_else_help(true)
                 .add_args::<args::QueryProposalVotes<args::CliTypes>>()
         }
     }
