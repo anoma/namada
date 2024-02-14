@@ -1239,9 +1239,12 @@ where
                 if let Err(e) = mempool_fee_check(
                     &wrapper,
                     get_fee_unshielding_transaction(&tx, &wrapper),
-                    &mut TempWlStorage::new(&self.wl_storage.storage),
-                    &mut self.vp_wasm_cache.clone(),
-                    &mut self.tx_wasm_cache.clone(),
+                    &mut ShellParams::new(
+                        &mut gas_meter,
+                        &mut TempWlStorage::new(&self.wl_storage.storage),
+                        &mut self.vp_wasm_cache.clone(),
+                        &mut self.tx_wasm_cache.clone(),
+                    ),
                 ) {
                     response.code = ResultCode::FeeError.into();
                     response.log = format!("{INVALID_MSG}: {e}");
@@ -1375,9 +1378,7 @@ where
 fn mempool_fee_check<D, H, CA>(
     wrapper: &WrapperTx,
     masp_transaction: Option<Transaction>,
-    temp_wl_storage: &mut TempWlStorage<D, H>,
-    vp_wasm_cache: &mut VpCache<CA>,
-    tx_wasm_cache: &mut TxCache<CA>,
+    shell_params: &mut ShellParams<CA, TempWlStorage<D, H>>,
 ) -> Result<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -1385,7 +1386,7 @@ where
     CA: 'static + WasmCacheAccess + Sync,
 {
     let minimum_gas_price = namada::ledger::parameters::read_gas_cost(
-        temp_wl_storage,
+        shell_params.wl_storage,
         &wrapper.fee.token,
     )
     .expect("Must be able to read gas cost parameter")
@@ -1398,11 +1399,10 @@ where
         wrapper,
         masp_transaction,
         minimum_gas_price,
-        temp_wl_storage,
-        vp_wasm_cache,
-        tx_wasm_cache,
+        shell_params,
     )?;
-    protocol::check_fees(temp_wl_storage, wrapper).map_err(Error::TxApply)
+    protocol::check_fees(shell_params.wl_storage, wrapper)
+        .map_err(Error::TxApply)
 }
 
 /// Check the validity of the fee payment, including the minimum amounts
@@ -1411,9 +1411,7 @@ pub fn wrapper_fee_check<D, H, CA>(
     wrapper: &WrapperTx,
     masp_transaction: Option<Transaction>,
     minimum_gas_price: token::Amount,
-    temp_wl_storage: &mut TempWlStorage<D, H>,
-    vp_wasm_cache: &mut VpCache<CA>,
-    tx_wasm_cache: &mut TxCache<CA>,
+    shell_params: &mut ShellParams<CA, TempWlStorage<D, H>>,
 ) -> Result<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -1423,7 +1421,7 @@ where
     match token::denom_to_amount(
         wrapper.fee.amount_per_gas_unit,
         &wrapper.fee.token,
-        temp_wl_storage,
+        shell_params.wl_storage,
     ) {
         Ok(amount_per_gas_unit) if amount_per_gas_unit < minimum_gas_price => {
             // The fees do not match the minimum required
@@ -1445,14 +1443,11 @@ where
         }
     }
 
+    // FIXME: here call charge_fee and remove the call to fee payment that comes
+    // after this! Actually no, charge is ok if the unshield is wrong
+
     if let Some(transaction) = masp_transaction {
-        fee_unshielding_validation(
-            wrapper,
-            transaction,
-            temp_wl_storage,
-            vp_wasm_cache,
-            tx_wasm_cache,
-        )?;
+        fee_unshielding_validation(wrapper, transaction, shell_params)?;
     }
 
     Ok(())
@@ -1462,9 +1457,7 @@ where
 fn fee_unshielding_validation<D, H, CA>(
     wrapper: &WrapperTx,
     masp_transaction: Transaction,
-    temp_wl_storage: &mut TempWlStorage<D, H>,
-    vp_wasm_cache: &mut VpCache<CA>,
-    tx_wasm_cache: &mut TxCache<CA>,
+    shell_params: &mut ShellParams<CA, TempWlStorage<D, H>>,
 ) -> Result<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -1474,17 +1467,28 @@ where
     // Validation of the commitment to this section is done when
     // checking the aggregated signature of the wrapper, no need for
     // further validation
+    let ShellParams {
+        tx_gas_meter,
+        wl_storage,
+        vp_wasm_cache,
+        tx_wasm_cache,
+    } = shell_params;
 
     // Validate data and generate unshielding tx
-    let transfer_code_hash = get_transfer_hash_from_storage(temp_wl_storage);
+    let transfer_code_hash = get_transfer_hash_from_storage(*wl_storage);
 
-    let descriptions_limit = temp_wl_storage
+    let descriptions_limit = wl_storage
         .read(
             &parameters::storage::get_fee_unshielding_descriptions_limit_key(),
         )
         .expect("Error reading the storage")
         .expect("Missing fee unshielding descriptions limit param in storage");
 
+    // FIXME: actually in finalize block I don't do these checks Maybe I could
+    // just replicate them? Yes they are very fast anyway FIXME: yes but
+    // than it means that in here we still let a tx with an invalid fee
+    // unshielding pass! FIXME: in case I need to call this function in
+    // run_fee_unshielding instead of just generate
     let unshield = wrapper
         .check_and_generate_fee_unshielding(
             transfer_code_hash,
@@ -1494,10 +1498,17 @@ where
         )
         .map_err(|e| Error::TxApply(protocol::Error::FeeUnshieldingError(e)))?;
 
-    let fee_unshielding_gas_limit: GasLimit = temp_wl_storage
-        .read(&parameters::storage::get_fee_unshielding_gas_limit_key())
+    let min_gas_limit = wl_storage
+        .read::<u64>(&parameters::storage::get_fee_unshielding_gas_limit_key())
         .expect("Error reading from storage")
-        .expect("Missing fee unshielding gas limit in storage");
+        .expect("Missing fee unshielding gas limit in storage")
+        .min(tx_gas_meter.tx_gas_limit.into());
+    let mut unshield_gas_meter = TxGasMeter::new(GasLimit::from(min_gas_limit));
+    unshield_gas_meter
+        .copy_consumed_gas_from(tx_gas_meter)
+        .map_err(|e| {
+            Error::TxApply(protocol::Error::GasError(e.to_string()))
+        })?;
 
     // Runtime check
     // NOTE: A clean tx write log must be provided to this call for a
@@ -1507,16 +1518,18 @@ where
     // from being passed/triggering VPs) but we cannot
     // commit the tx write log yet cause the tx could still
     // be invalid.
-    temp_wl_storage.write_log.precommit_tx();
+    wl_storage.write_log.precommit_tx();
 
+    // FIXME: apply the same logic of finalize block
+    // FIXME: see if we can use the same functions
     let result = apply_wasm_tx(
         unshield,
         &TxIndex::default(),
         ShellParams::new(
-            &mut TxGasMeter::new(fee_unshielding_gas_limit),
-            temp_wl_storage,
-            vp_wasm_cache,
-            tx_wasm_cache,
+            &mut unshield_gas_meter,
+            *wl_storage,
+            *vp_wasm_cache,
+            *tx_wasm_cache,
         ),
     )
     .map_err(|e| {
@@ -1525,6 +1538,7 @@ where
         ))
     })?;
 
+    // FIXME: add unit test for out of gas
     if result.is_accepted() {
         Ok(())
     } else {

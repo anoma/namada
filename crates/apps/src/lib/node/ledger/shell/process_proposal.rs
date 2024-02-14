@@ -593,9 +593,12 @@ where
                     &wrapper,
                     get_fee_unshielding_transaction(&tx, &wrapper),
                     block_proposer,
-                    temp_wl_storage,
-                    vp_wasm_cache,
-                    tx_wasm_cache,
+                    &mut ShellParams::new(
+                        &mut tx_gas_meter,
+                        temp_wl_storage,
+                        vp_wasm_cache,
+                        tx_wasm_cache,
+                    ),
                 ) {
                     Ok(()) => TxResult {
                         code: ResultCode::Ok.into(),
@@ -631,9 +634,7 @@ fn process_proposal_fee_check<D, H, CA>(
     wrapper: &WrapperTx,
     masp_transaction: Option<Transaction>,
     proposer: &Address,
-    temp_wl_storage: &mut TempWlStorage<D, H>,
-    vp_wasm_cache: &mut VpCache<CA>,
-    tx_wasm_cache: &mut TxCache<CA>,
+    shell_params: &mut ShellParams<CA, TempWlStorage<D, H>>,
 ) -> Result<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -641,7 +642,7 @@ where
     CA: 'static + WasmCacheAccess + Sync,
 {
     let minimum_gas_price = namada::ledger::parameters::read_gas_cost(
-        temp_wl_storage,
+        shell_params.wl_storage,
         &wrapper.fee.token,
     )
     .expect("Must be able to read gas cost parameter")
@@ -654,12 +655,10 @@ where
         wrapper,
         masp_transaction,
         minimum_gas_price,
-        temp_wl_storage,
-        vp_wasm_cache,
-        tx_wasm_cache,
+        shell_params,
     )?;
 
-    protocol::transfer_fee(temp_wl_storage, proposer, wrapper)
+    protocol::transfer_fee(shell_params.wl_storage, proposer, wrapper)
         .map_err(Error::TxApply)
 }
 

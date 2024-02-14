@@ -3,7 +3,7 @@
 use masp_primitives::transaction::Transaction;
 use namada::core::hints;
 use namada::gas::TxGasMeter;
-use namada::ledger::protocol;
+use namada::ledger::protocol::{self, ShellParams};
 use namada::ledger::storage::tx_queue::TxInQueue;
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
 use namada::state::{DBIter, StorageHasher, TempWlStorage, DB};
@@ -360,9 +360,12 @@ where
             protocol::get_fee_unshielding_transaction(&tx, &wrapper),
             block_proposer,
             proposer_local_config,
-            temp_wl_storage,
-            vp_wasm_cache,
-            tx_wasm_cache,
+            &mut ShellParams::new(
+                &mut tx_gas_meter,
+                temp_wl_storage,
+                vp_wasm_cache,
+                tx_wasm_cache,
+            ),
         ) {
             Ok(()) => Ok(u64::from(wrapper.gas_limit)),
             Err(_) => Err(()),
@@ -377,9 +380,7 @@ fn prepare_proposal_fee_check<D, H, CA>(
     masp_transaction: Option<Transaction>,
     proposer: &Address,
     proposer_local_config: Option<&ValidatorLocalConfig>,
-    temp_wl_storage: &mut TempWlStorage<D, H>,
-    vp_wasm_cache: &mut VpCache<CA>,
-    tx_wasm_cache: &mut TxCache<CA>,
+    shell_params: &mut ShellParams<CA, TempWlStorage<D, H>>,
 ) -> Result<(), Error>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -400,7 +401,7 @@ where
                 ))))?
                 .to_owned(),
             None => namada::ledger::parameters::read_gas_cost(
-                temp_wl_storage,
+                shell_params.wl_storage,
                 &wrapper.fee.token,
             )
             .expect("Must be able to read gas cost parameter")
@@ -415,12 +416,10 @@ where
         wrapper,
         masp_transaction,
         minimum_gas_price,
-        temp_wl_storage,
-        vp_wasm_cache,
-        tx_wasm_cache,
+        shell_params,
     )?;
 
-    protocol::transfer_fee(temp_wl_storage, proposer, wrapper)
+    protocol::transfer_fee(shell_params.wl_storage, proposer, wrapper)
         .map_err(Error::TxApply)
 }
 

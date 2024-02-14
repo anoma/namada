@@ -289,7 +289,7 @@ impl TxGasMeter {
 
     /// Copy the consumed gas from the other instance. Fails if this value
     /// exceeds the gas limit of this gas meter
-    pub fn copy_consumed_gas_from_other(&mut self, other: &Self) -> Result<()> {
+    pub fn copy_consumed_gas_from(&mut self, other: &Self) -> Result<()> {
         self.transaction_gas = other.transaction_gas;
         if other.transaction_gas > self.tx_gas_limit {
             Err(Error::TransactionGasExceededError)

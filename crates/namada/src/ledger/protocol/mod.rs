@@ -106,10 +106,10 @@ where
     CA: 'static + WasmCacheAccess + Sync,
     WLS: WriteLogAndStorage + StorageRead,
 {
-    tx_gas_meter: &'a mut TxGasMeter,
-    wl_storage: &'a mut WLS,
-    vp_wasm_cache: &'a mut VpCache<CA>,
-    tx_wasm_cache: &'a mut TxCache<CA>,
+    pub tx_gas_meter: &'a mut TxGasMeter,
+    pub wl_storage: &'a mut WLS,
+    pub vp_wasm_cache: &'a mut VpCache<CA>,
+    pub tx_wasm_cache: &'a mut TxCache<CA>,
 }
 
 impl<'a, CA, WLS> ShellParams<'a, CA, WLS>
@@ -311,9 +311,6 @@ where
     H: 'static + StorageHasher + Sync,
     WLS: WriteLogAndStorage<D = D, H = H> + StorageRead,
 {
-    // FIXME: in process_proposal and mempool check also validate the
-    // transparent notes
-
     // Unshield funds if requested
     let valid_fee_unshielding = if let Some(transaction) = masp_transaction {
         run_fee_unshielding(wrapper, shell_params, transaction)
@@ -323,7 +320,8 @@ where
 
     // Charge or check fees before propagating any possible error coming from
     // the fee unshielding. If fee unshielding failed for non-gas reasons but
-    // the fees can still be paid we'll continue with the execution
+    // the fees can still be paid we'll continue with the execution (this is a
+    // different logic from the one we apply in process_proposal)
     match wrapper_args {
         Some(WrapperArgs {
             block_proposer,
@@ -388,7 +386,7 @@ where
         .min(tx_gas_meter.tx_gas_limit.into());
     let mut unshield_gas_meter = TxGasMeter::new(GasLimit::from(min_gas_limit));
     unshield_gas_meter
-        .copy_consumed_gas_from_other(tx_gas_meter)
+        .copy_consumed_gas_from(tx_gas_meter)
         .map_err(|e| Error::GasError(e.to_string()))?;
 
     // If it fails just log it and still try to charge the gas
@@ -427,7 +425,6 @@ where
 
                     result.is_accepted()
                 }
-                // FIXME: could propagate error?
                 Err(e) => {
                     wl_storage.write_log_mut().drop_tx_keep_precommit();
                     tracing::error!(
@@ -439,9 +436,6 @@ where
                 }
             }
         }
-        // FIXME: could propagate error?
-        // FIXME: I could but I would need to patter nmatch the error in the
-        // caller and also propagate the gas meter
         Err(e) => {
             tracing::error!("{}", e);
             false
@@ -449,7 +443,7 @@ where
     };
 
     tx_gas_meter
-        .copy_consumed_gas_from_other(&unshield_gas_meter)
+        .copy_consumed_gas_from(&unshield_gas_meter)
         .map_err(|e| Error::GasError(e.to_string()))?;
 
     Ok(result)
@@ -493,7 +487,7 @@ where
                 // Balance was insufficient for fee payment, move all the
                 // available funds in the transparent balance of
                 // the fee payer. This shouldn't happen as it should be
-                // prevented from mempool.
+                // prevented from mempool/process_proposal.
                 tracing::error!(
                     "Transfer of tx fee cannot be applied to due to \
                      insufficient funds. Falling back to transferring the \
@@ -519,7 +513,7 @@ where
         }
         Err(e) => {
             // Fee overflow. This shouldn't happen as it should be prevented
-            // from mempool.
+            // from mempool/process_proposal.
             tracing::error!(
                 "Transfer of tx fee cannot be applied to due to fee overflow. \
                  This shouldn't happen."
