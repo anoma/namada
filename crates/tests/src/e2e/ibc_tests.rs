@@ -2105,9 +2105,7 @@ fn check_funded_balances(
     Ok(())
 }
 
-fn check_inflated_balance(
-    test: &Test,
-) -> Result<()> {
+fn check_inflated_balance(test: &Test) -> Result<()> {
     std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let rpc = get_actor_rpc(test, Who::Validator(0));
     let query_args = vec![
@@ -2120,8 +2118,7 @@ fn check_inflated_balance(
         &rpc,
     ];
     let mut client = run!(test, Bin::Client, query_args, Some(100))?;
-    let (_, matched) =
-        client.exp_regex("nam: .*")?;
+    let (_, matched) = client.exp_regex("nam: .*")?;
     let regex = regex::Regex::new(r"[0-9]+").unwrap();
     let mut iter = regex.find_iter(&matched);
     let balance: u64 = iter.next().unwrap().as_str().parse().unwrap();

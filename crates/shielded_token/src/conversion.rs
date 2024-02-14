@@ -1,12 +1,16 @@
 //! MASP rewards conversions
 
+#[cfg(any(feature = "multicore", test))]
+use namada_core::borsh::BorshSerializeExt;
 use namada_core::ledger::inflation::{
     ShieldedRewardsController, ShieldedValsToUpdate,
 };
 use namada_core::types::address::{Address, MASP};
 use namada_core::types::dec::Dec;
 #[cfg(any(feature = "multicore", test))]
-use namada_core::types::masp::{AssetDataWithTreePos, AssetMap, TokenMap};
+use namada_core::types::hash::Hash;
+#[cfg(any(feature = "multicore", test))]
+use namada_core::types::masp::TokenMap;
 use namada_core::types::uint::Uint;
 use namada_parameters as parameters;
 use namada_state::{DBIter, StorageHasher, WlStorage, DB};
@@ -15,7 +19,7 @@ use namada_trans_token::storage_key::{balance_key, minted_balance_key};
 use namada_trans_token::{read_denom, Amount, DenominatedAmount, Denomination};
 
 #[cfg(any(feature = "multicore", test))]
-use crate::storage_key::{masp_asset_map_key, masp_token_map_key};
+use crate::storage_key::{masp_assets_hash_key, masp_token_map_key};
 use crate::storage_key::{
     masp_kd_gain_key, masp_kp_gain_key, masp_last_inflation_key,
     masp_last_locked_amount_key, masp_locked_amount_target_key,
@@ -279,10 +283,6 @@ where
     let ref_inflation =
         calculate_masp_rewards_precision(wl_storage, &native_token)?.0;
 
-    let asset_map_key = masp_asset_map_key();
-    let mut asset_map: AssetMap =
-        wl_storage.read(&asset_map_key)?.unwrap_or_default();
-
     // Reward all tokens according to above reward rates
     for token in &masp_reward_keys {
         let (reward, denom) = calculate_masp_rewards(wl_storage, token)?;
@@ -409,16 +409,14 @@ where
                 }
             }
             // Add a conversion from the previous asset type
-            asset_map.insert(
+            wl_storage.storage.conversion_state.assets.insert(
                 old_asset,
-                AssetDataWithTreePos {
-                    token: token.clone(),
-                    denom,
-                    pos: digit,
-                    epoch: wl_storage.storage.last_epoch,
-                    conv: MaspAmount::zero().into(),
-                    tree_pos: 0,
-                },
+                (
+                    (token.clone(), denom, digit),
+                    wl_storage.storage.last_epoch,
+                    MaspAmount::zero().into(),
+                    0,
+                ),
             );
         }
     }
@@ -427,7 +425,13 @@ where
     // multiple cores
     let num_threads = rayon::current_num_threads();
     // Put assets into vector to enable computation batching
-    let assets: Vec<_> = asset_map.values_mut().enumerate().collect();
+    let assets: Vec<_> = wl_storage
+        .storage
+        .conversion_state
+        .assets
+        .values_mut()
+        .enumerate()
+        .collect();
     // ceil(assets.len() / num_threads)
     let notes_per_thread_max = (assets.len() + num_threads - 1) / num_threads;
     // floor(assets.len() / num_threads)
@@ -437,20 +441,16 @@ where
         .into_par_iter()
         .with_min_len(notes_per_thread_min)
         .with_max_len(notes_per_thread_max)
-        .map(|(idx, asset)| {
-            if let Some(current_conv) = current_convs.get(&(
-                asset.token.clone(),
-                asset.denom,
-                asset.pos,
-            )) {
+        .map(|(idx, (asset, _epoch, conv, pos))| {
+            if let Some(current_conv) = current_convs.get(asset) {
                 // Use transitivity to update conversion
-                asset.conv += current_conv.clone();
+                *conv += current_conv.clone();
             }
             // Update conversion position to leaf we are about to create
-            asset.tree_pos = idx as u64;
+            *pos = idx;
             // The merkle tree need only provide the conversion commitment,
             // the remaining information is provided through the storage API
-            Node::new(asset.conv.cmu().to_repr())
+            Node::new(conv.cmu().to_repr())
         })
         .collect();
 
@@ -506,21 +506,25 @@ where
                 Some(wl_storage.storage.block.epoch),
             )
             .into_storage_result()?;
-            asset_map.insert(
+            wl_storage.storage.conversion_state.assets.insert(
                 new_asset,
-                AssetDataWithTreePos {
-                    token: addr.clone(),
-                    denom,
-                    pos: digit,
-                    epoch: wl_storage.storage.block.epoch,
-                    conv: MaspAmount::zero().into(),
-                    tree_pos: wl_storage.storage.conversion_state.tree.size()
-                        as u64,
-                },
+                (
+                    (addr.clone(), denom, digit),
+                    wl_storage.storage.block.epoch,
+                    MaspAmount::zero().into(),
+                    wl_storage.storage.conversion_state.tree.size(),
+                ),
             );
         }
     }
-    wl_storage.write(&asset_map_key, asset_map)?;
+    let assets_hash = Hash::sha256(
+        &wl_storage
+            .storage
+            .conversion_state
+            .assets
+            .serialize_to_vec(),
+    );
+    wl_storage.write(&masp_assets_hash_key(), assets_hash)?;
 
     Ok(())
 }

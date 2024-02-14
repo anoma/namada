@@ -11,7 +11,7 @@ use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::transaction::Transaction;
 use namada_core::types::address::Address;
 use namada_core::types::address::InternalAddress::Masp;
-use namada_core::types::masp::{encode_asset_type, AssetMap};
+use namada_core::types::masp::encode_asset_type;
 use namada_core::types::storage::{IndexedTx, Key};
 use namada_gas::MASP_VERIFY_SHIELDED_TX_GAS;
 use namada_sdk::masp::verify_shielded_tx;
@@ -25,7 +25,7 @@ use sha2::Digest as Sha2Digest;
 use thiserror::Error;
 use token::storage_key::{
     balance_key, is_any_shielded_action_balance_key, is_masp_allowed_key,
-    is_masp_key, is_masp_nullifier_key, is_masp_tx_pin_key, masp_asset_map_key,
+    is_masp_key, is_masp_nullifier_key, is_masp_tx_pin_key,
     masp_commitment_anchor_key, masp_commitment_tree_key,
     masp_convert_anchor_key, masp_nullifier_key,
 };
@@ -413,9 +413,7 @@ where
         _verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
         let epoch = self.ctx.get_block_epoch()?;
-        let asset_map_key = masp_asset_map_key();
-        let asset_map: AssetMap =
-            self.ctx.read_pre(&asset_map_key)?.unwrap_or_default();
+        let conversion_state = self.ctx.storage.get_conversion_state();
         let shielded_tx = self.ctx.get_shielded_action(tx_data)?;
 
         if u64::from(self.ctx.get_block_height()?)
@@ -486,20 +484,24 @@ where
                     );
                     return Ok(false);
                 }
-                match asset_map.get(&vin.asset_type) {
+                match conversion_state.assets.get(&vin.asset_type) {
                     // Satisfies 2. Note how the asset's epoch must be equal to
                     // the present: users must never be allowed to backdate
                     // transparent inputs to a transaction for they would then
                     // be able to claim rewards while locking their assets for
                     // negligible time periods.
-                    Some(asset)
-                        if asset.token == transfer.token
-                            && asset.denom == denom
-                            && asset.epoch == epoch =>
+                    Some((
+                        (address, asset_denom, digit),
+                        asset_epoch,
+                        _,
+                        _,
+                    )) if *address == transfer.token
+                        && *asset_denom == denom
+                        && *asset_epoch == epoch =>
                     {
                         total_in_values = total_in_values
                             .checked_add(token::Amount::from_masp_denominated(
-                                vin.value, asset.pos,
+                                vin.value, *digit,
                             ))
                             .ok_or_else(|| {
                                 Error::NativeVpError(
@@ -522,7 +524,10 @@ where
                             Some(epoch),
                         )
                         .wrap_err("unable to create asset type")?;
-                        if asset_map.contains_key(&epoched_asset_type) {
+                        if conversion_state
+                            .assets
+                            .contains_key(&epoched_asset_type)
+                        {
                             // If such an epoched asset type is available in the
                             // conversion tree, then we must reject the
                             // unepoched variant
@@ -630,16 +635,20 @@ where
                     );
                     return Ok(false);
                 }
-                match asset_map.get(&out.asset_type) {
+                match conversion_state.assets.get(&out.asset_type) {
                     // Satisfies 2.
-                    Some(asset)
-                        if asset.token == transfer.token
-                            && asset.denom == denom
-                            && asset.epoch <= epoch =>
+                    Some((
+                        (address, asset_denom, digit),
+                        asset_epoch,
+                        _,
+                        _,
+                    )) if *address == transfer.token
+                        && *asset_denom == denom
+                        && *asset_epoch <= epoch =>
                     {
                         total_out_values = total_out_values
                             .checked_add(token::Amount::from_masp_denominated(
-                                out.value, asset.pos,
+                                out.value, *digit,
                             ))
                             .ok_or_else(|| {
                                 Error::NativeVpError(

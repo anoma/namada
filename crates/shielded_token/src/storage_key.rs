@@ -20,7 +20,7 @@ pub const MASP_CONVERT_ANCHOR_KEY: &str = "convert_anchor";
 /// The key for the token map
 pub const MASP_TOKEN_MAP_KEY: &str = "tokens";
 /// The key for the asset map
-pub const MASP_ASSET_MAP_KEY: &str = "assets";
+pub const MASP_ASSETS_HASH_KEY: &str = "assets_hash";
 /// Last calculated inflation value handed out
 pub const MASP_LAST_INFLATION_KEY: &str = "last_inflation";
 /// The last locked ratio
@@ -158,9 +158,9 @@ pub fn masp_token_map_key() -> storage::Key {
         .expect("Cannot obtain a storage key")
 }
 
-/// Get the key for the masp asset map
-pub fn masp_asset_map_key() -> storage::Key {
+/// Get the key for the masp assets' hash
+pub fn masp_assets_hash_key() -> storage::Key {
     storage::Key::from(address::MASP.to_db_key())
-        .push(&MASP_ASSET_MAP_KEY.to_owned())
+        .push(&MASP_ASSETS_HASH_KEY.to_owned())
         .expect("Cannot obtain a storage key")
 }

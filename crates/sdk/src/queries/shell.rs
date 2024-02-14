@@ -12,7 +12,7 @@ use namada_core::hints;
 use namada_core::types::address::Address;
 use namada_core::types::dec::Dec;
 use namada_core::types::hash::Hash;
-use namada_core::types::masp::{AssetMap, TokenMap};
+use namada_core::types::masp::TokenMap;
 use namada_core::types::storage::{
     self, BlockHeight, BlockResults, Epoch, KeySeg, PrefixValue,
 };
@@ -20,7 +20,7 @@ use namada_core::types::token::{Denomination, MaspDigitPos};
 use namada_core::types::uint::Uint;
 use namada_state::{DBIter, LastBlock, StorageHasher, DB};
 use namada_storage::{self, ResultExt, StorageRead};
-use namada_token::storage_key::{masp_asset_map_key, masp_token_map_key};
+use namada_token::storage_key::masp_token_map_key;
 #[cfg(any(test, feature = "async-client"))]
 use namada_tx::data::TxResult;
 
@@ -177,23 +177,20 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let asset_map_key = masp_asset_map_key();
-    let asset_map: AssetMap =
-        ctx.wl_storage.read(&asset_map_key)?.unwrap_or_default();
-    Ok(asset_map
+    Ok(ctx
+        .wl_storage
+        .storage
+        .conversion_state
+        .assets
         .iter()
-        .map(|(&asset_type, asset)| {
-            (
-                asset_type,
+        .map(
+            |(&asset_type, ((ref addr, denom, digit), epoch, ref conv, _))| {
                 (
-                    asset.token.clone(),
-                    asset.denom,
-                    asset.pos,
-                    asset.epoch,
-                    asset.conv.clone().into(),
-                ),
-            )
-        })
+                    asset_type,
+                    (addr.clone(), *denom, *digit, *epoch, conv.clone().into()),
+                )
+            },
+        )
         .collect())
 }
 
@@ -206,24 +203,22 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    // Conversion values are constructed on request
-    let asset_map_key = masp_asset_map_key();
-    let asset_map: AssetMap =
-        ctx.wl_storage.read(&asset_map_key)?.unwrap_or_default();
-    if let Some(asset) = asset_map.get(&asset_type) {
+    if let Some(((addr, denom, digit), epoch, conv, pos)) = ctx
+        .wl_storage
+        .storage
+        .conversion_state
+        .assets
+        .get(&asset_type)
+    {
         Ok(Some((
-            asset.token.clone(),
-            asset.denom,
-            asset.pos,
-            asset.epoch,
+            addr.clone(),
+            *denom,
+            *digit,
+            *epoch,
             Into::<masp_primitives::transaction::components::I128Sum>::into(
-                asset.conv.clone(),
+                conv.clone(),
             ),
-            ctx.wl_storage
-                .storage
-                .conversion_state
-                .tree
-                .path(asset.pos as _),
+            ctx.wl_storage.storage.conversion_state.tree.path(*pos),
         )))
     } else {
         Ok(None)

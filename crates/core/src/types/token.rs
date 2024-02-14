@@ -1,6 +1,7 @@
 //! A basic fungible token
 
 use std::cmp::Ordering;
+use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::iter::Sum;
 use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
@@ -9,6 +10,8 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::BASE32HEX_NOPAD;
 use ethabi::ethereum_types::U256;
+use masp_primitives::asset_type::AssetType;
+use masp_primitives::convert::AllowedConversion;
 use masp_primitives::merkle_tree::FrozenCommitmentTree;
 use masp_primitives::sapling;
 use serde::{Deserialize, Serialize};
@@ -19,7 +22,7 @@ use crate::types::address::Address;
 use crate::types::dec::{Dec, POS_DECIMAL_PRECISION};
 use crate::types::hash::Hash;
 use crate::types::storage;
-use crate::types::storage::{DbKeySeg, KeySeg};
+use crate::types::storage::{DbKeySeg, Epoch, KeySeg};
 use crate::types::uint::{self, Uint, I256};
 
 /// A representation of the conversion state
@@ -29,6 +32,17 @@ pub struct ConversionState {
     pub normed_inflation: Option<u128>,
     /// The tree currently containing all the conversions
     pub tree: FrozenCommitmentTree<sapling::Node>,
+    /// Map assets to their latest conversion and position in Merkle tree
+    #[allow(clippy::type_complexity)]
+    pub assets: BTreeMap<
+        AssetType,
+        (
+            (Address, Denomination, MaspDigitPos),
+            Epoch,
+            AllowedConversion,
+            usize,
+        ),
+    >,
 }
 
 /// Amount in micro units. For different granularity another representation
