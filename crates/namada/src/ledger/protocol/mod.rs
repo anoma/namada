@@ -293,8 +293,7 @@ pub fn get_fee_unshielding_transaction(
         })
 }
 
-/// Charge fee for the provided wrapper transaction. In ABCI returns an error if
-/// the balance of the block proposer overflows. In ABCI plus returns error if:
+/// Charge fee for the provided wrapper transaction. Returns error if:
 /// - The unshielding fails
 /// - Fee amount overflows
 /// - Not enough funds are available to pay the entire amount of the fee
@@ -312,100 +311,148 @@ where
     H: 'static + StorageHasher + Sync,
     WLS: WriteLogAndStorage<D = D, H = H> + StorageRead,
 {
+    // FIXME: in process_proposal and mempool check also validate the
+    // transparent notes
+
+    // Unshield funds if requested
+    let valid_fee_unshielding = if let Some(transaction) = masp_transaction {
+        run_fee_unshielding(wrapper, shell_params, transaction)
+    } else {
+        Ok(false)
+    };
+
+    // Charge or check fees before propagating any possible error coming from
+    // the fee unshielding. If fee unshielding failed for non-gas reasons but
+    // the fees can still be paid we'll continue with the execution
+    match wrapper_args {
+        Some(WrapperArgs {
+            block_proposer,
+            is_committed_fee_unshield: _,
+        }) => transfer_fee(shell_params.wl_storage, block_proposer, wrapper)?,
+        None => check_fees(shell_params.wl_storage, wrapper)?,
+    }
+
+    changed_keys.extend(
+        shell_params
+            .wl_storage
+            .write_log_mut()
+            .get_keys_with_precommit(),
+    );
+
+    // FIXME: add test that fee unshieldign consumes gas
+    // Commit tx write log even in case of subsequent errors
+    shell_params.wl_storage.write_log_mut().commit_tx();
+
+    // Update the flag only after the valid fee payment has been committed. If
+    // fee unshielding went out of gas propagate the error
+    if let Some(args) = wrapper_args {
+        args.is_committed_fee_unshield = valid_fee_unshielding?;
+    }
+    // FIXME: need a test also for this, check that an invalid fee unshielding
+    // does not trigger the sentinel
+
+    Ok(())
+}
+
+// Executes the masp fee unshielding transaction. Returns `true if the unshield
+// was succesfull, `false` otherwise and error in case of out-of-gas
+fn run_fee_unshielding<'a, D, H, CA, WLS>(
+    wrapper: &WrapperTx,
+    shell_params: &mut ShellParams<'a, CA, WLS>,
+    transaction: Transaction,
+) -> Result<bool>
+where
+    CA: 'static + WasmCacheAccess + Sync,
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+    WLS: WriteLogAndStorage<D = D, H = H> + StorageRead,
+{
     let ShellParams {
-        tx_gas_meter: _,
+        tx_gas_meter,
         wl_storage,
         vp_wasm_cache,
         tx_wasm_cache,
     } = shell_params;
 
-    // Unshield funds if requested
-    let requires_fee_unshield = if let Some(transaction) = masp_transaction {
-        // The unshielding tx does not charge gas, instantiate a
-        // custom gas meter for this step
-        let mut tx_gas_meter =
-            TxGasMeter::new(GasLimit::from(
-                wl_storage
-                    .read::<u64>(
-                        &namada_parameters::storage::get_fee_unshielding_gas_limit_key(
-                        ),
-                    )
-                    .expect("Error reading the storage")
-                    .expect("Missing fee unshielding gas limit in storage")),
-            );
+    // The unshielding is subject to a gas limit imposed by a protocol
+    // parameter, instantiate a custom gas meter for this step and
+    // initialize it with the already consumed gas. The gas limit should
+    // actually be the lowest between the protocol parameter and the actual gas
+    // limit of the transaction
+    let min_gas_limit = wl_storage
+        .read::<u64>(
+            &namada_parameters::storage::get_fee_unshielding_gas_limit_key(),
+        )
+        .expect("Error reading the storage")
+        .expect("Missing fee unshielding gas limit in storage")
+        .min(tx_gas_meter.tx_gas_limit.into());
+    let mut unshield_gas_meter = TxGasMeter::new(GasLimit::from(min_gas_limit));
+    unshield_gas_meter
+        .copy_consumed_gas_from_other(tx_gas_meter)
+        .map_err(|e| Error::GasError(e.to_string()))?;
 
-        // If it fails, do not return early
-        // from this function but try to take the funds from the unshielded
-        // balance
-        match wrapper.generate_fee_unshielding(
-            get_transfer_hash_from_storage(*wl_storage),
-            Some(TX_TRANSFER_WASM.to_string()),
-            transaction,
-        ) {
-            Ok(fee_unshielding_tx) => {
-                // NOTE: A clean tx write log must be provided to this call
-                // for a correct vp validation. Block write log, instead,
-                // should contain any prior changes (if any)
-                wl_storage.write_log_mut().precommit_tx();
-                match apply_wasm_tx(
-                    fee_unshielding_tx,
-                    &TxIndex::default(),
-                    ShellParams {
-                        tx_gas_meter: &mut tx_gas_meter,
-                        wl_storage: *wl_storage,
-                        vp_wasm_cache,
-                        tx_wasm_cache,
-                    },
-                ) {
-                    Ok(result) => {
-                        // NOTE: do not commit yet cause this could be
-                        // exploited to get free unshieldings
-                        if !result.is_accepted() {
-                            wl_storage.write_log_mut().drop_tx_keep_precommit();
-                            tracing::error!(
-                                "The unshielding tx is invalid, some VPs \
-                                 rejected it: {:#?}",
-                                result.vps_result.rejected_vps
-                            );
-                        }
-                    }
-                    Err(e) => {
+    // If it fails just log it and still try to charge the gas
+    let result = match wrapper.generate_fee_unshielding(
+        get_transfer_hash_from_storage(*wl_storage),
+        Some(TX_TRANSFER_WASM.to_string()),
+        transaction,
+    ) {
+        Ok(fee_unshielding_tx) => {
+            // NOTE: A clean tx write log must be provided to this call
+            // for a correct vp validation. Block write log, instead,
+            // should contain any prior changes (if any)
+            wl_storage.write_log_mut().precommit_tx();
+            match apply_wasm_tx(
+                fee_unshielding_tx,
+                &TxIndex::default(),
+                ShellParams {
+                    tx_gas_meter: &mut unshield_gas_meter,
+                    wl_storage: *wl_storage,
+                    vp_wasm_cache,
+                    tx_wasm_cache,
+                },
+            ) {
+                Ok(result) => {
+                    // NOTE: do not commit yet cause this could be
+                    // exploited to get free unshieldings and shielded
+                    // operations
+                    if !result.is_accepted() {
                         wl_storage.write_log_mut().drop_tx_keep_precommit();
                         tracing::error!(
-                            "The unshielding tx is invalid, wasm run failed: \
-                             {}",
-                            e
+                            "The unshielding tx is invalid, some VPs rejected \
+                             it: {:#?}",
+                            result.vps_result.rejected_vps
                         );
                     }
+
+                    result.is_accepted()
+                }
+                // FIXME: could propagate error?
+                Err(e) => {
+                    wl_storage.write_log_mut().drop_tx_keep_precommit();
+                    tracing::error!(
+                        "The unshielding tx is invalid, wasm run failed: {}",
+                        e
+                    );
+
+                    false
                 }
             }
-            Err(e) => tracing::error!("{}", e),
         }
-
-        true
-    } else {
-        false
+        // FIXME: could propagate error?
+        // FIXME: I could but I would need to patter nmatch the error in the
+        // caller and also propagate the gas meter
+        Err(e) => {
+            tracing::error!("{}", e);
+            false
+        }
     };
 
-    // Charge or check fees
-    match wrapper_args {
-        Some(WrapperArgs {
-            block_proposer,
-            is_committed_fee_unshield: _,
-        }) => transfer_fee(*wl_storage, block_proposer, wrapper)?,
-        None => check_fees(*wl_storage, wrapper)?,
-    }
+    tx_gas_meter
+        .copy_consumed_gas_from_other(&unshield_gas_meter)
+        .map_err(|e| Error::GasError(e.to_string()))?;
 
-    changed_keys.extend(wl_storage.write_log_mut().get_keys_with_precommit());
-
-    // Commit tx write log even in case of subsequent errors
-    wl_storage.write_log_mut().commit_tx();
-    // Update the flag only after the fee payment has been committed
-    if let Some(args) = wrapper_args {
-        args.is_committed_fee_unshield = requires_fee_unshield;
-    }
-
-    Ok(())
+    Ok(result)
 }
 
 /// Perform the actual transfer of fess from the fee payer to the block
