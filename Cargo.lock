@@ -3897,7 +3897,7 @@ dependencies = [
 [[package]]
 name = "masp_note_encryption"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?tag=v1.0.0#c3c6047a9c9da54058afc71219b913ac9f79e48b"
+source = "git+https://github.com/anoma/masp?tag=v1.1.0#f24691c0eb76909e3c15ae03aef294dccebd2df3"
 dependencies = [
  "borsh",
  "chacha20",
@@ -3910,7 +3910,7 @@ dependencies = [
 [[package]]
 name = "masp_primitives"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?tag=v1.0.0#c3c6047a9c9da54058afc71219b913ac9f79e48b"
+source = "git+https://github.com/anoma/masp?tag=v1.1.0#f24691c0eb76909e3c15ae03aef294dccebd2df3"
 dependencies = [
  "aes",
  "bip0039",
@@ -3942,7 +3942,7 @@ dependencies = [
 [[package]]
 name = "masp_proofs"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?tag=v1.0.0#c3c6047a9c9da54058afc71219b913ac9f79e48b"
+source = "git+https://github.com/anoma/masp?tag=v1.1.0#f24691c0eb76909e3c15ae03aef294dccebd2df3"
 dependencies = [
  "bellman",
  "blake2b_simd",
@@ -4122,7 +4122,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "namada"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -4162,6 +4162,7 @@ dependencies = [
  "namada_tx_env",
  "namada_vote_ext",
  "namada_vp_env",
+ "num-traits 0.2.17",
  "num256",
  "orion",
  "owo-colors",
@@ -4204,7 +4205,7 @@ dependencies = [
 
 [[package]]
 name = "namada_account"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "borsh",
  "namada_core",
@@ -4216,7 +4217,7 @@ dependencies = [
 
 [[package]]
 name = "namada_apps"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "ark-serialize",
  "ark-std",
@@ -4306,7 +4307,7 @@ dependencies = [
 
 [[package]]
 name = "namada_benchmarks"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "borsh",
  "borsh-ext",
@@ -4322,7 +4323,7 @@ dependencies = [
 
 [[package]]
 name = "namada_core"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "bech32 0.8.1",
  "borsh",
@@ -4372,7 +4373,7 @@ dependencies = [
 
 [[package]]
 name = "namada_encoding_spec"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "borsh",
  "itertools 0.10.5",
@@ -4383,7 +4384,7 @@ dependencies = [
 
 [[package]]
 name = "namada_ethereum_bridge"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "assert_matches",
  "borsh",
@@ -4415,7 +4416,7 @@ dependencies = [
 
 [[package]]
 name = "namada_examples"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "masp_proofs",
  "namada_sdk",
@@ -4426,7 +4427,7 @@ dependencies = [
 
 [[package]]
 name = "namada_gas"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "assert_matches",
  "borsh",
@@ -4438,7 +4439,7 @@ dependencies = [
 
 [[package]]
 name = "namada_governance"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "borsh",
  "namada_core",
@@ -4455,7 +4456,7 @@ dependencies = [
 
 [[package]]
 name = "namada_ibc"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "borsh",
  "ibc",
@@ -4479,7 +4480,7 @@ dependencies = [
 
 [[package]]
 name = "namada_light_sdk"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "borsh",
  "borsh-ext",
@@ -4493,7 +4494,7 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "pretty_assertions",
  "proc-macro2",
@@ -4503,7 +4504,7 @@ dependencies = [
 
 [[package]]
 name = "namada_merkle_tree"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "assert_matches",
  "borsh",
@@ -4519,7 +4520,7 @@ dependencies = [
 
 [[package]]
 name = "namada_parameters"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "borsh",
  "namada_core",
@@ -4530,7 +4531,7 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "assert_matches",
  "borsh",
@@ -4559,7 +4560,7 @@ dependencies = [
 
 [[package]]
 name = "namada_sdk"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -4623,7 +4624,7 @@ dependencies = [
 
 [[package]]
 name = "namada_shielded_token"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "masp_primitives",
  "namada_core",
@@ -4639,7 +4640,7 @@ dependencies = [
 
 [[package]]
 name = "namada_state"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "assert_matches",
  "borsh",
@@ -4665,7 +4666,7 @@ dependencies = [
 
 [[package]]
 name = "namada_storage"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "borsh",
  "itertools 0.10.5",
@@ -4679,7 +4680,7 @@ dependencies = [
 
 [[package]]
 name = "namada_test_utils"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "borsh",
  "namada_core",
@@ -4688,7 +4689,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tests"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "assert_cmd",
  "async-trait",
@@ -4740,7 +4741,7 @@ dependencies = [
 
 [[package]]
 name = "namada_token"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "namada_core",
  "namada_shielded_token",
@@ -4750,7 +4751,7 @@ dependencies = [
 
 [[package]]
 name = "namada_trans_token"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "namada_core",
  "namada_storage",
@@ -4758,7 +4759,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "ark-bls12-381",
  "assert_matches",
@@ -4782,7 +4783,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_env"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "namada_core",
  "namada_storage",
@@ -4790,7 +4791,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "borsh",
  "masp_primitives",
@@ -4812,7 +4813,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "borsh",
  "masp_primitives",
@@ -4821,7 +4822,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vote_ext"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "borsh",
  "data-encoding",
@@ -4832,7 +4833,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_env"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "derivative",
  "masp_primitives",
@@ -4844,7 +4845,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.30.3"
+version = "0.31.4"
 dependencies = [
  "borsh",
  "namada_account",

@@ -1,4 +1,5 @@
 import argparse
+import datetime
 import sys
 import os
 import subprocess
@@ -120,7 +121,7 @@ print(f"Using {bins[0].split('/')[-1]} version: {os.popen(bin + ' --version').re
 # Run namadac utils init_network with the correct arguments
 print('Running namadac utils init_network')
 CHAIN_PREFIX='local'
-GENESIS_TIME='2021-12-31T00:00:00Z'
+GENESIS_TIME = datetime.datetime.now(datetime.timezone.utc).isoformat()
 TEMPLATES_PATH=localnet_dir
 WASM_CHECKSUMS_PATH=namada_dir + '/wasm/checksums.json'
 WASM_PATH=namada_dir + '/wasm/'

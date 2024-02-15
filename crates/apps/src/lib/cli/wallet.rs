@@ -110,33 +110,42 @@ fn shielded_keys_list(
             display_line!(io, &mut w_lock; "    Viewing Key: {}", key).unwrap();
             // A subset of viewing keys will have corresponding spending keys.
             // Print those too if they are available and requested.
-            if unsafe_show_secret {
-                if let Some(spending_key) = spending_key_opt {
-                    match spending_key.get::<CliWalletUtils>(decrypt, None) {
-                        // Here the spending key is unencrypted or successfully
-                        // decrypted
-                        Ok(spending_key) => {
+            if let Some(spending_key) = spending_key_opt {
+                match spending_key.get::<CliWalletUtils>(decrypt, None) {
+                    // Here the spending key is unencrypted or successfully
+                    // decrypted
+                    Ok(spending_key) => {
+                        if unsafe_show_secret {
                             display_line!(io,
                                 &mut w_lock;
                                 "    Spending key: {}", spending_key,
                             )
                             .unwrap();
                         }
-                        // Here the key is encrypted but decryption has not been
-                        // requested
-                        Err(DecryptionError::NotDecrypting) if !decrypt => {
-                            continue;
-                        }
-                        // Here the key is encrypted but incorrect password has
-                        // been provided
-                        Err(err) => {
-                            display_line!(io,
-                                &mut w_lock;
-                                    "    Couldn't decrypt the spending key: {}",
-                                    err,
-                            )
-                            .unwrap();
-                        }
+                    }
+                    // Here the key is encrypted but decryption has not been
+                    // requested
+                    Err(DecryptionError::NotDecrypting) if !decrypt => {
+                        continue;
+                    }
+                    // Here the key is encrypted but no password has been
+                    // provided
+                    Err(DecryptionError::EmptyPassword) => {
+                        display_line!(io,
+                                      &mut w_lock;
+                                      "Decryption of the spending key cancelled: no password provided"
+                        )
+                        .unwrap();
+                    }
+                    // Here the key is encrypted but incorrect password has
+                    // been provided
+                    Err(err) => {
+                        display_line!(io,
+                            &mut w_lock;
+                                "    Couldn't decrypt the spending key: {}",
+                                err,
+                        )
+                        .unwrap();
                     }
                 }
             }
@@ -179,6 +188,7 @@ fn shielded_key_derive(
         unsafe_dont_encrypt,
         derivation_path,
         allow_non_compliant,
+        prompt_bip39_passphrase,
         use_device,
         ..
     }: args::KeyDerive,
@@ -205,6 +215,7 @@ fn shielded_key_derive(
                 alias_force,
                 derivation_path,
                 None,
+                prompt_bip39_passphrase,
                 encryption_password,
             )
             .unwrap_or_else(|| {
@@ -308,15 +319,12 @@ fn payment_address_gen(
     let alias = alias.to_lowercase();
     let viewing_key = ExtendedFullViewingKey::from(viewing_key).fvk.vk;
     let (div, _g_d) = find_valid_diversifier(&mut OsRng);
-    let payment_addr = viewing_key
+    let masp_payment_addr = viewing_key
         .to_payment_address(div)
         .expect("a PaymentAddress");
+    let payment_addr = PaymentAddress::from(masp_payment_addr).pinned(pin);
     let alias = wallet
-        .insert_payment_addr(
-            alias,
-            PaymentAddress::from(payment_addr).pinned(pin),
-            alias_force,
-        )
+        .insert_payment_addr(alias, payment_addr, alias_force)
         .unwrap_or_else(|| {
             edisplay_line!(io, "Payment address not added");
             cli::safe_exit(1);
@@ -324,7 +332,8 @@ fn payment_address_gen(
     wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
     display_line!(
         io,
-        "Successfully generated a payment address with the following alias: {}",
+        "Successfully generated payment address {} with alias {}",
+        payment_addr,
         alias,
     );
 }
@@ -431,6 +440,7 @@ async fn transparent_key_and_address_derive(
         unsafe_dont_encrypt,
         derivation_path,
         allow_non_compliant,
+        prompt_bip39_passphrase,
         use_device,
         ..
     }: args::KeyDerive,
@@ -461,6 +471,7 @@ async fn transparent_key_and_address_derive(
                 alias_force,
                 derivation_path,
                 None,
+                prompt_bip39_passphrase,
                 encryption_password,
             )
             .unwrap_or_else(|| {
@@ -1018,9 +1029,17 @@ fn transparent_key_address_find_by_alias(
                 match wallet.find_secret_key(&alias, None) {
                     Ok(keypair) => {
                         if unsafe_show_secret {
-                            display_line!(io, &mut w_lock; "    Secret key: {}", keypair)
-                        .unwrap();
+                            display_line!(io, &mut w_lock; "    Secret key: {}", keypair) .unwrap();
                         }
+                    }
+                    Err(FindKeyError::KeyDecryptionError(
+                        DecryptionError::EmptyPassword,
+                    )) => {
+                        display_line!(io,
+                                      &mut w_lock;
+                                      "Decryption of the keypair cancelled: no password provided"
+                        )
+                        .unwrap();
                     }
                     Err(FindKeyError::KeyNotFound(_)) => {}
                     Err(err) => edisplay_line!(io, "{}", err),
@@ -1087,6 +1106,15 @@ fn shielded_key_address_find_by_alias(
                         if unsafe_show_secret {
                             display_line!(io, &mut w_lock; "    Spending key: {}", spending_key).unwrap();
                         }
+                    }
+                    Err(FindKeyError::KeyDecryptionError(
+                        DecryptionError::EmptyPassword,
+                    )) => {
+                        display_line!(io,
+                                      &mut w_lock;
+                                      "Decryption of the shielded key cancelled: no password provided"
+                        )
+                        .unwrap();
                     }
                     Err(FindKeyError::KeyNotFound(_)) => {}
                     Err(err) => edisplay_line!(io, "{}", err),
@@ -1157,14 +1185,22 @@ fn transparent_keys_list(
             // Print those too if they are available and requested.
             if let Some((stored_keypair, _pkh)) = stored_keypair {
                 match stored_keypair.get::<CliWalletUtils>(decrypt, None) {
-                    Ok(keypair) if unsafe_show_secret => {
+                    Ok(keypair) => {
+                        if unsafe_show_secret {
+                            display_line!(io,
+                                          &mut w_lock;
+                                          "    Secret key: {}", keypair,
+                            )
+                            .unwrap();
+                        }
+                    }
+                    Err(DecryptionError::EmptyPassword) => {
                         display_line!(io,
                                       &mut w_lock;
-                                      "    Secret key: {}", keypair,
+                                      "Decryption of the keypair cancelled: no password provided"
                         )
                         .unwrap();
                     }
-                    Ok(_keypair) => {}
                     Err(DecryptionError::NotDecrypting) if !decrypt => {
                         continue;
                     }

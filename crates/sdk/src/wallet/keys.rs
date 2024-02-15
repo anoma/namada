@@ -144,6 +144,8 @@ pub enum DecryptionError {
     DeserializingError,
     #[error("Asked not to decrypt")]
     NotDecrypting,
+    #[error("Empty password provided")]
+    EmptyPassword,
 }
 
 impl<T: BorshSerialize + BorshDeserialize + Display + FromStr + Clone>
@@ -217,6 +219,10 @@ impl<T: BorshSerialize + BorshDeserialize> EncryptedKeypair<T> {
         &self,
         password: Zeroizing<String>,
     ) -> Result<T, DecryptionError> {
+        if password.is_empty() {
+            return Err(DecryptionError::EmptyPassword);
+        }
+
         let salt_len = encryption_salt().len();
         let (raw_salt, cipher) = self.0.split_at(salt_len);
 

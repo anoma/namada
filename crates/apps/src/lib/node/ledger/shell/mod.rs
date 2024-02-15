@@ -1895,6 +1895,8 @@ mod test_utils {
                 self.wl_storage.storage.last_block.as_mut()
             {
                 *height = next_epoch_min_start_height;
+            } else {
+                panic!("Test failed");
             }
             self.finalize_and_commit(req.clone());
 
