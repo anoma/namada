@@ -348,7 +348,12 @@ pub fn received_ibc_token(
             TracePrefix::new(dest_port_id.clone(), dest_channel_id.clone());
         ibc_denom.add_trace_prefix(prefix);
     }
-    Ok(storage::ibc_token(ibc_denom.to_string()))
+    if ibc_denom.trace_path.is_empty() {
+        Address::decode(ibc_denom.to_string())
+            .map_err(|e| Error::Denom(format!("Invalid base denom: {e}")))
+    } else {
+        Ok(storage::ibc_token(ibc_denom.to_string()))
+    }
 }
 
 #[cfg(any(test, feature = "testing"))]
