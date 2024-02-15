@@ -1666,7 +1666,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Sign a transaction.")
+                .about("Sign a transaction offline.")
                 .add_args::<args::SignTx<args::CliTypes>>()
         }
     }
