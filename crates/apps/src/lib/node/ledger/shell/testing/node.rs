@@ -503,9 +503,8 @@ impl MockNode {
 
     /// Send a tx through Process Proposal and Finalize Block
     /// and register the results.
-    pub fn submit_txs(&self, txs: Vec<Vec<u8>>) {
-        // The block space allocator disallows encrypted txs in certain blocks.
-        // Advance to block height that allows txs.
+    fn submit_txs(&self, txs: Vec<Vec<u8>>) {
+
         self.finalize_and_commit();
         let (proposer_address, votes) = self.prepare_request();
 
@@ -764,21 +763,6 @@ impl<'a> Client for &'a MockNode {
             return Ok(resp);
         } else {
             self.clear_results();
-        }
-        let (proposer_address, _) = self.prepare_request();
-        let req = RequestPrepareProposal {
-            proposer_address: proposer_address.into(),
-            ..Default::default()
-        };
-        let txs: Vec<Vec<u8>> = {
-            let locked = self.shell.lock().unwrap();
-            locked.prepare_proposal(req).txs
-        }
-        .into_iter()
-        .map(|tx| tx.into())
-        .collect();
-        if !txs.is_empty() {
-            self.submit_txs(txs);
         }
         Ok(resp)
     }
