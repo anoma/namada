@@ -69,7 +69,7 @@ router! {SHELL,
     ( "last_block" ) -> Option<LastBlock> = last_block,
 
     // First block height of the current epoch
-    ( "first_height_of_current_epoch" ) -> BlockHeight = first_block_height_of_current_epoch,
+    ( "first_block_height_of_current_epoch" ) -> BlockHeight = first_block_height_of_current_epoch,
 
     // Raw storage access - read value
     ( "value" / [storage_key: storage::Key] )
