@@ -243,6 +243,7 @@ pub mod cmds {
                 .subcommand(TxResignSteward::def().display_order(4))
                 // Queries
                 .subcommand(QueryEpoch::def().display_order(5))
+                .subcommand(QueryNextEpochInfo::def().display_order(5))
                 .subcommand(QueryStatus::def().display_order(5))
                 .subcommand(QueryAccount::def().display_order(5))
                 .subcommand(QueryTransfers::def().display_order(5))
@@ -312,6 +313,8 @@ pub mod cmds {
             let redelegate = Self::parse_with_ctx(matches, Redelegate);
             let claim_rewards = Self::parse_with_ctx(matches, ClaimRewards);
             let query_epoch = Self::parse_with_ctx(matches, QueryEpoch);
+            let query_next_epoch_info =
+                Self::parse_with_ctx(matches, QueryNextEpochInfo);
             let query_status = Self::parse_with_ctx(matches, QueryStatus);
             let query_account = Self::parse_with_ctx(matches, QueryAccount);
             let query_transfers = Self::parse_with_ctx(matches, QueryTransfers);
@@ -376,6 +379,7 @@ pub mod cmds {
                 .or(tx_update_steward_commission)
                 .or(tx_resign_steward)
                 .or(query_epoch)
+                .or(query_next_epoch_info)
                 .or(query_status)
                 .or(query_transfers)
                 .or(query_conversions)
@@ -464,6 +468,7 @@ pub mod cmds {
         TxUpdateStewardCommission(TxUpdateStewardCommission),
         TxResignSteward(TxResignSteward),
         QueryEpoch(QueryEpoch),
+        QueryNextEpochInfo(QueryNextEpochInfo),
         QueryStatus(QueryStatus),
         QueryAccount(QueryAccount),
         QueryTransfers(QueryTransfers),
@@ -1463,6 +1468,28 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query the epoch of the last committed block.")
+                .add_args::<args::Query<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryNextEpochInfo(pub args::Query<args::CliTypes>);
+
+    impl SubCmd for QueryNextEpochInfo {
+        const CMD: &'static str = "next-epoch-info";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| QueryNextEpochInfo(args::Query::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Query some info to help discern when the next epoch will \
+                     begin.",
+                )
                 .add_args::<args::Query<args::CliTypes>>()
         }
     }
