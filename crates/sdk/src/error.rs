@@ -162,12 +162,10 @@ pub enum TxSubmitError {
          be reactivated."
     )]
     ValidatorNotInactive(Address, Epoch),
-    /// Validator still frozen and ineligible to be unjailed
-    #[error(
-        "The validator address {0} is currently frozen and ineligible to be \
-         unjailed."
-    )]
-    ValidatorFrozenFromUnjailing(Address),
+    /// Validator is frozen and ineligible to be unjailed or have bonds
+    /// unbonded
+    #[error("The validator address {0} is currently frozen.")]
+    ValidatorFrozen(Address),
     /// The commission for the steward are not valid
     #[error("Invalid steward commission: {0}.")]
     InvalidStewardCommission(String),
