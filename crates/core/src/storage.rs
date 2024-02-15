@@ -1171,6 +1171,14 @@ impl Mul<u64> for Epoch {
     }
 }
 
+impl Mul<Epoch> for u64 {
+    type Output = Epoch;
+
+    fn mul(self, rhs: Epoch) -> Self::Output {
+        Epoch(self * rhs.0)
+    }
+}
+
 impl Div<u64> for Epoch {
     type Output = Epoch;
 

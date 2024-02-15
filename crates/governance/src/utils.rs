@@ -432,8 +432,8 @@ pub fn compute_proposal_result(
     }
 }
 
-/// Calculate the valid voting window for validator given a proposal epoch
-/// details
+/// Calculate the valid voting window for a validator given proposal epoch
+/// details. The valid window is within 2/3 of the voting period.
 pub fn is_valid_validator_voting_period(
     current_epoch: Epoch,
     voting_start_epoch: Epoch,
@@ -442,9 +442,10 @@ pub fn is_valid_validator_voting_period(
     if voting_start_epoch >= voting_end_epoch {
         false
     } else {
-        let duration = voting_end_epoch - voting_start_epoch;
-        let two_third_duration = (duration / 3) * 2;
-        current_epoch <= voting_start_epoch + two_third_duration
+        // From e_cur <= e_start + 2/3 * (e_end - e_start)
+        let is_within_two_thirds =
+            3 * current_epoch <= voting_start_epoch + 2 * voting_end_epoch;
+        current_epoch >= voting_start_epoch && is_within_two_thirds
     }
 }
 
