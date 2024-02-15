@@ -895,11 +895,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     ) -> Result<ExtractedMaspTx, Error> {
         // We use the changed keys instead of the Transfer object
         // because those are what the masp validity predicate works on
-        let TxResult {
+        let (
             wrapper_changed_keys,
             changed_keys,
-            ..
-        } = if let ExtractShieldedActionArg::Event(tx_event) = action_arg {
+        ) = if let ExtractShieldedActionArg::Event(tx_event) = action_arg {
             let tx_result_str = tx_event
                 .attributes
                 .iter()
@@ -915,10 +914,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                         "Missing required tx result in event".to_string(),
                     )
                 })?;
-            TxResult::from_str(tx_result_str)
-                .map_err(|e| Error::Other(e.to_string()))?
+            let result = TxResult::from_str(tx_result_str)
+                .map_err(|e| Error::Other(e.to_string()))?;
+            (result.wrapper_changed_keys, result.changed_keys)
         } else {
-            panic!("Expected a event type Shield action argument.")
+            (Default::default(), Default::default())
         };
 
         let tx_header = tx.header();
