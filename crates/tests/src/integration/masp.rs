@@ -2128,7 +2128,7 @@ fn dynamic_assets() -> Result<()> {
     let nam = NAM.to_lowercase();
 
     let token_map_key = masp_token_map_key();
-    let tokens = {
+    let test_tokens = {
         // Only distribute rewards for NAM tokens
         let mut tokens: TokenMap = node
             .shell
@@ -2239,7 +2239,7 @@ fn dynamic_assets() -> Result<()> {
             .read(&token_map_key)
             .unwrap()
             .unwrap_or_default();
-        tokens.insert(btc.clone(), tokens[&btc].clone());
+        tokens.insert(btc.clone(), test_tokens[&btc].clone());
         node.shell
             .lock()
             .unwrap()
@@ -2415,7 +2415,9 @@ fn dynamic_assets() -> Result<()> {
         let storage = &mut node.shell.lock().unwrap().wl_storage;
         storage
             .write(
-                &token::storage_key::masp_max_reward_rate_key(&tokens[&nam]),
+                &token::storage_key::masp_max_reward_rate_key(
+                    &test_tokens[&nam],
+                ),
                 Dec::zero(),
             )
             .unwrap();
@@ -2588,7 +2590,9 @@ fn dynamic_assets() -> Result<()> {
         let storage = &mut node.shell.lock().unwrap().wl_storage;
         storage
             .write(
-                &token::storage_key::masp_max_reward_rate_key(&tokens[&nam]),
+                &token::storage_key::masp_max_reward_rate_key(
+                    &test_tokens[&nam],
+                ),
                 Dec::from_str("0.1").unwrap(),
             )
             .unwrap();
