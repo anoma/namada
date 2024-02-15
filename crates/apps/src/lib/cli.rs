@@ -3216,8 +3216,8 @@ pub mod args {
         /// Add global args definition. Should be added to every top-level
         /// command.
         pub fn def(app: App) -> App {
-            app.arg(CHAIN_ID_OPT.def().help("The chain ID."))
-                .arg(BASE_DIR.def().help(
+            app.arg(CHAIN_ID_OPT.def().global(true).help("The chain ID."))
+                .arg(BASE_DIR.def().global(true).help(
                     "The base directory is where the nodes, client and wallet \
                      configuration and state is stored. This value can also \
                      be set via `NAMADA_BASE_DIR` environment variable, but \
@@ -3227,7 +3227,7 @@ pub mod args {
                      Unix,`$HOME/Library/Application Support/Namada` on \
                      Mac,and `%AppData%\\Namada` on Windows.",
                 ))
-                .arg(WASM_DIR.def().help(
+                .arg(WASM_DIR.def().global(true).help(
                     "Directory with built WASM validity predicates, \
                      transactions. This value can also be set via \
                      `NAMADA_WASM_DIR` environment variable, but the argument \
@@ -3236,6 +3236,7 @@ pub mod args {
                 .arg(
                     PRE_GENESIS
                         .def()
+                        .global(true)
                         .help("Dispatch pre-genesis specific logic."),
                 )
         }
