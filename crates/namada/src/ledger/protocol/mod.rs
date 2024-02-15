@@ -349,9 +349,9 @@ where
     Ok(())
 }
 
-// Executes the masp fee unshielding transaction. Returns `true if the unshield
-// was succesfull, `false` otherwise and error in case of out-of-gas
-fn run_fee_unshielding<'a, D, H, CA, WLS>(
+/// Executes the masp fee unshielding transaction. Returns `true if the unshield
+/// was succesfull, `false` otherwise and error in case of out-of-gas
+pub fn run_fee_unshielding<'a, D, H, CA, WLS>(
     wrapper: &WrapperTx,
     shell_params: &mut ShellParams<'a, CA, WLS>,
     transaction: Transaction,
@@ -386,7 +386,7 @@ where
         .copy_consumed_gas_from(tx_gas_meter)
         .map_err(|e| Error::GasError(e.to_string()))?;
 
-    // If it fails just log it and still try to charge the gas
+    // If it fails just log it and still try to charge the gas fees
     let result = match wrapper.generate_fee_unshielding(
         get_transfer_hash_from_storage(*wl_storage),
         Some(TX_TRANSFER_WASM.to_string()),
@@ -395,7 +395,11 @@ where
         Ok(fee_unshielding_tx) => {
             // NOTE: A clean tx write log must be provided to this call
             // for a correct vp validation. Block write log, instead,
-            // should contain any prior changes (if any)
+            // should contain any prior changes (if any). This is to simulate
+            // the unshielding tx (to prevent the already written
+            // keys from being passed/triggering VPs) but we cannot
+            // commit the tx write log yet cause the tx could still
+            // be invalid.
             wl_storage.write_log_mut().precommit_tx();
             match apply_wasm_tx(
                 fee_unshielding_tx,

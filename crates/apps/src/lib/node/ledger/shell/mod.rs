@@ -10,7 +10,7 @@ mod finalize_block;
 mod governance;
 mod init_chain;
 pub use init_chain::InitChainValidation;
-use namada_sdk::tx::data::GasLimit;
+
 pub mod prepare_proposal;
 pub mod process_proposal;
 pub(super) mod queries;
@@ -41,10 +41,7 @@ use namada::ledger::gas::{Gas, TxGasMeter};
 use namada::ledger::pos::namada_proof_of_stake::types::{
     ConsensusValidator, ValidatorSetUpdate,
 };
-use namada::ledger::protocol::{
-    apply_wasm_tx, get_fee_unshielding_transaction,
-    get_transfer_hash_from_storage, ShellParams,
-};
+use namada::ledger::protocol::{get_fee_unshielding_transaction, ShellParams};
 use namada::ledger::{parameters, pos, protocol};
 use namada::parameters::validate_tx_bytes;
 use namada::proof_of_stake::slashing::{process_slashes, slash};
@@ -1447,9 +1444,6 @@ where
         fee_unshielding_validation(wrapper, transaction, shell_params)?;
     }
 
-    // FIXME: call transfer or check fees directly here and remove it from the
-    // caller
-
     Ok(())
 }
 
@@ -1467,14 +1461,74 @@ where
     // Validation of the commitment to this section is done when
     // checking the aggregated signature of the wrapper, no need for
     // further validation
-    let ShellParams {
-        tx_gas_meter,
-        wl_storage,
-        vp_wasm_cache,
-        tx_wasm_cache,
-    } = shell_params;
 
     // Validate data and generate unshielding tx
+    check_fee_unshielding(shell_params.wl_storage, wrapper, &masp_transaction)?;
+
+    if namada::ledger::protocol::run_fee_unshielding(
+        wrapper,
+        shell_params,
+        masp_transaction,
+    )
+    .map_err(|e| {
+        Error::TxApply(protocol::Error::FeeUnshieldingError(
+            WrapperTxErr::InvalidUnshield(format!(
+                "Fee unshielding went out of gas: {}",
+                e
+            )),
+        ))
+    })? {
+        Ok(())
+    } else {
+        Err(Error::TxApply(protocol::Error::FeeUnshieldingError(
+            WrapperTxErr::InvalidUnshield(
+                "Error while applying fee unshielding wasm transaction"
+                    .to_string(),
+            ),
+        )))
+    }
+}
+
+// Performs validation on the optional fee unshielding data carried by
+// the wrapper.
+fn check_fee_unshielding<D, H>(
+    wl_storage: &TempWlStorage<D, H>,
+    _wrapper: &WrapperTx,
+    unshield: &Transaction,
+) -> Result<()>
+where
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
+{
+    // Check that the number of descriptions is within a certain limit
+    // to avoid a possible DoS vector
+    let sapling_bundle = unshield.sapling_bundle().ok_or(Error::TxApply(
+        protocol::Error::FeeUnshieldingError(WrapperTxErr::InvalidUnshield(
+            "Missing required sapling bundle".to_string(),
+        )),
+    ))?;
+    let spends = sapling_bundle.shielded_spends.len();
+    let converts = sapling_bundle.shielded_converts.len();
+    let outs = sapling_bundle.shielded_outputs.len();
+
+    let descriptions = spends
+        .checked_add(converts)
+        .ok_or_else(|| {
+            Error::TxApply(protocol::Error::FeeUnshieldingError(
+                WrapperTxErr::InvalidUnshield(
+                    "Descriptions overflow".to_string(),
+                ),
+            ))
+        })?
+        .checked_add(outs)
+        .ok_or_else(|| {
+            Error::TxApply(protocol::Error::FeeUnshieldingError(
+                WrapperTxErr::InvalidUnshield(
+                    "Descriptions overflow".to_string(),
+                ),
+            ))
+        })?;
+
     let descriptions_limit = wl_storage
         .read(
             &parameters::storage::get_fee_unshielding_descriptions_limit_key(),
@@ -1482,76 +1536,20 @@ where
         .expect("Error reading the storage")
         .expect("Missing fee unshielding descriptions limit param in storage");
 
-    // FIXME: actually in finalize block I don't do these checks Maybe I could
-    // just replicate them? Yes they are very fast anyway FIXME: yes but
-    // than it means that in here we still let a tx with an invalid fee
-    // unshielding pass! FIXME: in case I need to call this function in
-    // run_fee_unshielding instead of just generate
-    let unshield = wrapper
-        .check_and_generate_fee_unshielding(
-            get_transfer_hash_from_storage(*wl_storage),
-            Some(namada_sdk::tx::TX_TRANSFER_WASM.to_string()),
-            descriptions_limit,
-            masp_transaction,
-        )
-        .map_err(|e| Error::TxApply(protocol::Error::FeeUnshieldingError(e)))?;
-
-    let min_gas_limit = wl_storage
-        .read::<u64>(&parameters::storage::get_fee_unshielding_gas_limit_key())
-        .expect("Error reading from storage")
-        .expect("Missing fee unshielding gas limit in storage")
-        .min(tx_gas_meter.tx_gas_limit.into());
-    let mut unshield_gas_meter = TxGasMeter::new(GasLimit::from(min_gas_limit));
-    unshield_gas_meter
-        .copy_consumed_gas_from(tx_gas_meter)
-        .map_err(|e| {
-            Error::TxApply(protocol::Error::GasError(e.to_string()))
-        })?;
-
-    // Runtime check
-    // NOTE: A clean tx write log must be provided to this call for a
-    // correct vp validation. Block write log, instead, should contain
-    // any prior changes (if any). This is to simulate the
-    // unshielding tx (to prevent the already written keys
-    // from being passed/triggering VPs) but we cannot
-    // commit the tx write log yet cause the tx could still
-    // be invalid.
-    wl_storage.write_log.precommit_tx();
-
-    // FIXME: apply the same logic of finalize block
-    // FIXME: see if we can use the same functions
-    let result = apply_wasm_tx(
-        unshield,
-        &TxIndex::default(),
-        ShellParams::new(
-            &mut unshield_gas_meter,
-            *wl_storage,
-            *vp_wasm_cache,
-            *tx_wasm_cache,
-        ),
-    )
-    .map_err(|e| {
+    if u64::try_from(descriptions).map_err(|e| {
         Error::TxApply(protocol::Error::FeeUnshieldingError(
-            WrapperTxErr::InvalidUnshield(format!("Wasm run failed: {}", e)),
+            WrapperTxErr::InvalidUnshield(e.to_string()),
         ))
-    })?;
-
-    tx_gas_meter
-        .copy_consumed_gas_from(&unshield_gas_meter)
-        .map_err(|e| {
-            Error::TxApply(protocol::Error::GasError(e.to_string()))
-        })?;
-
-    if result.is_accepted() {
-        Ok(())
-    } else {
-        Err(Error::TxApply(protocol::Error::FeeUnshieldingError(
-            WrapperTxErr::InvalidUnshield(format!(
-                "Some VPs rejected fee unshielding: {:#?}",
-                result.vps_result.rejected_vps
-            )),
-        )))
+    })? > descriptions_limit
+    {
+        return Err(Error::TxApply(protocol::Error::FeeUnshieldingError(
+            WrapperTxErr::InvalidUnshield(
+                "Descriptions exceed the maximum amount allowed".to_string(),
+            ),
+        )));
     }
+
+    Ok(())
 }
 
 /// for the shell
