@@ -4816,11 +4816,9 @@ pub mod args {
                             DATA_PATH_OPT.name,
                         ]),
                 )
-                .arg(
-                    PROPOSAL_VOTE
-                        .def()
-                        .help("The vote for the proposal. Either yay or nay."),
-                )
+                .arg(PROPOSAL_VOTE.def().help(
+                    "The vote for the proposal. Either yay, nay, or abstain.",
+                ))
                 .arg(
                     PROPOSAL_OFFLINE
                         .def()
