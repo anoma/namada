@@ -225,15 +225,15 @@ fn validate_pos_changes(
                                     Consensus | BelowCapacity | BelowThreshold
                                 ) && post == Inactive)
                             // Reactivation case
-                            || pre == Inactive && post != Inactive
+                            || (pre == Inactive && post != Inactive)
                             // Unjail case
-                            || pre == Jailed
+                            || (pre == Jailed
                                 && matches!(
                                     post,
                                     Consensus
                                         | BelowCapacity
                                         | BelowThreshold
-                                )
+                                ))
                         {
                             address == owner && **valid_sig
                         } else if
