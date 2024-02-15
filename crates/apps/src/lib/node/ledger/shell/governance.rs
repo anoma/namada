@@ -6,10 +6,10 @@ use namada::core::storage::Epoch;
 use namada::governance::pgf::storage::keys as pgf_storage;
 use namada::governance::pgf::storage::steward::StewardDetail;
 use namada::governance::pgf::{storage as pgf, ADDRESS};
-use namada::governance::storage::keys as gov_storage;
 use namada::governance::storage::proposal::{
     AddRemove, PGFAction, PGFTarget, ProposalType, StoragePgfFunding,
 };
+use namada::governance::storage::{keys as gov_storage, load_proposals};
 use namada::governance::utils::{
     compute_proposal_result, ProposalVotes, TallyResult, TallyType, TallyVote,
     VotePower,
@@ -31,6 +31,7 @@ use super::*;
 pub fn finalize_block<D, H>(
     shell: &mut Shell<D, H>,
     events: &mut impl EmitEvents,
+    current_epoch: Epoch,
     is_new_epoch: bool,
 ) -> Result<()>
 where
@@ -38,7 +39,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     if is_new_epoch {
-        execute_governance_proposals(shell, events)?;
+        load_and_execute_governance_proposals(shell, events, current_epoch)?;
     }
     Ok(())
 }
@@ -49,9 +50,27 @@ pub struct ProposalsResult {
     rejected: Vec<u64>,
 }
 
+pub fn load_and_execute_governance_proposals<D, H>(
+    shell: &mut Shell<D, H>,
+    events: &mut impl EmitEvents,
+    current_epoch: Epoch,
+) -> Result<ProposalsResult>
+where
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
+{
+    let proposal_ids = load_proposals(&shell.state, current_epoch)?;
+
+    let proposals_result =
+        execute_governance_proposals(shell, events, proposal_ids)?;
+
+    Ok(proposals_result)
+}
+
 fn execute_governance_proposals<D, H>(
     shell: &mut Shell<D, H>,
     events: &mut impl EmitEvents,
+    proposal_ids: BTreeSet<u64>,
 ) -> Result<ProposalsResult>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -59,7 +78,7 @@ where
 {
     let mut proposals_result = ProposalsResult::default();
 
-    for id in std::mem::take(&mut shell.proposal_data) {
+    for id in proposal_ids {
         let proposal_funds_key = gov_storage::get_funds_key(id);
         let proposal_end_epoch_key = gov_storage::get_voting_end_epoch_key(id);
         let proposal_type_key = gov_storage::get_proposal_type_key(id);

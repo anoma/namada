@@ -7,7 +7,7 @@ pub mod proposal;
 /// Vote structures
 pub mod vote;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use namada_core::address::Address;
 use namada_core::borsh::BorshDeserialize;
@@ -305,4 +305,29 @@ where
     let key = governance_keys::get_proposal_result_key(proposal_id);
     let proposal_result: Option<ProposalResult> = storage.read(&key)?;
     Ok(proposal_result)
+}
+
+/// Load proposals for execution in the current epoch.
+pub fn load_proposals<S>(
+    storage: &S,
+    current_epoch: Epoch,
+) -> Result<BTreeSet<u64>>
+where
+    S: StorageRead,
+{
+    let mut ids = BTreeSet::<u64>::new();
+    let proposals_key =
+        governance_keys::get_commiting_proposals_prefix(current_epoch.0);
+    for key_val in namada_storage::iter_prefix_bytes(storage, &proposals_key)? {
+        let (key, _) = key_val?;
+        let grace_epoch = governance_keys::get_commit_proposal_epoch(&key)
+            .expect("this key segment should correspond to an epoch number");
+        if current_epoch.0 == grace_epoch {
+            let proposal_id = governance_keys::get_commit_proposal_id(&key)
+                .expect("ths key segment should correspond to a proposal id");
+            ids.insert(proposal_id);
+        }
+    }
+
+    Ok(ids)
 }
