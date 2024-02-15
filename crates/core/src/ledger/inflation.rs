@@ -312,15 +312,16 @@ mod test {
 
     #[test]
     fn test_pos_inflation_playground() {
+        let denom = 1_000_000_u64;
         let init_locked_ratio = Dec::from_str("0.1").unwrap();
-        let total_tokens = 1_000_000_000_000_000_u64;
-        let epochs_per_year = 365_u64;
+        let total_tokens = 10_000_000_000_u64 * denom;
+        let epochs_per_year = 730_u64;
 
-        let staking_growth = Dec::from_str("0.04").unwrap();
+        let staking_growth = Dec::from_str("0.9").unwrap();
         // let mut do_add = true;
 
         // let a = (init_locked_ratio * total_tokens).to_uint().unwrap();
-        let num_rounds = 100;
+        let num_rounds = 50;
 
         let mut controller = PosRewardsController {
             locked_tokens: (init_locked_ratio * total_tokens)
@@ -331,8 +332,8 @@ mod test {
             locked_ratio_last: init_locked_ratio,
             max_reward_rate: Dec::from_str("0.1").unwrap(),
             last_inflation_amount: Uint::zero(),
-            p_gain_nom: Dec::from_str("0.25").unwrap(),
-            d_gain_nom: Dec::from_str("0.25").unwrap(),
+            p_gain_nom: Dec::from_str("2.5").unwrap(),
+            d_gain_nom: Dec::from_str("2.5").unwrap(),
             epochs_per_year,
         };
         dbg!(&controller);

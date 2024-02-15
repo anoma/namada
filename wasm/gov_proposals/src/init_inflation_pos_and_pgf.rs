@@ -10,8 +10,8 @@ fn apply_tx(ctx: &mut Ctx, _tx_data: Tx) -> TxResult {
     let mut pos_params = read_pos_params(ctx)?.owned;
     pos_params.max_inflation_rate = Dec::from_str("0.1").unwrap();
     pos_params.target_staked_ratio = Dec::from_str("0.666667").unwrap();
-    pos_params.rewards_gain_p = Dec::from_str("0.25").unwrap();
-    pos_params.rewards_gain_d = Dec::from_str("0.25").unwrap();
+    pos_params.rewards_gain_p = Dec::from_str("2.5").unwrap();
+    pos_params.rewards_gain_d = Dec::from_str("2.5").unwrap();
     write_pos_params(ctx, &pos_params)?;
 
     // PGF
