@@ -5593,7 +5593,7 @@ pub mod args {
             app.add_args::<Tx<CliTypes>>().arg(
                 VALIDATOR
                     .def()
-                    .help("The address of the jailed validator to deactivate."),
+                    .help("The address of the jailed validator to reactivate."),
             )
         }
     }
