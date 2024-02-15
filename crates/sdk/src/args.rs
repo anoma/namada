@@ -11,7 +11,7 @@ use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::keccak::KeccakHash;
 use namada_core::types::key::{common, SchemeType};
 use namada_core::types::masp::PaymentAddress;
-use namada_core::types::storage::Epoch;
+use namada_core::types::storage::{BlockHeight, Epoch};
 use namada_core::types::time::DateTimeUtc;
 use namada_core::types::{storage, token};
 use namada_governance::cli::onchain::{
@@ -61,6 +61,8 @@ pub trait NamadaTypes: Clone + std::fmt::Debug {
     type EthereumAddress: Clone + std::fmt::Debug;
     /// Represents a viewing key
     type ViewingKey: Clone + std::fmt::Debug;
+    /// Represents a spending key
+    type SpendingKey: Clone + std::fmt::Debug;
     /// Represents the owner of a balance
     type BalanceOwner: Clone + std::fmt::Debug;
     /// Represents a public key
@@ -100,6 +102,7 @@ impl NamadaTypes for SdkTypes {
     type EthereumAddress = ();
     type Keypair = namada_core::types::key::common::SecretKey;
     type PublicKey = namada_core::types::key::common::PublicKey;
+    type SpendingKey = namada_core::types::masp::ExtendedSpendingKey;
     type TendermintAddress = tendermint_config::net::Address;
     type TransferSource = namada_core::types::masp::TransferSource;
     type TransferTarget = namada_core::types::masp::TransferTarget;
@@ -1804,6 +1807,23 @@ pub struct SignTx<C: NamadaTypes = SdkTypes> {
     pub tx_data: C::Data,
     /// The account address
     pub owner: C::Address,
+}
+
+#[derive(Clone, Debug)]
+/// Sync notes from MASP owned by the provided spending /
+/// viewing keys. Syncing can be told to stop at a given
+/// block height.
+pub struct ShieldedSync<C: NamadaTypes = SdkTypes> {
+    /// The ledger address
+    pub ledger_address: C::TendermintAddress,
+    /// The number of txs to fetch before caching
+    pub batch_size: u64,
+    /// Height to sync up to. Defaults to most recent
+    pub last_query_height: Option<BlockHeight>,
+    /// Spending keys used to determine note ownership
+    pub spending_keys: Vec<C::SpendingKey>,
+    /// Viewing keys used to determine note ownership
+    pub viewing_keys: Vec<C::ViewingKey>,
 }
 
 /// Query PoS commission rate
