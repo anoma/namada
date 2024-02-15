@@ -337,7 +337,6 @@ where
             .get_keys_with_precommit(),
     );
 
-    // FIXME: add test that fee unshieldign consumes gas
     // Commit tx write log even in case of subsequent errors
     shell_params.wl_storage.write_log_mut().commit_tx();
 
@@ -346,8 +345,6 @@ where
     if let Some(args) = wrapper_args {
         args.is_committed_fee_unshield = valid_fee_unshielding?;
     }
-    // FIXME: need a test also for this, check that an invalid fee unshielding
-    // does not trigger the sentinel
 
     Ok(())
 }

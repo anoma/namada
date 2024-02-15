@@ -2009,6 +2009,87 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
     Ok(())
 }
 
+/// Test the unshielding tx attached to a wrapper:
+///
+/// 1. Shield some tokens to reduce the unshielded balance
+/// 2. Submit a new wrapper with a valid unshielding tx that fails because of
+/// gas
+#[test]
+fn wrapper_fee_unshielding_out_of_gas() -> Result<()> {
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "127.0.0.1:26567";
+    // Download the shielded pool parameters before starting node
+    let _ = FsShieldedUtils::new(PathBuf::new());
+    let (mut node, _services) = setup::setup()?;
+    _ = node.next_epoch();
+
+    // 1. Shield some tokens
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            ALBERT_KEY,
+            "--target",
+            AA_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "1979999", // Reduce the balance of the fee payer artificially
+            "--gas-price",
+            "1",
+            "--gas-limit",
+            "20000",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+
+    _ = node.next_epoch();
+    // 2. Valid unshielding out of gas
+    let tx_args = vec![
+        "transfer",
+        "--source",
+        ALBERT_KEY,
+        "--target",
+        BERTHA,
+        "--token",
+        NAM,
+        "--amount",
+        "1",
+        "--gas-price",
+        "1",
+        // Set a haigh gas limit to ensure that fee unshielding consumes it and
+        // we don't go out of gas just because of the tx size
+        "--gas-limit",
+        "7000",
+        "--gas-payer",
+        ALBERT_KEY,
+        "--gas-spending-key",
+        A_SPENDING_KEY,
+        "--ledger-address",
+        validator_one_rpc,
+    ];
+
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, tx_args.clone()));
+    assert!(
+        captured.result.is_err(),
+        "{:?} unexpectedly succeeded: {:?}, {:?}",
+        tx_args,
+        captured.result,
+        captured.output
+    );
+    // Assert that the failure happens with the wrapper transaction that gets
+    // rejected by mempool
+    assert!(format!("{:?}", captured.result)
+        .contains("Encountered error while broadcasting transaction"));
+
+    Ok(())
+}
+
 // Test that a masp unshield transaction can be succesfully executed even across
 // an epoch boundary.
 #[test]
