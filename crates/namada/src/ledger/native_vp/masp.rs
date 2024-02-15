@@ -81,7 +81,6 @@ where
         // than once in the same tx
         let mut revealed_nullifiers = HashSet::new();
 
-        // FIXME: test this check in some way if possible
         for description in transaction
             .sapling_bundle()
             .map_or(&vec![], |bundle| &bundle.shielded_spends)
@@ -561,16 +560,14 @@ where
             // 2. At least one shielded input
             // 3. The spend descriptions' anchors are valid
             // 4. The convert descriptions's anchors are valid
-            // FIXME: can improve this?
-            if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
-                if !transp_bundle.vin.is_empty() {
-                    tracing::debug!(
-                        "Transparent input to a transaction from the masp \
-                         must be 0 but is {}",
-                        transp_bundle.vin.len()
-                    );
-                    return Ok(false);
-                }
+            if shielded_tx
+                .transparent_bundle()
+                .is_some_and(|bundle| !bundle.vin.is_empty())
+            {
+                tracing::debug!(
+                    "No transparent inputs are allowed when the source is masp",
+                );
+                return Ok(false);
             }
 
             if !shielded_tx
@@ -699,24 +696,21 @@ where
             // 2. At least one shielded output
 
             // Satisfies 1.
-            // FIXME: can this be improved?
-            if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
-                if !transp_bundle.vout.is_empty() {
-                    tracing::debug!(
-                        "Transparent output to a transaction from the masp \
-                         must be 0 but is {}",
-                        transp_bundle.vout.len()
-                    );
-                    return Ok(false);
-                }
+            if shielded_tx
+                .transparent_bundle()
+                .is_some_and(|bundle| !bundle.vout.is_empty())
+            {
+                tracing::debug!(
+                    "No transparent outputs are allowed when the target is \
+                     the masp",
+                );
+                return Ok(false);
             }
 
             // Staisfies 2.
-            // FIXME: I think this is wrong! What if it's None?
-            // FIXME: is this even  needed?
-            if shielded_tx
+            if !shielded_tx
                 .sapling_bundle()
-                .is_some_and(|bundle| bundle.shielded_outputs.is_empty())
+                .is_some_and(|bundle| !bundle.shielded_outputs.is_empty())
             {
                 return Ok(false);
             }
