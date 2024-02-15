@@ -392,7 +392,7 @@ fn proposal_ibc_token_inflation() -> Result<()> {
     let mut epoch = get_epoch(&test_b, &rpc_b).unwrap();
     // Vote
     while epoch <= start_epoch {
-        sleep(5);
+        sleep(10);
         epoch = get_epoch(&test_b, &rpc_b).unwrap();
     }
     submit_votes(&test_b)?;
@@ -400,7 +400,7 @@ fn proposal_ibc_token_inflation() -> Result<()> {
     // wait for the grace
     let grace_epoch = start_epoch + 12u64 + 6u64;
     while epoch <= grace_epoch {
-        sleep(5);
+        sleep(10);
         epoch = get_epoch(&test_b, &rpc_b).unwrap();
     }
     sleep(5);
@@ -464,7 +464,7 @@ fn proposal_ibc_token_inflation() -> Result<()> {
     let next_epoch = epoch.next();
     // wait the next epoch to dispense the rewrad
     while epoch < next_epoch {
-        sleep(5);
+        sleep(10);
         epoch = get_epoch(&test_b, &rpc_b).unwrap();
     }
 
