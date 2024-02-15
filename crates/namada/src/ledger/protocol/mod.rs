@@ -48,6 +48,8 @@ pub enum Error {
     StateError(namada_state::Error),
     #[error("Storage error: {0}")]
     StorageError(namada_state::StorageError),
+    #[error("Wrapper tx runner error: {0}")]
+    WrapperRunnerError(String),
     #[error("Transaction runner error: {0}")]
     TxRunnerError(vm::wasm::run::Error),
     #[error("{0:?}")]
@@ -200,7 +202,7 @@ where
                     tx_wasm_cache,
                 },
                 wrapper_args,
-            )?;
+            ).map_err(|e| Error::WrapperRunnerError(e.to_string()))?;
             let mut inner_res = apply_wasm_tx(
                 tx,
                 &tx_index,
@@ -211,6 +213,7 @@ where
                     tx_wasm_cache,
                 },
             )?;
+
             inner_res.wrapper_changed_keys = changed_keys;
             Ok(inner_res)
         }
@@ -1192,7 +1195,22 @@ mod tests {
     fn test_apply_wasm_tx_allowlist() {
         let (mut state, _validators) = test_utils::setup_default_storage();
 
-        let mut tx = Tx::new(ChainId::default(), None);
+            let mut rng: ThreadRng = thread_rng();
+            ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap()
+        };
+        let wrapper_tx = WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: DenominatedAmount::native(
+                    Amount::from_uint(10, 0).expect("Test failed"),
+                ),
+                token: nam(),
+            },
+            keypair.ref_to(),
+            Epoch(0),
+            Default::default(),
+            None,
+        );
+        let mut tx = Tx::from_type(TxType::Wrapper(Box::new(wrapper_tx)));
         // pseudo-random code hash
         let code = vec![1_u8, 2, 3];
         let tx_hash = Hash::sha256(&code);

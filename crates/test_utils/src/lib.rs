@@ -19,6 +19,7 @@ pub const WASM_FOR_TESTS_DIR: &str = "wasm_for_tests";
 pub enum TestWasms {
     TxMemoryLimit,
     TxNoOp,
+    TxInvalidData,
     TxProposalCode,
     TxReadStorageKey,
     TxWriteStorageKey,
@@ -37,6 +38,7 @@ impl TestWasms {
         let filename = match self {
             TestWasms::TxMemoryLimit => "tx_memory_limit.wasm",
             TestWasms::TxNoOp => "tx_no_op.wasm",
+            TestWasms::TxInvalidData => "tx_invalid_data.wasm",
             TestWasms::TxProposalCode => "tx_proposal_code.wasm",
             TestWasms::TxReadStorageKey => "tx_read_storage_key.wasm",
             TestWasms::TxWriteStorageKey => "tx_write.wasm",
