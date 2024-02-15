@@ -1443,12 +1443,12 @@ where
         }
     }
 
-    // FIXME: here call charge_fee and remove the call to fee payment that comes
-    // after this! Actually no, charge is ok if the unshield is wrong
-
     if let Some(transaction) = masp_transaction {
         fee_unshielding_validation(wrapper, transaction, shell_params)?;
     }
+
+    // FIXME: call transfer or check fees directly here and remove it from the
+    // caller
 
     Ok(())
 }
@@ -1475,8 +1475,6 @@ where
     } = shell_params;
 
     // Validate data and generate unshielding tx
-    let transfer_code_hash = get_transfer_hash_from_storage(*wl_storage);
-
     let descriptions_limit = wl_storage
         .read(
             &parameters::storage::get_fee_unshielding_descriptions_limit_key(),
@@ -1491,7 +1489,7 @@ where
     // run_fee_unshielding instead of just generate
     let unshield = wrapper
         .check_and_generate_fee_unshielding(
-            transfer_code_hash,
+            get_transfer_hash_from_storage(*wl_storage),
             Some(namada_sdk::tx::TX_TRANSFER_WASM.to_string()),
             descriptions_limit,
             masp_transaction,
