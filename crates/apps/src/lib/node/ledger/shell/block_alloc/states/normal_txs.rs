@@ -25,7 +25,7 @@ impl NextStateImpl for BlockAllocator<BuildingTxBatch> {
 
     #[inline]
     fn next_state_impl(mut self) -> Self::Next {
-        let remaining_free_space = self.uninitialized_space_in_bytes();
+        let remaining_free_space = self.unoccupied_space_in_bytes();
         self.protocol_txs = TxBin::init(remaining_free_space);
         // cast state
         let Self {

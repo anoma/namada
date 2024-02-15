@@ -180,7 +180,10 @@ impl BlockAllocator<states::BuildingTxBatch> {
             _state: PhantomData,
             block: TxBin::init(max),
             protocol_txs: TxBin::default(),
-            normal_txs: NormalTxsBins::new(max_block_gas),
+            normal_txs: NormalTxsBins{
+                space: TxBin::init(tendermint_max_block_space_in_bytes),
+                gas: TxBin::init(max_block_gas),
+            },
         }
     }
 }
@@ -193,9 +196,9 @@ impl<State> BlockAllocator<State> {
     /// block space for a given round and the sum of the allotted space
     /// to each [`TxBin`] instance in a [`BlockAllocator`].
     #[inline]
-    fn uninitialized_space_in_bytes(&self) -> u64 {
+    fn unoccupied_space_in_bytes(&self) -> u64 {
         let total_bin_space =
-            self.protocol_txs.allotted + self.normal_txs.space.allotted;
+            self.protocol_txs.occupied + self.normal_txs.space.occupied;
         self.block.allotted - total_bin_space
     }
 }
@@ -492,9 +495,9 @@ mod tests {
             tendermint_max_block_space_in_bytes,
             1_000,
         );
-        let expected = tendermint_max_block_space_in_bytes
-            - threshold::ONE_HALF.over(tendermint_max_block_space_in_bytes);
-        assert_eq!(expected, bins.uninitialized_space_in_bytes());
+        let expected = tendermint_max_block_space_in_bytes;
+        assert_eq!(bins.protocol_txs.allotted, threshold::ONE_HALF.over(tendermint_max_block_space_in_bytes));
+        assert_eq!(expected, bins.unoccupied_space_in_bytes());
     }
 
     /// Implementation of [`test_tx_dump_doesnt_fill_up_bin`].
@@ -518,12 +521,13 @@ mod tests {
         ));
         let mut protocol_tx_iter = protocol_txs.iter();
         let mut allocated_txs = vec![];
+        let mut new_size = 0;
         for tx in protocol_tx_iter.by_ref() {
             let bin = bins.borrow().protocol_txs;
-            let new_size = bin.occupied + tx.len() as u64;
-            if new_size >= bin.allotted {
+            if new_size + tx.len() as u64 >= bin.allotted {
                 break;
             } else {
+                new_size += tx.len() as u64;
                 allocated_txs.push(tx);
             }
         }
@@ -532,11 +536,17 @@ mod tests {
         }
 
         let bins = RefCell::new(bins.into_inner().next_state());
-        let decrypted_txs = normal_txs.into_iter().take_while(|tx| {
+        let mut new_size = bins.borrow().normal_txs.space.allotted;
+        let mut decrypted_txs = vec![];
+        for tx in normal_txs {
             let bin = bins.borrow().normal_txs.space;
-            let new_size = bin.occupied + tx.len() as u64;
-            new_size < bin.allotted
-        });
+            if (new_size + tx.len() as u64) < bin.allotted {
+                new_size += tx.len() as u64;
+                decrypted_txs.push(tx);
+            } else {
+                break;
+            }
+        }
         for tx in decrypted_txs {
             assert!(
                 bins.borrow_mut()
@@ -547,12 +557,13 @@ mod tests {
 
         let bins = RefCell::new(bins.into_inner().next_state());
         let mut allocated_txs = vec![];
+        let mut new_size = bins.borrow().protocol_txs.allotted;
         for tx in protocol_tx_iter.by_ref() {
             let bin = bins.borrow().protocol_txs;
-            let new_size = bin.occupied + tx.len() as u64;
-            if new_size >= bin.allotted {
+            if new_size + tx.len() as u64 >= bin.allotted {
                 break;
             } else {
+                new_size += tx.len() as u64;
                 allocated_txs.push(tx);
             }
         }
