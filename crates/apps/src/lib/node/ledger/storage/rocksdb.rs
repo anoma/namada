@@ -7,14 +7,12 @@
 //!   - `eth_events_queue`: a queue of confirmed ethereum events to be processed
 //!     in order
 //!   - `height`: the last committed block height
-//!   - `tx_queue`: txs to be decrypted in the next block
 //!   - `next_epoch_min_start_height`: minimum block height from which the next
 //!     epoch can start
 //!   - `next_epoch_min_start_time`: minimum block time from which the next
 //!     epoch can start
 //!   - `replay_protection`: hashes of the processed transactions
 //!   - `pred`: predecessor values of the top-level keys of the same name
-//!     - `tx_queue`
 //!     - `next_epoch_min_start_height`
 //!     - `next_epoch_min_start_time`
 //!   - `conversion_state`: MASP conversion state
@@ -515,7 +513,6 @@ impl RocksDB {
         for metadata_key in [
             "next_epoch_min_start_height",
             "next_epoch_min_start_time",
-            "tx_queue",
         ] {
             let previous_key = format!("pred/{}", metadata_key);
             let previous_value = self
@@ -989,15 +986,6 @@ impl DB for RocksDB {
             );
         }
 
-        // Tx queue
-        if let Some(pred_tx_queue) = self
-            .0
-            .get_cf(state_cf, "tx_queue")
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            // Write the predecessor value for rollback
-            batch.0.put_cf(state_cf, "pred/tx_queue", pred_tx_queue);
-        }
         batch
             .0
             .put_cf(state_cf, "ethereum_height", encode(&ethereum_height));

@@ -410,13 +410,13 @@ where
                 // incentivize the proposer to include only
                 // valid transaction and avoid wasting block
                 // resources (ABCI only)
+
+                // Account for the tx's resources even in case of an error.
+                let allocated_gas = metadata
+                    .user_gas
+                    .try_dump(u64::from(wrapper.gas_limit));
                 let mut tx_gas_meter = TxGasMeter::new(wrapper.gas_limit);
-                if tx_gas_meter.add_wrapper_gas(tx_bytes).is_err() {
-                    // Account for the tx's resources even in case of an error.
-                    // Ignore any allocation error
-                    let _ = metadata
-                        .user_gas
-                        .try_dump(u64::from(wrapper.gas_limit));
+                if tx_gas_meter.add_wrapper_gas(tx_bytes).is_err() || allocated_gas.is_err() {
 
                     return TxResult {
                         code: ResultCode::TxGasLimit.into(),
@@ -1435,7 +1435,7 @@ mod test_process_proposal {
             Err(TestError::RejectProposal(response)) => {
                 assert_eq!(
                     response[0].result.code,
-                    u32::from(ResultCode::AllocationError)
+                    u32::from(ResultCode::TxGasLimit)
                 );
             }
         }
