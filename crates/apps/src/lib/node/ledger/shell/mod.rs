@@ -1538,6 +1538,12 @@ where
         ))
     })?;
 
+    tx_gas_meter
+        .copy_consumed_gas_from(&unshield_gas_meter)
+        .map_err(|e| {
+            Error::TxApply(protocol::Error::GasError(e.to_string()))
+        })?;
+
     if result.is_accepted() {
         Ok(())
     } else {
