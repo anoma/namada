@@ -2193,6 +2193,13 @@ pub struct KeyExport {
     pub alias: String,
 }
 
+/// Wallet key export arguments
+#[derive(Clone, Debug)]
+pub struct KeyConvert {
+    /// Key alias
+    pub alias: String,
+}
+
 /// Wallet key import arguments
 #[derive(Clone, Debug)]
 pub struct KeyImport {

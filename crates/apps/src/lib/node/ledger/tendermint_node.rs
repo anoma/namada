@@ -261,7 +261,7 @@ pub fn rollback(tendermint_dir: impl AsRef<Path>) -> Result<BlockHeight> {
 
 /// Convert a common signing scheme validator key into JSON for
 /// Tendermint
-fn validator_key_to_json(
+pub fn validator_key_to_json(
     sk: &common::SecretKey,
 ) -> std::result::Result<serde_json::Value, ParseSecretKeyError> {
     let raw_hash = tm_consensus_key_raw_hash(&sk.ref_to());
@@ -316,7 +316,7 @@ pub fn write_validator_state(home_dir: impl AsRef<Path>) -> Result<()> {
 }
 
 /// Abstract over the initialization of validator data for Tendermint
-fn write_validator(
+pub fn write_validator(
     path: PathBuf,
     err_dir: &'static str,
     err_file: &'static str,
