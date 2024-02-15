@@ -724,7 +724,10 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Convert to tendermint priv_validator_key.json with your consensus key alias")
+                .about(
+                    "Convert to tendermint priv_validator_key.json with your \
+                     consensus key alias",
+                )
                 .add_args::<args::KeyConvert>()
         }
     }
