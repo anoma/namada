@@ -1666,7 +1666,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Query PoS bonded stake.")
+                .about("Sign a transaction.")
                 .add_args::<args::SignTx<args::CliTypes>>()
         }
     }
