@@ -202,7 +202,8 @@ where
                     tx_wasm_cache,
                 },
                 wrapper_args,
-            ).map_err(|e| Error::WrapperRunnerError(e.to_string()))?;
+            )
+            .map_err(|e| Error::WrapperRunnerError(e.to_string()))?;
             let mut inner_res = apply_wasm_tx(
                 tx,
                 &tx_index,

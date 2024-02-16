@@ -21,9 +21,6 @@ pub const TX_REJECTED: &str = "Transaction was rejected by VPs";
 /// Inner transaction failed in execution (no VPs ran).
 pub const TX_FAILED: &str = "Transaction failed";
 
-/// Wrapper transaction accepted.
-pub const TX_ACCEPTED: &str = "Wrapper transaction accepted";
-
 pub const WALLET_HD_PASSPHRASE_PROMPT: &str =
     "Enter BIP39 passphrase (empty for none): ";
 

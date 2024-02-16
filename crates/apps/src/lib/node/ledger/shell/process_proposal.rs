@@ -412,12 +412,12 @@ where
                 // resources (ABCI only)
 
                 // Account for the tx's resources even in case of an error.
-                let allocated_gas = metadata
-                    .user_gas
-                    .try_dump(u64::from(wrapper.gas_limit));
+                let allocated_gas =
+                    metadata.user_gas.try_dump(u64::from(wrapper.gas_limit));
                 let mut tx_gas_meter = TxGasMeter::new(wrapper.gas_limit);
-                if tx_gas_meter.add_wrapper_gas(tx_bytes).is_err() || allocated_gas.is_err() {
-
+                if tx_gas_meter.add_wrapper_gas(tx_bytes).is_err()
+                    || allocated_gas.is_err()
+                {
                     return TxResult {
                         code: ResultCode::TxGasLimit.into(),
                         info: "Wrapper transactions exceeds its gas limit"
