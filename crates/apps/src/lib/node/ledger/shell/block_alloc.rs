@@ -180,7 +180,7 @@ impl BlockAllocator<states::BuildingTxBatch> {
             _state: PhantomData,
             block: TxBin::init(max),
             protocol_txs: TxBin::default(),
-            normal_txs: NormalTxsBins{
+            normal_txs: NormalTxsBins {
                 space: TxBin::init(tendermint_max_block_space_in_bytes),
                 gas: TxBin::init(max_block_gas),
             },
@@ -496,7 +496,10 @@ mod tests {
             1_000,
         );
         let expected = tendermint_max_block_space_in_bytes;
-        assert_eq!(bins.protocol_txs.allotted, threshold::ONE_HALF.over(tendermint_max_block_space_in_bytes));
+        assert_eq!(
+            bins.protocol_txs.allotted,
+            threshold::ONE_HALF.over(tendermint_max_block_space_in_bytes)
+        );
         assert_eq!(expected, bins.unoccupied_space_in_bytes());
     }
 

@@ -207,48 +207,48 @@ where
             let (
                 mut tx_event,
                 mut tx_gas_meter,
-                mut wrapper_args,
+                mut wrapper_args
             ) = match &tx_header.tx_type {
-                TxType::Wrapper(wrapper) => {
-                    stats.increment_wrapper_txs();
-                    let tx_event = new_tx_event(&tx, height.0);
-                    let gas_meter = TxGasMeter::new(wrapper.gas_limit);
-                    if let Some(code_sec) = tx
-                        .get_section(tx.code_sechash())
-                        .and_then(|x| Section::code_sec(x.as_ref()))
-                    {
-                        stats.increment_tx_type(
-                            code_sec.code.hash().to_string(),
-                        );
+                    TxType::Wrapper(wrapper) => {
+                        stats.increment_wrapper_txs();
+                        let tx_event = new_tx_event(&tx, height.0);
+                        let gas_meter = TxGasMeter::new(wrapper.gas_limit);
+                        if let Some(code_sec) = tx
+                            .get_section(tx.code_sechash())
+                            .and_then(|x| Section::code_sec(x.as_ref()))
+                        {
+                            stats.increment_tx_type(
+                                code_sec.code.hash().to_string(),
+                            );
+                        }
+                        (
+                            tx_event,
+                            gas_meter,
+                            Some(WrapperArgs {
+                                block_proposer: &native_block_proposer_address,
+                                is_committed_fee_unshield: false,
+                            }),
+                        )
                     }
-                    (
-                        tx_event,
-                        gas_meter,
-                        Some(WrapperArgs {
-                            block_proposer: &native_block_proposer_address,
-                            is_committed_fee_unshield: false,
-                        }),
-                    )
-                }
-                TxType::Decrypted(_) => unreachable!(),
-                TxType::Raw => {
-                    tracing::error!(
-                        "Internal logic error: FinalizeBlock received a \
-                         TxType::Raw transaction"
-                    );
-                    continue;
-                }
-                TxType::Protocol(protocol_tx) => match protocol_tx.tx {
-                    ProtocolTxType::BridgePoolVext
-                    | ProtocolTxType::BridgePool
-                    | ProtocolTxType::ValSetUpdateVext
-                    | ProtocolTxType::ValidatorSetUpdate => (
-                        new_tx_event(&tx, height.0),
-                        TxGasMeter::new_from_sub_limit(0.into()),
-                        None,
-                    ),
-                    ProtocolTxType::EthEventsVext => {
-                        let ext =
+                    TxType::Decrypted(_) => unreachable!(),
+                    TxType::Raw => {
+                        tracing::error!(
+                            "Internal logic error: FinalizeBlock received a \
+                             TxType::Raw transaction"
+                        );
+                        continue;
+                    }
+                    TxType::Protocol(protocol_tx) => match protocol_tx.tx {
+                        ProtocolTxType::BridgePoolVext
+                        | ProtocolTxType::BridgePool
+                        | ProtocolTxType::ValSetUpdateVext
+                        | ProtocolTxType::ValidatorSetUpdate => (
+                            new_tx_event(&tx, height.0),
+                            TxGasMeter::new_from_sub_limit(0.into()),
+                            None,
+                        ),
+                        ProtocolTxType::EthEventsVext => {
+                            let ext =
                             ethereum_tx_data_variants::EthEventsVext::try_from(
                                 &tx,
                             )
@@ -411,13 +411,16 @@ where
                     tx_event["info"] = "Check inner_tx for result.".to_string();
                     tx_event["inner_tx"] = result.to_string();
                 }
-                Err(Error::TxApply(protocol::Error::WrapperRunnerError(msg))) => {
+                Err(Error::TxApply(protocol::Error::WrapperRunnerError(
+                    msg,
+                ))) => {
                     tracing::info!(
                         "Wrapper transaction {} failed with: {}",
                         tx_event["hash"],
                         msg,
                     );
-                    tx_event["gas_used"] =  tx_gas_meter.get_tx_consumed_gas().to_string();
+                    tx_event["gas_used"] =
+                        tx_gas_meter.get_tx_consumed_gas().to_string();
                     tx_event["info"] = msg.to_string();
                     tx_event["code"] = ResultCode::InvalidTx.into();
                 }
@@ -435,12 +438,12 @@ where
                         if !matches!(
                             msg,
                             Error::TxApply(protocol::Error::GasError(_))
-                            | Error::TxApply(
-                                protocol::Error::MissingSection(_)
-                            )
-                            | Error::TxApply(
-                                protocol::Error::ReplayAttempt(_)
-                            )
+                                | Error::TxApply(
+                                    protocol::Error::MissingSection(_)
+                                )
+                                | Error::TxApply(
+                                    protocol::Error::ReplayAttempt(_)
+                                )
                         ) {
                             self.commit_inner_tx_hash(replay_protection_hashes);
                         } else if let Error::TxApply(
@@ -473,9 +476,10 @@ where
                     tx_event["code"] = ResultCode::InvalidTx.into();
                     // The fee unshield operation could still have been
                     // committed
-                    if wrapper_args
-                        .expect("Missing required wrapper arguments")
-                        .is_committed_fee_unshield
+                    if let Some(WrapperArgs {
+                        is_committed_fee_unshield: true,
+                        ..
+                    }) = wrapper_args
                     {
                         tx_event["is_valid_masp_tx"] = format!("{}", tx_index);
                     }
@@ -2402,11 +2406,7 @@ mod test_finalize_block {
             })
             .expect("Test failed")[0];
         assert_eq!(event.event_type.to_string(), String::from("applied"));
-        let code = event
-            .attributes
-            .get("code")
-            .expect("Test failed")
-            .as_str();
+        let code = event.attributes.get("code").expect("Test failed").as_str();
         assert_eq!(code, String::from(ResultCode::Ok).as_str());
 
         // the merkle tree root should not change after finalize_block
@@ -2441,7 +2441,7 @@ mod test_finalize_block {
     fn test_duplicated_tx_same_block() {
         let (mut shell, _, _, _) = setup();
         let keypair = crate::wallet::defaults::albert_keypair();
-        let keypair_2 =  crate::wallet::defaults::bertha_keypair();
+        let keypair_2 = crate::wallet::defaults::bertha_keypair();
 
         let tx_code = TestWasms::TxNoOp.read_bytes();
         let mut wrapper =
@@ -2545,7 +2545,7 @@ mod test_finalize_block {
                 Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                     Fee {
                         amount_per_gas_unit: DenominatedAmount::native(1.into()),
-                        token: shell.state.in_mem().native_token.clone(),
+                        token: shell.state.native_token.clone(),
                     },
                     keypair.ref_to(),
                     Epoch(0),
@@ -2612,7 +2612,9 @@ mod test_finalize_block {
         let mut wrong_commitment_wrapper = failing_wrapper.clone();
         let tx_code = TestWasms::TxInvalidData.read_bytes();
         wrong_commitment_wrapper.set_code(Code::new(tx_code, None));
-        wrong_commitment_wrapper.sections.retain(|sec| !matches!(sec, Section::Data(_)));
+        wrong_commitment_wrapper
+            .sections
+            .retain(|sec| !matches!(sec, Section::Data(_)));
         // Add some extra data to avoid having the same Tx hash as the
         // `failing_wrapper`
         wrong_commitment_wrapper.add_memo(&[0_u8]);
@@ -2623,7 +2625,11 @@ mod test_finalize_block {
             &mut wrong_commitment_wrapper,
             &mut failing_wrapper,
         ] {
-            tx.sign_raw(vec![keypair.clone()], vec![keypair.ref_to()].into_iter().collect(), None);
+            tx.sign_raw(
+                vec![keypair.clone()],
+                vec![keypair.ref_to()].into_iter().collect(),
+                None,
+            );
         }
         for tx in [
             &mut out_of_gas_wrapper,
