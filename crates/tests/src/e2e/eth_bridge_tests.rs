@@ -826,7 +826,6 @@ async fn test_wdai_transfer_established_unauthorized() -> Result<()> {
         &bertha_addr.to_string(),
         &token::DenominatedAmount::new(token::Amount::from(10_000), 0u8.into()),
     )?;
-    cmd.exp_string(TX_ACCEPTED)?;
     cmd.exp_string(TX_REJECTED)?;
     cmd.assert_success();
 

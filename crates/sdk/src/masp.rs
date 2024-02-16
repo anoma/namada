@@ -895,31 +895,29 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     ) -> Result<ExtractedMaspTx, Error> {
         // We use the changed keys instead of the Transfer object
         // because those are what the masp validity predicate works on
-        let (
-            wrapper_changed_keys,
-            changed_keys,
-        ) = if let ExtractShieldedActionArg::Event(tx_event) = action_arg {
-            let tx_result_str = tx_event
-                .attributes
-                .iter()
-                .find_map(|attr| {
-                    if attr.key == "inner_tx" {
-                        Some(&attr.value)
-                    } else {
-                        None
-                    }
-                })
-                .ok_or_else(|| {
-                    Error::Other(
-                        "Missing required tx result in event".to_string(),
-                    )
-                })?;
-            let result = TxResult::from_str(tx_result_str)
-                .map_err(|e| Error::Other(e.to_string()))?;
-            (result.wrapper_changed_keys, result.changed_keys)
-        } else {
-            (Default::default(), Default::default())
-        };
+        let (wrapper_changed_keys, changed_keys) =
+            if let ExtractShieldedActionArg::Event(tx_event) = action_arg {
+                let tx_result_str = tx_event
+                    .attributes
+                    .iter()
+                    .find_map(|attr| {
+                        if attr.key == "inner_tx" {
+                            Some(&attr.value)
+                        } else {
+                            None
+                        }
+                    })
+                    .ok_or_else(|| {
+                        Error::Other(
+                            "Missing required tx result in event".to_string(),
+                        )
+                    })?;
+                let result = TxResult::from_str(tx_result_str)
+                    .map_err(|e| Error::Other(e.to_string()))?;
+                (result.wrapper_changed_keys, result.changed_keys)
+            } else {
+                (Default::default(), Default::default())
+            };
 
         let tx_header = tx.header();
         // NOTE: simply looking for masp sections attached to the tx

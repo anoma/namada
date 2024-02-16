@@ -504,7 +504,6 @@ impl MockNode {
     /// Send a tx through Process Proposal and Finalize Block
     /// and register the results.
     fn submit_txs(&self, txs: Vec<Vec<u8>>) {
-
         self.finalize_and_commit();
         let (proposer_address, votes) = self.prepare_request();
 

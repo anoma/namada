@@ -1,4 +1,4 @@
-//! All the states of the [`BlockAllocator`] state machine,
+//! All the states of the `BlockAllocator` state machine,
 //! over the extent of a Tendermint consensus round
 //! block proposal.
 //!
@@ -51,7 +51,7 @@ pub enum WithoutNormalTxs {}
 /// [`crate::node::ledger::shell::block_alloc::states`].
 pub struct BuildingTxBatch {}
 
-/// Try to allocate a new transaction on a [`BlockAllocator`] state.
+/// Try to allocate a new transaction on a `BlockAllocator` state.
 ///
 /// For more info, read the module docs of
 /// [`crate::node::ledger::shell::block_alloc::states`].
@@ -65,7 +65,7 @@ pub trait TryAlloc {
     ) -> Result<(), AllocFailure>;
 }
 
-/// Represents a state transition in the [`BlockAllocator`] state machine.
+/// Represents a state transition in the `BlockAllocator` state machine.
 ///
 /// This trait should not be used directly. Instead, consider using
 /// [`NextState`].
@@ -73,10 +73,10 @@ pub trait TryAlloc {
 /// For more info, read the module docs of
 /// [`crate::node::ledger::shell::block_alloc::states`].
 pub trait NextStateImpl<Transition = ()> {
-    /// The next state in the [`BlockAllocator`] state machine.
+    /// The next state in the `BlockAllocator` state machine.
     type Next;
 
-    /// Transition to the next state in the [`BlockAllocator`] state
+    /// Transition to the next state in the `BlockAllocator`] state
     /// machine.
     fn next_state_impl(self) -> Self::Next;
 }
@@ -87,7 +87,7 @@ pub trait NextStateImpl<Transition = ()> {
 /// For more info, read the module docs of
 /// [`crate::node::ledger::shell::block_alloc::states`].
 pub trait NextState: NextStateImpl {
-    /// Transition to the next state in the [`BlockAllocator`] state,
+    /// Transition to the next state in the `BlockAllocator` state,
     /// using a null transiiton function.
     #[inline]
     fn next_state(self) -> Self::Next
