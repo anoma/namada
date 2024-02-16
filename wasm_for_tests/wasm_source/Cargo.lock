@@ -3134,7 +3134,7 @@ dependencies = [
 [[package]]
 name = "masp_note_encryption"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?tag=v1.1.0#f24691c0eb76909e3c15ae03aef294dccebd2df3"
+source = "git+https://github.com/anoma/masp?branch=murisi/borsh-schemas#243544fac3957a259d70973315e41b99f3af6052"
 dependencies = [
  "borsh",
  "chacha20",
@@ -3147,7 +3147,7 @@ dependencies = [
 [[package]]
 name = "masp_primitives"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?tag=v1.1.0#f24691c0eb76909e3c15ae03aef294dccebd2df3"
+source = "git+https://github.com/anoma/masp?branch=murisi/borsh-schemas#243544fac3957a259d70973315e41b99f3af6052"
 dependencies = [
  "aes",
  "bip0039",
@@ -3179,7 +3179,7 @@ dependencies = [
 [[package]]
 name = "masp_proofs"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?tag=v1.1.0#f24691c0eb76909e3c15ae03aef294dccebd2df3"
+source = "git+https://github.com/anoma/masp?branch=murisi/borsh-schemas#243544fac3957a259d70973315e41b99f3af6052"
 dependencies = [
  "bellman",
  "blake2b_simd",

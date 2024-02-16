@@ -16,7 +16,12 @@ version.workspace = true
 name = "generate-txs"
 path = "generate_txs.rs"
 
+[[example]]
+name = "generate-parser"
+path = "generate_parser.rs"
+
 [dev-dependencies]
+masp_primitives.workspace = true
 masp_proofs = { workspace = true, default-features = false, features = ["local-prover", "download-params"] }
 namada_sdk = { path = "../crates/sdk", default-features = false, features = ["namada-sdk", "std", "testing"] }
 proptest.workspace = true

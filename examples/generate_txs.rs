@@ -29,7 +29,7 @@ async fn main() -> Result<(), Reason> {
     let json = serde_json::to_string(&test_vectors)
         .expect("unable to serialize test vectors");
     std::fs::write(&args[1], json).expect("unable to save test vectors");
-    std::fs::write(&args[2], format!("{:?}", debug_vectors))
+    std::fs::write(&args[2], format!("{:#?}", debug_vectors))
         .expect("unable to save test vectors");
     Ok(())
 }

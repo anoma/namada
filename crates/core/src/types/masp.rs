@@ -3,7 +3,7 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
 use serde::{Deserialize, Serialize};
@@ -31,6 +31,7 @@ use crate::types::token::{Denomination, MaspDigitPos};
     Hash,
     Serialize,
     Deserialize,
+    BorshSchema,
 )]
 pub struct AssetData {
     /// The token associated with this asset type

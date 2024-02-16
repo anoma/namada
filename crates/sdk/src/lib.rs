@@ -990,7 +990,7 @@ pub mod testing {
     }
 
     // Maximum number of notes to include in a transaction
-    const MAX_ASSETS: usize = 10;
+    const MAX_ASSETS: usize = 2;
 
     // Type of MASP transaction
     #[derive(Debug, Clone)]

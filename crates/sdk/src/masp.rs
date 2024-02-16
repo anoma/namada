@@ -3184,7 +3184,7 @@ pub mod testing {
     // Maximum value for a note partition
     const MAX_MONEY: u64 = 100;
     // Maximum number of partitions for a note
-    const MAX_SPLITS: usize = 10;
+    const MAX_SPLITS: usize = 3;
 
     prop_compose! {
         // Arbitrarily partition the given vector of integers into sets and sum
