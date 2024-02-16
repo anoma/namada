@@ -19,6 +19,11 @@ mainnet = [
 ]
 wasm-runtime = ["namada/wasm-runtime"]
 integration = ["namada_apps/integration"]
+namada-eth-bridge = [
+  "namada/namada-eth-bridge",
+  "namada_sdk/namada-eth-bridge",
+  "namada_apps/namada-eth-bridge",
+]
 
 [dependencies]
 namada = {path = "../namada", features = ["testing"]}
