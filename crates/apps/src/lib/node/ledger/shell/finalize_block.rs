@@ -395,6 +395,15 @@ where
                             tx_event["hash"],
                             result.vps_result.rejected_vps
                         );
+                        // The fee unshield operation could still have been
+                        // committed
+                        if wrapper_args
+                            .map(|args| args.is_committed_fee_unshield)
+                            .unwrap_or_default()
+                        {
+                            tx_event["is_valid_masp_tx"] =
+                                format!("{}", tx_index);
+                        }
 
                         // If an inner tx failed for any reason but invalid
                         // signature, commit its hash to storage, otherwise
@@ -476,12 +485,12 @@ where
                     tx_event["code"] = ResultCode::InvalidTx.into();
                     // The fee unshield operation could still have been
                     // committed
-                    if let Some(WrapperArgs {
-                        is_committed_fee_unshield: true,
-                        ..
-                    }) = wrapper_args
+                    if wrapper_args
+                        .map(|args| args.is_committed_fee_unshield)
+                        .unwrap_or_default()
                     {
-                        tx_event["is_valid_masp_tx"] = format!("{}", tx_index);
+                        tx_event["is_valid_masp_tx"] =
+                            format!("{}", tx_index);
                     }
                     tx_event["code"] = ResultCode::WasmRuntimeError.into();
                 }
