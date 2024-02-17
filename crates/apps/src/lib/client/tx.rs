@@ -1600,7 +1600,7 @@ pub async fn submit_tx(
 
 pub async fn gen_ibc_shielded_transfer(
     context: &impl Namada,
-    args: args::GenIbcShieldedTransafer,
+    args: args::GenIbcShieldedTransfer,
 ) -> Result<(), error::Error> {
     if let Some(shielded_transfer) =
         tx::gen_ibc_shielded_transfer(context, args.clone()).await?
