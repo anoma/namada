@@ -269,7 +269,7 @@ pub mod cmds {
                 .subcommand(QueryMetaData::def().display_order(5))
                 // Actions
                 .subcommand(SignTx::def().display_order(6))
-                .subcommand(GenIbcShieldedTransafer::def().display_order(6))
+                .subcommand(GenIbcShieldedTransfer::def().display_order(6))
                 // Utils
                 .subcommand(Utils::def().display_order(7))
         }
@@ -352,7 +352,7 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, AddToEthBridgePool);
             let sign_tx = Self::parse_with_ctx(matches, SignTx);
             let gen_ibc_shielded =
-                Self::parse_with_ctx(matches, GenIbcShieldedTransafer);
+                Self::parse_with_ctx(matches, GenIbcShieldedTransfer);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
             tx_custom
                 .or(tx_transfer)
@@ -492,7 +492,7 @@ pub mod cmds {
         QueryValidatorState(QueryValidatorState),
         QueryRewards(QueryRewards),
         SignTx(SignTx),
-        GenIbcShieldedTransafer(GenIbcShieldedTransafer),
+        GenIbcShieldedTransfer(GenIbcShieldedTransfer),
     }
 
     #[allow(clippy::large_enum_variant)]
@@ -2059,16 +2059,16 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct GenIbcShieldedTransafer(
-        pub args::GenIbcShieldedTransafer<args::CliTypes>,
+    pub struct GenIbcShieldedTransfer(
+        pub args::GenIbcShieldedTransfer<args::CliTypes>,
     );
 
-    impl SubCmd for GenIbcShieldedTransafer {
+    impl SubCmd for GenIbcShieldedTransfer {
         const CMD: &'static str = "ibc-gen-shielded";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).map(|matches| {
-                GenIbcShieldedTransafer(args::GenIbcShieldedTransafer::parse(
+                GenIbcShieldedTransfer(args::GenIbcShieldedTransfer::parse(
                     matches,
                 ))
             })
@@ -2077,7 +2077,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Generate shielded transfer for IBC.")
-                .add_args::<args::GenIbcShieldedTransafer<args::CliTypes>>()
+                .add_args::<args::GenIbcShieldedTransfer<args::CliTypes>>()
         }
     }
 
@@ -5656,16 +5656,13 @@ pub mod args {
         }
     }
 
-    impl CliToSdk<GenIbcShieldedTransafer<SdkTypes>>
-        for GenIbcShieldedTransafer<CliTypes>
+    impl CliToSdk<GenIbcShieldedTransfer<SdkTypes>>
+        for GenIbcShieldedTransfer<CliTypes>
     {
-        fn to_sdk(
-            self,
-            ctx: &mut Context,
-        ) -> GenIbcShieldedTransafer<SdkTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> GenIbcShieldedTransfer<SdkTypes> {
             let query = self.query.to_sdk(ctx);
             let chain_ctx = ctx.borrow_chain_or_exit();
-            GenIbcShieldedTransafer::<SdkTypes> {
+            GenIbcShieldedTransfer::<SdkTypes> {
                 query,
                 output_folder: self.output_folder,
                 target: chain_ctx.get(&self.target),
@@ -5677,7 +5674,7 @@ pub mod args {
         }
     }
 
-    impl Args for GenIbcShieldedTransafer<CliTypes> {
+    impl Args for GenIbcShieldedTransfer<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let output_folder = OUTPUT_FOLDER_PATH.parse(matches);

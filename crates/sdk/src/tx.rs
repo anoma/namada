@@ -2684,7 +2684,7 @@ pub async fn build_custom(
 /// Generate IBC shielded transfer
 pub async fn gen_ibc_shielded_transfer<N: Namada>(
     context: &N,
-    args: args::GenIbcShieldedTransafer,
+    args: args::GenIbcShieldedTransfer,
 ) -> Result<Option<IbcShieldedTransfer>> {
     let key = match args.target.payment_address() {
         Some(pa) if pa.is_pinned() => Some(pa.hash()),

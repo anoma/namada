@@ -705,7 +705,7 @@ impl CliApi {
                         let namada = ctx.to_sdk(client, io);
                         tx::sign_tx(&namada, args).await?;
                     }
-                    Sub::GenIbcShieldedTransafer(GenIbcShieldedTransafer(
+                    Sub::GenIbcShieldedTransfer(GenIbcShieldedTransfer(
                         args,
                     )) => {
                         let chain_ctx = ctx.borrow_mut_chain_or_exit();

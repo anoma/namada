@@ -2458,7 +2458,7 @@ pub struct ValidatorSetUpdateRelay<C: NamadaTypes = SdkTypes> {
 
 /// IBC shielded transfer generation arguments
 #[derive(Clone, Debug)]
-pub struct GenIbcShieldedTransafer<C: NamadaTypes = SdkTypes> {
+pub struct GenIbcShieldedTransfer<C: NamadaTypes = SdkTypes> {
     /// The query parameters.
     pub query: Query<C>,
     /// The output directory path to where serialize the data
