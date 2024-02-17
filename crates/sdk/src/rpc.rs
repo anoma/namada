@@ -1142,8 +1142,8 @@ pub async fn get_bond_amount_at<C: crate::queries::Client + Sync>(
 /// grouped by their bond IDs.
 pub async fn bonds_and_unbonds<C: crate::queries::Client + Sync>(
     client: &C,
-    source: &Option<Address>,
-    validator: &Option<Address>,
+    source: &Address,
+    validator: &Address,
 ) -> Result<BondsAndUnbondsDetails, error::Error> {
     convert_response::<C, _>(
         RPC.vp()
