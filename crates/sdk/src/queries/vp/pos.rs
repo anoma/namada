@@ -568,8 +568,8 @@ where
 
 fn bonds_and_unbonds<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
-    source: Option<Address>,
-    validator: Option<Address>,
+    source: Address,
+    validator: Address,
 ) -> namada_storage::Result<BondsAndUnbondsDetails>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
