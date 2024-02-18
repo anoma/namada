@@ -605,13 +605,14 @@ where
                 .get(storage, current_epoch, params)
                 .unwrap();
 
+            let prev_state = validator_state_handle(&address)
+                .get(storage, current_epoch, params)
+                .unwrap();
+
             // Check if the validator was consensus in the previous epoch with
             // the same stake. If so, no updated is needed.
             // Look up previous state and prev and current voting powers
             if !prev_consensus_validator_handle.is_empty(storage).unwrap() {
-                let prev_state = validator_state_handle(&address)
-                    .get(storage, current_epoch, params)
-                    .unwrap();
                 let prev_tm_voting_power = Lazy::new(|| {
                     let prev_validator_stake = read_validator_stake(
                         storage,
@@ -679,7 +680,7 @@ where
                     consensus_key: new_consensus_key,
                     bonded_stake: new_stake,
                 })]
-            } else {
+            } else if matches!(prev_state, Some(ValidatorState::Consensus)) {
                 vec![
                     ValidatorSetUpdate::Consensus(ConsensusValidator {
                         consensus_key: new_consensus_key,
@@ -687,6 +688,11 @@ where
                     }),
                     ValidatorSetUpdate::Deactivated(old_consensus_key.unwrap()),
                 ]
+            } else {
+                vec![ValidatorSetUpdate::Consensus(ConsensusValidator {
+                    consensus_key: new_consensus_key,
+                    bonded_stake: new_stake,
+                })]
             }
         });
 
