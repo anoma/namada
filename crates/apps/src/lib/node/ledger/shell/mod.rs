@@ -1294,7 +1294,7 @@ where
         let validator_set_update_fn = if is_genesis {
             namada_proof_of_stake::genesis_validator_set_tendermint
         } else {
-            namada_proof_of_stake::validator_set_update::validator_set_update_tendermint
+            namada_proof_of_stake::validator_set_update::validator_set_update_comet
         };
 
         validator_set_update_fn(
