@@ -653,7 +653,7 @@ where
                 return vec![ValidatorSetUpdate::Consensus(
                     ConsensusValidator {
                         consensus_key: new_consensus_key,
-                        bonded_stake: new_stake,
+                        bonded_stake: *new_tm_voting_power,
                     },
                 )];
             }
@@ -667,7 +667,7 @@ where
                 vec![
                     ValidatorSetUpdate::Consensus(ConsensusValidator {
                         consensus_key: new_consensus_key,
-                        bonded_stake: new_stake,
+                        bonded_stake: *new_tm_voting_power,
                     }),
                     ValidatorSetUpdate::Deactivated(
                         prev_consensus_key.unwrap(),
@@ -682,7 +682,7 @@ where
             } else {
                 vec![ValidatorSetUpdate::Consensus(ConsensusValidator {
                     consensus_key: new_consensus_key,
-                    bonded_stake: new_stake,
+                    bonded_stake: *new_tm_voting_power,
                 })]
             }
         });

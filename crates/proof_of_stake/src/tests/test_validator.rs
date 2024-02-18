@@ -556,7 +556,10 @@ fn test_validator_sets() {
         tm_updates[0],
         ValidatorSetUpdate::Consensus(ConsensusValidator {
             consensus_key: pk3,
-            bonded_stake: stake3,
+            bonded_stake: into_tm_voting_power(
+                params.tm_votes_per_token,
+                stake3
+            ),
         })
     );
 
@@ -611,7 +614,10 @@ fn test_validator_sets() {
         tm_updates[0],
         ValidatorSetUpdate::Consensus(ConsensusValidator {
             consensus_key: pk5,
-            bonded_stake: stake5,
+            bonded_stake: into_tm_voting_power(
+                params.tm_votes_per_token,
+                stake5
+            ),
         })
     );
     assert_eq!(tm_updates[1], ValidatorSetUpdate::Deactivated(pk2));
@@ -812,7 +818,10 @@ fn test_validator_sets() {
         tm_updates[0],
         ValidatorSetUpdate::Consensus(ConsensusValidator {
             consensus_key: pk4.clone(),
-            bonded_stake: stake4,
+            bonded_stake: into_tm_voting_power(
+                params.tm_votes_per_token,
+                stake4
+            ),
         })
     );
     assert_eq!(tm_updates[1], ValidatorSetUpdate::Deactivated(pk1));
@@ -927,7 +936,10 @@ fn test_validator_sets() {
         tm_updates[0],
         ValidatorSetUpdate::Consensus(ConsensusValidator {
             consensus_key: pk6,
-            bonded_stake: stake6,
+            bonded_stake: into_tm_voting_power(
+                params.tm_votes_per_token,
+                stake6
+            ),
         })
     );
     assert_eq!(tm_updates[1], ValidatorSetUpdate::Deactivated(pk4));
@@ -1187,7 +1199,10 @@ fn test_validator_sets_swap() {
         tm_updates[0],
         ValidatorSetUpdate::Consensus(ConsensusValidator {
             consensus_key: pk3.clone(),
-            bonded_stake: stake3,
+            bonded_stake: into_tm_voting_power(
+                params.tm_votes_per_token,
+                stake3
+            ),
         })
     );
 
@@ -1226,14 +1241,17 @@ fn test_validator_sets_swap() {
     assert_eq!(epoch, bonds_epoch_3);
 
     let tm_updates = get_tendermint_set_updates(&s, &params, epoch);
-    dbg!(&tm_updates);
+    // dbg!(&tm_updates);
     assert_eq!(tm_updates.len(), 2);
     assert_eq!(
         tm_updates,
         vec![
             ValidatorSetUpdate::Consensus(ConsensusValidator {
                 consensus_key: new_ck2,
-                bonded_stake: stake2,
+                bonded_stake: into_tm_voting_power(
+                    params.tm_votes_per_token,
+                    stake2
+                ),
             }),
             ValidatorSetUpdate::Deactivated(pk3),
         ]

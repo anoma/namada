@@ -38,7 +38,6 @@ use namada::ethereum_bridge::protocol::validation::validator_set_update::validat
 use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
 use namada::ledger::gas::{Gas, TxGasMeter};
-use namada::ledger::pos::into_tm_voting_power;
 use namada::ledger::pos::namada_proof_of_stake::types::{
     ConsensusValidator, ValidatorSetUpdate,
 };
@@ -1305,14 +1304,8 @@ where
                 let (consensus_key, power) = match update {
                     ValidatorSetUpdate::Consensus(ConsensusValidator {
                         consensus_key,
-                        bonded_stake,
-                    }) => {
-                        let power: i64 = into_tm_voting_power(
-                            pos_params.tm_votes_per_token,
-                            bonded_stake,
-                        );
-                        (consensus_key, power)
-                    }
+                        bonded_stake: power,
+                    }) => (consensus_key, power),
                     ValidatorSetUpdate::Deactivated(consensus_key) => {
                         // Any validators that have been dropped from the
                         // consensus set must have voting power set to 0 to
