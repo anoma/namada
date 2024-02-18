@@ -363,7 +363,9 @@ fn proposal_ibc_token_inflation() -> Result<()> {
     let update_genesis =
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
             genesis.parameters.parameters.epochs_per_year =
-                epochs_per_year_from_min_duration(50);
+                epochs_per_year_from_min_duration(30);
+            // for the trusting period of IBC client
+            genesis.parameters.pos_params.pipeline_len = 3;
             genesis.parameters.parameters.max_proposal_bytes =
                 Default::default();
             genesis.parameters.pgf_params.stewards =
@@ -382,10 +384,10 @@ fn proposal_ibc_token_inflation() -> Result<()> {
     delegate_token(&test_b)?;
     let rpc_b = get_actor_rpc(&test_b, Who::Validator(0));
     let mut epoch = get_epoch(&test_b, &rpc_b).unwrap();
-    let delegated = epoch + 2u64;
+    let delegated = epoch + 3u64;
     while epoch <= delegated {
-        sleep(5);
-        epoch = get_epoch(&test_b, &rpc_b).unwrap();
+        sleep(10);
+        epoch = get_epoch(&test_b, &rpc_b).unwrap_or_default();
     }
     // inflation proposal on Chain B
     let start_epoch = propose_inflation(&test_b)?;
@@ -393,17 +395,12 @@ fn proposal_ibc_token_inflation() -> Result<()> {
     // Vote
     while epoch <= start_epoch {
         sleep(10);
-        epoch = get_epoch(&test_b, &rpc_b).unwrap();
+        epoch = get_epoch(&test_b, &rpc_b).unwrap_or_default();
     }
     submit_votes(&test_b)?;
 
-    // wait for the grace
-    let grace_epoch = start_epoch + 12u64 + 6u64;
-    while epoch <= grace_epoch {
-        sleep(10);
-        epoch = get_epoch(&test_b, &rpc_b).unwrap();
-    }
-    sleep(5);
+    // wait for the next epoch of the grace
+    wait_epochs(&test_b, 18 + 1)?;
 
     setup_hermes(&test_a, &test_b)?;
     let port_id_a = "transfer".parse().unwrap();
@@ -417,31 +414,16 @@ fn proposal_ibc_token_inflation() -> Result<()> {
 
     // Get masp proof for the following IBC transfer from the destination chain
     // It will send 1 APFEL to PA(B) on Chain B
-    let output_folder = test_b.test_dir.path().to_string_lossy();
     // PA(B) on Chain B will receive APFEL on chain A
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
     let token_addr = find_address(&test_a, APFEL)?;
-    let args = [
-        "ibc-gen-shielded",
-        "--output-folder-path",
-        &output_folder,
-        "--target",
+    let file_path = gen_ibc_shielded_transfer(
+        &test_b,
         AB_PAYMENT_ADDRESS,
-        "--token",
-        &token_addr.to_string(),
-        "--amount",
+        token_addr.to_string(),
         "1",
-        "--port-id",
-        port_id_b.as_ref(),
-        "--channel-id",
-        channel_id_b.as_ref(),
-        "--node",
-        &rpc_b,
-    ];
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
-    let mut client = run!(test_b, Bin::Client, args, Some(120))?;
-    let file_path = get_shielded_transfer_path(&mut client)?;
-    client.assert_success();
+        &port_id_b,
+        &channel_id_b,
+    )?;
 
     // Transfer 1 from Chain A to a z-address on Chain B
     transfer(
@@ -460,13 +442,8 @@ fn proposal_ibc_token_inflation() -> Result<()> {
     )?;
     wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
 
-    let mut epoch = get_epoch(&test_b, &rpc_b).unwrap();
-    let next_epoch = epoch.next();
     // wait the next epoch to dispense the rewrad
-    while epoch < next_epoch {
-        sleep(10);
-        epoch = get_epoch(&test_b, &rpc_b).unwrap();
-    }
+    wait_epochs(&test_b, 1)?;
 
     // Check balances
     check_inflated_balance(&test_b)?;
@@ -674,6 +651,29 @@ fn wait_for_packet_relay(
         }
     }
     Err(eyre!("Pending packet is still left"))
+}
+
+fn wait_epochs(test: &Test, duration_epochs: u64) -> Result<()> {
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+    let mut epoch = None;
+    for _ in 0..10 {
+        match get_epoch(test, &rpc) {
+            Ok(e) => {
+                epoch = Some(e);
+                break;
+            }
+            Err(_) => sleep(10),
+        }
+    }
+    let (mut epoch, target_epoch) = match epoch {
+        Some(e) => (e, e + duration_epochs),
+        None => return Err(eyre!("Query epoch failed")),
+    };
+    while epoch < target_epoch {
+        sleep(10);
+        epoch = get_epoch(test, &rpc).unwrap_or_default();
+    }
+    Ok(())
 }
 
 fn create_client(test_a: &Test, test_b: &Test) -> Result<(ClientId, ClientId)> {
@@ -1369,6 +1369,54 @@ fn transfer_timeout(
     Ok(())
 }
 
+fn gen_ibc_shielded_transfer(
+    test: &Test,
+    target: impl AsRef<str>,
+    token: impl AsRef<str>,
+    amount: impl AsRef<str>,
+    port_id: &PortId,
+    channel_id: &ChannelId,
+) -> Result<PathBuf> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+    let output_folder = test.test_dir.path().to_string_lossy();
+    for _ in 0..3 {
+        let start_epoch = match get_epoch(test, &rpc) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        let args = [
+            "ibc-gen-shielded",
+            "--output-folder-path",
+            &output_folder,
+            "--target",
+            target.as_ref(),
+            "--token",
+            token.as_ref(),
+            "--amount",
+            amount.as_ref(),
+            "--port-id",
+            port_id.as_ref(),
+            "--channel-id",
+            channel_id.as_ref(),
+            "--node",
+            &rpc,
+        ];
+        let mut client = run!(test, Bin::Client, args, Some(120))?;
+        let file_path = get_shielded_transfer_path(&mut client)?;
+        client.assert_success();
+        let cur_epoch = match get_epoch(test, &rpc) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        // check if the epoch isn't updated
+        if cur_epoch == start_epoch {
+            return Ok(file_path);
+        }
+    }
+    Err(eyre!("Generating the shielded transfer failed"))
+}
+
 #[allow(clippy::too_many_arguments)]
 fn shielded_transfer(
     test_a: &Test,
@@ -1382,34 +1430,17 @@ fn shielded_transfer(
 ) -> Result<()> {
     // Get masp proof for the following IBC transfer from the destination chain
     // It will send 10 BTC from Chain A to PA(B) on Chain B
-    let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
-    // Chain B will receive Chain A's BTC
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
-    let output_folder = test_b.test_dir.path().to_string_lossy();
     // PA(B) on Chain B will receive BTC on chain A
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
     let token_addr = find_address(test_a, BTC)?;
-    let amount = Amount::native_whole(10).to_string_native();
-    let args = [
-        "ibc-gen-shielded",
-        "--output-folder-path",
-        &output_folder,
-        "--target",
+    let file_path = gen_ibc_shielded_transfer(
+        test_b,
         AB_PAYMENT_ADDRESS,
-        "--token",
-        &token_addr.to_string(),
-        "--amount",
-        &amount,
-        "--port-id",
-        port_id_b.as_ref(),
-        "--channel-id",
-        channel_id_b.as_ref(),
-        "--node",
-        &rpc_b,
-    ];
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
-    let mut client = run!(test_b, Bin::Client, args, Some(120))?;
-    let file_path = get_shielded_transfer_path(&mut client)?;
-    client.assert_success();
+        token_addr.to_string(),
+        "10",
+        port_id_b,
+        channel_id_b,
+    )?;
 
     // Send a token to the shielded address on Chain A
     transfer_on_chain(test_a, ALBERT, AA_PAYMENT_ADDRESS, BTC, 10, ALBERT_KEY)?;
