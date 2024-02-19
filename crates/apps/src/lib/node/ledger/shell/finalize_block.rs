@@ -489,8 +489,7 @@ where
                         .map(|args| args.is_committed_fee_unshield)
                         .unwrap_or_default()
                     {
-                        tx_event["is_valid_masp_tx"] =
-                            format!("{}", tx_index);
+                        tx_event["is_valid_masp_tx"] = format!("{}", tx_index);
                     }
                     tx_event["code"] = ResultCode::WasmRuntimeError.into();
                 }
