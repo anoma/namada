@@ -2,7 +2,6 @@ use clap::Command as App;
 use eyre::Report;
 use namada::types::io::Io;
 use namada_sdk::error::Error as SdkError;
-use tendermint_config::net::Address as TendermintAddress;
 
 use super::node::MockNode;
 use crate::cli::api::{CliApi, CliClient};
@@ -93,7 +92,7 @@ pub fn run(
 
 #[async_trait::async_trait(?Send)]
 impl<'a> CliClient for &'a MockNode {
-    fn from_tendermint_address(_: &TendermintAddress) -> Self {
+    fn from_tendermint_address(_: &tendermint_rpc::Url) -> Self {
         unreachable!("MockNode should always be instantiated at test start.")
     }
 

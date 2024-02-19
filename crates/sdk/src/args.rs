@@ -95,12 +95,12 @@ impl NamadaTypes for SdkTypes {
     type Address = Address;
     type BalanceOwner = namada_core::types::masp::BalanceOwner;
     type BpConversionTable = HashMap<Address, BpConversionTableEntry>;
-    type ConfigRpcTendermintAddress = tendermint_config::net::Address;
+    type ConfigRpcTendermintAddress = tendermint_rpc::Url;
     type Data = Vec<u8>;
     type EthereumAddress = ();
     type Keypair = namada_core::types::key::common::SecretKey;
     type PublicKey = namada_core::types::key::common::PublicKey;
-    type TendermintAddress = tendermint_config::net::Address;
+    type TendermintAddress = tendermint_rpc::Url;
     type TransferSource = namada_core::types::masp::TransferSource;
     type TransferTarget = namada_core::types::masp::TransferTarget;
     type ViewingKey = namada_core::types::masp::ExtendedViewingKey;

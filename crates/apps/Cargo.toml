@@ -127,6 +127,7 @@ sysinfo.workspace = true
 tar.workspace = true
 tempfile.workspace = true
 tendermint-config.workspace = true
+tendermint-rpc.workspace = true
 thiserror.workspace = true
 tokio = {workspace = true, features = ["full"]}
 toml.workspace = true

@@ -2882,7 +2882,7 @@ pub mod args {
     use crate::config::genesis::GenesisAddress;
     use crate::config::{self, Action, ActionAtHeight};
     use crate::facade::tendermint::Timeout;
-    use crate::facade::tendermint_config::net::Address as TendermintAddress;
+    use crate::facade::tendermint_rpc::Url;
 
     pub const ADDRESS: Arg<WalletAddress> = arg("address");
     pub const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
@@ -3012,10 +3012,10 @@ pub mod args {
          scheme is not supplied, it is assumed to be TCP.";
     pub const CONFIG_RPC_LEDGER_ADDRESS: ArgDefaultFromCtx<ConfigRpcAddress> =
         arg_default_from_ctx("node", DefaultFn(|| "".to_string()));
-    pub const LEDGER_ADDRESS: ArgDefault<TendermintAddress> = arg("node")
-        .default(DefaultFn(|| {
+    pub const LEDGER_ADDRESS: ArgDefault<Url> =
+        arg("node").default(DefaultFn(|| {
             let raw = "127.0.0.1:26657";
-            TendermintAddress::from_str(raw).unwrap()
+            Url::from_str(raw).unwrap()
         }));
     pub const LIST_FIND_ADDRESSES_ONLY: ArgFlag = flag("addr");
     pub const LIST_FIND_KEYS_ONLY: ArgFlag = flag("keys");
@@ -5915,7 +5915,7 @@ pub mod args {
         type EthereumAddress = String;
         type Keypair = WalletKeypair;
         type PublicKey = WalletPublicKey;
-        type TendermintAddress = tendermint_config::net::Address;
+        type TendermintAddress = tendermint_rpc::Url;
         type TransferSource = WalletTransferSource;
         type TransferTarget = WalletTransferTarget;
         type ViewingKey = WalletViewingKey;
