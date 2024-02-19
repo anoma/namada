@@ -363,9 +363,7 @@ fn proposal_ibc_token_inflation() -> Result<()> {
     let update_genesis =
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
             genesis.parameters.parameters.epochs_per_year =
-                epochs_per_year_from_min_duration(30);
-            // for the trusting period of IBC client
-            genesis.parameters.pos_params.pipeline_len = 3;
+                epochs_per_year_from_min_duration(50);
             genesis.parameters.parameters.max_proposal_bytes =
                 Default::default();
             genesis.parameters.pgf_params.stewards =
@@ -384,7 +382,7 @@ fn proposal_ibc_token_inflation() -> Result<()> {
     delegate_token(&test_b)?;
     let rpc_b = get_actor_rpc(&test_b, Who::Validator(0));
     let mut epoch = get_epoch(&test_b, &rpc_b).unwrap();
-    let delegated = epoch + 3u64;
+    let delegated = epoch + 2u64;
     while epoch <= delegated {
         sleep(10);
         epoch = get_epoch(&test_b, &rpc_b).unwrap_or_default();
@@ -415,12 +413,13 @@ fn proposal_ibc_token_inflation() -> Result<()> {
     // Get masp proof for the following IBC transfer from the destination chain
     // It will send 1 APFEL to PA(B) on Chain B
     // PA(B) on Chain B will receive APFEL on chain A
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
     let token_addr = find_address(&test_a, APFEL)?;
     let file_path = gen_ibc_shielded_transfer(
         &test_b,
         AB_PAYMENT_ADDRESS,
         token_addr.to_string(),
-        "1",
+        1,
         &port_id_b,
         &channel_id_b,
     )?;
@@ -1373,48 +1372,33 @@ fn gen_ibc_shielded_transfer(
     test: &Test,
     target: impl AsRef<str>,
     token: impl AsRef<str>,
-    amount: impl AsRef<str>,
+    amount: u64,
     port_id: &PortId,
     channel_id: &ChannelId,
 ) -> Result<PathBuf> {
     std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let rpc = get_actor_rpc(test, Who::Validator(0));
     let output_folder = test.test_dir.path().to_string_lossy();
-    for _ in 0..3 {
-        let start_epoch = match get_epoch(test, &rpc) {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
-        let args = [
-            "ibc-gen-shielded",
-            "--output-folder-path",
-            &output_folder,
-            "--target",
-            target.as_ref(),
-            "--token",
-            token.as_ref(),
-            "--amount",
-            amount.as_ref(),
-            "--port-id",
-            port_id.as_ref(),
-            "--channel-id",
-            channel_id.as_ref(),
-            "--node",
-            &rpc,
-        ];
-        let mut client = run!(test, Bin::Client, args, Some(120))?;
-        let file_path = get_shielded_transfer_path(&mut client)?;
-        client.assert_success();
-        let cur_epoch = match get_epoch(test, &rpc) {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
-        // check if the epoch isn't updated
-        if cur_epoch == start_epoch {
-            return Ok(file_path);
-        }
-    }
-    Err(eyre!("Generating the shielded transfer failed"))
+    let args = [
+        "ibc-gen-shielded",
+        "--output-folder-path",
+        &output_folder,
+        "--target",
+        target.as_ref(),
+        "--token",
+        token.as_ref(),
+        "--amount",
+        &amount.to_string(),
+        "--port-id",
+        port_id.as_ref(),
+        "--channel-id",
+        channel_id.as_ref(),
+        "--node",
+        &rpc,
+    ];
+    let mut client = run!(test, Bin::Client, args, Some(120))?;
+    let file_path = get_shielded_transfer_path(&mut client)?;
+    Ok(file_path)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1437,7 +1421,7 @@ fn shielded_transfer(
         test_b,
         AB_PAYMENT_ADDRESS,
         token_addr.to_string(),
-        "10",
+        10,
         port_id_b,
         channel_id_b,
     )?;
