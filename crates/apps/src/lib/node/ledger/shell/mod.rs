@@ -769,6 +769,8 @@ where
     /// Commit a block. Persist the application state and return the Merkle root
     /// hash.
     pub fn commit(&mut self) -> response::Commit {
+        self.bump_last_processed_eth_block();
+
         self.wl_storage
             .commit_block()
             .expect("Encountered a storage error while committing a block");
@@ -779,7 +781,6 @@ where
             "Committed block hash: {merkle_root}, height: {committed_height}",
         );
 
-        self.bump_last_processed_eth_block();
         self.broadcast_queued_txs();
 
         response::Commit {
