@@ -582,9 +582,9 @@ where
 
         if end_epoch <= start_epoch || start_epoch <= current_epoch {
             tracing::info!(
-                "Proposal end ({end_epoch}) must be after start \
-                 ({start_epoch}) and start before current epoch \
-                 ({current_epoch})."
+                "Proposal end epoch ({end_epoch}) must be after the start \
+                 epoch ({start_epoch}), and the start epoch must be after the \
+                 current epoch ({current_epoch})."
             );
             return Ok(false);
         }

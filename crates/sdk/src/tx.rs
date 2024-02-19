@@ -1017,11 +1017,9 @@ pub async fn build_unjail_validator(
                     eligible_epoch
                 );
                 if !tx_args.force {
-                    return Err(Error::from(
-                        TxSubmitError::ValidatorFrozenFromUnjailing(
-                            validator.clone(),
-                        ),
-                    ));
+                    return Err(Error::from(TxSubmitError::ValidatorFrozen(
+                        validator.clone(),
+                    )));
                 }
             }
         }
@@ -1575,6 +1573,32 @@ pub async fn build_unbond(
             .map(Some),
         None => Ok(source.clone()),
     }?;
+
+    // Check that the validator is not frozen due to slashes
+    let last_slash_epoch =
+        rpc::query_last_infraction_epoch(context.client(), &validator).await?;
+    if let Some(infraction_epoch) = last_slash_epoch {
+        let params = rpc::get_pos_params(context.client()).await?;
+        let current_epoch = rpc::query_epoch(context.client()).await?;
+
+        let eligible_epoch =
+            infraction_epoch + params.slash_processing_epoch_offset();
+        if current_epoch < eligible_epoch {
+            edisplay_line!(
+                context.io(),
+                "The validator {} is currently frozen due to an infraction in \
+                 epoch {}. Unbonds can be processed starting at epoch {}.",
+                &validator,
+                infraction_epoch,
+                eligible_epoch
+            );
+            if !tx_args.force {
+                return Err(Error::from(TxSubmitError::ValidatorFrozen(
+                    validator.clone(),
+                )));
+            }
+        }
+    }
 
     let default_address = source.clone().unwrap_or(validator.clone());
     let default_signer = Some(default_address.clone());
@@ -2808,7 +2832,7 @@ pub async fn build_custom(
 /// Generate IBC shielded transfer
 pub async fn gen_ibc_shielded_transfer<N: Namada>(
     context: &N,
-    args: args::GenIbcShieldedTransafer,
+    args: args::GenIbcShieldedTransfer,
 ) -> Result<Option<IbcShieldedTransfer>> {
     let key = match args.target.payment_address() {
         Some(pa) if pa.is_pinned() => Some(pa.hash()),
