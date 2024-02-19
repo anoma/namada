@@ -2705,7 +2705,7 @@ fn proposal_offline() -> Result<()> {
     Ok(())
 }
 
-fn write_json_file<T>(proposal_path: &std::path::Path, proposal_content: T)
+pub fn write_json_file<T>(proposal_path: &std::path::Path, proposal_content: T)
 where
     T: Serialize,
 {

@@ -91,7 +91,7 @@ use crate::e2e::helpers::{
     get_established_addr_from_pregenesis, get_validator_pk,
     wait_for_wasm_pre_compile,
 };
-use crate::e2e::ledger_tests::prepare_proposal_data;
+use crate::e2e::ledger_tests::{prepare_proposal_data, write_json_file};
 use crate::e2e::setup::{
     self, run_hermes_cmd, setup_hermes, sleep, Bin, NamadaCmd, Test, Who,
 };
@@ -398,7 +398,7 @@ fn proposal_ibc_token_inflation() -> Result<()> {
     submit_votes(&test_b)?;
 
     // wait for the next epoch of the grace
-    wait_epochs(&test_b, 18 + 1)?;
+    wait_epochs(&test_b, 9 + 1)?;
 
     setup_hermes(&test_a, &test_b)?;
     let port_id_a = "transfer".parse().unwrap();
@@ -415,6 +415,8 @@ fn proposal_ibc_token_inflation() -> Result<()> {
     // PA(B) on Chain B will receive APFEL on chain A
     std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
     let token_addr = find_address(&test_a, APFEL)?;
+    // wait the next epoch not to update the epoch during the IBC transfer
+    wait_epochs(&test_b, 1)?;
     let file_path = gen_ibc_shielded_transfer(
         &test_b,
         AB_PAYMENT_ADDRESS,
@@ -653,6 +655,7 @@ fn wait_for_packet_relay(
 }
 
 fn wait_epochs(test: &Test, duration_epochs: u64) -> Result<()> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let rpc = get_actor_rpc(test, Who::Validator(0));
     let mut epoch = None;
     for _ in 0..10 {
@@ -1740,13 +1743,30 @@ fn propose_inflation(test: &Test) -> Result<Epoch> {
     let rpc = get_actor_rpc(test, Who::Validator(0));
     let epoch = get_epoch(test, &rpc)?;
     let start_epoch = (epoch.0 + 6) / 3 * 3;
-    let proposal_json_path = prepare_proposal_data(
-        test,
-        0,
-        albert,
-        TestWasms::TxProposalIbcTokenInflation.read_bytes(),
-        start_epoch,
-    );
+    let proposal_json = serde_json::json!({
+        "proposal": {
+            "id": 0,
+            "content": {
+                "title": "TheTitle",
+                "authors": "test@test.com",
+                "discussions-to": "www.github.com/anoma/aip/1",
+                "created": "2022-03-10T08:54:37Z",
+                "license": "MIT",
+                "abstract": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros. Nullam sed ex justo. Ut at placerat ipsum, sit amet rhoncus libero. Sed blandit non purus non suscipit. Phasellus sed quam nec augue bibendum bibendum ut vitae urna. Sed odio diam, ornare nec sapien eget, congue viverra enim.",
+                "motivation": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices.",
+                "details": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros.",
+                "requires": "2"
+            },
+            "author": albert,
+            "voting_start_epoch": start_epoch,
+            "voting_end_epoch": start_epoch + 3_u64,
+            "grace_epoch": start_epoch + 9_u64,
+        },
+        "data": TestWasms::TxProposalIbcTokenInflation.read_bytes()
+    });
+
+    let proposal_json_path = test.test_dir.path().join("proposal.json");
+    write_json_file(proposal_json_path.as_path(), proposal_json);
 
     let submit_proposal_args = vec![
         "init-proposal",
