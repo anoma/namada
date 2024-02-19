@@ -774,12 +774,9 @@ where
             ..Default::default()
         };
         // commit block's data from write log and store the in DB
-        self.wl_storage.commit_block().unwrap_or_else(|e| {
-            tracing::error!(
-                "Encountered a storage error while committing a block {:?}",
-                e
-            )
-        });
+        self.wl_storage
+            .commit_block()
+            .expect("Encountered a storage error while committing a block");
 
         let root = self.wl_storage.storage.merkle_root();
         tracing::info!(
