@@ -1505,11 +1505,37 @@ fn wrapper_fee_unshielding() -> Result<()> {
             "--token",
             NAM,
             "--amount",
-            "1959999", // Reduce the balance of the fee payer artificially
+            "1919999", // Reduce the balance of the fee payer artificially
             "--gas-price",
             "1",
             "--gas-limit",
-            "40000",
+            "20000",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+
+    _ = node.next_epoch();
+
+    // 2. Shield more tokens to produce another output description
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            ALBERT_KEY,
+            "--target",
+            AA_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "40000", // Reduce the balance of the fee payer artificially
+            "--gas-price",
+            "1",
+            "--gas-limit",
+            "20000",
             "--ledger-address",
             validator_one_rpc,
         ],
