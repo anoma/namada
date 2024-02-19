@@ -388,13 +388,13 @@ pub enum ValidatorSetUpdate {
     Deactivated(common::PublicKey),
 }
 
-/// Consensus validator's consensus key and its bonded stake.
+/// Newly updated consensus validator's consensus key and bonded stake.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConsensusValidator {
     /// A public key used for signing validator's consensus actions
     pub consensus_key: common::PublicKey,
     /// Total bonded stake of the validator
-    pub bonded_stake: token::Amount,
+    pub bonded_stake: i64,
 }
 
 /// ID of a bond and/or an unbond.

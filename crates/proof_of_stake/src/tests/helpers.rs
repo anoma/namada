@@ -15,7 +15,7 @@ use proptest::strategy::{Just, Strategy};
 use crate::parameters::testing::arb_pos_params;
 use crate::types::{GenesisValidator, ValidatorSetUpdate};
 use crate::validator_set_update::{
-    copy_validator_sets_and_positions, validator_set_update_tendermint,
+    copy_validator_sets_and_positions, validator_set_update_comet,
 };
 use crate::{
     compute_and_store_total_consensus_stake, OwnedPosParams, PosParams,
@@ -57,7 +57,7 @@ pub fn get_tendermint_set_updates(
     // the start of a new one too and so we give it the predecessor of the
     // current epoch here to actually get the update for the current epoch.
     let epoch = Epoch(epoch - 1);
-    validator_set_update_tendermint(s, params, epoch, |update| update).unwrap()
+    validator_set_update_comet(s, params, epoch, |update| update).unwrap()
 }
 
 /// Advance to the next epoch. Returns the new epoch.
