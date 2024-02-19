@@ -73,7 +73,7 @@ fn get_tx_args(use_device: bool) -> TxArgs {
         output_folder: None,
         force: false,
         broadcast_only: false,
-        ledger_address: tendermint_rpc::Url::from_str("127.0.0.1:26657")
+        ledger_address: tendermint_rpc::Url::from_str("http://127.0.0.1:26657")
             .unwrap(),
         initialized_account_alias: None,
         wallet_alias_force: false,

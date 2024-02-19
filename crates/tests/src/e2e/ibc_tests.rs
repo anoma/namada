@@ -77,7 +77,6 @@ use namada_apps::config::utils::set_port;
 use namada_apps::config::{ethereum_bridge, TendermintMode};
 use namada_apps::facade::tendermint::block::Header as TmHeader;
 use namada_apps::facade::tendermint::merkle::proof::ProofOps as TmProof;
-use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
 use namada_apps::facade::tendermint_rpc::{Client, HttpClient, Url};
 use namada_core::types::string_encoding::StringEncoded;
 use namada_sdk::masp::fs::FsShieldedUtils;
@@ -594,8 +593,8 @@ fn create_client(test_a: &Test, test_b: &Test) -> Result<(ClientId, ClientId)> {
 
 fn make_client_state(test: &Test, height: Height) -> TmClientState {
     let rpc = get_actor_rpc(test, Who::Validator(0));
-    let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
-    let client = HttpClient::new(ledger_address).unwrap();
+    let tendermint_url = Url::from_str(&rpc).unwrap();
+    let client = HttpClient::new(tendermint_url).unwrap();
 
     let pos_params =
         test.async_runtime().block_on(query_pos_parameters(&client));
@@ -717,8 +716,8 @@ fn update_client(
 }
 
 fn make_light_client_io(test: &Test) -> TmLightClientIo {
-    let addr = format!("http://{}", get_actor_rpc(test, Who::Validator(0)));
-    let rpc_addr = Url::from_str(&addr).unwrap();
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+    let rpc_addr = Url::from_str(&rpc).unwrap();
     let rpc_client = HttpClient::new(rpc_addr).unwrap();
     let rpc_timeout = Duration::new(10, 0);
 
@@ -1670,8 +1669,8 @@ fn make_ibc_data(message: impl Msg) -> Vec<u8> {
 
 fn query_height(test: &Test) -> Result<Height> {
     let rpc = get_actor_rpc(test, Who::Validator(0));
-    let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
-    let client = HttpClient::new(ledger_address).unwrap();
+    let tendermint_url = Url::from_str(&rpc).unwrap();
+    let client = HttpClient::new(tendermint_url).unwrap();
 
     let status = test
         .async_runtime()
@@ -1683,8 +1682,8 @@ fn query_height(test: &Test) -> Result<Height> {
 
 fn query_header(test: &Test, height: Height) -> Result<TmHeader> {
     let rpc = get_actor_rpc(test, Who::Validator(0));
-    let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
-    let client = HttpClient::new(ledger_address).unwrap();
+    let tendermint_url = Url::from_str(&rpc).unwrap();
+    let client = HttpClient::new(tendermint_url).unwrap();
     let height = height.revision_height() as u32;
     let result = test
         .async_runtime()
@@ -1704,8 +1703,8 @@ fn check_ibc_update_query(
     consensus_height: BlockHeight,
 ) -> Result<()> {
     let rpc = get_actor_rpc(test, Who::Validator(0));
-    let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
-    let client = HttpClient::new(ledger_address).unwrap();
+    let tendermint_url = Url::from_str(&rpc).unwrap();
+    let client = HttpClient::new(tendermint_url).unwrap();
     match test.async_runtime().block_on(RPC.shell().ibc_client_update(
         &client,
         client_id,
@@ -1723,8 +1722,8 @@ fn check_ibc_packet_query(
     packet: &Packet,
 ) -> Result<()> {
     let rpc = get_actor_rpc(test, Who::Validator(0));
-    let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
-    let client = HttpClient::new(ledger_address).unwrap();
+    let tendermint_url = Url::from_str(&rpc).unwrap();
+    let client = HttpClient::new(tendermint_url).unwrap();
     match test.async_runtime().block_on(RPC.shell().ibc_packet(
         &client,
         event_type,
@@ -1746,8 +1745,8 @@ fn query_value_with_proof(
     height: Option<Height>,
 ) -> Result<(Option<Vec<u8>>, TmProof)> {
     let rpc = get_actor_rpc(test, Who::Validator(0));
-    let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
-    let client = HttpClient::new(ledger_address).unwrap();
+    let tendermint_url = Url::from_str(&rpc).unwrap();
+    let client = HttpClient::new(tendermint_url).unwrap();
     let result = test.async_runtime().block_on(query_storage_value_bytes(
         &client,
         key,
@@ -2039,8 +2038,8 @@ fn get_attributes_from_event(event: &AbciEvent) -> HashMap<String, String> {
 
 fn get_events(test: &Test, height: u32) -> Result<Vec<AbciEvent>> {
     let rpc = get_actor_rpc(test, Who::Validator(0));
-    let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
-    let client = HttpClient::new(ledger_address).unwrap();
+    let tendermint_url = Url::from_str(&rpc).unwrap();
+    let client = HttpClient::new(tendermint_url).unwrap();
 
     let response = test
         .async_runtime()

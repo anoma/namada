@@ -3014,7 +3014,7 @@ pub mod args {
         arg_default_from_ctx("node", DefaultFn(|| "".to_string()));
     pub const LEDGER_ADDRESS: ArgDefault<Url> =
         arg("node").default(DefaultFn(|| {
-            let raw = "127.0.0.1:26657";
+            let raw = "http://127.0.0.1:26657";
             Url::from_str(raw).unwrap()
         }));
     pub const LIST_FIND_ADDRESSES_ONLY: ArgFlag = flag("addr");

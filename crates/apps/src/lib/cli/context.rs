@@ -470,7 +470,7 @@ impl ArgFromContext for tendermint_rpc::Url {
     ) -> Result<Self, String> {
         if raw.as_ref().is_empty() {
             return Self::from_str(
-                &ctx.config.ledger.cometbft.rpc.laddr.to_string(),
+                &ctx.config.ledger.cometbft.rpc.laddr.to_string().replace("tpc", "http"),
             )
             .map_err(|err| format!("Invalid Tendermint address: {err}"));
         }
