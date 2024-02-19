@@ -194,6 +194,7 @@ pub mod wrapper_tx {
         pub pk: common::PublicKey,
         /// The epoch in which the tx is to be submitted. This determines
         /// which decryption key will be used
+        /// TODO: Is this still necessary without the DKG? Seems not
         pub epoch: Epoch,
         /// Max amount of gas that can be used when executing the inner tx
         pub gas_limit: GasLimit,

@@ -71,7 +71,7 @@ use namada::ledger::queries::{
 };
 use namada::state::StorageRead;
 use namada::tx::data::pos::Bond;
-use namada::tx::data::{TxResult, VpsResult};
+use namada::tx::data::{Fee, TxResult, VpsResult};
 use namada::tx::{Code, Data, Section, Signature, Tx};
 use namada::vm::wasm::run;
 use namada::{proof_of_stake, tendermint};
@@ -289,9 +289,7 @@ impl BenchShell {
         extra_sections: Option<Vec<Section>>,
         signers: Vec<&SecretKey>,
     ) -> Tx {
-        let mut tx = Tx::from_type(namada::tx::data::TxType::Decrypted(
-            namada::tx::data::DecryptedTx::Decrypted,
-        ));
+        let mut tx = Tx::from_type(namada::tx::data::TxType::Raw);
 
         // NOTE: here we use the code hash to avoid including the cost for the
         // wasm validation. The wasm codes (both txs and vps) are always
@@ -564,7 +562,18 @@ impl BenchShell {
 
     // Commit a masp transaction and cache the tx and the changed keys for
     // client queries
-    pub fn commit_masp_tx(&mut self, masp_tx: Tx) {
+    pub fn commit_masp_tx(&mut self, mut masp_tx: Tx) {
+        use namada::core::types::key::RefTo;
+        masp_tx.add_wrapper(
+            Fee {
+                amount_per_gas_unit: DenominatedAmount::native(0.into()),
+                token: self.wl_storage.storage.native_token.clone(),
+            },
+            defaults::albert_keypair().ref_to(),
+            self.wl_storage.storage.last_epoch,
+            0.into(),
+            None,
+        );
         self.last_block_masp_txs
             .push((masp_tx, self.state.write_log().get_keys()));
         self.state.commit_tx();
