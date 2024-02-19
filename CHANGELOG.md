@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## v0.31.5
+
+Namada 0.31.5 is a patch release that fixes consensus validator set update for CometBFT.
+
+### BUG FIXES
+
+- Fixed a bug in the communication of validator set updates to
+  CometBFT after a change of validator consensus key that occurs
+  at the same epoch as a validator entering the consensus set.
+  ([\#2653](https://github.com/anoma/namada/pull/2653))
+
 ## v0.31.4
 
 Namada 0.31.4 is a patch release that fixes the result query of an active governance proposal.
