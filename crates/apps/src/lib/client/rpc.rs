@@ -151,7 +151,11 @@ pub async fn query_transfers(
     let mut shielded = context.shielded_mut().await;
     let _ = shielded.load().await;
     // Precompute asset types to increase chances of success in decoding
-    let _ = shielded.precompute_asset_types(context).await;
+    let token_map = query_tokens(context, None, None).await;
+    let tokens = token_map.values().collect();
+    let _ = shielded
+        .precompute_asset_types(context.client(), tokens)
+        .await;
     // Obtain the effects of all shielded and transparent transactions
     let transfers = shielded
         .query_tx_deltas(
@@ -451,10 +455,12 @@ pub async fn query_pinned_balance(
         .collect();
     let _ = context.shielded_mut().await.load().await;
     // Precompute asset types to increase chances of success in decoding
+    let token_map = query_tokens(context, None, None).await;
+    let tokens = token_map.values().collect();
     let _ = context
         .shielded_mut()
         .await
-        .precompute_asset_types(context)
+        .precompute_asset_types(context.client(), tokens)
         .await;
     // Print the token balances by payment address
     for owner in owners {
@@ -899,7 +905,11 @@ pub async fn query_shielded_balance(
         let mut shielded = context.shielded_mut().await;
         let _ = shielded.load().await;
         // Precompute asset types to increase chances of success in decoding
-        let _ = shielded.precompute_asset_types(context).await;
+        let token_map = query_tokens(context, None, None).await;
+        let tokens = token_map.values().collect();
+        let _ = shielded
+            .precompute_asset_types(context.client(), tokens)
+            .await;
         // Save the update state so that future fetches can be short-circuited
         let _ = shielded.save().await;
     }
