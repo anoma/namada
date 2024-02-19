@@ -42,8 +42,9 @@ use crate::validator_set_update::{
     insert_validator_into_validator_set, update_validator_set,
 };
 use crate::{
-    become_validator, bond_tokens, is_validator, staking_token_address,
-    unbond_tokens, withdraw_tokens, BecomeValidator, OwnedPosParams,
+    become_validator, bond_tokens, change_consensus_key, is_validator,
+    staking_token_address, unbond_tokens, withdraw_tokens, BecomeValidator,
+    OwnedPosParams,
 };
 
 proptest! {
@@ -555,7 +556,10 @@ fn test_validator_sets() {
         tm_updates[0],
         ValidatorSetUpdate::Consensus(ConsensusValidator {
             consensus_key: pk3,
-            bonded_stake: stake3,
+            bonded_stake: into_tm_voting_power(
+                params.tm_votes_per_token,
+                stake3
+            ),
         })
     );
 
@@ -610,7 +614,10 @@ fn test_validator_sets() {
         tm_updates[0],
         ValidatorSetUpdate::Consensus(ConsensusValidator {
             consensus_key: pk5,
-            bonded_stake: stake5,
+            bonded_stake: into_tm_voting_power(
+                params.tm_votes_per_token,
+                stake5
+            ),
         })
     );
     assert_eq!(tm_updates[1], ValidatorSetUpdate::Deactivated(pk2));
@@ -811,7 +818,10 @@ fn test_validator_sets() {
         tm_updates[0],
         ValidatorSetUpdate::Consensus(ConsensusValidator {
             consensus_key: pk4.clone(),
-            bonded_stake: stake4,
+            bonded_stake: into_tm_voting_power(
+                params.tm_votes_per_token,
+                stake4
+            ),
         })
     );
     assert_eq!(tm_updates[1], ValidatorSetUpdate::Deactivated(pk1));
@@ -926,7 +936,10 @@ fn test_validator_sets() {
         tm_updates[0],
         ValidatorSetUpdate::Consensus(ConsensusValidator {
             consensus_key: pk6,
-            bonded_stake: stake6,
+            bonded_stake: into_tm_voting_power(
+                params.tm_votes_per_token,
+                stake6
+            ),
         })
     );
     assert_eq!(tm_updates[1], ValidatorSetUpdate::Deactivated(pk4));
@@ -1185,9 +1198,63 @@ fn test_validator_sets_swap() {
     assert_eq!(
         tm_updates[0],
         ValidatorSetUpdate::Consensus(ConsensusValidator {
-            consensus_key: pk3,
-            bonded_stake: stake3,
+            consensus_key: pk3.clone(),
+            bonded_stake: into_tm_voting_power(
+                params.tm_votes_per_token,
+                stake3
+            ),
         })
+    );
+
+    // Now give val2 stake such that it bumps val3 out of the consensus set, and
+    // also change val2's consensus key
+    let pipeline_epoch = epoch + params.pipeline_len;
+    let bonds_epoch_3 = pipeline_epoch;
+    let bonds = token::Amount::native_whole(1);
+    let stake2 = stake2 + bonds;
+
+    update_validator_set(&mut s, &params, &val2, bonds.change(), epoch, None)
+        .unwrap();
+    update_validator_deltas(
+        &mut s,
+        &params,
+        &val2,
+        bonds.change(),
+        epoch,
+        None,
+    )
+    .unwrap();
+
+    sk_seed += 1;
+    let new_ck2 = key::testing::common_sk_from_simple_seed(sk_seed).to_public();
+    change_consensus_key(&mut s, &val2, &new_ck2, epoch).unwrap();
+
+    // Advance to EPOCH 5
+    let epoch = advance_epoch(&mut s, &params);
+
+    // Check tendermint validator set updates
+    let tm_updates = get_tendermint_set_updates(&s, &params, epoch);
+    assert!(tm_updates.is_empty());
+
+    // Advance to EPOCH 6
+    let epoch = advance_epoch(&mut s, &params);
+    assert_eq!(epoch, bonds_epoch_3);
+
+    let tm_updates = get_tendermint_set_updates(&s, &params, epoch);
+    // dbg!(&tm_updates);
+    assert_eq!(tm_updates.len(), 2);
+    assert_eq!(
+        tm_updates,
+        vec![
+            ValidatorSetUpdate::Consensus(ConsensusValidator {
+                consensus_key: new_ck2,
+                bonded_stake: into_tm_voting_power(
+                    params.tm_votes_per_token,
+                    stake2
+                ),
+            }),
+            ValidatorSetUpdate::Deactivated(pk3),
+        ]
     );
 }
 

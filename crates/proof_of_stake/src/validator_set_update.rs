@@ -561,7 +561,7 @@ where
 /// Communicate imminent validator set updates to Tendermint. This function is
 /// called two blocks before the start of a new epoch because Tendermint
 /// validator updates become active two blocks after the updates are submitted.
-pub fn validator_set_update_tendermint<S, T>(
+pub fn validator_set_update_comet<S, T>(
     storage: &S,
     params: &PosParams,
     current_epoch: Epoch,
@@ -570,9 +570,11 @@ pub fn validator_set_update_tendermint<S, T>(
 where
     S: StorageRead,
 {
-    tracing::debug!("Communicating validator set updates to Tendermint.");
-    // Because this is called 2 blocks before a start on an epoch, we're gonna
-    // give Tendermint updates for the next epoch
+    tracing::debug!(
+        "Communicating post-genesis validator set updates to CometBFT."
+    );
+    // Because this is called 2 blocks before the start on an epoch, we will
+    // give CometBFT the updates for the next epoch
     let next_epoch = current_epoch.next();
 
     let new_consensus_validator_handle =
@@ -580,6 +582,7 @@ where
     let prev_consensus_validator_handle =
         consensus_validator_set_handle().at(&current_epoch);
 
+    tracing::debug!("Iterating over new consensus validators:");
     let new_consensus_validators = new_consensus_validator_handle
         .iter(storage)?
         .map(|validator| {
@@ -596,100 +599,95 @@ where
                 new_stake.to_string_native()
             );
 
+            let prev_tm_voting_power = Lazy::new(|| {
+                let prev_validator_stake = read_validator_stake(
+                    storage,
+                    params,
+                    &address,
+                    current_epoch,
+                )
+                .unwrap();
+                into_tm_voting_power(
+                    params.tm_votes_per_token,
+                    prev_validator_stake,
+                )
+            });
+            let new_tm_voting_power = Lazy::new(|| {
+                into_tm_voting_power(params.tm_votes_per_token, new_stake)
+            });
+
+            // If both previous and current voting powers are 0, and the
+            // validator_stake_threshold is 0, skip update
+            if params.validator_stake_threshold.is_zero()
+                && *prev_tm_voting_power == 0
+                && *new_tm_voting_power == 0
+            {
+                tracing::debug!(
+                    "Skipping CometBFT validator set update, {address} is in \
+                     consensus set but without voting power"
+                );
+                return vec![];
+            }
+
             let new_consensus_key = validator_consensus_key_handle(&address)
                 .get(storage, next_epoch, params)
                 .unwrap()
                 .unwrap();
 
-            let old_consensus_key = validator_consensus_key_handle(&address)
+            let prev_consensus_key = validator_consensus_key_handle(&address)
                 .get(storage, current_epoch, params)
                 .unwrap();
 
-            // Check if the validator was consensus in the previous epoch with
-            // the same stake. If so, no updated is needed.
-            // Look up previous state and prev and current voting powers
-            if !prev_consensus_validator_handle.is_empty(storage).unwrap() {
-                let prev_state = validator_state_handle(&address)
-                    .get(storage, current_epoch, params)
-                    .unwrap();
-                let prev_tm_voting_power = Lazy::new(|| {
-                    let prev_validator_stake = read_validator_stake(
-                        storage,
-                        params,
-                        &address,
-                        current_epoch,
-                    )
-                    .unwrap();
-                    into_tm_voting_power(
-                        params.tm_votes_per_token,
-                        prev_validator_stake,
-                    )
-                });
-                let new_tm_voting_power = Lazy::new(|| {
-                    into_tm_voting_power(params.tm_votes_per_token, new_stake)
-                });
-
-                // If it was in `Consensus` before and voting power has not
-                // changed, skip the update
-                if matches!(prev_state, Some(ValidatorState::Consensus))
-                    && *prev_tm_voting_power == *new_tm_voting_power
-                {
-                    if old_consensus_key.as_ref().unwrap() == &new_consensus_key
-                    {
-                        tracing::debug!(
-                            "skipping validator update, {address} is in \
-                             consensus set but voting power hasn't changed"
-                        );
-                        return vec![];
-                    } else {
-                        return vec![
-                            ValidatorSetUpdate::Consensus(ConsensusValidator {
-                                consensus_key: new_consensus_key,
-                                bonded_stake: new_stake,
-                            }),
-                            ValidatorSetUpdate::Deactivated(
-                                old_consensus_key.unwrap(),
-                            ),
-                        ];
-                    }
-                }
-                // If both previous and current voting powers are 0, and the
-                // validator_stake_threshold is 0, skip update
-                if params.validator_stake_threshold.is_zero()
-                    && *prev_tm_voting_power == 0
-                    && *new_tm_voting_power == 0
-                {
-                    tracing::info!(
-                        "skipping validator update, {address} is in consensus \
-                         set but without voting power"
-                    );
-                    return vec![];
-                }
-            }
+            let prev_state = validator_state_handle(&address)
+                .get(storage, current_epoch, params)
+                .unwrap();
 
             tracing::debug!(
-                "{address} consensus key {}",
+                "{address} new consensus key {}",
                 new_consensus_key.tm_raw_hash()
             );
 
-            if old_consensus_key.as_ref() == Some(&new_consensus_key)
-                || old_consensus_key.is_none()
-            {
-                vec![ValidatorSetUpdate::Consensus(ConsensusValidator {
-                    consensus_key: new_consensus_key,
-                    bonded_stake: new_stake,
-                })]
-            } else {
+            // If the old state was not Consensus, then just a
+            // ConsensusValidator update is required
+            if !matches!(prev_state, Some(ValidatorState::Consensus)) {
+                return vec![ValidatorSetUpdate::Consensus(
+                    ConsensusValidator {
+                        consensus_key: new_consensus_key,
+                        bonded_stake: *new_tm_voting_power,
+                    },
+                )];
+            }
+
+            // Now we've matched validators that were previously Consensus and
+            // remain so, which also implies that an old consensus key exists
+
+            // If the consensus key has changed, then both ConsensusValidator
+            // and DeactivatedValidator updates are required
+            if prev_consensus_key.as_ref() != Some(&new_consensus_key) {
                 vec![
                     ValidatorSetUpdate::Consensus(ConsensusValidator {
                         consensus_key: new_consensus_key,
-                        bonded_stake: new_stake,
+                        bonded_stake: *new_tm_voting_power,
                     }),
-                    ValidatorSetUpdate::Deactivated(old_consensus_key.unwrap()),
+                    ValidatorSetUpdate::Deactivated(
+                        prev_consensus_key.unwrap(),
+                    ),
                 ]
+            } else if *prev_tm_voting_power == *new_tm_voting_power {
+                tracing::debug!(
+                    "Skipping CometBFT validator set update; {address} \
+                     remains in consensus set but voting power hasn't changed"
+                );
+                vec![]
+            } else {
+                vec![ValidatorSetUpdate::Consensus(ConsensusValidator {
+                    consensus_key: new_consensus_key,
+                    bonded_stake: *new_tm_voting_power,
+                })]
             }
         });
 
+    tracing::debug!("Iterating over previous consensus validators:");
     let prev_consensus_validators = prev_consensus_validator_handle
         .iter(storage)?
         .map(|validator| {
@@ -719,7 +717,7 @@ where
                 )
             });
 
-            let old_consensus_key = validator_consensus_key_handle(&address)
+            let prev_consensus_key = validator_consensus_key_handle(&address)
                 .get(storage, current_epoch, params)
                 .unwrap()
                 .unwrap();
@@ -734,24 +732,25 @@ where
                 // If the new state is not Consensus but its prev voting power
                 // was 0 and the stake threshold is 0, we can also skip the
                 // update
-                tracing::info!(
-                    "skipping validator update, {address} is in consensus set \
-                     but without voting power"
+                tracing::debug!(
+                    "Skipping CometBFT validator set update, {address} is in \
+                     not in consensus set anymore, but it previously had no \
+                     voting power"
                 );
                 return vec![];
             }
 
             // The remaining validators were previously Consensus but no longer
             // are, so they must be deactivated
-            let consensus_key = validator_consensus_key_handle(&address)
+            let new_consensus_key = validator_consensus_key_handle(&address)
                 .get(storage, next_epoch, params)
                 .unwrap()
                 .unwrap();
             tracing::debug!(
-                "{address} consensus key {}",
-                consensus_key.tm_raw_hash()
+                "{address} new consensus key {}",
+                new_consensus_key.tm_raw_hash()
             );
-            vec![ValidatorSetUpdate::Deactivated(old_consensus_key)]
+            vec![ValidatorSetUpdate::Deactivated(prev_consensus_key)]
         });
 
     Ok(new_consensus_validators
