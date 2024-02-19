@@ -381,7 +381,7 @@ impl<U> Wallet<U> {
 
     /// Find the viewing key with the given alias in the wallet and return it
     pub fn find_viewing_key(
-        &mut self,
+        &self,
         alias: impl AsRef<str>,
     ) -> Result<&ExtendedViewingKey, FindKeyError> {
         self.store.find_viewing_key(alias.as_ref()).ok_or_else(|| {

@@ -76,7 +76,7 @@ use namada::types::token::{Amount, DenominatedAmount, Transfer};
 use namada::vm::wasm::run;
 use namada::{proof_of_stake, tendermint};
 use namada_sdk::masp::{
-    self, ShieldedContext, ShieldedTransfer, ShieldedUtils,
+    self, ContextSyncStatus, ShieldedContext, ShieldedTransfer, ShieldedUtils,
 };
 pub use namada_sdk::tx::{
     TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
@@ -117,6 +117,8 @@ const BERTHA_SPENDING_KEY: &str = "bertha_spending";
 
 const FILE_NAME: &str = "shielded.dat";
 const TMP_FILE_NAME: &str = "shielded.tmp";
+const SPECULATIVE_FILE_NAME: &str = "speculative_shielded.dat";
+const SPECULATIVE_TMP_FILE_NAME: &str = "speculative_shielded.tmp";
 
 /// For `tracing_subscriber`, which fails if called more than once in the same
 /// process
@@ -654,10 +656,19 @@ impl ShieldedUtils for BenchShieldedUtils {
     async fn load<U: ShieldedUtils>(
         &self,
         ctx: &mut ShieldedContext<U>,
+        force_confirmed: bool,
     ) -> std::io::Result<()> {
         // Try to load shielded context from file
+        let file_name = if force_confirmed {
+            FILE_NAME
+        } else {
+            match ctx.sync_status {
+                ContextSyncStatus::Confirmed => FILE_NAME,
+                ContextSyncStatus::Speculative => SPECULATIVE_FILE_NAME,
+            }
+        };
         let mut ctx_file = File::open(
-            self.context_dir.0.path().to_path_buf().join(FILE_NAME),
+            self.context_dir.0.path().to_path_buf().join(file_name),
         )?;
         let mut bytes = Vec::new();
         ctx_file.read_to_end(&mut bytes)?;
@@ -674,8 +685,14 @@ impl ShieldedUtils for BenchShieldedUtils {
         &self,
         ctx: &ShieldedContext<U>,
     ) -> std::io::Result<()> {
+        let (tmp_file_name, file_name) = match ctx.sync_status {
+            ContextSyncStatus::Confirmed => (TMP_FILE_NAME, FILE_NAME),
+            ContextSyncStatus::Speculative => {
+                (SPECULATIVE_TMP_FILE_NAME, SPECULATIVE_FILE_NAME)
+            }
+        };
         let tmp_path =
-            self.context_dir.0.path().to_path_buf().join(TMP_FILE_NAME);
+            self.context_dir.0.path().to_path_buf().join(tmp_file_name);
         {
             // First serialize the shielded context into a temporary file.
             // Inability to create this file implies a simultaneuous write is in
@@ -696,8 +713,20 @@ impl ShieldedUtils for BenchShieldedUtils {
         // corrupt data.
         std::fs::rename(
             tmp_path,
-            self.context_dir.0.path().to_path_buf().join(FILE_NAME),
+            self.context_dir.0.path().to_path_buf().join(file_name),
         )?;
+
+        // Remove the speculative file if present since it's state is
+        // overwritten by the confirmed one we just saved
+        if let ContextSyncStatus::Confirmed = ctx.sync_status {
+            let _ = std::fs::remove_file(
+                self.context_dir
+                    .0
+                    .path()
+                    .to_path_buf()
+                    .join(SPECULATIVE_FILE_NAME),
+            );
+        }
         Ok(())
     }
 }
