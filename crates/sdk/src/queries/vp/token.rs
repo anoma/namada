@@ -22,7 +22,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    read_denom(ctx.wl_storage, &addr)
+    read_denom(ctx.state, &addr)
 }
 
 /// Get the total supply for a token address
@@ -34,7 +34,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    read_total_supply(ctx.wl_storage, &addr)
+    read_total_supply(ctx.state, &addr)
 }
 
 #[cfg(any(test, feature = "async-client"))]

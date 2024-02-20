@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use namada_core::storage::BlockHeight;
-use namada_state::{DBIter, StorageHasher, WlStorage, DB};
+use namada_state::{DBIter, StorageHasher, WlState, DB};
 use thiserror::Error;
 
 use crate::events::log::EventLog;
@@ -15,8 +15,8 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    /// Reference to the ledger's [`WlStorage`].
-    pub wl_storage: &'shell WlStorage<D, H>,
+    /// Reference to the ledger's [`WlState`].
+    pub state: &'shell WlState<D, H>,
     /// Log of events emitted by `FinalizeBlock` ABCI calls.
     pub event_log: &'shell EventLog,
     /// Cache of VP wasm compiled artifacts.
