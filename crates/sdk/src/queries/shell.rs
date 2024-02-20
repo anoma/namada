@@ -17,7 +17,7 @@ use namada_core::storage::{
 };
 use namada_core::token::{Denomination, MaspDigitPos};
 use namada_core::uint::Uint;
-use namada_state::{DBIter, LastBlock, StorageHasher, DB};
+use namada_state::{DBIter, LastBlock, StateRead, StorageHasher, DB};
 use namada_storage::{self, ResultExt, StorageRead};
 #[cfg(any(test, feature = "async-client"))]
 use namada_tx::data::TxResult;
@@ -135,10 +135,10 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let (iter, _gas) = ctx.wl_storage.storage.iter_results();
+    let (iter, _gas) = ctx.state.db_iter_results();
     let mut results = vec![
         BlockResults::default();
-        ctx.wl_storage.storage.block.height.0 as usize + 1
+        ctx.state.in_mem().block.height.0 as usize + 1
     ];
     for (key, value, _gas) in iter {
         let key = u64::parse(key.clone()).map_err(|_| {
@@ -173,8 +173,8 @@ where
     H: 'static + StorageHasher + Sync,
 {
     Ok(ctx
-        .wl_storage
-        .storage
+        .state
+        .in_mem()
         .conversion_state
         .assets
         .iter()
@@ -199,12 +199,8 @@ where
     H: 'static + StorageHasher + Sync,
 {
     // Conversion values are constructed on request
-    if let Some(((addr, denom, digit), epoch, conv, pos)) = ctx
-        .wl_storage
-        .storage
-        .conversion_state
-        .assets
-        .get(&asset_type)
+    if let Some(((addr, denom, digit), epoch, conv, pos)) =
+        ctx.state.in_mem().conversion_state.assets.get(&asset_type)
     {
         Ok(Some((
             addr.clone(),
@@ -214,7 +210,7 @@ where
             Into::<masp_primitives::transaction::components::I128Sum>::into(
                 conv.clone(),
             ),
-            ctx.wl_storage.storage.conversion_state.tree.path(*pos),
+            ctx.state.in_mem().conversion_state.tree.path(*pos),
         )))
     } else {
         Ok(None)
@@ -229,11 +225,11 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let tokens = ctx.wl_storage.storage.conversion_state.tokens.clone();
+    let tokens = ctx.state.in_mem().conversion_state.tokens.clone();
     let mut data = Vec::<MaspTokenRewardData>::new();
     for (name, token) in tokens {
         let max_reward_rate = ctx
-            .wl_storage
+            .state
             .read::<Dec>(&namada_token::storage_key::masp_max_reward_rate_key(
                 &token,
             ))?
@@ -247,7 +243,7 @@ where
                 ))
             })?;
         let kd_gain = ctx
-            .wl_storage
+            .state
             .read::<Dec>(&namada_token::storage_key::masp_kd_gain_key(&token))?
             .ok_or_else(|| {
                 namada_storage::Error::new(std::io::Error::new(
@@ -259,7 +255,7 @@ where
                 ))
             })?;
         let kp_gain = ctx
-            .wl_storage
+            .state
             .read::<Dec>(&namada_token::storage_key::masp_kp_gain_key(&token))?
             .ok_or_else(|| {
                 namada_storage::Error::new(std::io::Error::new(
@@ -271,7 +267,7 @@ where
                 ))
             })?;
         let locked_amount_target = ctx
-            .wl_storage
+            .state
             .read::<Uint>(
                 &namada_token::storage_key::masp_locked_amount_target_key(
                     &token,
@@ -307,7 +303,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let data = ctx.wl_storage.storage.last_epoch;
+    let data = ctx.state.in_mem().last_epoch;
     Ok(data)
 }
 
@@ -318,7 +314,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let data = ctx.wl_storage.storage.native_token.clone();
+    let data = ctx.state.in_mem().native_token.clone();
     Ok(data)
 }
 
@@ -330,7 +326,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    Ok(ctx.wl_storage.storage.block.pred_epochs.get_epoch(height))
+    Ok(ctx.state.in_mem().block.pred_epochs.get_epoch(height))
 }
 
 fn last_block<D, H, V, T>(
@@ -340,7 +336,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    Ok(ctx.wl_storage.storage.last_block.clone())
+    Ok(ctx.state.in_mem().last_block.clone())
 }
 
 /// Returns data with `vec![]` when the storage key is not found. For all
@@ -356,7 +352,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let last_committed_height = ctx.wl_storage.storage.get_last_block_height();
+    let last_committed_height = ctx.state.in_mem().get_last_block_height();
     let queried_height = {
         let height: BlockHeight = request.height.into();
         let is_last_height_query = height.0 == 0;
@@ -382,16 +378,14 @@ where
     }
 
     match ctx
-        .wl_storage
-        .storage
-        .read_with_height(&storage_key, queried_height)
+        .state
+        .db_read_with_height(&storage_key, queried_height)
         .into_storage_result()?
     {
         (Some(value), _gas) => {
             let proof = if request.prove {
                 let proof = ctx
-                    .wl_storage
-                    .storage
+                    .state
                     .get_existence_proof(&storage_key, &value, queried_height)
                     .into_storage_result()?;
                 Some(proof)
@@ -407,8 +401,7 @@ where
         (None, _gas) => {
             let proof = if request.prove {
                 let proof = ctx
-                    .wl_storage
-                    .storage
+                    .state
                     .get_non_existence_proof(&storage_key, queried_height)
                     .into_storage_result()?;
                 Some(proof)
@@ -435,7 +428,7 @@ where
 {
     require_latest_height(&ctx, request)?;
 
-    let iter = namada_storage::iter_prefix_bytes(ctx.wl_storage, &storage_key)?;
+    let iter = namada_storage::iter_prefix_bytes(ctx.state, &storage_key)?;
     let data: namada_storage::Result<Vec<PrefixValue>> = iter
         .map(|iter_result| {
             let (key, value) = iter_result?;
@@ -446,7 +439,7 @@ where
     let proof = if request.prove {
         let queried_height = {
             let last_committed_height =
-                ctx.wl_storage.storage.get_last_block_height();
+                ctx.state.in_mem().get_last_block_height();
 
             let height: BlockHeight = request.height.into();
             let is_last_height_query = height.0 == 0;
@@ -460,8 +453,7 @@ where
         let mut ops = vec![];
         for PrefixValue { key, value } in &data {
             let mut proof = ctx
-                .wl_storage
-                .storage
+                .state
                 .get_existence_proof(key, value, queried_height)
                 .into_storage_result()?;
             ops.append(&mut proof.ops);
@@ -488,7 +480,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let data = StorageRead::has_key(ctx.wl_storage, &storage_key)?;
+    let data = StorageRead::has_key(ctx.state, &storage_key)?;
     Ok(data)
 }
 
@@ -584,11 +576,11 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let account_exists = namada_account::exists(ctx.wl_storage, &owner)?;
+    let account_exists = namada_account::exists(ctx.state, &owner)?;
 
     if account_exists {
-        let public_keys = namada_account::public_keys(ctx.wl_storage, &owner)?;
-        let threshold = namada_account::threshold(ctx.wl_storage, &owner)?;
+        let public_keys = namada_account::public_keys(ctx.state, &owner)?;
+        let threshold = namada_account::threshold(ctx.state, &owner)?;
 
         Ok(Some(Account {
             public_keys_map: AccountPublicKeysMap::from_iter(public_keys),
@@ -608,7 +600,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let public_keys = namada_account::public_keys(ctx.wl_storage, &owner)?;
+    let public_keys = namada_account::public_keys(ctx.state, &owner)?;
 
     Ok(!public_keys.is_empty())
 }
