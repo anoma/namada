@@ -322,7 +322,7 @@ impl CliApi {
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let mut chain_ctx = ctx.take_chain_or_exit();
+                        let chain_ctx = ctx.take_chain_or_exit();
                         let vks = chain_ctx
                             .wallet
                             .get_viewing_keys()
@@ -338,7 +338,6 @@ impl CliApi {
                             .into_iter()
                             .map(|sk| sk.into())
                             .collect::<Vec<_>>();
-                        let _ = chain_ctx.shielded.load().await;
                         crate::client::masp::syncing(
                             chain_ctx.shielded,
                             &client,
