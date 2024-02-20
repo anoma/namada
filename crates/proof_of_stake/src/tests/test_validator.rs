@@ -9,7 +9,7 @@ use namada_core::key::testing::{
 use namada_core::key::{self, common, RefTo};
 use namada_core::storage::Epoch;
 use namada_core::token;
-use namada_state::testing::TestWlStorage;
+use namada_state::testing::TestState;
 use namada_storage::collections::lazy_map;
 use proptest::prelude::*;
 use proptest::test_runner::Config;
@@ -78,10 +78,10 @@ fn test_become_validator_aux(
     //      validators: {validators:#?}"
     // );
 
-    let mut s = TestWlStorage::default();
+    let mut s = TestState::default();
 
     // Genesis
-    let mut current_epoch = s.storage.block.epoch;
+    let mut current_epoch = s.in_mem().block.epoch;
     let params = test_init_genesis(
         &mut s,
         params,
@@ -273,7 +273,7 @@ fn test_become_validator_aux(
 
 #[test]
 fn test_validator_raw_hash() {
-    let mut storage = TestWlStorage::default();
+    let mut storage = TestState::default();
     let address = address::testing::established_address_1();
     let consensus_sk = key::testing::keypair_1();
     let consensus_pk = consensus_sk.to_public();
@@ -293,7 +293,7 @@ fn test_validator_raw_hash() {
 
 #[test]
 fn test_validator_sets() {
-    let mut s = TestWlStorage::default();
+    let mut s = TestState::default();
     // Only 3 consensus validator slots
     let params = OwnedPosParams {
         max_validator_slots: 3,
@@ -388,7 +388,7 @@ fn test_validator_sets() {
     .unwrap();
 
     // A helper to insert a non-genesis validator
-    let insert_validator = |s: &mut TestWlStorage,
+    let insert_validator = |s: &mut TestState,
                             addr,
                             pk: &common::PublicKey,
                             stake: token::Amount,
@@ -976,7 +976,7 @@ fn test_validator_sets() {
 /// with 0 voting power, because it wasn't it its set before
 #[test]
 fn test_validator_sets_swap() {
-    let mut s = TestWlStorage::default();
+    let mut s = TestState::default();
     // Only 2 consensus validator slots
     let params = OwnedPosParams {
         max_validator_slots: 2,
@@ -1066,7 +1066,7 @@ fn test_validator_sets_swap() {
     .unwrap();
 
     // A helper to insert a non-genesis validator
-    let insert_validator = |s: &mut TestWlStorage,
+    let insert_validator = |s: &mut TestState,
                             addr,
                             pk: &common::PublicKey,
                             stake: token::Amount,
@@ -1281,8 +1281,8 @@ fn test_purge_validator_information_aux(validators: Vec<GenesisValidator>) {
         ..Default::default()
     };
 
-    let mut s = TestWlStorage::default();
-    let mut current_epoch = s.storage.block.epoch;
+    let mut s = TestState::default();
+    let mut current_epoch = s.in_mem().block.epoch;
 
     // Genesis
     let gov_params = namada_governance::parameters::GovernanceParameters {
@@ -1306,7 +1306,7 @@ fn test_purge_validator_information_aux(validators: Vec<GenesisValidator>) {
     let validator_positions = validator_set_positions_handle();
     let all_validator_addresses = validator_addresses_handle();
 
-    let check_is_data = |storage: &TestWlStorage, start: Epoch, end: Epoch| {
+    let check_is_data = |storage: &TestState, start: Epoch, end: Epoch| {
         for ep in Epoch::iter_bounds_inclusive(start, end) {
             assert!(!consensus_val_set.at(&ep).is_empty(storage).unwrap());
             // assert!(!below_cap_val_set.at(&ep).is_empty(storage).
@@ -1325,7 +1325,7 @@ fn test_purge_validator_information_aux(validators: Vec<GenesisValidator>) {
     for _ in 0..default_past_epochs {
         current_epoch = advance_epoch(&mut s, &params);
     }
-    assert_eq!(s.storage.block.epoch.0, default_past_epochs);
+    assert_eq!(s.in_mem().block.epoch.0, default_past_epochs);
     assert_eq!(current_epoch.0, default_past_epochs);
 
     check_is_data(

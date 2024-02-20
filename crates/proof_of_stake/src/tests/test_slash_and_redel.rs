@@ -6,7 +6,7 @@ use namada_core::address;
 use namada_core::dec::Dec;
 use namada_core::storage::{BlockHeight, Epoch};
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
-use namada_state::testing::TestWlStorage;
+use namada_state::testing::TestState;
 use namada_storage::collections::lazy_map::Collectable;
 use namada_storage::StorageRead;
 use proptest::prelude::*;
@@ -66,14 +66,14 @@ fn test_simple_redelegation_aux(
     let src_validator = validators[0].address.clone();
     let dest_validator = validators[1].address.clone();
 
-    let mut storage = TestWlStorage::default();
+    let mut storage = TestState::default();
     let params = OwnedPosParams {
         unbonding_len: 4,
         ..Default::default()
     };
 
     // Genesis
-    let mut current_epoch = storage.storage.block.epoch;
+    let mut current_epoch = storage.in_mem().block.epoch;
     let params = test_init_genesis(
         &mut storage,
         params,
@@ -293,7 +293,7 @@ fn test_slashes_with_unbonding_aux(
     params.unbonding_len = 4;
     // println!("\nTest inputs: {params:?}, genesis validators:
     // {validators:#?}");
-    let mut s = TestWlStorage::default();
+    let mut s = TestState::default();
 
     // Find the validator with the least stake to avoid the cubic slash rate
     // going to 100%
@@ -305,8 +305,8 @@ fn test_slashes_with_unbonding_aux(
     let val_tokens = validator.tokens;
 
     // Genesis
-    // let start_epoch = s.storage.block.epoch;
-    let mut current_epoch = s.storage.block.epoch;
+    // let start_epoch = s.in_mem().block.epoch;
+    let mut current_epoch = s.in_mem().block.epoch;
     let params = test_init_genesis(
         &mut s,
         params,
@@ -461,7 +461,7 @@ fn test_redelegation_with_slashing_aux(
     let src_validator = validators[0].address.clone();
     let dest_validator = validators[1].address.clone();
 
-    let mut storage = TestWlStorage::default();
+    let mut storage = TestState::default();
     let params = OwnedPosParams {
         unbonding_len: 4,
         // Avoid empty consensus set by removing the threshold
@@ -470,7 +470,7 @@ fn test_redelegation_with_slashing_aux(
     };
 
     // Genesis
-    let mut current_epoch = storage.storage.block.epoch;
+    let mut current_epoch = storage.in_mem().block.epoch;
     let params = test_init_genesis(
         &mut storage,
         params,
@@ -682,14 +682,14 @@ fn test_chain_redelegations_aux(mut validators: Vec<GenesisValidator>) {
     let dest_validator_2 = validators[2].address.clone();
     let _init_stake_dest_2 = validators[2].tokens;
 
-    let mut storage = TestWlStorage::default();
+    let mut storage = TestState::default();
     let params = OwnedPosParams {
         unbonding_len: 4,
         ..Default::default()
     };
 
     // Genesis
-    let mut current_epoch = storage.storage.block.epoch;
+    let mut current_epoch = storage.in_mem().block.epoch;
     let params = test_init_genesis(
         &mut storage,
         params,
@@ -1073,10 +1073,10 @@ fn test_overslashing_aux(mut validators: Vec<GenesisValidator>) {
 
     // println!("\nTest inputs: {params:?}, genesis validators:
     // {validators:#?}");
-    let mut storage = TestWlStorage::default();
+    let mut storage = TestState::default();
 
     // Genesis
-    let mut current_epoch = storage.storage.block.epoch;
+    let mut current_epoch = storage.in_mem().block.epoch;
     let params = test_init_genesis(
         &mut storage,
         params,
@@ -1087,7 +1087,7 @@ fn test_overslashing_aux(mut validators: Vec<GenesisValidator>) {
     storage.commit_block().unwrap();
 
     // Get a delegator with some tokens
-    let staking_token = storage.storage.native_token.clone();
+    let staking_token = storage.in_mem().native_token.clone();
     let delegator = address::testing::gen_implicit_address();
     let amount_del = token::Amount::native_whole(5);
     credit_tokens(&mut storage, &staking_token, &delegator, amount_del)
@@ -1243,7 +1243,7 @@ proptest! {
 }
 
 fn test_slashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
-    let mut storage = TestWlStorage::default();
+    let mut storage = TestState::default();
     let params = OwnedPosParams {
         unbonding_len: 4,
         validator_stake_threshold: token::Amount::zero(),
@@ -1260,7 +1260,7 @@ fn test_slashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
     validators[0].tokens = (init_tot_stake - val1_init_stake) / 30;
 
     // Genesis
-    let mut current_epoch = storage.storage.block.epoch;
+    let mut current_epoch = storage.in_mem().block.epoch;
     let params = test_init_genesis(
         &mut storage,
         params,

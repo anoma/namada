@@ -116,7 +116,7 @@ where
         let epoch =
             epoch.unwrap_or_else(|| self.storage.get_block_epoch().unwrap());
         ConsensusValidators {
-            wl_storage: self.storage,
+            state: self.storage,
             validator_set: consensus_validator_set_handle().at(&epoch),
         }
     }
@@ -259,7 +259,7 @@ pub struct ConsensusValidators<'db, S>
 where
     S: StorageRead,
 {
-    wl_storage: &'db S,
+    state: &'db S,
     validator_set: ConsensusValidatorSet,
 }
 
@@ -273,7 +273,7 @@ where
         &'this self,
     ) -> impl Iterator<Item = WeightedValidator> + 'db {
         self.validator_set
-            .iter(self.wl_storage)
+            .iter(self.state)
             .expect("Must be able to iterate over consensus validators")
             .map(|res| {
                 let (
