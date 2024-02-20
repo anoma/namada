@@ -1032,7 +1032,7 @@ mod test {
         };
         let ctx = RequestCtx {
             event_log: &client.event_log,
-            wl_storage: &client.wl_storage,
+            state: &client.state,
             vp_wasm_cache: (),
             tx_wasm_cache: (),
             storage_read_past_height_limit: None,
@@ -1049,7 +1049,7 @@ mod test {
         };
         let ctx = RequestCtx {
             event_log: &client.event_log,
-            wl_storage: &client.wl_storage,
+            state: &client.state,
             vp_wasm_cache: (),
             tx_wasm_cache: (),
             storage_read_past_height_limit: None,

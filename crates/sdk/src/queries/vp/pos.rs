@@ -184,7 +184,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    read_pos_params(ctx.wl_storage)
+    read_pos_params(ctx.state)
 }
 
 /// Find if the given address belongs to a validator account.
@@ -196,7 +196,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    namada_proof_of_stake::is_validator(ctx.wl_storage, &addr)
+    namada_proof_of_stake::is_validator(ctx.state, &addr)
 }
 
 /// Find a consensus key of a validator account.
@@ -208,9 +208,9 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let current_epoch = ctx.wl_storage.storage.last_epoch;
+    let current_epoch = ctx.state.in_mem().last_epoch;
     namada_proof_of_stake::storage::get_consensus_key(
-        ctx.wl_storage,
+        ctx.state,
         &addr,
         current_epoch,
     )
@@ -226,7 +226,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    namada_proof_of_stake::is_delegator(ctx.wl_storage, &addr, epoch)
+    namada_proof_of_stake::is_delegator(ctx.state, &addr, epoch)
 }
 
 /// Get all the validator known addresses. These validators may be in any state,
@@ -239,8 +239,8 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let epoch = epoch.unwrap_or(ctx.wl_storage.storage.last_epoch);
-    read_all_validator_addresses(ctx.wl_storage, epoch)
+    let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
+    read_all_validator_addresses(ctx.state, epoch)
 }
 
 /// Get the validator commission rate and max commission rate change per epoch
@@ -253,15 +253,12 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let epoch = epoch.unwrap_or(ctx.wl_storage.storage.last_epoch);
-    let params = read_pos_params(ctx.wl_storage)?;
-    let commission_rate = validator_commission_rate_handle(&validator).get(
-        ctx.wl_storage,
-        epoch,
-        &params,
-    )?;
+    let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
+    let params = read_pos_params(ctx.state)?;
+    let commission_rate = validator_commission_rate_handle(&validator)
+        .get(ctx.state, epoch, &params)?;
     let max_commission_change_per_epoch =
-        read_validator_max_commission_rate_change(ctx.wl_storage, &validator)?;
+        read_validator_max_commission_rate_change(ctx.state, &validator)?;
 
     match (commission_rate, max_commission_change_per_epoch) {
         (Some(commission_rate), Some(max_commission_change_per_epoch)) => {
@@ -283,12 +280,11 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let email = read_validator_email(ctx.wl_storage, &validator)?;
-    let description = read_validator_description(ctx.wl_storage, &validator)?;
-    let website = read_validator_website(ctx.wl_storage, &validator)?;
-    let discord_handle =
-        read_validator_discord_handle(ctx.wl_storage, &validator)?;
-    let avatar = read_validator_avatar(ctx.wl_storage, &validator)?;
+    let email = read_validator_email(ctx.state, &validator)?;
+    let description = read_validator_description(ctx.state, &validator)?;
+    let website = read_validator_website(ctx.state, &validator)?;
+    let discord_handle = read_validator_discord_handle(ctx.state, &validator)?;
+    let avatar = read_validator_avatar(ctx.state, &validator)?;
 
     // Email is the only required field for a validator in storage
     match email {
@@ -313,13 +309,10 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let epoch = epoch.unwrap_or(ctx.wl_storage.storage.last_epoch);
-    let params = read_pos_params(ctx.wl_storage)?;
-    let state = validator_state_handle(&validator).get(
-        ctx.wl_storage,
-        epoch,
-        &params,
-    )?;
+    let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
+    let params = read_pos_params(ctx.state)?;
+    let state =
+        validator_state_handle(&validator).get(ctx.state, epoch, &params)?;
     Ok(state)
 }
 
@@ -332,7 +325,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    read_validator_last_slash_epoch(ctx.wl_storage, &validator)
+    read_validator_last_slash_epoch(ctx.state, &validator)
 }
 
 /// Get the total stake of a validator at the given epoch or current when
@@ -349,11 +342,11 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let epoch = epoch.unwrap_or(ctx.wl_storage.storage.last_epoch);
-    let params = read_pos_params(ctx.wl_storage)?;
-    if namada_proof_of_stake::is_validator(ctx.wl_storage, &validator)? {
+    let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
+    let params = read_pos_params(ctx.state)?;
+    if namada_proof_of_stake::is_validator(ctx.state, &validator)? {
         let stake =
-            read_validator_stake(ctx.wl_storage, &params, &validator, epoch)?;
+            read_validator_stake(ctx.state, &params, &validator, epoch)?;
         Ok(Some(stake))
     } else {
         Ok(None)
@@ -372,7 +365,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let handle = validator_incoming_redelegations_handle(&src_validator);
-    handle.get(ctx.wl_storage, &delegator)
+    handle.get(ctx.state, &delegator)
 }
 
 /// Get all the validator in the consensus set with their bonded stake.
@@ -384,8 +377,8 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let epoch = epoch.unwrap_or(ctx.wl_storage.storage.last_epoch);
-    read_consensus_validator_set_addresses_with_stake(ctx.wl_storage, epoch)
+    let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
+    read_consensus_validator_set_addresses_with_stake(ctx.state, epoch)
 }
 
 /// Get all the validator in the below-capacity set with their bonded stake.
@@ -397,11 +390,8 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let epoch = epoch.unwrap_or(ctx.wl_storage.storage.last_epoch);
-    read_below_capacity_validator_set_addresses_with_stake(
-        ctx.wl_storage,
-        epoch,
-    )
+    let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
+    read_below_capacity_validator_set_addresses_with_stake(ctx.state, epoch)
 }
 
 /// Get the total stake in PoS system at the given epoch or current when `None`.
@@ -413,9 +403,9 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let epoch = epoch.unwrap_or(ctx.wl_storage.storage.last_epoch);
-    let params = read_pos_params(ctx.wl_storage)?;
-    read_total_stake(ctx.wl_storage, &params, epoch)
+    let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
+    let params = read_pos_params(ctx.state)?;
+    read_total_stake(ctx.state, &params, epoch)
 }
 
 fn bond_deltas<D, H, V, T>(
@@ -427,7 +417,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    bond_handle(&source, &validator).to_hashmap(ctx.wl_storage)
+    bond_handle(&source, &validator).to_hashmap(ctx.state)
 }
 
 /// Find the sum of bond amount up the given epoch when `Some`, or up to the
@@ -442,13 +432,13 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let params = read_pos_params(ctx.wl_storage)?;
-    let epoch = epoch
-        .unwrap_or(ctx.wl_storage.storage.last_epoch + params.pipeline_len);
+    let params = read_pos_params(ctx.state)?;
+    let epoch =
+        epoch.unwrap_or(ctx.state.in_mem().last_epoch + params.pipeline_len);
 
     let handle = bond_handle(&source, &validator);
     handle
-        .get_sum(ctx.wl_storage, epoch, &params)?
+        .get_sum(ctx.state, epoch, &params)?
         .ok_or_err_msg("Cannot find bond")
 }
 
@@ -462,10 +452,10 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let epoch = epoch.unwrap_or(ctx.wl_storage.storage.last_epoch);
+    let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
     let bond_id = BondId { source, validator };
 
-    bond_amount(ctx.wl_storage, &bond_id, epoch)
+    bond_amount(ctx.state, &bond_id, epoch)
 }
 
 fn unbond<D, H, V, T>(
@@ -478,7 +468,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let handle = unbond_handle(&source, &validator);
-    let iter = handle.iter(ctx.wl_storage)?;
+    let iter = handle.iter(ctx.state)?;
     iter.map(|next_result| {
         next_result.map(
             |(
@@ -504,7 +494,7 @@ where
 {
     // TODO slashes
     let handle = unbond_handle(&source, &validator);
-    let iter = handle.iter(ctx.wl_storage)?;
+    let iter = handle.iter(ctx.state)?;
     iter.map(|next_result| {
         next_result.map(
             |(
@@ -529,11 +519,11 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let epoch = epoch.unwrap_or(ctx.wl_storage.storage.last_epoch);
+    let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
 
     let handle = unbond_handle(&source, &validator);
     let mut total = token::Amount::zero();
-    for result in handle.iter(ctx.wl_storage)? {
+    for result in handle.iter(ctx.state)? {
         let (
             lazy_map::NestedSubKey::Data {
                 key: end,
@@ -557,13 +547,8 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let current_epoch = ctx.wl_storage.storage.last_epoch;
-    query_reward_tokens(
-        ctx.wl_storage,
-        source.as_ref(),
-        &validator,
-        current_epoch,
-    )
+    let current_epoch = ctx.state.in_mem().last_epoch;
+    query_reward_tokens(ctx.state, source.as_ref(), &validator, current_epoch)
 }
 
 fn bonds_and_unbonds<D, H, V, T>(
@@ -576,9 +561,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     namada_proof_of_stake::queries::bonds_and_unbonds(
-        ctx.wl_storage,
-        source,
-        validator,
+        ctx.state, source, validator,
     )
 }
 
@@ -592,7 +575,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    find_delegation_validators(ctx.wl_storage, &owner)
+    find_delegation_validators(ctx.state, &owner)
 }
 
 /// Find all the validator addresses to whom the given `owner` address has
@@ -606,8 +589,8 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let epoch = epoch.unwrap_or(ctx.wl_storage.storage.last_epoch);
-    find_delegations(ctx.wl_storage, &owner, &epoch)
+    let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
+    find_delegations(ctx.state, &owner, &epoch)
 }
 
 /// Validator slashes
@@ -620,7 +603,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let slash_handle = validator_slashes_handle(&validator);
-    slash_handle.iter(ctx.wl_storage)?.collect()
+    slash_handle.iter(ctx.state)?.collect()
 }
 
 /// All slashes
@@ -631,7 +614,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    find_all_slashes(ctx.wl_storage)
+    find_all_slashes(ctx.state)
 }
 
 /// Enqueued slashes
@@ -642,8 +625,8 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let current_epoch = ctx.wl_storage.storage.last_epoch;
-    find_all_enqueued_slashes(ctx.wl_storage, current_epoch)
+    let current_epoch = ctx.state.in_mem().last_epoch;
+    find_all_enqueued_slashes(ctx.state, current_epoch)
 }
 
 /// Native validator address by looking up the Tendermint address
@@ -656,8 +639,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     namada_proof_of_stake::storage::find_validator_by_raw_hash(
-        ctx.wl_storage,
-        tm_addr,
+        ctx.state, tm_addr,
     )
 }
 
@@ -669,7 +651,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    namada_proof_of_stake::storage::get_consensus_key_set(ctx.wl_storage)
+    namada_proof_of_stake::storage::get_consensus_key_set(ctx.state)
 }
 
 /// Find if the given source address has any bonds.
@@ -681,7 +663,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    namada_proof_of_stake::queries::has_bonds(ctx.wl_storage, &source)
+    namada_proof_of_stake::queries::has_bonds(ctx.state, &source)
 }
 
 /// Client-only methods for the router type are composed from router functions.
