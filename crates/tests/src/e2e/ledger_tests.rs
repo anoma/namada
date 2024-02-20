@@ -1512,9 +1512,11 @@ fn test_bond_queries() -> Result<()> {
     client.exp_string(
         "All bonds total active: 100188.000000\r
 All bonds total: 100188.000000\r
+All bonds total slashed: 0.000000\r
 All unbonds total active: 412.000000\r
 All unbonds total: 412.000000\r
-All unbonds total withdrawable: 412.000000\r",
+All unbonds total withdrawable: 412.000000\r
+All unbonds total slashed: 0.000000\r",
     )?;
     client.assert_success();
 
