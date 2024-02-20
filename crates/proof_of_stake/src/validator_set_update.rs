@@ -828,6 +828,7 @@ where
             .at(&val_stake)
             .insert(storage, val_position, val_address)?;
     }
+
     // Purge consensus and below-capacity validator sets
     consensus_validator_set.update_data(storage, params, current_epoch)?;
     below_capacity_validator_set.update_data(storage, params, current_epoch)?;
@@ -847,7 +848,6 @@ where
         let prev = new_positions_handle.insert(storage, validator, position)?;
         debug_assert!(prev.is_none());
     }
-    validator_set_positions_handle.set_last_update(storage, current_epoch)?;
 
     // Purge old epochs of validator positions
     validator_set_positions_handle.update_data(

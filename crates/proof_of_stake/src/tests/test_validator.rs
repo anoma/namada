@@ -1320,8 +1320,20 @@ fn test_purge_validator_information_aux(validators: Vec<GenesisValidator>) {
 
     // Check that there is validator data for epochs 0 - pipeline_len
     check_is_data(&s, current_epoch, Epoch(params.owned.pipeline_len));
+    assert_eq!(
+        consensus_val_set.get_last_update(&s).unwrap().unwrap(),
+        Epoch(0)
+    );
+    assert_eq!(
+        validator_positions.get_last_update(&s).unwrap().unwrap(),
+        Epoch(0)
+    );
+    assert_eq!(
+        validator_positions.get_last_update(&s).unwrap().unwrap(),
+        Epoch(0)
+    );
 
-    // Advance to epoch 1
+    // Advance to epoch `default_past_epochs`
     for _ in 0..default_past_epochs {
         current_epoch = advance_epoch(&mut s, &params);
     }
@@ -1332,6 +1344,18 @@ fn test_purge_validator_information_aux(validators: Vec<GenesisValidator>) {
         &s,
         Epoch(0),
         Epoch(params.owned.pipeline_len + default_past_epochs),
+    );
+    assert_eq!(
+        consensus_val_set.get_last_update(&s).unwrap().unwrap(),
+        Epoch(default_past_epochs)
+    );
+    assert_eq!(
+        validator_positions.get_last_update(&s).unwrap().unwrap(),
+        Epoch(default_past_epochs)
+    );
+    assert_eq!(
+        validator_positions.get_last_update(&s).unwrap().unwrap(),
+        Epoch(default_past_epochs)
     );
 
     current_epoch = advance_epoch(&mut s, &params);

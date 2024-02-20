@@ -444,13 +444,11 @@ where
                 //     panic!("WARNING: no data existing in
                 // {new_oldest_epoch}"); }
                 self.set_oldest_epoch(storage, new_oldest_epoch)?;
-
-                // Update the epoch of the last update to the current epoch
-                let key = self.get_last_update_storage_key();
-                storage.write(&key, current_epoch)?;
-                return Ok(());
             }
         }
+        // Update the epoch of the last update to the current epoch
+        let key = self.get_last_update_storage_key();
+        storage.write(&key, current_epoch)?;
 
         Ok(())
     }
