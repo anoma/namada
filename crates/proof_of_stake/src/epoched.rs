@@ -1088,7 +1088,7 @@ mod test {
     use namada_core::address::testing::established_address_1;
     use namada_core::dec::Dec;
     use namada_core::{key, token};
-    use namada_state::testing::TestWlStorage;
+    use namada_state::testing::TestState;
     use test_log::test;
 
     use super::*;
@@ -1392,8 +1392,8 @@ mod test {
         Ok(())
     }
 
-    fn init_storage() -> namada_storage::Result<TestWlStorage> {
-        let mut s = TestWlStorage::default();
+    fn init_storage() -> namada_storage::Result<TestState> {
+        let mut s = TestState::default();
         let gov_params =
             namada_governance::parameters::GovernanceParameters::default();
         gov_params.init_storage(&mut s)?;
