@@ -486,8 +486,10 @@ where
                 BTreeMap<[u8; 20], DeltaBalance>,
             > = BTreeMap::default();
 
-            let mut processed_vins = vec![false; transp_bundle.vin.len()];
-            let mut processed_vouts = vec![false; transp_bundle.vout.len()];
+            let mut unprocessed_vins =
+                BTreeSet::from_iter(0..transp_bundle.vin.len());
+            let mut unprocessed_vouts =
+                BTreeSet::from_iter(0..transp_bundle.vout.len());
 
             // Run the checks fore every token involved in the transaction
             for token in changed_balances.masp {
@@ -510,8 +512,8 @@ where
                 // Handle transparent input
                 // The following boundary condition must be satisfied: asset
                 // type must be properly derived
-                for (idx, vin) in transp_bundle.vin.iter().enumerate() {
-                    if processed_vins[idx] {
+                for (ref idx, vin) in transp_bundle.vin.iter().enumerate() {
+                    if !unprocessed_vins.contains(idx) {
                         continue;
                     }
                     // Non-masp sources add to the transparent tx pool
@@ -614,27 +616,18 @@ where
                                     })?;
                             }
                         }
-                        // FIXME: this is wrong, I could fin it in another
-                        // token unrecognized
-                        // asset
-                        _ => {
-                            let error =
-                                Error::NativeVpError(native_vp::Error::SimpleMessage(
-                                    "Unable to decode asset",
-                                ));
-                            tracing::debug!("{error}");
-                            return Err(error);
-                        },
+                        // unrecognized asset, will try with another token
+                        _ => continue,
                     };
 
-                    processed_vins[idx] = true;
+                    unprocessed_vins.remove(idx);
                 }
 
                 // Handle transparent output
                 // The following boundary condition must be satisfied: asset
                 // type must be properly derived
-                for (idx, out) in transp_bundle.vout.iter().enumerate() {
-                    if processed_vouts[idx] {
+                for (ref idx, out) in transp_bundle.vout.iter().enumerate() {
+                    if !unprocessed_vouts.contains(idx) {
                         continue;
                     }
                     // Non-masp destinations subtract from transparent tx
@@ -706,24 +699,23 @@ where
                                     )
                                 })?;
                         }
-                        // FIXME: this is wrong, I could fin it in another
-                        // token unrecognized
-                        // asset
-                        _ => {
-                            let error =
-                                Error::NativeVpError(native_vp::Error::SimpleMessage(
-                                    "Unable to decode asset",
-                                ));
-                            tracing::debug!("{error}");
-                            return Err(error);
-                        },
+                        // unrecognized asset, will try with another token
+                        _ => continue,
                     };
 
-                    processed_vouts[idx] = true;
+                    unprocessed_vouts.remove(idx);
                 }
 
                 total_bundle_balances.insert(token, token_bundle_balances);
             }
+            if !(unprocessed_vins.is_empty() && unprocessed_vouts.is_empty()) {
+                let error = native_vp::Error::new_const(
+                    "Some transparent assets could not be recognized"
+                ).into();
+                tracing::debug!("{error}");
+                return Err(error);
+            }
+
             total_bundle_balances
         } else {
             BTreeMap::default()
