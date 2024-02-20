@@ -89,6 +89,33 @@ pub async fn query_and_print_epoch(context: &impl Namada) -> Epoch {
     epoch
 }
 
+/// Query and print some information to help discern when the next epoch will
+/// begin.
+pub async fn query_and_print_next_epoch_info(context: &impl Namada) {
+    let (this_epoch_first_height, epoch_duration) =
+        rpc::query_next_epoch_info(context.client()).await.unwrap();
+
+    display_line!(
+        context.io(),
+        "First block height of this current epoch: {this_epoch_first_height}."
+    );
+    display_line!(
+        context.io(),
+        "Minimum number of blocks in an epoch: {}.",
+        epoch_duration.min_num_of_blocks
+    );
+    display_line!(
+        context.io(),
+        "Minimum amount of time for an epoch: {} seconds.",
+        epoch_duration.min_duration
+    );
+    display_line!(
+        context.io(),
+        "\nEarliest height at which the next epoch can begin is block {}.",
+        this_epoch_first_height.0 + epoch_duration.min_num_of_blocks
+    );
+}
+
 /// Query and print node's status.
 pub async fn query_and_print_status(
     context: &impl Namada,

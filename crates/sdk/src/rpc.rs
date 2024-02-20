@@ -30,6 +30,7 @@ use namada_governance::utils::{
 use namada_ibc::storage::{
     ibc_denom_key, ibc_denom_key_prefix, is_ibc_denom_key,
 };
+use namada_parameters::{storage as params_storage, EpochDuration};
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{
     BondsAndUnbondsDetails, CommissionPair, ValidatorMetaData, ValidatorState,
@@ -1120,6 +1121,22 @@ pub async fn query_proposal_votes<C: crate::queries::Client + Sync>(
     convert_response::<C, Vec<Vote>>(
         RPC.vp().gov().proposal_id_votes(client, &proposal_id).await,
     )
+}
+
+pub async fn query_next_epoch_info<C: crate::queries::Client + Sync>(
+    client: &C,
+) -> Result<(BlockHeight, EpochDuration), error::Error> {
+    let this_epoch_first_height = convert_response::<C, BlockHeight>(
+        RPC.shell()
+            .first_block_height_of_current_epoch(client)
+            .await,
+    )?;
+
+    let key = params_storage::get_epoch_duration_storage_key();
+    let epoch_duration: EpochDuration =
+        query_storage_value(client, &key).await?;
+
+    Ok((this_epoch_first_height, epoch_duration))
 }
 
 /// Get the bond amount at the given epoch
