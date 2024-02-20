@@ -1748,7 +1748,7 @@ fn wrapper_fee_unshielding() -> Result<()> {
 #[test]
 fn multiple_unfetched_txs_same_block() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
-    let validator_one_rpc = "127.0.0.1:26567";
+    let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
     let (mut node, _services) = setup::setup()?;
