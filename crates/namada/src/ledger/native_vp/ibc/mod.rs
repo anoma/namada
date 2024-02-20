@@ -8,7 +8,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use context::{PseudoExecutionContext, VpValidationContext};
-use namada_core::address::Address;
+use namada_core::address::{Address, InternalAddress};
 use namada_core::storage::Key;
 use namada_gas::{IBC_ACTION_EXECUTE_GAS, IBC_ACTION_VALIDATE_GAS};
 use namada_ibc::{
@@ -23,9 +23,14 @@ use namada_vp_env::VpEnv;
 use thiserror::Error;
 
 use crate::ibc::core::host::types::identifiers::ChainId as IbcChainId;
-use crate::ledger::ibc::storage::{calc_hash, is_ibc_key, is_ibc_trace_key};
+use crate::ledger::ibc::storage::{
+    calc_hash, deposit_key, is_ibc_key, is_ibc_trace_key, mint_limit_key,
+    throughput_limit_key, withdraw_key,
+};
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::ledger::parameters::read_epoch_duration_parameter;
+use crate::token::storage_key::{is_any_token_balance_key, minted_balance_key};
+use crate::token::Amount;
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]
@@ -82,6 +87,9 @@ where
 
         // Validate the denom store if a denom key has been changed
         self.validate_trace(keys_changed)?;
+
+        // Check the limits
+        self.check_limits(keys_changed)?;
 
         Ok(true)
     }
@@ -212,6 +220,78 @@ where
         }
         Ok(())
     }
+
+    fn check_limits(&self, keys_changed: &BTreeSet<Key>) -> VpResult<bool> {
+        for token in keys_changed.iter().filter_map(|k| {
+            is_any_token_balance_key(k).and_then(|[token, _]| match token {
+                Address::Internal(InternalAddress::IbcToken(_)) => Some(token),
+                _ => None,
+            })
+        }) {
+            // Check the supply
+            let mint_limit_key =
+                mint_limit_key(token).expect("The token should be an IbcToken");
+            let mint_limit: Amount = self
+                .ctx
+                .read_pre(&mint_limit_key)
+                .map_err(Error::NativeVpError)?
+                .unwrap_or_default();
+            let minted_balance_key = minted_balance_key(token);
+            let minted: Amount = self
+                .ctx
+                .read_post(&minted_balance_key)
+                .map_err(Error::NativeVpError)?
+                .unwrap_or_default();
+            if mint_limit < minted {
+                tracing::debug!(
+                    "Transfer exceeding the mint limit is not allowed: Mint \
+                     limit {mint_limit}, minted amount {minted}"
+                );
+                return Ok(false);
+            }
+
+            // Check the per-epoch throughput
+            let throughput_limit_key = throughput_limit_key(token)
+                .expect("The token should be an IbcToken");
+            let throughput_limit: Amount = self
+                .ctx
+                .read_pre(&throughput_limit_key)
+                .map_err(Error::NativeVpError)?
+                .unwrap_or_default();
+            let deposit_key =
+                deposit_key(token).expect("The token should be an IbcToken");
+            let deposit: Amount = self
+                .ctx
+                .read_post(&deposit_key)
+                .map_err(Error::NativeVpError)?
+                .unwrap_or_default();
+            let withdraw_key =
+                withdraw_key(token).expect("The token should be an IbcToken");
+            let withdraw: Amount = self
+                .ctx
+                .read_post(&withdraw_key)
+                .map_err(Error::NativeVpError)?
+                .unwrap_or_default();
+            let diff = if deposit < withdraw {
+                withdraw
+                    .checked_sub(deposit)
+                    .expect("withdraw should be bigger than deposit")
+            } else {
+                deposit
+                    .checked_sub(deposit)
+                    .expect("deposit should be bigger than withdraw")
+            };
+            if throughput_limit < diff {
+                tracing::debug!(
+                    "Transfer exceeding the per-epoch throughput limit is not \
+                     allowed: Per-epoch throughput limit {throughput_limit}, \
+                     actual throughput {diff}"
+                );
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
 }
 
 fn match_value(
@@ -267,7 +347,6 @@ pub fn get_dummy_genesis_validator()
     use crate::core::dec::Dec;
     use crate::core::key::testing::common_sk_from_simple_seed;
     use crate::key;
-    use crate::token::Amount;
 
     let address = established_address_1();
     let tokens = Amount::native_whole(1);
@@ -332,7 +411,6 @@ mod tests {
     use crate::core::address::testing::{
         established_address_1, established_address_2, nam,
     };
-    use crate::core::address::InternalAddress;
     use crate::core::ibc::{MsgNftTransfer, MsgTransfer};
     use crate::core::storage::Epoch;
     use crate::ibc::apps::nft_transfer::types::events::{
@@ -423,7 +501,6 @@ mod tests {
     use crate::tendermint::time::Time as TmTime;
     use crate::time::DurationSecs;
     use crate::token::storage_key::balance_key;
-    use crate::token::Amount;
     use crate::vm::wasm;
 
     const ADDRESS: Address = Address::Internal(InternalAddress::Ibc);

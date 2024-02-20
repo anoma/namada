@@ -68,6 +68,42 @@ where
 
         Ok((token, amount))
     }
+
+    /// Add the amount to the per-epoch withdraw of the token
+    fn add_deposit(
+        &self,
+        token: &Address,
+        amount: Amount,
+    ) -> Result<(), TokenTransferError> {
+        let deposit = self.inner.borrow().deposit(token)?;
+        let added_deposit = deposit.checked_add(amount).ok_or_else(|| {
+            TokenTransferError::Other(
+                "The per-epoch deposit overflowed".to_string(),
+            )
+        })?;
+        self.inner
+            .borrow_mut()
+            .store_deposit(token, added_deposit)
+            .map_err(TokenTransferError::from)
+    }
+
+    /// Add the amount to the per-epoch withdraw of the token
+    fn add_withdraw(
+        &self,
+        token: &Address,
+        amount: Amount,
+    ) -> Result<(), TokenTransferError> {
+        let withdraw = self.inner.borrow().withdraw(token)?;
+        let added_withdraw = withdraw.checked_add(amount).ok_or_else(|| {
+            TokenTransferError::Other(
+                "The per-epoch withdraw overflowed".to_string(),
+            )
+        })?;
+        self.inner
+            .borrow_mut()
+            .store_withdraw(token, added_withdraw)
+            .map_err(TokenTransferError::from)
+    }
 }
 
 impl<C> TokenTransferValidationContext for TokenTransferContext<C>
@@ -149,6 +185,8 @@ where
     ) -> Result<(), TokenTransferError> {
         let (ibc_token, amount) = self.get_token_amount(coin)?;
 
+        self.add_withdraw(&ibc_token, amount)?;
+
         self.inner
             .borrow_mut()
             .transfer_token(
@@ -169,6 +207,8 @@ where
     ) -> Result<(), TokenTransferError> {
         let (ibc_token, amount) = self.get_token_amount(coin)?;
 
+        self.add_deposit(&ibc_token, amount)?;
+
         self.inner
             .borrow_mut()
             .transfer_token(&IBC_ESCROW_ADDRESS, to_account, &ibc_token, amount)
@@ -183,6 +223,8 @@ where
         // The trace path of the denom is already updated if receiving the token
         let (ibc_token, amount) = self.get_token_amount(coin)?;
 
+        self.add_deposit(&ibc_token, amount)?;
+
         self.inner
             .borrow_mut()
             .mint_token(account, &ibc_token, amount)
@@ -196,6 +238,8 @@ where
         _memo: &Memo,
     ) -> Result<(), TokenTransferError> {
         let (ibc_token, amount) = self.get_token_amount(coin)?;
+
+        self.add_withdraw(&ibc_token, amount)?;
 
         // The burn is "unminting" from the minted balance
         self.inner

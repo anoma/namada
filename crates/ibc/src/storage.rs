@@ -25,6 +25,10 @@ const COUNTER_SEG: &str = "counter";
 const TRACE: &str = "ibc_trace";
 const NFT_CLASS: &str = "nft_class";
 const NFT_METADATA: &str = "nft_meta";
+const MINT_LIMIT: &str = "mint_limit";
+const THROUGHPUT_LIMIT: &str = "throughput_limit";
+const DEPOSIT: &str = "deposit";
+const WITHDRAW: &str = "withdraw";
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -35,10 +39,8 @@ pub enum Error {
     InvalidKey(String),
     #[error("Port capability error: {0}")]
     InvalidPortCapability(String),
-    #[error("Denom error: {0}")]
-    Denom(String),
-    #[error("IBS signer error: {0}")]
-    IbcSigner(String),
+    #[error("Invalid address error: {0}")]
+    Address(String),
 }
 
 /// IBC storage functions result
@@ -484,4 +486,80 @@ pub fn is_ibc_counter_key(key: &Key) -> bool {
                 || prefix == CONNECTIONS_COUNTER_PREFIX
                 || prefix == CHANNELS_COUNTER_PREFIX) && counter == COUNTER_SEG
             )
+}
+
+/// Returns a key of the deposit limit for the token
+pub fn mint_limit_key(token: &Address) -> Result<Key> {
+    let hash = match token {
+        Address::Internal(InternalAddress::IbcToken(hash)) => hash,
+        _ => {
+            return Err(Error::Address(format!(
+                "token is not an IbcToken: {token}"
+            )));
+        }
+    };
+    Ok(
+        Key::from(Address::Internal(InternalAddress::Ibc).to_db_key())
+            .push(&MINT_LIMIT.to_string().to_db_key())
+            .expect("Cannot obtain a storage key")
+            .push(&hash.to_string().to_db_key())
+            .expect("Cannot obtain a storage key"),
+    )
+}
+
+/// Returns a key of the per-epoch throughput limit for the token
+pub fn throughput_limit_key(token: &Address) -> Result<Key> {
+    let hash = match token {
+        Address::Internal(InternalAddress::IbcToken(hash)) => hash,
+        _ => {
+            return Err(Error::Address(format!(
+                "token is not an IbcToken: {token}"
+            )));
+        }
+    };
+    Ok(
+        Key::from(Address::Internal(InternalAddress::Ibc).to_db_key())
+            .push(&THROUGHPUT_LIMIT.to_string().to_db_key())
+            .expect("Cannot obtain a storage key")
+            .push(&hash.to_string().to_db_key())
+            .expect("Cannot obtain a storage key"),
+    )
+}
+
+/// Returns a key of the per-epoch deposit for the token
+pub fn deposit_key(token: &Address) -> Result<Key> {
+    let hash = match token {
+        Address::Internal(InternalAddress::IbcToken(hash)) => hash,
+        _ => {
+            return Err(Error::Address(format!(
+                "token is not an IbcToken: {token}"
+            )));
+        }
+    };
+    Ok(
+        Key::from(Address::Internal(InternalAddress::Ibc).to_db_key())
+            .push(&DEPOSIT.to_string().to_db_key())
+            .expect("Cannot obtain a storage key")
+            .push(&hash.to_string().to_db_key())
+            .expect("Cannot obtain a storage key"),
+    )
+}
+
+/// Returns a key of the per-epoch withdraw for the token
+pub fn withdraw_key(token: &Address) -> Result<Key> {
+    let hash = match token {
+        Address::Internal(InternalAddress::IbcToken(hash)) => hash,
+        _ => {
+            return Err(Error::Address(format!(
+                "token is not an IbcToken: {token}"
+            )));
+        }
+    };
+    Ok(
+        Key::from(Address::Internal(InternalAddress::Ibc).to_db_key())
+            .push(&WITHDRAW.to_string().to_db_key())
+            .expect("Cannot obtain a storage key")
+            .push(&hash.to_string().to_db_key())
+            .expect("Cannot obtain a storage key"),
+    )
 }

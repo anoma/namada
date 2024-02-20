@@ -721,4 +721,68 @@ pub trait IbcCommonContext: IbcStorageContext {
         let amount = self.read::<Amount>(&balance_key)?;
         Ok(amount == Some(Amount::from_u64(1)))
     }
+
+    /// Read the mint limit of the given token
+    fn mint_limit(&self, token: &Address) -> Result<Amount> {
+        let key = storage::mint_limit_key(token).map_err(|e| {
+            ChannelError::Other {
+                description: format!(
+                    "Getting the deposit limit key failed: {e}"
+                ),
+            }
+        })?;
+        Ok(self.read::<Amount>(&key)?.unwrap_or_default())
+    }
+
+    /// Read the per-epoch throughput limit of the given token
+    fn throughput_limit(&self, token: &Address) -> Result<Amount> {
+        let key = storage::throughput_limit_key(token).map_err(|e| {
+            ChannelError::Other {
+                description: format!(
+                    "Getting the throughput limit key failed: {e}"
+                ),
+            }
+        })?;
+        Ok(self.read::<Amount>(&key)?.unwrap_or_default())
+    }
+
+    /// Read the per-epoch deposit of the given token
+    fn deposit(&self, token: &Address) -> Result<Amount> {
+        let key =
+            storage::deposit_key(token).map_err(|e| ChannelError::Other {
+                description: format!("Getting the deposit key failed: {e}"),
+            })?;
+        Ok(self.read::<Amount>(&key)?.unwrap_or_default())
+    }
+
+    /// Write the per-epoch deposit of the given token
+    fn store_deposit(&mut self, token: &Address, amount: Amount) -> Result<()> {
+        let key =
+            storage::deposit_key(token).map_err(|e| ChannelError::Other {
+                description: format!("Getting the deposit key failed: {e}"),
+            })?;
+        self.write(&key, amount).map_err(ContextError::from)
+    }
+
+    /// Read the per-epoch withdraw of the given token
+    fn withdraw(&self, token: &Address) -> Result<Amount> {
+        let key =
+            storage::withdraw_key(token).map_err(|e| ChannelError::Other {
+                description: format!("Getting the withdraw key failed: {e}"),
+            })?;
+        Ok(self.read::<Amount>(&key)?.unwrap_or_default())
+    }
+
+    /// Write the per-epoch withdraw of the given token
+    fn store_withdraw(
+        &mut self,
+        token: &Address,
+        amount: Amount,
+    ) -> Result<()> {
+        let key =
+            storage::withdraw_key(token).map_err(|e| ChannelError::Other {
+                description: format!("Getting the withdraw key failed: {e}"),
+            })?;
+        self.write(&key, amount).map_err(ContextError::from)
+    }
 }
