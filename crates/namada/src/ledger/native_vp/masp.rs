@@ -346,33 +346,26 @@ where
 
         let mut result = ChangedBalances::default();
         // Get the changed balance keys
-        // FIXME: can partiotion here?
         // FIXME: does this also contain temp modification? Yes, is this
         // correct? I don't think so, I might end up validating keys that are
         // not committed, so wrong validation FIXME: probably I need to
         // read post from storage to circumvent this
-        let balance_addresses: Vec<[&Address; 2]> = keys_changed
-            .iter()
-            .filter_map(is_any_shielded_action_balance_key)
-            .collect();
+        let (masp_balances, counterparts_balances): (Vec<_>, Vec<_>) =
+            keys_changed
+                .iter()
+                .filter_map(is_any_shielded_action_balance_key)
+                .partition(|addresses| {
+                    addresses[1] == &Address::Internal(Masp)
+                });
 
-        let masp_balances: Vec<&[&Address; 2]> = balance_addresses
-            .iter()
-            .filter(|addresses| addresses[1] == &Address::Internal(Masp))
-            .collect();
-        for &[token, _] in masp_balances {
+        for [token, _] in masp_balances {
             // NOTE: no need to extract the changes of the masp balances too,
             // we'll examine those of the other transparent addresses and the
             // multitoken vp ensures a correct match between the two sets
             result.masp.insert(token);
         }
 
-        let counterparts: Vec<&[&Address; 2]> = balance_addresses
-            .iter()
-            .filter(|addresses| addresses[1] != &Address::Internal(Masp))
-            .collect();
-
-        for &[token, counterpart] in counterparts {
+        for [token, counterpart] in counterparts_balances {
             // FIXME: incorrect use read_bytes like in the other places
             // otherwise I read temp modifications FIXME: also
             // mention this in red teaming. Also the fact that temporary keys
