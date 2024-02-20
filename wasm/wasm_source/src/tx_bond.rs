@@ -18,16 +18,19 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::RefCell;
     use std::collections::BTreeSet;
 
     use namada::core::dec::Dec;
     use namada::core::storage::Epoch;
+    use namada::ledger::gas::VpGasMeter;
     use namada::ledger::pos::{OwnedPosParams, PosVP};
     use namada::proof_of_stake::storage::{
         bond_handle, read_consensus_validator_set_addresses_with_stake,
         read_total_stake, read_validator_stake,
     };
     use namada::proof_of_stake::types::{GenesisValidator, WeightedValidator};
+    use namada::validity_predicate::VpSentinel;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::native_vp::TestNativeVpEnv;
@@ -107,7 +110,7 @@ mod tests {
 
             // Ensure that the bond's source has enough tokens for the bond
             let target = bond.source.as_ref().unwrap_or(&bond.validator);
-            let native_token = tx_env.wl_storage.storage.native_token.clone();
+            let native_token = tx_env.state.in_mem().native_token.clone();
             tx_env.credit_tokens(target, &native_token, bond.amount);
             native_token
         });
@@ -327,8 +330,12 @@ mod tests {
 
         // Use the tx_env to run PoS VP
         let tx_env = tx_host_env::take();
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &tx_env.gas_meter.borrow(),
+        ));
+        let sentinel = RefCell::new(VpSentinel::default());
         let vp_env = TestNativeVpEnv::from_tx_env(tx_env, address::POS);
-        let result = vp_env.validate_tx(PosVP::new);
+        let result = vp_env.validate_tx(&gas_meter, &sentinel, PosVP::new);
         let result =
             result.expect("Validation of valid changes must not fail!");
         assert!(
