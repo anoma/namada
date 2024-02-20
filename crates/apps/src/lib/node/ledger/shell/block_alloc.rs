@@ -365,7 +365,7 @@ mod tests {
     /// reserved for each kind of tx type, in the
     /// allocator's common path. Further check that
     /// if not enough normal txs are present, the rest
-    /// if filled with protocol txs
+    /// is filled with protocol txs
     #[test]
     fn test_filling_up_with_protocol() {
         const BLOCK_SIZE: u64 = 60;
