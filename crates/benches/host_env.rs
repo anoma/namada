@@ -194,13 +194,13 @@ fn write_log_read(c: &mut Criterion) {
         group.throughput(criterion::Throughput::Bytes(throughput_len));
         // Generate random bytes for the value and write it to storage
         let value: Vec<u8> = (0..value_len).map(|_| rand::random()).collect();
-        shell.wl_storage.write_log.write(&key, value).unwrap();
+        shell.state.write_log_mut().write(&key, value).unwrap();
 
         group.bench_function(
             format!("key: {key}, bytes: {throughput_len}"),
             |b| {
                 b.iter_with_large_drop(|| {
-                    shell.wl_storage.write_log.read(&key).0.unwrap()
+                    shell.state.write_log().read(&key).0.unwrap()
                 })
             },
         );
@@ -228,19 +228,13 @@ fn storage_read(c: &mut Criterion) {
         // NOTE: just like for storage writes, we don't have control on when
         // data is actually flushed to disk, so just benchmark the read function
         // without caring if data is actually in memory or on disk
-        shell.wl_storage.storage.write(&key, &value).unwrap();
+        shell.state.db_write(&key, &value).unwrap();
 
         group.bench_function(
             format!("key: {key}, bytes: {throughput_len}"),
             |b| {
                 b.iter_with_large_drop(|| {
-                    shell
-                        .wl_storage
-                        .storage
-                        .db
-                        .read_subspace_val(&key)
-                        .unwrap()
-                        .unwrap()
+                    shell.state.db().read_subspace_val(&key).unwrap().unwrap()
                 })
             },
         );
@@ -273,7 +267,7 @@ fn write_log_write(c: &mut Criterion) {
                         (0..value_len).map(|_| rand::random()).collect()
                     },
                     |value| {
-                        shell.wl_storage.write_log.write(&key, value).unwrap()
+                        shell.state.write_log_mut().write(&key, value).unwrap()
                     },
                     criterion::BatchSize::SmallInput,
                 )
@@ -298,7 +292,7 @@ fn storage_write(c: &mut Criterion) {
         // so we set this as the throughput parameter
         let throughput_len = value_len + key.len() as u64;
         group.throughput(criterion::Throughput::Bytes(throughput_len));
-        let block_height = shell.wl_storage.storage.block.height;
+        let block_height = shell.state.in_mem().block.height;
 
         group.bench_function(
             format!("key: {key}, bytes: {throughput_len}"),
@@ -315,9 +309,8 @@ fn storage_write(c: &mut Criterion) {
                         // just benchmark the write operation here without
                         // focusing on the hardware write
                         shell
-                            .wl_storage
-                            .storage
-                            .db
+                            .state
+                            .db_mut()
                             .write_subspace_val(block_height, &key, value, true)
                             .unwrap();
                     },
