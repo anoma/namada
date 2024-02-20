@@ -1,5 +1,7 @@
 //! Implementation of the `FinalizeBlock` ABCI++ method for the Shell
 
+use std::cell::RefCell;
+
 use data_encoding::HEXUPPER;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
@@ -14,7 +16,6 @@ use namada::proof_of_stake;
 use namada::proof_of_stake::storage::{
     find_validator_by_raw_hash, write_last_block_proposer_address,
 };
-use namada::state::wl_storage::WriteLogAndStorage;
 use namada::state::write_log::StorageModification;
 use namada::state::{
     ResultExt, StorageRead, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY,
@@ -62,9 +63,9 @@ where
         // Begin the new block and check if a new epoch has begun
         let (height, new_epoch) = self.update_state(req.header, req.hash);
 
-        let (current_epoch, _gas) = self.wl_storage.storage.get_current_epoch();
+        let (current_epoch, _gas) = self.state.in_mem().get_current_epoch();
         let update_for_tendermint = matches!(
-            self.wl_storage.storage.update_epoch_blocks_delay,
+            self.state.in_mem().update_epoch_blocks_delay,
             Some(EPOCH_SWITCH_BLOCKS_DELAY)
         );
 
@@ -75,32 +76,33 @@ where
         tracing::debug!(
             "New epoch block delay for updating the Tendermint validator set: \
              {:?}",
-            self.wl_storage.storage.update_epoch_blocks_delay
+            self.state.in_mem().update_epoch_blocks_delay
         );
 
         // Finalize the transactions' hashes from the previous block
-        for hash in self.wl_storage.storage.iter_replay_protection() {
-            self.wl_storage
-                .write_log
+        let (write_log, _in_mem, db) = self.state.split_borrow();
+        for (raw_key, _, _) in db.iter_replay_protection() {
+            let hash = raw_key.parse().expect("Failed hash conversion");
+            write_log
                 .finalize_tx_hash(hash)
                 .expect("Failed tx hashes finalization")
         }
 
         let emit_events = &mut response.events;
         // Get the actual votes from cometBFT in the preferred format
-        let votes = pos_votes_from_abci(&self.wl_storage, &req.votes);
+        let votes = pos_votes_from_abci(&self.state, &req.votes);
         let validator_set_update_epoch =
             self.get_validator_set_update_epoch(current_epoch);
 
         // Sub-system updates:
         // - Token
-        token::finalize_block(&mut self.wl_storage, emit_events, new_epoch)?;
+        token::finalize_block(&mut self.state, emit_events, new_epoch)?;
         // - Governance
         governance::finalize_block(self, emit_events, new_epoch)?;
         // - PoS
         //    - Must be applied after governance in case it changes PoS params
         proof_of_stake::finalize_block(
-            &mut self.wl_storage,
+            &mut self.state,
             emit_events,
             new_epoch,
             validator_set_update_epoch,
@@ -118,7 +120,7 @@ where
         let native_block_proposer_address = {
             let tm_raw_hash_string =
                 tm_raw_hash_to_string(req.proposer_address);
-            find_validator_by_raw_hash(&self.wl_storage, tm_raw_hash_string)
+            find_validator_by_raw_hash(&self.state, tm_raw_hash_string)
                 .unwrap()
                 .expect(
                     "Unable to find native validator address of block \
@@ -127,7 +129,7 @@ where
         };
 
         // Tracks the accepted transactions
-        self.wl_storage.storage.block.results = BlockResults::default();
+        self.state.in_mem_mut().block.results = BlockResults::default();
         let mut changed_keys = BTreeSet::new();
         for (tx_index, processed_tx) in req.txs.iter().enumerate() {
             let tx = if let Ok(tx) = Tx::try_from(processed_tx.tx.as_ref()) {
@@ -189,8 +191,8 @@ where
                 // if the rejected tx was decrypted, remove it
                 // from the queue of txs to be processed
                 if let TxType::Decrypted(_) = &tx_header.tx_type {
-                    self.wl_storage
-                        .storage
+                    self.state
+                        .in_mem_mut()
                         .tx_queue
                         .pop()
                         .expect("Missing wrapper tx in queue");
@@ -202,7 +204,7 @@ where
             let (
                 mut tx_event,
                 embedding_wrapper,
-                mut tx_gas_meter,
+                tx_gas_meter,
                 wrapper,
                 mut wrapper_args,
             ) = match &tx_header.tx_type {
@@ -224,8 +226,8 @@ where
                 TxType::Decrypted(inner) => {
                     // We remove the corresponding wrapper tx from the queue
                     let tx_in_queue = self
-                        .wl_storage
-                        .storage
+                        .state
+                        .in_mem_mut()
                         .tx_queue
                         .pop()
                         .expect("Missing wrapper tx in queue");
@@ -318,7 +320,7 @@ where
                         {
                             let this_signer = &(
                                 address,
-                                self.wl_storage.storage.get_last_block_height(),
+                                self.state.in_mem().get_last_block_height(),
                             );
                             for MultiSignedEthEvent { event, signers } in
                                 &digest.events
@@ -338,8 +340,8 @@ where
                     }
                 },
             };
-
-            let tx_result = protocol::check_tx_allowed(&tx, &self.wl_storage)
+            let tx_gas_meter = RefCell::new(tx_gas_meter);
+            let tx_result = protocol::check_tx_allowed(&tx, &self.state)
                 .and_then(|()| {
                     protocol::dispatch_tx(
                         tx,
@@ -349,14 +351,15 @@ where
                                 .try_into()
                                 .expect("transaction index out of bounds"),
                         ),
-                        &mut tx_gas_meter,
-                        &mut self.wl_storage,
+                        &tx_gas_meter,
+                        &mut self.state,
                         &mut self.vp_wasm_cache,
                         &mut self.tx_wasm_cache,
                         wrapper_args.as_mut(),
                     )
                 })
                 .map_err(Error::TxApply);
+            let tx_gas_meter = tx_gas_meter.into_inner();
             match tx_result {
                 Ok(result) => {
                     if result.is_accepted() {
@@ -373,7 +376,7 @@ where
                                 tx_event["is_valid_masp_tx"] =
                                     format!("{}", tx_index);
                             }
-                            self.wl_storage.storage.tx_queue.push(TxInQueue {
+                            self.state.in_mem_mut().tx_queue.push(TxInQueue {
                                 tx: wrapper.expect("Missing expected wrapper"),
                                 gas: tx_gas_meter.get_available_gas(),
                             });
@@ -399,11 +402,11 @@ where
                                 self.commit_inner_tx_hash(wrapper);
                             }
                         }
-                        self.wl_storage.commit_tx();
+                        self.state.commit_tx();
                         if !tx_event.contains_key("code") {
                             tx_event["code"] = ResultCode::Ok.into();
-                            self.wl_storage
-                                .storage
+                            self.state
+                                .in_mem_mut()
                                 .block
                                 .results
                                 .accept(tx_index);
@@ -447,7 +450,7 @@ where
                         }
 
                         stats.increment_rejected_txs();
-                        self.wl_storage.drop_tx();
+                        self.state.drop_tx();
                         tx_event["code"] = ResultCode::InvalidTx.into();
                     }
                     tx_event["gas_used"] = result.gas_used.to_string();
@@ -484,7 +487,7 @@ where
                             // hash. A replay of the wrapper is impossible since
                             // the inner tx hash is committed to storage and
                             // we validate the wrapper against that hash too
-                            self.wl_storage
+                            self.state
                                 .delete_tx_hash(wrapper.header_hash())
                                 .expect(
                                     "Error while deleting tx hash from storage",
@@ -493,7 +496,7 @@ where
                     }
 
                     stats.increment_errored_txs();
-                    self.wl_storage.drop_tx();
+                    self.state.drop_tx();
 
                     tx_event["gas_used"] =
                         tx_gas_meter.get_tx_consumed_gas().to_string();
@@ -533,14 +536,14 @@ where
         // Update the MASP commitment tree anchor if the tree was updated
         let tree_key = token::storage_key::masp_commitment_tree_key();
         if let Some(StorageModification::Write { value }) =
-            self.wl_storage.write_log.read(&tree_key).0
+            self.state.write_log().read(&tree_key).0
         {
             let updated_tree = CommitmentTree::<Node>::try_from_slice(value)
                 .into_storage_result()?;
             let anchor_key = token::storage_key::masp_commitment_anchor_key(
                 updated_tree.root(),
             );
-            self.wl_storage.write(&anchor_key, ())?;
+            self.state.write(&anchor_key, ())?;
         }
 
         if update_for_tendermint {
@@ -551,7 +554,7 @@ where
         }
 
         write_last_block_proposer_address(
-            &mut self.wl_storage,
+            &mut self.state,
             native_block_proposer_address,
         )?;
 
@@ -571,21 +574,21 @@ where
         header: Header,
         hash: BlockHash,
     ) -> (BlockHeight, bool) {
-        let height = self.wl_storage.storage.get_last_block_height() + 1;
+        let height = self.state.in_mem().get_last_block_height() + 1;
 
-        self.wl_storage
-            .storage
+        self.state
+            .in_mem_mut()
             .begin_block(hash, height)
             .expect("Beginning a block shouldn't fail");
 
         let header_time = header.time;
-        self.wl_storage
-            .storage
+        self.state
+            .in_mem_mut()
             .set_header(header)
             .expect("Setting a header shouldn't fail");
 
         let new_epoch = self
-            .wl_storage
+            .state
             .update_epoch(height, header_time)
             .expect("Must be able to update epoch");
         (height, new_epoch)
@@ -622,32 +625,29 @@ where
         let last_epoch = current_epoch.prev();
 
         // Get the number of blocks in the last epoch
-        let first_block_of_last_epoch = self
-            .wl_storage
-            .storage
-            .block
-            .pred_epochs
-            .first_block_heights[last_epoch.0 as usize]
-            .0;
+        let first_block_of_last_epoch =
+            self.state.in_mem().block.pred_epochs.first_block_heights
+                [last_epoch.0 as usize]
+                .0;
         let num_blocks_in_last_epoch =
-            self.wl_storage.storage.block.height.0 - first_block_of_last_epoch;
+            self.state.in_mem().block.height.0 - first_block_of_last_epoch;
 
         // PoS inflation
         namada_proof_of_stake::rewards::apply_inflation(
-            &mut self.wl_storage,
+            &mut self.state,
             last_epoch,
             num_blocks_in_last_epoch,
         )?;
 
         // Pgf inflation
         pgf_inflation::apply_inflation(
-            &mut self.wl_storage,
+            self.state.restrict_writes_to_write_log(),
             namada::ibc::transfer_over_ibc,
         )?;
-        for ibc_event in self.wl_storage.write_log_mut().take_ibc_events() {
+        for ibc_event in self.state.write_log_mut().take_ibc_events() {
             let mut event = Event::from(ibc_event.clone());
             // Add the height for IBC event query
-            let height = self.wl_storage.storage.get_last_block_height() + 1;
+            let height = self.state.in_mem().get_last_block_height() + 1;
             event["height"] = height.to_string();
             response.events.push(event);
         }
@@ -660,11 +660,11 @@ where
     // the wrapper). Requires the wrapper transaction as argument to recover
     // both the hashes.
     fn commit_inner_tx_hash(&mut self, wrapper_tx: Tx) {
-        self.wl_storage
+        self.state
             .write_tx_hash(wrapper_tx.raw_header_hash())
             .expect("Error while writing tx hash to storage");
 
-        self.wl_storage
+        self.state
             .delete_tx_hash(wrapper_tx.header_hash())
             .expect("Error while deleting tx hash from storage");
     }
@@ -790,6 +790,7 @@ mod test_finalize_block {
         read_consensus_validator_set_addresses,
     };
     use namada_sdk::tendermint::abci::types::MisbehaviorKind;
+    use namada_sdk::validity_predicate::VpSentinel;
     use namada_test_utils::tx_data::TxWriteData;
     use namada_test_utils::TestWasms;
     use test_log::test;
@@ -816,7 +817,7 @@ mod test_finalize_block {
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount_per_gas_unit: DenominatedAmount::native(1.into()),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
@@ -857,7 +858,7 @@ mod test_finalize_block {
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount_per_gas_unit: DenominatedAmount::native(1.into()),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
@@ -896,13 +897,12 @@ mod test_finalize_block {
 
         // Add unshielded balance for fee paymenty
         let balance_key = token::storage_key::balance_key(
-            &shell.wl_storage.storage.native_token,
+            &shell.state.in_mem().native_token,
             &Address::from(&keypair.ref_to()),
         );
         shell
-            .wl_storage
-            .storage
-            .write(&balance_key, Amount::native_whole(1000).serialize_to_vec())
+            .state
+            .write(&balance_key, Amount::native_whole(1000))
             .unwrap();
 
         // create some wrapper txs
@@ -974,7 +974,7 @@ mod test_finalize_block {
                     amount_per_gas_unit: DenominatedAmount::native(
                         Default::default(),
                     ),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
@@ -1014,7 +1014,7 @@ mod test_finalize_block {
             assert_eq!(code, &String::from(ResultCode::InvalidTx));
         }
         // check that the corresponding wrapper tx was removed from the queue
-        assert!(shell.wl_storage.storage.tx_queue.is_empty());
+        assert!(shell.state.in_mem().tx_queue.is_empty());
     }
 
     /// Test that if a tx is undecryptable, it is applied
@@ -1028,7 +1028,7 @@ mod test_finalize_block {
         let wrapper = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount_per_gas_unit: DenominatedAmount::native(0.into()),
-                token: shell.wl_storage.storage.native_token.clone(),
+                token: shell.state.in_mem().native_token.clone(),
             },
             keypair.ref_to(),
             Epoch(0),
@@ -1066,7 +1066,7 @@ mod test_finalize_block {
             assert!(log.contains("Transaction could not be decrypted."))
         }
         // check that the corresponding wrapper tx was removed from the queue
-        assert!(shell.wl_storage.storage.tx_queue.is_empty());
+        assert!(shell.state.in_mem().tx_queue.is_empty());
     }
 
     /// Test that the wrapper txs are queued in the order they
@@ -1081,13 +1081,12 @@ mod test_finalize_block {
 
         // Add unshielded balance for fee payment
         let balance_key = token::storage_key::balance_key(
-            &shell.wl_storage.storage.native_token,
+            &shell.state.in_mem().native_token,
             &Address::from(&keypair.ref_to()),
         );
         shell
-            .wl_storage
-            .storage
-            .write(&balance_key, Amount::native_whole(1000).serialize_to_vec())
+            .state
+            .write(&balance_key, Amount::native_whole(1000))
             .unwrap();
 
         // create two decrypted txs
@@ -1207,7 +1206,7 @@ mod test_finalize_block {
 
         // ---- The protocol tx that includes this event on-chain
         let ext = ethereum_events::Vext {
-            block_height: shell.wl_storage.storage.get_last_block_height(),
+            block_height: shell.state.in_mem().get_last_block_height(),
             ethereum_events: vec![event.clone()],
             validator_addr: address.clone(),
         }
@@ -1218,13 +1217,13 @@ mod test_finalize_block {
                 event,
                 signers: BTreeSet::from([(
                     address.clone(),
-                    shell.wl_storage.storage.get_last_block_height(),
+                    shell.state.in_mem().get_last_block_height(),
                 )]),
             };
 
             let digest = ethereum_events::VextDigest {
                 signatures: vec![(
-                    (address, shell.wl_storage.storage.get_last_block_height()),
+                    (address, shell.state.in_mem().get_last_block_height()),
                     ext.sig,
                 )]
                 .into_iter()
@@ -1286,7 +1285,7 @@ mod test_finalize_block {
 
         // ---- The protocol tx that includes this event on-chain
         let ext = ethereum_events::Vext {
-            block_height: shell.wl_storage.storage.get_last_block_height(),
+            block_height: shell.state.in_mem().get_last_block_height(),
             ethereum_events: vec![event],
             validator_addr: address,
         }
@@ -1335,22 +1334,21 @@ mod test_finalize_block {
     {
         let (mut shell, _, _, _) = setup_at_height(1u64);
         namada::eth_bridge::test_utils::commit_bridge_pool_root_at_height(
-            &mut shell.wl_storage,
+            &mut shell.state,
             &KeccakHash([1; 32]),
             1.into(),
         );
         let value = BlockHeight(2).serialize_to_vec();
         shell
-            .wl_storage
-            .storage
+            .state
+            .in_mem_mut()
             .block
             .tree
             .update(&get_key_from_hash(&KeccakHash([1; 32])), value)
             .expect("Test failed");
         shell
-            .wl_storage
-            .storage
-            .write(&get_nonce_key(), Uint::from(1).serialize_to_vec())
+            .state
+            .db_write(&get_nonce_key(), Uint::from(1).serialize_to_vec())
             .expect("Test failed");
         let (tx, action) = craft_tx(&mut shell);
         let processed_tx = ProcessedTx {
@@ -1365,16 +1363,16 @@ mod test_finalize_block {
             ..Default::default()
         };
         let root = shell
-            .wl_storage
+            .state
             .read_bytes(&get_signed_root_key())
             .expect("Reading signed Bridge pool root shouldn't fail.");
         assert!(root.is_none());
         _ = shell.finalize_block(req).expect("Test failed");
-        shell.wl_storage.commit_block().unwrap();
+        shell.state.commit_block().unwrap();
         match action {
             TestBpAction::VerifySignedRoot => {
                 let (root, _) = shell
-                    .wl_storage
+                    .state
                     .ethbridge_queries()
                     .get_signed_bridge_pool_root()
                     .expect("Test failed");
@@ -1382,10 +1380,8 @@ mod test_finalize_block {
                 assert_eq!(root.data.1, ethUint::from(1));
             }
             TestBpAction::CheckNonceIncremented => {
-                let nonce = shell
-                    .wl_storage
-                    .ethbridge_queries()
-                    .get_bridge_pool_nonce();
+                let nonce =
+                    shell.state.ethbridge_queries().get_bridge_pool_nonce();
                 assert_eq!(nonce, ethUint::from(2));
             }
         }
@@ -1408,24 +1404,18 @@ mod test_finalize_block {
                 );
                 let supply_key = token::storage_key::minted_balance_key(&token);
                 let amt: Amount = 999_999_u64.into();
-                shell
-                    .wl_storage
-                    .write(&owner_key, amt)
-                    .expect("Test failed");
-                shell
-                    .wl_storage
-                    .write(&supply_key, amt)
-                    .expect("Test failed");
+                shell.state.write(&owner_key, amt).expect("Test failed");
+                shell.state.write(&supply_key, amt).expect("Test failed");
             }
             // add bertha's gas fees the pool
             {
                 let amt: Amount = 999_999_u64.into();
                 let pool_balance_key = token::storage_key::balance_key(
-                    &shell.wl_storage.storage.native_token,
+                    &shell.state.in_mem().native_token,
                     &bridge_pool::BRIDGE_POOL_ADDRESS,
                 );
                 shell
-                    .wl_storage
+                    .state
                     .write(&pool_balance_key, amt)
                     .expect("Test failed");
             }
@@ -1444,14 +1434,14 @@ mod test_finalize_block {
                         sender: bertha.clone(),
                     },
                     gas_fee: GasFee {
-                        token: shell.wl_storage.storage.native_token.clone(),
+                        token: shell.state.in_mem().native_token.clone(),
                         amount: 10u64.into(),
                         payer: bertha.clone(),
                     },
                 };
                 let transfer = (&pending).into();
                 shell
-                    .wl_storage
+                    .state
                     .write(&bridge_pool::get_pending_key(&pending), pending)
                     .expect("Test failed");
                 transfer
@@ -1466,10 +1456,7 @@ mod test_finalize_block {
             let ext = {
                 let ext = ethereum_events::Vext {
                     validator_addr,
-                    block_height: shell
-                        .wl_storage
-                        .storage
-                        .get_last_block_height(),
+                    block_height: shell.state.in_mem().get_last_block_height(),
                     ethereum_events: vec![ethereum_event],
                 }
                 .sign(&protocol_key);
@@ -1508,23 +1495,22 @@ mod test_finalize_block {
             min_duration: DurationSecs(0),
         };
         namada::ledger::parameters::update_epoch_parameter(
-            &mut shell.wl_storage,
+            &mut shell.state,
             &epoch_duration,
         )
         .unwrap();
-        shell.wl_storage.storage.next_epoch_min_start_height = BlockHeight(5);
-        shell.wl_storage.storage.next_epoch_min_start_time = DateTimeUtc::now();
+        shell.state.in_mem_mut().next_epoch_min_start_height = BlockHeight(5);
+        shell.state.in_mem_mut().next_epoch_min_start_time = DateTimeUtc::now();
 
         let txs_key = gen_keypair();
         // Add unshielded balance for fee payment
         let balance_key = token::storage_key::balance_key(
-            &shell.wl_storage.storage.native_token,
+            &shell.state.in_mem().native_token,
             &Address::from(&txs_key.ref_to()),
         );
         shell
-            .wl_storage
-            .storage
-            .write(&balance_key, Amount::native_whole(1000).serialize_to_vec())
+            .state
+            .write(&balance_key, Amount::native_whole(1000))
             .unwrap();
 
         // Add a proposal to be executed on next epoch change.
@@ -1543,7 +1529,7 @@ mod test_finalize_block {
             };
 
             namada::governance::init_proposal(
-                &mut shell.wl_storage,
+                &mut shell.state,
                 proposal,
                 vec![],
                 None,
@@ -1558,8 +1544,7 @@ mod test_finalize_block {
             };
             // Vote to accept the proposal (there's only one validator, so its
             // vote decides)
-            namada::governance::vote_proposal(&mut shell.wl_storage, vote)
-                .unwrap();
+            namada::governance::vote_proposal(&mut shell.state, vote).unwrap();
         };
 
         // Add a proposal to be accepted and one to be rejected.
@@ -1567,15 +1552,14 @@ mod test_finalize_block {
         add_proposal(1, ProposalVote::Nay);
 
         // Commit the genesis state
-        shell.wl_storage.commit_block().unwrap();
+        shell.state.commit_block().unwrap();
         shell.commit();
 
         // Collect all storage key-vals into a sorted map
         let store_block_state = |shell: &TestShell| -> BTreeMap<_, _> {
             shell
-                .wl_storage
-                .storage
-                .db
+                .state
+                .db()
                 .iter_prefix(None)
                 .map(|(key, val, _gas)| (key, val))
                 .collect()
@@ -1590,20 +1574,20 @@ mod test_finalize_block {
         // Keep applying finalize block
         let validator = shell.mode.get_validator_address().unwrap();
         let pos_params =
-            namada_proof_of_stake::storage::read_pos_params(&shell.wl_storage)
+            namada_proof_of_stake::storage::read_pos_params(&shell.state)
                 .unwrap();
         let consensus_key =
             namada_proof_of_stake::storage::validator_consensus_key_handle(
                 validator,
             )
-            .get(&shell.wl_storage, Epoch::default(), &pos_params)
+            .get(&shell.state, Epoch::default(), &pos_params)
             .unwrap()
             .unwrap();
         let proposer_address = HEXUPPER
             .decode(consensus_key.tm_raw_hash().as_bytes())
             .unwrap();
         let val_stake = read_validator_stake(
-            &shell.wl_storage,
+            &shell.state,
             &pos_params,
             validator,
             Epoch::default(),
@@ -1642,12 +1626,12 @@ mod test_finalize_block {
                 ..Default::default()
             };
             // merkle tree root before finalize_block
-            let root_pre = shell.shell.wl_storage.storage.block.tree.root();
+            let root_pre = shell.shell.state.in_mem().block.tree.root();
 
             let _events = shell.finalize_block(req).unwrap();
 
             // the merkle tree root should not change after finalize_block
-            let root_post = shell.shell.wl_storage.storage.block.tree.root();
+            let root_post = shell.shell.state.in_mem().block.tree.root();
             assert_eq!(root_pre.0, root_post.0);
             let new_state = store_block_state(&shell);
             // The new state must be unchanged
@@ -1656,7 +1640,7 @@ mod test_finalize_block {
                 new_state.iter(),
             );
             // Commit the block to move on to the next one
-            shell.wl_storage.commit_block().unwrap();
+            shell.state.commit_block().unwrap();
 
             // Store the state after commit for the next iteration
             last_storage_state = store_block_state(&shell);
@@ -1684,14 +1668,14 @@ mod test_finalize_block {
 
         let mut validator_set: BTreeSet<WeightedValidator> =
             read_consensus_validator_set_addresses_with_stake(
-                &shell.wl_storage,
+                &shell.state,
                 Epoch::default(),
             )
             .unwrap()
             .into_iter()
             .collect();
 
-        let params = read_pos_params(&shell.wl_storage).unwrap();
+        let params = read_pos_params(&shell.state).unwrap();
 
         let val1 = validator_set.pop_first().unwrap();
         let val2 = validator_set.pop_first().unwrap();
@@ -1700,7 +1684,7 @@ mod test_finalize_block {
 
         let get_pkh = |address, epoch| {
             let ck = validator_consensus_key_handle(&address)
-                .get(&shell.wl_storage, epoch, &params)
+                .get(&shell.state, epoch, &params)
                 .unwrap()
                 .unwrap();
             let hash_string = tm_consensus_key_raw_hash(&ck);
@@ -1793,11 +1777,7 @@ mod test_finalize_block {
         // won't receive votes from TM since we receive votes at a 1-block
         // delay, so votes will be empty here
         next_block_for_inflation(&mut shell, pkh1.to_vec(), vec![], None);
-        assert!(
-            rewards_accumulator_handle()
-                .is_empty(&shell.wl_storage)
-                .unwrap()
-        );
+        assert!(rewards_accumulator_handle().is_empty(&shell.state).unwrap());
 
         // FINALIZE BLOCK 2. Tell Namada that val1 is the block proposer.
         // Include votes that correspond to block 1. Make val2 the next block's
@@ -1808,20 +1788,16 @@ mod test_finalize_block {
             votes.clone(),
             None,
         );
-        assert!(rewards_prod_1.is_empty(&shell.wl_storage).unwrap());
-        assert!(rewards_prod_2.is_empty(&shell.wl_storage).unwrap());
-        assert!(rewards_prod_3.is_empty(&shell.wl_storage).unwrap());
-        assert!(rewards_prod_4.is_empty(&shell.wl_storage).unwrap());
-        assert!(
-            !rewards_accumulator_handle()
-                .is_empty(&shell.wl_storage)
-                .unwrap()
-        );
+        assert!(rewards_prod_1.is_empty(&shell.state).unwrap());
+        assert!(rewards_prod_2.is_empty(&shell.state).unwrap());
+        assert!(rewards_prod_3.is_empty(&shell.state).unwrap());
+        assert!(rewards_prod_4.is_empty(&shell.state).unwrap());
+        assert!(!rewards_accumulator_handle().is_empty(&shell.state).unwrap());
         // Val1 was the proposer, so its reward should be larger than all
         // others, which should themselves all be equal
-        let acc_sum = get_rewards_sum(&shell.wl_storage);
+        let acc_sum = get_rewards_sum(&shell.state);
         assert!(is_decimal_equal_enough(Dec::one(), acc_sum));
-        let acc = get_rewards_acc(&shell.wl_storage);
+        let acc = get_rewards_acc(&shell.state);
         assert_eq!(acc.get(&val2.address), acc.get(&val3.address));
         assert_eq!(acc.get(&val2.address), acc.get(&val4.address));
         assert!(
@@ -1831,16 +1807,16 @@ mod test_finalize_block {
 
         // FINALIZE BLOCK 3, with val1 as proposer for the next block.
         next_block_for_inflation(&mut shell, pkh1.to_vec(), votes, None);
-        assert!(rewards_prod_1.is_empty(&shell.wl_storage).unwrap());
-        assert!(rewards_prod_2.is_empty(&shell.wl_storage).unwrap());
-        assert!(rewards_prod_3.is_empty(&shell.wl_storage).unwrap());
-        assert!(rewards_prod_4.is_empty(&shell.wl_storage).unwrap());
+        assert!(rewards_prod_1.is_empty(&shell.state).unwrap());
+        assert!(rewards_prod_2.is_empty(&shell.state).unwrap());
+        assert!(rewards_prod_3.is_empty(&shell.state).unwrap());
+        assert!(rewards_prod_4.is_empty(&shell.state).unwrap());
         // Val2 was the proposer for this block, so its rewards accumulator
         // should be the same as val1 now. Val3 and val4 should be equal as
         // well.
-        let acc_sum = get_rewards_sum(&shell.wl_storage);
+        let acc_sum = get_rewards_sum(&shell.state);
         assert!(is_decimal_equal_enough(Dec::two(), acc_sum));
-        let acc = get_rewards_acc(&shell.wl_storage);
+        let acc = get_rewards_acc(&shell.state);
         assert_eq!(acc.get(&val1.address), acc.get(&val2.address));
         assert_eq!(acc.get(&val3.address), acc.get(&val4.address));
         assert!(
@@ -1909,13 +1885,13 @@ mod test_finalize_block {
             votes.clone(),
             None,
         );
-        assert!(rewards_prod_1.is_empty(&shell.wl_storage).unwrap());
-        assert!(rewards_prod_2.is_empty(&shell.wl_storage).unwrap());
-        assert!(rewards_prod_3.is_empty(&shell.wl_storage).unwrap());
-        assert!(rewards_prod_4.is_empty(&shell.wl_storage).unwrap());
-        let acc_sum = get_rewards_sum(&shell.wl_storage);
+        assert!(rewards_prod_1.is_empty(&shell.state).unwrap());
+        assert!(rewards_prod_2.is_empty(&shell.state).unwrap());
+        assert!(rewards_prod_3.is_empty(&shell.state).unwrap());
+        assert!(rewards_prod_4.is_empty(&shell.state).unwrap());
+        let acc_sum = get_rewards_sum(&shell.state);
         assert!(is_decimal_equal_enough(Dec::new(3, 0).unwrap(), acc_sum));
-        let acc = get_rewards_acc(&shell.wl_storage);
+        let acc = get_rewards_acc(&shell.state);
         assert!(
             acc.get(&val1.address).cloned().unwrap()
                 > acc.get(&val2.address).cloned().unwrap()
@@ -1932,15 +1908,13 @@ mod test_finalize_block {
         // Advance to the start of epoch 1. Val1 is the only block proposer for
         // the rest of the epoch. Val4 does not vote for the rest of the epoch.
         let height_of_next_epoch =
-            shell.wl_storage.storage.next_epoch_min_start_height;
+            shell.state.in_mem().next_epoch_min_start_height;
         let current_height = 4_u64;
-        assert_eq!(current_height, shell.wl_storage.storage.block.height.0);
+        assert_eq!(current_height, shell.state.in_mem().block.height.0);
 
         for _ in current_height..height_of_next_epoch.0 + 2 {
-            dbg!(
-                get_rewards_acc(&shell.wl_storage),
-                get_rewards_sum(&shell.wl_storage),
-            );
+            // dbg!(get_rewards_acc(&shell.state),
+            // get_rewards_sum(&shell.state),);
             next_block_for_inflation(
                 &mut shell,
                 pkh1.to_vec(),
@@ -1948,25 +1922,21 @@ mod test_finalize_block {
                 None,
             );
         }
-        assert!(
-            rewards_accumulator_handle()
-                .is_empty(&shell.wl_storage)
-                .unwrap()
-        );
+        assert!(rewards_accumulator_handle().is_empty(&shell.state).unwrap());
         let rp1 = rewards_prod_1
-            .get(&shell.wl_storage, &Epoch::default())
+            .get(&shell.state, &Epoch::default())
             .unwrap()
             .unwrap();
         let rp2 = rewards_prod_2
-            .get(&shell.wl_storage, &Epoch::default())
+            .get(&shell.state, &Epoch::default())
             .unwrap()
             .unwrap();
         let rp3 = rewards_prod_3
-            .get(&shell.wl_storage, &Epoch::default())
+            .get(&shell.state, &Epoch::default())
             .unwrap()
             .unwrap();
         let rp4 = rewards_prod_4
-            .get(&shell.wl_storage, &Epoch::default())
+            .get(&shell.state, &Epoch::default())
             .unwrap()
             .unwrap();
         assert!(rp1 > rp2);
@@ -1985,20 +1955,20 @@ mod test_finalize_block {
 
         let mut validator_set: BTreeSet<WeightedValidator> =
             read_consensus_validator_set_addresses_with_stake(
-                &shell.wl_storage,
+                &shell.state,
                 Epoch::default(),
             )
             .unwrap()
             .into_iter()
             .collect();
 
-        let params = read_pos_params(&shell.wl_storage).unwrap();
+        let params = read_pos_params(&shell.state).unwrap();
 
         let validator = validator_set.pop_first().unwrap();
 
         let get_pkh = |address, epoch| {
             let ck = validator_consensus_key_handle(&address)
-                .get(&shell.wl_storage, epoch, &params)
+                .get(&shell.state, epoch, &params)
                 .unwrap()
                 .unwrap();
             let hash_string = tm_consensus_key_raw_hash(&ck);
@@ -2040,11 +2010,7 @@ mod test_finalize_block {
         // won't receive votes from TM since we receive votes at a 1-block
         // delay, so votes will be empty here
         next_block_for_inflation(&mut shell, pkh1.to_vec(), vec![], None);
-        assert!(
-            rewards_accumulator_handle()
-                .is_empty(&shell.wl_storage)
-                .unwrap()
-        );
+        assert!(rewards_accumulator_handle().is_empty(&shell.state).unwrap());
 
         let (current_epoch, inflation) =
             advance_epoch(&mut shell, &pkh1, &votes, None);
@@ -2052,7 +2018,7 @@ mod test_finalize_block {
 
         // Query the available rewards
         let query_rewards = namada_proof_of_stake::query_reward_tokens(
-            &shell.wl_storage,
+            &shell.state,
             None,
             &validator.address,
             current_epoch,
@@ -2061,7 +2027,7 @@ mod test_finalize_block {
 
         // Claim the rewards from the initial epoch
         let reward_1 = namada_proof_of_stake::claim_reward_tokens(
-            &mut shell.wl_storage,
+            &mut shell.state,
             None,
             &validator.address,
             current_epoch,
@@ -2074,7 +2040,7 @@ mod test_finalize_block {
         // Query the available rewards again and check that it is 0 now after
         // the claim
         let query_rewards = namada_proof_of_stake::query_reward_tokens(
-            &shell.wl_storage,
+            &shell.state,
             None,
             &validator.address,
             current_epoch,
@@ -2090,7 +2056,7 @@ mod test_finalize_block {
             None,
         );
         let att = namada_proof_of_stake::claim_reward_tokens(
-            &mut shell.wl_storage,
+            &mut shell.state,
             None,
             &validator.address,
             current_epoch,
@@ -2106,7 +2072,7 @@ mod test_finalize_block {
         // Unbond some tokens
         let unbond_amount = token::Amount::native_whole(50_000);
         let unbond_res = namada_proof_of_stake::unbond_tokens(
-            &mut shell.wl_storage,
+            &mut shell.state,
             None,
             &validator.address,
             unbond_amount,
@@ -2118,7 +2084,7 @@ mod test_finalize_block {
 
         // Query the available rewards
         let query_rewards = namada_proof_of_stake::query_reward_tokens(
-            &shell.wl_storage,
+            &shell.state,
             None,
             &validator.address,
             current_epoch,
@@ -2126,7 +2092,7 @@ mod test_finalize_block {
         .unwrap();
 
         let rew = namada_proof_of_stake::claim_reward_tokens(
-            &mut shell.wl_storage,
+            &mut shell.state,
             None,
             &validator.address,
             current_epoch,
@@ -2140,13 +2106,13 @@ mod test_finalize_block {
         let withdraw_epoch = current_epoch + params.withdrawable_epoch_offset();
         let last_claim_epoch =
             namada_proof_of_stake::storage::get_last_reward_claim_epoch(
-                &shell.wl_storage,
+                &shell.state,
                 &validator.address,
                 &validator.address,
             )
             .unwrap();
         let bond_amounts = namada_proof_of_stake::bond_amounts_for_rewards(
-            &shell.wl_storage,
+            &shell.state,
             &bond_id,
             last_claim_epoch.unwrap_or_default(),
             withdraw_epoch,
@@ -2171,8 +2137,8 @@ mod test_finalize_block {
         let mut missed_rewards = token::Amount::zero();
         while current_epoch < withdraw_epoch {
             let votes = get_default_true_votes(
-                &shell.wl_storage,
-                shell.wl_storage.storage.block.epoch,
+                &shell.state,
+                shell.state.in_mem().block.epoch,
             );
             let (new_epoch, inflation) =
                 advance_epoch(&mut shell, &pkh1, &votes, None);
@@ -2186,7 +2152,7 @@ mod test_finalize_block {
 
         // Withdraw tokens
         let withdraw_amount = namada_proof_of_stake::withdraw_tokens(
-            &mut shell.wl_storage,
+            &mut shell.state,
             None,
             &validator.address,
             current_epoch,
@@ -2196,7 +2162,7 @@ mod test_finalize_block {
 
         // Query the available rewards
         let query_rewards = namada_proof_of_stake::query_reward_tokens(
-            &shell.wl_storage,
+            &shell.state,
             None,
             &validator.address,
             current_epoch,
@@ -2205,7 +2171,7 @@ mod test_finalize_block {
 
         // Claim tokens
         let reward_2 = namada_proof_of_stake::claim_reward_tokens(
-            &mut shell.wl_storage,
+            &mut shell.state,
             None,
             &validator.address,
             current_epoch,
@@ -2226,7 +2192,7 @@ mod test_finalize_block {
 
         // Query the available rewards to check that they are 0
         let query_rewards = namada_proof_of_stake::query_reward_tokens(
-            &shell.wl_storage,
+            &shell.state,
             None,
             &validator.address,
             current_epoch,
@@ -2246,27 +2212,27 @@ mod test_finalize_block {
 
         let mut validator_set: BTreeSet<WeightedValidator> =
             read_consensus_validator_set_addresses_with_stake(
-                &shell.wl_storage,
+                &shell.state,
                 Epoch::default(),
             )
             .unwrap()
             .into_iter()
             .collect();
 
-        let params = read_pos_params(&shell.wl_storage).unwrap();
+        let params = read_pos_params(&shell.state).unwrap();
 
         let validator = validator_set.pop_first().unwrap();
         let commission_rate =
             namada_proof_of_stake::storage::validator_commission_rate_handle(
                 &validator.address,
             )
-            .get(&shell.wl_storage, Epoch(0), &params)
+            .get(&shell.state, Epoch(0), &params)
             .unwrap()
             .unwrap();
 
         let get_pkh = |address, epoch| {
             let ck = validator_consensus_key_handle(&address)
-                .get(&shell.wl_storage, epoch, &params)
+                .get(&shell.state, epoch, &params)
                 .unwrap()
                 .unwrap();
             let hash_string = tm_consensus_key_raw_hash(&ck);
@@ -2292,26 +2258,22 @@ mod test_finalize_block {
         // won't receive votes from TM since we receive votes at a 1-block
         // delay, so votes will be empty here
         next_block_for_inflation(&mut shell, pkh1.clone(), vec![], None);
-        assert!(
-            rewards_accumulator_handle()
-                .is_empty(&shell.wl_storage)
-                .unwrap()
-        );
+        assert!(rewards_accumulator_handle().is_empty(&shell.state).unwrap());
 
         // Make an account with balance and delegate some tokens
         let delegator = address::testing::gen_implicit_address();
         let del_amount = init_stake;
-        let staking_token = shell.wl_storage.storage.native_token.clone();
+        let staking_token = shell.state.in_mem().native_token.clone();
         namada::token::credit_tokens(
-            &mut shell.wl_storage,
+            &mut shell.state,
             &staking_token,
             &delegator,
             2 * init_stake,
         )
         .unwrap();
-        let mut current_epoch = shell.wl_storage.storage.block.epoch;
+        let mut current_epoch = shell.state.in_mem().block.epoch;
         namada_proof_of_stake::bond_tokens(
-            &mut shell.wl_storage,
+            &mut shell.state,
             Some(&delegator),
             &validator.address,
             del_amount,
@@ -2323,8 +2285,8 @@ mod test_finalize_block {
         // Advance to pipeline epoch
         for _ in 0..params.pipeline_len {
             let votes = get_default_true_votes(
-                &shell.wl_storage,
-                shell.wl_storage.storage.block.epoch,
+                &shell.state,
+                shell.state.in_mem().block.epoch,
             );
             let (new_epoch, inflation) =
                 advance_epoch(&mut shell, &pkh1, &votes, None);
@@ -2334,7 +2296,7 @@ mod test_finalize_block {
 
         // Claim the rewards for the validator for the first two epochs
         let val_reward_1 = namada_proof_of_stake::claim_reward_tokens(
-            &mut shell.wl_storage,
+            &mut shell.state,
             None,
             &validator.address,
             current_epoch,
@@ -2350,8 +2312,8 @@ mod test_finalize_block {
         // Go to the next epoch, where now the delegator's stake has been active
         // for an epoch
         let votes = get_default_true_votes(
-            &shell.wl_storage,
-            shell.wl_storage.storage.block.epoch,
+            &shell.state,
+            shell.state.in_mem().block.epoch,
         );
         let (new_epoch, inflation_3) =
             advance_epoch(&mut shell, &pkh1, &votes, None);
@@ -2360,7 +2322,7 @@ mod test_finalize_block {
 
         // Claim again for the validator
         let val_reward_2 = namada_proof_of_stake::claim_reward_tokens(
-            &mut shell.wl_storage,
+            &mut shell.state,
             None,
             &validator.address,
             current_epoch,
@@ -2369,7 +2331,7 @@ mod test_finalize_block {
 
         // Claim for the delegator
         let del_reward_1 = namada_proof_of_stake::claim_reward_tokens(
-            &mut shell.wl_storage,
+            &mut shell.state,
             Some(&delegator),
             &validator.address,
             current_epoch,
@@ -2409,15 +2371,15 @@ mod test_finalize_block {
 
         let mut validators: BTreeSet<WeightedValidator> =
             read_consensus_validator_set_addresses_with_stake(
-                &shell.wl_storage,
+                &shell.state,
                 Epoch::default(),
             )
             .unwrap()
             .into_iter()
             .collect();
 
-        let params = read_pos_params(&shell.wl_storage).unwrap();
-        let mut current_epoch = shell.wl_storage.storage.block.epoch;
+        let params = read_pos_params(&shell.state).unwrap();
+        let mut current_epoch = shell.state.in_mem().block.epoch;
 
         let validator1 = validators.pop_first().unwrap();
         let validator2 = validators.pop_first().unwrap();
@@ -2426,23 +2388,23 @@ mod test_finalize_block {
         let init_stake = validator1.bonded_stake;
 
         // Give the validators some tokens for txs
-        let staking_token = shell.wl_storage.storage.native_token.clone();
+        let staking_token = shell.state.in_mem().native_token.clone();
         namada::token::credit_tokens(
-            &mut shell.wl_storage,
+            &mut shell.state,
             &staking_token,
             &validator1.address,
             init_stake,
         )
         .unwrap();
         namada::token::credit_tokens(
-            &mut shell.wl_storage,
+            &mut shell.state,
             &staking_token,
             &validator2.address,
             init_stake,
         )
         .unwrap();
         namada::token::credit_tokens(
-            &mut shell.wl_storage,
+            &mut shell.state,
             &staking_token,
             &validator3.address,
             init_stake,
@@ -2451,7 +2413,7 @@ mod test_finalize_block {
 
         let get_pkh = |address, epoch| {
             let ck = validator_consensus_key_handle(&address)
-                .get(&shell.wl_storage, epoch, &params)
+                .get(&shell.state, epoch, &params)
                 .unwrap()
                 .unwrap();
             let hash_string = tm_consensus_key_raw_hash(&ck);
@@ -2463,18 +2425,12 @@ mod test_finalize_block {
         // won't receive votes from TM since we receive votes at a 1-block
         // delay, so votes will be empty here
         next_block_for_inflation(&mut shell, pkh1.clone(), vec![], None);
-        assert!(
-            rewards_accumulator_handle()
-                .is_empty(&shell.wl_storage)
-                .unwrap()
-        );
+        assert!(rewards_accumulator_handle().is_empty(&shell.state).unwrap());
 
         // Check that there's 3 unique consensus keys
         let consensus_keys =
-            namada_proof_of_stake::storage::get_consensus_key_set(
-                &shell.wl_storage,
-            )
-            .unwrap();
+            namada_proof_of_stake::storage::get_consensus_key_set(&shell.state)
+                .unwrap();
         assert_eq!(consensus_keys.len(), 3);
         // let ck1 = validator_consensus_key_handle(&validator)
         //     .get(&storage, current_epoch, &params)
@@ -2488,7 +2444,7 @@ mod test_finalize_block {
         // Validator1 bonds 1 NAM
         let bond_amount = token::Amount::native_whole(1);
         namada_proof_of_stake::bond_tokens(
-            &mut shell.wl_storage,
+            &mut shell.state,
             None,
             &validator1.address,
             bond_amount,
@@ -2500,7 +2456,7 @@ mod test_finalize_block {
         // Validator2 changes consensus key
         let new_ck2 = common_sk_from_simple_seed(1).ref_to();
         namada_proof_of_stake::change_consensus_key(
-            &mut shell.wl_storage,
+            &mut shell.state,
             &validator2.address,
             &new_ck2,
             current_epoch,
@@ -2509,7 +2465,7 @@ mod test_finalize_block {
 
         // Validator3 bonds 1 NAM and changes consensus key
         namada_proof_of_stake::bond_tokens(
-            &mut shell.wl_storage,
+            &mut shell.state,
             None,
             &validator3.address,
             bond_amount,
@@ -2519,7 +2475,7 @@ mod test_finalize_block {
         .unwrap();
         let new_ck3 = common_sk_from_simple_seed(2).ref_to();
         namada_proof_of_stake::change_consensus_key(
-            &mut shell.wl_storage,
+            &mut shell.state,
             &validator3.address,
             &new_ck3,
             current_epoch,
@@ -2528,17 +2484,15 @@ mod test_finalize_block {
 
         // Check that there's 5 unique consensus keys
         let consensus_keys =
-            namada_proof_of_stake::storage::get_consensus_key_set(
-                &shell.wl_storage,
-            )
-            .unwrap();
+            namada_proof_of_stake::storage::get_consensus_key_set(&shell.state)
+                .unwrap();
         assert_eq!(consensus_keys.len(), 5);
 
         // Advance to pipeline epoch
         for _ in 0..params.pipeline_len {
             let votes = get_default_true_votes(
-                &shell.wl_storage,
-                shell.wl_storage.storage.block.epoch,
+                &shell.state,
+                shell.state.in_mem().block.epoch,
             );
             let (new_epoch, _inflation) =
                 advance_epoch(&mut shell, &pkh1, &votes, None);
@@ -2546,7 +2500,7 @@ mod test_finalize_block {
         }
 
         let consensus_vals = read_consensus_validator_set_addresses_with_stake(
-            &shell.wl_storage,
+            &shell.state,
             current_epoch,
         )
         .unwrap();
@@ -2571,7 +2525,7 @@ mod test_finalize_block {
         // Val 1 changes consensus key
         let new_ck1 = common_sk_from_simple_seed(3).ref_to();
         namada_proof_of_stake::change_consensus_key(
-            &mut shell.wl_storage,
+            &mut shell.state,
             &validator1.address,
             &new_ck1,
             current_epoch,
@@ -2580,7 +2534,7 @@ mod test_finalize_block {
 
         // Val 2 is fully unbonded
         namada_proof_of_stake::unbond_tokens(
-            &mut shell.wl_storage,
+            &mut shell.state,
             None,
             &validator2.address,
             init_stake,
@@ -2591,7 +2545,7 @@ mod test_finalize_block {
 
         // Val 3 is fully unbonded and changes consensus key
         namada_proof_of_stake::unbond_tokens(
-            &mut shell.wl_storage,
+            &mut shell.state,
             None,
             &validator3.address,
             init_stake + bond_amount,
@@ -2601,7 +2555,7 @@ mod test_finalize_block {
         .unwrap();
         let new2_ck3 = common_sk_from_simple_seed(4).ref_to();
         namada_proof_of_stake::change_consensus_key(
-            &mut shell.wl_storage,
+            &mut shell.state,
             &validator1.address,
             &new2_ck3,
             current_epoch,
@@ -2610,17 +2564,15 @@ mod test_finalize_block {
 
         // Check that there's 7 unique consensus keys
         let consensus_keys =
-            namada_proof_of_stake::storage::get_consensus_key_set(
-                &shell.wl_storage,
-            )
-            .unwrap();
+            namada_proof_of_stake::storage::get_consensus_key_set(&shell.state)
+                .unwrap();
         assert_eq!(consensus_keys.len(), 7);
 
         // Advance to pipeline epoch
         for _ in 0..params.pipeline_len {
             let votes = get_default_true_votes(
-                &shell.wl_storage,
-                shell.wl_storage.storage.block.epoch,
+                &shell.state,
+                shell.state.in_mem().block.epoch,
             );
             let (new_epoch, _inflation) =
                 advance_epoch(&mut shell, &pkh1, &votes, None);
@@ -2628,7 +2580,7 @@ mod test_finalize_block {
         }
 
         let consensus_vals = read_consensus_validator_set_addresses_with_stake(
-            &shell.wl_storage,
+            &shell.state,
             current_epoch,
         )
         .unwrap();
@@ -2645,7 +2597,7 @@ mod test_finalize_block {
 
         // Val2 bonds 1 NAM and changes consensus key
         namada_proof_of_stake::bond_tokens(
-            &mut shell.wl_storage,
+            &mut shell.state,
             None,
             &validator2.address,
             bond_amount,
@@ -2655,7 +2607,7 @@ mod test_finalize_block {
         .unwrap();
         let new2_ck2 = common_sk_from_simple_seed(5).ref_to();
         namada_proof_of_stake::change_consensus_key(
-            &mut shell.wl_storage,
+            &mut shell.state,
             &validator2.address,
             &new2_ck2,
             current_epoch,
@@ -2664,7 +2616,7 @@ mod test_finalize_block {
 
         // Val3 bonds 1 NAM
         namada_proof_of_stake::bond_tokens(
-            &mut shell.wl_storage,
+            &mut shell.state,
             None,
             &validator3.address,
             bond_amount,
@@ -2675,17 +2627,15 @@ mod test_finalize_block {
 
         // Check that there's 8 unique consensus keys
         let consensus_keys =
-            namada_proof_of_stake::storage::get_consensus_key_set(
-                &shell.wl_storage,
-            )
-            .unwrap();
+            namada_proof_of_stake::storage::get_consensus_key_set(&shell.state)
+                .unwrap();
         assert_eq!(consensus_keys.len(), 8);
 
         // Advance to pipeline epoch
         for _ in 0..params.pipeline_len {
             let votes = get_default_true_votes(
-                &shell.wl_storage,
-                shell.wl_storage.storage.block.epoch,
+                &shell.state,
+                shell.state.in_mem().block.epoch,
             );
             let (new_epoch, _inflation) =
                 advance_epoch(&mut shell, &pkh1, &votes, None);
@@ -2693,7 +2643,7 @@ mod test_finalize_block {
         }
 
         let consensus_vals = read_consensus_validator_set_addresses_with_stake(
-            &shell.wl_storage,
+            &shell.state,
             current_epoch,
         )
         .unwrap();
@@ -2751,7 +2701,7 @@ mod test_finalize_block {
             replay_protection::last_key(&wrapper_tx.header_hash());
 
         // merkle tree root before finalize_block
-        let root_pre = shell.shell.wl_storage.storage.block.tree.root();
+        let root_pre = shell.shell.state.in_mem().block.tree.root();
 
         let event = &shell
             .finalize_block(FinalizeBlock {
@@ -2771,15 +2721,15 @@ mod test_finalize_block {
         assert_eq!(code, String::from(ResultCode::Ok).as_str());
 
         // the merkle tree root should not change after finalize_block
-        let root_post = shell.shell.wl_storage.storage.block.tree.root();
+        let root_post = shell.shell.state.in_mem().block.tree.root();
         assert_eq!(root_pre.0, root_post.0);
 
         // Check transaction's hash in storage
         assert!(
             shell
                 .shell
-                .wl_storage
-                .write_log
+                .state
+                .write_log()
                 .has_replay_protection_entry(&wrapper_tx.header_hash())
                 .unwrap_or_default()
         );
@@ -2787,8 +2737,8 @@ mod test_finalize_block {
         assert!(
             !shell
                 .shell
-                .wl_storage
-                .storage
+                .state
+                .in_mem()
                 .block
                 .tree
                 .has_key(&wrapper_hash_key)
@@ -2803,14 +2753,14 @@ mod test_finalize_block {
         let (mut shell, _, _, _) = setup();
         let keypair = gen_keypair();
         let keypair_2 = gen_keypair();
-        let mut batch = namada::state::testing::TestStorage::batch();
+        let mut batch = namada::state::testing::TestState::batch();
 
         let tx_code = TestWasms::TxNoOp.read_bytes();
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount_per_gas_unit: DenominatedAmount::native(1.into()),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
@@ -2827,7 +2777,7 @@ mod test_finalize_block {
         new_wrapper.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount_per_gas_unit: DenominatedAmount::native(1.into()),
-                token: shell.wl_storage.storage.native_token.clone(),
+                token: shell.state.in_mem().native_token.clone(),
             },
             keypair_2.ref_to(),
             Epoch(0),
@@ -2856,8 +2806,7 @@ mod test_finalize_block {
         for tx in [&wrapper, &new_wrapper] {
             let hash_subkey = replay_protection::last_key(&tx.header_hash());
             shell
-                .wl_storage
-                .storage
+                .state
                 .write_replay_protection_entry(&mut batch, &hash_subkey)
                 .expect("Test failed");
         }
@@ -2876,7 +2825,7 @@ mod test_finalize_block {
         shell.enqueue_tx(wrapper.clone(), GAS_LIMIT_MULTIPLIER.into());
         shell.enqueue_tx(new_wrapper.clone(), GAS_LIMIT_MULTIPLIER.into());
         // merkle tree root before finalize_block
-        let root_pre = shell.shell.wl_storage.storage.block.tree.root();
+        let root_pre = shell.shell.state.in_mem().block.tree.root();
 
         let event = &shell
             .finalize_block(FinalizeBlock {
@@ -2886,7 +2835,7 @@ mod test_finalize_block {
             .expect("Test failed");
 
         // the merkle tree root should not change after finalize_block
-        let root_post = shell.shell.wl_storage.storage.block.tree.root();
+        let root_post = shell.shell.state.in_mem().block.tree.root();
         assert_eq!(root_pre.0, root_post.0);
 
         assert_eq!(event[0].event_type.to_string(), String::from("applied"));
@@ -2899,15 +2848,15 @@ mod test_finalize_block {
         for (inner, wrapper) in [(inner, wrapper), (new_inner, new_wrapper)] {
             assert!(
                 shell
-                    .wl_storage
-                    .write_log
+                    .state
+                    .write_log()
                     .has_replay_protection_entry(&inner.raw_header_hash())
                     .unwrap_or_default()
             );
             assert!(
                 !shell
-                    .wl_storage
-                    .write_log
+                    .state
+                    .write_log()
                     .has_replay_protection_entry(&wrapper.header_hash())
                     .unwrap_or_default()
             );
@@ -2922,7 +2871,7 @@ mod test_finalize_block {
     fn test_tx_hash_handling() {
         let (mut shell, _, _, _) = setup();
         let keypair = gen_keypair();
-        let mut batch = namada::state::testing::TestStorage::batch();
+        let mut batch = namada::state::testing::TestState::batch();
 
         let (out_of_gas_wrapper, _) = mk_wrapper_tx(&shell, &keypair);
         let (undecryptable_wrapper, _) = mk_wrapper_tx(&shell, &keypair);
@@ -2937,7 +2886,7 @@ mod test_finalize_block {
                     amount_per_gas_unit: DenominatedAmount::native(
                         Amount::zero(),
                     ),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
@@ -2999,8 +2948,7 @@ mod test_finalize_block {
             let hash_subkey =
                 replay_protection::last_key(&wrapper.header_hash());
             shell
-                .wl_storage
-                .storage
+                .state
                 .write_replay_protection_entry(&mut batch, &hash_subkey)
                 .unwrap();
         }
@@ -3034,7 +2982,7 @@ mod test_finalize_block {
         );
         shell.enqueue_tx(failing_wrapper.clone(), GAS_LIMIT_MULTIPLIER.into());
         // merkle tree root before finalize_block
-        let root_pre = shell.shell.wl_storage.storage.block.tree.root();
+        let root_pre = shell.shell.state.in_mem().block.tree.root();
 
         let event = &shell
             .finalize_block(FinalizeBlock {
@@ -3044,7 +2992,7 @@ mod test_finalize_block {
             .expect("Test failed");
 
         // the merkle tree root should not change after finalize_block
-        let root_post = shell.shell.wl_storage.storage.block.tree.root();
+        let root_post = shell.shell.state.in_mem().block.tree.root();
         assert_eq!(root_pre.0, root_post.0);
 
         assert_eq!(event[0].event_type.to_string(), String::from("applied"));
@@ -3071,8 +3019,8 @@ mod test_finalize_block {
         ] {
             assert!(
                 !shell
-                    .wl_storage
-                    .write_log
+                    .state
+                    .write_log()
                     .has_replay_protection_entry(
                         &invalid_inner.raw_header_hash()
                     )
@@ -3080,23 +3028,22 @@ mod test_finalize_block {
             );
             assert!(
                 shell
-                    .wl_storage
-                    .storage
+                    .state
                     .has_replay_protection_entry(&valid_wrapper.header_hash())
                     .unwrap_or_default()
             );
         }
         assert!(
             shell
-                .wl_storage
-                .write_log
+                .state
+                .write_log()
                 .has_replay_protection_entry(&failing_inner.raw_header_hash())
                 .expect("test failed")
         );
         assert!(
             !shell
-                .wl_storage
-                .write_log
+                .state
+                .write_log()
                 .has_replay_protection_entry(&failing_wrapper.header_hash())
                 .unwrap_or_default()
         );
@@ -3114,7 +3061,7 @@ mod test_finalize_block {
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount_per_gas_unit: DenominatedAmount::native(0.into()),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
@@ -3144,7 +3091,7 @@ mod test_finalize_block {
             },
         }];
         // merkle tree root before finalize_block
-        let root_pre = shell.shell.wl_storage.storage.block.tree.root();
+        let root_pre = shell.shell.state.in_mem().block.tree.root();
 
         let event = &shell
             .finalize_block(FinalizeBlock {
@@ -3154,7 +3101,7 @@ mod test_finalize_block {
             .expect("Test failed");
 
         // the merkle tree root should not change after finalize_block
-        let root_post = shell.shell.wl_storage.storage.block.tree.root();
+        let root_post = shell.shell.state.in_mem().block.tree.root();
         assert_eq!(root_pre.0, root_post.0);
 
         assert_eq!(event[0].event_type.to_string(), String::from("accepted"));
@@ -3167,15 +3114,15 @@ mod test_finalize_block {
 
         assert!(
             shell
-                .wl_storage
-                .write_log
+                .state
+                .write_log()
                 .has_replay_protection_entry(&wrapper_hash)
                 .unwrap_or_default()
         );
         assert!(
             !shell
-                .wl_storage
-                .write_log
+                .state
+                .write_log()
                 .has_replay_protection_entry(&wrapper.raw_header_hash())
                 .unwrap_or_default()
         );
@@ -3193,7 +3140,7 @@ mod test_finalize_block {
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount_per_gas_unit: DenominatedAmount::native(100.into()),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
@@ -3231,14 +3178,11 @@ mod test_finalize_block {
         let code = event.attributes.get("code").expect("Testfailed").as_str();
         assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
         let balance_key = token::storage_key::balance_key(
-            &shell.wl_storage.storage.native_token,
+            &shell.state.in_mem().native_token,
             &Address::from(&keypair.to_public()),
         );
-        let balance: Amount = shell
-            .wl_storage
-            .read(&balance_key)
-            .unwrap()
-            .unwrap_or_default();
+        let balance: Amount =
+            shell.state.read(&balance_key).unwrap().unwrap_or_default();
 
         assert_eq!(balance, 0.into())
     }
@@ -3251,13 +3195,13 @@ mod test_finalize_block {
 
         let validator = shell.mode.get_validator_address().unwrap().to_owned();
         let pos_params =
-            namada_proof_of_stake::storage::read_pos_params(&shell.wl_storage)
+            namada_proof_of_stake::storage::read_pos_params(&shell.state)
                 .unwrap();
         let consensus_key =
             namada_proof_of_stake::storage::validator_consensus_key_handle(
                 &validator,
             )
-            .get(&shell.wl_storage, Epoch::default(), &pos_params)
+            .get(&shell.state, Epoch::default(), &pos_params)
             .unwrap()
             .unwrap();
         let proposer_address = HEXUPPER
@@ -3265,8 +3209,8 @@ mod test_finalize_block {
             .unwrap();
 
         let proposer_balance = namada::token::read_balance(
-            &shell.wl_storage,
-            &shell.wl_storage.storage.native_token,
+            &shell.state,
+            &shell.state.in_mem().native_token,
             &validator,
         )
         .unwrap();
@@ -3279,7 +3223,7 @@ mod test_finalize_block {
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount_per_gas_unit: DenominatedAmount::native(1.into()),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 Epoch(0),
@@ -3303,13 +3247,13 @@ mod test_finalize_block {
         let fee_amount = namada::token::denom_to_amount(
             fee_amount,
             &wrapper.header().wrapper().unwrap().fee.token,
-            &shell.wl_storage,
+            &shell.state,
         )
         .unwrap();
 
         let signer_balance = namada::token::read_balance(
-            &shell.wl_storage,
-            &shell.wl_storage.storage.native_token,
+            &shell.state,
+            &shell.state.in_mem().native_token,
             &wrapper.header().wrapper().unwrap().fee_payer(),
         )
         .unwrap();
@@ -3336,8 +3280,8 @@ mod test_finalize_block {
         assert_eq!(code, String::from(ResultCode::Ok).as_str());
 
         let new_proposer_balance = namada::token::read_balance(
-            &shell.wl_storage,
-            &shell.wl_storage.storage.native_token,
+            &shell.state,
+            &shell.state.in_mem().native_token,
             &validator,
         )
         .unwrap();
@@ -3347,8 +3291,8 @@ mod test_finalize_block {
         );
 
         let new_signer_balance = namada::token::read_balance(
-            &shell.wl_storage,
-            &shell.wl_storage.storage.native_token,
+            &shell.state,
+            &shell.state.in_mem().native_token,
             &wrapper.header().wrapper().unwrap().fee_payer(),
         )
         .unwrap();
@@ -3366,13 +3310,13 @@ mod test_finalize_block {
             num_validators,
             ..Default::default()
         });
-        let mut params = read_pos_params(&shell.wl_storage).unwrap();
+        let mut params = read_pos_params(&shell.state).unwrap();
         params.owned.unbonding_len = 4;
-        write_pos_params(&mut shell.wl_storage, &params.owned)?;
+        write_pos_params(&mut shell.state, &params.owned)?;
 
         let validator_set: Vec<WeightedValidator> =
             read_consensus_validator_set_addresses_with_stake(
-                &shell.wl_storage,
+                &shell.state,
                 Epoch::default(),
             )
             .unwrap()
@@ -3387,7 +3331,7 @@ mod test_finalize_block {
 
         let get_pkh = |address, epoch| {
             let ck = validator_consensus_key_handle(&address)
-                .get(&shell.wl_storage, epoch, &params)
+                .get(&shell.state, epoch, &params)
                 .unwrap()
                 .unwrap();
             let hash_string = tm_consensus_key_raw_hash(&ck);
@@ -3402,7 +3346,7 @@ mod test_finalize_block {
             // Every validator should be in the consensus set
             assert_eq!(
                 validator_state_handle(&validator.address)
-                    .get(&shell.wl_storage, Epoch::default(), &params)
+                    .get(&shell.state, Epoch::default(), &params)
                     .unwrap(),
                 Some(ValidatorState::Consensus)
             );
@@ -3420,8 +3364,8 @@ mod test_finalize_block {
         next_block_for_inflation(&mut shell, pkh1.to_vec(), vec![], None);
 
         let votes = get_default_true_votes(
-            &shell.wl_storage,
-            shell.wl_storage.storage.block.epoch,
+            &shell.state,
+            shell.state.in_mem().block.epoch,
         );
         assert!(!votes.is_empty());
         assert_eq!(votes.len(), 7_usize);
@@ -3458,7 +3402,7 @@ mod test_finalize_block {
             Some(byzantine_validators),
         );
 
-        let processing_epoch = shell.wl_storage.storage.block.epoch
+        let processing_epoch = shell.state.in_mem().block.epoch
             + params.unbonding_len
             + 1_u64
             + params.cubic_slashing_window_length;
@@ -3467,60 +3411,60 @@ mod test_finalize_block {
         // are properly updated
         assert_eq!(
             validator_state_handle(&val1.address)
-                .get(&shell.wl_storage, Epoch::default(), &params)
+                .get(&shell.state, Epoch::default(), &params)
                 .unwrap(),
             Some(ValidatorState::Consensus)
         );
         assert_eq!(
             validator_state_handle(&val2.address)
-                .get(&shell.wl_storage, Epoch::default(), &params)
+                .get(&shell.state, Epoch::default(), &params)
                 .unwrap(),
             Some(ValidatorState::Consensus)
         );
         assert!(
             enqueued_slashes_handle()
                 .at(&Epoch::default())
-                .is_empty(&shell.wl_storage)?
+                .is_empty(&shell.state)?
         );
         assert_eq!(
-            get_num_consensus_validators(&shell.wl_storage, Epoch::default())
+            get_num_consensus_validators(&shell.state, Epoch::default())
                 .unwrap(),
             7_u64
         );
         for epoch in Epoch::default().next().iter_range(params.pipeline_len) {
             assert_eq!(
                 validator_state_handle(&val1.address)
-                    .get(&shell.wl_storage, epoch, &params)
+                    .get(&shell.state, epoch, &params)
                     .unwrap(),
                 Some(ValidatorState::Jailed)
             );
             assert_eq!(
                 validator_state_handle(&val2.address)
-                    .get(&shell.wl_storage, epoch, &params)
+                    .get(&shell.state, epoch, &params)
                     .unwrap(),
                 Some(ValidatorState::Jailed)
             );
             assert!(
                 enqueued_slashes_handle()
                     .at(&epoch)
-                    .is_empty(&shell.wl_storage)?
+                    .is_empty(&shell.state)?
             );
             assert_eq!(
-                get_num_consensus_validators(&shell.wl_storage, epoch).unwrap(),
+                get_num_consensus_validators(&shell.state, epoch).unwrap(),
                 5_u64
             );
         }
         assert!(
             !enqueued_slashes_handle()
                 .at(&processing_epoch)
-                .is_empty(&shell.wl_storage)?
+                .is_empty(&shell.state)?
         );
 
         // Advance to the processing epoch
         loop {
             let votes = get_default_true_votes(
-                &shell.wl_storage,
-                shell.wl_storage.storage.block.epoch,
+                &shell.state,
+                shell.state.in_mem().block.epoch,
             );
             next_block_for_inflation(
                 &mut shell,
@@ -3530,34 +3474,34 @@ mod test_finalize_block {
             );
             // println!(
             //     "Block {} epoch {}",
-            //     shell.wl_storage.storage.block.height,
-            //     shell.wl_storage.storage.block.epoch
+            //     shell.state.in_mem().block.height,
+            //     shell.state.in_mem().block.epoch
             // );
-            if shell.wl_storage.storage.block.epoch == processing_epoch {
+            if shell.state.in_mem().block.epoch == processing_epoch {
                 // println!("Reached processing epoch");
                 break;
             } else {
                 assert!(
                     enqueued_slashes_handle()
-                        .at(&shell.wl_storage.storage.block.epoch)
-                        .is_empty(&shell.wl_storage)?
+                        .at(&shell.state.in_mem().block.epoch)
+                        .is_empty(&shell.state)?
                 );
                 let stake1 = read_validator_stake(
-                    &shell.wl_storage,
+                    &shell.state,
                     &params,
                     &val1.address,
-                    shell.wl_storage.storage.block.epoch,
+                    shell.state.in_mem().block.epoch,
                 )?;
                 let stake2 = read_validator_stake(
-                    &shell.wl_storage,
+                    &shell.state,
                     &params,
                     &val2.address,
-                    shell.wl_storage.storage.block.epoch,
+                    shell.state.in_mem().block.epoch,
                 )?;
                 let total_stake = read_total_stake(
-                    &shell.wl_storage,
+                    &shell.state,
                     &params,
-                    shell.wl_storage.storage.block.epoch,
+                    shell.state.in_mem().block.epoch,
                 )?;
                 assert_eq!(stake1, initial_stake);
                 assert_eq!(stake2, initial_stake);
@@ -3565,35 +3509,33 @@ mod test_finalize_block {
             }
         }
 
-        let num_slashes = namada::state::iter_prefix_bytes(
-            &shell.wl_storage,
-            &slashes_prefix(),
-        )?
-        .filter(|kv_res| {
-            let (k, _v) = kv_res.as_ref().unwrap();
-            is_validator_slashes_key(k).is_some()
-        })
-        .count();
+        let num_slashes =
+            namada::state::iter_prefix_bytes(&shell.state, &slashes_prefix())?
+                .filter(|kv_res| {
+                    let (k, _v) = kv_res.as_ref().unwrap();
+                    is_validator_slashes_key(k).is_some()
+                })
+                .count();
 
         assert_eq!(num_slashes, 2);
         assert_eq!(
             validator_slashes_handle(&val1.address)
-                .len(&shell.wl_storage)
+                .len(&shell.state)
                 .unwrap(),
             1_u64
         );
         assert_eq!(
             validator_slashes_handle(&val2.address)
-                .len(&shell.wl_storage)
+                .len(&shell.state)
                 .unwrap(),
             1_u64
         );
 
         let slash1 = validator_slashes_handle(&val1.address)
-            .get(&shell.wl_storage, 0)?
+            .get(&shell.state, 0)?
             .unwrap();
         let slash2 = validator_slashes_handle(&val2.address)
-            .get(&shell.wl_storage, 0)?
+            .get(&shell.state, 0)?
             .unwrap();
 
         assert_eq!(slash1.r#type, SlashType::DuplicateVote);
@@ -3612,47 +3554,47 @@ mod test_finalize_block {
         // Check that there are still 5 consensus validators and the 2
         // misbehaving ones are still jailed
         for epoch in shell
-            .wl_storage
-            .storage
+            .state
+            .in_mem()
             .block
             .epoch
             .iter_range(params.pipeline_len + 1)
         {
             assert_eq!(
                 validator_state_handle(&val1.address)
-                    .get(&shell.wl_storage, epoch, &params)
+                    .get(&shell.state, epoch, &params)
                     .unwrap(),
                 Some(ValidatorState::Jailed)
             );
             assert_eq!(
                 validator_state_handle(&val2.address)
-                    .get(&shell.wl_storage, epoch, &params)
+                    .get(&shell.state, epoch, &params)
                     .unwrap(),
                 Some(ValidatorState::Jailed)
             );
             assert_eq!(
-                get_num_consensus_validators(&shell.wl_storage, epoch).unwrap(),
+                get_num_consensus_validators(&shell.state, epoch).unwrap(),
                 5_u64
             );
         }
 
         // Check that the deltas at the pipeline epoch are slashed
         let pipeline_epoch =
-            shell.wl_storage.storage.block.epoch + params.pipeline_len;
+            shell.state.in_mem().block.epoch + params.pipeline_len;
         let stake1 = read_validator_stake(
-            &shell.wl_storage,
+            &shell.state,
             &params,
             &val1.address,
             pipeline_epoch,
         )?;
         let stake2 = read_validator_stake(
-            &shell.wl_storage,
+            &shell.state,
             &params,
             &val2.address,
             pipeline_epoch,
         )?;
         let total_stake =
-            read_total_stake(&shell.wl_storage, &params, pipeline_epoch)?;
+            read_total_stake(&shell.state, &params, pipeline_epoch)?;
 
         let expected_slashed = initial_stake.mul_ceil(cubic_rate);
 
@@ -3676,51 +3618,50 @@ mod test_finalize_block {
         assert_eq!(total_stake, total_initial_stake - 2u64 * expected_slashed);
 
         // Unjail one of the validators
-        let current_epoch = shell.wl_storage.storage.block.epoch;
-        unjail_validator(&mut shell.wl_storage, &val1.address, current_epoch)?;
+        let current_epoch = shell.state.in_mem().block.epoch;
+        unjail_validator(&mut shell.state, &val1.address, current_epoch)?;
         let pipeline_epoch = current_epoch + params.pipeline_len;
 
         // Check that the state is the same until the pipeline epoch, at which
         // point one validator is unjailed
         for epoch in shell
-            .wl_storage
-            .storage
+            .state
+            .in_mem()
             .block
             .epoch
             .iter_range(params.pipeline_len)
         {
             assert_eq!(
                 validator_state_handle(&val1.address)
-                    .get(&shell.wl_storage, epoch, &params)
+                    .get(&shell.state, epoch, &params)
                     .unwrap(),
                 Some(ValidatorState::Jailed)
             );
             assert_eq!(
                 validator_state_handle(&val2.address)
-                    .get(&shell.wl_storage, epoch, &params)
+                    .get(&shell.state, epoch, &params)
                     .unwrap(),
                 Some(ValidatorState::Jailed)
             );
             assert_eq!(
-                get_num_consensus_validators(&shell.wl_storage, epoch).unwrap(),
+                get_num_consensus_validators(&shell.state, epoch).unwrap(),
                 5_u64
             );
         }
         assert_eq!(
             validator_state_handle(&val1.address)
-                .get(&shell.wl_storage, pipeline_epoch, &params)
+                .get(&shell.state, pipeline_epoch, &params)
                 .unwrap(),
             Some(ValidatorState::Consensus)
         );
         assert_eq!(
             validator_state_handle(&val2.address)
-                .get(&shell.wl_storage, pipeline_epoch, &params)
+                .get(&shell.state, pipeline_epoch, &params)
                 .unwrap(),
             Some(ValidatorState::Jailed)
         );
         assert_eq!(
-            get_num_consensus_validators(&shell.wl_storage, pipeline_epoch)
-                .unwrap(),
+            get_num_consensus_validators(&shell.state, pipeline_epoch).unwrap(),
             6_u64
         );
 
@@ -3758,19 +3699,19 @@ mod test_finalize_block {
             num_validators,
             ..Default::default()
         });
-        let mut params = read_pos_params(&shell.wl_storage).unwrap();
+        let mut params = read_pos_params(&shell.state).unwrap();
         params.owned.unbonding_len = 4;
         params.owned.max_validator_slots = 50;
-        write_pos_params(&mut shell.wl_storage, &params.owned)?;
+        write_pos_params(&mut shell.state, &params.owned)?;
 
         // Slash pool balance
-        let nam_address = shell.wl_storage.storage.native_token.clone();
+        let nam_address = shell.state.in_mem().native_token.clone();
         let slash_balance_key = token::storage_key::balance_key(
             &nam_address,
             &namada_proof_of_stake::SLASH_POOL_ADDRESS,
         );
         let slash_pool_balance_init: token::Amount = shell
-            .wl_storage
+            .state
             .read(&slash_balance_key)
             .expect("must be able to read")
             .unwrap_or_default();
@@ -3778,7 +3719,7 @@ mod test_finalize_block {
 
         let consensus_set: Vec<WeightedValidator> =
             read_consensus_validator_set_addresses_with_stake(
-                &shell.wl_storage,
+                &shell.state,
                 Epoch::default(),
             )
             .unwrap()
@@ -3787,7 +3728,7 @@ mod test_finalize_block {
 
         let val1 = consensus_set[0].clone();
         let pkh1 = get_pkh_from_address(
-            &shell.wl_storage,
+            &shell.state,
             &params,
             val1.address.clone(),
             Epoch::default(),
@@ -3799,28 +3740,28 @@ mod test_finalize_block {
         // Finalize block 1
         next_block_for_inflation(&mut shell, pkh1.to_vec(), vec![], None);
 
-        let votes = get_default_true_votes(&shell.wl_storage, Epoch::default());
+        let votes = get_default_true_votes(&shell.state, Epoch::default());
         assert!(!votes.is_empty());
 
         // Advance to epoch 1 and
         // 1. Delegate 67231 NAM to validator
         // 2. Validator self-unbond 154654 NAM
         let (current_epoch, _) = advance_epoch(&mut shell, &pkh1, &votes, None);
-        assert_eq!(shell.wl_storage.storage.block.epoch.0, 1_u64);
+        assert_eq!(shell.state.in_mem().block.epoch.0, 1_u64);
 
         // Make an account with balance and delegate some tokens
         let delegator = address::testing::gen_implicit_address();
         let del_1_amount = token::Amount::native_whole(37_231);
-        let staking_token = shell.wl_storage.storage.native_token.clone();
+        let staking_token = shell.state.in_mem().native_token.clone();
         namada::token::credit_tokens(
-            &mut shell.wl_storage,
+            &mut shell.state,
             &staking_token,
             &delegator,
             token::Amount::native_whole(200_000),
         )
         .unwrap();
         namada_proof_of_stake::bond_tokens(
-            &mut shell.wl_storage,
+            &mut shell.state,
             Some(&delegator),
             &val1.address,
             del_1_amount,
@@ -3832,7 +3773,7 @@ mod test_finalize_block {
         // Self-unbond
         let self_unbond_1_amount = token::Amount::native_whole(84_654);
         namada_proof_of_stake::unbond_tokens(
-            &mut shell.wl_storage,
+            &mut shell.state,
             None,
             &val1.address,
             self_unbond_1_amount,
@@ -3842,7 +3783,7 @@ mod test_finalize_block {
         .unwrap();
 
         let val_stake = namada_proof_of_stake::storage::read_validator_stake(
-            &shell.wl_storage,
+            &shell.state,
             &params,
             &val1.address,
             current_epoch + params.pipeline_len,
@@ -3850,7 +3791,7 @@ mod test_finalize_block {
         .unwrap();
 
         let total_stake = namada_proof_of_stake::storage::read_total_stake(
-            &shell.wl_storage,
+            &shell.state,
             &params,
             current_epoch + params.pipeline_len,
         )
@@ -3868,14 +3809,14 @@ mod test_finalize_block {
         // Advance to epoch 2 and
         // 1. Unbond 18000 NAM from delegation
         let votes = get_default_true_votes(
-            &shell.wl_storage,
-            shell.wl_storage.storage.block.epoch,
+            &shell.state,
+            shell.state.in_mem().block.epoch,
         );
         let (current_epoch, _) = advance_epoch(&mut shell, &pkh1, &votes, None);
         tracing::debug!("\nUnbonding in epoch 2");
         let del_unbond_1_amount = token::Amount::native_whole(18_000);
         namada_proof_of_stake::unbond_tokens(
-            &mut shell.wl_storage,
+            &mut shell.state,
             Some(&delegator),
             &val1.address,
             del_unbond_1_amount,
@@ -3885,14 +3826,14 @@ mod test_finalize_block {
         .unwrap();
 
         let val_stake = namada_proof_of_stake::storage::read_validator_stake(
-            &shell.wl_storage,
+            &shell.state,
             &params,
             &val1.address,
             current_epoch + params.pipeline_len,
         )
         .unwrap();
         let total_stake = namada_proof_of_stake::storage::read_total_stake(
-            &shell.wl_storage,
+            &shell.state,
             &params,
             current_epoch + params.pipeline_len,
         )
@@ -3913,15 +3854,15 @@ mod test_finalize_block {
         // Advance to epoch 3 and
         // 1. Validator self-bond 9123 NAM
         let votes = get_default_true_votes(
-            &shell.wl_storage,
-            shell.wl_storage.storage.block.epoch,
+            &shell.state,
+            shell.state.in_mem().block.epoch,
         );
         let (current_epoch, _) = advance_epoch(&mut shell, &pkh1, &votes, None);
         tracing::debug!("\nBonding in epoch 3");
 
         let self_bond_1_amount = token::Amount::native_whole(9_123);
         namada_proof_of_stake::bond_tokens(
-            &mut shell.wl_storage,
+            &mut shell.state,
             None,
             &val1.address,
             self_bond_1_amount,
@@ -3933,15 +3874,15 @@ mod test_finalize_block {
         // Advance to epoch 4
         // 1. Validator self-unbond 15000 NAM
         let votes = get_default_true_votes(
-            &shell.wl_storage,
-            shell.wl_storage.storage.block.epoch,
+            &shell.state,
+            shell.state.in_mem().block.epoch,
         );
         let (current_epoch, _) = advance_epoch(&mut shell, &pkh1, &votes, None);
         assert_eq!(current_epoch.0, 4_u64);
 
         let self_unbond_2_amount = token::Amount::native_whole(15_000);
         namada_proof_of_stake::unbond_tokens(
-            &mut shell.wl_storage,
+            &mut shell.state,
             None,
             &val1.address,
             self_unbond_2_amount,
@@ -3953,8 +3894,8 @@ mod test_finalize_block {
         // Advance to epoch 5 and
         // Delegate 8144 NAM to validator
         let votes = get_default_true_votes(
-            &shell.wl_storage,
-            shell.wl_storage.storage.block.epoch,
+            &shell.state,
+            shell.state.in_mem().block.epoch,
         );
         let (current_epoch, _) = advance_epoch(&mut shell, &pkh1, &votes, None);
         assert_eq!(current_epoch.0, 5_u64);
@@ -3963,7 +3904,7 @@ mod test_finalize_block {
         // Delegate
         let del_2_amount = token::Amount::native_whole(8_144);
         namada_proof_of_stake::bond_tokens(
-            &mut shell.wl_storage,
+            &mut shell.state,
             Some(&delegator),
             &val1.address,
             del_2_amount,
@@ -3976,8 +3917,8 @@ mod test_finalize_block {
 
         // Advance to epoch 6
         let votes = get_default_true_votes(
-            &shell.wl_storage,
-            shell.wl_storage.storage.block.epoch,
+            &shell.state,
+            shell.state.in_mem().block.epoch,
         );
         let (current_epoch, _) = advance_epoch(&mut shell, &pkh1, &votes, None);
         assert_eq!(current_epoch.0, 6_u64);
@@ -3986,12 +3927,8 @@ mod test_finalize_block {
         // NOTE: Only the type, height, and validator address fields from the
         // Misbehavior struct are used in Namada
         let misbehavior_epoch = Epoch(3_u64);
-        let height = shell
-            .wl_storage
-            .storage
-            .block
-            .pred_epochs
-            .first_block_heights[misbehavior_epoch.0 as usize];
+        let height = shell.state.in_mem().block.pred_epochs.first_block_heights
+            [misbehavior_epoch.0 as usize];
         let misbehaviors = vec![Misbehavior {
             kind: MisbehaviorKind::DuplicateVote,
             validator: Validator {
@@ -4003,8 +3940,8 @@ mod test_finalize_block {
             total_voting_power: Default::default(),
         }];
         let votes = get_default_true_votes(
-            &shell.wl_storage,
-            shell.wl_storage.storage.block.epoch,
+            &shell.state,
+            shell.state.in_mem().block.epoch,
         );
         next_block_for_inflation(
             &mut shell,
@@ -4022,7 +3959,7 @@ mod test_finalize_block {
         let enqueued_slash = enqueued_slashes_handle()
             .at(&processing_epoch)
             .at(&val1.address)
-            .front(&shell.wl_storage)
+            .front(&shell.state)
             .unwrap()
             .unwrap();
         assert_eq!(enqueued_slash.epoch, misbehavior_epoch);
@@ -4030,7 +3967,7 @@ mod test_finalize_block {
         assert_eq!(enqueued_slash.rate, Dec::zero());
         let last_slash =
             namada_proof_of_stake::storage::read_validator_last_slash_epoch(
-                &shell.wl_storage,
+                &shell.state,
                 &val1.address,
             )
             .unwrap();
@@ -4039,7 +3976,7 @@ mod test_finalize_block {
             namada_proof_of_stake::storage::validator_slashes_handle(
                 &val1.address
             )
-            .is_empty(&shell.wl_storage)
+            .is_empty(&shell.state)
             .unwrap()
         );
 
@@ -4050,12 +3987,8 @@ mod test_finalize_block {
 
         // Discover two more misbehaviors, one committed in epoch 3, one in
         // epoch 4
-        let height4 = shell
-            .wl_storage
-            .storage
-            .block
-            .pred_epochs
-            .first_block_heights[4];
+        let height4 =
+            shell.state.in_mem().block.pred_epochs.first_block_heights[4];
         let misbehaviors = vec![
             Misbehavior {
                 kind: MisbehaviorKind::DuplicateVote,
@@ -4079,8 +4012,8 @@ mod test_finalize_block {
             },
         ];
         let votes = get_default_true_votes(
-            &shell.wl_storage,
-            shell.wl_storage.storage.block.epoch,
+            &shell.state,
+            shell.state.in_mem().block.epoch,
         );
         next_block_for_inflation(
             &mut shell,
@@ -4096,18 +4029,18 @@ mod test_finalize_block {
             .at(&processing_epoch.next())
             .at(&val1.address);
 
-        assert_eq!(enqueued_slashes_8.len(&shell.wl_storage).unwrap(), 2_u64);
-        assert_eq!(enqueued_slashes_9.len(&shell.wl_storage).unwrap(), 1_u64);
+        assert_eq!(enqueued_slashes_8.len(&shell.state).unwrap(), 2_u64);
+        assert_eq!(enqueued_slashes_9.len(&shell.state).unwrap(), 1_u64);
         let last_slash =
             namada_proof_of_stake::storage::read_validator_last_slash_epoch(
-                &shell.wl_storage,
+                &shell.state,
                 &val1.address,
             )
             .unwrap();
         assert_eq!(last_slash, Some(Epoch(4)));
         assert!(
             namada_proof_of_stake::is_validator_frozen(
-                &shell.wl_storage,
+                &shell.state,
                 &val1.address,
                 current_epoch,
                 &params
@@ -4118,13 +4051,13 @@ mod test_finalize_block {
             namada_proof_of_stake::storage::validator_slashes_handle(
                 &val1.address
             )
-            .is_empty(&shell.wl_storage)
+            .is_empty(&shell.state)
             .unwrap()
         );
 
         let pre_stake_10 =
             namada_proof_of_stake::storage::read_validator_stake(
-                &shell.wl_storage,
+                &shell.state,
                 &params,
                 &val1.address,
                 Epoch(10),
@@ -4145,26 +4078,26 @@ mod test_finalize_block {
         // Advance to epoch 9, where the infractions committed in epoch 3 will
         // be processed
         let votes = get_default_true_votes(
-            &shell.wl_storage,
-            shell.wl_storage.storage.block.epoch,
+            &shell.state,
+            shell.state.in_mem().block.epoch,
         );
         let _ = advance_epoch(&mut shell, &pkh1, &votes, None);
         let votes = get_default_true_votes(
-            &shell.wl_storage,
-            shell.wl_storage.storage.block.epoch,
+            &shell.state,
+            shell.state.in_mem().block.epoch,
         );
         let (current_epoch, _) = advance_epoch(&mut shell, &pkh1, &votes, None);
         assert_eq!(current_epoch.0, 9_u64);
 
         let val_stake_3 = namada_proof_of_stake::storage::read_validator_stake(
-            &shell.wl_storage,
+            &shell.state,
             &params,
             &val1.address,
             Epoch(3),
         )
         .unwrap();
         let val_stake_4 = namada_proof_of_stake::storage::read_validator_stake(
-            &shell.wl_storage,
+            &shell.state,
             &params,
             &val1.address,
             Epoch(4),
@@ -4172,13 +4105,13 @@ mod test_finalize_block {
         .unwrap();
 
         let tot_stake_3 = namada_proof_of_stake::storage::read_total_stake(
-            &shell.wl_storage,
+            &shell.state,
             &params,
             Epoch(3),
         )
         .unwrap();
         let tot_stake_4 = namada_proof_of_stake::storage::read_total_stake(
-            &shell.wl_storage,
+            &shell.state,
             &params,
             Epoch(4),
         )
@@ -4191,7 +4124,7 @@ mod test_finalize_block {
             Dec::one(),
             Dec::new(9, 0).unwrap() * tot_frac * tot_frac,
         );
-        dbg!(&cubic_rate);
+        // dbg!(&cubic_rate);
 
         let equal_enough = |rate1: Dec, rate2: Dec| -> bool {
             let tolerance = Dec::new(1, 9).unwrap();
@@ -4204,9 +4137,9 @@ mod test_finalize_block {
             namada_proof_of_stake::storage::validator_slashes_handle(
                 &val1.address,
             );
-        assert_eq!(val_slashes.len(&shell.wl_storage).unwrap(), 2u64);
+        assert_eq!(val_slashes.len(&shell.state).unwrap(), 2u64);
         let is_rate_good = val_slashes
-            .iter(&shell.wl_storage)
+            .iter(&shell.state)
             .unwrap()
             .all(|s| equal_enough(s.unwrap().rate, cubic_rate));
         assert!(is_rate_good);
@@ -4214,7 +4147,7 @@ mod test_finalize_block {
         // Check the amount of stake deducted from the futuremost epoch while
         // processing the slashes
         let post_stake_10 = read_validator_stake(
-            &shell.wl_storage,
+            &shell.state,
             &params,
             &val1.address,
             Epoch(10),
@@ -4266,7 +4199,7 @@ mod test_finalize_block {
         // Check the balance of the Slash Pool
         // TODO: finish once implemented
         // let slash_pool_balance: token::Amount = shell
-        //     .wl_storage
+        //     .state
         //     .read(&slash_balance_key)
         //     .expect("must be able to read")
         //     .unwrap_or_default();
@@ -4280,8 +4213,8 @@ mod test_finalize_block {
         // Advance to epoch 10, where the infraction committed in epoch 4 will
         // be processed
         let votes = get_default_true_votes(
-            &shell.wl_storage,
-            shell.wl_storage.storage.block.epoch,
+            &shell.state,
+            shell.state.in_mem().block.epoch,
         );
         let (current_epoch, _) = advance_epoch(&mut shell, &pkh1, &votes, None);
         assert_eq!(current_epoch.0, 10_u64);
@@ -4289,7 +4222,7 @@ mod test_finalize_block {
         // Check the balance of the Slash Pool
         // TODO: finish once implemented
         // let slash_pool_balance: token::Amount = shell
-        //     .wl_storage
+        //     .state
         //     .read(&slash_balance_key)
         //     .expect("must be able to read")
         //     .unwrap_or_default();
@@ -4316,14 +4249,14 @@ mod test_finalize_block {
         // );
 
         let val_stake = read_validator_stake(
-            &shell.wl_storage,
+            &shell.state,
             &params,
             &val1.address,
             current_epoch + params.pipeline_len,
         )?;
 
         let post_stake_10 = read_validator_stake(
-            &shell.wl_storage,
+            &shell.state,
             &params,
             &val1.address,
             Epoch(10),
@@ -4371,17 +4304,17 @@ mod test_finalize_block {
 
         for _ in 0..2 {
             let votes = get_default_true_votes(
-                &shell.wl_storage,
-                shell.wl_storage.storage.block.epoch,
+                &shell.state,
+                shell.state.in_mem().block.epoch,
             );
             let _ = advance_epoch(&mut shell, &pkh1, &votes, None);
         }
-        let current_epoch = shell.wl_storage.storage.block.epoch;
+        let current_epoch = shell.state.in_mem().block.epoch;
         assert_eq!(current_epoch.0, 12_u64);
 
         tracing::debug!("\nCHECK BOND AND UNBOND DETAILS");
         let details = namada_proof_of_stake::queries::bonds_and_unbonds(
-            &shell.wl_storage,
+            &shell.state,
             None,
             None,
         )
@@ -4499,7 +4432,7 @@ mod test_finalize_block {
         // Withdraw the delegation unbonds, which total to 18_000. This should
         // only be affected by the slashes in epoch 3
         let del_withdraw = namada_proof_of_stake::withdraw_tokens(
-            &mut shell.wl_storage,
+            &mut shell.state,
             Some(&delegator),
             &val1.address,
             current_epoch,
@@ -4518,7 +4451,7 @@ mod test_finalize_block {
         // TODO: finish once implemented
         // Check the balance of the Slash Pool
         // let slash_pool_balance: token::Amount = shell
-        //     .wl_storage
+        //     .state
         //     .read(&slash_balance_key)
         //     .expect("must be able to read")
         //     .unwrap_or_default();
@@ -4532,7 +4465,7 @@ mod test_finalize_block {
         // Withdraw the self unbonds, which total 154_654 + 15_000 - 9_123. Only
         // the (15_000 - 9_123) tokens are slashable.
         // let self_withdraw = namada_proof_of_stake::withdraw_tokens(
-        //     &mut shell.wl_storage,
+        //     &mut shell.state,
         //     None,
         //     &val1.address,
         //     current_epoch,
@@ -4545,7 +4478,7 @@ mod test_finalize_block {
         // );
         // Check the balance of the Slash Pool
         // let slash_pool_balance: token::Amount = shell
-        //     .wl_storage
+        //     .state
         //     .read(&slash_balance_key)
         //     .expect("must be able to read")
         //     .unwrap_or_default();
@@ -4575,11 +4508,11 @@ mod test_finalize_block {
             num_validators,
             ..Default::default()
         });
-        let params = read_pos_params(&shell.wl_storage).unwrap();
+        let params = read_pos_params(&shell.state).unwrap();
 
         let initial_consensus_set: Vec<Address> =
             read_consensus_validator_set_addresses(
-                &shell.wl_storage,
+                &shell.state,
                 Epoch::default(),
             )
             .unwrap()
@@ -4587,14 +4520,14 @@ mod test_finalize_block {
             .collect();
         let val1 = initial_consensus_set[0].clone();
         let pkh1 = get_pkh_from_address(
-            &shell.wl_storage,
+            &shell.state,
             &params,
             val1.clone(),
             Epoch::default(),
         );
         let val2 = initial_consensus_set[1].clone();
         let pkh2 = get_pkh_from_address(
-            &shell.wl_storage,
+            &shell.state,
             &params,
             val2.clone(),
             Epoch::default(),
@@ -4602,7 +4535,7 @@ mod test_finalize_block {
 
         let validator_stake =
             namada_proof_of_stake::storage::read_validator_stake(
-                &shell.wl_storage,
+                &shell.state,
                 &params,
                 &val2,
                 Epoch::default(),
@@ -4619,8 +4552,8 @@ mod test_finalize_block {
         // Ensure that there is no liveness data yet since there were no votes
         let missed_votes = liveness_missed_votes_handle();
         let sum_missed_votes = liveness_sum_missed_votes_handle();
-        assert!(missed_votes.is_empty(&shell.wl_storage)?);
-        assert!(sum_missed_votes.is_empty(&shell.wl_storage)?);
+        assert!(missed_votes.is_empty(&shell.state)?);
+        assert!(sum_missed_votes.is_empty(&shell.state)?);
 
         let minimum_unsigned_blocks = ((Dec::one()
             - params.liveness_threshold)
@@ -4631,8 +4564,8 @@ mod test_finalize_block {
 
         // Finalize block 2 and ensure that some data has been written
         let default_all_votes = get_default_true_votes(
-            &shell.wl_storage,
-            shell.wl_storage.storage.block.epoch,
+            &shell.state,
+            shell.state.in_mem().block.epoch,
         );
         next_block_for_inflation(
             &mut shell,
@@ -4640,17 +4573,17 @@ mod test_finalize_block {
             default_all_votes.clone(),
             None,
         );
-        assert!(missed_votes.is_empty(&shell.wl_storage)?);
+        assert!(missed_votes.is_empty(&shell.state)?);
         for val in &initial_consensus_set {
-            let sum = sum_missed_votes.get(&shell.wl_storage, val)?;
+            let sum = sum_missed_votes.get(&shell.state, val)?;
             assert_eq!(sum, Some(0u64));
         }
 
         // Completely unbond one of the validator to test the pruning at the
         // pipeline epoch
-        let mut current_epoch = shell.wl_storage.storage.block.epoch;
+        let mut current_epoch = shell.state.in_mem().block.epoch;
         namada_proof_of_stake::unbond_tokens(
-            &mut shell.wl_storage,
+            &mut shell.state,
             None,
             &val5,
             validator_stake,
@@ -4658,16 +4591,12 @@ mod test_finalize_block {
             false,
         )?;
         let pipeline_vals = read_consensus_validator_set_addresses(
-            &shell.wl_storage,
+            &shell.state,
             current_epoch + params.pipeline_len,
         )?;
         assert_eq!(pipeline_vals.len(), initial_consensus_set.len() - 1);
         let val5_pipeline_state = validator_state_handle(&val5)
-            .get(
-                &shell.wl_storage,
-                current_epoch + params.pipeline_len,
-                &params,
-            )?
+            .get(&shell.state, current_epoch + params.pipeline_len, &params)?
             .unwrap();
         assert_eq!(val5_pipeline_state, ValidatorState::BelowThreshold);
 
@@ -4682,8 +4611,8 @@ mod test_finalize_block {
         // NOTE: assume the minimum blocks for jailing is larger than remaining
         // blocks to next epoch!
         let mut votes_no2 = get_default_true_votes(
-            &shell.wl_storage,
-            shell.wl_storage.storage.block.epoch,
+            &shell.state,
+            shell.state.in_mem().block.epoch,
         );
         votes_no2.retain(|vote| vote.validator.address != pkh2);
 
@@ -4696,25 +4625,25 @@ mod test_finalize_block {
                 votes_no2.clone(),
                 None,
             );
-            current_epoch = shell.wl_storage.storage.block.epoch;
+            current_epoch = shell.state.in_mem().block.epoch;
             val2_num_missed_blocks += 1;
         }
 
         // Checks upon the new epoch
         for val in &initial_consensus_set {
             let missed_votes = liveness_missed_votes_handle().at(val);
-            let sum = sum_missed_votes.get(&shell.wl_storage, val)?;
+            let sum = sum_missed_votes.get(&shell.state, val)?;
 
             if val == &val2 {
                 assert_eq!(sum, Some(val2_num_missed_blocks));
                 for height in first_height_without_vote
                     ..first_height_without_vote + val2_num_missed_blocks
                 {
-                    assert!(missed_votes.contains(&shell.wl_storage, &height)?);
+                    assert!(missed_votes.contains(&shell.state, &height)?);
                     assert!(sum.unwrap() < minimum_unsigned_blocks);
                 }
             } else {
-                assert!(missed_votes.is_empty(&shell.wl_storage)?);
+                assert!(missed_votes.is_empty(&shell.state)?);
                 assert_eq!(sum, Some(0u64));
             }
         }
@@ -4727,30 +4656,29 @@ mod test_finalize_block {
                 votes_no2.clone(),
                 None,
             );
-            if shell.wl_storage.storage.update_epoch_blocks_delay == Some(1) {
+            if shell.state.in_mem().update_epoch_blocks_delay == Some(1) {
                 break;
             }
         }
-        assert_eq!(shell.wl_storage.storage.block.epoch, current_epoch);
+        assert_eq!(shell.state.in_mem().block.epoch, current_epoch);
         let pipeline_vals = read_consensus_validator_set_addresses(
-            &shell.wl_storage,
+            &shell.state,
             current_epoch + params.pipeline_len,
         )?;
         assert_eq!(pipeline_vals.len(), initial_consensus_set.len() - 1);
         let val2_sum_missed_votes =
-            liveness_sum_missed_votes_handle().get(&shell.wl_storage, &val2)?;
+            liveness_sum_missed_votes_handle().get(&shell.state, &val2)?;
         assert_eq!(
             val2_sum_missed_votes,
             Some(
-                shell.wl_storage.storage.block.height.0
-                    - first_height_without_vote
+                shell.state.in_mem().block.height.0 - first_height_without_vote
             )
         );
         for val in &initial_consensus_set {
             if val == &val2 {
                 continue;
             }
-            let sum = sum_missed_votes.get(&shell.wl_storage, val)?;
+            let sum = sum_missed_votes.get(&shell.state, val)?;
             assert_eq!(sum, Some(0u64));
         }
 
@@ -4762,16 +4690,16 @@ mod test_finalize_block {
             votes_no2.clone(),
             None,
         );
-        current_epoch = shell.wl_storage.storage.block.epoch;
+        current_epoch = shell.state.in_mem().block.epoch;
         assert_eq!(current_epoch, Epoch(2));
 
         let val2_sum_missed_votes =
-            liveness_sum_missed_votes_handle().get(&shell.wl_storage, &val2)?;
+            liveness_sum_missed_votes_handle().get(&shell.state, &val2)?;
         assert_eq!(val2_sum_missed_votes, Some(minimum_unsigned_blocks));
 
         // Check the validator sets for all epochs up through the pipeline
         let consensus_vals = read_consensus_validator_set_addresses(
-            &shell.wl_storage,
+            &shell.state,
             current_epoch,
         )?;
         assert_eq!(
@@ -4785,7 +4713,7 @@ mod test_finalize_block {
         );
         for offset in 1..=params.pipeline_len {
             let consensus_vals = read_consensus_validator_set_addresses(
-                &shell.wl_storage,
+                &shell.state,
                 current_epoch + offset,
             )?;
             assert_eq!(
@@ -4793,11 +4721,11 @@ mod test_finalize_block {
                 HashSet::from_iter([val1.clone(), val3.clone(), val4.clone()])
             );
             let val2_state = validator_state_handle(&val2)
-                .get(&shell.wl_storage, current_epoch + offset, &params)?
+                .get(&shell.state, current_epoch + offset, &params)?
                 .unwrap();
             assert_eq!(val2_state, ValidatorState::Jailed);
             let val5_state = validator_state_handle(&val5)
-                .get(&shell.wl_storage, current_epoch + offset, &params)?
+                .get(&shell.state, current_epoch + offset, &params)?
                 .unwrap();
             assert_eq!(val5_state, ValidatorState::BelowThreshold);
         }
@@ -4806,26 +4734,26 @@ mod test_finalize_block {
         // there, 5 should be removed)
         for val in &initial_consensus_set {
             let missed_votes = liveness_missed_votes_handle().at(val);
-            let sum = sum_missed_votes.get(&shell.wl_storage, val)?;
+            let sum = sum_missed_votes.get(&shell.state, val)?;
 
             if val == &val2 {
                 assert_eq!(
                     sum,
                     Some(
-                        shell.wl_storage.storage.block.height.0
+                        shell.state.in_mem().block.height.0
                             - first_height_without_vote
                     )
                 );
                 for height in first_height_without_vote
-                    ..shell.wl_storage.storage.block.height.0
+                    ..shell.state.in_mem().block.height.0
                 {
-                    assert!(missed_votes.contains(&shell.wl_storage, &height)?);
+                    assert!(missed_votes.contains(&shell.state, &height)?);
                 }
             } else if val == &val5 {
-                assert!(missed_votes.is_empty(&shell.wl_storage)?);
+                assert!(missed_votes.is_empty(&shell.state)?);
                 assert!(sum.is_none());
             } else {
-                assert!(missed_votes.is_empty(&shell.wl_storage)?);
+                assert!(missed_votes.is_empty(&shell.state)?);
                 assert_eq!(sum, Some(0u64));
             }
         }
@@ -4835,8 +4763,8 @@ mod test_finalize_block {
         let next_epoch = current_epoch.next();
         loop {
             let votes = get_default_true_votes(
-                &shell.wl_storage,
-                shell.wl_storage.storage.block.epoch,
+                &shell.state,
+                shell.state.in_mem().block.epoch,
             );
             current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None).0;
             if current_epoch == next_epoch {
@@ -4847,9 +4775,9 @@ mod test_finalize_block {
         // Check that the liveness data only contains data for vals 1, 3, and 4
         for val in &initial_consensus_set {
             let missed_votes = liveness_missed_votes_handle().at(val);
-            let sum = sum_missed_votes.get(&shell.wl_storage, val)?;
+            let sum = sum_missed_votes.get(&shell.state, val)?;
 
-            assert!(missed_votes.is_empty(&shell.wl_storage)?);
+            assert!(missed_votes.is_empty(&shell.state)?);
             if val == &val2 || val == &val5 {
                 assert!(sum.is_none());
             } else {
@@ -4859,13 +4787,13 @@ mod test_finalize_block {
 
         // Validator 2 unjail itself
         namada_proof_of_stake::unjail_validator(
-            &mut shell.wl_storage,
+            &mut shell.state,
             &val2,
             current_epoch,
         )?;
         let pipeline_epoch = current_epoch + params.pipeline_len;
         let val2_pipeline_state = validator_state_handle(&val2).get(
-            &shell.wl_storage,
+            &shell.state,
             pipeline_epoch,
             &params,
         )?;
@@ -4874,8 +4802,8 @@ mod test_finalize_block {
         // Advance to the pipeline epoch
         loop {
             let votes = get_default_true_votes(
-                &shell.wl_storage,
-                shell.wl_storage.storage.block.epoch,
+                &shell.state,
+                shell.state.in_mem().block.epoch,
             );
             current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None).0;
             if current_epoch == pipeline_epoch {
@@ -4883,11 +4811,11 @@ mod test_finalize_block {
             }
         }
         let sum_liveness = liveness_sum_missed_votes_handle();
-        assert_eq!(sum_liveness.get(&shell.wl_storage, &val1)?, Some(0u64));
-        assert_eq!(sum_liveness.get(&shell.wl_storage, &val2)?, None);
-        assert_eq!(sum_liveness.get(&shell.wl_storage, &val3)?, Some(0u64));
-        assert_eq!(sum_liveness.get(&shell.wl_storage, &val4)?, Some(0u64));
-        assert_eq!(sum_liveness.get(&shell.wl_storage, &val5)?, None);
+        assert_eq!(sum_liveness.get(&shell.state, &val1)?, Some(0u64));
+        assert_eq!(sum_liveness.get(&shell.state, &val2)?, None);
+        assert_eq!(sum_liveness.get(&shell.state, &val3)?, Some(0u64));
+        assert_eq!(sum_liveness.get(&shell.state, &val4)?, Some(0u64));
+        assert_eq!(sum_liveness.get(&shell.state, &val5)?, None);
 
         Ok(())
     }
@@ -4924,15 +4852,15 @@ mod test_finalize_block {
         consensus_votes: &[VoteInfo],
         misbehaviors: Option<Vec<Misbehavior>>,
     ) -> (Epoch, token::Amount) {
-        let current_epoch = shell.wl_storage.storage.block.epoch;
+        let current_epoch = shell.state.in_mem().block.epoch;
         let staking_token =
-            namada_proof_of_stake::staking_token_address(&shell.wl_storage);
+            namada_proof_of_stake::staking_token_address(&shell.state);
 
         // NOTE: assumed that the only change in pos address balance by
         // advancing to the next epoch is minted inflation - no change occurs
         // due to slashing
         let pos_balance_pre = shell
-            .wl_storage
+            .state
             .read::<token::Amount>(&token::storage_key::balance_key(
                 &staking_token,
                 &pos_address,
@@ -4946,12 +4874,12 @@ mod test_finalize_block {
                 consensus_votes.to_owned(),
                 misbehaviors.clone(),
             );
-            if shell.wl_storage.storage.block.epoch == current_epoch.next() {
+            if shell.state.in_mem().block.epoch == current_epoch.next() {
                 break;
             }
         }
         let pos_balance_post = shell
-            .wl_storage
+            .state
             .read::<token::Amount>(&token::storage_key::balance_key(
                 &staking_token,
                 &pos_address,
@@ -4960,7 +4888,7 @@ mod test_finalize_block {
             .unwrap_or_default();
 
         (
-            shell.wl_storage.storage.block.epoch,
+            shell.state.in_mem().block.epoch,
             pos_balance_post - pos_balance_pre,
         )
     }
@@ -4972,7 +4900,7 @@ mod test_finalize_block {
             setup_at_height(3u64);
         let proposal_execution_key = get_proposal_execution_key(0);
         shell
-            .wl_storage
+            .state
             .write(&proposal_execution_key, 0u64)
             .expect("Test failed.");
         let mut tx = Tx::new(shell.chain_id.clone(), None);
@@ -4981,21 +4909,22 @@ mod test_finalize_block {
             NonZeroU64::new_unchecked(42)
         });
         shell
-            .wl_storage
+            .state
             .write(&min_confirmations_key(), new_min_confirmations)
             .expect("Test failed");
-        let gas_meter = VpGasMeter::new_from_tx_meter(
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
-        );
+        ));
         let keys_changed = BTreeSet::from([min_confirmations_key()]);
         let verifiers = BTreeSet::default();
+        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = namada::ledger::native_vp::Ctx::new(
             shell.mode.get_validator_address().expect("Test failed"),
-            &shell.wl_storage.storage,
-            &shell.wl_storage.write_log,
+            shell.state.read_only(),
             &tx,
             &TxIndex(0),
-            gas_meter,
+            &gas_meter,
+            &sentinel,
             &keys_changed,
             &verifiers,
             shell.vp_wasm_cache.clone(),
@@ -5010,7 +4939,7 @@ mod test_finalize_block {
         let mut req = FinalizeBlock::default();
         req.header.time = namada::core::time::DateTimeUtc::now();
         let current_decision_height = shell.get_current_decision_height();
-        if let Some(b) = shell.wl_storage.storage.last_block.as_mut() {
+        if let Some(b) = shell.state.in_mem_mut().last_block.as_mut() {
             b.height = current_decision_height + 11;
         }
         shell.finalize_block(req).expect("Test failed");
@@ -5018,17 +4947,17 @@ mod test_finalize_block {
 
         let consensus_set: Vec<WeightedValidator> =
             read_consensus_validator_set_addresses_with_stake(
-                &shell.wl_storage,
+                &shell.state,
                 Epoch::default(),
             )
             .unwrap()
             .into_iter()
             .collect();
 
-        let params = read_pos_params(&shell.wl_storage).unwrap();
+        let params = read_pos_params(&shell.state).unwrap();
         let val1 = consensus_set[0].clone();
         let pkh1 = get_pkh_from_address(
-            &shell.wl_storage,
+            &shell.state,
             &params,
             val1.address.clone(),
             Epoch::default(),
