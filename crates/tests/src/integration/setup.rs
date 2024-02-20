@@ -243,7 +243,7 @@ fn create_node(
             .init_chain(init_req, 1)
             .map_err(|e| eyre!("Failed to initialize ledger: {:?}", e))?;
         // set the height of the first block (should be 1)
-        locked.wl_storage.storage.block.height = 1.into();
+        locked.state.in_mem_mut().block.height = 1.into();
         locked.commit();
     }
 
