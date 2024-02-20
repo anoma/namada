@@ -319,7 +319,7 @@ impl MockNode {
     }
 
     pub fn current_epoch(&self) -> Epoch {
-        self.shell.lock().unwrap().wl_storage.storage.last_epoch
+        self.shell.lock().unwrap().state.in_mem().last_epoch
     }
 
     pub fn next_epoch(&mut self) -> Epoch {
@@ -327,15 +327,15 @@ impl MockNode {
             let mut locked = self.shell.lock().unwrap();
 
             let next_epoch_height =
-                locked.wl_storage.storage.get_last_block_height() + 1;
-            locked.wl_storage.storage.next_epoch_min_start_height =
+                locked.state.in_mem().get_last_block_height() + 1;
+            locked.state.in_mem_mut().next_epoch_min_start_height =
                 next_epoch_height;
-            locked.wl_storage.storage.next_epoch_min_start_time =
+            locked.state.in_mem_mut().next_epoch_min_start_time =
                 DateTimeUtc::now();
             let next_epoch_min_start_height =
-                locked.wl_storage.storage.next_epoch_min_start_height;
+                locked.state.in_mem().next_epoch_min_start_height;
             if let Some(LastBlock { height, .. }) =
-                locked.wl_storage.storage.last_block.as_mut()
+                locked.state.in_mem_mut().last_block.as_mut()
             {
                 *height = next_epoch_min_start_height;
             }
@@ -348,8 +348,8 @@ impl MockNode {
         self.shell
             .lock()
             .unwrap()
-            .wl_storage
-            .storage
+            .state
+            .in_mem()
             .get_current_epoch()
             .0
     }
@@ -358,11 +358,11 @@ impl MockNode {
     fn prepare_request(&self) -> (Vec<u8>, Vec<VoteInfo>) {
         let (val1, ck) = {
             let locked = self.shell.lock().unwrap();
-            let params = locked.wl_storage.pos_queries().get_pos_params();
-            let current_epoch = locked.wl_storage.storage.get_current_epoch().0;
+            let params = locked.state.pos_queries().get_pos_params();
+            let current_epoch = locked.state.in_mem().get_current_epoch().0;
             let consensus_set: Vec<WeightedValidator> =
                 read_consensus_validator_set_addresses_with_stake(
-                    &locked.wl_storage,
+                    &locked.state,
                     current_epoch,
                 )
                 .unwrap()
@@ -371,7 +371,7 @@ impl MockNode {
 
             let val1 = consensus_set[0].clone();
             let ck = validator_consensus_key_handle(&val1.address)
-                .get(&locked.wl_storage, current_epoch, &params)
+                .get(&locked.state, current_epoch, &params)
                 .unwrap()
                 .unwrap();
             (val1, ck)
@@ -399,11 +399,8 @@ impl MockNode {
         let (proposer_address, votes) = self.prepare_request();
 
         let mut locked = self.shell.lock().unwrap();
-        let height = locked
-            .wl_storage
-            .storage
-            .get_last_block_height()
-            .next_height();
+        let height =
+            locked.state.in_mem().get_last_block_height().next_height();
 
         // check if we have protocol txs to be included
         // in the finalize block request
@@ -518,11 +515,8 @@ impl MockNode {
             ..Default::default()
         };
         let mut locked = self.shell.lock().unwrap();
-        let height = locked
-            .wl_storage
-            .storage
-            .get_last_block_height()
-            .next_height();
+        let height =
+            locked.state.in_mem().get_last_block_height().next_height();
         let (result, tx_results) = locked.process_proposal(req);
 
         let mut errors: Vec<_> = tx_results
@@ -672,8 +666,8 @@ impl<'a> Client for &'a MockNode {
             self.shell
                 .lock()
                 .unwrap()
-                .wl_storage
-                .storage
+                .state
+                .in_mem()
                 .last_block
                 .as_ref()
                 .map(|b| b.height)
@@ -690,7 +684,7 @@ impl<'a> Client for &'a MockNode {
         };
         let borrowed = self.shell.lock().unwrap();
         let ctx = RequestCtx {
-            wl_storage: &borrowed.wl_storage,
+            state: &borrowed.state,
             event_log: borrowed.event_log(),
             vp_wasm_cache: borrowed.vp_wasm_cache.read_only(),
             tx_wasm_cache: borrowed.tx_wasm_cache.read_only(),
@@ -723,16 +717,16 @@ impl<'a> Client for &'a MockNode {
             version: "test".to_string(),
             app_version: 0,
             last_block_height: locked
-                .wl_storage
-                .storage
+                .state
+                .in_mem()
                 .last_block
                 .as_ref()
                 .map(|b| b.height.0 as u32)
                 .unwrap_or_default()
                 .into(),
             last_block_app_hash: locked
-                .wl_storage
-                .storage
+                .state
+                .in_mem()
                 .last_block
                 .as_ref()
                 .map(|b| b.hash.0)
