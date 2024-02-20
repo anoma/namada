@@ -146,7 +146,7 @@ where
 
 impl BlockAllocator<states::BuildingProtocolTxBatch<WithNormalTxs>> {
     /// Construct a new [`BlockAllocator`], with an upper bound
-    /// on the max size of all txs in a block defined by Tendermint and an upper
+    /// on the max size of all txs in a block defined by CometBFT and an upper
     /// bound on the max gas in a block.
     #[inline]
     pub fn init(
