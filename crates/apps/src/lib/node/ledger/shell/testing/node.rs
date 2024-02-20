@@ -941,7 +941,7 @@ fn parse_tm_query(
     query: namada::tendermint_rpc::query::Query,
 ) -> dumb_queries::QueryMatcher {
     const QUERY_PARSING_REGEX_STR: &str =
-        r"^tm\.event='NewBlock' AND (applied)\.hash='([^']+)'$";
+        r"^tm\.event='NewBlock' AND applied\.hash='([^']+)'$";
 
     lazy_static! {
         /// Compiled regular expression used to parse Tendermint queries.

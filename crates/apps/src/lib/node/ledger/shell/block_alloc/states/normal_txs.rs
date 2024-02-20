@@ -2,12 +2,12 @@ use std::marker::PhantomData;
 
 use super::super::{AllocFailure, BlockAllocator, TxBin};
 use super::{
-    BuildingProtocolTxBatch, BuildingTxBatch, NextStateImpl, TryAlloc,
+    BuildingNormalTxBatch, BuildingProtocolTxBatch, NextStateImpl, TryAlloc,
     WithoutNormalTxs,
 };
 use crate::node::ledger::shell::block_alloc::BlockResources;
 
-impl TryAlloc for BlockAllocator<BuildingTxBatch> {
+impl TryAlloc for BlockAllocator<BuildingNormalTxBatch> {
     type Resources<'tx> = BlockResources<'tx>;
 
     #[inline]
@@ -20,7 +20,7 @@ impl TryAlloc for BlockAllocator<BuildingTxBatch> {
     }
 }
 
-impl NextStateImpl for BlockAllocator<BuildingTxBatch> {
+impl NextStateImpl for BlockAllocator<BuildingNormalTxBatch> {
     type Next = BlockAllocator<BuildingProtocolTxBatch<WithoutNormalTxs>>;
 
     #[inline]
