@@ -135,7 +135,7 @@ impl AbcippShim {
                         begin_block_request.header.proposer_address,
                     );
                     let block_proposer = find_validator_by_raw_hash(
-                        &self.service.wl_storage,
+                        &self.service.state,
                         tm_raw_hash_string,
                     )
                     .unwrap()

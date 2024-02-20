@@ -19,7 +19,7 @@ where
     /// Checks the channel from the Ethereum oracle monitoring
     /// the fullnode and retrieves all seen Ethereum events.
     pub fn new_ethereum_events(&mut self) -> Vec<EthereumEvent> {
-        let queries = self.wl_storage.ethbridge_queries();
+        let queries = self.state.ethbridge_queries();
         match &mut self.mode {
             ShellMode::Validator {
                 eth_oracle:
@@ -54,9 +54,9 @@ where
     > + 'iter {
         vote_extensions.into_iter().map(|vote_extension| {
             validate_eth_events_vext(
-                &self.wl_storage,
+                &self.state,
                 &vote_extension,
-                self.wl_storage.storage.get_last_block_height(),
+                self.state.in_mem().get_last_block_height(),
             )?;
             Ok(vote_extension)
         })
@@ -86,7 +86,7 @@ where
         vote_extensions: Vec<Signed<ethereum_events::Vext>>,
     ) -> Option<ethereum_events::VextDigest> {
         #[allow(clippy::question_mark)]
-        if self.wl_storage.storage.last_block.is_none() {
+        if self.state.in_mem().last_block.is_none() {
             return None;
         }
 
@@ -161,6 +161,7 @@ mod test_vote_extensions {
     use namada::state::collections::lazy_map::{NestedSubKey, SubKey};
     use namada::tendermint::abci::types::VoteInfo;
     use namada::vote_ext::ethereum_events;
+    use namada_sdk::storage::StorageWrite;
 
     use super::validate_eth_events_vext;
     use crate::node::ledger::shell::test_utils::*;
@@ -174,22 +175,24 @@ mod test_vote_extensions {
 
         // write bp nonce to storage
         shell
-            .wl_storage
-            .storage
-            .write(&bridge_pool::get_nonce_key(), nonce.serialize_to_vec())
+            .state
+            .write_bytes(
+                &bridge_pool::get_nonce_key(),
+                nonce.serialize_to_vec(),
+            )
             .expect("Test failed");
 
         // write nam nonce to the eth events queue
         shell
-            .wl_storage
-            .storage
+            .state
+            .in_mem_mut()
             .eth_events_queue
             .transfers_to_namada = InnerEthEventsQueue::new_at(nonce);
 
         // eth transfers with the same nonce as the bp nonce in storage are
         // valid
         shell
-            .wl_storage
+            .state
             .ethbridge_queries()
             .validate_eth_event_nonce(&EthereumEvent::TransfersToEthereum {
                 nonce,
@@ -202,7 +205,7 @@ mod test_vote_extensions {
 
         // eth transfers with different nonces are invalid
         shell
-            .wl_storage
+            .state
             .ethbridge_queries()
             .validate_eth_event_nonce(&EthereumEvent::TransfersToEthereum {
                 nonce: nonce + 1,
@@ -213,7 +216,7 @@ mod test_vote_extensions {
             .ok_or(())
             .expect_err("Test failed");
         shell
-            .wl_storage
+            .state
             .ethbridge_queries()
             .validate_eth_event_nonce(&EthereumEvent::TransfersToEthereum {
                 nonce: nonce - 1,
@@ -226,7 +229,7 @@ mod test_vote_extensions {
 
         // nam transfers with nonces >= the nonce in storage are valid
         shell
-            .wl_storage
+            .state
             .ethbridge_queries()
             .validate_eth_event_nonce(&EthereumEvent::TransfersToNamada {
                 nonce,
@@ -236,7 +239,7 @@ mod test_vote_extensions {
             .ok_or(())
             .expect("Test failed");
         shell
-            .wl_storage
+            .state
             .ethbridge_queries()
             .validate_eth_event_nonce(&EthereumEvent::TransfersToNamada {
                 nonce: nonce + 5,
@@ -248,7 +251,7 @@ mod test_vote_extensions {
 
         // nam transfers with lower nonces are invalid
         shell
-            .wl_storage
+            .state
             .ethbridge_queries()
             .validate_eth_event_nonce(&EthereumEvent::TransfersToNamada {
                 nonce: nonce - 1,
@@ -258,7 +261,7 @@ mod test_vote_extensions {
             .ok_or(())
             .expect_err("Test failed");
         shell
-            .wl_storage
+            .state
             .ethbridge_queries()
             .validate_eth_event_nonce(&EthereumEvent::TransfersToNamada {
                 nonce: nonce - 2,
@@ -372,7 +375,7 @@ mod test_vote_extensions {
         .sign(&signing_key);
         assert!(
             validate_eth_events_vext(
-                &shell.wl_storage,
+                &shell.state,
                 &ethereum_events,
                 shell.get_current_decision_height(),
             )
@@ -411,11 +414,11 @@ mod test_vote_extensions {
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
 
-        assert_eq!(shell.wl_storage.storage.get_current_epoch().0.0, 0);
+        assert_eq!(shell.state.in_mem().get_current_epoch().0.0, 0);
         // remove all validators of the next epoch
         let validators_handle = consensus_validator_set_handle().at(&1.into());
         let consensus_in_mem = validators_handle
-            .iter(&shell.wl_storage)
+            .iter(&shell.state)
             .expect("Test failed")
             .map(|val| {
                 let (
@@ -431,23 +434,23 @@ mod test_vote_extensions {
         for (val_stake, val_position) in consensus_in_mem.into_iter() {
             validators_handle
                 .at(&val_stake)
-                .remove(&mut shell.wl_storage, &val_position)
+                .remove(&mut shell.state, &val_position)
                 .expect("Test failed");
         }
         // we advance forward to the next epoch
         let consensus_set: Vec<WeightedValidator> =
             read_consensus_validator_set_addresses_with_stake(
-                &shell.wl_storage,
+                &shell.state,
                 Epoch::default(),
             )
             .unwrap()
             .into_iter()
             .collect();
 
-        let params = shell.wl_storage.pos_queries().get_pos_params();
+        let params = shell.state.pos_queries().get_pos_params();
         let val1 = consensus_set[0].clone();
         let pkh1 = get_pkh_from_address(
-            &shell.wl_storage,
+            &shell.state,
             &params,
             val1.address.clone(),
             Epoch::default(),
@@ -467,17 +470,17 @@ mod test_vote_extensions {
         assert_eq!(shell.start_new_epoch(Some(req)).0, 1);
         assert!(
             shell
-                .wl_storage
+                .state
                 .pos_queries()
                 .get_validator_from_protocol_pk(&signing_key.ref_to(), None)
                 .is_err()
         );
         let prev_epoch =
-            Epoch(shell.wl_storage.storage.get_current_epoch().0.0 - 1);
+            Epoch(shell.state.in_mem().get_current_epoch().0.0 - 1);
         assert!(
             shell
                 .shell
-                .wl_storage
+                .state
                 .pos_queries()
                 .get_validator_from_protocol_pk(
                     &signing_key.ref_to(),
@@ -487,12 +490,8 @@ mod test_vote_extensions {
         );
 
         assert!(
-            validate_eth_events_vext(
-                &shell.wl_storage,
-                &vote_ext,
-                signed_height
-            )
-            .is_ok()
+            validate_eth_events_vext(&shell.state, &vote_ext, signed_height)
+                .is_ok()
         );
     }
 
@@ -516,19 +515,19 @@ mod test_vote_extensions {
                 }],
                 relayer: gen_established_address(),
             }],
-            block_height: shell.wl_storage.storage.get_last_block_height(),
+            block_height: shell.state.in_mem().get_last_block_height(),
             validator_addr: address.clone(),
         };
 
         ethereum_events.block_height =
-            shell.wl_storage.storage.get_last_block_height() + 1;
+            shell.state.in_mem().get_last_block_height() + 1;
         let signed_vext = ethereum_events
             .sign(shell.mode.get_protocol_key().expect("Test failed"));
         assert!(
             validate_eth_events_vext(
-                &shell.wl_storage,
+                &shell.state,
                 &signed_vext,
-                shell.wl_storage.storage.get_last_block_height()
+                shell.state.in_mem().get_last_block_height()
             )
             .is_err()
         )
@@ -552,16 +551,16 @@ mod test_vote_extensions {
                 }],
                 relayer: gen_established_address(),
             }],
-            block_height: shell.wl_storage.storage.get_last_block_height(),
+            block_height: shell.state.in_mem().get_last_block_height(),
             validator_addr: address.clone(),
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
 
         assert!(
             validate_eth_events_vext(
-                &shell.wl_storage,
+                &shell.state,
                 &vote_ext,
-                shell.wl_storage.storage.get_last_block_height()
+                shell.state.in_mem().get_last_block_height()
             )
             .is_err()
         )

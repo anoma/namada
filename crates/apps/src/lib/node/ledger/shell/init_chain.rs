@@ -89,7 +89,7 @@ where
         #[cfg(any(test, feature = "testing"))] _num_validators: u64,
     ) -> Result<response::InitChain> {
         let mut response = response::InitChain::default();
-        let chain_id = self.wl_storage.storage.chain_id.as_str();
+        let chain_id = self.state.in_mem().chain_id.as_str();
         if chain_id != init.chain_id.as_str() {
             return Err(Error::ChainId(format!(
                 "Current chain ID: {}, Tendermint chain ID: {}",
@@ -122,7 +122,7 @@ where
         {
             // update the native token from the genesis file
             let native_token = genesis.get_native_token().clone();
-            self.wl_storage.storage.native_token = native_token;
+            self.state.in_mem_mut().native_token = native_token;
         }
         let mut validation = InitChainValidation::new(self, false);
         validation.run(
@@ -140,22 +140,20 @@ where
         let anchor = empty_commitment_tree.root();
         let note_commitment_tree_key =
             token::storage_key::masp_commitment_tree_key();
-        self.wl_storage
+        self.state
             .write(&note_commitment_tree_key, empty_commitment_tree)
             .unwrap();
         let commitment_tree_anchor_key =
             token::storage_key::masp_commitment_anchor_key(anchor);
-        self.wl_storage
-            .write(&commitment_tree_anchor_key, ())
-            .unwrap();
+        self.state.write(&commitment_tree_anchor_key, ()).unwrap();
 
         // Init masp convert anchor
         let convert_anchor_key = token::storage_key::masp_convert_anchor_key();
-        self.wl_storage.write(
+        self.state.write(
             &convert_anchor_key,
             namada::core::hash::Hash(
                 bls12_381::Scalar::from(
-                    self.wl_storage.storage.conversion_state.tree.root(),
+                    self.state.in_mem().conversion_state.tree.root(),
                 )
                 .to_bytes(),
             ),
@@ -202,19 +200,19 @@ where
         // Initialize protocol parameters
         let parameters = genesis.get_chain_parameters(&self.wasm_dir);
         self.store_wasms(&parameters)?;
-        parameters::init_storage(&parameters, &mut self.wl_storage).unwrap();
+        parameters::init_storage(&parameters, &mut self.state).unwrap();
 
         // Initialize governance parameters
         let gov_params = genesis.get_gov_params();
-        gov_params.init_storage(&mut self.wl_storage).unwrap();
+        gov_params.init_storage(&mut self.state).unwrap();
 
         // configure the Ethereum bridge if the configuration is set.
         if let Some(config) = genesis.get_eth_bridge_params() {
             tracing::debug!("Initializing Ethereum bridge storage.");
-            config.init_storage(&mut self.wl_storage);
+            config.init_storage(&mut self.state);
             self.update_eth_oracle(&Default::default());
         } else {
-            self.wl_storage
+            self.state
                 .write(
                     &namada::eth_bridge::storage::active_key(),
                     EthBridgeStatus::Disabled,
@@ -223,16 +221,16 @@ where
         }
 
         // Depends on parameters being initialized
-        self.wl_storage
-            .storage
+        self.state
+            .in_mem_mut()
             .init_genesis_epoch(initial_height, genesis_time, &parameters)
             .expect("Initializing genesis epoch must not fail");
 
         // PoS system depends on epoch being initialized
         let pos_params = genesis.get_pos_params();
-        let (current_epoch, _gas) = self.wl_storage.storage.get_current_epoch();
+        let (current_epoch, _gas) = self.state.in_mem().get_current_epoch();
         pos::namada_proof_of_stake::init_genesis(
-            &mut self.wl_storage,
+            &mut self.state,
             &pos_params,
             current_epoch,
         )
@@ -241,7 +239,7 @@ where
         // PGF parameters
         let pgf_params = genesis.get_pgf_params();
         pgf_params
-            .init_storage(&mut self.wl_storage)
+            .init_storage(&mut self.state)
             .expect("Should be able to initialized PGF at genesis");
 
         // Loaded VP code cache to avoid loading the same files multiple times
@@ -258,19 +256,19 @@ where
         self.apply_genesis_txs_bonds(&genesis);
 
         pos::namada_proof_of_stake::compute_and_store_total_consensus_stake(
-            &mut self.wl_storage,
+            &mut self.state,
             current_epoch,
         )
         .expect("Could not compute total consensus stake at genesis");
         // This has to be done after `apply_genesis_txs_validator_account`
         pos::namada_proof_of_stake::copy_genesis_validator_sets(
-            &mut self.wl_storage,
+            &mut self.state,
             &pos_params,
             current_epoch,
         )
         .expect("Must be able to copy PoS genesis validator sets");
 
-        ibc::init_genesis_storage(&mut self.wl_storage);
+        ibc::init_genesis_storage(&mut self.state);
         ControlFlow::Continue(())
     }
 
@@ -392,15 +390,13 @@ where
                 let hash_key = Key::wasm_hash(name);
                 let code_name_key = Key::wasm_code_name(name.to_owned());
 
-                self.wl_storage.write_bytes(&code_key, code).unwrap();
-                self.wl_storage.write(&code_len_key, code_len).unwrap();
-                self.wl_storage.write_bytes(&hash_key, code_hash).unwrap();
+                self.state.write_bytes(&code_key, code).unwrap();
+                self.state.write(&code_len_key, code_len).unwrap();
+                self.state.write_bytes(&hash_key, code_hash).unwrap();
                 if &Some(code_hash) == implicit_vp_code_hash {
                     is_implicit_vp_stored = true;
                 }
-                self.wl_storage
-                    .write_bytes(&code_name_key, code_hash)
-                    .unwrap();
+                self.state.write_bytes(&code_name_key, code_hash).unwrap();
             } else {
                 tracing::warn!("The wasm {name} isn't allowed.");
                 self.warn(Warning::DisallowedWasm(name.to_string()));
@@ -430,10 +426,10 @@ where
                 config: TokenConfig { denom, masp_params },
             } = token;
             // associate a token with its denomination.
-            write_denom(&mut self.wl_storage, address, *denom).unwrap();
+            write_denom(&mut self.state, address, *denom).unwrap();
             namada::token::write_params(
                 masp_params,
-                &mut self.wl_storage,
+                &mut self.state,
                 address,
                 denom,
             )
@@ -442,8 +438,8 @@ where
                 // add token addresses to the masp reward conversions lookup
                 // table.
                 let alias = alias.to_string();
-                self.wl_storage
-                    .storage
+                self.state
+                    .in_mem_mut()
                     .conversion_state
                     .tokens
                     .insert(alias, address.clone());
@@ -474,7 +470,7 @@ where
             for (owner, balance) in balances {
                 if let genesis::GenesisAddress::PublicKey(pk) = owner {
                     namada::account::init_account_storage(
-                        &mut self.wl_storage,
+                        &mut self.state,
                         &owner.address(),
                         std::slice::from_ref(&pk.raw),
                         1,
@@ -488,7 +484,7 @@ where
                     owner,
                 );
                 credit_tokens(
-                    &mut self.wl_storage,
+                    &mut self.state,
                     token_address,
                     &owner.address(),
                     balance.amount(),
@@ -497,7 +493,7 @@ where
                 total_token_balance += balance.amount();
             }
             // Write the total amount of tokens for the ratio
-            self.wl_storage
+            self.state
                 .write(
                     &token::storage_key::minted_balance_key(token_address),
                     total_token_balance,
@@ -530,14 +526,14 @@ where
                 );
                 let vp_code = self.lookup_vp(vp, genesis, vp_cache)?;
                 let code_hash = CodeHash::sha256(&vp_code);
-                self.wl_storage
+                self.state
                     .write_bytes(&Key::validity_predicate(address), code_hash)
                     .unwrap();
 
                 let public_keys: Vec<_> =
                     public_keys.iter().map(|pk| pk.raw.clone()).collect();
                 namada::account::init_account_storage(
-                    &mut self.wl_storage,
+                    &mut self.state,
                     address,
                     &public_keys,
                     *threshold,
@@ -587,18 +583,18 @@ where
 
                 let vp_code = self.lookup_vp(vp, genesis, vp_cache)?;
                 let code_hash = CodeHash::sha256(&vp_code);
-                self.wl_storage
+                self.state
                     .write_bytes(&Key::validity_predicate(address), code_hash)
                     .expect("Unable to write user VP");
 
-                self.wl_storage
+                self.state
                     .write(&protocol_pk_key(address), &protocol_key.pk.raw)
                     .expect("Unable to set genesis user protocol public key");
 
                 // TODO: replace pos::init_genesis validators arg with
                 // init_genesis_validator from here
                 if let Err(err) = pos::namada_proof_of_stake::become_validator(
-                    &mut self.wl_storage,
+                    &mut self.state,
                     BecomeValidator {
                         params,
                         address,
@@ -630,7 +626,7 @@ where
 
     /// Apply genesis txs to transfer tokens
     fn apply_genesis_txs_bonds(&mut self, genesis: &genesis::chain::Finalized) {
-        let (current_epoch, _gas) = self.wl_storage.storage.get_current_epoch();
+        let (current_epoch, _gas) = self.state.in_mem().get_current_epoch();
         if let Some(txs) = &genesis.transactions.bond {
             for BondTx {
                 source,
@@ -646,7 +642,7 @@ where
                 );
 
                 if let Err(err) = pos::namada_proof_of_stake::bond_tokens(
-                    &mut self.wl_storage,
+                    &mut self.state,
                     Some(&source.address()),
                     validator,
                     amount.amount(),
@@ -957,9 +953,8 @@ mod test {
         // Collect all storage key-vals into a sorted map
         let store_block_state = |shell: &TestShell| -> BTreeMap<_, _> {
             shell
-                .wl_storage
-                .storage
-                .db
+                .state
+                .db()
                 .iter_prefix(None)
                 .map(|(key, val, _gas)| (key, val))
                 .collect()
@@ -1136,15 +1131,13 @@ mod test {
         };
         // Initialize governance parameters
         let gov_params = genesis.get_gov_params();
-        gov_params
-            .init_storage(&mut initializer.wl_storage)
-            .unwrap();
+        gov_params.init_storage(&mut initializer.state).unwrap();
         // PoS system depends on epoch being initialized
         let pos_params = genesis.get_pos_params();
         let (current_epoch, _gas) =
-            initializer.wl_storage.storage.get_current_epoch();
+            initializer.state.in_mem().get_current_epoch();
         pos::namada_proof_of_stake::init_genesis(
-            &mut initializer.wl_storage,
+            &mut initializer.state,
             &pos_params,
             current_epoch,
         )
