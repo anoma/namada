@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 use eyre::WrapErr;
 use namada_core::address::{Address, InternalAddress};
 use namada_core::storage::Key;
-use namada_state::StorageHasher;
+use namada_state::StateRead;
 use namada_tx::Tx;
 use namada_vp_env::VpEnv;
 
@@ -23,20 +23,18 @@ pub struct Error(#[from] eyre::Report);
 ///
 /// All this VP does is reject NUT transfers whose destination
 /// address is not the Bridge pool escrow address.
-pub struct NonUsableTokens<'ctx, DB, H, CA>
+pub struct NonUsableTokens<'ctx, S, CA>
 where
-    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     /// Context to interact with the host structures.
-    pub ctx: Ctx<'ctx, DB, H, CA>,
+    pub ctx: Ctx<'ctx, S, CA>,
 }
 
-impl<'a, DB, H, CA> NativeVp for NonUsableTokens<'a, DB, H, CA>
+impl<'a, S, CA> NativeVp for NonUsableTokens<'a, S, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     type Error = Error;
@@ -118,6 +116,7 @@ where
 
 #[cfg(test)]
 mod test_nuts {
+    use std::cell::RefCell;
     use std::env::temp_dir;
 
     use assert_matches::assert_matches;
@@ -125,8 +124,9 @@ mod test_nuts {
     use namada_core::borsh::BorshSerializeExt;
     use namada_core::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
     use namada_core::storage::TxIndex;
+    use namada_core::validity_predicate::VpSentinel;
     use namada_ethereum_bridge::storage::wrapped_erc20s;
-    use namada_state::testing::TestWlStorage;
+    use namada_state::testing::TestState;
     use namada_state::StorageWrite;
     use namada_tx::data::TxType;
     use proptest::prelude::*;
@@ -143,31 +143,35 @@ mod test_nuts {
         let src_balance_key = balance_key(&nut, &src);
         let dst_balance_key = balance_key(&nut, &dst);
 
-        let wl_storage = {
-            let mut wl = TestWlStorage::default();
+        let state = {
+            let mut state = TestState::default();
 
             // write initial balances
-            wl.write(&src_balance_key, Amount::from(200_u64))
+            state
+                .write(&src_balance_key, Amount::from(200_u64))
                 .expect("Test failed");
-            wl.write(&dst_balance_key, Amount::from(100_u64))
+            state
+                .write(&dst_balance_key, Amount::from(100_u64))
                 .expect("Test failed");
-            wl.commit_block().expect("Test failed");
+            state.commit_block().expect("Test failed");
 
             // write the updated balances
-            wl.write_log
+            state
+                .write_log_mut()
                 .write(
                     &src_balance_key,
                     Amount::from(100_u64).serialize_to_vec(),
                 )
                 .expect("Test failed");
-            wl.write_log
+            state
+                .write_log_mut()
                 .write(
                     &dst_balance_key,
                     Amount::from(200_u64).serialize_to_vec(),
                 )
                 .expect("Test failed");
 
-            wl
+            state
         };
 
         let keys_changed = {
@@ -183,15 +187,17 @@ mod test_nuts {
         };
 
         let tx = Tx::from_type(TxType::Raw);
-        let ctx = Ctx::<_, _, WasmCacheRwAccess>::new(
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        ));
+        let sentinel = RefCell::new(VpSentinel::default());
+        let ctx = Ctx::<_, WasmCacheRwAccess>::new(
             &Address::Internal(InternalAddress::Nut(DAI_ERC20_ETH_ADDRESS)),
-            &wl_storage.storage,
-            &wl_storage.write_log,
+            &state,
             &tx,
             &TxIndex(0),
-            VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
-                u64::MAX.into(),
-            )),
+            &gas_meter,
+            &sentinel,
             &keys_changed,
             &verifiers,
             VpCache::new(temp_dir(), 100usize),

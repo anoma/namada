@@ -21,6 +21,8 @@ pub use {
 
 #[cfg(feature = "wasm-runtime")]
 mod dry_run_tx {
+    use std::cell::RefCell;
+
     use namada_sdk::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
     use namada_state::{DBIter, ResultExt, StorageHasher, DB};
     use namada_tx::data::GasLimit;
@@ -30,8 +32,8 @@ mod dry_run_tx {
     use crate::vm::WasmCacheAccess;
 
     /// Dry run a transaction
-    pub fn dry_run_tx<D, H, CA>(
-        mut ctx: RequestCtx<'_, D, H, VpCache<CA>, TxCache<CA>>,
+    pub fn dry_run_tx<'a, D, H, CA>(
+        mut ctx: RequestCtx<'a, D, H, VpCache<CA>, TxCache<CA>>,
         request: &RequestQuery,
     ) -> namada_state::StorageResult<EncodedResponseQuery>
     where
@@ -41,32 +43,31 @@ mod dry_run_tx {
     {
         use borsh_ext::BorshSerializeExt;
         use namada_gas::{Gas, GasMetering, TxGasMeter};
-        use namada_state::TempWlStorage;
         use namada_tx::data::{DecryptedTx, TxType};
         use namada_tx::Tx;
 
         use crate::ledger::protocol::ShellParams;
         use crate::storage::TxIndex;
 
+        let mut temp_state = ctx.state.with_temp_write_log();
         let mut tx = Tx::try_from(&request.data[..]).into_storage_result()?;
         tx.validate_tx().into_storage_result()?;
 
-        let mut temp_wl_storage = TempWlStorage::new(&ctx.wl_storage.storage);
         let mut cumulated_gas = Gas::default();
 
         // Wrapper dry run to allow estimating the gas cost of a transaction
-        let mut tx_gas_meter = match tx.header().tx_type {
+        let tx_gas_meter = match tx.header().tx_type {
             TxType::Wrapper(wrapper) => {
-                let mut tx_gas_meter =
-                    TxGasMeter::new(wrapper.gas_limit.to_owned());
+                let tx_gas_meter =
+                    RefCell::new(TxGasMeter::new(wrapper.gas_limit.to_owned()));
                 protocol::apply_wrapper_tx(
                     tx.clone(),
                     &wrapper,
                     None,
                     &request.data,
                     ShellParams::new(
-                        &mut tx_gas_meter,
-                        &mut temp_wl_storage,
+                        &tx_gas_meter,
+                        &mut temp_state,
                         &mut ctx.vp_wasm_cache,
                         &mut ctx.tx_wasm_cache,
                     ),
@@ -74,53 +75,53 @@ mod dry_run_tx {
                 )
                 .into_storage_result()?;
 
-                temp_wl_storage.write_log.commit_tx();
-                cumulated_gas = tx_gas_meter.get_tx_consumed_gas();
+                temp_state.write_log_mut().commit_tx();
+                cumulated_gas = tx_gas_meter.borrow_mut().get_tx_consumed_gas();
 
                 tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
-                TxGasMeter::new_from_sub_limit(tx_gas_meter.get_available_gas())
+                let available_gas = tx_gas_meter.borrow().get_available_gas();
+                TxGasMeter::new_from_sub_limit(available_gas)
             }
             TxType::Protocol(_) | TxType::Decrypted(_) => {
-                // If dry run only the inner tx, use the max block gas as the
-                // gas limit
+                // If dry run only the inner tx, use the max block gas as
+                // the gas limit
                 TxGasMeter::new(GasLimit::from(
-                    namada_parameters::get_max_block_gas(ctx.wl_storage)
-                        .unwrap(),
+                    namada_parameters::get_max_block_gas(ctx.state).unwrap(),
                 ))
             }
             TxType::Raw => {
                 // Cast tx to a decrypted for execution
                 tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
 
-                // If dry run only the inner tx, use the max block gas as the
-                // gas limit
+                // If dry run only the inner tx, use the max block gas as
+                // the gas limit
                 TxGasMeter::new(GasLimit::from(
-                    namada_parameters::get_max_block_gas(ctx.wl_storage)
-                        .unwrap(),
+                    namada_parameters::get_max_block_gas(ctx.state).unwrap(),
                 ))
             }
         };
 
+        let tx_gas_meter = RefCell::new(tx_gas_meter);
         let mut data = protocol::apply_wasm_tx(
             tx,
             &TxIndex(0),
             ShellParams::new(
-                &mut tx_gas_meter,
-                &mut temp_wl_storage,
+                &tx_gas_meter,
+                &mut temp_state,
                 &mut ctx.vp_wasm_cache,
                 &mut ctx.tx_wasm_cache,
             ),
         )
         .into_storage_result()?;
         cumulated_gas = cumulated_gas
-            .checked_add(tx_gas_meter.get_tx_consumed_gas())
+            .checked_add(tx_gas_meter.borrow().get_tx_consumed_gas())
             .ok_or(namada_state::StorageError::SimpleMessage(
                 "Overflow in gas",
             ))?;
         // Account gas for both inner and wrapper (if available)
         data.gas_used = cumulated_gas;
-        // NOTE: the keys changed by the wrapper transaction (if any) are not
-        // returned from this function
+        // NOTE: the keys changed by the wrapper transaction (if any) are
+        // not returned from this function
         let data = data.serialize_to_vec();
         Ok(EncodedResponseQuery {
             data,
@@ -141,7 +142,7 @@ mod test {
         EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
     };
     use namada_sdk::tendermint_rpc::{self, Error as RpcError, Response};
-    use namada_state::testing::TestWlStorage;
+    use namada_state::testing::TestState;
     use namada_state::StorageWrite;
     use namada_test_utils::TestWasms;
     use namada_tx::data::decrypted::DecryptedTx;
@@ -162,8 +163,8 @@ mod test {
     {
         /// RPC router
         pub rpc: RPC,
-        /// storage
-        pub wl_storage: TestWlStorage,
+        /// state
+        pub state: TestState,
         /// event log
         pub event_log: EventLog,
         /// VP wasm compilation cache
@@ -184,17 +185,14 @@ mod test {
         /// Initialize a test client for the given root RPC router
         pub fn new(rpc: RPC) -> Self {
             // Initialize the `TestClient`
-            let mut wl_storage = TestWlStorage::default();
+            let mut state = TestState::default();
 
             // Initialize mock gas limit
             let max_block_gas_key =
                 namada_parameters::storage::get_max_block_gas_key();
-            wl_storage
-                .storage
-                .write(&max_block_gas_key, namada_core::encode(&20_000_000_u64))
-                .expect(
-                    "Max block gas parameter must be initialized in storage",
-                );
+            state.write(&max_block_gas_key, 20_000_000_u64).expect(
+                "Max block gas parameter must be initialized in storage",
+            );
             let event_log = EventLog::default();
             let (vp_wasm_cache, vp_cache_dir) =
                 wasm::compilation_cache::common::testing::cache();
@@ -202,7 +200,7 @@ mod test {
                 wasm::compilation_cache::common::testing::cache();
             Self {
                 rpc,
-                wl_storage,
+                state,
                 event_log,
                 vp_wasm_cache: vp_wasm_cache.read_only(),
                 tx_wasm_cache: tx_wasm_cache.read_only(),
@@ -238,7 +236,7 @@ mod test {
                 prove,
             };
             let ctx = RequestCtx {
-                wl_storage: &self.wl_storage,
+                state: &self.state,
                 event_log: &self.event_log,
                 vp_wasm_cache: self.vp_wasm_cache.clone(),
                 tx_wasm_cache: self.tx_wasm_cache.clone(),
@@ -274,22 +272,21 @@ mod test {
         let tx_hash = Hash::sha256(&tx_no_op);
         let key = Key::wasm_code(&tx_hash);
         let len_key = Key::wasm_code_len(&tx_hash);
-        client.wl_storage.storage.write(&key, &tx_no_op).unwrap();
+        client.state.db_write(&key, &tx_no_op).unwrap();
         client
-            .wl_storage
-            .storage
-            .write(&len_key, (tx_no_op.len() as u64).serialize_to_vec())
+            .state
+            .db_write(&len_key, (tx_no_op.len() as u64).serialize_to_vec())
             .unwrap();
 
         // Request last committed epoch
         let read_epoch = RPC.shell().epoch(&client).await.unwrap();
-        let current_epoch = client.wl_storage.storage.last_epoch;
+        let current_epoch = client.state.in_mem().last_epoch;
         assert_eq!(current_epoch, read_epoch);
 
         // Request dry run tx
         let mut outer_tx =
             Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
-        outer_tx.header.chain_id = client.wl_storage.storage.chain_id.clone();
+        outer_tx.header.chain_id = client.state.in_mem().chain_id.clone();
         outer_tx.set_code(Code::from_hash(tx_hash, None));
         outer_tx.set_data(Data::new(vec![]));
         let tx_bytes = outer_tx.to_bytes();
@@ -331,10 +328,10 @@ mod test {
 
         // Then write some balance ...
         let balance = token::Amount::native_whole(1000);
-        StorageWrite::write(&mut client.wl_storage, &balance_key, balance)?;
+        StorageWrite::write(&mut client.state, &balance_key, balance)?;
         // It has to be committed to be visible in a query
-        client.wl_storage.commit_tx();
-        client.wl_storage.commit_block().unwrap();
+        client.state.commit_tx();
+        client.state.commit_block().unwrap();
         // ... there should be the same value now
         let read_balance = RPC
             .shell()
