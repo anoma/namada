@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::BTreeSet;
 
 use namada::core::address::{self, Address};
@@ -5,9 +6,7 @@ use namada::core::storage::{self, Key, TxIndex};
 use namada::gas::TxGasMeter;
 use namada::ledger::gas::VpGasMeter;
 use namada::ledger::storage::mockdb::MockDB;
-use namada::ledger::storage::testing::TestStorage;
-use namada::ledger::storage::write_log::WriteLog;
-use namada::ledger::storage::{Sha256Hasher, WlStorage};
+use namada::ledger::storage::testing::TestState;
 use namada::tx::data::TxType;
 use namada::tx::Tx;
 use namada::vm::prefix_iter::PrefixIterators;
@@ -42,10 +41,10 @@ pub mod vp_host_env {
 #[derive(Debug)]
 pub struct TestVpEnv {
     pub addr: Address,
-    pub wl_storage: WlStorage<MockDB, Sha256Hasher>,
+    pub state: TestState,
     pub iterators: PrefixIterators<'static, MockDB>,
-    pub gas_meter: VpGasMeter,
-    pub sentinel: VpSentinel,
+    pub gas_meter: RefCell<VpGasMeter>,
+    pub sentinel: RefCell<VpSentinel>,
     pub tx: Tx,
     pub tx_index: TxIndex,
     pub keys_changed: BTreeSet<storage::Key>,
@@ -66,20 +65,17 @@ impl Default for TestVpEnv {
         let (vp_wasm_cache, vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
-        let wl_storage = WlStorage {
-            storage: TestStorage::default(),
-            write_log: WriteLog::default(),
-        };
+        let state = TestState::default();
         let mut tx = Tx::from_type(TxType::Raw);
-        tx.header.chain_id = wl_storage.storage.chain_id.clone();
+        tx.header.chain_id = state.in_mem().chain_id.clone();
         Self {
             addr: address::testing::established_address_1(),
-            wl_storage,
+            state,
             iterators: PrefixIterators::default(),
-            gas_meter: VpGasMeter::new_from_tx_meter(
+            gas_meter: RefCell::new(VpGasMeter::new_from_tx_meter(
                 &TxGasMeter::new_from_sub_limit(10_000_000_000.into()),
-            ),
-            sentinel: VpSentinel::default(),
+            )),
+            sentinel: RefCell::new(VpSentinel::default()),
             tx,
             tx_index: TxIndex::default(),
             keys_changed: BTreeSet::default(),
@@ -94,12 +90,12 @@ impl Default for TestVpEnv {
 
 impl TestVpEnv {
     pub fn all_touched_storage_keys(&self) -> BTreeSet<Key> {
-        self.wl_storage.write_log.get_keys()
+        self.state.write_log().get_keys()
     }
 
     pub fn get_verifiers(&self) -> BTreeSet<Address> {
-        self.wl_storage
-            .write_log
+        self.state
+            .write_log()
             .verifiers_and_changed_keys(&self.verifiers)
             .0
     }
@@ -116,7 +112,7 @@ mod native_vp_host_env {
 
     // TODO replace with `std::concat_idents` once stabilized (https://github.com/rust-lang/rust/issues/29599)
     use concat_idents::concat_idents;
-    use namada::state::Sha256Hasher;
+    use namada::state::StateRead;
     use namada::vm::host_env::*;
     use namada::vm::WasmCacheRwAccess;
 
@@ -124,8 +120,8 @@ mod native_vp_host_env {
 
     #[cfg(feature = "wasm-runtime")]
     pub type VpEval = namada::vm::wasm::run::VpEvalWasm<
-        MockDB,
-        Sha256Hasher,
+        <TestState as StateRead>::D,
+        <TestState as StateRead>::H,
         WasmCacheRwAccess,
     >;
     #[cfg(not(feature = "wasm-runtime"))]
@@ -197,7 +193,7 @@ mod native_vp_host_env {
         // Write an empty validity predicate for the address, because it's used
         // to check if the address exists when we write into its storage
         let vp_key = Key::validity_predicate(&addr);
-        tx_env.wl_storage.storage.write(&vp_key, vec![]).unwrap();
+        tx_env.state.db_write(&vp_key, vec![]).unwrap();
 
         tx_host_env::set(tx_env);
         apply_tx(&addr);
@@ -205,8 +201,8 @@ mod native_vp_host_env {
         let tx_env = tx_host_env::take();
         let verifiers_from_tx = &tx_env.verifiers;
         let (verifiers, keys_changed) = tx_env
-            .wl_storage
-            .write_log
+            .state
+            .write_log()
             .verifiers_and_changed_keys(verifiers_from_tx);
         if !verifiers.contains(&addr) {
             panic!(
@@ -218,7 +214,7 @@ mod native_vp_host_env {
 
         let vp_env = TestVpEnv {
             addr,
-            wl_storage: tx_env.wl_storage,
+            state: tx_env.state,
             keys_changed,
             verifiers,
             ..Default::default()
@@ -258,7 +254,7 @@ mod native_vp_host_env {
                     extern "C" fn extern_fn_name( $($arg: $type),* ) {
                         with(|TestVpEnv {
                                 addr,
-                                wl_storage,
+                                state,
                                 iterators,
                                 gas_meter,
                                 sentinel,
@@ -274,8 +270,7 @@ mod native_vp_host_env {
 
                             let env = vm::host_env::testing::vp_env(
                                 addr,
-                                &wl_storage.storage,
-                                &wl_storage.write_log,
+                                state,
                                 iterators,
                                 gas_meter,
                                 sentinel,
@@ -303,7 +298,7 @@ mod native_vp_host_env {
                     extern "C" fn extern_fn_name( $($arg: $type),* ) -> $ret {
                         with(|TestVpEnv {
                                 addr,
-                                wl_storage,
+                                state,
                                 iterators,
                                 gas_meter,
                                 sentinel,
@@ -319,8 +314,7 @@ mod native_vp_host_env {
 
                             let env = vm::host_env::testing::vp_env(
                                 addr,
-                                &wl_storage.storage,
-                                &wl_storage.write_log,
+                                state,
                                 iterators,
                                 gas_meter,
                                 sentinel,
