@@ -7,7 +7,7 @@ use namada_core::ethereum_events::EthAddress;
 use namada_core::ethereum_structs;
 use namada_core::storage::Key;
 use namada_core::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
-use namada_state::{DBIter, StorageHasher, WlStorage, DB};
+use namada_state::{DBIter, StorageHasher, WlState, DB};
 use namada_storage::{StorageRead, StorageWrite};
 use serde::{Deserialize, Serialize};
 
@@ -167,7 +167,7 @@ impl EthereumBridgeParams {
     ///
     /// If these parameters are initialized, the storage subspaces
     /// for the Ethereum bridge VPs are also initialized.
-    pub fn init_storage<D, H>(&self, wl_storage: &mut WlStorage<D, H>)
+    pub fn init_storage<D, H>(&self, state: &mut WlState<D, H>)
     where
         D: 'static + DB + for<'iter> DBIter<'iter>,
         H: 'static + StorageHasher,
@@ -187,18 +187,18 @@ impl EthereumBridgeParams {
         let native_erc20_key = bridge_storage::native_erc20_key();
         let bridge_contract_key = bridge_storage::bridge_contract_key();
         let eth_start_height_key = bridge_storage::eth_start_height_key();
-        wl_storage
+        state
             .write(
                 &active_key,
                 EthBridgeStatus::Enabled(EthBridgeEnabled::AtGenesis),
             )
             .unwrap();
-        wl_storage
+        state
             .write(&min_confirmations_key, min_confirmations)
             .unwrap();
-        wl_storage.write(&native_erc20_key, native_erc20).unwrap();
-        wl_storage.write(&bridge_contract_key, bridge).unwrap();
-        wl_storage
+        state.write(&native_erc20_key, native_erc20).unwrap();
+        state.write(&bridge_contract_key, bridge).unwrap();
+        state
             .write(&eth_start_height_key, eth_start_height)
             .unwrap();
         for Erc20WhitelistEntry {
@@ -221,26 +221,26 @@ impl EthereumBridgeParams {
                 suffix: whitelist::KeyType::Whitelisted,
             }
             .into();
-            wl_storage.write(&key, true).unwrap();
+            state.write(&key, true).unwrap();
 
             let key = whitelist::Key {
                 asset: *addr,
                 suffix: whitelist::KeyType::Cap,
             }
             .into();
-            wl_storage.write(&key, cap).unwrap();
+            state.write(&key, cap).unwrap();
 
             let key = whitelist::Key {
                 asset: *addr,
                 suffix: whitelist::KeyType::Denomination,
             }
             .into();
-            wl_storage.write(&key, denom).unwrap();
+            state.write(&key, denom).unwrap();
         }
         // Initialize the storage for the Ethereum Bridge VP.
-        vp::ethereum_bridge::init_storage(wl_storage);
+        vp::ethereum_bridge::init_storage(state);
         // Initialize the storage for the Bridge Pool VP.
-        vp::bridge_pool::init_storage(wl_storage);
+        vp::bridge_pool::init_storage(state);
     }
 }
 
@@ -279,7 +279,7 @@ impl EthereumOracleConfig {
     /// present, `None` will be returned - this could be the case if the bridge
     /// has not been bootstrapped yet. Panics if the storage appears to be
     /// corrupt.
-    pub fn read<D, H>(wl_storage: &WlStorage<D, H>) -> Option<Self>
+    pub fn read<D, H>(state: &WlState<D, H>) -> Option<Self>
     where
         D: 'static + DB + for<'iter> DBIter<'iter>,
         H: 'static + StorageHasher,
@@ -288,10 +288,9 @@ impl EthereumOracleConfig {
         // should not panic, when the active status key has not been
         // written to; simply return bridge disabled instead
         let has_active_key =
-            wl_storage.has_key(&bridge_storage::active_key()).unwrap();
+            state.has_key(&bridge_storage::active_key()).unwrap();
 
-        if !has_active_key || !wl_storage.ethbridge_queries().is_bridge_active()
-        {
+        if !has_active_key || !state.ethbridge_queries().is_bridge_active() {
             return None;
         }
 
@@ -302,11 +301,10 @@ impl EthereumOracleConfig {
 
         // These reads must succeed otherwise the storage is corrupt or a
         // read failed
-        let min_confirmations =
-            must_read_key(wl_storage, &min_confirmations_key);
-        let native_erc20 = must_read_key(wl_storage, &native_erc20_key);
-        let bridge_contract = must_read_key(wl_storage, &bridge_contract_key);
-        let eth_start_height = must_read_key(wl_storage, &eth_start_height_key);
+        let min_confirmations = must_read_key(state, &min_confirmations_key);
+        let native_erc20 = must_read_key(state, &native_erc20_key);
+        let bridge_contract = must_read_key(state, &bridge_contract_key);
+        let eth_start_height = must_read_key(state, &eth_start_height_key);
 
         Some(Self {
             eth_start_height,
@@ -341,14 +339,14 @@ where
 /// Reads the value of `key` from `storage` and deserializes it, or panics
 /// otherwise.
 fn must_read_key<D, H, T: BorshDeserialize>(
-    wl_storage: &WlStorage<D, H>,
+    state: &WlState<D, H>,
     key: &Key,
 ) -> T
 where
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
 {
-    StorageRead::read::<T>(wl_storage, key).map_or_else(
+    StorageRead::read::<T>(state, key).map_or_else(
         |err| panic!("Could not read {key}: {err:?}"),
         |value| {
             value.unwrap_or_else(|| {
@@ -365,7 +363,7 @@ where
 mod tests {
     use eyre::Result;
     use namada_core::ethereum_events::EthAddress;
-    use namada_state::testing::TestWlStorage;
+    use namada_state::testing::TestState;
 
     use super::*;
 
@@ -395,7 +393,7 @@ mod tests {
 
     #[test]
     fn test_ethereum_bridge_config_read_write_storage() {
-        let mut wl_storage = TestWlStorage::default();
+        let mut state = TestState::default();
         let config = EthereumBridgeParams {
             erc20_whitelist: vec![],
             eth_start_height: Default::default(),
@@ -408,9 +406,9 @@ mod tests {
                 },
             },
         };
-        config.init_storage(&mut wl_storage);
+        config.init_storage(&mut state);
 
-        let read = EthereumOracleConfig::read(&wl_storage).unwrap();
+        let read = EthereumOracleConfig::read(&state).unwrap();
         let config = EthereumOracleConfig::from(config);
 
         assert_eq!(config, read);
@@ -418,8 +416,8 @@ mod tests {
 
     #[test]
     fn test_ethereum_bridge_config_uninitialized() {
-        let wl_storage = TestWlStorage::default();
-        let read = EthereumOracleConfig::read(&wl_storage);
+        let state = TestState::default();
+        let read = EthereumOracleConfig::read(&state);
 
         assert!(read.is_none());
     }
@@ -427,7 +425,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Could not read")]
     fn test_ethereum_bridge_config_storage_corrupt() {
-        let mut wl_storage = TestWlStorage::default();
+        let mut state = TestState::default();
         let config = EthereumBridgeParams {
             erc20_whitelist: vec![],
             eth_start_height: Default::default(),
@@ -440,14 +438,14 @@ mod tests {
                 },
             },
         };
-        config.init_storage(&mut wl_storage);
+        config.init_storage(&mut state);
         let min_confirmations_key = bridge_storage::min_confirmations_key();
-        wl_storage
+        state
             .write_bytes(&min_confirmations_key, vec![42, 1, 2, 3, 4])
             .unwrap();
 
         // This should panic because the min_confirmations value is not valid
-        EthereumOracleConfig::read(&wl_storage);
+        EthereumOracleConfig::read(&state);
     }
 
     #[test]
@@ -455,15 +453,15 @@ mod tests {
         expected = "Ethereum bridge appears to be only partially configured!"
     )]
     fn test_ethereum_bridge_config_storage_partially_configured() {
-        let mut wl_storage = TestWlStorage::default();
-        wl_storage
+        let mut state = TestState::default();
+        state
             .write(
                 &bridge_storage::active_key(),
                 EthBridgeStatus::Enabled(EthBridgeEnabled::AtGenesis),
             )
             .unwrap();
         // Write a valid min_confirmations value
-        wl_storage
+        state
             .write(
                 &bridge_storage::min_confirmations_key(),
                 MinimumConfirmations::default(),
@@ -471,6 +469,6 @@ mod tests {
             .unwrap();
 
         // This should panic as the other config values are not written
-        EthereumOracleConfig::read(&wl_storage);
+        EthereumOracleConfig::read(&state);
     }
 }

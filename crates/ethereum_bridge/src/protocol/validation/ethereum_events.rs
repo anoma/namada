@@ -2,7 +2,7 @@
 
 use namada_core::storage::BlockHeight;
 use namada_proof_of_stake::pos_queries::PosQueries;
-use namada_state::{DBIter, StorageHasher, WlStorage, DB};
+use namada_state::{DBIter, StorageHasher, WlState, DB};
 use namada_tx::Signed;
 use namada_vote_ext::ethereum_events;
 
@@ -19,7 +19,7 @@ use crate::storage::eth_bridge_queries::EthBridgeQueries;
 ///  * There are no duplicate Ethereum events in this vote extension, and the
 ///    events are sorted in ascending order.
 pub fn validate_eth_events_vext<D, H>(
-    wl_storage: &WlStorage<D, H>,
+    state: &WlState<D, H>,
     ext: &Signed<ethereum_events::Vext>,
     last_height: BlockHeight,
 ) -> Result<(), VoteExtensionError>
@@ -30,7 +30,7 @@ where
     // NOTE: for ABCI++, we should pass
     // `last_height` here, instead of `ext.data.block_height`
     let ext_height_epoch =
-        match wl_storage.pos_queries().get_epoch(ext.data.block_height) {
+        match state.pos_queries().get_epoch(ext.data.block_height) {
             Some(epoch) => epoch,
             _ => {
                 tracing::debug!(
@@ -41,7 +41,7 @@ where
                 return Err(VoteExtensionError::UnexpectedEpoch);
             }
         };
-    if !wl_storage
+    if !state
         .ethbridge_queries()
         .is_bridge_active_at(ext_height_epoch)
     {
@@ -65,10 +65,10 @@ where
         tracing::debug!("Dropping vote extension issued at genesis");
         return Err(VoteExtensionError::UnexpectedBlockHeight);
     }
-    validate_eth_events(wl_storage, &ext.data)?;
+    validate_eth_events(state, &ext.data)?;
     // get the public key associated with this validator
     let validator = &ext.data.validator_addr;
-    let (_, pk) = wl_storage
+    let (_, pk) = state
         .pos_queries()
         .get_validator_from_address(validator, Some(ext_height_epoch))
         .map_err(|err| {
@@ -102,7 +102,7 @@ where
 /// ascending ordering, must not contain any dupes
 /// and must have valid nonces.
 fn validate_eth_events<D, H>(
-    wl_storage: &WlStorage<D, H>,
+    state: &WlState<D, H>,
     ext: &ethereum_events::Vext,
 ) -> Result<(), VoteExtensionError>
 where
@@ -128,11 +128,11 @@ where
     }
     // for the proposal to be valid, at least one of the
     // event's nonces must be valid
-    if ext.ethereum_events.iter().any(|event| {
-        wl_storage
-            .ethbridge_queries()
-            .validate_eth_event_nonce(event)
-    }) {
+    if ext
+        .ethereum_events
+        .iter()
+        .any(|event| state.ethbridge_queries().validate_eth_event_nonce(event))
+    {
         Ok(())
     } else {
         Err(VoteExtensionError::InvalidEthEventNonce)
