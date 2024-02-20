@@ -326,7 +326,7 @@ pub mod threshold {
         }
     }
 
-    /// Divide free space in three.
+    /// Divide free space in half.
     pub const ONE_HALF: Threshold = Threshold::new(1, 2);
 }
 
