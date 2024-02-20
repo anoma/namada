@@ -1468,9 +1468,31 @@ pub struct IndexedTx {
     pub height: BlockHeight,
     /// The index in the block of the tx
     pub index: TxIndex,
-    /// A transcation can have up to two sheilded transfers.
-    /// This indicates if the wrapper contained a sheilded transfer.
+    /// A transcation can have up to two shielded transfers.
+    /// This indicates if the wrapper contained a shielded transfer.
     pub is_wrapper: bool,
+}
+
+#[derive(
+    Default,
+    Debug,
+    Copy,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+)]
+/// The index of a tx to be stored in the DB. Differs from
+/// [`IndexedTx`] as we know we only persist txs which aren't
+/// wrapper txs.
+pub struct StoredIndexedTx {
+    /// The block height of the indexed tx
+    pub height: BlockHeight,
+    /// The index in the block of the tx
+    pub index: TxIndex,
 }
 
 #[cfg(test)]

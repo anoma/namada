@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use super::super::{AllocFailure, BlockAllocator};
 use super::{
-    BuildingProtocolTxBatch, BuildingTxBatch, NextStateImpl, TryAlloc,
+    BuildingNormalTxBatch, BuildingProtocolTxBatch, NextStateImpl, TryAlloc,
     WithNormalTxs,
 };
 use crate::node::ledger::shell::block_alloc::TxBin;
@@ -20,7 +20,7 @@ impl<T> TryAlloc for BlockAllocator<BuildingProtocolTxBatch<T>> {
 }
 
 impl NextStateImpl for BlockAllocator<BuildingProtocolTxBatch<WithNormalTxs>> {
-    type Next = BlockAllocator<BuildingTxBatch>;
+    type Next = BlockAllocator<BuildingNormalTxBatch>;
 
     #[inline]
     fn next_state_impl(mut self) -> Self::Next {
