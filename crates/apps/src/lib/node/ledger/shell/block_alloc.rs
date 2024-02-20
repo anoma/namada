@@ -153,7 +153,7 @@ impl BlockAllocator<states::BuildingProtocolTxBatch<WithNormalTxs>> {
         cometbft_max_block_space_in_bytes: u64,
         max_block_gas: u64,
     ) -> Self {
-        let max = tendermint_max_block_space_in_bytes;
+        let max = cometbft_max_block_space_in_bytes;
         Self {
             _state: PhantomData,
             block: TxBin::init(max),
@@ -166,7 +166,7 @@ impl BlockAllocator<states::BuildingProtocolTxBatch<WithNormalTxs>> {
     }
 }
 
-impl BlockAllocator<states::BuildingTxBatch> {
+impl BlockAllocator<states::BuildingNormalTxBatch> {
     /// Construct a new [`BlockAllocator`], with an upper bound
     /// on the max size of all txs in a block defined by Tendermint and an upper
     /// bound on the max gas in a block.
@@ -332,13 +332,12 @@ pub mod threshold {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
 
     use assert_matches::assert_matches;
     use proptest::prelude::*;
 
     use super::states::{
-        BuildingProtocolTxBatch, BuildingTxBatch, NextState, TryAlloc,
+        BuildingNormalTxBatch, BuildingProtocolTxBatch, NextState, TryAlloc,
     };
     use super::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
@@ -350,7 +349,7 @@ mod tests {
 
     /// Convenience alias for a block allocator at a state with protocol
     /// txs.
-    type BsaNormalTxs = BlockAllocator<BuildingTxBatch>;
+    type BsaNormalTxs = BlockAllocator<BuildingNormalTxBatch>;
 
     /// Proptest generated txs.
     #[derive(Debug)]
@@ -416,7 +415,7 @@ mod tests {
         // reserve block space for protocol txs
         let mut alloc = BsaInitialProtocolTxs::init(BLOCK_SIZE, BLOCK_GAS);
 
-        // allocate ~1/3 of the block space to encrypted txs
+        // allocate ~1/3 of the block space to protocol txs
         assert!(alloc.try_alloc(&[0; 18]).is_ok());
 
         // reserve block space for normal txs
@@ -435,6 +434,12 @@ mod tests {
         assert_matches!(
             alloc.try_alloc(BlockResources::new(&[0; 1], 0)),
             Err(AllocFailure::Rejected { .. })
+        );
+
+        let mut alloc = alloc.next_state();
+        assert_matches!(
+            alloc.try_alloc(&[0; 1]),
+            Err(AllocFailure::OverflowsBin { .. })
         );
     }
 
@@ -518,15 +523,15 @@ mod tests {
         // iterate over the produced txs to make sure we can keep
         // dumping new txs without filling up the bins
 
-        let bins = RefCell::new(BsaInitialProtocolTxs::init(
+        let mut bins = BsaInitialProtocolTxs::init(
             tendermint_max_block_space_in_bytes,
             max_block_gas,
-        ));
+        );
         let mut protocol_tx_iter = protocol_txs.iter();
         let mut allocated_txs = vec![];
         let mut new_size = 0;
         for tx in protocol_tx_iter.by_ref() {
-            let bin = bins.borrow().protocol_txs;
+            let bin = bins.protocol_txs;
             if new_size + tx.len() as u64 >= bin.allotted {
                 break;
             } else {
@@ -535,14 +540,14 @@ mod tests {
             }
         }
         for tx in allocated_txs {
-            assert!(bins.borrow_mut().try_alloc(tx).is_ok());
+            assert!(bins.try_alloc(tx).is_ok());
         }
 
-        let bins = RefCell::new(bins.into_inner().next_state());
-        let mut new_size = bins.borrow().normal_txs.space.allotted;
+        let mut bins = bins.next_state();
+        let mut new_size = bins.normal_txs.space.allotted;
         let mut decrypted_txs = vec![];
         for tx in normal_txs {
-            let bin = bins.borrow().normal_txs.space;
+            let bin = bins.normal_txs.space;
             if (new_size + tx.len() as u64) < bin.allotted {
                 new_size += tx.len() as u64;
                 decrypted_txs.push(tx);
@@ -551,18 +556,14 @@ mod tests {
             }
         }
         for tx in decrypted_txs {
-            assert!(
-                bins.borrow_mut()
-                    .try_alloc(BlockResources::new(&tx, 0))
-                    .is_ok()
-            );
+            assert!(bins.try_alloc(BlockResources::new(&tx, 0)).is_ok());
         }
 
-        let bins = RefCell::new(bins.into_inner().next_state());
+        let mut bins = bins.next_state();
         let mut allocated_txs = vec![];
-        let mut new_size = bins.borrow().protocol_txs.allotted;
+        let mut new_size = bins.protocol_txs.allotted;
         for tx in protocol_tx_iter.by_ref() {
-            let bin = bins.borrow().protocol_txs;
+            let bin = bins.protocol_txs;
             if new_size + tx.len() as u64 >= bin.allotted {
                 break;
             } else {
@@ -572,7 +573,7 @@ mod tests {
         }
 
         for tx in allocated_txs {
-            assert!(bins.borrow_mut().try_alloc(tx).is_ok());
+            assert!(bins.try_alloc(tx).is_ok());
         }
     }
 

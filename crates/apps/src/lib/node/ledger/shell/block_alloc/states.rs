@@ -8,7 +8,7 @@
 //!
 //! 1. [`BuildingProtocolTxBatch`] - the initial state. In
 //!    this state, we populate a block with protocol txs.
-//! 2. [`BuildingTxBatch`] - the second state. In
+//! 2. [`BuildingNormalTxBatch`] - the second state. In
 //!    this state, we populate a block with non-protocol txs.
 //! 3. [`BuildingProtocolTxBatch`] - we return to this state to
 //!    fill up any remaining block space if possible.
@@ -28,7 +28,7 @@ use super::AllocFailure;
 /// For more info, read the module docs of
 /// [`crate::node::ledger::shell::block_alloc::states`].
 pub struct BuildingProtocolTxBatch<Mode> {
-    /// One of [`WithEncryptedTxs`] and [`WithoutEncryptedTxs`].
+    /// One of [`WithNormalTxs`] and [`WithoutNormalTxs`].
     _mode: Mode,
 }
 
@@ -49,7 +49,7 @@ pub enum WithoutNormalTxs {}
 ///
 /// For more info, read the module docs of
 /// [`crate::node::ledger::shell::block_alloc::states`].
-pub struct BuildingTxBatch {}
+pub struct BuildingNormalTxBatch {}
 
 /// Try to allocate a new transaction on a `BlockAllocator` state.
 ///

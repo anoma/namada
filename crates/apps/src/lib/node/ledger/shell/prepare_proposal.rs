@@ -15,7 +15,7 @@ use namada::vm::WasmCacheAccess;
 
 use super::super::*;
 use super::block_alloc::states::{
-    BuildingProtocolTxBatch, BuildingTxBatch, NextState, TryAlloc,
+    BuildingNormalTxBatch, BuildingProtocolTxBatch, NextState, TryAlloc,
     WithNormalTxs, WithoutNormalTxs,
 };
 use super::block_alloc::{AllocFailure, BlockAllocator, BlockResources};
@@ -104,7 +104,7 @@ where
     /// Tendermint's mempool.
     fn build_normal_txs(
         &self,
-        mut alloc: BlockAllocator<BuildingTxBatch>,
+        mut alloc: BlockAllocator<BuildingNormalTxBatch>,
         txs: &[TxBytes],
         block_time: Option<Timestamp>,
         block_proposer: &Address,
@@ -229,6 +229,7 @@ where
                 )
         )
         .collect();
+        // avoid dropping the txs that couldn't be included in the block
         deserialized_iter.keep_rest();
         (alloc, taken)
     }

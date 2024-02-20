@@ -403,7 +403,9 @@ where
                     },
                 }
             }
-            TxType::Decrypted(_) => unreachable!(),
+            TxType::Decrypted(_) => {
+                unreachable!("Received decrypted tx in ProcessProposal")
+            }
             TxType::Wrapper(wrapper) => {
                 // Account for gas and space. This is done even if the
                 // transaction is later deemed invalid, to

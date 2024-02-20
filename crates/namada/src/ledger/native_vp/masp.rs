@@ -265,14 +265,11 @@ where
             1 => {
                 match self
                     .ctx
-                    .read_post::<IndexedTx>(pin_keys.first().unwrap())?
+                    .read_post::<StoredIndexedTx>(pin_keys.first().unwrap())?
                 {
-                    Some(IndexedTx {
-                        height,
-                        index,
-                        is_wrapper: false,
-                    }) if height == self.ctx.get_block_height()?
-                        && index == self.ctx.get_tx_index()? => {}
+                    Some(StoredIndexedTx { height, index })
+                        if height == self.ctx.get_block_height()?
+                            && index == self.ctx.get_tx_index()? => {}
                     Some(_) => {
                         return Err(Error::NativeVpError(
                             native_vp::Error::SimpleMessage(
