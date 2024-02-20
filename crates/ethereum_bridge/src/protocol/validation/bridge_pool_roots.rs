@@ -3,7 +3,7 @@
 use namada_core::keccak::keccak_hash;
 use namada_core::storage::BlockHeight;
 use namada_proof_of_stake::pos_queries::PosQueries;
-use namada_state::{DBIter, StorageHasher, WlStorage, DB};
+use namada_state::{DBIter, StorageHasher, WlState, DB};
 use namada_tx::{SignableEthMessage, Signed};
 use namada_vote_ext::bridge_pool_roots;
 
@@ -21,7 +21,7 @@ use crate::storage::eth_bridge_queries::EthBridgeQueries;
 ///  * The validator signed over the correct height inside of the extension.
 ///  * Check that the inner signature is valid.
 pub fn validate_bp_roots_vext<D, H>(
-    wl_storage: &WlStorage<D, H>,
+    state: &WlState<D, H>,
     ext: &Signed<bridge_pool_roots::Vext>,
     last_height: BlockHeight,
 ) -> Result<(), VoteExtensionError>
@@ -32,7 +32,7 @@ where
     // NOTE: for ABCI++, we should pass
     // `last_height` here, instead of `ext.data.block_height`
     let ext_height_epoch =
-        match wl_storage.pos_queries().get_epoch(ext.data.block_height) {
+        match state.pos_queries().get_epoch(ext.data.block_height) {
             Some(epoch) => epoch,
             _ => {
                 tracing::debug!(
@@ -43,7 +43,7 @@ where
                 return Err(VoteExtensionError::UnexpectedEpoch);
             }
         };
-    if !wl_storage
+    if !state
         .ethbridge_queries()
         .is_bridge_active_at(ext_height_epoch)
     {
@@ -71,7 +71,7 @@ where
 
     // get the public key associated with this validator
     let validator = &ext.data.validator_addr;
-    let (_, pk) = wl_storage
+    let (_, pk) = state
         .pos_queries()
         .get_validator_from_address(validator, Some(ext_height_epoch))
         .map_err(|err| {
@@ -96,12 +96,12 @@ where
         VoteExtensionError::VerifySigFailed
     })?;
 
-    let bp_root = wl_storage
+    let bp_root = state
         .ethbridge_queries()
         .get_bridge_pool_root_at_height(ext.data.block_height)
         .expect("We asserted that the queried height is correct")
         .0;
-    let nonce = wl_storage
+    let nonce = state
         .ethbridge_queries()
         .get_bridge_pool_nonce_at_height(ext.data.block_height)
         .to_bytes();
@@ -109,7 +109,7 @@ where
         keccak_hash([bp_root, nonce].concat()),
         ext.data.sig.clone(),
     );
-    let pk = wl_storage
+    let pk = state
         .pos_queries()
         .read_validator_eth_hot_key(validator, Some(ext_height_epoch))
         .expect("A validator should have an Ethereum hot key in storage.");
