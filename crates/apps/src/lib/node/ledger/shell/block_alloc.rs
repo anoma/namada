@@ -150,7 +150,7 @@ impl BlockAllocator<states::BuildingProtocolTxBatch<WithNormalTxs>> {
     /// bound on the max gas in a block.
     #[inline]
     pub fn init(
-        tendermint_max_block_space_in_bytes: u64,
+        cometbft_max_block_space_in_bytes: u64,
         max_block_gas: u64,
     ) -> Self {
         let max = tendermint_max_block_space_in_bytes;
