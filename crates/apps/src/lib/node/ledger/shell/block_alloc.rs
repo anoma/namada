@@ -348,7 +348,7 @@ mod tests {
     type BsaInitialProtocolTxs =
         BlockAllocator<BuildingProtocolTxBatch<WithNormalTxs>>;
 
-    /// Convenience alias for a block space allocator at a state with protocol
+    /// Convenience alias for a block allocator at a state with protocol
     /// txs.
     type BsaNormalTxs = BlockAllocator<BuildingTxBatch>;
 
