@@ -232,7 +232,7 @@ mod tests {
             match &transition {
                 Transition::CommitTx => {
                     // commit the tx without committing the block
-                    tx_host_env::with(|env| env.wl_storage.commit_tx());
+                    tx_host_env::with(|env| env.state.commit_tx());
                 }
                 Transition::CommitTxAndBlock => {
                     // commit the tx and the block
