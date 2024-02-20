@@ -1816,7 +1816,7 @@ pub async fn query_bonds(
                 "  Remaining active bond from epoch {}: Δ {} (slashed {})",
                 bond.start,
                 bond.amount.to_string_native(),
-                bond.slashed_amount.unwrap_or_default()
+                bond.slashed_amount.unwrap_or_default().to_string_native()
             )?;
         }
         if !details.bonds_total.is_zero() {
@@ -1845,7 +1845,7 @@ pub async fn query_bonds(
                     unbond.withdraw,
                     unbond.start,
                     unbond.amount.to_string_native(),
-                    unbond.slashed_amount.unwrap_or_default()
+                    unbond.slashed_amount.unwrap_or_default().to_string_native()
                 )?;
             }
             display_line!(
