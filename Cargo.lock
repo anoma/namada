@@ -3471,6 +3471,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "indexmap"
+version = "2.2.4"
+source = "git+https://github.com/heliaxdev/indexmap?tag=2.2.4-heliax-1#b5b5b547bd6ab04bbb16e060326a50ddaeb6c909"
+dependencies = [
+ "borsh",
+ "equivalent",
+ "hashbrown 0.14.3",
+ "serde 1.0.193",
+]
+
+[[package]]
 name = "informalsystems-pbjson"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4340,6 +4351,7 @@ dependencies = [
  "ics23",
  "impl-num-traits",
  "index-set",
+ "indexmap 2.2.4",
  "k256",
  "masp_primitives",
  "namada_macros",
