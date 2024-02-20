@@ -48,7 +48,7 @@ impl Broadcaster {
                 strategy: time::Constant(time::Duration::from_secs(1)),
             }
             .timeout(
-                time::Instant::now() + time::Duration::from_secs(30),
+                time::Instant::now() + time::Duration::from_secs(180),
                 || async {
                     match self.client.status().await {
                         Ok(status) => ControlFlow::Break(status),
