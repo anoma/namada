@@ -1,7 +1,6 @@
 //! IBC-related data types
 
 use std::cmp::Ordering;
-use std::collections::HashMap;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -12,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::address::HASH_LEN;
+use crate::collections::HashMap;
 use crate::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
 use crate::ibc::apps::transfer::types::{Memo, PrefixedDenom, TracePath};
 use crate::ibc::core::handler::types::events::{

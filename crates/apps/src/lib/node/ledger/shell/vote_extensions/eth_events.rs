@@ -1,8 +1,9 @@
 //! Extend Tendermint votes with Ethereum events seen by a quorum of validators.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 use namada::vote_ext::ethereum_events::MultiSignedEthEvent;
+use namada_sdk::collections::HashMap;
 
 use super::*;
 
@@ -135,7 +136,6 @@ where
 
 #[cfg(test)]
 mod test_vote_extensions {
-
     use borsh_ext::BorshSerializeExt;
     use namada::core::address::testing::gen_established_address;
     use namada::core::ethereum_events::{

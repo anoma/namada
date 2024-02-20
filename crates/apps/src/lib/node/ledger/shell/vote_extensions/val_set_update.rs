@@ -1,7 +1,7 @@
 //! Extend Tendermint votes with validator set updates, to be relayed to
 //! Namada's Ethereum bridge smart contracts.
 
-use std::collections::HashMap;
+use namada::core::collections::HashMap;
 
 use super::*;
 

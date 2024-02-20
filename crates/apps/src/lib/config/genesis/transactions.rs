@@ -1,6 +1,6 @@
 //! Genesis transactions
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Debug;
 use std::net::SocketAddr;
 
@@ -13,6 +13,7 @@ use ledger_transport_hid::TransportNativeHID;
 use namada::account::AccountPublicKeysMap;
 use namada::core::address::{Address, EstablishedAddress};
 use namada::core::chain::ChainId;
+use namada::core::collections::HashSet;
 use namada::core::dec::Dec;
 use namada::core::key::{
     common, ed25519, RefTo, SerializeWithBorsh, SigScheme,

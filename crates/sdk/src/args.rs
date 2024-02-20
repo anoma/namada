@@ -1,11 +1,11 @@
 //! Structures encapsulating SDK arguments
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration as StdDuration;
 
 use namada_core::address::Address;
 use namada_core::chain::ChainId;
+use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
 use namada_core::ethereum_events::EthAddress;
 use namada_core::keccak::KeccakHash;

@@ -1,6 +1,5 @@
 //! Ledger events
 
-use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::ops::{Index, IndexMut};
 use std::str::FromStr;
@@ -8,6 +7,7 @@ use std::str::FromStr;
 use thiserror::Error;
 
 use crate::borsh::{BorshDeserialize, BorshSerialize};
+use crate::collections::HashMap;
 use crate::ethereum_structs::{BpTransferStatus, EthBridgeEvent};
 use crate::ibc::IbcEvent;
 

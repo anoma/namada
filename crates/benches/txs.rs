@@ -1,9 +1,9 @@
-use std::collections::HashMap;
 use std::str::FromStr;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use namada::account::{InitAccount, UpdateAccount};
 use namada::core::address::{self, Address};
+use namada::core::collections::HashMap;
 use namada::core::eth_bridge_pool::{GasFee, PendingTransfer};
 use namada::core::hash::Hash;
 use namada::core::key::{

@@ -1,9 +1,10 @@
 //! Queries router and handlers for PoS validity predicate
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::address::Address;
+use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::common;
 use namada_core::storage::Epoch;
 use namada_core::token;

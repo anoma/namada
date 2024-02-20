@@ -27,7 +27,6 @@ pub mod io;
 pub mod queries;
 pub mod wallet;
 
-use std::collections::HashSet;
 #[cfg(feature = "async-send")]
 pub use std::marker::Send as MaybeSend;
 #[cfg(feature = "async-send")]
@@ -37,6 +36,7 @@ use std::str::FromStr;
 
 use args::{InputAmount, SdkTypes};
 use namada_core::address::Address;
+use namada_core::collections::HashSet;
 use namada_core::dec::Dec;
 use namada_core::ethereum_events::EthAddress;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};

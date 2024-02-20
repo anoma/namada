@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 
@@ -16,6 +16,7 @@ use namada_core::borsh::{
     BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
 };
 use namada_core::chain::ChainId;
+use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::*;
 use namada_core::masp::AssetData;
 use namada_core::sign::SignatureIndex;

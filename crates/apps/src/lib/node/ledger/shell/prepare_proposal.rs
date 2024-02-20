@@ -1173,10 +1173,9 @@ mod test_prepare_proposal {
         if let ShellMode::Validator { local_config, .. } = &mut shell.mode {
             // Remove the allowed btc
             *local_config = Some(ValidatorLocalConfig {
-                accepted_gas_tokens: std::collections::HashMap::from([(
-                    namada::core::address::testing::nam(),
-                    Amount::from(1),
-                )]),
+                accepted_gas_tokens: namada::core::collections::HashMap::from(
+                    [(namada::core::address::testing::nam(), Amount::from(1))],
+                ),
             });
         }
 
@@ -1279,10 +1278,12 @@ mod test_prepare_proposal {
         if let ShellMode::Validator { local_config, .. } = &mut shell.mode {
             // Remove btc and increase minimum for nam
             *local_config = Some(ValidatorLocalConfig {
-                accepted_gas_tokens: std::collections::HashMap::from([(
-                    namada::core::address::testing::nam(),
-                    Amount::from(100),
-                )]),
+                accepted_gas_tokens: namada::core::collections::HashMap::from(
+                    [(
+                        namada::core::address::testing::nam(),
+                        Amount::from(100),
+                    )],
+                ),
             });
         }
 
