@@ -3,7 +3,7 @@
 //! Here, we expose the host functions into wasm's
 //! imports, so they can be called from inside the wasm.
 
-use namada_core::hash::StorageHasher;
+use namada_state::{DBIter, StorageHasher, DB};
 use wasmer::{
     Function, HostEnvInitError, ImportObject, Instance, Memory, Store,
     WasmerEnv,
@@ -13,9 +13,9 @@ use crate::vm::host_env::{TxVmEnv, VpEvaluator, VpVmEnv};
 use crate::vm::wasm::memory::WasmMemory;
 use crate::vm::{host_env, WasmCacheAccess};
 
-impl<DB, H, CA> WasmerEnv for TxVmEnv<'_, WasmMemory, DB, H, CA>
+impl<D, H, CA> WasmerEnv for TxVmEnv<'_, WasmMemory, D, H, CA>
 where
-    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -27,9 +27,9 @@ where
     }
 }
 
-impl<DB, H, EVAL, CA> WasmerEnv for VpVmEnv<'_, WasmMemory, DB, H, EVAL, CA>
+impl<D, H, EVAL, CA> WasmerEnv for VpVmEnv<'_, WasmMemory, D, H, EVAL, CA>
 where
-    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
@@ -45,13 +45,13 @@ where
 /// Prepare imports (memory and host functions) exposed to the vm guest running
 /// transaction code
 #[allow(clippy::too_many_arguments)]
-pub fn tx_imports<DB, H, CA>(
+pub fn tx_imports<D, H, CA>(
     wasm_store: &Store,
     initial_memory: Memory,
-    env: TxVmEnv<'static, WasmMemory, DB, H, CA>,
+    env: TxVmEnv<'static, WasmMemory, D, H, CA>,
 ) -> ImportObject
 where
-    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
@@ -88,22 +88,22 @@ where
             "namada_tx_ibc_execute" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_ibc_execute),
             "namada_tx_set_commitment_sentinel" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_set_commitment_sentinel),
             "namada_tx_verify_tx_section_signature" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_verify_tx_section_signature),
-            "namada_tx_update_masp_note_commitment_tree" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_update_masp_note_commitment_tree)
+            "namada_tx_update_masp_note_commitment_tree" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_update_masp_note_commitment_tree),
         },
     }
 }
 
 /// Prepare imports (memory and host functions) exposed to the vm guest running
 /// validity predicate code
-pub fn vp_imports<DB, H, EVAL, CA>(
+pub fn vp_imports<D, H, EVAL, CA>(
     wasm_store: &Store,
     initial_memory: Memory,
-    env: VpVmEnv<'static, WasmMemory, DB, H, EVAL, CA>,
+    env: VpVmEnv<'static, WasmMemory, D, H, EVAL, CA>,
 ) -> ImportObject
 where
-    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
-    EVAL: VpEvaluator<Db = DB, H = H, Eval = EVAL, CA = CA>,
+    EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA>,
     CA: WasmCacheAccess,
 {
     wasmer::imports! {

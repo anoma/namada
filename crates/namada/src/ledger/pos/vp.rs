@@ -13,7 +13,7 @@ pub use namada_proof_of_stake::types;
 //     is_validator_address_raw_hash_key,
 //     is_validator_max_commission_rate_change_key,
 // };
-use namada_state::StorageHasher;
+use namada_state::StateRead;
 use namada_state::StorageRead;
 use namada_tx::Tx;
 use thiserror::Error;
@@ -34,32 +34,29 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Proof-of-Stake validity predicate
-pub struct PosVP<'a, DB, H, CA>
+pub struct PosVP<'a, S, CA>
 where
-    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: StorageHasher,
+    S: StateRead,
     CA: WasmCacheAccess,
 {
     /// Context to interact with the host structures.
-    pub ctx: Ctx<'a, DB, H, CA>,
+    pub ctx: Ctx<'a, S, CA>,
 }
 
-impl<'a, DB, H, CA> PosVP<'a, DB, H, CA>
+impl<'a, S, CA> PosVP<'a, S, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     /// Instantiate a `PosVP`.
-    pub fn new(ctx: Ctx<'a, DB, H, CA>) -> Self {
+    pub fn new(ctx: Ctx<'a, S, CA>) -> Self {
         Self { ctx }
     }
 }
 
-impl<'a, DB, H, CA> NativeVp for PosVP<'a, DB, H, CA>
+impl<'a, S, CA> NativeVp for PosVP<'a, S, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     type Error = Error;

@@ -13,7 +13,7 @@ use namada_governance::utils::is_valid_validator_voting_period;
 use namada_governance::ProposalVote;
 use namada_proof_of_stake::is_validator;
 use namada_proof_of_stake::queries::find_delegations;
-use namada_state::StorageRead;
+use namada_state::{StateRead, StorageRead};
 use namada_tx::Tx;
 use namada_vp_env::VpEnv;
 use thiserror::Error;
@@ -47,20 +47,18 @@ pub enum Error {
 }
 
 /// Governance VP
-pub struct GovernanceVp<'a, DB, H, CA>
+pub struct GovernanceVp<'a, S, CA>
 where
-    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: namada_state::StorageHasher,
+    S: StateRead,
     CA: WasmCacheAccess,
 {
     /// Context to interact with the host structures.
-    pub ctx: Ctx<'a, DB, H, CA>,
+    pub ctx: Ctx<'a, S, CA>,
 }
 
-impl<'a, DB, H, CA> NativeVp for GovernanceVp<'a, DB, H, CA>
+impl<'a, S, CA> NativeVp for GovernanceVp<'a, S, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + namada_state::StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     type Error = Error;
@@ -134,10 +132,9 @@ where
     }
 }
 
-impl<'a, DB, H, CA> GovernanceVp<'a, DB, H, CA>
+impl<'a, S, CA> GovernanceVp<'a, S, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + namada_state::StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     fn is_valid_init_proposal_key_set(
@@ -711,8 +708,7 @@ where
         delegation_address: &Address,
     ) -> Result<bool>
     where
-        DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-        H: 'static + namada_state::StorageHasher,
+        S: StateRead,
         CA: 'static + WasmCacheAccess,
     {
         if !address.eq(delegation_address) {

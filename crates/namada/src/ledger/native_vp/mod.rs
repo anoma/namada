@@ -9,6 +9,7 @@ pub mod parameters;
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
+use std::fmt::Debug;
 
 use borsh::BorshDeserialize;
 use eyre::WrapErr;
@@ -18,6 +19,7 @@ use namada_core::validity_predicate::VpSentinel;
 use namada_gas::GasMetering;
 use namada_tx::Tx;
 pub use namada_vp_env::VpEnv;
+use state::StateRead;
 
 use super::vp_host_fns;
 use crate::address::Address;
@@ -25,8 +27,7 @@ use crate::hash::Hash;
 use crate::ibc::IbcEvent;
 use crate::ledger::gas::VpGasMeter;
 use crate::state;
-use crate::state::write_log::WriteLog;
-use crate::state::{ResultExt, State, StorageHasher, StorageRead};
+use crate::state::{ResultExt, StorageRead};
 use crate::storage::{BlockHash, BlockHeight, Epoch, Header, Key, TxIndex};
 use crate::vm::prefix_iter::PrefixIterators;
 use crate::vm::WasmCacheAccess;
@@ -56,24 +57,21 @@ pub trait NativeVp {
 /// wrapper types and `eval_runner` field. The references must not be changed
 /// when [`Ctx`] is mutable.
 #[derive(Debug)]
-pub struct Ctx<'a, DB, H, CA>
+pub struct Ctx<'a, S, CA>
 where
-    DB: state::DB + for<'iter> state::DBIter<'iter>,
-    H: StorageHasher,
+    S: StateRead,
     CA: WasmCacheAccess,
 {
     /// The address of the account that owns the VP
     pub address: &'a Address,
     /// Storage prefix iterators.
-    pub iterators: RefCell<PrefixIterators<'a, DB>>,
+    pub iterators: RefCell<PrefixIterators<'a, <S as StateRead>::D>>,
     /// VP gas meter.
-    pub gas_meter: RefCell<VpGasMeter>,
+    pub gas_meter: &'a RefCell<VpGasMeter>,
     /// Errors sentinel
-    pub sentinel: RefCell<VpSentinel>,
-    /// Read-only access to the storage.
-    pub storage: &'a State<DB, H>,
-    /// Read-only access to the write log.
-    pub write_log: &'a WriteLog,
+    pub sentinel: &'a RefCell<VpSentinel>,
+    /// Read-only state access.
+    pub state: &'a S,
     /// The transaction code is used for signature verification
     pub tx: &'a Tx,
     /// The transaction index is used to obtain the shielded transaction's
@@ -95,42 +93,39 @@ where
 /// Read access to the prior storage (state before tx execution) via
 /// [`trait@StorageRead`].
 #[derive(Debug)]
-pub struct CtxPreStorageRead<'view, 'a: 'view, DB, H, CA>
+pub struct CtxPreStorageRead<'view, 'a: 'view, S, CA>
 where
-    DB: state::DB + for<'iter> state::DBIter<'iter>,
-    H: StorageHasher,
+    S: StateRead,
     CA: WasmCacheAccess,
 {
-    ctx: &'view Ctx<'a, DB, H, CA>,
+    ctx: &'view Ctx<'a, S, CA>,
 }
 
 /// Read access to the posterior storage (state after tx execution) via
 /// [`trait@StorageRead`].
 #[derive(Debug)]
-pub struct CtxPostStorageRead<'view, 'a: 'view, DB, H, CA>
+pub struct CtxPostStorageRead<'view, 'a: 'view, S, CA>
 where
-    DB: state::DB + for<'iter> state::DBIter<'iter>,
-    H: StorageHasher,
+    S: StateRead,
     CA: WasmCacheAccess,
 {
-    ctx: &'view Ctx<'a, DB, H, CA>,
+    ctx: &'view Ctx<'a, S, CA>,
 }
 
-impl<'a, DB, H, CA> Ctx<'a, DB, H, CA>
+impl<'a, S, CA> Ctx<'a, S, CA>
 where
-    DB: 'static + state::DB + for<'iter> state::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     /// Initialize a new context for native VP call
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         address: &'a Address,
-        storage: &'a State<DB, H>,
-        write_log: &'a WriteLog,
+        state: &'a S,
         tx: &'a Tx,
         tx_index: &'a TxIndex,
-        gas_meter: VpGasMeter,
+        gas_meter: &'a RefCell<VpGasMeter>,
+        sentinel: &'a RefCell<VpSentinel>,
         keys_changed: &'a BTreeSet<Key>,
         verifiers: &'a BTreeSet<Address>,
         #[cfg(feature = "wasm-runtime")]
@@ -138,11 +133,10 @@ where
     ) -> Self {
         Self {
             address,
+            state,
             iterators: RefCell::new(PrefixIterators::default()),
-            gas_meter: RefCell::new(gas_meter),
-            sentinel: RefCell::new(VpSentinel::default()),
-            storage,
-            write_log,
+            gas_meter,
+            sentinel,
             tx,
             tx_index,
             keys_changed,
@@ -156,27 +150,24 @@ where
 
     /// Read access to the prior storage (state before tx execution)
     /// via [`trait@StorageRead`].
-    pub fn pre<'view>(&'view self) -> CtxPreStorageRead<'view, 'a, DB, H, CA> {
+    pub fn pre<'view>(&'view self) -> CtxPreStorageRead<'view, 'a, S, CA> {
         CtxPreStorageRead { ctx: self }
     }
 
     /// Read access to the posterior storage (state after tx execution)
     /// via [`trait@StorageRead`].
-    pub fn post<'view>(
-        &'view self,
-    ) -> CtxPostStorageRead<'view, 'a, DB, H, CA> {
+    pub fn post<'view>(&'view self) -> CtxPostStorageRead<'view, 'a, S, CA> {
         CtxPostStorageRead { ctx: self }
     }
 }
 
-impl<'view, 'a: 'view, DB, H, CA> StorageRead
-    for CtxPreStorageRead<'view, 'a, DB, H, CA>
+impl<'view, 'a: 'view, S, CA> StorageRead
+    for CtxPreStorageRead<'view, 'a, S, CA>
 where
-    DB: 'static + state::DB + for<'iter> state::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
-    type PrefixIter<'iter> = state::PrefixIter<'iter, DB> where Self: 'iter;
+    type PrefixIter<'iter> = state::PrefixIter<'iter,<S as StateRead>:: D> where Self: 'iter;
 
     fn read_bytes(
         &self,
@@ -184,8 +175,7 @@ where
     ) -> Result<Option<Vec<u8>>, state::StorageError> {
         vp_host_fns::read_pre(
             &mut self.ctx.gas_meter.borrow_mut(),
-            self.ctx.storage,
-            self.ctx.write_log,
+            self.ctx.state,
             key,
             &mut self.ctx.sentinel.borrow_mut(),
         )
@@ -195,8 +185,7 @@ where
     fn has_key(&self, key: &storage::Key) -> Result<bool, state::StorageError> {
         vp_host_fns::has_key_pre(
             &mut self.ctx.gas_meter.borrow_mut(),
-            self.ctx.storage,
-            self.ctx.write_log,
+            self.ctx.state,
             key,
             &mut self.ctx.sentinel.borrow_mut(),
         )
@@ -209,8 +198,8 @@ where
     ) -> Result<Self::PrefixIter<'iter>, state::StorageError> {
         vp_host_fns::iter_prefix_pre(
             &mut self.ctx.gas_meter.borrow_mut(),
-            self.ctx.write_log,
-            self.ctx.storage,
+            self.ctx.state.write_log(),
+            self.ctx.state.db(),
             prefix,
             &mut self.ctx.sentinel.borrow_mut(),
         )
@@ -224,7 +213,7 @@ where
         &'iter self,
         iter: &mut Self::PrefixIter<'iter>,
     ) -> Result<Option<(String, Vec<u8>)>, state::StorageError> {
-        vp_host_fns::iter_next::<DB>(
+        vp_host_fns::iter_next::<<S as StateRead>::D>(
             &mut self.ctx.gas_meter.borrow_mut(),
             iter,
             &mut self.ctx.sentinel.borrow_mut(),
@@ -268,14 +257,13 @@ where
     }
 }
 
-impl<'view, 'a: 'view, DB, H, CA> StorageRead
-    for CtxPostStorageRead<'view, 'a, DB, H, CA>
+impl<'view, 'a: 'view, S, CA> StorageRead
+    for CtxPostStorageRead<'view, 'a, S, CA>
 where
-    DB: 'static + state::DB + for<'iter> state::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
-    type PrefixIter<'iter> = state::PrefixIter<'iter, DB> where Self: 'iter;
+    type PrefixIter<'iter> = state::PrefixIter<'iter, <S as StateRead>::D> where Self: 'iter;
 
     fn read_bytes(
         &self,
@@ -283,8 +271,7 @@ where
     ) -> Result<Option<Vec<u8>>, state::StorageError> {
         vp_host_fns::read_post(
             &mut self.ctx.gas_meter.borrow_mut(),
-            self.ctx.storage,
-            self.ctx.write_log,
+            self.ctx.state,
             key,
             &mut self.ctx.sentinel.borrow_mut(),
         )
@@ -294,8 +281,7 @@ where
     fn has_key(&self, key: &storage::Key) -> Result<bool, state::StorageError> {
         vp_host_fns::has_key_post(
             &mut self.ctx.gas_meter.borrow_mut(),
-            self.ctx.storage,
-            self.ctx.write_log,
+            self.ctx.state,
             key,
             &mut self.ctx.sentinel.borrow_mut(),
         )
@@ -308,8 +294,8 @@ where
     ) -> Result<Self::PrefixIter<'iter>, state::StorageError> {
         vp_host_fns::iter_prefix_post(
             &mut self.ctx.gas_meter.borrow_mut(),
-            self.ctx.write_log,
-            self.ctx.storage,
+            self.ctx.state.write_log(),
+            self.ctx.state.db(),
             prefix,
             &mut self.ctx.sentinel.borrow_mut(),
         )
@@ -323,7 +309,7 @@ where
         &'iter self,
         iter: &mut Self::PrefixIter<'iter>,
     ) -> Result<Option<(String, Vec<u8>)>, state::StorageError> {
-        vp_host_fns::iter_next::<DB>(
+        vp_host_fns::iter_next::<<S as StateRead>::D>(
             &mut self.ctx.gas_meter.borrow_mut(),
             iter,
             &mut self.ctx.sentinel.borrow_mut(),
@@ -359,7 +345,7 @@ where
     }
 
     fn get_native_token(&self) -> Result<Address, state::StorageError> {
-        Ok(self.ctx.storage.native_token.clone())
+        Ok(self.ctx.state.in_mem().native_token.clone())
     }
 
     fn get_pred_epochs(&self) -> state::StorageResult<Epochs> {
@@ -367,15 +353,14 @@ where
     }
 }
 
-impl<'view, 'a: 'view, DB, H, CA> VpEnv<'view> for Ctx<'a, DB, H, CA>
+impl<'view, 'a: 'view, S, CA> VpEnv<'view> for Ctx<'a, S, CA>
 where
-    DB: 'static + state::DB + for<'iter> state::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
-    type Post = CtxPostStorageRead<'view, 'a, DB, H, CA>;
-    type Pre = CtxPreStorageRead<'view, 'a, DB, H, CA>;
-    type PrefixIter<'iter> = state::PrefixIter<'iter, DB> where Self: 'iter;
+    type Post = CtxPostStorageRead<'view, 'a, S, CA>;
+    type Pre = CtxPreStorageRead<'view, 'a, S, CA>;
+    type PrefixIter<'iter> = state::PrefixIter<'iter, <S as StateRead>::D> where Self: 'iter;
 
     fn pre(&'view self) -> Self::Pre {
         CtxPreStorageRead { ctx: self }
@@ -391,7 +376,7 @@ where
     ) -> Result<Option<T>, state::StorageError> {
         vp_host_fns::read_temp(
             &mut self.gas_meter.borrow_mut(),
-            self.write_log,
+            self.state,
             key,
             &mut self.sentinel.borrow_mut(),
         )
@@ -405,7 +390,7 @@ where
     ) -> Result<Option<Vec<u8>>, state::StorageError> {
         vp_host_fns::read_temp(
             &mut self.gas_meter.borrow_mut(),
-            self.write_log,
+            self.state,
             key,
             &mut self.sentinel.borrow_mut(),
         )
@@ -415,7 +400,7 @@ where
     fn get_chain_id(&self) -> Result<String, state::StorageError> {
         vp_host_fns::get_chain_id(
             &mut self.gas_meter.borrow_mut(),
-            self.storage,
+            self.state,
             &mut self.sentinel.borrow_mut(),
         )
         .into_storage_result()
@@ -424,7 +409,7 @@ where
     fn get_block_height(&self) -> Result<BlockHeight, state::StorageError> {
         vp_host_fns::get_block_height(
             &mut self.gas_meter.borrow_mut(),
-            self.storage,
+            self.state,
             &mut self.sentinel.borrow_mut(),
         )
         .into_storage_result()
@@ -436,7 +421,7 @@ where
     ) -> Result<Option<Header>, state::StorageError> {
         vp_host_fns::get_block_header(
             &mut self.gas_meter.borrow_mut(),
-            self.storage,
+            self.state,
             height,
             &mut self.sentinel.borrow_mut(),
         )
@@ -446,7 +431,7 @@ where
     fn get_block_hash(&self) -> Result<BlockHash, state::StorageError> {
         vp_host_fns::get_block_hash(
             &mut self.gas_meter.borrow_mut(),
-            self.storage,
+            self.state,
             &mut self.sentinel.borrow_mut(),
         )
         .into_storage_result()
@@ -455,7 +440,7 @@ where
     fn get_block_epoch(&self) -> Result<Epoch, state::StorageError> {
         vp_host_fns::get_block_epoch(
             &mut self.gas_meter.borrow_mut(),
-            self.storage,
+            self.state,
             &mut self.sentinel.borrow_mut(),
         )
         .into_storage_result()
@@ -473,7 +458,7 @@ where
     fn get_native_token(&self) -> Result<Address, state::StorageError> {
         vp_host_fns::get_native_token(
             &mut self.gas_meter.borrow_mut(),
-            self.storage,
+            self.state,
             &mut self.sentinel.borrow_mut(),
         )
         .into_storage_result()
@@ -482,7 +467,7 @@ where
     fn get_pred_epochs(&self) -> state::StorageResult<Epochs> {
         vp_host_fns::get_pred_epochs(
             &mut self.gas_meter.borrow_mut(),
-            self.storage,
+            self.state,
             &mut self.sentinel.borrow_mut(),
         )
         .into_storage_result()
@@ -494,7 +479,7 @@ where
     ) -> Result<Vec<IbcEvent>, state::StorageError> {
         vp_host_fns::get_ibc_events(
             &mut self.gas_meter.borrow_mut(),
-            self.write_log,
+            self.state,
             event_type,
         )
         .into_storage_result()
@@ -506,8 +491,8 @@ where
     ) -> Result<Self::PrefixIter<'iter>, state::StorageError> {
         vp_host_fns::iter_prefix_pre(
             &mut self.gas_meter.borrow_mut(),
-            self.write_log,
-            self.storage,
+            self.state.write_log(),
+            self.state.db(),
             prefix,
             &mut self.sentinel.borrow_mut(),
         )
@@ -526,22 +511,24 @@ where
             use crate::vm::host_env::VpCtx;
             use crate::vm::wasm::run::VpEvalWasm;
 
-            let eval_runner = VpEvalWasm {
-                db: PhantomData,
-                hasher: PhantomData,
-                cache_access: PhantomData,
-            };
-            let mut iterators: PrefixIterators<'_, DB> =
+            let eval_runner =
+                VpEvalWasm::<<S as StateRead>::D, <S as StateRead>::H, CA> {
+                    db: PhantomData,
+                    hasher: PhantomData,
+                    cache_access: PhantomData,
+                };
+            let mut iterators: PrefixIterators<'_, <S as StateRead>::D> =
                 PrefixIterators::default();
             let mut result_buffer: Option<Vec<u8>> = None;
             let mut vp_wasm_cache = self.vp_wasm_cache.clone();
 
             let ctx = VpCtx::new(
                 self.address,
-                self.storage,
-                self.write_log,
-                &mut self.gas_meter.borrow_mut(),
-                &mut self.sentinel.borrow_mut(),
+                self.state.write_log(),
+                self.state.in_mem(),
+                self.state.db(),
+                self.gas_meter,
+                self.sentinel,
                 self.tx,
                 self.tx_index,
                 &mut iterators,
@@ -659,10 +646,9 @@ pub trait StorageReader {
     ) -> eyre::Result<Option<T>>;
 }
 
-impl<'a, DB, H, CA> StorageReader for &Ctx<'a, DB, H, CA>
+impl<'a, S, CA> StorageReader for &Ctx<'a, S, CA>
 where
-    DB: 'static + state::DB + for<'iter> state::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     /// Helper function. After reading posterior state,
