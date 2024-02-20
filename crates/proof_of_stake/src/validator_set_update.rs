@@ -521,11 +521,13 @@ where
 /// consensus set already.
 pub fn promote_next_below_capacity_validator_to_consensus<S>(
     storage: &mut S,
-    epoch: Epoch,
+    current_epoch: Epoch,
+    offset: u64,
 ) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
+    let epoch = current_epoch + offset;
     let below_cap_set = below_capacity_validator_set_handle().at(&epoch);
     let max_below_capacity_amount =
         get_max_below_capacity_validator_amount(&below_cap_set, storage)?;
@@ -550,8 +552,8 @@ where
         validator_state_handle(&promoted_validator).set(
             storage,
             ValidatorState::Consensus,
-            epoch,
-            0,
+            current_epoch,
+            offset,
         )?;
     }
 
