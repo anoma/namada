@@ -49,9 +49,9 @@ where
         {
             // start counting allotted space for txs
             let alloc = self.get_protocol_txs_allocator();
-            // add vote extension protocol txs
-            let (alloc, mut txs) = self.build_protocol_txs(alloc, &mut req.txs);
-            let alloc = alloc.next_state();
+            // add initial protocol txs
+            let (alloc, mut txs) =
+                self.build_protocol_tx_with_normal_txs(alloc, &mut req.txs);
 
             // add encrypted txs
             let tm_raw_hash_string =
@@ -73,9 +73,8 @@ where
                 local_config.as_ref(),
             );
             txs.append(&mut normal_txs);
-            // decrypt the wrapper txs included in the previous block
-            let (_, mut remaining_txs) =
-                self.build_protocol_txs(alloc, &mut req.txs);
+            let mut remaining_txs =
+                self.build_protocol_tx_without_normal_txs(alloc, &mut req.txs);
             txs.append(&mut remaining_txs);
             txs
         } else {
@@ -101,7 +100,7 @@ where
     }
 
     /// Builds a batch of encrypted transactions, retrieved from
-    /// Tendermint's mempool.
+    /// CometBFT's mempool.
     fn build_normal_txs(
         &self,
         mut alloc: BlockAllocator<BuildingNormalTxBatch>,
@@ -171,6 +170,28 @@ where
         let alloc = alloc.next_state();
 
         (txs, alloc)
+    }
+
+    /// Allocate an initial set of protocol txs and advance to the
+    /// next allocation state.
+    fn build_protocol_tx_with_normal_txs(
+        &self,
+        alloc: BlockAllocator<BuildingProtocolTxBatch<WithNormalTxs>>,
+        txs: &mut Vec<TxBytes>,
+    ) -> (BlockAllocator<BuildingNormalTxBatch>, Vec<TxBytes>) {
+        let (alloc, txs) = self.build_protocol_txs(alloc, txs);
+        (alloc.next_state(), txs)
+    }
+
+    /// Allocate protocol txs into any remaining space. After this, no
+    /// more allocation will take place.
+    fn build_protocol_tx_without_normal_txs(
+        &self,
+        alloc: BlockAllocator<BuildingProtocolTxBatch<WithoutNormalTxs>>,
+        txs: &mut Vec<TxBytes>,
+    ) -> Vec<TxBytes> {
+        let (_, txs) = self.build_protocol_txs(alloc, txs);
+        txs
     }
 
     /// Builds a batch of protocol transactions.
