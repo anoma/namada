@@ -363,14 +363,8 @@ fn proposal_ibc_token_inflation() -> Result<()> {
     let update_genesis =
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
             genesis.parameters.parameters.epochs_per_year =
-                epochs_per_year_from_min_duration(50);
-            genesis.parameters.parameters.max_proposal_bytes =
-                Default::default();
-            genesis.parameters.pgf_params.stewards =
-                BTreeSet::from_iter([get_established_addr_from_pregenesis(
-                    ALBERT_KEY, base_dir, &genesis,
-                )
-                .unwrap()]);
+                epochs_per_year_from_min_duration(60);
+            genesis.parameters.gov_params.min_proposal_grace_epochs = 3;
             setup::set_validators(1, genesis, base_dir, |_| 0)
         };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
@@ -398,7 +392,7 @@ fn proposal_ibc_token_inflation() -> Result<()> {
     submit_votes(&test_b)?;
 
     // wait for the next epoch of the grace
-    wait_epochs(&test_b, 9 + 1)?;
+    wait_epochs(&test_b, 6 + 1)?;
 
     setup_hermes(&test_a, &test_b)?;
     let port_id_a = "transfer".parse().unwrap();
@@ -1742,7 +1736,7 @@ fn propose_inflation(test: &Test) -> Result<Epoch> {
     let albert = find_address(test, ALBERT)?;
     let rpc = get_actor_rpc(test, Who::Validator(0));
     let epoch = get_epoch(test, &rpc)?;
-    let start_epoch = (epoch.0 + 6) / 3 * 3;
+    let start_epoch = (epoch.0 + 3) / 3 * 3;
     let proposal_json = serde_json::json!({
         "proposal": {
             "id": 0,
@@ -1760,7 +1754,7 @@ fn propose_inflation(test: &Test) -> Result<Epoch> {
             "author": albert,
             "voting_start_epoch": start_epoch,
             "voting_end_epoch": start_epoch + 3_u64,
-            "grace_epoch": start_epoch + 9_u64,
+            "grace_epoch": start_epoch + 6_u64,
         },
         "data": TestWasms::TxProposalIbcTokenInflation.read_bytes()
     });
@@ -2171,8 +2165,8 @@ fn check_inflated_balance(test: &Test) -> Result<()> {
     let (_, matched) = client.exp_regex("nam: .*")?;
     let regex = regex::Regex::new(r"[0-9]+").unwrap();
     let mut iter = regex.find_iter(&matched);
-    let balance: u64 = iter.next().unwrap().as_str().parse().unwrap();
-    assert!(balance > 0);
+    let balance: f64 = iter.next().unwrap().as_str().parse().unwrap();
+    assert!(balance > 0.0);
     client.assert_success();
 
     Ok(())
