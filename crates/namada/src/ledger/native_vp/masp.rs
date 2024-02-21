@@ -208,20 +208,10 @@ where
         &self,
         transaction: &Transaction,
     ) -> Result<bool> {
-        let shielded_spends = match transaction.sapling_bundle() {
-            Some(bundle) if !bundle.shielded_spends.is_empty() => {
-                &bundle.shielded_spends
-            }
-            _ => {
-                tracing::debug!(
-                    "Missing expected spend descriptions in shielded \
-                     transaction"
-                );
-                return Ok(false);
-            }
-        };
-
-        for description in shielded_spends {
+        for description in transaction
+            .sapling_bundle()
+            .map_or(&vec![], |bundle| &bundle.shielded_spends)
+        {
             let anchor_key = masp_commitment_anchor_key(description.anchor);
 
             // Check if the provided anchor was published before
@@ -325,10 +315,6 @@ where
 
         let mut result = ChangedBalances::default();
         // Get the changed balance keys
-        // FIXME: does this also contain temp modification? Yes, is this
-        // correct? I don't think so, I might end up validating keys that are
-        // not committed, so wrong validation FIXME: probably I need to
-        // read post from storage to circumvent this
         let (masp_balances, counterparts_balances): (Vec<_>, Vec<_>) =
             keys_changed
                 .iter()
@@ -345,18 +331,10 @@ where
         }
 
         for [token, counterpart] in counterparts_balances {
-            // FIXME: incorrect use read_bytes like in the other places
-            // otherwise I read temp modifications FIXME: also
-            // mention this in red teaming. Also the fact that temporary keys
-            // changed are passed to the vps
             let pre_balance: Amount = self
                 .ctx
                 .read_pre(&balance_key(token, counterpart))?
                 .unwrap_or_default();
-            // FIXME: incorrect use read_bytes like in the other places
-            // otherwise I read temp modifications FIXME: actually,
-            // not sure, maybe this method is correct, depend on the
-            // implementation on Ctx
             let post_balance: Amount = self
                 .ctx
                 .read_post(&balance_key(token, counterpart))?
@@ -419,9 +397,6 @@ where
             return Ok(false);
         }
 
-        // FIXME: why do we need to look at the balance keys in the client?
-        // Isn't Transaction enough?
-
         let mut transparent_tx_pool = I128Sum::zero();
         // The Sapling value balance adds to the transparent tx pool
         transparent_tx_pool += shielded_tx.sapling_value_balance();
@@ -438,8 +413,6 @@ where
         // nullifier is being revealed by the tx
         // 4. The transaction must correctly update the note commitment tree
         // in storage with the new output descriptions
-        // FIXME: actually I need to review all of these functions, I should
-        // never assume that the sapling bundle is there
         if !(self.valid_spend_descriptions_anchor(&shielded_tx)?
             && self.valid_convert_descriptions_anchor(&shielded_tx)?
             && self.valid_nullifiers_reveal(keys_changed, &shielded_tx)?
@@ -473,13 +446,6 @@ where
 
                 // To help recognize asset types not in the conversion tree
                 let unepoched_tokens = unepoched_tokens(token, denom)?;
-
-                // FIXME: can we support a fully transparent transfer
-                // triggering the masp vp? Probably not if it carries the
-                // Transaction object. Actually maybe yes, in protcol
-                // instead of just checking that the masp vp was triggered
-                // and was succesful I should ALSO check that at least one
-                // masp key was changed
 
                 // Handle transparent input
                 // The following boundary condition must be satisfied: asset
