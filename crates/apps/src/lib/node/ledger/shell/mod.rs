@@ -768,30 +768,27 @@ where
     /// Commit a block. Persist the application state and return the Merkle root
     /// hash.
     pub fn commit(&mut self) -> response::Commit {
-        let mut response = response::Commit {
-            retain_height: tendermint::block::Height::from(0_u32),
-            ..Default::default()
-        };
-        // commit block's data from write log and store the in DB
-        self.wl_storage.commit_block().unwrap_or_else(|e| {
-            tracing::error!(
-                "Encountered a storage error while committing a block {:?}",
-                e
-            )
-        });
-
-        let root = self.wl_storage.storage.merkle_root();
-        tracing::info!(
-            "Committed block hash: {}, height: {}",
-            root,
-            self.wl_storage.storage.get_last_block_height(),
-        );
-        response.data = root.0.to_vec().into();
-
         self.bump_last_processed_eth_block();
+
+        self.wl_storage
+            .commit_block()
+            .expect("Encountered a storage error while committing a block");
+
+        let merkle_root = self.wl_storage.storage.merkle_root();
+        let committed_height = self.wl_storage.storage.get_last_block_height();
+        tracing::info!(
+            "Committed block hash: {merkle_root}, height: {committed_height}",
+        );
+
         self.broadcast_queued_txs();
 
-        response
+        response::Commit {
+            // NB: by passing 0, we forbid CometBFT from deleting
+            // data pertaining to past blocks
+            retain_height: tendermint::block::Height::from(0_u32),
+            // NB: current application hash
+            data: merkle_root.0.to_vec().into(),
+        }
     }
 
     /// Updates the Ethereum oracle's last processed block.
