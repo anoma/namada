@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use eyre::eyre;
-use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::types::eth_abi::{Encode, Token};
 use namada_core::types::eth_bridge_pool::PendingTransfer;
 use namada_core::types::hash::Hash;
@@ -27,9 +27,7 @@ const POOL_ROOT_PREFIX_NON_LEAF: u8 = 0xff;
 /// A simple Merkle tree for the Ethereum bridge pool
 ///
 /// Note that an empty tree has root [0u8; 20] by definition.
-#[derive(
-    Debug, Default, Clone, BorshSerialize, BorshDeserialize, BorshSchema,
-)]
+#[derive(Debug, Default, Clone, BorshSerialize, BorshDeserialize)]
 pub struct BridgePoolTree {
     /// Root of the tree
     root: KeccakHash,

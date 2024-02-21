@@ -1,4 +1,4 @@
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::types::ethereum_events::EthereumEvent;
 use namada_vote_ext::ethereum_events::MultiSignedEthEvent;
 
@@ -37,9 +37,7 @@ impl From<MultiSignedEthEvent> for EthMsgUpdate {
 }
 
 /// Represents an event stored under `eth_msgs`
-#[derive(
-    Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
-)]
+#[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub struct EthMsg {
     /// The event being stored
     pub body: EthereumEvent,

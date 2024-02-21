@@ -8,7 +8,7 @@ use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::str::FromStr;
 
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXUPPER;
 #[cfg(any(test, feature = "rand"))]
@@ -116,7 +116,7 @@ impl FromStr for SchemeType {
 /// Represents a signature
 
 pub trait Signature:
-    Hash + PartialOrd + Serialize + BorshSerialize + BorshDeserialize + BorshSchema
+    Hash + PartialOrd + Serialize + BorshSerialize + BorshDeserialize
 {
     /// The scheme type of this implementation
     const TYPE: SchemeType;
@@ -143,7 +143,6 @@ pub trait Signature:
 pub trait PublicKey:
     BorshSerialize
     + BorshDeserialize
-    + BorshSchema
     + Ord
     + Clone
     + Display
@@ -178,7 +177,6 @@ pub trait PublicKey:
 pub trait SecretKey:
     BorshSerialize
     + BorshDeserialize
-    + BorshSchema
     + Display
     + Debug
     + RefTo<Self::PublicKey>
@@ -278,7 +276,6 @@ pub trait SigScheme: Eq + Ord + Debug + Serialize + Default {
     Clone,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
     PartialEq,
     Eq,
     PartialOrd,

@@ -3,7 +3,7 @@
 
 use std::borrow::Cow;
 
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use ethabi::token::Token;
 use namada_macros::StorageKeys;
@@ -81,7 +81,6 @@ const NAMESPACE: &str = "transfer";
     Ord,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
     Serialize,
     Deserialize,
 )]
@@ -123,7 +122,6 @@ impl std::fmt::Display for TransferToEthereumKind {
     Deserialize,
     BorshSerialize,
     BorshDeserialize,
-    /* BorshSchema, */
 )]
 pub struct PendingTransferAppendix<'transfer> {
     /// The kind of the pending transfer to Ethereum.
@@ -179,7 +177,6 @@ impl<'transfer> PendingTransferAppendix<'transfer> {
     Deserialize,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
 )]
 pub struct TransferToEthereum {
     /// The kind of transfer to Ethereum.
@@ -208,7 +205,6 @@ pub struct TransferToEthereum {
     Deserialize,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
 )]
 pub struct PendingTransfer {
     /// Transfer to Ethereum data.
@@ -345,7 +341,6 @@ impl From<&PendingTransfer> for Key {
     Deserialize,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
 )]
 pub struct GasFee {
     /// The amount of fees.

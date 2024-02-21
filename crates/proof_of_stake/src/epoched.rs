@@ -6,7 +6,7 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::{cmp, ops};
 
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::types::storage::{self, Epoch};
 use namada_storage;
 use namada_storage::collections::lazy_map::{LazyMap, NestedMap};
@@ -761,7 +761,6 @@ where
     Clone,
     BorshDeserialize,
     BorshSerialize,
-    BorshSchema,
     PartialEq,
     Eq,
     PartialOrd,
@@ -784,7 +783,6 @@ impl EpochOffset for OffsetZero {
     Clone,
     BorshDeserialize,
     BorshSerialize,
-    BorshSchema,
     PartialEq,
     Eq,
     PartialOrd,
@@ -807,7 +805,6 @@ impl EpochOffset for OffsetDefaultNumPastEpochs {
     Clone,
     BorshDeserialize,
     BorshSerialize,
-    BorshSchema,
     PartialEq,
     Eq,
     PartialOrd,
@@ -830,7 +827,6 @@ impl EpochOffset for OffsetPipelineLen {
     Clone,
     BorshDeserialize,
     BorshSerialize,
-    BorshSchema,
     PartialEq,
     Eq,
     PartialOrd,
@@ -853,7 +849,6 @@ impl EpochOffset for OffsetUnbondingLen {
     Clone,
     BorshDeserialize,
     BorshSerialize,
-    BorshSchema,
     PartialEq,
     Eq,
     PartialOrd,
@@ -876,7 +871,6 @@ impl EpochOffset for OffsetPipelinePlusUnbondingLen {
     Clone,
     BorshDeserialize,
     BorshSerialize,
-    BorshSchema,
     PartialEq,
     Eq,
     PartialOrd,
@@ -899,7 +893,6 @@ impl EpochOffset for OffsetSlashProcessingLen {
     Clone,
     BorshDeserialize,
     BorshSerialize,
-    BorshSchema,
     PartialEq,
     Eq,
     PartialOrd,
@@ -922,7 +915,6 @@ impl EpochOffset for OffsetSlashProcessingLenPlus {
     Clone,
     BorshDeserialize,
     BorshSerialize,
-    BorshSchema,
     PartialEq,
     Eq,
     PartialOrd,
@@ -945,7 +937,6 @@ impl EpochOffset for OffsetMaxU64 {
     Clone,
     BorshDeserialize,
     BorshSerialize,
-    BorshSchema,
     PartialEq,
     Eq,
     PartialOrd,
@@ -968,7 +959,6 @@ impl EpochOffset for OffsetMaxProposalPeriod {
     Clone,
     BorshDeserialize,
     BorshSerialize,
-    BorshSchema,
     PartialEq,
     Eq,
     PartialOrd,
@@ -992,7 +982,6 @@ impl EpochOffset for OffsetMaxProposalPeriodPlus {
     Clone,
     BorshDeserialize,
     BorshSerialize,
-    BorshSchema,
     PartialEq,
     Eq,
     PartialOrd,
@@ -1019,7 +1008,6 @@ impl EpochOffset for OffsetMaxProposalPeriodOrSlashProcessingLen {
     Clone,
     BorshDeserialize,
     BorshSerialize,
-    BorshSchema,
     PartialEq,
     Eq,
     PartialOrd,
@@ -1075,7 +1063,7 @@ pub enum DynEpochOffset {
 /// Which offset should be used to set data. The value is read from
 /// [`PosParams`].
 pub trait EpochOffset:
-    Debug + Clone + BorshDeserialize + BorshSerialize + BorshSchema
+    Debug + Clone + BorshDeserialize + BorshSerialize
 {
     /// Find the value of a given offset from PoS and Gov parameters.
     fn value(params: &PosParams) -> u64;

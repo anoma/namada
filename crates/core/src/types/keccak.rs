@@ -4,7 +4,7 @@
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
 
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXUPPER;
 use ethabi::Token;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
@@ -38,7 +38,6 @@ pub enum TryFromError {
     Ord,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
 )]
 pub struct KeccakHash(pub [u8; 32]);
 

@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::types::address::Address;
 use namada_core::types::key::common;
 use namada_core::types::storage::Epoch;
@@ -136,7 +136,7 @@ router! {POS,
 
 /// Enriched bonds data with extra information calculated from the data queried
 /// from the node.
-#[derive(Debug, Clone, BorshDeserialize, BorshSerialize, BorshSchema)]
+#[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
 pub struct Enriched<T> {
     /// The queried data
     pub data: T,

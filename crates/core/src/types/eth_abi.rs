@@ -3,7 +3,7 @@
 
 use std::marker::PhantomData;
 
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSerialize};
 #[doc(inline)]
 pub use ethabi::token::Token;
 
@@ -11,7 +11,7 @@ use crate::types::keccak::{keccak_hash, KeccakHash};
 use crate::types::key::{Signable, SignableEthMessage};
 
 /// A container for data types that are able to be Ethereum ABI-encoded.
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
 #[repr(transparent)]
 pub struct EncodeCell<T: ?Sized> {
     /// ABI-encoded value of type `T`.

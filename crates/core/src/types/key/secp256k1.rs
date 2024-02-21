@@ -1,14 +1,13 @@
 //! secp256k1 keys and related functionality
 
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
 use std::io::{ErrorKind, Read, Write};
 use std::str::FromStr;
 
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
 use ethabi::Token;
@@ -81,31 +80,6 @@ impl BorshSerialize for PublicKey {
     fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
         writer.write_all(&self.0.to_sec1_bytes())?;
         Ok(())
-    }
-}
-
-impl BorshSchema for PublicKey {
-    fn add_definitions_recursively(
-        definitions: &mut BTreeMap<
-            borsh::schema::Declaration,
-            borsh::schema::Definition,
-        >,
-    ) {
-        // Encoded as `[u8; COMPRESSED_PUBLIC_KEY_SIZE]`
-        let elements = "u8".into();
-        let length = COMPRESSED_PUBLIC_KEY_SIZE as u64;
-        // let definition = borsh::schema::Definition::Array { elements, length
-        // };
-        let definition = borsh::schema::Definition::Sequence {
-            length_width: 0,
-            length_range: 0..=length,
-            elements,
-        };
-        definitions.insert(Self::declaration(), definition);
-    }
-
-    fn declaration() -> borsh::schema::Declaration {
-        "secp256k1::PublicKey".into()
     }
 }
 
@@ -235,31 +209,6 @@ impl BorshSerialize for SecretKey {
     fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
         let bytes: [u8; SECRET_KEY_SIZE] = self.0.to_bytes().into();
         BorshSerialize::serialize(&bytes, writer)
-    }
-}
-
-impl BorshSchema for SecretKey {
-    fn add_definitions_recursively(
-        definitions: &mut BTreeMap<
-            borsh::schema::Declaration,
-            borsh::schema::Definition,
-        >,
-    ) {
-        // Encoded as `[u8; SECRET_KEY_SIZE]`
-        let elements = "u8".into();
-        let length = SECRET_KEY_SIZE as u64;
-        // let definition = borsh::schema::Definition::Array { elements, length
-        // };
-        let definition = borsh::schema::Definition::Sequence {
-            length_width: 0,
-            length_range: 0..=length,
-            elements,
-        };
-        definitions.insert(Self::declaration(), definition);
-    }
-
-    fn declaration() -> borsh::schema::Declaration {
-        "secp256k1::SecretKey".into()
     }
 }
 
@@ -406,28 +355,6 @@ impl BorshSerialize for Signature {
     fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
         let sig_bytes: [u8; 64] = self.0.to_bytes().into();
         BorshSerialize::serialize(&(sig_bytes, self.1.to_byte()), writer)
-    }
-}
-
-impl BorshSchema for Signature {
-    fn add_definitions_recursively(
-        definitions: &mut BTreeMap<
-            borsh::schema::Declaration,
-            borsh::schema::Definition,
-        >,
-    ) {
-        // Encoded as `([u8; SIGNATURE_SIZE], u8)`
-        let signature = <[u8; SIGNATURE_SIZE]>::declaration();
-        <[u8; SIGNATURE_SIZE]>::add_definitions_recursively(definitions);
-        let recovery = "u8".into();
-        let definition = borsh::schema::Definition::Tuple {
-            elements: vec![signature, recovery],
-        };
-        definitions.insert(Self::declaration(), definition);
-    }
-
-    fn declaration() -> borsh::schema::Declaration {
-        "secp256k1::Signature".into()
     }
 }
 

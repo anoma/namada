@@ -7,7 +7,7 @@ use std::iter::Sum;
 use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 use std::str::FromStr;
 
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::BASE32HEX_NOPAD;
 use ethabi::ethereum_types::U256;
 use masp_primitives::asset_type::AssetType;
@@ -55,7 +55,6 @@ pub struct ConversionState {
     Default,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
     PartialEq,
     Eq,
     PartialOrd,
@@ -335,7 +334,6 @@ impl Display for Amount {
     Ord,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
     Serialize,
     Deserialize,
 )]
@@ -356,15 +354,7 @@ impl From<Denomination> for u8 {
 
 /// An amount with its denomination.
 #[derive(
-    Debug,
-    Copy,
-    Clone,
-    Hash,
-    PartialEq,
-    Eq,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
+    Debug, Copy, Clone, Hash, PartialEq, Eq, BorshSerialize, BorshDeserialize,
 )]
 pub struct DenominatedAmount {
     /// The mantissa
@@ -1013,7 +1003,6 @@ impl From<DenominatedAmount> for IbcAmount {
     Hash,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
     Deserialize,
     Serialize,
 )]
@@ -1047,7 +1036,6 @@ impl Default for MaspParams {
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
     Hash,
     Eq,
     PartialOrd,

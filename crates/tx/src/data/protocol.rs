@@ -1,9 +1,7 @@
 //! Types for sending and verifying txs
 //! used in Namada protocols
 
-use namada_core::borsh::{
-    BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
-};
+use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
 use namada_core::types::key::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -11,13 +9,7 @@ use sha2::{Digest, Sha256};
 use crate::TxError;
 
 #[derive(
-    Clone,
-    Debug,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-    Serialize,
-    Deserialize,
+    Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
 /// Txs sent by validators as part of internal protocols
 pub struct ProtocolTx {
@@ -51,13 +43,7 @@ impl ProtocolTx {
 }
 
 #[derive(
-    Clone,
-    Debug,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-    Serialize,
-    Deserialize,
+    Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
 #[allow(clippy::large_enum_variant)]
 /// Types of protocol messages to be sent

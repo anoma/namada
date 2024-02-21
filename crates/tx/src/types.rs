@@ -10,10 +10,7 @@ use masp_primitives::transaction::builder::Builder;
 use masp_primitives::transaction::components::sapling::builder::SaplingMetadata;
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::ExtendedFullViewingKey;
-use namada_core::borsh::schema::{add_definition, Declaration, Definition};
-use namada_core::borsh::{
-    BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
-};
+use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
 use namada_core::types::account::AccountPublicKeysMap;
 use namada_core::types::address::Address;
 use namada_core::types::chain::ChainId;
@@ -71,7 +68,7 @@ pub enum DecodeError {
 /// Because the signature is not checked by the ledger, we don't inline it into
 /// the `Tx` type directly. Instead, the signature is attached to the `tx.data`,
 /// which can then be checked by a validity predicate wasm.
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub struct SignedTxData {
     /// The original tx data bytes, if any
     pub data: Option<Vec<u8>>,
@@ -119,25 +116,6 @@ impl<S, T: PartialOrd> PartialOrd for Signed<T, S> {
 impl<S, T: Ord> Ord for Signed<T, S> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.data.cmp(&other.data)
-    }
-}
-
-impl<S, T: BorshSchema> BorshSchema for Signed<T, S> {
-    fn add_definitions_recursively(
-        definitions: &mut BTreeMap<Declaration, Definition>,
-    ) {
-        let fields = borsh::schema::Fields::NamedFields(vec![
-            ("data".to_string(), T::declaration()),
-            ("sig".to_string(), <common::Signature>::declaration()),
-        ]);
-        let definition = borsh::schema::Definition::Struct { fields };
-        add_definition(Self::declaration(), definition, definitions);
-        T::add_definitions_recursively(definitions);
-        <common::Signature>::add_definitions_recursively(definitions);
-    }
-
-    fn declaration() -> borsh::schema::Declaration {
-        format!("Signed<{}>", T::declaration())
     }
 }
 
@@ -205,13 +183,7 @@ pub fn verify_standalone_sig<T, S: Signable<T>>(
 
 /// A section representing transaction data
 #[derive(
-    Clone,
-    Debug,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-    Serialize,
-    Deserialize,
+    Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
 pub struct Data {
     pub salt: [u8; 8],
@@ -239,13 +211,7 @@ pub struct CommitmentError;
 
 /// Represents either some code bytes or their SHA-256 hash
 #[derive(
-    Clone,
-    Debug,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-    Serialize,
-    Deserialize,
+    Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
 pub enum Commitment {
     /// Result of applying hash function to bytes
@@ -298,13 +264,7 @@ impl Commitment {
 
 /// A section representing transaction code
 #[derive(
-    Clone,
-    Debug,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-    Serialize,
-    Deserialize,
+    Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
 pub struct Code {
     /// Additional random data
@@ -350,13 +310,7 @@ pub type Memo = Vec<u8>;
 
 /// Indicates the list of public keys against which signatures will be verified
 #[derive(
-    Clone,
-    Debug,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-    Serialize,
-    Deserialize,
+    Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
 pub enum Signer {
     /// The address of a multisignature account
@@ -367,13 +321,7 @@ pub enum Signer {
 
 /// A section representing a multisig over another section
 #[derive(
-    Clone,
-    Debug,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-    Serialize,
-    Deserialize,
+    Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
 pub struct Signature {
     /// The hash of the section being signed
@@ -512,13 +460,7 @@ impl Signature {
 
 /// A section representing a multisig over another section
 #[derive(
-    Clone,
-    Debug,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-    Serialize,
-    Deserialize,
+    Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
 pub struct CompressedSignature {
     /// The hash of the section being signed
@@ -556,13 +498,7 @@ impl CompressedSignature {
 
 /// Represents a section obtained by encrypting another section
 #[derive(
-    Clone,
-    Debug,
-    Serialize,
-    Deserialize,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
+    Clone, Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize,
 )]
 pub struct Ciphertext {
     /// Ciphertext representation when ferveo not available
@@ -684,30 +620,10 @@ impl MaspBuilder {
     }
 }
 
-impl borsh::BorshSchema for MaspBuilder {
-    fn add_definitions_recursively(
-        _definitions: &mut BTreeMap<
-            borsh::schema::Declaration,
-            borsh::schema::Definition,
-        >,
-    ) {
-    }
-
-    fn declaration() -> borsh::schema::Declaration {
-        "Builder".into()
-    }
-}
-
 /// A section of a transaction. Carries an independent piece of information
 /// necessary for the processing of a transaction.
 #[derive(
-    Clone,
-    Debug,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-    Serialize,
-    Deserialize,
+    Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
 pub enum Section {
     /// Transaction data that needs to be sent to hardware wallets
@@ -848,13 +764,7 @@ impl Section {
 /// A Namada transaction header indicating where transaction subcomponents can
 /// be found
 #[derive(
-    Clone,
-    Debug,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-    Serialize,
-    Deserialize,
+    Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
 pub struct Header {
     /// The chain which this transaction is being submitted to
@@ -940,13 +850,7 @@ pub enum TxError {
 /// A Namada transaction is represented as a header followed by a series of
 /// seections providing additional details.
 #[derive(
-    Clone,
-    Debug,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-    Serialize,
-    Deserialize,
+    Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
 pub struct Tx {
     /// Type indicating how to process transaction

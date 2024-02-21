@@ -9,7 +9,7 @@ pub mod wrapper_tx {
     pub use ark_bls12_381::Bls12_381 as EllipticCurve;
     use masp_primitives::transaction::Transaction;
     use namada_core::borsh::{
-        BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
+        BorshDeserialize, BorshSerialize, BorshSerializeExt,
     };
     use namada_core::types::address::{Address, MASP};
     use namada_core::types::hash::Hash;
@@ -61,7 +61,6 @@ pub mod wrapper_tx {
         PartialEq,
         BorshSerialize,
         BorshDeserialize,
-        BorshSchema,
         Serialize,
         Deserialize,
         Eq,
@@ -89,7 +88,6 @@ pub mod wrapper_tx {
         PartialEq,
         BorshSerialize,
         BorshDeserialize,
-        BorshSchema,
         Serialize,
         Deserialize,
         Eq,
@@ -178,13 +176,7 @@ pub mod wrapper_tx {
     /// unshielding tx for fee payment and some non-encrypted metadata for
     /// inclusion and / or verification purposes
     #[derive(
-        Debug,
-        Clone,
-        BorshSerialize,
-        BorshDeserialize,
-        BorshSchema,
-        Serialize,
-        Deserialize,
+        Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
     )]
     pub struct WrapperTx {
         /// The fee to be paid for including the tx

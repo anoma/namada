@@ -8,7 +8,7 @@ use std::ops::{Add, AddAssign, Deref, Div, Drop, Mul, Rem, Sub};
 use std::str::FromStr;
 
 use arse_merkle_tree::InternalKey;
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use data_encoding::{BASE32HEX_NOPAD, HEXUPPER};
 use index_set::vec::VecIndexSet;
@@ -167,7 +167,6 @@ impl BlockResults {
     Copy,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
     PartialEq,
     Eq,
     PartialOrd,
@@ -371,7 +370,6 @@ impl Header {
     Clone,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
     Debug,
     Default,
     Eq,
@@ -795,7 +793,6 @@ pub trait KeySeg {
     Clone,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
     Debug,
     Eq,
     PartialEq,
@@ -1040,7 +1037,6 @@ impl KeySeg for common::PublicKey {
     Hash,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
     Serialize,
     Deserialize,
 )]
@@ -1284,7 +1280,7 @@ impl Epochs {
 }
 
 /// A value of a storage prefix iterator.
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 pub struct PrefixValue {
     /// Storage key
     pub key: Key,

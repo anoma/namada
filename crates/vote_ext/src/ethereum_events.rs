@@ -4,7 +4,7 @@
 use std::collections::{BTreeSet, HashMap};
 use std::ops::Deref;
 
-use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::types::address::Address;
 use namada_core::types::ethereum_events::EthereumEvent;
 use namada_core::types::key::common::{self, Signature};
@@ -16,7 +16,7 @@ pub type Vext = EthereumEventsVext;
 
 /// Represents a [`Vext`] signed by some validator, with
 /// a Namada protocol key.
-#[derive(Clone, Debug, BorshSerialize, BorshSchema, BorshDeserialize)]
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub struct SignedVext(pub Signed<Vext>);
 
 impl Deref for SignedVext {
@@ -38,9 +38,7 @@ impl From<Signed<Vext>> for SignedVext {
 /// This struct will be created and signed over by each consensus validator,
 /// to be included as a vote extension at the end of a Tendermint PreCommit
 /// phase.
-#[derive(
-    Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
-)]
+#[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub struct EthereumEventsVext {
     /// The block height for which this [`Vext`] was made.
     pub block_height: BlockHeight,
@@ -72,9 +70,7 @@ impl Vext {
 
 /// Aggregates an Ethereum event with the corresponding
 /// validators who saw this event.
-#[derive(
-    Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
-)]
+#[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub struct MultiSignedEthEvent {
     /// The Ethereum event that was signed.
     pub event: EthereumEvent,
@@ -88,9 +84,7 @@ pub type VextDigest = EthereumEventsVextDigest;
 
 /// Compresses a set of signed [`Vext`] instances, to save
 /// space on a block.
-#[derive(
-    Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
-)]
+#[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub struct EthereumEventsVextDigest {
     /// The signatures, signing address, and signing block height
     /// of each [`Vext`]

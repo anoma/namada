@@ -8,7 +8,7 @@ use std::iter::Sum;
 use std::ops::{Add, AddAssign, Div, Mul, Neg, Sub};
 use std::str::FromStr;
 
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::eyre;
 use num_traits::CheckedMul;
 use serde::{Deserialize, Serialize};
@@ -38,7 +38,6 @@ pub type Result<T> = std::result::Result<T, Error>;
     Default,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
     PartialEq,
     Serialize,
     Deserialize,

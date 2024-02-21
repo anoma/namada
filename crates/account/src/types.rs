@@ -1,4 +1,4 @@
-use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
 use namada_core::types::key::common;
@@ -11,7 +11,6 @@ use serde::{Deserialize, Serialize};
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
     Serialize,
     Deserialize,
 )]
@@ -33,7 +32,6 @@ pub struct InitAccount {
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
     Serialize,
     Deserialize,
 )]

@@ -1,6 +1,6 @@
 //! Types used for PoS system transactions
 
-use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::types::address::Address;
 use namada_core::types::dec::Dec;
 use namada_core::types::key::{common, secp256k1};
@@ -14,7 +14,6 @@ use serde::{Deserialize, Serialize};
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
     Serialize,
     Deserialize,
 )]
@@ -56,7 +55,6 @@ pub struct BecomeValidator {
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
     Hash,
     Eq,
     Serialize,
@@ -82,7 +80,6 @@ pub type Unbond = Bond;
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
     Hash,
     Eq,
     Serialize,
@@ -103,7 +100,6 @@ pub struct Withdraw {
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
     Hash,
     Eq,
     Serialize,
@@ -124,7 +120,6 @@ pub struct ClaimRewards {
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
     Hash,
     Eq,
     Serialize,
@@ -148,7 +143,6 @@ pub struct Redelegation {
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
     Hash,
     Eq,
     Serialize,
@@ -168,7 +162,6 @@ pub struct CommissionChange {
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
     Hash,
     Eq,
     Serialize,
@@ -198,7 +191,6 @@ pub struct MetaDataChange {
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
     Hash,
     Eq,
     Serialize,
