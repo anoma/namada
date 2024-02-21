@@ -16,7 +16,8 @@ use namada_core::collections::{HashMap, HashSet};
 use namada_core::masp::encode_asset_type;
 use namada_core::storage::{IndexedTx, Key};
 use namada_sdk::masp::verify_shielded_tx;
-use namada_state::{OptionExt, ResultExt, StateRead};
+use namada_state::{ConversionState, OptionExt, ResultExt, StateRead};
+use namada_proof_of_stake::Epoch;
 use namada_token::read_denom;
 use namada_tx::Tx;
 use namada_vp_env::VpEnv;
@@ -329,9 +330,6 @@ where
             }
         }
 
-        // FIXME: I also need to update note fetching in the client? Yes more
-        // than one transfer
-
         let mut result = ChangedBalances::default();
         // Get the changed balance keys
         let (masp_balances, counterparts_balances): (Vec<_>, Vec<_>) =
@@ -376,72 +374,15 @@ where
 
         Ok(result)
     }
-}
 
-// Make a map to help recognize asset types lacking an epoch
-fn unepoched_tokens(
-    token: &Address,
-    denom: token::Denomination,
-) -> Result<HashMap<AssetType, (Address, token::Denomination, MaspDigitPos)>> {
-    let mut unepoched_tokens = HashMap::new();
-    for digit in MaspDigitPos::iter() {
-        let asset_type = encode_asset_type(token.clone(), denom, digit, None)
-            .wrap_err("unable to create asset type")?;
-        unepoched_tokens.insert(asset_type, (token.clone(), denom, digit));
-    }
-    Ok(unepoched_tokens)
-}
-
-impl<'a, S, CA> NativeVp for MaspVp<'a, S, CA>
-where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
-{
-    type Error = Error;
-
-    fn validate_tx(
+    fn validate_transparent_bundle(
         &self,
-        tx_data: &Tx,
-        keys_changed: &BTreeSet<Key>,
-        _verifiers: &BTreeSet<Address>,
+        shielded_tx: &Transaction,
+        changed_balances: ChangedBalances,
+        transparent_tx_pool: &mut I128Sum,
+        epoch: Epoch,
+        conversion_state: &ConversionState,
     ) -> Result<()> {
-        let epoch = self.ctx.get_block_epoch()?;
-        let conversion_state = self.ctx.state.in_mem().get_conversion_state();
-        let shielded_tx = self.ctx.get_shielded_action(tx_data)?;
-
-        if u64::from(self.ctx.get_block_height()?)
-            > u64::from(shielded_tx.expiry_height())
-        {
-            let error =
-                native_vp::Error::new_const("MASP transaction is expired")
-                    .into();
-            tracing::debug!("{error}");
-            return Err(error);
-        }
-
-        let mut transparent_tx_pool = I128Sum::zero();
-        // The Sapling value balance adds to the transparent tx pool
-        transparent_tx_pool += shielded_tx.sapling_value_balance();
-
-        // Check the validity of the keys and get the transfer data
-        let changed_balances =
-            self.validate_state_and_get_transfer_data(keys_changed)?;
-
-        // Checks on the sapling bundle
-        // 1. The spend descriptions' anchors are valid
-        // 2. The convert descriptions's anchors are valid
-        // 3. The nullifiers provided by the transaction have not been
-        // revealed previously (even in the same tx) and no unneeded
-        // nullifier is being revealed by the tx
-        // 4. The transaction must correctly update the note commitment tree
-        // in storage with the new output descriptions
-        self.valid_spend_descriptions_anchor(&shielded_tx)?;
-        self.valid_convert_descriptions_anchor(&shielded_tx)?;
-        self.valid_nullifiers_reveal(keys_changed, &shielded_tx)?;
-        self.valid_note_commitment_update(&shielded_tx)?;
-
-        // FIXME: extract to function
-        // Checks on the transparent bundle, if present
         let bundle_balances = if let Some(transp_bundle) =
             shielded_tx.transparent_bundle()
         {
@@ -474,7 +415,7 @@ where
                         continue;
                     }
                     // Non-masp sources add to the transparent tx pool
-                    transparent_tx_pool = transparent_tx_pool
+                    *transparent_tx_pool = transparent_tx_pool
                         .checked_add(
                             &I128Sum::from_nonnegative(
                                 vin.asset_type,
@@ -589,7 +530,7 @@ where
                     }
                     // Non-masp destinations subtract from transparent tx
                     // pool
-                    transparent_tx_pool = transparent_tx_pool
+                    *transparent_tx_pool = transparent_tx_pool
                         .checked_sub(
                             &I128Sum::from_nonnegative(
                                 out.asset_type,
@@ -691,6 +632,78 @@ where
             tracing::debug!("{error}");
             return Err(error);
         }
+
+        Ok(())
+    }
+}
+
+// Make a map to help recognize asset types lacking an epoch
+fn unepoched_tokens(
+    token: &Address,
+    denom: token::Denomination,
+) -> Result<HashMap<AssetType, (Address, token::Denomination, MaspDigitPos)>> {
+    let mut unepoched_tokens = HashMap::new();
+    for digit in MaspDigitPos::iter() {
+        let asset_type = encode_asset_type(token.clone(), denom, digit, None)
+            .wrap_err("unable to create asset type")?;
+        unepoched_tokens.insert(asset_type, (token.clone(), denom, digit));
+    }
+    Ok(unepoched_tokens)
+}
+
+impl<'a, S, CA> NativeVp for MaspVp<'a, S, CA>
+where
+    S: StateRead,
+    CA: 'static + WasmCacheAccess,
+{
+    type Error = Error;
+
+    fn validate_tx(
+        &self,
+        tx_data: &Tx,
+        keys_changed: &BTreeSet<Key>,
+        _verifiers: &BTreeSet<Address>,
+    ) -> Result<()> {
+        let epoch = self.ctx.get_block_epoch()?;
+        let conversion_state = self.ctx.state.in_mem().get_conversion_state();
+        let shielded_tx = self.ctx.get_shielded_action(tx_data)?;
+
+        if u64::from(self.ctx.get_block_height()?)
+            > u64::from(shielded_tx.expiry_height())
+        {
+            let error = native_vp::Error::new_const("MASP transaction is expired").into();
+            tracing::debug!("{error}");
+            return Err(error);
+        }
+
+        // The Sapling value balance adds to the transparent tx pool
+        let mut transparent_tx_pool = shielded_tx.sapling_value_balance();
+
+        // Check the validity of the keys and get the transfer data
+        let changed_balances =
+            self.validate_state_and_get_transfer_data(keys_changed)?;
+
+        // Checks on the sapling bundle
+        // 1. The spend descriptions' anchors are valid
+        // 2. The convert descriptions's anchors are valid
+        // 3. The nullifiers provided by the transaction have not been
+        // revealed previously (even in the same tx) and no unneeded
+        // nullifier is being revealed by the tx
+        // 4. The transaction must correctly update the note commitment tree
+        // in storage with the new output descriptions
+        self.valid_spend_descriptions_anchor(&shielded_tx)?;
+        self.valid_convert_descriptions_anchor(&shielded_tx)?;
+        self.valid_nullifiers_reveal(keys_changed, &shielded_tx)?;
+        self.valid_note_commitment_update(&shielded_tx)?;
+
+        // Checks on the transparent bundle, if present
+        self.validate_transparent_bundle(
+            &shielded_tx,
+            changed_balances,
+            &mut transparent_tx_pool,
+            epoch,
+            conversion_state,
+        )?;
 
         match transparent_tx_pool.partial_cmp(&I128Sum::zero()) {
             None | Some(Ordering::Less) => {
