@@ -82,7 +82,7 @@ pub struct IbcEvent {
 
 impl std::cmp::PartialOrd for IbcEvent {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.event_type.partial_cmp(&other.event_type)
+        Some(self.cmp(other))
     }
 }
 

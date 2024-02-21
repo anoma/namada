@@ -312,8 +312,7 @@ where
     consensus_validator_set_handle()
         .at(&epoch)
         .iter(storage)?
-        .fold(Ok(token::Amount::zero()), |acc, entry| {
-            let acc = acc?;
+        .try_fold(token::Amount::zero(), |acc, entry| {
             let (
                 lazy_map::NestedSubKey::Data {
                     key: amount,
@@ -2484,13 +2483,9 @@ where
 #[cfg(any(test, feature = "testing"))]
 /// PoS related utility functions to help set up tests.
 pub mod test_utils {
-    use namada_storage;
-    use namada_storage::{StorageRead, StorageWrite};
     use namada_trans_token::credit_tokens;
 
     use super::*;
-    use crate::parameters::PosParams;
-    use crate::storage::read_non_pos_owned_params;
     use crate::types::GenesisValidator;
 
     /// Helper function to initialize storage with PoS data

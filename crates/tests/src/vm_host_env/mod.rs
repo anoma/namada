@@ -564,7 +564,7 @@ mod tests {
         let expiration = Some(DateTimeUtc::now());
         for data in &[
             // Tx with some arbitrary data
-            vec![1, 2, 3, 4].repeat(10),
+            [1, 2, 3, 4].repeat(10),
             // Tx without any data
             vec![],
         ] {

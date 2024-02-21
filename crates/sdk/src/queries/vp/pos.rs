@@ -29,7 +29,7 @@ use namada_proof_of_stake::types::{
     BondId, BondsAndUnbondsDetail, BondsAndUnbondsDetails, CommissionPair,
     Slash, ValidatorMetaData, ValidatorState, WeightedValidator,
 };
-use namada_proof_of_stake::{self, bond_amount, query_reward_tokens};
+use namada_proof_of_stake::{bond_amount, query_reward_tokens};
 use namada_state::{DBIter, StorageHasher, DB};
 use namada_storage::collections::lazy_map;
 use namada_storage::OptionExt;

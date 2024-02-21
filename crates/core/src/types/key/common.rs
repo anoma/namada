@@ -1,6 +1,4 @@
 //! Cryptographic keys
-
-use std::convert::TryFrom;
 use std::fmt::Display;
 use std::str::FromStr;
 
@@ -456,7 +454,6 @@ impl super::SigScheme for SigScheme {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::key::ed25519;
 
     /// Run `cargo test gen_ed25519_keypair -- --nocapture` to generate a
     /// new ed25519 keypair wrapped in `common` key types.

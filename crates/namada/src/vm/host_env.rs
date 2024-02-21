@@ -1,7 +1,6 @@
 //! Virtual machine's host environment exposes functions that may be called from
 //! within a virtual machine.
 use std::collections::BTreeSet;
-use std::convert::TryInto;
 use std::num::TryFromIntError;
 
 use borsh::BorshDeserialize;
@@ -2733,10 +2732,6 @@ where
 /// A helper module for testing
 #[cfg(feature = "testing")]
 pub mod testing {
-    use std::collections::BTreeSet;
-
-    use namada_state::StorageHasher;
-
     use super::*;
     use crate::vm::memory::testing::NativeMemory;
     use crate::vm::wasm::memory::WasmMemory;

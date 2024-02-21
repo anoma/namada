@@ -306,8 +306,6 @@ pub fn get_dummy_genesis_validator()
 
 #[cfg(test)]
 mod tests {
-    use core::time::Duration;
-    use std::convert::TryFrom;
     use std::str::FromStr;
 
     use borsh::BorshDeserialize;
@@ -322,7 +320,7 @@ mod tests {
     use namada_state::testing::TestWlStorage;
     use namada_state::StorageRead;
     use namada_tx::data::TxType;
-    use namada_tx::{Code, Data, Section, Signature, Tx};
+    use namada_tx::{Code, Data, Section, Signature};
     use prost::Message;
     use sha2::Digest;
 
@@ -391,12 +389,12 @@ mod tests {
     use crate::ibc::primitives::proto::{Any, Protobuf};
     use crate::ibc::primitives::{Msg, Timestamp};
     use crate::ibc::storage::{
-        ack_key, calc_hash, channel_counter_key, channel_key,
-        client_connections_key, client_counter_key, client_state_key,
-        client_update_height_key, client_update_timestamp_key, commitment_key,
-        connection_counter_key, connection_key, consensus_state_key,
-        ibc_denom_key, next_sequence_ack_key, next_sequence_recv_key,
-        next_sequence_send_key, receipt_key,
+        ack_key, channel_counter_key, channel_key, client_connections_key,
+        client_counter_key, client_state_key, client_update_height_key,
+        client_update_timestamp_key, commitment_key, connection_counter_key,
+        connection_key, consensus_state_key, ibc_denom_key,
+        next_sequence_ack_key, next_sequence_recv_key, next_sequence_send_key,
+        receipt_key,
     };
     use crate::ledger::gas::VpGasMeter;
     use crate::ledger::parameters::storage::{

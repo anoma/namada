@@ -257,7 +257,7 @@ impl StoreType {
         if key.is_empty() {
             return Err(Error::EmptyKey("the key is empty".to_owned()));
         }
-        match key.segments.get(0) {
+        match key.segments.first() {
             Some(DbKeySeg::AddressSeg(Address::Internal(internal))) => {
                 match internal {
                     InternalAddress::PoS | InternalAddress::PosSlashPool => {
@@ -1005,7 +1005,6 @@ impl<'a> SubTreeWrite for &'a mut BridgePoolTree {
 mod test {
     use ics23::HostFunctionsManager;
     use namada_core::types::hash::Sha256Hasher;
-    use namada_core::types::storage::KeySeg;
 
     use super::*;
     use crate::ics23_specs::{ibc_proof_specs, proof_specs};
@@ -1150,7 +1149,7 @@ mod test {
         };
         let proof = tree.get_sub_tree_proof(&ibc_key, proof).unwrap();
         let (store_type, sub_key) = StoreType::sub_key(&ibc_key).unwrap();
-        let paths = vec![sub_key.to_string(), store_type.to_string()];
+        let paths = [sub_key.to_string(), store_type.to_string()];
         let mut sub_root = ibc_val.clone();
         let mut value = ibc_val;
         // First, the sub proof is verified. Next the base proof is verified
@@ -1214,7 +1213,7 @@ mod test {
 
         let proof = tree.get_sub_tree_proof(&pos_key, proof).unwrap();
         let (store_type, sub_key) = StoreType::sub_key(&pos_key).unwrap();
-        let paths = vec![sub_key.to_string(), store_type.to_string()];
+        let paths = [sub_key.to_string(), store_type.to_string()];
         let mut sub_root = pos_val.clone();
         let mut value = pos_val;
         // First, the sub proof is verified. Next the base proof is verified

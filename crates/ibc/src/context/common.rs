@@ -288,10 +288,7 @@ pub trait IbcCommonContext: IbcStorageContext {
             .time
             .try_into()
             .expect("The time should be converted");
-        let next_validators_hash = header
-            .next_validators_hash
-            .try_into()
-            .expect("The hash should be converted");
+        let next_validators_hash = header.next_validators_hash.into();
         let consensus_state: TmConsensusState = TmConsensusStateType::new(
             commitment_root,
             time,

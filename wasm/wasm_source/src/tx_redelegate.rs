@@ -31,7 +31,6 @@ mod tests {
     };
     use namada::proof_of_stake::types::{GenesisValidator, WeightedValidator};
     use namada::types::dec::Dec;
-    use namada::types::storage::Epoch;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::native_vp::TestNativeVpEnv;
@@ -41,7 +40,6 @@ mod tests {
     use namada_tx_prelude::key::testing::arb_common_keypair;
     use namada_tx_prelude::key::RefTo;
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
-    use namada_tx_prelude::{token, BorshSerializeExt};
     use proptest::prelude::*;
 
     use super::*;

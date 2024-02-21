@@ -643,7 +643,6 @@ mod tests {
     use super::*;
     use crate::state::testing::TestStorage;
     use crate::tx::data::eval_vp::EvalVp;
-    use crate::types::hash::Hash;
     use crate::vm::host_env::TxRuntimeError;
     use crate::vm::wasm;
 
@@ -698,7 +697,8 @@ mod tests {
         let downcasted_tx_rt_err: &TxRuntimeError = source_err
             .downcast_ref()
             .unwrap_or_else(|| panic!("{assert_msg}: {source_err}"));
-        let TxRuntimeError::MemoryError(tx_mem_err) = downcasted_tx_rt_err else {
+        let TxRuntimeError::MemoryError(tx_mem_err) = downcasted_tx_rt_err
+        else {
             panic!("{assert_msg}: {downcasted_tx_rt_err}");
         };
         tx_mem_err

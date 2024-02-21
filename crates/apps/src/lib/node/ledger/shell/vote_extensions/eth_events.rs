@@ -2,14 +2,9 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use namada::state::{DBIter, StorageHasher, DB};
-use namada::tx::Signed;
-use namada::types::ethereum_events::EthereumEvent;
-use namada::vote_ext::ethereum_events::{self, MultiSignedEthEvent};
-use namada_sdk::eth_bridge::EthBridgeQueries;
+use namada::vote_ext::ethereum_events::MultiSignedEthEvent;
 
 use super::*;
-use crate::node::ledger::shell::{Shell, ShellMode};
 
 impl<D, H> Shell<D, H>
 where
@@ -140,7 +135,6 @@ where
 
 #[cfg(test)]
 mod test_vote_extensions {
-    use std::convert::TryInto;
 
     use borsh_ext::BorshSerializeExt;
     use namada::eth_bridge::storage::bridge_pool;

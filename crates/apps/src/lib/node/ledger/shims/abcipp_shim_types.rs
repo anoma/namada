@@ -1,7 +1,6 @@
 use crate::facade::tendermint::v0_37::abci::{Request, Response};
 
 pub mod shim {
-    use std::convert::TryFrom;
 
     use thiserror::Error;
 
@@ -151,7 +150,6 @@ pub mod shim {
 
     /// Custom types for request payloads
     pub mod request {
-        use std::convert::TryFrom;
 
         use namada::types::hash::Hash;
         use namada::types::storage::{BlockHash, Header};

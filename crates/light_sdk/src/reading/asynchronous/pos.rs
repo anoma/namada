@@ -5,7 +5,6 @@ use namada_sdk::proof_of_stake::types::{
 };
 use namada_sdk::proof_of_stake::PosParams;
 use namada_sdk::queries::vp::pos::EnrichedBondsAndUnbondsDetails;
-use namada_sdk::types::address::Address;
 use namada_sdk::types::key::common;
 use namada_sdk::types::storage::{BlockHeight, Epoch};
 

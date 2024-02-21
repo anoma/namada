@@ -261,14 +261,12 @@ mod test_apply_bp_roots_to_storage {
     use borsh::BorshDeserialize;
     use namada_core::types::address;
     use namada_core::types::ethereum_events::Uint;
-    use namada_core::types::keccak::{keccak_hash, KeccakHash};
+    use namada_core::types::keccak::KeccakHash;
     use namada_core::types::storage::Key;
     use namada_core::types::voting_power::FractionalVotingPower;
     use namada_proof_of_stake::parameters::OwnedPosParams;
     use namada_proof_of_stake::storage::write_pos_params;
     use namada_state::testing::TestWlStorage;
-    use namada_storage::StorageRead;
-    use namada_vote_ext::bridge_pool_roots;
 
     use super::*;
     use crate::protocol::transactions::votes::{

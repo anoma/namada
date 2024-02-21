@@ -1,7 +1,6 @@
 //! Types for dealing with time and durations.
 
 use std::collections::BTreeMap;
-use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
 use std::io::Read;
 use std::ops::{Add, Sub};

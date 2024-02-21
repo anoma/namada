@@ -87,7 +87,7 @@ impl PartialEq for Alias {
 
 impl PartialOrd for Alias {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.normalize().partial_cmp(&other.normalize())
+        Some(self.cmp(other))
     }
 }
 

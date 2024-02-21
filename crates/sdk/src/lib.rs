@@ -231,15 +231,15 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     ) -> args::Redelegate {
         args::Redelegate {
             tx: self.tx_builder(),
-            /// Source validator address
+            // Source validator address
             src_validator,
-            /// Destination validator address
+            // Destination validator address
             dest_validator,
-            /// Owner of the bonds that are being redelegated
+            // Owner of the bonds that are being redelegated
             owner: source,
-            /// The amount of tokens to redelegate
+            // The amount of tokens to redelegate
             amount,
-            /// Path to the TX WASM code file
+            // Path to the TX WASM code file
             tx_code_path: PathBuf::from(TX_REDELEGATE_WASM),
         }
     }

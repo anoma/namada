@@ -33,7 +33,7 @@ pub use namada_merkle_tree::{
     MerkleTreeStoresRead, MerkleTreeStoresWrite, StoreRef, StoreType,
 };
 use namada_merkle_tree::{Error as MerkleTreeError, MerkleRoot};
-use namada_parameters::{self, EpochDuration, Parameters};
+use namada_parameters::{EpochDuration, Parameters};
 pub use namada_storage::{Error as StorageError, Result as StorageResult, *};
 use thiserror::Error;
 use tx_queue::{ExpiredTxsQueue, TxQueue};
@@ -570,14 +570,11 @@ where
             height
         };
 
-        let epoch = self
-            .block
-            .pred_epochs
-            .get_epoch(height)
-            .unwrap_or(Epoch::default());
+        let epoch =
+            self.block.pred_epochs.get_epoch(height).unwrap_or_default();
         let epoch_start_height =
             match self.block.pred_epochs.get_start_height_of_epoch(epoch) {
-                Some(height) if height == BlockHeight(0) => BlockHeight(1),
+                Some(BlockHeight(0)) => BlockHeight(1),
                 Some(height) => height,
                 None => BlockHeight(1),
             };
@@ -1103,7 +1100,6 @@ impl From<MerkleTreeError> for Error {
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
     use namada_core::types::address;
-    use namada_core::types::hash::Sha256Hasher;
 
     use super::mockdb::MockDB;
     use super::*;
@@ -1175,7 +1171,6 @@ mod tests {
     use namada_core::types::dec::Dec;
     use namada_core::types::time::{self, Duration};
     use namada_core::types::token;
-    use namada_parameters::Parameters;
     use proptest::prelude::*;
     use proptest::test_runner::Config;
 

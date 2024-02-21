@@ -1765,8 +1765,6 @@ fn set_max_open_files(cf_opts: &mut rocksdb::Options) {
 
 #[cfg(unix)]
 mod imp {
-    use std::convert::TryInto;
-
     use rlimit::{Resource, Rlim};
 
     const DEFAULT_NOFILE_LIMIT: Rlim = Rlim::from_raw(16384);
@@ -1818,7 +1816,7 @@ mod test {
     use namada::types::address::{
         gen_established_address, EstablishedAddressGen,
     };
-    use namada::types::storage::{BlockHash, Epoch, Epochs};
+    use namada::types::storage::{BlockHash, Epochs};
     use tempfile::tempdir;
     use test_log::test;
 
@@ -1979,7 +1977,7 @@ mod test {
         let keys_0 = vec![key_0_a, key_0_b, key_0_c];
         let keys_1 = vec![key_1_a, key_1_b, key_1_c];
         let keys_01 = vec![key_01_a];
-        let all_keys = vec![keys_0.clone(), keys_01, keys_1.clone()].concat();
+        let all_keys = [keys_0.clone(), keys_01, keys_1.clone()].concat();
 
         // Write the keys
         let mut batch = RocksDB::batch();

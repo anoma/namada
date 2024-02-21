@@ -288,7 +288,6 @@ pub fn read_and_confirm_encryption_password(
 mod tests {
     use namada::bip39::MnemonicType;
     use namada_sdk::wallet::WalletIo;
-    use rand_core;
 
     use super::CliWalletUtils;
 

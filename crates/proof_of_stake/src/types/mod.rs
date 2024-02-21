@@ -4,7 +4,6 @@ mod rev_order;
 
 use core::fmt::Debug;
 use std::collections::{BTreeMap, HashMap};
-use std::convert::TryFrom;
 use std::fmt::Display;
 use std::hash::Hash;
 use std::ops::Sub;

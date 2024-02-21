@@ -31,7 +31,7 @@ impl utils::GetVoters for &HashSet<EthMsgUpdate> {
     #[inline]
     fn get_voters(self) -> HashSet<(Address, BlockHeight)> {
         self.iter().fold(HashSet::new(), |mut voters, update| {
-            voters.extend(update.seen_by.clone().into_iter());
+            voters.extend(update.seen_by.clone());
             voters
         })
     }
@@ -334,17 +334,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{BTreeSet, HashMap, HashSet};
-
-    use borsh::BorshDeserialize;
     use namada_core::types::address;
     use namada_core::types::ethereum_events::testing::{
         arbitrary_amount, arbitrary_eth_address, arbitrary_nonce,
         arbitrary_single_transfer, DAI_ERC20_ETH_ADDRESS,
     };
-    use namada_core::types::ethereum_events::{
-        EthereumEvent, TransferToNamada,
-    };
+    use namada_core::types::ethereum_events::TransferToNamada;
     use namada_core::types::voting_power::FractionalVotingPower;
     use namada_state::testing::TestWlStorage;
     use namada_storage::mockdb::MockDBWriteBatch;

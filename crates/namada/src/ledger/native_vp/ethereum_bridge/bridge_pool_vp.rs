@@ -641,7 +641,6 @@ where
 mod test_bridge_pool_vp {
     use std::env::temp_dir;
 
-    use borsh::BorshDeserialize;
     use namada_core::borsh::BorshSerializeExt;
     use namada_core::types::address;
     use namada_ethereum_bridge::storage::bridge_pool::get_signed_root_key;
@@ -658,7 +657,7 @@ mod test_bridge_pool_vp {
     use crate::state::mockdb::MockDB;
     use crate::state::write_log::WriteLog;
     use crate::state::{Sha256Hasher, State, WlStorage};
-    use crate::types::address::{nam, wnam, InternalAddress};
+    use crate::types::address::{nam, wnam};
     use crate::types::chain::ChainId;
     use crate::types::eth_bridge_pool::{GasFee, TransferToEthereum};
     use crate::types::hash::Hash;

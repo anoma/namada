@@ -1,7 +1,6 @@
 //! This module is for hashing Namada types using the keccak256
 //! hash function in a way that is compatible with smart contracts
 //! on Ethereum.
-use std::convert::{TryFrom, TryInto};
 use std::fmt;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};

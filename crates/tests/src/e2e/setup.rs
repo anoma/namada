@@ -36,7 +36,6 @@ use namada_tx_prelude::token;
 use once_cell::sync::Lazy;
 use rand::rngs::OsRng;
 use rand::Rng;
-use serde_json;
 use tempfile::{tempdir, tempdir_in, TempDir};
 
 use crate::e2e::helpers::{generate_bin_command, make_hermes_config};
@@ -370,7 +369,7 @@ pub fn network(
     {
         let base_dir = test_dir.path();
         let src_path =
-            wallet::wallet_file(&templates_dir.join("src").join("pre-genesis"));
+            wallet::wallet_file(templates_dir.join("src").join("pre-genesis"));
         let dest_dir = base_dir.join("pre-genesis");
         let dest_path = wallet::wallet_file(&dest_dir);
         println!(

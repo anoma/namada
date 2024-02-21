@@ -11,7 +11,7 @@ pub use namada_core::types::parameters::*;
 use namada_core::types::storage::Key;
 use namada_core::types::time::DurationSecs;
 use namada_core::types::token;
-use namada_storage::{self, ResultExt, StorageRead, StorageWrite};
+use namada_storage::{ResultExt, StorageRead, StorageWrite};
 pub use storage::get_max_block_gas;
 use thiserror::Error;
 pub use wasm_allowlist::{is_tx_allowed, is_vp_allowed};

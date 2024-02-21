@@ -141,7 +141,7 @@ mod test {
     use namada_sdk::queries::{
         EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
     };
-    use namada_sdk::tendermint_rpc::{self, Error as RpcError, Response};
+    use namada_sdk::tendermint_rpc::{Error as RpcError, Response};
     use namada_state::testing::TestWlStorage;
     use namada_state::StorageWrite;
     use namada_test_utils::TestWasms;

@@ -297,7 +297,6 @@ mod tests {
 /// Testing helpers
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-    use namada_core::types::dec::Dec;
     use proptest::prelude::*;
 
     use super::*;

@@ -1,3 +1,4 @@
+#![allow(clippy::non_canonical_partial_ord_impl)]
 //! The parameters used for the chain's genesis
 
 pub mod chain;
@@ -400,7 +401,7 @@ pub fn make_dev_genesis(
             .validator_account
             .as_ref()
             .unwrap()
-            .get(0)
+            .first()
             .unwrap();
         let genesis_addr =
             GenesisAddress::EstablishedAddress(tx.tx.data.address.raw.clone());
@@ -408,7 +409,7 @@ pub fn make_dev_genesis(
         let balance = *nam_balances.0.get(&genesis_addr).unwrap();
         let bonded = {
             let bond =
-                genesis.transactions.bond.as_mut().unwrap().get(0).unwrap();
+                genesis.transactions.bond.as_mut().unwrap().first().unwrap();
             bond.amount
         };
 

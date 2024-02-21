@@ -42,10 +42,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use eyre::{eyre, Result};
-    use namada_core::types::storage;
+    use eyre::eyre;
     use namada_state::testing::TestWlStorage;
-    use namada_storage::{StorageRead, StorageWrite};
+    use namada_storage::StorageRead;
 
     use super::*;
 

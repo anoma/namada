@@ -26,7 +26,6 @@ mod tests {
     use namada::proof_of_stake::storage::validator_commission_rate_handle;
     use namada::proof_of_stake::types::GenesisValidator;
     use namada::types::dec::{Dec, POS_DECIMAL_PRECISION};
-    use namada::types::storage::Epoch;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::native_vp::TestNativeVpEnv;
@@ -36,7 +35,6 @@ mod tests {
     use namada_tx_prelude::key::testing::arb_common_keypair;
     use namada_tx_prelude::key::RefTo;
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
-    use namada_tx_prelude::{token, BorshSerializeExt};
     use proptest::prelude::*;
 
     use super::*;

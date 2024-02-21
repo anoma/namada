@@ -110,9 +110,7 @@ pub struct EthBridgeQueriesHook<'db, DB> {
 
 impl<'db, DB> Clone for EthBridgeQueriesHook<'db, DB> {
     fn clone(&self) -> Self {
-        Self {
-            wl_storage: self.wl_storage,
-        }
+        *self
     }
 }
 
@@ -481,8 +479,8 @@ where
     /// NUTs are minted when:
     ///
     /// 1. `token` is not whitelisted.
-    /// 2. `token` has exceeded the configured token caps,
-    ///    after minting `amount_to_mint`.
+    /// 2. `token` has exceeded the configured token caps, after minting
+    ///    `amount_to_mint`.
     pub fn get_eth_assets_to_mint(
         self,
         token: &EthAddress,

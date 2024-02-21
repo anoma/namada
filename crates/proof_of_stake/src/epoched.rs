@@ -8,7 +8,6 @@ use std::{cmp, ops};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::types::storage::{self, Epoch};
-use namada_storage;
 use namada_storage::collections::lazy_map::{LazyMap, NestedMap};
 use namada_storage::collections::{self, LazyCollection};
 use namada_storage::{StorageRead, StorageWrite};

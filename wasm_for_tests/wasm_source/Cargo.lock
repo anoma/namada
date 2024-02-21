@@ -50,9 +50,9 @@ dependencies = [
 
 [[package]]
 name = "ahash"
-version = "0.7.7"
+version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a824f2aa7e75a0c98c5a504fceb80649e9c35265d44525b5f94de4771a395cd"
+checksum = "891477e0c6a8957309ee5c45a6368af3ae14bb510732d2684ffa19af310920f9"
 dependencies = [
  "getrandom 0.2.11",
  "once_cell",
@@ -2952,6 +2952,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5546,11 +5555,12 @@ dependencies = [
 [[package]]
 name = "sparse-merkle-tree"
 version = "0.3.1-pre"
-source = "git+https://github.com/heliaxdev/sparse-merkle-tree?rev=515687fe7884cb365067ac86c66ac3613de176bb#515687fe7884cb365067ac86c66ac3613de176bb"
+source = "git+https://github.com/heliaxdev/sparse-merkle-tree?rev=bab8cb96872db22cc9a139b2d3dfc4e00521d097#bab8cb96872db22cc9a139b2d3dfc4e00521d097"
 dependencies = [
  "borsh",
  "cfg-if 1.0.0",
  "ics23",
+ "itertools 0.12.1",
  "sha2 0.9.9",
 ]
 

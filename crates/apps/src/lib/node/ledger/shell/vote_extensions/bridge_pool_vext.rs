@@ -1,11 +1,8 @@
 //! Extend Tendermint votes with signatures of the Ethereum
 //! bridge pool root and nonce seen by a quorum of validators.
 use itertools::Itertools;
-use namada::state::{DBIter, StorageHasher, DB};
-use namada::tx::Signed;
 
 use super::*;
-use crate::node::ledger::shell::Shell;
 
 impl<D, H> Shell<D, H>
 where
@@ -70,7 +67,7 @@ mod test_bp_vote_extensions {
     use namada::proof_of_stake::{become_validator, BecomeValidator, Epoch};
     use namada::state::StorageWrite;
     use namada::tendermint::abci::types::VoteInfo;
-    use namada::tx::{SignableEthMessage, Signed};
+    use namada::tx::Signed;
     use namada::types::ethereum_events::Uint;
     use namada::types::keccak::{keccak_hash, KeccakHash};
     use namada::types::key::*;

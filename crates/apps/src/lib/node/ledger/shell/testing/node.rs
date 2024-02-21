@@ -571,7 +571,7 @@ impl MockNode {
             txs: txs
                 .clone()
                 .into_iter()
-                .zip(tx_results.into_iter())
+                .zip(tx_results)
                 .map(|(tx, result)| ProcessedTx {
                     tx: tx.into(),
                     result,
@@ -835,7 +835,7 @@ impl<'a> Client for &'a MockNode {
                             block: 0,
                             app: 0,
                         }),
-                        chain_id: "Namada".try_into().unwrap(),
+                        chain_id: "Namada".into(),
                         height: encoded_event.0 as i64,
                         time: None,
                         last_block_id: None,

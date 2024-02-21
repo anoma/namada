@@ -11,7 +11,6 @@ use namada::tx::data::{DecryptedTx, TxType, WrapperTx};
 use namada::tx::Tx;
 use namada::types::address::Address;
 use namada::types::key::tm_raw_hash_to_string;
-use namada::types::time::DateTimeUtc;
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::WasmCacheAccess;
 
@@ -443,16 +442,15 @@ mod test_prepare_proposal {
     use namada::state::collections::lazy_map::{NestedSubKey, SubKey};
     use namada::token;
     use namada::token::{read_denom, Amount, DenominatedAmount};
-    use namada::tx::data::{Fee, TxType, WrapperTx};
+    use namada::tx::data::Fee;
     use namada::tx::{Code, Data, Header, Section, Signature, Signed};
-    use namada::types::address::{self, Address};
+    use namada::types::address;
     use namada::types::ethereum_events::EthereumEvent;
     use namada::types::key::RefTo;
     use namada::types::storage::{BlockHeight, InnerEthEventsQueue};
     use namada::vote_ext::{ethereum_events, ethereum_tx_data_variants};
 
     use super::*;
-    use crate::config::ValidatorLocalConfig;
     use crate::node::ledger::shell::test_utils::{
         self, gen_keypair, get_pkh_from_address, TestShell,
     };
@@ -842,7 +840,7 @@ mod test_prepare_proposal {
         // fail the test
         let expected_txs: Vec<Header> = expected_wrapper
             .into_iter()
-            .chain(expected_decrypted.into_iter())
+            .chain(expected_decrypted)
             .map(|tx| tx.header)
             .collect();
         let received: Vec<Header> = shell

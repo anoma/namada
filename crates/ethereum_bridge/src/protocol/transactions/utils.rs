@@ -120,8 +120,6 @@ pub(super) fn get_voting_powers_for_selected(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-
     use assert_matches::assert_matches;
     use namada_core::types::address;
     use namada_core::types::ethereum_events::testing::arbitrary_bonded_stake;

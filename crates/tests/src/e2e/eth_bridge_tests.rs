@@ -279,10 +279,9 @@ async fn test_roundtrip_eth_transfer() -> Result<()> {
 /// In this test, we check the following:
 /// 1. We can successfully add transfers to the bridge pool.
 /// 2. We can query the bridge pool and it is non-empty.
-/// 3. We request a proof of inclusion of the transfer into the
-///    bridge pool.
-/// 4. We submit an Ethereum event indicating that the transfer
-///    has been relayed.
+/// 3. We request a proof of inclusion of the transfer into the bridge pool.
+/// 4. We submit an Ethereum event indicating that the transfer has been
+///    relayed.
 /// 5. We check that the event is removed from the bridge pool.
 #[tokio::test]
 async fn test_bridge_pool_e2e() {

@@ -95,7 +95,7 @@ where
                 {
                     return Ok(false);
                 }
-            } else if key.segments.get(0) == Some(&addr.to_db_key()) {
+            } else if key.segments.first() == Some(&addr.to_db_key()) {
                 // Unknown changes to this address space are disallowed
                 // tracing::info!("PoS unrecognized key change {} rejected",
                 // key);

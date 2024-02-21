@@ -585,7 +585,6 @@ mod tests {
     use std::collections::HashMap;
 
     use assert_matches::assert_matches;
-    use eyre::Result;
     use namada_core::borsh::BorshSerializeExt;
     use namada_core::types::address::testing::gen_implicit_address;
     use namada_core::types::address::{gen_established_address, nam, wnam};
@@ -923,7 +922,7 @@ mod tests {
                 let receiver_balance_key = balance_key(&wdai, &receiver);
                 let wdai_supply_key = minted_balance_key(&wdai);
 
-                for key in vec![receiver_balance_key, wdai_supply_key] {
+                for key in [receiver_balance_key, wdai_supply_key] {
                     let value: Option<token::Amount> =
                         wl_storage.read(&key).unwrap();
                     if expected_amount.is_zero() {

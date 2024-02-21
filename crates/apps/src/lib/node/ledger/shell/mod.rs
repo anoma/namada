@@ -631,16 +631,7 @@ where
             for evidence in byzantine_validators {
                 // dbg!(&evidence);
                 tracing::info!("Processing evidence {evidence:?}.");
-                let evidence_height = match u64::try_from(evidence.height) {
-                    Ok(height) => height,
-                    Err(err) => {
-                        tracing::error!(
-                            "Unexpected evidence block height {}",
-                            err
-                        );
-                        continue;
-                    }
-                };
+                let evidence_height = u64::from(evidence.height);
                 let evidence_epoch = match self
                     .wl_storage
                     .storage
@@ -928,8 +919,12 @@ where
                 );
                 return;
             }
-            let Some(config) = EthereumOracleConfig::read(&self.wl_storage) else {
-                tracing::info!("Not starting oracle as the Ethereum bridge config couldn't be found in storage");
+            let Some(config) = EthereumOracleConfig::read(&self.wl_storage)
+            else {
+                tracing::info!(
+                    "Not starting oracle as the Ethereum bridge config \
+                     couldn't be found in storage"
+                );
                 return;
             };
             let active =
@@ -1541,35 +1536,28 @@ where
 #[cfg(test)]
 mod test_utils {
     use std::ops::{Deref, DerefMut};
-    use std::path::PathBuf;
 
     use data_encoding::HEXUPPER;
     use namada::ledger::parameters::{EpochDuration, Parameters};
     use namada::proof_of_stake::parameters::PosParams;
     use namada::proof_of_stake::storage::validator_consensus_key_handle;
     use namada::state::mockdb::MockDB;
-    use namada::state::{
-        LastBlock, Sha256Hasher, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY,
-    };
+    use namada::state::{LastBlock, StorageWrite};
     use namada::tendermint::abci::types::VoteInfo;
     use namada::token::conversion::update_allowed_conversions;
-    use namada::tx::data::{Fee, TxType, WrapperTx};
+    use namada::tx::data::Fee;
     use namada::tx::{Code, Data};
-    use namada::types::address;
-    use namada::types::chain::ChainId;
     use namada::types::ethereum_events::Uint;
     use namada::types::hash::Hash;
     use namada::types::keccak::KeccakHash;
     use namada::types::key::*;
     use namada::types::storage::{BlockHash, Epoch, Header};
-    use namada::types::time::{DateTimeUtc, DurationSecs};
+    use namada::types::time::DurationSecs;
     use tempfile::tempdir;
     use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
     use super::*;
     use crate::config::ethereum_bridge::ledger::ORACLE_CHANNEL_BUFFER_SIZE;
-    use crate::facade::tendermint;
-    use crate::facade::tendermint::abci::types::Misbehavior;
     use crate::facade::tendermint_proto::google::protobuf::Timestamp;
     use crate::facade::tendermint_proto::v0_37::abci::{
         RequestPrepareProposal, RequestProcessProposal,
@@ -1805,7 +1793,7 @@ mod test_utils {
                 });
             let results = tx_results
                 .into_iter()
-                .zip(req.txs.into_iter())
+                .zip(req.txs)
                 .map(|(res, tx_bytes)| ProcessedTx {
                     result: res,
                     tx: tx_bytes.into(),
@@ -2221,20 +2209,14 @@ mod shell_tests {
     use namada::core::ledger::replay_protection;
     use namada::token::read_denom;
     use namada::tx::data::protocol::{ProtocolTx, ProtocolTxType};
-    use namada::tx::data::{Fee, WrapperTx};
-    use namada::tx::{
-        Code, Data, Section, SignableEthMessage, Signature, Signed, Tx,
-    };
-    use namada::types::ethereum_events::EthereumEvent;
-    use namada::types::key::RefTo;
-    use namada::types::storage::{BlockHeight, Epoch};
+    use namada::tx::data::Fee;
+    use namada::tx::{Code, Data, Signature, Signed};
+    use namada::types::storage::Epoch;
     use namada::vote_ext::{
         bridge_pool_roots, ethereum_events, ethereum_tx_data_variants,
     };
-    use namada::{parameters, token};
 
     use super::*;
-    use crate::node::ledger::shell::test_utils;
     use crate::node::ledger::shell::token::DenominatedAmount;
     use crate::wallet;
 

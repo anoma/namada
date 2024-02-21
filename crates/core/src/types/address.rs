@@ -229,7 +229,7 @@ impl<'addr> From<&'addr Address> for raw::Address<'addr, raw::Validated> {
 // the order.
 impl PartialOrd for Address {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.encode().partial_cmp(&other.encode())
+        Some(self.cmp(other))
     }
 }
 
@@ -725,7 +725,7 @@ pub fn gen_established_address(seed: impl AsRef<str>) -> Address {
     let mut key_gen = EstablishedAddressGen::new(seed);
 
     let mut rng: ThreadRng = thread_rng();
-    let mut rng_bytes = vec![0u8; 32];
+    let mut rng_bytes = [0u8; 32];
     rng.fill_bytes(&mut rng_bytes[..]);
     let rng_source = rng_bytes
         .iter()

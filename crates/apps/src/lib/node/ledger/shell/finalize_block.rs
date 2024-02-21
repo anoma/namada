@@ -5,28 +5,24 @@ use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use namada::governance::pgf::inflation as pgf_inflation;
 use namada::ledger::events::EventType;
-use namada::ledger::gas::{GasMetering, TxGasMeter};
+use namada::ledger::gas::GasMetering;
 use namada::ledger::pos::namada_proof_of_stake;
-use namada::ledger::protocol::{self, WrapperArgs};
+use namada::ledger::protocol::WrapperArgs;
 use namada::proof_of_stake::storage::{
     find_validator_by_raw_hash, read_last_block_proposer_address,
     write_last_block_proposer_address,
 };
-use namada::state::wl_storage::WriteLogAndStorage;
 use namada::state::write_log::StorageModification;
-use namada::state::{
-    ResultExt, StorageRead, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY,
-};
+use namada::state::{ResultExt, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY};
 use namada::token::conversion::update_allowed_conversions;
 use namada::tx::data::protocol::ProtocolTxType;
-use namada::types::key::tm_raw_hash_to_string;
 use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
 use namada::vote_ext::ethereum_events::MultiSignedEthEvent;
 use namada::vote_ext::ethereum_tx_data_variants;
 
 use super::governance::execute_governance_proposals;
 use super::*;
-use crate::facade::tendermint::abci::types::{Misbehavior, VoteInfo};
+use crate::facade::tendermint::abci::types::VoteInfo;
 use crate::node::ledger::shell::stats::InternalStats;
 
 impl<D, H> Shell<D, H>
@@ -835,9 +831,7 @@ fn pos_votes_from_abci(
                     );
 
                     // Try to convert voting power to u64
-                    let validator_vp = u64::try_from(*power).expect(
-                        "Must be able to convert voting power from i64 to u64",
-                    );
+                    let validator_vp = u64::from(*power);
 
                     Some(namada_proof_of_stake::types::VoteInfo {
                         validator_address,
@@ -862,7 +856,6 @@ mod test_finalize_block {
     use std::num::NonZeroU64;
     use std::str::FromStr;
 
-    use data_encoding::HEXUPPER;
     use namada::core::ledger::replay_protection;
     use namada::eth_bridge::storage::bridge_pool::{
         self, get_key_from_hash, get_nonce_key, get_signed_root_key,
@@ -890,20 +883,18 @@ mod test_finalize_block {
         BondId, SlashType, ValidatorState, WeightedValidator,
     };
     use namada::proof_of_stake::{unjail_validator, ADDRESS as pos_address};
-    use namada::state::StorageWrite;
     use namada::token::{Amount, DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
-    use namada::tx::data::{Fee, WrapperTx};
-    use namada::tx::{Code, Data, Section, Signature};
+    use namada::tx::data::Fee;
+    use namada::tx::{Code, Data, Signature};
     use namada::types::dec::{Dec, POS_DECIMAL_PRECISION};
     use namada::types::ethereum_events::{EthAddress, Uint as ethUint};
     use namada::types::hash::Hash;
     use namada::types::keccak::KeccakHash;
     use namada::types::key::testing::common_sk_from_simple_seed;
-    use namada::types::key::tm_consensus_key_raw_hash;
-    use namada::types::storage::{Epoch, KeySeg};
-    use namada::types::time::{DateTimeUtc, DurationSecs};
+    use namada::types::storage::KeySeg;
+    use namada::types::time::DurationSecs;
     use namada::types::uint::Uint;
-    use namada::vote_ext::{ethereum_events, EthereumTxData};
+    use namada::vote_ext::ethereum_events;
     use namada_sdk::eth_bridge::MinimumConfirmations;
     use namada_sdk::governance::ProposalVote;
     use namada_sdk::proof_of_stake::storage::{
@@ -915,9 +906,7 @@ mod test_finalize_block {
     use test_log::test;
 
     use super::*;
-    use crate::facade::tendermint::abci::types::{
-        Misbehavior, Validator, VoteInfo,
-    };
+    use crate::facade::tendermint::abci::types::Validator;
     use crate::node::ledger::oracle::control::Command;
     use crate::node::ledger::shell::test_utils::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{

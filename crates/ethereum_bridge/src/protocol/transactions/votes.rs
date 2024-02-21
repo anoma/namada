@@ -57,7 +57,8 @@ pub trait EpochedVotingPowerExt {
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
     {
-        let Some(max_voting_power) = self.epoch_max_voting_power(wl_storage) else {
+        let Some(max_voting_power) = self.epoch_max_voting_power(wl_storage)
+        else {
             return FractionalVotingPower::NULL;
         };
         FractionalVotingPower::new(
@@ -75,7 +76,8 @@ pub trait EpochedVotingPowerExt {
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
     {
-        let Some(max_voting_power) = self.epoch_max_voting_power(wl_storage) else {
+        let Some(max_voting_power) = self.epoch_max_voting_power(wl_storage)
+        else {
             return false;
         };
         // NB: Preserve the safety property of the Tendermint protocol across
@@ -185,10 +187,7 @@ pub fn dedupe(signers: BTreeSet<(Address, BlockHeight)>) -> Votes {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
-
-    use namada_core::types::storage::BlockHeight;
-    use namada_core::types::{address, token};
+    use namada_core::types::address;
     use namada_proof_of_stake::parameters::OwnedPosParams;
     use namada_proof_of_stake::storage::write_pos_params;
 

@@ -810,7 +810,6 @@ pub struct Metadata<ID> {
 #[cfg(test)]
 mod test {
     use std::path::PathBuf;
-    use std::str::FromStr;
 
     use super::*;
 

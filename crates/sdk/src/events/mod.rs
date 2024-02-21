@@ -2,7 +2,6 @@
 pub mod log;
 
 use std::collections::HashMap;
-use std::convert::TryFrom;
 use std::fmt::{self, Display};
 use std::ops::{Index, IndexMut};
 use std::str::FromStr;

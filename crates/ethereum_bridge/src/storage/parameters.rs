@@ -363,8 +363,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use eyre::Result;
-    use namada_core::types::ethereum_events::EthAddress;
     use namada_state::testing::TestWlStorage;
 
     use super::*;

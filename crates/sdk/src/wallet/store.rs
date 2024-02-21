@@ -13,7 +13,6 @@ use namada_core::types::masp::{
     ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
 };
 use serde::{Deserialize, Serialize};
-use slip10_ed25519;
 use zeroize::Zeroizing;
 
 use super::alias::{self, Alias};
@@ -633,7 +632,7 @@ impl Store {
                 other.store.tendermint_node_key,
             ),
         ];
-        self.secret_keys.extend(keys.into_iter());
+        self.secret_keys.extend(keys);
 
         let consensus_pk = other.consensus_key.ref_to();
         let tendermint_node_pk = other.tendermint_node_key.ref_to();
@@ -644,15 +643,15 @@ impl Store {
                 tendermint_node_pk.clone(),
             ),
         ];
-        self.public_keys.extend(public_keys.clone().into_iter());
+        self.public_keys.extend(public_keys.clone());
         self.addresses
-            .extend(public_keys.into_iter().map(|(k, v)| (k, (&v).into())));
+            .extend(public_keys.map(|(k, v)| (k, (&v).into())));
 
         let pkhs = [
             ((&consensus_pk).into(), consensus_key_alias),
             ((&tendermint_node_pk).into(), tendermint_node_key_alias),
         ];
-        self.pkhs.extend(pkhs.into_iter());
+        self.pkhs.extend(pkhs);
 
         self.validator_data = Some(ValidatorData {
             address: validator_address,
@@ -789,11 +788,10 @@ impl<'de> Deserialize<'de> for AddressVpType {
 
 #[cfg(test)]
 mod test_wallet {
-    use base58::{self, FromBase58};
+    use base58::FromBase58;
     use bip39::{Language, Mnemonic, Seed};
     use data_encoding::HEXLOWER;
 
-    use super::super::derivation_path::DerivationPath;
     use super::*;
 
     #[test]

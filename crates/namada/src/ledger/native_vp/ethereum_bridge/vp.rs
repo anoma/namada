@@ -5,7 +5,6 @@ use eyre::{eyre, Result};
 use namada_core::types::address::Address;
 use namada_core::types::hash::StorageHasher;
 use namada_core::types::storage::Key;
-use namada_ethereum_bridge;
 use namada_ethereum_bridge::storage;
 use namada_ethereum_bridge::storage::escrow_key;
 use namada_tx::Tx;
@@ -165,14 +164,12 @@ fn validate_changed_keys(
 
 #[cfg(test)]
 mod tests {
-    use std::default::Default;
     use std::env::temp_dir;
 
     use namada_core::borsh::BorshSerializeExt;
     use namada_gas::TxGasMeter;
     use namada_state::StorageWrite;
     use namada_tx::data::TxType;
-    use namada_tx::Tx;
     use rand::Rng;
 
     use super::*;

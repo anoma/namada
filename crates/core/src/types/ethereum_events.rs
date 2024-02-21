@@ -40,7 +40,7 @@ pub struct Uint(pub [u64; 4]);
 impl PartialOrd for Uint {
     #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        ethUint(self.0).partial_cmp(&ethUint(other.0))
+        Some(self.cmp(other))
     }
 }
 
@@ -390,7 +390,6 @@ impl From<Erc20Transfer> for TransferToEthereum {
 
 #[cfg(test)]
 pub mod tests {
-    use std::str::FromStr;
 
     use super::*;
 
@@ -450,7 +449,7 @@ pub mod testing {
     use proptest::prop_compose;
 
     use super::*;
-    use crate::types::token::{self, Amount};
+    use crate::types::token;
 
     pub const DAI_ERC20_ETH_ADDRESS_CHECKSUMMED: &str =
         "0x6B175474E89094C44Da98b954EedeAC495271d0F";

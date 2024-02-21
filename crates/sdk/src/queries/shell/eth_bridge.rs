@@ -34,7 +34,7 @@ use namada_ethereum_bridge::storage::{
 use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_state::MembershipProof::BridgePool;
 use namada_state::{DBIter, StorageHasher, StoreRef, StoreType, DB};
-use namada_storage::{self, CustomError, ResultExt, StorageRead};
+use namada_storage::{CustomError, ResultExt, StorageRead};
 use namada_vote_ext::validator_set_update::{
     ValidatorSetArgs, VotingPowersMap,
 };
@@ -368,8 +368,8 @@ where
 {
     let Some(contract) = StorageRead::read(ctx.wl_storage, key)? else {
         return Err(namada_storage::Error::SimpleMessage(
-            "Failed to read contract: The Ethereum bridge \
-             storage is not initialized",
+            "Failed to read contract: The Ethereum bridge storage is not \
+             initialized",
         ));
     };
     Ok(contract)
@@ -839,22 +839,16 @@ mod test_ethbridge_router {
     use assert_matches::assert_matches;
     use namada_core::types::address::nam;
     use namada_core::types::address::testing::established_address_1;
-    use namada_core::types::eth_abi::Encode;
     use namada_core::types::eth_bridge_pool::{
-        GasFee, PendingTransfer, TransferToEthereum, TransferToEthereumKind,
+        GasFee, TransferToEthereum, TransferToEthereumKind,
     };
-    use namada_core::types::ethereum_events::EthAddress;
-    use namada_core::types::storage::BlockHeight;
-    use namada_core::types::voting_power::{
-        EthBridgeVotingPower, FractionalVotingPower,
-    };
+    use namada_core::types::voting_power::EthBridgeVotingPower;
     use namada_ethereum_bridge::protocol::transactions::validator_set_update::aggregate_votes;
     use namada_ethereum_bridge::storage::bridge_pool::{
         get_pending_key, get_signed_root_key, BridgePoolTree,
     };
     use namada_ethereum_bridge::storage::proof::BridgePoolRootProof;
     use namada_ethereum_bridge::storage::whitelist;
-    use namada_proof_of_stake::pos_queries::PosQueries;
     use namada_state::mockdb::MockDBWriteBatch;
     use namada_storage::StorageWrite;
     use namada_vote_ext::validator_set_update;
@@ -1792,7 +1786,6 @@ mod test_ethbridge_router {
 #[allow(dead_code)]
 mod test_utils {
     use namada_core::types::address::Address;
-    pub use namada_ethereum_bridge::test_utils::*;
 
     /// An established user address for testing & development
     pub fn bertha_address() -> Address {

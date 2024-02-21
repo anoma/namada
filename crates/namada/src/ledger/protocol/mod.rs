@@ -683,9 +683,9 @@ where
     use namada_vote_ext::{ethereum_events, validator_set_update};
 
     let Some(data) = data else {
-        return Err(Error::ProtocolTxError(
-            eyre!("Protocol tx data must be present")),
-        );
+        return Err(Error::ProtocolTxError(eyre!(
+            "Protocol tx data must be present"
+        )));
     };
     let ethereum_tx_data = EthereumTxData::deserialize(&tx, &data)
         .wrap_err_with(|| {
@@ -1167,8 +1167,6 @@ mod tests {
     use namada_ethereum_bridge::storage::proof::EthereumProof;
     use namada_ethereum_bridge::storage::{vote_tallies, vp};
     use namada_ethereum_bridge::test_utils;
-    use namada_state::StorageRead;
-    use namada_token::Amount;
     use namada_tx::{SignableEthMessage, Signed};
     use namada_vote_ext::bridge_pool_roots::BridgePoolRootVext;
     use namada_vote_ext::ethereum_events::EthereumEventsVext;

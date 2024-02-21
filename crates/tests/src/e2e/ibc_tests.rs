@@ -9,7 +9,6 @@
 //! To keep the temporary files created by a test, use env var
 //! `NAMADA_E2E_KEEP_TEMP=true`.
 
-use core::convert::TryFrom;
 use core::str::FromStr;
 use core::time::Duration;
 use std::collections::{BTreeSet, HashMap};
