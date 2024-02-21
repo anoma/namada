@@ -4391,10 +4391,11 @@ pub mod args {
             let public_keys = PUBLIC_KEYS.parse(matches);
             let threshold = THRESHOLD.parse(matches);
     
-            // Custom validation to enforce threshold < number of public keys
-            if threshold > public_keys.len() as Option<u8> {
-                // Threshold should be less than the number of public keys
-                panic!("Threshold must be less than the number of public keys");
+            let num_keys = public_keys.as_ref().map_or(0, |keys| keys.len());
+
+            if num_keys < threshold {
+                eprintln!("Threshold must be less than the number of public keys provided.");
+                std::process::exit(1);
             }
     
             Self {
