@@ -1,5 +1,6 @@
 //! Generic Error Type for all of the Shared Crate
 
+use namada_core::event::EventError;
 use namada_core::types::address::Address;
 use namada_core::types::dec::Dec;
 use namada_core::types::ethereum_events::EthAddress;
@@ -58,23 +59,6 @@ pub enum PinnedBalanceError {
         "The supplied viewing key does not recognize payments to given address"
     )]
     InvalidViewingKey,
-}
-
-/// Errors to do with emitting events.
-#[derive(Error, Debug, Clone)]
-pub enum EventError {
-    /// Error when parsing an event type
-    #[error("Invalid event type")]
-    InvalidEventType,
-    /// Error when parsing attributes from an event JSON.
-    #[error("Json missing `attributes` field")]
-    MissingAttributes,
-    /// Missing key in attributes.
-    #[error("Attributes missing key: {0}")]
-    MissingKey(String),
-    /// Missing value in attributes.
-    #[error("Attributes missing value: {0}")]
-    MissingValue(String),
 }
 
 /// Errors that deal with querying some kind of data

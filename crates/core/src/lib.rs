@@ -7,6 +7,7 @@
 #![deny(rustdoc::private_intra_doc_links)]
 
 pub mod bytes;
+pub mod event;
 pub mod hints;
 pub mod ledger;
 pub mod types;
