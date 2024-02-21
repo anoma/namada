@@ -1257,7 +1257,7 @@ fn key_convert(
     let mut wallet = load_wallet(ctx);
     let sk = wallet.find_secret_key(&alias, None);
     let key: serde_json::Value = validator_key_to_json(&sk.unwrap()).unwrap();
-    let file_name = format!("priv_validator_key.json_{}", alias);
+    let file_name = format!("priv_validator_key_{}.json", alias);
     let file = File::create(&file_name).unwrap();
     serde_json::to_writer_pretty(file, &key).unwrap_or_else(|err| {
         edisplay_line!(io, "{}", err);
