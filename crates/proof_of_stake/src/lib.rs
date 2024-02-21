@@ -36,6 +36,7 @@ use namada_storage::collections::lazy_map::{self, Collectable, LazyMap};
 use namada_storage::{StorageRead, StorageWrite};
 pub use namada_trans_token as token;
 pub use parameters::{OwnedPosParams, PosParams};
+use types::into_tm_voting_power;
 
 use crate::queries::{find_bonds, has_bonds};
 use crate::rewards::{
@@ -1843,9 +1844,11 @@ where
         let consensus_key = validator_consensus_key_handle(&address)
             .get(storage, current_epoch, params)?
             .unwrap();
+        let new_tm_voting_power =
+            into_tm_voting_power(params.tm_votes_per_token, new_stake);
         let converted = f(ValidatorSetUpdate::Consensus(ConsensusValidator {
             consensus_key,
-            bonded_stake: new_stake,
+            bonded_stake: new_tm_voting_power,
         }));
         Ok(converted)
     })
