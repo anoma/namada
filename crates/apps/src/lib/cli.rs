@@ -4088,7 +4088,7 @@ pub mod args {
                 ))
                 .arg(THRESHOLD.def().help(
                     "The minimum number of signature to be provided for \
-                     authorization. Must be less then the maximum number of \
+                     authorization. Must be less than the maximum number of \
                      public keys provided.",
                 ))
         }
@@ -4390,6 +4390,13 @@ pub mod args {
             let tx_code_path = PathBuf::from(TX_UPDATE_ACCOUNT_WASM);
             let public_keys = PUBLIC_KEYS.parse(matches);
             let threshold = THRESHOLD.parse(matches);
+    
+            // Custom validation to enforce threshold < number of public keys
+            if threshold > public_keys.len() as u8 {
+                // Threshold should be less than the number of public keys
+                panic!("Threshold must be less than the number of public keys");
+            }
+    
             Self {
                 tx,
                 vp_code_path,
@@ -4399,17 +4406,14 @@ pub mod args {
                 threshold,
             }
         }
-
+    
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
-                .arg(
-                    CODE_PATH_OPT.def().help(
-                        "The path to the new validity predicate WASM code.",
-                    ),
-                )
+                .arg(CODE_PATH_OPT.def().help(
+                    "The path to the new validity predicate WASM code.",
+                ))
                 .arg(ADDRESS.def().help(
-                    "The account's address. It's key is used to produce the \
-                     signature.",
+                    "The account's address. It's key is used to produce the signature.",
                 ))
                 .arg(PUBLIC_KEYS.def().help(
                     "A list public keys to be associated with the new account \
@@ -4417,11 +4421,13 @@ pub mod args {
                 ))
                 .arg(THRESHOLD.def().help(
                     "The minimum number of signature to be provided for \
-                     authorization. Must be less then the maximum number of \
+                     authorization. Must be less than the maximum number of \
                      public keys provided.",
                 ))
         }
     }
+    
+    
 
     impl CliToSdk<Bond<SdkTypes>> for Bond<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> Bond<SdkTypes> {
