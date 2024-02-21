@@ -1634,12 +1634,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
 
 [[package]]
-name = "dtoa"
-version = "0.4.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56899898ce76aaf4a0f24d914c97ea6ed976d42fec6ad33fcbb0a1103e07b2b0"
-
-[[package]]
 name = "dunce"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3824,9 +3818,6 @@ name = "linked-hash-map"
 version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0717cef1bc8b636c6e1c1bbdefc09e6322da8a9321966e8928ef80d20f7f770f"
-dependencies = [
- "serde 1.0.193",
-]
 
 [[package]]
 name = "linux-raw-sys"
@@ -3878,20 +3869,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b823e83b2affd8f40a9ee8c29dbc56404c1e34cd2710921f2801e2cf29527afa"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "madato"
-version = "0.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c36112680b23ee7a5d2a10e56b59a74e4028963e9080b8abec4e69d0d773dc06"
-dependencies = [
- "indexmap 1.9.3",
- "linked-hash-map",
- "regex",
- "serde 1.0.193",
- "serde_derive",
- "serde_yaml",
 ]
 
 [[package]]
@@ -4369,17 +4346,6 @@ dependencies = [
  "tracing-subscriber",
  "uint",
  "zeroize",
-]
-
-[[package]]
-name = "namada_encoding_spec"
-version = "0.31.5"
-dependencies = [
- "borsh",
- "itertools 0.10.5",
- "lazy_static",
- "madato",
- "namada",
 ]
 
 [[package]]
@@ -6685,18 +6651,6 @@ dependencies = [
  "itoa",
  "ryu",
  "serde 1.0.193",
-]
-
-[[package]]
-name = "serde_yaml"
-version = "0.7.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef8099d3df28273c99a1728190c7a9f19d444c941044f64adf986bee7ec53051"
-dependencies = [
- "dtoa",
- "linked-hash-map",
- "serde 1.0.193",
- "yaml-rust",
 ]
 
 [[package]]
