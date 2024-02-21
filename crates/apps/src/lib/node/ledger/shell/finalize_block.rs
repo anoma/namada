@@ -74,6 +74,14 @@ where
             "Block height: {height}, epoch: {current_epoch}, is new epoch: \
              {new_epoch}."
         );
+        if update_for_tendermint {
+            tracing::info!(
+                "Will begin a new epoch {} in {} blocks starting at height {}",
+                current_epoch.next(),
+                EPOCH_SWITCH_BLOCKS_DELAY,
+                height.0 + u64::from(EPOCH_SWITCH_BLOCKS_DELAY)
+            );
+        }
         tracing::debug!(
             "New epoch block delay for updating the Tendermint validator set: \
              {:?}",

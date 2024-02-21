@@ -243,6 +243,7 @@ pub mod cmds {
                 .subcommand(TxResignSteward::def().display_order(4))
                 // Queries
                 .subcommand(QueryEpoch::def().display_order(5))
+                .subcommand(QueryNextEpochInfo::def().display_order(5))
                 .subcommand(QueryStatus::def().display_order(5))
                 .subcommand(QueryAccount::def().display_order(5))
                 .subcommand(QueryTransfers::def().display_order(5))
@@ -269,7 +270,7 @@ pub mod cmds {
                 // Actions
                 .subcommand(SignTx::def().display_order(6))
                 .subcommand(ShieldedSync::def().display_order(6))
-                .subcommand(GenIbcShieldedTransafer::def().display_order(6))
+                .subcommand(GenIbcShieldedTransfer::def().display_order(6))
                 // Utils
                 .subcommand(Utils::def().display_order(7))
         }
@@ -313,6 +314,8 @@ pub mod cmds {
             let redelegate = Self::parse_with_ctx(matches, Redelegate);
             let claim_rewards = Self::parse_with_ctx(matches, ClaimRewards);
             let query_epoch = Self::parse_with_ctx(matches, QueryEpoch);
+            let query_next_epoch_info =
+                Self::parse_with_ctx(matches, QueryNextEpochInfo);
             let query_status = Self::parse_with_ctx(matches, QueryStatus);
             let query_account = Self::parse_with_ctx(matches, QueryAccount);
             let query_transfers = Self::parse_with_ctx(matches, QueryTransfers);
@@ -351,7 +354,7 @@ pub mod cmds {
             let sign_tx = Self::parse_with_ctx(matches, SignTx);
             let shielded_sync = Self::parse_with_ctx(matches, ShieldedSync);
             let gen_ibc_shielded =
-                Self::parse_with_ctx(matches, GenIbcShieldedTransafer);
+                Self::parse_with_ctx(matches, GenIbcShieldedTransfer);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
             tx_custom
                 .or(tx_transfer)
@@ -378,6 +381,7 @@ pub mod cmds {
                 .or(tx_update_steward_commission)
                 .or(tx_resign_steward)
                 .or(query_epoch)
+                .or(query_next_epoch_info)
                 .or(query_status)
                 .or(query_transfers)
                 .or(query_conversions)
@@ -467,6 +471,7 @@ pub mod cmds {
         TxUpdateStewardCommission(TxUpdateStewardCommission),
         TxResignSteward(TxResignSteward),
         QueryEpoch(QueryEpoch),
+        QueryNextEpochInfo(QueryNextEpochInfo),
         QueryStatus(QueryStatus),
         QueryAccount(QueryAccount),
         QueryTransfers(QueryTransfers),
@@ -491,7 +496,7 @@ pub mod cmds {
         QueryRewards(QueryRewards),
         SignTx(SignTx),
         ShieldedSync(ShieldedSync),
-        GenIbcShieldedTransafer(GenIbcShieldedTransafer),
+        GenIbcShieldedTransfer(GenIbcShieldedTransfer),
     }
 
     #[allow(clippy::large_enum_variant)]
@@ -1523,6 +1528,28 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct QueryNextEpochInfo(pub args::Query<args::CliTypes>);
+
+    impl SubCmd for QueryNextEpochInfo {
+        const CMD: &'static str = "next-epoch-info";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| QueryNextEpochInfo(args::Query::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Query some info to help discern when the next epoch will \
+                     begin.",
+                )
+                .add_args::<args::Query<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct QueryStatus(pub args::Query<args::CliTypes>);
 
     impl SubCmd for QueryStatus {
@@ -1694,7 +1721,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Query PoS bonded stake.")
+                .about("Sign a transaction offline.")
                 .add_args::<args::SignTx<args::CliTypes>>()
         }
     }
@@ -2087,16 +2114,16 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct GenIbcShieldedTransafer(
-        pub args::GenIbcShieldedTransafer<args::CliTypes>,
+    pub struct GenIbcShieldedTransfer(
+        pub args::GenIbcShieldedTransfer<args::CliTypes>,
     );
 
-    impl SubCmd for GenIbcShieldedTransafer {
+    impl SubCmd for GenIbcShieldedTransfer {
         const CMD: &'static str = "ibc-gen-shielded";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).map(|matches| {
-                GenIbcShieldedTransafer(args::GenIbcShieldedTransafer::parse(
+                GenIbcShieldedTransfer(args::GenIbcShieldedTransfer::parse(
                     matches,
                 ))
             })
@@ -2105,7 +2132,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Generate shielded transfer for IBC.")
-                .add_args::<args::GenIbcShieldedTransafer<args::CliTypes>>()
+                .add_args::<args::GenIbcShieldedTransfer<args::CliTypes>>()
         }
     }
 
@@ -4851,11 +4878,9 @@ pub mod args {
                             DATA_PATH_OPT.name,
                         ]),
                 )
-                .arg(
-                    PROPOSAL_VOTE
-                        .def()
-                        .help("The vote for the proposal. Either yay or nay."),
-                )
+                .arg(PROPOSAL_VOTE.def().help(
+                    "The vote for the proposal. Either yay, nay, or abstain.",
+                ))
                 .arg(
                     PROPOSAL_OFFLINE
                         .def()
@@ -5622,7 +5647,7 @@ pub mod args {
             app.add_args::<Tx<CliTypes>>().arg(
                 VALIDATOR
                     .def()
-                    .help("The address of the jailed validator to deactivate."),
+                    .help("The address of the validator to deactivate."),
             )
         }
     }
@@ -5655,7 +5680,7 @@ pub mod args {
             app.add_args::<Tx<CliTypes>>().arg(
                 VALIDATOR
                     .def()
-                    .help("The address of the jailed validator to deactivate."),
+                    .help("The address of the validator to reactivate."),
             )
         }
     }
@@ -5750,16 +5775,13 @@ pub mod args {
         }
     }
 
-    impl CliToSdk<GenIbcShieldedTransafer<SdkTypes>>
-        for GenIbcShieldedTransafer<CliTypes>
+    impl CliToSdk<GenIbcShieldedTransfer<SdkTypes>>
+        for GenIbcShieldedTransfer<CliTypes>
     {
-        fn to_sdk(
-            self,
-            ctx: &mut Context,
-        ) -> GenIbcShieldedTransafer<SdkTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> GenIbcShieldedTransfer<SdkTypes> {
             let query = self.query.to_sdk(ctx);
             let chain_ctx = ctx.borrow_chain_or_exit();
-            GenIbcShieldedTransafer::<SdkTypes> {
+            GenIbcShieldedTransfer::<SdkTypes> {
                 query,
                 output_folder: self.output_folder,
                 target: chain_ctx.get(&self.target),
@@ -5771,7 +5793,7 @@ pub mod args {
         }
     }
 
-    impl Args for GenIbcShieldedTransafer<CliTypes> {
+    impl Args for GenIbcShieldedTransfer<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let output_folder = OUTPUT_FOLDER_PATH.parse(matches);
