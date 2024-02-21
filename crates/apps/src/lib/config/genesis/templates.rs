@@ -229,6 +229,7 @@ pub struct Parameters<T: TemplateValidation> {
     pub gov_params: GovernanceParams,
     pub pgf_params: PgfParams<T>,
     pub eth_bridge_params: Option<EthBridgeParams>,
+    pub ibc_params: IbcParams,
 }
 
 #[derive(
@@ -484,6 +485,23 @@ pub struct EthBridgeParams {
     /// The addresses of the Ethereum contracts that need to be directly known
     /// by validators.
     pub contracts: Contracts,
+}
+
+#[derive(
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshDeserialize,
+    BorshSerialize,
+    PartialEq,
+    Eq,
+)]
+pub struct IbcParams {
+    /// Default supply limit of each token
+    pub default_mint_limit: token::Amount,
+    /// Default per-epoch throughput limit of each token
+    pub default_per_epoch_throughput_limit: token::Amount,
 }
 
 impl TokenBalances {
@@ -857,6 +875,7 @@ pub fn validate_parameters(
         gov_params,
         pgf_params,
         eth_bridge_params,
+        ibc_params,
     } = parameters;
     match parameters.denominate(tokens) {
         Err(e) => {
@@ -874,6 +893,7 @@ pub fn validate_parameters(
                 valid: Default::default(),
             },
             eth_bridge_params,
+            ibc_params,
         }),
     }
 }
