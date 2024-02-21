@@ -127,8 +127,8 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             output_folder: None,
             force: false,
             broadcast_only: false,
-            ledger_address: tendermint_config::net::Address::from_str(
-                "127.0.0.1:26657",
+            ledger_address: tendermint_rpc::Url::from_str(
+                "http://127.0.0.1:26657",
             )
             .unwrap(),
             initialized_account_alias: None,
@@ -642,8 +642,8 @@ where
                 output_folder: None,
                 force: false,
                 broadcast_only: false,
-                ledger_address: tendermint_config::net::Address::from_str(
-                    "127.0.0.1:26657",
+                ledger_address: tendermint_rpc::Url::from_str(
+                    "http://127.0.0.1:26657",
                 )
                 .unwrap(),
                 initialized_account_alias: None,

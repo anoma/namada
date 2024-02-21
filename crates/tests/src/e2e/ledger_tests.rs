@@ -1018,6 +1018,9 @@ fn pos_bonds() -> Result<()> {
         start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
             .background();
 
+    let rpc = get_actor_rpc(&test, Who::Validator(0));
+    wait_for_block_height(&test, &rpc, 2, 30)?;
+
     let validator_0_rpc = get_actor_rpc(&test, Who::Validator(0));
 
     // 2. Submit a self-bond for the first genesis validator

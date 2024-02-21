@@ -27,7 +27,7 @@ use crate::strings::TX_APPLIED_SUCCESS;
 #[test]
 fn masp_incentives() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
-    let validator_one_rpc = "127.0.0.1:26567";
+    let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
     // Lengthen epoch to ensure that a transaction can be constructed and
@@ -809,7 +809,7 @@ fn masp_incentives() -> Result<()> {
 #[test]
 fn spend_unconverted_asset_type() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
-    let validator_one_rpc = "127.0.0.1:26567";
+    let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
 
@@ -929,7 +929,7 @@ fn spend_unconverted_asset_type() -> Result<()> {
 #[test]
 fn masp_pinned_txs() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
-    let validator_one_rpc = "127.0.0.1:26567";
+    let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
 
@@ -1122,7 +1122,7 @@ fn masp_txs_and_queries() -> Result<()> {
     //     tracing::level_filters::LevelFilter::INFO,
     // )?;
     // This address doesn't matter for tests. But an argument is required.
-    let validator_one_rpc = "127.0.0.1:26567";
+    let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
 
@@ -1457,7 +1457,7 @@ fn masp_txs_and_queries() -> Result<()> {
 #[test]
 fn wrapper_fee_unshielding() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
-    let validator_one_rpc = "127.0.0.1:26567";
+    let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
     let (mut node, _services) = setup::setup()?;
@@ -1748,7 +1748,7 @@ fn wrapper_fee_unshielding() -> Result<()> {
 #[test]
 fn multiple_unfetched_txs_same_block() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
-    let validator_one_rpc = "127.0.0.1:26567";
+    let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
     let (mut node, _services) = setup::setup()?;
@@ -2014,7 +2014,7 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
 #[test]
 fn cross_epoch_unshield() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
-    let validator_one_rpc = "127.0.0.1:26567";
+    let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
     let (mut node, _services) = setup::setup()?;
@@ -2115,7 +2115,7 @@ fn cross_epoch_unshield() -> Result<()> {
 #[test]
 fn dynamic_assets() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
-    let validator_one_rpc = "127.0.0.1:26567";
+    let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
     // Lengthen epoch to ensure that a transaction can be constructed and

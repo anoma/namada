@@ -18,7 +18,6 @@ use namada_sdk::masp::fs::FsShieldedUtils;
 use namada_sdk::masp::ShieldedContext;
 use namada_sdk::wallet::Wallet;
 use namada_sdk::{Namada, NamadaImpl};
-use tendermint_config::net::Address as TendermintAddress;
 
 use super::args;
 use crate::cli::utils;
@@ -74,7 +73,7 @@ pub type WalletPublicKey = FromContext<common::PublicKey>;
 pub type WalletBalanceOwner = FromContext<BalanceOwner>;
 
 /// RPC address of a locally configured node
-pub type ConfigRpcAddress = FromContext<TendermintAddress>;
+pub type ConfigRpcAddress = FromContext<tendermint_rpc::Url>;
 
 /// Address that defaults to the native token address.
 #[derive(Clone, Debug)]
@@ -95,8 +94,8 @@ impl FromStr for AddrOrNativeToken {
     }
 }
 
-impl From<TendermintAddress> for ConfigRpcAddress {
-    fn from(value: TendermintAddress) -> Self {
+impl From<tendermint_rpc::Url> for ConfigRpcAddress {
+    fn from(value: tendermint_rpc::Url) -> Self {
         FromContext::new(value.to_string())
     }
 }
@@ -464,13 +463,16 @@ impl ArgFromContext for AddrOrNativeToken {
     }
 }
 
-impl ArgFromContext for TendermintAddress {
+impl ArgFromContext for tendermint_rpc::Url {
     fn arg_from_ctx(
         ctx: &ChainContext,
         raw: impl AsRef<str>,
     ) -> Result<Self, String> {
         if raw.as_ref().is_empty() {
-            return Ok(ctx.config.ledger.cometbft.rpc.laddr.clone());
+            return Self::from_str(
+                &ctx.config.ledger.cometbft.rpc.laddr.to_string().replace("tpc", "http"),
+            )
+            .map_err(|err| format!("Invalid Tendermint address: {err}"));
         }
         Self::from_str(raw.as_ref())
             .map_err(|err| format!("Invalid Tendermint address: {err}"))
