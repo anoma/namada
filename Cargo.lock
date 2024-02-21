@@ -4288,6 +4288,7 @@ dependencies = [
  "tar",
  "tempfile",
  "tendermint-config",
+ "tendermint-rpc",
  "test-log",
  "thiserror",
  "tokio",
