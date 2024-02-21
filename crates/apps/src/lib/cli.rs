@@ -4357,7 +4357,7 @@ pub mod args {
                 ))
                 .arg(THRESHOLD.def().help(
                     "The minimum number of signature to be provided for \
-                     authorization. Must be less then the maximum number of \
+                     authorization. Must be less than the maximum number of \
                      public keys provided.",
                 ))
         }
