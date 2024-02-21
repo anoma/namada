@@ -4392,7 +4392,7 @@ pub mod args {
             let threshold = THRESHOLD.parse(matches);
     
             // Custom validation to enforce threshold < number of public keys
-            if threshold > public_keys.len() as u8 {
+            if threshold > public_keys.len() as Option<u8> {
                 // Threshold should be less than the number of public keys
                 panic!("Threshold must be less than the number of public keys");
             }
