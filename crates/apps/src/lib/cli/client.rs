@@ -1,4 +1,5 @@
 use color_eyre::eyre::Result;
+use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::types::io::Io;
 use namada_sdk::{Namada, NamadaImpl};
 
@@ -314,6 +315,40 @@ impl CliApi {
                         let namada = ctx.to_sdk(client, io);
                         tx::submit_validator_metadata_change(&namada, args)
                             .await?;
+                    }
+                    Sub::ShieldedSync(ShieldedSync(args)) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(&args.ledger_address)
+                        });
+                        client.wait_until_node_is_synced(&io).await?;
+                        let args = args.to_sdk(&mut ctx);
+                        let mut chain_ctx = ctx.take_chain_or_exit();
+                        let vks = chain_ctx
+                            .wallet
+                            .get_viewing_keys()
+                            .values()
+                            .copied()
+                            .map(|vk| ExtendedFullViewingKey::from(vk).fvk.vk)
+                            .chain(args.viewing_keys.into_iter().map(|vk| {
+                                ExtendedFullViewingKey::from(vk).fvk.vk
+                            }))
+                            .collect::<Vec<_>>();
+                        let sks = args
+                            .spending_keys
+                            .into_iter()
+                            .map(|sk| sk.into())
+                            .collect::<Vec<_>>();
+                        let _ = chain_ctx.shielded.load().await;
+                        crate::client::masp::syncing(
+                            chain_ctx.shielded,
+                            &client,
+                            &io,
+                            args.batch_size,
+                            args.last_query_height,
+                            &sks,
+                            &vks,
+                        )
+                        .await?;
                     }
                     // Eth bridge
                     Sub::AddToEthBridgePool(args) => {

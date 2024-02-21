@@ -268,6 +268,7 @@ pub mod cmds {
                 .subcommand(QueryMetaData::def().display_order(5))
                 // Actions
                 .subcommand(SignTx::def().display_order(6))
+                .subcommand(ShieldedSync::def().display_order(6))
                 .subcommand(GenIbcShieldedTransafer::def().display_order(6))
                 // Utils
                 .subcommand(Utils::def().display_order(7))
@@ -348,6 +349,7 @@ pub mod cmds {
             let add_to_eth_bridge_pool =
                 Self::parse_with_ctx(matches, AddToEthBridgePool);
             let sign_tx = Self::parse_with_ctx(matches, SignTx);
+            let shielded_sync = Self::parse_with_ctx(matches, ShieldedSync);
             let gen_ibc_shielded =
                 Self::parse_with_ctx(matches, GenIbcShieldedTransafer);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
@@ -400,6 +402,7 @@ pub mod cmds {
                 .or(query_metadata)
                 .or(query_account)
                 .or(sign_tx)
+                .or(shielded_sync)
                 .or(gen_ibc_shielded)
                 .or(utils)
         }
@@ -487,6 +490,7 @@ pub mod cmds {
         QueryValidatorState(QueryValidatorState),
         QueryRewards(QueryRewards),
         SignTx(SignTx),
+        ShieldedSync(ShieldedSync),
         GenIbcShieldedTransafer(GenIbcShieldedTransafer),
     }
 
@@ -1345,6 +1349,29 @@ pub mod cmds {
                      validator.",
                 )
                 .add_args::<args::TxReactivateValidator<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct ShieldedSync(pub args::ShieldedSync<args::CliTypes>);
+
+    impl SubCmd for ShieldedSync {
+        const CMD: &'static str = "shielded-sync";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| ShieldedSync(args::ShieldedSync::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Sync the local shielded context with MASP notes owned by \
+                     the provided viewing / spending keys up to an optional \
+                     specified block height.",
+                )
+                .add_args::<args::ShieldedSync<args::CliTypes>>()
         }
     }
 
@@ -2901,6 +2928,8 @@ pub mod args {
             Err(_) => config::get_default_namada_folder(),
         }),
     );
+    pub const BATCH_SIZE_OPT: ArgDefault<u64> =
+        arg_default("batch-size", DefaultFn(|| 1));
     pub const BLOCK_HEIGHT: Arg<BlockHeight> = arg("block-height");
     pub const BLOCK_HEIGHT_OPT: ArgOpt<BlockHeight> = arg_opt("height");
     pub const BRIDGE_POOL_GAS_AMOUNT: ArgDefault<token::DenominatedAmount> =
@@ -3084,6 +3113,8 @@ pub mod args {
     pub const SIGNATURES: ArgMulti<PathBuf, GlobStar> = arg_multi("signatures");
     pub const SOURCE: Arg<WalletAddress> = arg("source");
     pub const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
+    pub const SPENDING_KEYS: ArgMulti<WalletSpendingKey, GlobStar> =
+        arg_multi("spending-keys");
     pub const STEWARD: Arg<WalletAddress> = arg("steward");
     pub const SOURCE_VALIDATOR: Arg<WalletAddress> = arg("source-validator");
     pub const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
@@ -3120,6 +3151,8 @@ pub mod args {
     pub const VALUE: Arg<String> = arg("value");
     pub const VOTER_OPT: ArgOpt<WalletAddress> = arg_opt("voter");
     pub const VIEWING_KEY: Arg<WalletViewingKey> = arg("key");
+    pub const VIEWING_KEYS: ArgMulti<WalletViewingKey, GlobStar> =
+        arg_multi("viewing-keys");
     pub const VP: ArgOpt<String> = arg_opt("vp");
     pub const WALLET_ALIAS_FORCE: ArgFlag = flag("wallet-alias-force");
     pub const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
@@ -5631,6 +5664,63 @@ pub mod args {
         }
     }
 
+    impl Args for ShieldedSync<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let ledger_address = LEDGER_ADDRESS.parse(matches);
+            let batch_size = BATCH_SIZE_OPT.parse(matches);
+            let last_query_height = BLOCK_HEIGHT_OPT.parse(matches);
+            let spending_keys = SPENDING_KEYS.parse(matches);
+            let viewing_keys = VIEWING_KEYS.parse(matches);
+            Self {
+                ledger_address,
+                batch_size,
+                last_query_height,
+                spending_keys,
+                viewing_keys,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(LEDGER_ADDRESS.def().help(LEDGER_ADDRESS_ABOUT))
+                .arg(BATCH_SIZE_OPT.def().help(
+                    "Optional batch size which determines how many txs to \
+                     fetch before caching locally. Default is 1.",
+                ))
+                .arg(BLOCK_HEIGHT_OPT.def().help(
+                    "Option block height to sync up to. Default is latest.",
+                ))
+                .arg(SPENDING_KEYS.def().help(
+                    "List of new spending keys with which to check note \
+                     ownership. These will be added to the shielded context.",
+                ))
+                .arg(VIEWING_KEYS.def().help(
+                    "List of new viewing keys with which to check note \
+                     ownership. These will be added to the shielded context.",
+                ))
+        }
+    }
+
+    impl CliToSdk<ShieldedSync<SdkTypes>> for ShieldedSync<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> ShieldedSync<SdkTypes> {
+            let chain_ctx = ctx.borrow_mut_chain_or_exit();
+            ShieldedSync {
+                ledger_address: self.ledger_address,
+                batch_size: self.batch_size,
+                last_query_height: self.last_query_height,
+                spending_keys: self
+                    .spending_keys
+                    .iter()
+                    .map(|sk| chain_ctx.get_cached(sk))
+                    .collect(),
+                viewing_keys: self
+                    .viewing_keys
+                    .iter()
+                    .map(|vk| chain_ctx.get_cached(vk))
+                    .collect(),
+            }
+        }
+    }
+
     impl CliToSdk<GenIbcShieldedTransafer<SdkTypes>>
         for GenIbcShieldedTransafer<CliTypes>
     {
@@ -5915,6 +6005,7 @@ pub mod args {
         type EthereumAddress = String;
         type Keypair = WalletKeypair;
         type PublicKey = WalletPublicKey;
+        type SpendingKey = WalletSpendingKey;
         type TendermintAddress = tendermint_config::net::Address;
         type TransferSource = WalletTransferSource;
         type TransferTarget = WalletTransferTarget;
