@@ -2304,6 +2304,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let memo = MemoBytes::empty();
 
         // Try to get a seed from env var, if any.
+        let rng = StdRng::from_rng(OsRng).unwrap();
+        #[cfg(feature = "testing")]
         let rng = if let Ok(seed) = env::var(ENV_VAR_MASP_TEST_SEED)
             .map_err(|e| Error::Other(e.to_string()))
             .and_then(|seed| {
@@ -2319,7 +2321,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             );
             StdRng::seed_from_u64(seed)
         } else {
-            StdRng::from_rng(OsRng).unwrap()
+            rng
         };
 
         // Now we build up the transaction within this object
