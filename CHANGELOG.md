@@ -1,5 +1,53 @@
 # CHANGELOG
 
+## v0.31.6
+
+Namada 0.31.6 is a patch release that contains various fixes and improvements.
+
+### BUG FIXES
+
+- Fix shielded balance query for IBC tokens
+  ([\#2625](https://github.com/anoma/namada/issues/2625))
+- Rather than allowing CometBFT to keep processing blocks after a storage write
+  has failed in Namada, crash the ledger to avoid any potential corruption of
+  state. ([\#2657](https://github.com/anoma/namada/pull/2657))
+- Fixing the order of proposal execution to be deterministic.
+  ([\#2679](https://github.com/anoma/namada/pull/2679))
+
+### FEATURES
+
+- Added wallet command to "convert" a consensus key
+  into Tendermint private validator key JSON format.
+  ([\#2516](https://github.com/anoma/namada/pull/2516))
+
+### IMPROVEMENTS
+
+- Simplified the transaction fetching algorithm to enable it to be saved to
+  storage more frequently. ([\#2458](https://github.com/anoma/namada/pull/2458))
+- The client, when generating a shielded transfer, invalidates the
+  masp notes that have been spent without the need to sync with a node.
+  ([\#2534](https://github.com/anoma/namada/pull/2534))
+- CLI: Allow to use global args (`--chain-id`, `--base-dir`, `--wasm-dir` and 
+  `--pre-genesis`) before or after a sub-command.
+  ([\#2545](https://github.com/anoma/namada/pull/2545))
+- Show help message for query-proposal subcommand instead of crashing when no
+  arg provided. ([\#2611](https://github.com/anoma/namada/pull/2611))
+- Various improvements to client and error logging.
+  ([\#2615](https://github.com/anoma/namada/pull/2615))
+- Allow users to input http/https url as ledger urls.
+  ([\#2658](https://github.com/anoma/namada/pull/2658))
+- Increase broadcaster timeout and allow users to increase it via environment
+  variable. ([\#2668](https://github.com/anoma/namada/pull/2668))
+
+### SDK
+
+- Reworked the sdk to support the new speculative state of the
+  `ShieldedContext`:\n-`ShieldedContext` now has an extra field to determin its
+  state\n-When calling `gen_shielded_transfer` the context now invalidates the
+  spent notes (if any)\n-The fee unshielding `Transaction` is now built before
+  the actual transaction\n-`find_viewing_key` only requires a shared reference
+  now ([\#2534](https://github.com/anoma/namada/pull/2534))
+
 ## v0.31.5
 
 Namada 0.31.5 is a patch release that fixes consensus validator set update for CometBFT.
