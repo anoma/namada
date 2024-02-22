@@ -552,7 +552,7 @@ impl Unscanned {
     where
         I: IntoIterator<Item = IndexedNoteEntry>,
     {
-        self.txs.extend(items.into_iter());
+        self.txs.extend(items);
     }
 
     fn contains_height(&self, height: u64) -> bool {

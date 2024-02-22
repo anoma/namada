@@ -852,7 +852,7 @@ fn pos_votes_from_abci(
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_finalize_block {
-    use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+    use std::collections::{BTreeMap, HashMap, HashSet};
     use std::num::NonZeroU64;
     use std::str::FromStr;
 

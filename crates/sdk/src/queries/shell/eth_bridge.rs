@@ -1786,6 +1786,8 @@ mod test_ethbridge_router {
 #[allow(dead_code)]
 mod test_utils {
     use namada_core::types::address::Address;
+    #[allow(unused_imports)]
+    pub use namada_ethereum_bridge::test_utils::*;
 
     /// An established user address for testing & development
     pub fn bertha_address() -> Address {

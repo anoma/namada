@@ -58,7 +58,6 @@ use namada::ledger::queries::{
     Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
 use namada::state::StorageRead;
-use namada::tendermint_rpc::{self};
 use namada::tx::data::pos::Bond;
 use namada::tx::data::{TxResult, VpsResult};
 use namada::tx::{Code, Data, Section, Signature, Tx};

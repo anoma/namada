@@ -22,7 +22,6 @@ pub mod utils;
 mod vote_extensions;
 
 use std::collections::BTreeSet;
-use std::convert::{TryFrom, TryInto};
 use std::mem;
 use std::path::{Path, PathBuf};
 #[allow(unused_imports)]

@@ -25,7 +25,6 @@ use namada::proof_of_stake::types::WeightedValidator;
 use namada::state::{LastBlock, Sha256Hasher, EPOCH_SWITCH_BLOCKS_DELAY};
 use namada::tendermint::abci::response::Info;
 use namada::tendermint::abci::types::VoteInfo;
-use namada::tendermint_rpc::SimpleRequest;
 use namada::types::control_flow::time::Duration;
 use namada::types::ethereum_events::EthereumEvent;
 use namada::types::ethereum_structs;
@@ -38,13 +37,14 @@ use namada_sdk::tendermint_proto::google::protobuf::Timestamp;
 use namada_sdk::tx::data::ResultCode;
 use regex::Regex;
 use tendermint_rpc::endpoint::block;
+use tendermint_rpc::SimpleRequest;
 use tokio::sync::mpsc;
 
+use crate::facade::tendermint;
 use crate::facade::tendermint_proto::v0_37::abci::{
     RequestPrepareProposal, RequestProcessProposal,
 };
 use crate::facade::tendermint_rpc::error::Error as RpcError;
-use crate::facade::{tendermint, tendermint_rpc};
 use crate::node::ledger::ethereum_oracle::test_tools::mock_web3_client::{
     TestOracle, Web3Client, Web3Controller,
 };

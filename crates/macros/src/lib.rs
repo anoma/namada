@@ -389,7 +389,7 @@ mod test_proc_macros {
         let expected_impl = quote! {
             impl Keys {
                 /// A list of all storage keys
-                pub const ALL: &[&'static str] = {
+                pub const ALL: &'static [&'static str] = {
                     let Keys { bird, is, the, word } = Self::VALUES;
                     &[bird, is, the, word]
                 };
