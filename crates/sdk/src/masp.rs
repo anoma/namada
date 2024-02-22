@@ -1149,12 +1149,13 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                             let addresses = balance_keys
                                 .iter()
                                 .find(|addresses| {
-                                    if addresses[1] != &MASP {
+                                    let owner = addresses.1.to_address_ref();
+                                    if owner != &MASP {
                                         let transp_addr_commit =
                                             TransparentAddress(
                                                 ripemd::Ripemd160::digest(
                                                     sha2::Sha256::digest(
-                                                        &addresses[1]
+                                                        &owner
                                                             .serialize_to_vec(),
                                                     ),
                                                 )
@@ -1188,8 +1189,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                                 });
 
                             (
-                                addresses[1].to_owned(),
-                                addresses[0].to_owned(),
+                                addresses.1.to_address_ref().to_owned(),
+                                addresses.0.to_owned(),
                                 amount,
                             )
                         } else {
@@ -1201,12 +1202,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                         let token = balance_keys
                             .iter()
                             .find(|addresses| {
-                                if addresses[1] != &MASP {
+                                let owner = addresses.1.to_address_ref();
+                                if owner != &MASP {
                                     let transp_addr_commit = TransparentAddress(
                                         ripemd::Ripemd160::digest(
                                             sha2::Sha256::digest(
-                                                &addresses[1]
-                                                    .serialize_to_vec(),
+                                                &owner.serialize_to_vec(),
                                             ),
                                         )
                                         .into(),
@@ -1229,7 +1230,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                                     "Could not find target of MASP tx"
                                         .to_string(),
                                 )
-                            })?[0];
+                            })?
+                            .0;
 
                         let amount = transp_bundle
                             .vout
@@ -2294,28 +2296,27 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
         // To speed up integration tests, we can save and load proofs
         #[cfg(feature = "testing")]
-        let load_or_save = if let Ok(masp_proofs) =
-            env::var(ENV_VAR_MASP_TEST_PROOFS)
-        {
-            let parsed = match masp_proofs.to_ascii_lowercase().as_str() {
-                "load" => LoadOrSaveProofs::Load,
-                "save" => LoadOrSaveProofs::Save,
-                env_var => Err(Error::Other(format!(
+        let load_or_save =
+            if let Ok(masp_proofs) = env::var(ENV_VAR_MASP_TEST_PROOFS) {
+                let parsed = match masp_proofs.to_ascii_lowercase().as_str() {
+                    "load" => LoadOrSaveProofs::Load,
+                    "save" => LoadOrSaveProofs::Save,
+                    env_var => Err(Error::Other(format!(
                     "Unexpected value for {ENV_VAR_MASP_TEST_PROOFS} env var. \
                      Expecting \"save\" or \"load\", but got \"{env_var}\"."
                 )))?,
-            };
-            if env::var(ENV_VAR_MASP_TEST_SEED).is_err() {
-                Err(Error::Other(format!(
+                };
+                if env::var(ENV_VAR_MASP_TEST_SEED).is_err() {
+                    Err(Error::Other(format!(
                     "Ensure to set a seed with {ENV_VAR_MASP_TEST_SEED} env \
                      var when using {ENV_VAR_MASP_TEST_PROOFS} for \
                      deterministic proofs."
                 )))?;
-            }
-            parsed
-        } else {
-            LoadOrSaveProofs::Neither
-        };
+                }
+                parsed
+            } else {
+                LoadOrSaveProofs::Neither
+            };
 
         let builder_clone = builder.clone().map_builder(WalletMap);
         #[cfg(feature = "testing")]

@@ -28,7 +28,8 @@ use token::storage_key::{
     balance_key, is_any_shielded_action_balance_key, is_masp_allowed_key,
     is_masp_key, is_masp_nullifier_key, is_masp_tx_pin_key,
     masp_commitment_anchor_key, masp_commitment_tree_key,
-    masp_convert_anchor_key, masp_nullifier_key,
+    masp_convert_anchor_key, masp_nullifier_key, minted_balance_key,
+    ShieldedActionOwner,
 };
 use token::Amount;
 
@@ -321,33 +322,48 @@ where
                 .iter()
                 .filter_map(is_any_shielded_action_balance_key)
                 .partition(|addresses| {
-                    addresses[1] == &Address::Internal(Masp)
+                    addresses.1.to_address_ref() == &Address::Internal(Masp)
                 });
 
-        for [token, _] in masp_balances {
+        for (token, _) in masp_balances {
             // NOTE: no need to extract the changes of the masp balances too,
             // we'll examine those of the other transparent addresses and the
             // multitoken vp ensures a correct match between the two sets
             result.masp.insert(token);
         }
 
-        for [token, counterpart] in counterparts_balances {
+        for (token, counterpart) in counterparts_balances {
+            let counterpart_balance_key = match counterpart {
+                ShieldedActionOwner::Owner(addr) => balance_key(token, addr),
+                ShieldedActionOwner::Minted => minted_balance_key(token),
+            };
             let pre_balance: Amount = self
                 .ctx
-                .read_pre(&balance_key(token, counterpart))?
+                .read_pre(&counterpart_balance_key)?
                 .unwrap_or_default();
             let post_balance: Amount = self
                 .ctx
-                .read_post(&balance_key(token, counterpart))?
+                .read_post(&counterpart_balance_key)?
                 .unwrap_or_default();
             // Public keys must be the hash of the sources/targets
             let address_hash = <[u8; 20]>::from(ripemd::Ripemd160::digest(
-                sha2::Sha256::digest(&counterpart.serialize_to_vec()),
+                sha2::Sha256::digest(
+                    &counterpart.to_address_ref().serialize_to_vec(),
+                ),
             ));
-            let diff = match post_balance.checked_sub(pre_balance) {
+            let mut diff = match post_balance.checked_sub(pre_balance) {
                 Some(diff) => DeltaBalance::Positive(diff),
                 None => DeltaBalance::Negative(pre_balance - post_balance),
             };
+
+            if let ShieldedActionOwner::Minted = counterpart {
+                // When receiving ibc transfers we mint and also shield so we
+                // have two credits, we need to mock the mint balance as a
+                // negative change even if it is positive
+                if let DeltaBalance::Positive(amt) = diff {
+                    diff = DeltaBalance::Negative(amt);
+                }
+            }
 
             result
                 .other
@@ -601,8 +617,11 @@ where
             BTreeMap::default()
         };
 
-        // Check that the changed balance keys in storage match the
-        // modifications carried by the transparent bundle
+        // FIXME: this is wrong, the bundle balances must be a subste of
+        // changed_balances.other, not the same otherwise I prevent other
+        // transparent transfers in parallel Check that the changed
+        // balance keys in storage match the modifications carried by
+        // the transparent bundle
         if bundle_balances != changed_balances.other {
             // NOTE: this effectively prevent addresses from being
             // involved in other transparent transfers in the same tx since
