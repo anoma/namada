@@ -15,6 +15,7 @@ use borsh::BorshDeserialize;
 use namada_core::storage;
 use namada_core::storage::Epochs;
 use namada_gas::GasMetering;
+use namada_token::Amount;
 use namada_tx::Tx;
 pub use namada_vp_env::VpEnv;
 use state::StateRead;
@@ -634,6 +635,55 @@ pub(super) mod testing {
                 .get(key)
                 .map(|bytes| T::try_from_slice(bytes).into_storage_result())
                 .transpose()
+        }
+    }
+}
+
+/// A positive or negative amount
+#[derive(Copy, Clone, Debug)]
+pub(crate) enum SignedAmount {
+    Positive(Amount),
+    Negative(Amount),
+}
+
+impl PartialEq for SignedAmount {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Positive(lhs), Self::Positive(rhs)) => lhs == rhs,
+            (Self::Negative(lhs), Self::Negative(rhs)) => lhs == rhs,
+            (Self::Positive(lhs), Self::Negative(rhs)) => {
+                lhs == &Amount::default() && rhs == &Amount::default()
+            }
+            (Self::Negative(lhs), Self::Positive(rhs)) => {
+                lhs == &Amount::default() && rhs == &Amount::default()
+            }
+        }
+    }
+}
+
+impl SignedAmount {
+    fn checked_add(&self, rhs: Self) -> Option<Self> {
+        match (self, rhs) {
+            (Self::Positive(lhs), Self::Positive(rhs)) => {
+                let tmp = lhs.checked_add(rhs)?;
+                Some(Self::Positive(tmp))
+            }
+            (Self::Positive(lhs), Self::Negative(rhs)) => {
+                match lhs.checked_sub(rhs) {
+                    Some(diff) => Some(Self::Positive(diff)),
+                    None => Some(Self::Negative(rhs - *lhs)),
+                }
+            }
+            (Self::Negative(lhs), Self::Positive(rhs)) => {
+                match rhs.checked_sub(*lhs) {
+                    Some(diff) => Some(Self::Positive(diff)),
+                    None => Some(Self::Negative(*lhs - rhs)),
+                }
+            }
+            (Self::Negative(lhs), Self::Negative(rhs)) => {
+                let tmp = lhs.checked_add(rhs)?;
+                Some(Self::Negative(tmp))
+            }
         }
     }
 }
