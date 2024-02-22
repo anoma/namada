@@ -293,6 +293,24 @@ where
             .normed_inflation
             .get_or_insert(ref_inflation);
 
+        if *token == native_token {
+            // Save the new normed inflation
+            *normed_inflation += (((Uint::from(*normed_inflation)
+                * Uint::from(reward.0))
+                + Uint::from(reward.1 - 1))
+                / reward.1)
+                .try_into()
+                .unwrap_or_else(|_| {
+                    tracing::warn!(
+                        "MASP reward for {} assumed to be 0 because the \
+                         computed value is too large. Please check the \
+                         inflation parameters.",
+                        token
+                    );
+                    0u128
+                });
+        }
+
         for digit in MaspDigitPos::iter() {
             // Provide an allowed conversion from previous timestamp. The
             // negative sign allows each instance of the old asset to be
@@ -311,97 +329,44 @@ where
                 Some(wl_storage.storage.block.epoch),
             )
             .into_storage_result()?;
-            if *token == native_token {
-                // The amount that will be given of the new native token for
-                // every amount of the native token given in the
-                // previous epoch
-                let new_normed_inflation = Uint::from(*normed_inflation)
-                    .checked_add(
-                        (Uint::from(*normed_inflation) * Uint::from(reward.0))
-                            / reward.1,
-                    )
-                    .and_then(|x| x.try_into().ok())
-                    .unwrap_or_else(|| {
-                        tracing::warn!(
-                            "MASP reward for {} assumed to be 0 because the \
-                             computed value is too large. Please check the \
-                             inflation parameters.",
-                            token
-                        );
-                        *normed_inflation
-                    });
-                // The conversion is computed such that if consecutive
-                // conversions are added together, the
-                // intermediate native tokens cancel/
-                // telescope out
-                current_convs.insert(
-                    (token.clone(), denom, digit),
-                    (MaspAmount::from_pair(
-                        old_asset,
-                        -(*normed_inflation as i128),
-                    )
+
+            // Express the inflation reward in real terms, that is, with
+            // respect to the native asset in the zeroth
+            // epoch
+            let real_reward = ((Uint::from(reward.0)
+                * Uint::from(ref_inflation))
+                / *normed_inflation)
+                .try_into()
+                .unwrap_or_else(|_| {
+                    tracing::warn!(
+                        "MASP reward for {} assumed to be 0 because the \
+                         computed value is too large. Please check the \
+                         inflation parameters.",
+                        token
+                    );
+                    0u128
+                });
+            // The conversion is computed such that if consecutive
+            // conversions are added together, the
+            // intermediate tokens cancel/ telescope out
+            current_convs.insert(
+                (token.clone(), denom, digit),
+                (MaspAmount::from_pair(old_asset, -(reward.1 as i128))
                     .unwrap()
-                        + MaspAmount::from_pair(
-                            new_asset,
-                            new_normed_inflation as i128,
-                        )
-                        .unwrap())
-                    .into(),
-                );
-                // Operations that happen exactly once for each token
-                if digit == MaspDigitPos::Three {
-                    // The reward for each reward.1 units of the current asset
-                    // is reward.0 units of the reward token
-                    let native_reward =
-                        addr_bal * (new_normed_inflation, *normed_inflation);
-                    total_reward += native_reward
-                        .0
-                        .checked_add(native_reward.1)
-                        .unwrap_or(Amount::max())
-                        .checked_sub(addr_bal)
-                        .unwrap_or_default();
-                    // Save the new normed inflation
-                    *normed_inflation = new_normed_inflation;
-                }
-            } else {
-                // Express the inflation reward in real terms, that is, with
-                // respect to the native asset in the zeroth
-                // epoch
-                let real_reward = ((Uint::from(reward.0)
-                    * Uint::from(ref_inflation))
-                    / *normed_inflation)
-                    .try_into()
-                    .unwrap_or_else(|_| {
-                        tracing::warn!(
-                            "MASP reward for {} assumed to be 0 because the \
-                             computed value is too large. Please check the \
-                             inflation parameters.",
-                            token
-                        );
-                        0u128
-                    });
-                // The conversion is computed such that if consecutive
-                // conversions are added together, the
-                // intermediate tokens cancel/ telescope out
-                current_convs.insert(
-                    (token.clone(), denom, digit),
-                    (MaspAmount::from_pair(old_asset, -(reward.1 as i128))
+                    + MaspAmount::from_pair(new_asset, reward.1 as i128)
                         .unwrap()
-                        + MaspAmount::from_pair(new_asset, reward.1 as i128)
-                            .unwrap()
-                        + MaspAmount::from_pair(
-                            reward_assets[digit as usize],
-                            real_reward as i128,
-                        )
-                        .unwrap())
-                    .into(),
-                );
-                // Operations that happen exactly once for each token
-                if digit == MaspDigitPos::Three {
-                    // The reward for each reward.1 units of the current asset
-                    // is reward.0 units of the reward token
-                    total_reward += (addr_bal * (reward.0, reward.1)).0;
-                }
+                    + MaspAmount::from_pair(
+                        reward_assets[digit as usize],
+                        real_reward as i128,
+                    )
+                    .unwrap())
+                .into(),
+            );
+            // Operations that happen exactly once for each token
+            if digit == MaspDigitPos::Three {
+                // The reward for each reward.1 units of the current asset
+                // is reward.0 units of the reward token
+                total_reward += (addr_bal * (reward.0, reward.1)).0;
             }
             // Add a conversion from the previous asset type
             wl_storage.storage.conversion_state.assets.insert(

@@ -194,7 +194,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.09292"));
+    assert!(captured.contains("nam: 0.092828"));
 
     // Assert NAM balance at MASP pool is exclusively the
     // rewards from the shielded BTC
@@ -317,7 +317,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.359578"));
+    assert!(captured.contains("nam: 0.357917"));
 
     // Assert NAM balance at MASP pool is an accumulation of
     // rewards from both the shielded BTC and shielded ETH
@@ -337,7 +337,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.671183"));
+    assert!(captured.contains("nam: 0.671201"));
 
     // Wait till epoch boundary
     node.next_epoch();
@@ -403,7 +403,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.719514"));
+    assert!(captured.contains("nam: 0.715164"));
 
     node.next_epoch();
 
@@ -425,7 +425,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1.58943"));
+    assert!(captured.contains("nam: 1.589461"));
 
     // Wait till epoch boundary
     node.next_epoch();
@@ -488,7 +488,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1.113911"));
+    assert!(captured.contains("nam: 1.107819"));
 
     // Assert NAM balance at MASP pool is
     // the accumulation of rewards from the shielded assets (BTC and ETH)
@@ -508,7 +508,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1.83743"));
+    assert!(captured.contains("nam: 1.837461"));
 
     // Wait till epoch boundary
     node.next_epoch();
@@ -532,7 +532,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1.113911"));
+    assert!(captured.contains("nam: 1.107819"));
 
     // Assert NAM balance at VK(B) is the rewards dispensed earlier
     // (since VK(A) has no shielded assets, no further rewards should
@@ -553,7 +553,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.719514"));
+    assert!(captured.contains("nam: 0.715164"));
 
     // Assert NAM balance at MASP pool is
     // the accumulation of rewards from the shielded assets (BTC and ETH)
@@ -573,7 +573,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1.83743"));
+    assert!(captured.contains("nam: 1.837461"));
 
     // Wait till epoch boundary to prevent conversion expiry during transaction
     // construction
@@ -592,7 +592,7 @@ fn masp_incentives() -> Result<()> {
             "--token",
             NAM,
             "--amount",
-            "0.719514",
+            "0.715164",
             "--signing-keys",
             BERTHA_KEY,
             "--node",
@@ -617,7 +617,7 @@ fn masp_incentives() -> Result<()> {
             "--token",
             NAM,
             "--amount",
-            "1.113911",
+            "1.107819",
             "--signing-keys",
             ALBERT_KEY,
             "--node",
@@ -681,7 +681,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.004005"));
+    assert!(captured.contains("nam: 0.014478"));
 
     Ok(())
 }
@@ -1661,7 +1661,7 @@ fn dynamic_assets() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.0303"));
+    assert!(captured.contains("nam: 0.03027"));
 
     // Assert BTC balance at VK(A) is still 2
     let captured = CapturedOutput::of(|| {
@@ -1732,7 +1732,7 @@ fn dynamic_assets() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.07575"));
+    assert!(captured.contains("nam: 0.075675"));
 
     {
         // Stop decoding and distributing shielded rewards for BTC in next epoch
@@ -1779,7 +1779,7 @@ fn dynamic_assets() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.07575"));
+    assert!(captured.contains("nam: 0.075675"));
 
     // Wait till epoch boundary
     node.next_epoch();
@@ -1820,7 +1820,7 @@ fn dynamic_assets() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.07575"));
+    assert!(captured.contains("nam: 0.075675"));
 
     {
         // Start distributing shielded rewards for NAM in next epoch
@@ -1872,7 +1872,7 @@ fn dynamic_assets() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.075825"));
+    assert!(captured.contains("nam: 0.075675"));
 
     Ok(())
 }
