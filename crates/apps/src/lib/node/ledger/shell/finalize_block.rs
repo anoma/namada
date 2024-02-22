@@ -74,6 +74,14 @@ where
             "Block height: {height}, epoch: {current_epoch}, is new epoch: \
              {new_epoch}."
         );
+        if update_for_tendermint {
+            tracing::info!(
+                "Will begin a new epoch {} in {} blocks starting at height {}",
+                current_epoch.next(),
+                EPOCH_SWITCH_BLOCKS_DELAY,
+                height.0 + u64::from(EPOCH_SWITCH_BLOCKS_DELAY)
+            );
+        }
         tracing::debug!(
             "New epoch block delay for updating the Tendermint validator set: \
              {:?}",
@@ -850,7 +858,7 @@ fn pos_votes_from_abci(
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_finalize_block {
-    use std::collections::{BTreeMap, BTreeSet, HashMap};
+    use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
     use std::num::NonZeroU64;
     use std::str::FromStr;
 

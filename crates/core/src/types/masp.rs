@@ -202,6 +202,13 @@ impl From<masp_primitives::zip32::ExtendedFullViewingKey>
     }
 }
 
+impl From<ExtendedViewingKey> for masp_primitives::sapling::ViewingKey {
+    fn from(value: ExtendedViewingKey) -> Self {
+        let fvk = masp_primitives::zip32::ExtendedFullViewingKey::from(value);
+        fvk.fvk.vk
+    }
+}
+
 impl serde::Serialize for ExtendedViewingKey {
     fn serialize<S>(
         &self,

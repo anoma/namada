@@ -9,12 +9,13 @@ use namada_core::types::storage::Epoch;
 use namada_core::types::token;
 use namada_core::types::token::testing::arb_amount_non_zero_ceiled;
 use namada_state::testing::TestWlStorage;
+use proptest::prop_oneof;
 use proptest::strategy::{Just, Strategy};
 
 use crate::parameters::testing::arb_pos_params;
 use crate::types::{GenesisValidator, ValidatorSetUpdate};
 use crate::validator_set_update::{
-    copy_validator_sets_and_positions, validator_set_update_tendermint,
+    copy_validator_sets_and_positions, validator_set_update_comet,
 };
 use crate::{
     compute_and_store_total_consensus_stake, OwnedPosParams, PosParams,
@@ -56,7 +57,7 @@ pub fn get_tendermint_set_updates(
     // the start of a new one too and so we give it the predecessor of the
     // current epoch here to actually get the update for the current epoch.
     let epoch = Epoch(epoch - 1);
-    validator_set_update_tendermint(s, params, epoch, |update| update).unwrap()
+    validator_set_update_comet(s, params, epoch, |update| update).unwrap()
 }
 
 /// Advance to the next epoch. Returns the new epoch.
@@ -85,13 +86,20 @@ pub fn arb_genesis_validators(
         .unwrap_or_else(|| PosParams::default().validator_stake_threshold);
     let tokens: Vec<_> = (0..size.end)
         .map(|ix| {
+            let threshold = threshold.raw_amount().as_u64();
             if ix == 0 {
                 // Make sure that at least one validator has at least a stake
                 // greater or equal to the threshold to avoid having an empty
                 // consensus set.
-                threshold.raw_amount().as_u64()..=10_000_000_u64
+                (threshold..=10_000_000_u64).boxed()
             } else {
-                1..=10_000_000_u64
+                prop_oneof![
+                    // More like to have validators with the same stake
+                    Just(threshold),
+                    Just(threshold - 1),
+                    1..=10_000_000_u64,
+                ]
+                .boxed()
             }
             .prop_map(token::Amount::from)
         })

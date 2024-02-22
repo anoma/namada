@@ -4,9 +4,11 @@ use std::str::FromStr;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use namada::state::StorageWrite;
-use namada::token;
+use namada::token::{self, DenominatedAmount};
 use namada_apps::node::ledger::shell::testing::client::run;
+use namada_apps::node::ledger::shell::testing::node::NodeResults;
 use namada_apps::node::ledger::shell::testing::utils::{Bin, CapturedOutput};
+use namada_apps::wallet::defaults::christel_keypair;
 use namada_core::types::dec::Dec;
 use namada_sdk::masp::fs::FsShieldedUtils;
 use test_log::test;
@@ -25,7 +27,7 @@ use crate::strings::TX_APPLIED_SUCCESS;
 #[test]
 fn masp_incentives() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
-    let validator_one_rpc = "127.0.0.1:26567";
+    let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
     // Lengthen epoch to ensure that a transaction can be constructed and
@@ -48,6 +50,21 @@ fn masp_incentives() -> Result<()> {
             BTC,
             "--amount",
             "1",
+            "--node",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            AB_VIEWING_KEY,
             "--node",
             validator_one_rpc,
         ],
@@ -94,6 +111,14 @@ fn masp_incentives() -> Result<()> {
 
     // Wait till epoch boundary
     node.next_epoch();
+
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+    node.assert_success();
 
     // Assert BTC balance at VK(A) is still 1
     let captured = CapturedOutput::of(|| {
@@ -156,6 +181,14 @@ fn masp_incentives() -> Result<()> {
 
     // Wait till epoch boundary
     node.next_epoch();
+
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+    node.assert_success();
 
     // Assert BTC balance at VK(A) is still 1
     let captured = CapturedOutput::of(|| {
@@ -239,6 +272,14 @@ fn masp_incentives() -> Result<()> {
     )?;
     node.assert_success();
 
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+    node.assert_success();
+
     // Assert ETH balance at VK(B) is 0.001
     let captured = CapturedOutput::of(|| {
         run(
@@ -279,6 +320,14 @@ fn masp_incentives() -> Result<()> {
 
     // Wait till epoch boundary
     node.next_epoch();
+
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+    node.assert_success();
 
     // Assert ETH balance at VK(B) is still 0.001
     let captured = CapturedOutput::of(|| {
@@ -341,7 +390,6 @@ fn masp_incentives() -> Result<()> {
 
     // Wait till epoch boundary
     node.next_epoch();
-
     // Send 0.001 ETH from SK(B) to Christel
     run(
         &node,
@@ -361,6 +409,14 @@ fn masp_incentives() -> Result<()> {
             "--node",
             validator_one_rpc,
         ],
+    )?;
+    node.assert_success();
+
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
     node.assert_success();
 
@@ -384,6 +440,13 @@ fn masp_incentives() -> Result<()> {
     assert!(captured.contains("No shielded eth balance found"));
 
     node.next_epoch();
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+    node.assert_success();
 
     // Assert VK(B) retains the NAM rewards dispensed in the correct
     // amount.
@@ -406,6 +469,13 @@ fn masp_incentives() -> Result<()> {
     assert!(captured.contains("nam: 0.719514"));
 
     node.next_epoch();
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+    node.assert_success();
 
     // Assert NAM balance at MASP pool is
     // the accumulation of rewards from the shielded assets (BTC and ETH)
@@ -449,6 +519,14 @@ fn masp_incentives() -> Result<()> {
             "--node",
             validator_one_rpc,
         ],
+    )?;
+    node.assert_success();
+
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
     node.assert_success();
 
@@ -512,6 +590,13 @@ fn masp_incentives() -> Result<()> {
 
     // Wait till epoch boundary
     node.next_epoch();
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+    node.assert_success();
 
     // Assert NAM balance at VK(A) is the rewards dispensed earlier
     // (since VK(A) has no shielded assets, no further rewards should
@@ -578,7 +663,13 @@ fn masp_incentives() -> Result<()> {
     // Wait till epoch boundary to prevent conversion expiry during transaction
     // construction
     node.next_epoch();
-
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+    node.assert_success();
     // Send all NAM rewards from SK(B) to Christel
     run(
         &node,
@@ -603,7 +694,13 @@ fn masp_incentives() -> Result<()> {
 
     // Wait till epoch boundary
     node.next_epoch();
-
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+    node.assert_success();
     // Send all NAM rewards from SK(A) to Bertha
     run(
         &node,
@@ -626,6 +723,14 @@ fn masp_incentives() -> Result<()> {
     )?;
     node.assert_success();
 
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+    node.assert_success();
+
     // Assert NAM balance at VK(A) is 0
     let captured = CapturedOutput::of(|| {
         run(
@@ -645,6 +750,13 @@ fn masp_incentives() -> Result<()> {
     assert!(captured.result.is_ok());
     assert!(captured.contains("No shielded nam balance found"));
 
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+    node.assert_success();
     // Assert NAM balance at VK(B) is 0
     let captured = CapturedOutput::of(|| {
         run(
@@ -697,7 +809,7 @@ fn masp_incentives() -> Result<()> {
 #[test]
 fn spend_unconverted_asset_type() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
-    let validator_one_rpc = "127.0.0.1:26567";
+    let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
 
@@ -750,7 +862,20 @@ fn spend_unconverted_asset_type() -> Result<()> {
     for _ in 0..5 {
         node.next_epoch();
     }
-
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            AB_VIEWING_KEY,
+            "--node",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
     // 4. Check the shielded balance
     let captured = CapturedOutput::of(|| {
         run(
@@ -804,13 +929,27 @@ fn spend_unconverted_asset_type() -> Result<()> {
 #[test]
 fn masp_pinned_txs() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
-    let validator_one_rpc = "127.0.0.1:26567";
+    let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
 
     let (mut node, _services) = setup::setup()?;
     // Wait till epoch boundary
     let _ep0 = node.next_epoch();
+
+    // sync shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AC_VIEWING_KEY,
+            "--node",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
 
     // Assert PPA(C) cannot be recognized by incorrect viewing key
     let captured =
@@ -881,6 +1020,14 @@ fn masp_pinned_txs() -> Result<()> {
     // This makes it more consistent for some reason?
     let _ep2 = node.next_epoch();
 
+    // sync shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+    node.assert_success();
+
     // Assert PPA(C) has the 20 BTC transaction pinned to it
     let captured =
         CapturedOutput::with_input(AC_VIEWING_KEY.into()).run(|| {
@@ -923,6 +1070,14 @@ fn masp_pinned_txs() -> Result<()> {
 
     // Wait till epoch boundary
     let _ep1 = node.next_epoch();
+
+    // sync shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+    node.assert_success();
 
     // Assert PPA(C) does not NAM pinned to it on epoch boundary
     let captured =
@@ -967,7 +1122,7 @@ fn masp_txs_and_queries() -> Result<()> {
     //     tracing::level_filters::LevelFilter::INFO,
     // )?;
     // This address doesn't matter for tests. But an argument is required.
-    let validator_one_rpc = "127.0.0.1:26567";
+    let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
 
@@ -978,6 +1133,22 @@ fn masp_txs_and_queries() -> Result<()> {
 
     let (mut node, _services) = setup::setup()?;
     _ = node.next_epoch();
+
+    // add necessary viewing keys to shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            AB_VIEWING_KEY,
+            "--node",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+
     let txs_args = vec![
         // 0. Attempt to spend 10 BTC at SK(A) to PA(B)
         (
@@ -1188,11 +1359,22 @@ fn masp_txs_and_queries() -> Result<()> {
     ];
 
     for (tx_args, tx_result) in &txs_args {
-        // We ensure transfers don't cross epoch boundaries.
-        if tx_args[0] == "transfer" {
+        node.assert_success();
+        // there is no need to dry run balance queries
+        let dry_run_args = if tx_args[0] == "transfer" {
+            // We ensure transfers don't cross epoch boundaries.
             node.next_epoch();
-        }
-        for &dry_run in &[true, false] {
+            vec![true, false]
+        } else {
+            vec![false]
+        };
+        for &dry_run in &dry_run_args {
+            // sync shielded context
+            run(
+                &node,
+                Bin::Client,
+                vec!["shielded-sync", "--node", validator_one_rpc],
+            )?;
             let tx_args = if dry_run && tx_args[0] == "transfer" {
                 vec![tx_args.clone(), vec!["--dry-run"]].concat()
             } else {
@@ -1268,16 +1450,47 @@ fn masp_txs_and_queries() -> Result<()> {
 /// 1. Shield some tokens to reduce the unshielded balance
 /// 2. Submit a new wrapper with a valid unshielding tx and assert
 /// success
-/// 3. Submit a new wrapper with an invalid unshielding tx and assert the
+/// 3. Submit another transaction with valid fee unshielding and an inner
+/// shielded transfer with the same source
+/// 4. Submit a new wrapper with an invalid unshielding tx and assert the
 /// failure
 #[test]
 fn wrapper_fee_unshielding() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
-    let validator_one_rpc = "127.0.0.1:26567";
+    let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
     let (mut node, _services) = setup::setup()?;
     _ = node.next_epoch();
+
+    // Add the relevant viewing keys to the wallet otherwise the shielded
+    // context won't precache the masp data
+    run(
+        &node,
+        Bin::Wallet,
+        vec![
+            "add",
+            "--alias",
+            "alias_a",
+            "--value",
+            AA_VIEWING_KEY,
+            "--unsafe-dont-encrypt",
+        ],
+    )?;
+    node.assert_success();
+    run(
+        &node,
+        Bin::Wallet,
+        vec![
+            "add",
+            "--alias",
+            "alias_b",
+            "--value",
+            AB_VIEWING_KEY,
+            "--unsafe-dont-encrypt",
+        ],
+    )?;
+    node.assert_success();
 
     // 1. Shield some tokens
     run(
@@ -1286,15 +1499,15 @@ fn wrapper_fee_unshielding() -> Result<()> {
         vec![
             "transfer",
             "--source",
-            ALBERT,
+            ALBERT_KEY,
             "--target",
             AA_PAYMENT_ADDRESS,
             "--token",
             NAM,
             "--amount",
-            "500000",
+            "1919999", // Reduce the balance of the fee payer artificially
             "--gas-price",
-            "30", // Reduce the balance of the fee payer artificially
+            "1",
             "--gas-limit",
             "20000",
             "--ledger-address",
@@ -1304,6 +1517,76 @@ fn wrapper_fee_unshielding() -> Result<()> {
     node.assert_success();
 
     _ = node.next_epoch();
+
+    // 2. Shield more tokens to produce another output description
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            ALBERT_KEY,
+            "--target",
+            AA_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "40000", // Reduce the balance of the fee payer artificially
+            "--gas-price",
+            "1",
+            "--gas-limit",
+            "20000",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+
+    _ = node.next_epoch();
+
+    // sync shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+    node.assert_success();
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                ALBERT_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 1"));
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 1959999"));
+
+    _ = node.next_epoch();
     // 2. Valid unshielding
     run(
         &node,
@@ -1311,12 +1594,14 @@ fn wrapper_fee_unshielding() -> Result<()> {
         vec![
             "transfer",
             "--source",
-            ALBERT,
+            ALBERT_KEY,
             "--target",
             BERTHA,
             "--token",
             NAM,
             "--amount",
+            "1",
+            "--gas-price",
             "1",
             "--gas-limit",
             "20000",
@@ -1327,12 +1612,108 @@ fn wrapper_fee_unshielding() -> Result<()> {
         ],
     )?;
     node.assert_success();
+    // sync shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+    node.assert_success();
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                ALBERT_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 0"));
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 1939999"));
 
-    // 3. Invalid unshielding
+    _ = node.next_epoch();
+    // 3. Try another valid fee unshielding and masp transaction in the same tx,
+    // with the same source. This tests that the client can properly construct
+    // two valid masp transactions at the same time
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            A_SPENDING_KEY,
+            "--target",
+            AB_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "1",
+            "--gas-price",
+            "1",
+            "--gas-limit",
+            "20000",
+            "--gas-payer",
+            ALBERT_KEY,
+            "--gas-spending-key",
+            A_SPENDING_KEY,
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+    // sync shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 1919998"));
+
+    _ = node.next_epoch();
+    // 4. Invalid unshielding
     let tx_args = vec![
         "transfer",
         "--source",
-        ALBERT,
+        ALBERT_KEY,
         "--target",
         BERTHA,
         "--token",
@@ -1362,12 +1743,278 @@ fn wrapper_fee_unshielding() -> Result<()> {
     Ok(())
 }
 
+/// Tests that multiple transactions can be constructed (without fetching) from
+/// the shielded context and executed in the same block
+#[test]
+fn multiple_unfetched_txs_same_block() -> Result<()> {
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "http://127.0.0.1:26567";
+    // Download the shielded pool parameters before starting node
+    let _ = FsShieldedUtils::new(PathBuf::new());
+    let (mut node, _services) = setup::setup()?;
+    _ = node.next_epoch();
+
+    // Add the relevant viewing keys to the wallet otherwise the shielded
+    // context won't precache the masp data
+    run(
+        &node,
+        Bin::Wallet,
+        vec![
+            "add",
+            "--alias",
+            "alias_a",
+            "--value",
+            AA_VIEWING_KEY,
+            "--unsafe-dont-encrypt",
+        ],
+    )?;
+    node.assert_success();
+    run(
+        &node,
+        Bin::Wallet,
+        vec![
+            "add",
+            "--alias",
+            "alias_b",
+            "--value",
+            AB_VIEWING_KEY,
+            "--unsafe-dont-encrypt",
+        ],
+    )?;
+    node.assert_success();
+
+    // 1. Shield tokens
+    _ = node.next_epoch();
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            ALBERT_KEY,
+            "--target",
+            AA_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "100",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+    _ = node.next_epoch();
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            ALBERT_KEY,
+            "--target",
+            AA_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "200",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+    _ = node.next_epoch();
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            ALBERT_KEY,
+            "--target",
+            AB_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "100",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+    // sync shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+
+    // 2. Shielded operations without fetching. Dump the txs to than reload and
+    // submit in the same block
+    let tempdir = tempfile::tempdir().unwrap();
+    let mut txs_bytes = vec![];
+
+    _ = node.next_epoch();
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            A_SPENDING_KEY,
+            "--target",
+            AC_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "50",
+            "--gas-payer",
+            ALBERT_KEY,
+            "--output-folder-path",
+            tempdir.path().to_str().unwrap(),
+            "--dump-tx",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+    let file_path = tempdir
+        .path()
+        .read_dir()
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    txs_bytes.push(std::fs::read(&file_path).unwrap());
+    std::fs::remove_file(&file_path).unwrap();
+
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            A_SPENDING_KEY,
+            "--target",
+            AC_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "50",
+            "--gas-payer",
+            CHRISTEL_KEY,
+            "--output-folder-path",
+            tempdir.path().to_str().unwrap(),
+            "--dump-tx",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+    let file_path = tempdir
+        .path()
+        .read_dir()
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    txs_bytes.push(std::fs::read(&file_path).unwrap());
+    std::fs::remove_file(&file_path).unwrap();
+
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            B_SPENDING_KEY,
+            "--target",
+            AC_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "50",
+            "--gas-payer",
+            CHRISTEL_KEY,
+            "--output-folder-path",
+            tempdir.path().to_str().unwrap(),
+            "--dump-tx",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+    let file_path = tempdir
+        .path()
+        .read_dir()
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    txs_bytes.push(std::fs::read(&file_path).unwrap());
+    std::fs::remove_file(&file_path).unwrap();
+
+    let sk = christel_keypair();
+    let pk = sk.to_public();
+
+    let native_token = node
+        .shell
+        .lock()
+        .unwrap()
+        .wl_storage
+        .storage
+        .native_token
+        .clone();
+    let mut txs = vec![];
+    for bytes in txs_bytes {
+        let mut tx = namada::tx::Tx::deserialize(&bytes).unwrap();
+        tx.add_wrapper(
+            namada::tx::data::wrapper_tx::Fee {
+                amount_per_gas_unit: DenominatedAmount::native(1.into()),
+                token: native_token.clone(),
+            },
+            pk.clone(),
+            Default::default(),
+            20000.into(),
+            None,
+        );
+        tx.sign_wrapper(sk.clone());
+
+        txs.push(tx.to_bytes());
+    }
+
+    node.clear_results();
+    node.submit_txs(txs);
+    {
+        let results = node.results.lock().unwrap();
+        // If empty than failed in process proposal
+        assert!(!results.is_empty());
+
+        for result in results.iter() {
+            assert!(matches!(result, NodeResults::Ok));
+        }
+    }
+    // Finalize the next block to actually execute the decrypted txs
+    node.clear_results();
+    node.finalize_and_commit();
+    {
+        let results = node.results.lock().unwrap();
+        for result in results.iter() {
+            assert!(matches!(result, NodeResults::Ok));
+        }
+    }
+
+    Ok(())
+}
+
 // Test that a masp unshield transaction can be succesfully executed even across
 // an epoch boundary.
 #[test]
-fn cross_epoch_tx() -> Result<()> {
+fn cross_epoch_unshield() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
-    let validator_one_rpc = "127.0.0.1:26567";
+    let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
     let (mut node, _services) = setup::setup()?;
@@ -1388,6 +2035,20 @@ fn cross_epoch_tx() -> Result<()> {
             "--amount",
             "1000",
             "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            "--node",
             validator_one_rpc,
         ],
     )?;
@@ -1454,7 +2115,7 @@ fn cross_epoch_tx() -> Result<()> {
 #[test]
 fn dynamic_assets() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
-    let validator_one_rpc = "127.0.0.1:26567";
+    let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
     // Lengthen epoch to ensure that a transaction can be constructed and
@@ -1471,6 +2132,19 @@ fn dynamic_assets() -> Result<()> {
         storage.conversion_state.tokens.retain(|k, _v| *k == nam);
         tokens
     };
+    // add necessary viewing keys to shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            "--node",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
     // Wait till epoch boundary
     node.next_epoch();
     // Send 1 BTC from Albert to PA
@@ -1490,6 +2164,13 @@ fn dynamic_assets() -> Result<()> {
             "--node",
             validator_one_rpc,
         ],
+    )?;
+    node.assert_success();
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
     node.assert_success();
 
@@ -1543,6 +2224,13 @@ fn dynamic_assets() -> Result<()> {
 
     // Wait till epoch boundary
     node.next_epoch();
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+    node.assert_success();
 
     // Assert BTC balance at VK(A) is still 1
     let captured = CapturedOutput::of(|| {
@@ -1602,6 +2290,13 @@ fn dynamic_assets() -> Result<()> {
         ],
     )?;
     node.assert_success();
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+    node.assert_success();
 
     // Assert BTC balance at VK(A) is now 2
     let captured = CapturedOutput::of(|| {
@@ -1643,6 +2338,13 @@ fn dynamic_assets() -> Result<()> {
 
     // Wait till epoch boundary
     node.next_epoch();
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+    node.assert_success();
 
     // Assert that VK(A) has now received a NAM rewward for second deposit
     let captured = CapturedOutput::of(|| {
@@ -1695,6 +2397,13 @@ fn dynamic_assets() -> Result<()> {
 
     // Wait till epoch boundary
     node.next_epoch();
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+    node.assert_success();
 
     // Assert BTC balance at VK(A) is still 2
     let captured = CapturedOutput::of(|| {
@@ -1742,6 +2451,13 @@ fn dynamic_assets() -> Result<()> {
 
     // Wait till epoch boundary
     node.next_epoch();
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+    node.assert_success();
 
     // Assert BTC balance at VK(A) is still 2
     let captured = CapturedOutput::of(|| {
@@ -1783,7 +2499,13 @@ fn dynamic_assets() -> Result<()> {
 
     // Wait till epoch boundary
     node.next_epoch();
-
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+    node.assert_success();
     // Assert BTC balance at VK(A) is still 2
     let captured = CapturedOutput::of(|| {
         run(
@@ -1835,7 +2557,13 @@ fn dynamic_assets() -> Result<()> {
 
     // Wait till epoch boundary
     node.next_epoch();
-
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+    node.assert_success();
     // Assert BTC balance at VK(A) is still 2
     let captured = CapturedOutput::of(|| {
         run(

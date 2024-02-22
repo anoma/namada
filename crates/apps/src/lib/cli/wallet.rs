@@ -28,6 +28,7 @@ use crate::cli::api::CliApi;
 use crate::cli::args::CliToSdk;
 use crate::cli::{args, cmds, Context};
 use crate::client::utils::PRE_GENESIS_DIR;
+use crate::node::ledger::tendermint_node::validator_key_to_json;
 use crate::wallet::{
     self, read_and_confirm_encryption_password, CliWalletUtils,
 };
@@ -53,6 +54,9 @@ impl CliApi {
             )) => key_address_find(ctx, io, args),
             cmds::NamadaWallet::KeyExport(cmds::WalletExportKey(args)) => {
                 key_export(ctx, io, args)
+            }
+            cmds::NamadaWallet::KeyConvert(cmds::WalletConvertKey(args)) => {
+                key_convert(ctx, io, args)
             }
             cmds::NamadaWallet::KeyImport(cmds::WalletImportKey(args)) => {
                 key_import(ctx, io, args)
@@ -188,6 +192,7 @@ fn shielded_key_derive(
         unsafe_dont_encrypt,
         derivation_path,
         allow_non_compliant,
+        prompt_bip39_passphrase,
         use_device,
         ..
     }: args::KeyDerive,
@@ -214,6 +219,7 @@ fn shielded_key_derive(
                 alias_force,
                 derivation_path,
                 None,
+                prompt_bip39_passphrase,
                 encryption_password,
             )
             .unwrap_or_else(|| {
@@ -317,15 +323,12 @@ fn payment_address_gen(
     let alias = alias.to_lowercase();
     let viewing_key = ExtendedFullViewingKey::from(viewing_key).fvk.vk;
     let (div, _g_d) = find_valid_diversifier(&mut OsRng);
-    let payment_addr = viewing_key
+    let masp_payment_addr = viewing_key
         .to_payment_address(div)
         .expect("a PaymentAddress");
+    let payment_addr = PaymentAddress::from(masp_payment_addr).pinned(pin);
     let alias = wallet
-        .insert_payment_addr(
-            alias,
-            PaymentAddress::from(payment_addr).pinned(pin),
-            alias_force,
-        )
+        .insert_payment_addr(alias, payment_addr, alias_force)
         .unwrap_or_else(|| {
             edisplay_line!(io, "Payment address not added");
             cli::safe_exit(1);
@@ -333,7 +336,8 @@ fn payment_address_gen(
     wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
     display_line!(
         io,
-        "Successfully generated a payment address with the following alias: {}",
+        "Successfully generated payment address {} with alias {}",
+        payment_addr,
         alias,
     );
 }
@@ -440,6 +444,7 @@ async fn transparent_key_and_address_derive(
         unsafe_dont_encrypt,
         derivation_path,
         allow_non_compliant,
+        prompt_bip39_passphrase,
         use_device,
         ..
     }: args::KeyDerive,
@@ -470,6 +475,7 @@ async fn transparent_key_and_address_derive(
                 alias_force,
                 derivation_path,
                 None,
+                prompt_bip39_passphrase,
                 encryption_password,
             )
             .unwrap_or_else(|| {
@@ -1241,6 +1247,25 @@ fn key_export(
             edisplay_line!(io, "{}", err);
             cli::safe_exit(1)
         })
+}
+
+/// Convert a consensus key to tendermint validator key in json format
+fn key_convert(
+    ctx: Context,
+    io: &impl Io,
+    args::KeyConvert { alias }: args::KeyConvert,
+) {
+    let alias = alias.to_lowercase();
+    let mut wallet = load_wallet(ctx);
+    let sk = wallet.find_secret_key(&alias, None);
+    let key: serde_json::Value = validator_key_to_json(&sk.unwrap()).unwrap();
+    let file_name = format!("priv_validator_key_{}.json", alias);
+    let file = File::create(&file_name).unwrap();
+    serde_json::to_writer_pretty(file, &key).unwrap_or_else(|err| {
+        edisplay_line!(io, "{}", err);
+        cli::safe_exit(1)
+    });
+    display_line!(io, "Converted to file {}", file_name);
 }
 
 /// Import a transparent keypair / MASP spending key from a file.

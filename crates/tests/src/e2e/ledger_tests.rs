@@ -26,9 +26,11 @@ use namada::governance::storage::proposal::{PGFInternalTarget, PGFTarget};
 use namada::token;
 use namada::types::address::Address;
 use namada::types::storage::Epoch;
+use namada_apps::cli::context::ENV_VAR_CHAIN_ID;
 use namada_apps::config::ethereum_bridge;
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
+use namada_core::types::chain::ChainId;
 use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_sdk::governance::pgf::cli::steward::Commission;
 use namada_sdk::masp::fs::FsShieldedUtils;
@@ -59,6 +61,8 @@ use crate::strings::{
     TX_APPLIED_SUCCESS, TX_FAILED, TX_REJECTED, VALIDATOR_NODE,
 };
 use crate::{run, run_as};
+
+const ENV_VAR_NAMADA_ADD_PEER: &str = "NAMADA_ADD_PEER";
 
 fn start_namada_ledger_node(
     test: &Test,
@@ -694,6 +698,8 @@ fn ledger_txs_and_queries() -> Result<()> {
 /// operation is successful
 /// 2. Test that a tx requesting a disposable signer
 /// providing an insufficient unshielding fails
+/// 3. Submit another transaction with valid fee unshielding and an inner
+/// shielded transfer with the same source
 #[test]
 fn wrapper_disposable_signer() -> Result<()> {
     // Download the shielded pool parameters before starting node
@@ -718,27 +724,56 @@ fn wrapper_disposable_signer() -> Result<()> {
 
     let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
 
+    // Add the relevant viewing keys to the wallet otherwise the shielded
+    // context won't precache the masp data
+    let tx_args = vec![
+        "add",
+        "--alias",
+        "alias_a",
+        "--value",
+        AA_VIEWING_KEY,
+        "--unsafe-dont-encrypt",
+    ];
+    let mut client = run!(test, Bin::Wallet, tx_args, Some(120))?;
+    client.assert_success();
+
     let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+
+    // Produce three different output descriptions to spend
+    for _ in 0..3 {
+        let tx_args = vec![
+            "transfer",
+            "--source",
+            ALBERT,
+            "--target",
+            AA_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "50",
+            "--ledger-address",
+            &validator_one_rpc,
+        ];
+        let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
+        client.exp_string(TX_ACCEPTED)?;
+        client.exp_string(TX_APPLIED_SUCCESS)?;
+    }
+
+    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let tx_args = vec!["shielded-sync", "--node", &validator_one_rpc];
+    let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
+    client.assert_success();
 
     let tx_args = vec![
-        "transfer",
-        "--source",
-        ALBERT,
-        "--target",
-        AA_PAYMENT_ADDRESS,
-        "--token",
-        NAM,
-        "--amount",
-        "50",
-        "--ledger-address",
+        "shielded-sync",
+        "--viewing-keys",
+        AA_VIEWING_KEY,
+        "--node",
         &validator_one_rpc,
     ];
-    let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
+    let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
+    client.assert_success();
 
-    client.exp_string(TX_ACCEPTED)?;
-    client.exp_string(TX_APPLIED_SUCCESS)?;
-
-    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
     let tx_args = vec![
         "transfer",
         "--source",
@@ -749,6 +784,8 @@ fn wrapper_disposable_signer() -> Result<()> {
         NAM,
         "--amount",
         "1",
+        "--gas-limit",
+        "20000",
         "--gas-spending-key",
         A_SPENDING_KEY,
         "--disposable-gas-payer",
@@ -760,6 +797,9 @@ fn wrapper_disposable_signer() -> Result<()> {
     client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let tx_args = vec!["shielded-sync", "--node", &validator_one_rpc];
+    let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
+    client.assert_success();
     let tx_args = vec![
         "transfer",
         "--source",
@@ -770,6 +810,8 @@ fn wrapper_disposable_signer() -> Result<()> {
         NAM,
         "--amount",
         "1",
+        "--gas-limit",
+        "20000",
         "--gas-price",
         "90000000",
         "--gas-spending-key",
@@ -785,6 +827,32 @@ fn wrapper_disposable_signer() -> Result<()> {
     let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
     client.exp_string("Error while processing transaction's fees")?;
 
+    // Try another valid fee unshielding and masp transaction in the same tx,
+    // with the same source. This tests that the client can properly
+    // construct multiple transactions together
+    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let tx_args = vec![
+        "transfer",
+        "--source",
+        A_SPENDING_KEY,
+        "--target",
+        AB_PAYMENT_ADDRESS,
+        "--token",
+        NAM,
+        "--amount",
+        "1",
+        "--gas-limit",
+        "20000",
+        "--gas-spending-key",
+        A_SPENDING_KEY,
+        "--disposable-gas-payer",
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
+
+    client.exp_string(TX_ACCEPTED)?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     Ok(())
 }
 
@@ -949,6 +1017,9 @@ fn pos_bonds() -> Result<()> {
     let _bg_validator_0 =
         start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
             .background();
+
+    let rpc = get_actor_rpc(&test, Who::Validator(0));
+    wait_for_block_height(&test, &rpc, 2, 30)?;
 
     let validator_0_rpc = get_actor_rpc(&test, Who::Validator(0));
 
@@ -2020,8 +2091,9 @@ fn proposal_submission() -> Result<()> {
     client.exp_string("Proposal Id: 0")?;
     client.exp_string(
         "passed with 100000.000000 yay votes, 900.000000 nay votes and \
-         0.000000 abstain votes, total voting power: 100900.000000 threshold \
-         was: 67266.66666",
+         0.000000 abstain votes, total voting power: 100900.000000, threshold \
+         (fraction) of total voting power needed to tally: 67266.666667 \
+         (0.666666666669)",
     )?;
     client.assert_success();
 
@@ -3892,8 +3964,9 @@ fn proposal_change_shielded_reward() -> Result<()> {
     client.exp_string("Proposal Id: 0")?;
     client.exp_string(
         "passed with 100000.000000 yay votes, 900.000000 nay votes and \
-         0.000000 abstain votes, total voting power: 100900.000000 threshold \
-         was: 67266.66666",
+         0.000000 abstain votes, total voting power: 100900.000000, threshold \
+         (fraction) of total voting power needed to tally: 67266.666667 \
+         (0.666666666669)",
     )?;
     client.assert_success();
 
@@ -3940,6 +4013,92 @@ fn proposal_change_shielded_reward() -> Result<()> {
     let mut client = run!(test, Bin::Client, query_masp_rewards, Some(30))?;
     client.exp_regex(".*Max reward rate: 0.05.*")?;
     client.assert_success();
+
+    Ok(())
+}
+
+/// Test sync with a chain.
+///
+/// The chain ID must be set via `NAMADA_CHAIN_ID` env var.
+/// Additionally, `NAMADA_ADD_PEER` maybe be specified with a string that must
+/// be parsable into `TendermintAddress`.
+///
+/// To run this test use `--ignored`.
+#[test]
+#[ignore = "This test is only ran when explicitly triggered"]
+fn test_sync_chain() -> Result<()> {
+    let chain_id_raw = std::env::var(ENV_VAR_CHAIN_ID).unwrap_or_else(|_| {
+        panic!("Set `{ENV_VAR_CHAIN_ID}` env var to sync with.")
+    });
+    let chain_id = ChainId::from_str(chain_id_raw.trim())?;
+    let working_dir = setup::working_dir();
+    let test_dir = setup::TestDir::new();
+    let test = Test {
+        working_dir,
+        test_dir,
+        net: setup::Network { chain_id },
+        async_runtime: Default::default(),
+    };
+    let base_dir = test.test_dir.path();
+
+    // Setup the chain
+    let mut join_network = setup::run_cmd(
+        Bin::Client,
+        [
+            "utils",
+            "join-network",
+            "--chain-id",
+            chain_id_raw.as_str(),
+            "--dont-prefetch-wasm",
+        ],
+        Some(60),
+        &test.working_dir,
+        base_dir,
+        format!("{}:{}", std::file!(), std::line!()),
+    )?;
+    join_network.exp_string("Successfully configured for chain")?;
+    join_network.assert_success();
+
+    // Add peer if any given
+    if let Ok(add_peer) = std::env::var(ENV_VAR_NAMADA_ADD_PEER) {
+        let mut config = namada_apps::config::Config::load(
+            base_dir,
+            &test.net.chain_id,
+            None,
+        );
+        config.ledger.cometbft.p2p.persistent_peers.push(
+            TendermintAddress::from_str(&add_peer).unwrap_or_else(|_| {
+                panic!(
+                    "Invalid `{ENV_VAR_NAMADA_ADD_PEER}` value. Must be a \
+                     valid `TendermintAddress`."
+                )
+            }),
+        );
+        config.write(base_dir, &test.net.chain_id, true).unwrap();
+    }
+
+    // Start a non-validator node
+    let mut ledger = start_namada_ledger_node_wait_wasm(
+        &test,
+        None,
+        // init-chain may take a long time for large setups
+        Some(1200),
+    )?;
+    ledger.exp_string("finalize_block: Block height: 1")?;
+    let _bg_ledger = ledger.background();
+
+    // Wait to be synced
+    loop {
+        let mut client = run!(test, Bin::Client, ["status"], Some(30))?;
+        if client.exp_string("catching_up: false").is_ok() {
+            println!("Node is synced!");
+            break;
+        } else {
+            let sleep_secs = 300;
+            println!("Not synced yet. Sleeping for {sleep_secs} secs.");
+            sleep(sleep_secs);
+        }
+    }
 
     Ok(())
 }

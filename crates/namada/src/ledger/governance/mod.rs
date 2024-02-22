@@ -379,7 +379,7 @@ where
             ProposalType::PGFPayment(fundings) => {
                 // collect all the funding target that we have to add and are
                 // unique
-                let are_continous_add_targets_unique = fundings
+                let are_continuous_add_targets_unique = fundings
                     .iter()
                     .filter_map(|funding| match funding {
                         PGFAction::Continuous(AddRemove::Add(target)) => {
@@ -391,7 +391,7 @@ where
 
                 // collect all the funding target that we have to remove and are
                 // unique
-                let are_continous_remove_targets_unique = fundings
+                let are_continuous_remove_targets_unique = fundings
                     .iter()
                     .filter_map(|funding| match funding {
                         PGFAction::Continuous(AddRemove::Remove(target)) => {
@@ -411,20 +411,20 @@ where
                 // check that they are unique by checking that the set of add
                 // plus the set of remove plus the set of retro is equal to the
                 // total fundings
-                let are_continous_fundings_unique =
-                    are_continous_add_targets_unique.len()
-                        + are_continous_remove_targets_unique.len()
+                let are_continuous_fundings_unique =
+                    are_continuous_add_targets_unique.len()
+                        + are_continuous_remove_targets_unique.len()
                         + total_retro_targerts
                         == fundings.len();
 
                 // can't remove and add the same target in the same proposal
-                let are_targets_unique = are_continous_add_targets_unique
-                    .intersection(&are_continous_remove_targets_unique)
+                let are_targets_unique = are_continuous_add_targets_unique
+                    .intersection(&are_continuous_remove_targets_unique)
                     .count() as u64
                     == 0;
 
                 Ok(is_total_fundings_valid
-                    && are_continous_fundings_unique
+                    && are_continuous_fundings_unique
                     && are_targets_unique)
             }
             _ => Ok(true), // default proposal
@@ -582,9 +582,9 @@ where
 
         if end_epoch <= start_epoch || start_epoch <= current_epoch {
             tracing::info!(
-                "Proposal end ({end_epoch}) must be after start \
-                 ({start_epoch}) and start before current epoch \
-                 ({current_epoch})."
+                "Proposal end epoch ({end_epoch}) must be after the start \
+                 epoch ({start_epoch}), and the start epoch must be after the \
+                 current epoch ({current_epoch})."
             );
             return Ok(false);
         }

@@ -243,6 +243,8 @@ pub mod cmds {
                 .subcommand(TxResignSteward::def().display_order(4))
                 // Queries
                 .subcommand(QueryEpoch::def().display_order(5))
+                .subcommand(QueryNextEpochInfo::def().display_order(5))
+                .subcommand(QueryStatus::def().display_order(5))
                 .subcommand(QueryAccount::def().display_order(5))
                 .subcommand(QueryTransfers::def().display_order(5))
                 .subcommand(QueryConversions::def().display_order(5))
@@ -267,7 +269,8 @@ pub mod cmds {
                 .subcommand(QueryMetaData::def().display_order(5))
                 // Actions
                 .subcommand(SignTx::def().display_order(6))
-                .subcommand(GenIbcShieldedTransafer::def().display_order(6))
+                .subcommand(ShieldedSync::def().display_order(6))
+                .subcommand(GenIbcShieldedTransfer::def().display_order(6))
                 // Utils
                 .subcommand(Utils::def().display_order(7))
         }
@@ -311,6 +314,9 @@ pub mod cmds {
             let redelegate = Self::parse_with_ctx(matches, Redelegate);
             let claim_rewards = Self::parse_with_ctx(matches, ClaimRewards);
             let query_epoch = Self::parse_with_ctx(matches, QueryEpoch);
+            let query_next_epoch_info =
+                Self::parse_with_ctx(matches, QueryNextEpochInfo);
+            let query_status = Self::parse_with_ctx(matches, QueryStatus);
             let query_account = Self::parse_with_ctx(matches, QueryAccount);
             let query_transfers = Self::parse_with_ctx(matches, QueryTransfers);
             let query_conversions =
@@ -346,8 +352,9 @@ pub mod cmds {
             let add_to_eth_bridge_pool =
                 Self::parse_with_ctx(matches, AddToEthBridgePool);
             let sign_tx = Self::parse_with_ctx(matches, SignTx);
+            let shielded_sync = Self::parse_with_ctx(matches, ShieldedSync);
             let gen_ibc_shielded =
-                Self::parse_with_ctx(matches, GenIbcShieldedTransafer);
+                Self::parse_with_ctx(matches, GenIbcShieldedTransfer);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
             tx_custom
                 .or(tx_transfer)
@@ -374,6 +381,8 @@ pub mod cmds {
                 .or(tx_update_steward_commission)
                 .or(tx_resign_steward)
                 .or(query_epoch)
+                .or(query_next_epoch_info)
+                .or(query_status)
                 .or(query_transfers)
                 .or(query_conversions)
                 .or(query_masp_reward_tokens)
@@ -397,6 +406,7 @@ pub mod cmds {
                 .or(query_metadata)
                 .or(query_account)
                 .or(sign_tx)
+                .or(shielded_sync)
                 .or(gen_ibc_shielded)
                 .or(utils)
         }
@@ -461,6 +471,8 @@ pub mod cmds {
         TxUpdateStewardCommission(TxUpdateStewardCommission),
         TxResignSteward(TxResignSteward),
         QueryEpoch(QueryEpoch),
+        QueryNextEpochInfo(QueryNextEpochInfo),
+        QueryStatus(QueryStatus),
         QueryAccount(QueryAccount),
         QueryTransfers(QueryTransfers),
         QueryConversions(QueryConversions),
@@ -483,7 +495,8 @@ pub mod cmds {
         QueryValidatorState(QueryValidatorState),
         QueryRewards(QueryRewards),
         SignTx(SignTx),
-        GenIbcShieldedTransafer(GenIbcShieldedTransafer),
+        ShieldedSync(ShieldedSync),
+        GenIbcShieldedTransfer(GenIbcShieldedTransfer),
     }
 
     #[allow(clippy::large_enum_variant)]
@@ -501,6 +514,8 @@ pub mod cmds {
         KeyAddrFind(WalletFindKeysAddresses),
         /// Key export
         KeyExport(WalletExportKey),
+        /// Key convert
+        KeyConvert(WalletConvertKey),
         /// Key import
         KeyImport(WalletImportKey),
         /// Key / address add
@@ -517,6 +532,7 @@ pub mod cmds {
                 .subcommand(WalletListKeysAddresses::def())
                 .subcommand(WalletFindKeysAddresses::def())
                 .subcommand(WalletExportKey::def())
+                .subcommand(WalletConvertKey::def())
                 .subcommand(WalletImportKey::def())
                 .subcommand(WalletAddKeyAddress::def())
                 .subcommand(WalletRemoveKeyAddress::def())
@@ -529,6 +545,7 @@ pub mod cmds {
             let key_addr_list = SubCmd::parse(matches).map(Self::KeyAddrList);
             let key_addr_find = SubCmd::parse(matches).map(Self::KeyAddrFind);
             let export = SubCmd::parse(matches).map(Self::KeyExport);
+            let convert = SubCmd::parse(matches).map(Self::KeyConvert);
             let import = SubCmd::parse(matches).map(Self::KeyImport);
             let key_addr_add = SubCmd::parse(matches).map(Self::KeyAddrAdd);
             let key_addr_remove =
@@ -538,6 +555,7 @@ pub mod cmds {
                 .or(key_addr_list)
                 .or(key_addr_find)
                 .or(export)
+                .or(convert)
                 .or(import)
                 .or(key_addr_add)
                 .or(key_addr_remove)
@@ -701,6 +719,29 @@ pub mod cmds {
                      a file.",
                 )
                 .add_args::<args::KeyExport>()
+        }
+    }
+
+    /// Export key to a file
+    #[derive(Clone, Debug)]
+    pub struct WalletConvertKey(pub args::KeyConvert);
+
+    impl SubCmd for WalletConvertKey {
+        const CMD: &'static str = "convert";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| (Self(args::KeyConvert::parse(matches))))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Convert to tendermint priv_validator_key.json with your \
+                     consensus key alias",
+                )
+                .add_args::<args::KeyConvert>()
         }
     }
 
@@ -1034,6 +1075,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query votes for the proposal.")
+                .arg_required_else_help(true)
                 .add_args::<args::QueryProposalVotes<args::CliTypes>>()
         }
     }
@@ -1345,6 +1387,29 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct ShieldedSync(pub args::ShieldedSync<args::CliTypes>);
+
+    impl SubCmd for ShieldedSync {
+        const CMD: &'static str = "shielded-sync";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| ShieldedSync(args::ShieldedSync::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Sync the local shielded context with MASP notes owned by \
+                     the provided viewing / spending keys up to an optional \
+                     specified block height.",
+                )
+                .add_args::<args::ShieldedSync<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct Bond(pub args::Bond<args::CliTypes>);
 
     impl SubCmd for Bond {
@@ -1459,6 +1524,47 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Query the epoch of the last committed block.")
+                .add_args::<args::Query<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryNextEpochInfo(pub args::Query<args::CliTypes>);
+
+    impl SubCmd for QueryNextEpochInfo {
+        const CMD: &'static str = "next-epoch-info";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| QueryNextEpochInfo(args::Query::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Query some info to help discern when the next epoch will \
+                     begin.",
+                )
+                .add_args::<args::Query<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryStatus(pub args::Query<args::CliTypes>);
+
+    impl SubCmd for QueryStatus {
+        const CMD: &'static str = "status";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| QueryStatus(args::Query::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query the node's status.")
                 .add_args::<args::Query<args::CliTypes>>()
         }
     }
@@ -1616,7 +1722,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Query PoS bonded stake.")
+                .about("Sign a transaction offline.")
                 .add_args::<args::SignTx<args::CliTypes>>()
         }
     }
@@ -2009,16 +2115,16 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct GenIbcShieldedTransafer(
-        pub args::GenIbcShieldedTransafer<args::CliTypes>,
+    pub struct GenIbcShieldedTransfer(
+        pub args::GenIbcShieldedTransfer<args::CliTypes>,
     );
 
-    impl SubCmd for GenIbcShieldedTransafer {
+    impl SubCmd for GenIbcShieldedTransfer {
         const CMD: &'static str = "ibc-gen-shielded";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).map(|matches| {
-                GenIbcShieldedTransafer(args::GenIbcShieldedTransafer::parse(
+                GenIbcShieldedTransfer(args::GenIbcShieldedTransfer::parse(
                     matches,
                 ))
             })
@@ -2027,7 +2133,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Generate shielded transfer for IBC.")
-                .add_args::<args::GenIbcShieldedTransafer<args::CliTypes>>()
+                .add_args::<args::GenIbcShieldedTransfer<args::CliTypes>>()
         }
     }
 
@@ -2859,7 +2965,7 @@ pub mod args {
     use crate::config::genesis::GenesisAddress;
     use crate::config::{self, Action, ActionAtHeight};
     use crate::facade::tendermint::Timeout;
-    use crate::facade::tendermint_config::net::Address as TendermintAddress;
+    use crate::facade::tendermint_rpc::Url;
 
     pub const ADDRESS: Arg<WalletAddress> = arg("address");
     pub const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
@@ -2878,6 +2984,8 @@ pub mod args {
             Err(_) => config::get_default_namada_folder(),
         }),
     );
+    pub const BATCH_SIZE_OPT: ArgDefault<u64> =
+        arg_default("batch-size", DefaultFn(|| 1));
     pub const BLOCK_HEIGHT: Arg<BlockHeight> = arg("block-height");
     pub const BLOCK_HEIGHT_OPT: ArgOpt<BlockHeight> = arg_opt("height");
     pub const BRIDGE_POOL_GAS_AMOUNT: ArgDefault<token::DenominatedAmount> =
@@ -2989,10 +3097,10 @@ pub mod args {
          scheme is not supplied, it is assumed to be TCP.";
     pub const CONFIG_RPC_LEDGER_ADDRESS: ArgDefaultFromCtx<ConfigRpcAddress> =
         arg_default_from_ctx("node", DefaultFn(|| "".to_string()));
-    pub const LEDGER_ADDRESS: ArgDefault<TendermintAddress> = arg("node")
-        .default(DefaultFn(|| {
-            let raw = "127.0.0.1:26657";
-            TendermintAddress::from_str(raw).unwrap()
+    pub const LEDGER_ADDRESS: ArgDefault<Url> =
+        arg("node").default(DefaultFn(|| {
+            let raw = "http://127.0.0.1:26657";
+            Url::from_str(raw).unwrap()
         }));
     pub const LIST_FIND_ADDRESSES_ONLY: ArgFlag = flag("addr");
     pub const LIST_FIND_KEYS_ONLY: ArgFlag = flag("keys");
@@ -3061,6 +3169,8 @@ pub mod args {
     pub const SIGNATURES: ArgMulti<PathBuf, GlobStar> = arg_multi("signatures");
     pub const SOURCE: Arg<WalletAddress> = arg("source");
     pub const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
+    pub const SPENDING_KEYS: ArgMulti<WalletSpendingKey, GlobStar> =
+        arg_multi("spending-keys");
     pub const STEWARD: Arg<WalletAddress> = arg("steward");
     pub const SOURCE_VALIDATOR: Arg<WalletAddress> = arg("source-validator");
     pub const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
@@ -3097,6 +3207,8 @@ pub mod args {
     pub const VALUE: Arg<String> = arg("value");
     pub const VOTER_OPT: ArgOpt<WalletAddress> = arg_opt("voter");
     pub const VIEWING_KEY: Arg<WalletViewingKey> = arg("key");
+    pub const VIEWING_KEYS: ArgMulti<WalletViewingKey, GlobStar> =
+        arg_multi("viewing-keys");
     pub const VP: ArgOpt<String> = arg_opt("vp");
     pub const WALLET_ALIAS_FORCE: ArgFlag = flag("wallet-alias-force");
     pub const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
@@ -3132,8 +3244,8 @@ pub mod args {
         /// Add global args definition. Should be added to every top-level
         /// command.
         pub fn def(app: App) -> App {
-            app.arg(CHAIN_ID_OPT.def().help("The chain ID."))
-                .arg(BASE_DIR.def().help(
+            app.arg(CHAIN_ID_OPT.def().global(true).help("The chain ID."))
+                .arg(BASE_DIR.def().global(true).help(
                     "The base directory is where the nodes, client and wallet \
                      configuration and state is stored. This value can also \
                      be set via `NAMADA_BASE_DIR` environment variable, but \
@@ -3143,7 +3255,7 @@ pub mod args {
                      Unix,`$HOME/Library/Application Support/Namada` on \
                      Mac,and `%AppData%\\Namada` on Windows.",
                 ))
-                .arg(WASM_DIR.def().help(
+                .arg(WASM_DIR.def().global(true).help(
                     "Directory with built WASM validity predicates, \
                      transactions. This value can also be set via \
                      `NAMADA_WASM_DIR` environment variable, but the argument \
@@ -3152,6 +3264,7 @@ pub mod args {
                 .arg(
                     PRE_GENESIS
                         .def()
+                        .global(true)
                         .help("Dispatch pre-genesis specific logic."),
                 )
         }
@@ -4766,11 +4879,9 @@ pub mod args {
                             DATA_PATH_OPT.name,
                         ]),
                 )
-                .arg(
-                    PROPOSAL_VOTE
-                        .def()
-                        .help("The vote for the proposal. Either yay or nay."),
-                )
+                .arg(PROPOSAL_VOTE.def().help(
+                    "The vote for the proposal. Either yay, nay, or abstain.",
+                ))
                 .arg(
                     PROPOSAL_OFFLINE
                         .def()
@@ -5537,7 +5648,7 @@ pub mod args {
             app.add_args::<Tx<CliTypes>>().arg(
                 VALIDATOR
                     .def()
-                    .help("The address of the jailed validator to deactivate."),
+                    .help("The address of the validator to deactivate."),
             )
         }
     }
@@ -5570,7 +5681,7 @@ pub mod args {
             app.add_args::<Tx<CliTypes>>().arg(
                 VALIDATOR
                     .def()
-                    .help("The address of the jailed validator to deactivate."),
+                    .help("The address of the validator to reactivate."),
             )
         }
     }
@@ -5608,16 +5719,70 @@ pub mod args {
         }
     }
 
-    impl CliToSdk<GenIbcShieldedTransafer<SdkTypes>>
-        for GenIbcShieldedTransafer<CliTypes>
+    impl Args for ShieldedSync<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let ledger_address = LEDGER_ADDRESS.parse(matches);
+            let batch_size = BATCH_SIZE_OPT.parse(matches);
+            let last_query_height = BLOCK_HEIGHT_OPT.parse(matches);
+            let spending_keys = SPENDING_KEYS.parse(matches);
+            let viewing_keys = VIEWING_KEYS.parse(matches);
+            Self {
+                ledger_address,
+                batch_size,
+                last_query_height,
+                spending_keys,
+                viewing_keys,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(LEDGER_ADDRESS.def().help(LEDGER_ADDRESS_ABOUT))
+                .arg(BATCH_SIZE_OPT.def().help(
+                    "Optional batch size which determines how many txs to \
+                     fetch before caching locally. Default is 1.",
+                ))
+                .arg(BLOCK_HEIGHT_OPT.def().help(
+                    "Option block height to sync up to. Default is latest.",
+                ))
+                .arg(SPENDING_KEYS.def().help(
+                    "List of new spending keys with which to check note \
+                     ownership. These will be added to the shielded context.",
+                ))
+                .arg(VIEWING_KEYS.def().help(
+                    "List of new viewing keys with which to check note \
+                     ownership. These will be added to the shielded context.",
+                ))
+        }
+    }
+
+    impl CliToSdk<ShieldedSync<SdkTypes>> for ShieldedSync<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> ShieldedSync<SdkTypes> {
+            let chain_ctx = ctx.borrow_mut_chain_or_exit();
+            ShieldedSync {
+                ledger_address: self.ledger_address,
+                batch_size: self.batch_size,
+                last_query_height: self.last_query_height,
+                spending_keys: self
+                    .spending_keys
+                    .iter()
+                    .map(|sk| chain_ctx.get_cached(sk))
+                    .collect(),
+                viewing_keys: self
+                    .viewing_keys
+                    .iter()
+                    .map(|vk| chain_ctx.get_cached(vk))
+                    .collect(),
+            }
+        }
+    }
+
+    impl CliToSdk<GenIbcShieldedTransfer<SdkTypes>>
+        for GenIbcShieldedTransfer<CliTypes>
     {
-        fn to_sdk(
-            self,
-            ctx: &mut Context,
-        ) -> GenIbcShieldedTransafer<SdkTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> GenIbcShieldedTransfer<SdkTypes> {
             let query = self.query.to_sdk(ctx);
             let chain_ctx = ctx.borrow_chain_or_exit();
-            GenIbcShieldedTransafer::<SdkTypes> {
+            GenIbcShieldedTransfer::<SdkTypes> {
                 query,
                 output_folder: self.output_folder,
                 target: chain_ctx.get(&self.target),
@@ -5629,7 +5794,7 @@ pub mod args {
         }
     }
 
-    impl Args for GenIbcShieldedTransafer<CliTypes> {
+    impl Args for GenIbcShieldedTransfer<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let output_folder = OUTPUT_FOLDER_PATH.parse(matches);
@@ -5892,7 +6057,8 @@ pub mod args {
         type EthereumAddress = String;
         type Keypair = WalletKeypair;
         type PublicKey = WalletPublicKey;
-        type TendermintAddress = tendermint_config::net::Address;
+        type SpendingKey = WalletSpendingKey;
+        type TendermintAddress = tendermint_rpc::Url;
         type TransferSource = WalletTransferSource;
         type TransferTarget = WalletTransferTarget;
         type ViewingKey = WalletViewingKey;
@@ -6570,6 +6736,19 @@ pub mod args {
     }
 
     impl Args for KeyExport {
+        fn parse(matches: &ArgMatches) -> Self {
+            let alias = ALIAS.parse(matches);
+            Self { alias }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                ALIAS.def().help("The alias of the key you wish to export."),
+            )
+        }
+    }
+
+    impl Args for KeyConvert {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
             Self { alias }

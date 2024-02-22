@@ -77,7 +77,6 @@ use namada_apps::config::utils::set_port;
 use namada_apps::config::{ethereum_bridge, TendermintMode};
 use namada_apps::facade::tendermint::block::Header as TmHeader;
 use namada_apps::facade::tendermint::merkle::proof::ProofOps as TmProof;
-use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
 use namada_apps::facade::tendermint_rpc::{Client, HttpClient, Url};
 use namada_core::types::string_encoding::StringEncoded;
 use namada_sdk::masp::fs::FsShieldedUtils;
@@ -596,8 +595,8 @@ fn create_client(test_a: &Test, test_b: &Test) -> Result<(ClientId, ClientId)> {
 
 fn make_client_state(test: &Test, height: Height) -> TmClientState {
     let rpc = get_actor_rpc(test, Who::Validator(0));
-    let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
-    let client = HttpClient::new(ledger_address).unwrap();
+    let tendermint_url = Url::from_str(&rpc).unwrap();
+    let client = HttpClient::new(tendermint_url).unwrap();
 
     let pos_params =
         test.async_runtime().block_on(query_pos_parameters(&client));
@@ -719,8 +718,8 @@ fn update_client(
 }
 
 fn make_light_client_io(test: &Test) -> TmLightClientIo {
-    let addr = format!("http://{}", get_actor_rpc(test, Who::Validator(0)));
-    let rpc_addr = Url::from_str(&addr).unwrap();
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+    let rpc_addr = Url::from_str(&rpc).unwrap();
     let rpc_client = HttpClient::new(rpc_addr).unwrap();
     let rpc_timeout = Duration::new(10, 0);
 
@@ -1139,7 +1138,7 @@ fn transfer_on_chain(
         "--node",
         &rpc,
     ];
-    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
     client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
@@ -1307,6 +1306,16 @@ fn shielded_transfer(
 
     // Send a token to the shielded address on Chain A
     transfer_on_chain(test_a, ALBERT, AA_PAYMENT_ADDRESS, BTC, 10, ALBERT_KEY)?;
+    let rpc = get_actor_rpc(test_a, Who::Validator(0));
+    let tx_args = vec![
+        "shielded-sync",
+        "--viewing-keys",
+        AA_VIEWING_KEY,
+        "--node",
+        &rpc,
+    ];
+    let mut client = run!(test_a, Bin::Client, tx_args, Some(120))?;
+    client.assert_success();
 
     // Send a token from SP(A) on Chain A to PA(B) on Chain B
     let amount = Amount::native_whole(10).to_string_native();
@@ -1680,8 +1689,8 @@ fn make_ibc_data(message: Any) -> Vec<u8> {
 
 fn query_height(test: &Test) -> Result<Height> {
     let rpc = get_actor_rpc(test, Who::Validator(0));
-    let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
-    let client = HttpClient::new(ledger_address).unwrap();
+    let tendermint_url = Url::from_str(&rpc).unwrap();
+    let client = HttpClient::new(tendermint_url).unwrap();
 
     let status = test
         .async_runtime()
@@ -1693,8 +1702,8 @@ fn query_height(test: &Test) -> Result<Height> {
 
 fn query_header(test: &Test, height: Height) -> Result<TmHeader> {
     let rpc = get_actor_rpc(test, Who::Validator(0));
-    let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
-    let client = HttpClient::new(ledger_address).unwrap();
+    let tendermint_url = Url::from_str(&rpc).unwrap();
+    let client = HttpClient::new(tendermint_url).unwrap();
     let height = height.revision_height() as u32;
     let result = test
         .async_runtime()
@@ -1714,8 +1723,8 @@ fn check_ibc_update_query(
     consensus_height: BlockHeight,
 ) -> Result<()> {
     let rpc = get_actor_rpc(test, Who::Validator(0));
-    let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
-    let client = HttpClient::new(ledger_address).unwrap();
+    let tendermint_url = Url::from_str(&rpc).unwrap();
+    let client = HttpClient::new(tendermint_url).unwrap();
     match test.async_runtime().block_on(RPC.shell().ibc_client_update(
         &client,
         client_id,
@@ -1733,8 +1742,8 @@ fn check_ibc_packet_query(
     packet: &Packet,
 ) -> Result<()> {
     let rpc = get_actor_rpc(test, Who::Validator(0));
-    let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
-    let client = HttpClient::new(ledger_address).unwrap();
+    let tendermint_url = Url::from_str(&rpc).unwrap();
+    let client = HttpClient::new(tendermint_url).unwrap();
     match test.async_runtime().block_on(RPC.shell().ibc_packet(
         &client,
         event_type,
@@ -1756,8 +1765,8 @@ fn query_value_with_proof(
     height: Option<Height>,
 ) -> Result<(Option<Vec<u8>>, TmProof)> {
     let rpc = get_actor_rpc(test, Who::Validator(0));
-    let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
-    let client = HttpClient::new(ledger_address).unwrap();
+    let tendermint_url = Url::from_str(&rpc).unwrap();
+    let client = HttpClient::new(tendermint_url).unwrap();
     let result = test.async_runtime().block_on(query_storage_value_bytes(
         &client,
         key,
@@ -1909,6 +1918,15 @@ fn check_shielded_balances(
     let token_addr = find_address(test_a, BTC)?.to_string();
     std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
     let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
+    let tx_args = vec![
+        "shielded-sync",
+        "--viewing-keys",
+        AB_VIEWING_KEY,
+        "--node",
+        &rpc_b,
+    ];
+    let mut client = run!(test_b, Bin::Client, tx_args, Some(120))?;
+    client.assert_success();
     let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/btc");
     let query_args = vec![
         "balance",
@@ -2049,8 +2067,8 @@ fn get_attributes_from_event(event: &AbciEvent) -> HashMap<String, String> {
 
 fn get_events(test: &Test, height: u32) -> Result<Vec<AbciEvent>> {
     let rpc = get_actor_rpc(test, Who::Validator(0));
-    let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
-    let client = HttpClient::new(ledger_address).unwrap();
+    let tendermint_url = Url::from_str(&rpc).unwrap();
+    let client = HttpClient::new(tendermint_url).unwrap();
 
     let response = test
         .async_runtime()

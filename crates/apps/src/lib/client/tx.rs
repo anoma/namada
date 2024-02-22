@@ -23,6 +23,7 @@ use namada::types::dec::Dec;
 use namada::types::io::Io;
 use namada::types::key::{self, *};
 use namada_sdk::rpc::{InnerTxResult, TxBroadcastData, TxResponse};
+use namada_sdk::signing::validate_fee_and_gen_unshield;
 use namada_sdk::wallet::alias::validator_consensus_key;
 use namada_sdk::wallet::{Wallet, WalletIo};
 use namada_sdk::{display_line, edisplay_line, error, signing, tx, Namada};
@@ -412,15 +413,26 @@ pub async fn submit_change_consensus_key(
     )
     .add_data(data);
 
+    if let Some(memo) = &tx_args.memo {
+        tx.add_memo(memo);
+    };
+
     let signing_data =
         init_validator_signing_data(namada, &tx_args, vec![new_key]).await?;
-
-    tx::prepare_tx(
+    let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
         namada,
         &tx_args,
+        &signing_data.fee_payer,
+    )
+    .await?;
+
+    tx::prepare_tx(
+        namada.client(),
+        &tx_args,
         &mut tx,
+        unshield,
+        fee_amount,
         signing_data.fee_payer.clone(),
-        None,
     )
     .await?;
 
@@ -740,15 +752,26 @@ pub async fn submit_become_validator(
     )
     .add_data(data);
 
+    if let Some(memo) = &tx_args.memo {
+        tx.add_memo(memo);
+    };
+
     let signing_data =
         init_validator_signing_data(namada, &tx_args, all_pks).await?;
-
-    tx::prepare_tx(
+    let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
         namada,
         &tx_args,
+        &signing_data.fee_payer,
+    )
+    .await?;
+
+    tx::prepare_tx(
+        namada.client(),
+        &tx_args,
         &mut tx,
+        unshield,
+        fee_amount,
         signing_data.fee_payer.clone(),
-        None,
     )
     .await?;
 
@@ -1592,7 +1615,7 @@ pub async fn submit_tx(
 
 pub async fn gen_ibc_shielded_transfer(
     context: &impl Namada,
-    args: args::GenIbcShieldedTransafer,
+    args: args::GenIbcShieldedTransfer,
 ) -> Result<(), error::Error> {
     if let Some(shielded_transfer) =
         tx::gen_ibc_shielded_transfer(context, args.clone()).await?
