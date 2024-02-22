@@ -496,9 +496,9 @@ impl PartialOrd for Signature {
 
 impl Ord for Signature {
     fn cmp(&self, other: &Self) -> Ordering {
-        match self.0.to_bytes().partial_cmp(&other.0.to_bytes()) {
-            Some(Ordering::Equal) => self.1.cmp(&other.1),
-            res => res.unwrap(),
+        match self.0.to_bytes().cmp(&other.0.to_bytes()) {
+            Ordering::Equal => self.1.cmp(&other.1),
+            res => res,
         }
     }
 }
