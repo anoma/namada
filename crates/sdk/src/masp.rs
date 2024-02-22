@@ -116,21 +116,13 @@ pub const CONVERT_NAME: &str = "masp-convert.params";
 /// Type alias for convenience and profit
 pub type IndexedNoteData = BTreeMap<
     IndexedTx,
-    (
-        Epoch,
-        BTreeSet<namada_core::types::storage::Key>,
-        Transaction,
-    ),
+    (Epoch, BTreeSet<namada_core::storage::Key>, Transaction),
 >;
 
 /// Type alias for the entries of [`IndexedNoteData`] iterators
 pub type IndexedNoteEntry = (
     IndexedTx,
-    (
-        Epoch,
-        BTreeSet<namada_core::types::storage::Key>,
-        Transaction,
-    ),
+    (Epoch, BTreeSet<namada_core::storage::Key>, Transaction),
 );
 
 /// Shielded transfer
