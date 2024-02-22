@@ -4391,8 +4391,7 @@ pub mod args {
             let public_keys = PUBLIC_KEYS.parse(matches);
             let threshold = THRESHOLD.parse(matches);
     
-            let num_keys = public_keys.as_ref().map_or(0, |keys| keys.len());
-
+            let num_keys = <Vec<cli::context::FromContext<namada::ledger::pos::common::PublicKey>> as AsRef<T>>::as_ref(&public_keys).map_or(0, |keys| keys.len());
             if num_keys < threshold {
                 eprintln!("Threshold must be less than the number of public keys provided.");
                 std::process::exit(1);
