@@ -68,6 +68,9 @@ router! {SHELL,
     // Query the last committed block
     ( "last_block" ) -> Option<LastBlock> = last_block,
 
+    // First block height of the current epoch
+    ( "first_block_height_of_current_epoch" ) -> BlockHeight = first_block_height_of_current_epoch,
+
     // Raw storage access - read value
     ( "value" / [storage_key: storage::Key] )
         -> Vec<u8> = (with_options storage_value),
@@ -341,6 +344,26 @@ where
     H: 'static + StorageHasher + Sync,
 {
     Ok(ctx.wl_storage.storage.last_block.clone())
+}
+
+fn first_block_height_of_current_epoch<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+) -> namada_storage::Result<BlockHeight>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    ctx.wl_storage
+        .storage
+        .block
+        .pred_epochs
+        .first_block_heights
+        .last()
+        .ok_or(namada_storage::Error::new(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "The pred_epochs is unexpectedly empty",
+        )))
+        .cloned()
 }
 
 /// Returns data with `vec![]` when the storage key is not found. For all

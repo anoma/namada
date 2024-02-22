@@ -89,6 +89,33 @@ pub async fn query_and_print_epoch(context: &impl Namada) -> Epoch {
     epoch
 }
 
+/// Query and print some information to help discern when the next epoch will
+/// begin.
+pub async fn query_and_print_next_epoch_info(context: &impl Namada) {
+    let (this_epoch_first_height, epoch_duration) =
+        rpc::query_next_epoch_info(context.client()).await.unwrap();
+
+    display_line!(
+        context.io(),
+        "First block height of this current epoch: {this_epoch_first_height}."
+    );
+    display_line!(
+        context.io(),
+        "Minimum number of blocks in an epoch: {}.",
+        epoch_duration.min_num_of_blocks
+    );
+    display_line!(
+        context.io(),
+        "Minimum amount of time for an epoch: {} seconds.",
+        epoch_duration.min_duration
+    );
+    display_line!(
+        context.io(),
+        "\nEarliest height at which the next epoch can begin is block {}.",
+        this_epoch_first_height.0 + epoch_duration.min_num_of_blocks
+    );
+}
+
 /// Query and print node's status.
 pub async fn query_and_print_status(
     context: &impl Namada,
@@ -151,11 +178,16 @@ pub async fn query_transfers(
     let mut shielded = context.shielded_mut().await;
     let _ = shielded.load().await;
     // Precompute asset types to increase chances of success in decoding
-    let _ = shielded.precompute_asset_types(context).await;
+    let token_map = query_tokens(context, None, None).await;
+    let tokens = token_map.values().collect();
+    let _ = shielded
+        .precompute_asset_types(context.client(), tokens)
+        .await;
     // Obtain the effects of all shielded and transparent transactions
     let transfers = shielded
         .query_tx_deltas(
             context.client(),
+            context.io(),
             &query_owner,
             &query_token,
             &wallet.get_viewing_keys(),
@@ -450,10 +482,12 @@ pub async fn query_pinned_balance(
         .collect();
     let _ = context.shielded_mut().await.load().await;
     // Precompute asset types to increase chances of success in decoding
+    let token_map = query_tokens(context, None, None).await;
+    let tokens = token_map.values().collect();
     let _ = context
         .shielded_mut()
         .await
-        .precompute_asset_types(context)
+        .precompute_asset_types(context.client(), tokens)
         .await;
     // Print the token balances by payment address
     for owner in owners {
@@ -897,13 +931,12 @@ pub async fn query_shielded_balance(
     {
         let mut shielded = context.shielded_mut().await;
         let _ = shielded.load().await;
-        let fvks: Vec<_> = viewing_keys
-            .iter()
-            .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
-            .collect();
-        shielded.fetch(context.client(), &[], &fvks).await.unwrap();
         // Precompute asset types to increase chances of success in decoding
-        let _ = shielded.precompute_asset_types(context).await;
+        let token_map = query_tokens(context, None, None).await;
+        let tokens = token_map.values().collect();
+        let _ = shielded
+            .precompute_asset_types(context.client(), tokens)
+            .await;
         // Save the update state so that future fetches can be short-circuited
         let _ = shielded.save().await;
     }

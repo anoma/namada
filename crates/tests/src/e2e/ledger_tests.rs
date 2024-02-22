@@ -698,6 +698,8 @@ fn ledger_txs_and_queries() -> Result<()> {
 /// operation is successful
 /// 2. Test that a tx requesting a disposable signer
 /// providing an insufficient unshielding fails
+/// 3. Submit another transaction with valid fee unshielding and an inner
+/// shielded transfer with the same source
 #[test]
 fn wrapper_disposable_signer() -> Result<()> {
     // Download the shielded pool parameters before starting node
@@ -722,27 +724,56 @@ fn wrapper_disposable_signer() -> Result<()> {
 
     let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
 
+    // Add the relevant viewing keys to the wallet otherwise the shielded
+    // context won't precache the masp data
+    let tx_args = vec![
+        "add",
+        "--alias",
+        "alias_a",
+        "--value",
+        AA_VIEWING_KEY,
+        "--unsafe-dont-encrypt",
+    ];
+    let mut client = run!(test, Bin::Wallet, tx_args, Some(120))?;
+    client.assert_success();
+
     let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+
+    // Produce three different output descriptions to spend
+    for _ in 0..3 {
+        let tx_args = vec![
+            "transfer",
+            "--source",
+            ALBERT,
+            "--target",
+            AA_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "50",
+            "--ledger-address",
+            &validator_one_rpc,
+        ];
+        let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
+        client.exp_string(TX_ACCEPTED)?;
+        client.exp_string(TX_APPLIED_SUCCESS)?;
+    }
+
+    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let tx_args = vec!["shielded-sync", "--node", &validator_one_rpc];
+    let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
+    client.assert_success();
 
     let tx_args = vec![
-        "transfer",
-        "--source",
-        ALBERT,
-        "--target",
-        AA_PAYMENT_ADDRESS,
-        "--token",
-        NAM,
-        "--amount",
-        "50",
-        "--ledger-address",
+        "shielded-sync",
+        "--viewing-keys",
+        AA_VIEWING_KEY,
+        "--node",
         &validator_one_rpc,
     ];
-    let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
+    let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
+    client.assert_success();
 
-    client.exp_string(TX_ACCEPTED)?;
-    client.exp_string(TX_APPLIED_SUCCESS)?;
-
-    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
     let tx_args = vec![
         "transfer",
         "--source",
@@ -753,6 +784,8 @@ fn wrapper_disposable_signer() -> Result<()> {
         NAM,
         "--amount",
         "1",
+        "--gas-limit",
+        "20000",
         "--gas-spending-key",
         A_SPENDING_KEY,
         "--disposable-gas-payer",
@@ -764,6 +797,9 @@ fn wrapper_disposable_signer() -> Result<()> {
     client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let tx_args = vec!["shielded-sync", "--node", &validator_one_rpc];
+    let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
+    client.assert_success();
     let tx_args = vec![
         "transfer",
         "--source",
@@ -774,6 +810,8 @@ fn wrapper_disposable_signer() -> Result<()> {
         NAM,
         "--amount",
         "1",
+        "--gas-limit",
+        "20000",
         "--gas-price",
         "90000000",
         "--gas-spending-key",
@@ -789,6 +827,32 @@ fn wrapper_disposable_signer() -> Result<()> {
     let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
     client.exp_string("Error while processing transaction's fees")?;
 
+    // Try another valid fee unshielding and masp transaction in the same tx,
+    // with the same source. This tests that the client can properly
+    // construct multiple transactions together
+    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let tx_args = vec![
+        "transfer",
+        "--source",
+        A_SPENDING_KEY,
+        "--target",
+        AB_PAYMENT_ADDRESS,
+        "--token",
+        NAM,
+        "--amount",
+        "1",
+        "--gas-limit",
+        "20000",
+        "--gas-spending-key",
+        A_SPENDING_KEY,
+        "--disposable-gas-payer",
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
+
+    client.exp_string(TX_ACCEPTED)?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     Ok(())
 }
 
@@ -953,6 +1017,9 @@ fn pos_bonds() -> Result<()> {
     let _bg_validator_0 =
         start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
             .background();
+
+    let rpc = get_actor_rpc(&test, Who::Validator(0));
+    wait_for_block_height(&test, &rpc, 2, 30)?;
 
     let validator_0_rpc = get_actor_rpc(&test, Who::Validator(0));
 
