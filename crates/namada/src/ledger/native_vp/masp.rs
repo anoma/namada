@@ -60,10 +60,25 @@ where
     pub ctx: Ctx<'a, DB, H, CA>,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(Debug)]
 enum DeltaBalance {
     Positive(Amount),
     Negative(Amount),
+}
+
+impl PartialEq for DeltaBalance {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Positive(lhs), Self::Positive(rhs)) => lhs == rhs,
+            (Self::Negative(lhs), Self::Negative(rhs)) => lhs == rhs,
+            (Self::Positive(lhs), Self::Negative(rhs)) => {
+                lhs == &Amount::default() && rhs == &Amount::default()
+            }
+            (Self::Negative(lhs), Self::Positive(rhs)) => {
+                lhs == &Amount::default() && rhs == &Amount::default()
+            }
+        }
+    }
 }
 
 impl DeltaBalance {
@@ -327,8 +342,9 @@ where
 
         for (token, _) in masp_balances {
             // NOTE: no need to extract the changes of the masp balances too,
-            // we'll examine those of the other transparent addresses and the
-            // multitoken vp ensures a correct match between the two sets
+            // we'll examine those of the other transparent addresses and we'll
+            // check the match with the transparent bundle. The rest of the
+            // validation is up to the multitoken vp
             result.masp.insert(token);
         }
 
@@ -384,12 +400,16 @@ where
         conversion_state: &ConversionState,
     ) -> Result<bool> {
         if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
+            // Support structs to allow a valid check on the asset derivation.
+            // These also allow to check if some transparent inputs or outputs
+            // were not utilized for a given token which would lead to an
+            // inconsistent transparent balance of masp
             let mut unprocessed_vins =
                 BTreeSet::from_iter(0..transp_bundle.vin.len());
             let mut unprocessed_vouts =
                 BTreeSet::from_iter(0..transp_bundle.vout.len());
 
-            // Run the checks fore every token involved in the transaction
+            // Run the checks fore every token that involved the masp balances
             for token in changed_balances.masp {
                 let denom = read_denom(&self.ctx.pre(), token)?.ok_or_err_msg(
                     "No denomination found in storage for the given token",
@@ -596,7 +616,7 @@ where
                     unprocessed_vouts.remove(idx);
                 }
 
-                // Iterate ofver the delta balances described by the transparent
+                // Iterate over the delta balances described by the transparent
                 // bundle and verify that these match the actual modifications
                 // in storage NOTE: this effectively prevent the
                 // same addresses/tokens couples from being
@@ -629,10 +649,20 @@ where
             }
             if !(unprocessed_vins.is_empty() && unprocessed_vouts.is_empty()) {
                 tracing::debug!(
-                    "Some transparent assets could not be recognized"
+                    "Some transparent assets could not be recognized or were \
+                     not utilized"
                 );
                 return Ok(false);
             }
+        } else if !changed_balances.masp.is_empty() {
+            // If no transparent bundle is present than no change to the
+            // transparent balances of masp is allowed
+            tracing::debug!(
+                "No transparent bundle was provided with the transaction but \
+                 the following masp balances were changed: {:#?}",
+                changed_balances.masp
+            );
+            return Ok(false);
         }
 
         Ok(true)
