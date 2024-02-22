@@ -33,6 +33,7 @@ use token::storage_key::{
 };
 use token::Amount;
 
+use super::SignedAmount;
 use crate::ledger::native_vp;
 use crate::ledger::native_vp::{Ctx, NativeVp};
 use crate::token;
@@ -59,54 +60,6 @@ where
     pub ctx: Ctx<'a, S, CA>,
 }
 
-#[derive(Debug)]
-enum DeltaBalance {
-    Positive(Amount),
-    Negative(Amount),
-}
-
-impl PartialEq for DeltaBalance {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Positive(lhs), Self::Positive(rhs)) => lhs == rhs,
-            (Self::Negative(lhs), Self::Negative(rhs)) => lhs == rhs,
-            (Self::Positive(lhs), Self::Negative(rhs)) => {
-                lhs == &Amount::default() && rhs == &Amount::default()
-            }
-            (Self::Negative(lhs), Self::Positive(rhs)) => {
-                lhs == &Amount::default() && rhs == &Amount::default()
-            }
-        }
-    }
-}
-
-impl DeltaBalance {
-    fn checked_add(&self, rhs: Self) -> Option<Self> {
-        match (self, rhs) {
-            (Self::Positive(lhs), Self::Positive(rhs)) => {
-                let tmp = lhs.checked_add(rhs)?;
-                Some(Self::Positive(tmp))
-            }
-            (Self::Positive(lhs), Self::Negative(rhs)) => {
-                match lhs.checked_sub(rhs) {
-                    Some(diff) => Some(Self::Positive(diff)),
-                    None => Some(Self::Negative(rhs - *lhs)),
-                }
-            }
-            (Self::Negative(lhs), Self::Positive(rhs)) => {
-                match rhs.checked_sub(*lhs) {
-                    Some(diff) => Some(Self::Positive(diff)),
-                    None => Some(Self::Negative(*lhs - rhs)),
-                }
-            }
-            (Self::Negative(lhs), Self::Negative(rhs)) => {
-                let tmp = lhs.checked_add(rhs)?;
-                Some(Self::Negative(tmp))
-            }
-        }
-    }
-}
-
 // The balances changed by the transaction, split between masp and non-masp
 // balances. The masp collection carries the token addresses. The collection of
 // the other balances maps the token address to the addresses of the
@@ -115,7 +68,7 @@ impl DeltaBalance {
 #[derive(Default)]
 struct ChangedBalances<'vp> {
     masp: BTreeSet<&'vp Address>,
-    other: BTreeMap<&'vp Address, BTreeMap<[u8; 20], DeltaBalance>>,
+    other: BTreeMap<&'vp Address, BTreeMap<[u8; 20], SignedAmount>>,
 }
 
 impl<'a, S, CA> MaspVp<'a, S, CA>
@@ -365,16 +318,16 @@ where
                 ),
             ));
             let mut diff = match post_balance.checked_sub(pre_balance) {
-                Some(diff) => DeltaBalance::Positive(diff),
-                None => DeltaBalance::Negative(pre_balance - post_balance),
+                Some(diff) => SignedAmount::Positive(diff),
+                None => SignedAmount::Negative(pre_balance - post_balance),
             };
 
             if let ShieldedActionOwner::Minted = counterpart {
                 // When receiving ibc transfers we mint and also shield so we
                 // have two credits, we need to mock the mint balance as a
                 // negative change even if it is positive
-                if let DeltaBalance::Positive(amt) = diff {
-                    diff = DeltaBalance::Negative(amt);
+                if let SignedAmount::Positive(amt) = diff {
+                    diff = SignedAmount::Negative(amt);
                 }
             }
 
@@ -460,11 +413,11 @@ where
                             );
                             let bref = token_bundle_balances
                                 .entry(vin.address.0)
-                                .or_insert(DeltaBalance::Negative(
+                                .or_insert(SignedAmount::Negative(
                                     Amount::default(),
                                 ));
                             *bref = bref
-                                .checked_add(DeltaBalance::Negative(amount))
+                                .checked_add(SignedAmount::Negative(amount))
                                 .ok_or_else(|| {
                                     Error::NativeVpError(
                                         native_vp::Error::SimpleMessage(
@@ -509,11 +462,11 @@ where
                                     );
                                 let bref = token_bundle_balances
                                     .entry(vin.address.0)
-                                    .or_insert(DeltaBalance::Negative(
+                                    .or_insert(SignedAmount::Negative(
                                         Amount::default(),
                                     ));
                                 *bref = bref
-                                    .checked_add(DeltaBalance::Negative(amount))
+                                    .checked_add(SignedAmount::Negative(amount))
                                     .ok_or_else(|| {
                                         Error::NativeVpError(
                                             native_vp::Error::SimpleMessage(
@@ -567,11 +520,11 @@ where
                             );
                             let bref = token_bundle_balances
                                 .entry(out.address.0)
-                                .or_insert(DeltaBalance::Positive(
+                                .or_insert(SignedAmount::Positive(
                                     Amount::default(),
                                 ));
                             *bref = bref
-                                .checked_add(DeltaBalance::Positive(amount))
+                                .checked_add(SignedAmount::Positive(amount))
                                 .ok_or_else(|| {
                                     Error::NativeVpError(
                                         native_vp::Error::SimpleMessage(
@@ -593,11 +546,11 @@ where
                             );
                             let bref = token_bundle_balances
                                 .entry(out.address.0)
-                                .or_insert(DeltaBalance::Positive(
+                                .or_insert(SignedAmount::Positive(
                                     Amount::default(),
                                 ));
                             *bref = bref
-                                .checked_add(DeltaBalance::Positive(amount))
+                                .checked_add(SignedAmount::Positive(amount))
                                 .ok_or_else(|| {
                                     Error::NativeVpError(
                                         native_vp::Error::SimpleMessage(
