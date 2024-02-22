@@ -12,6 +12,8 @@ use std::str::FromStr;
 #[cfg(any(test, feature = "testing"))]
 use std::sync::Mutex;
 
+#[cfg(any(test, feature = "testing"))]
+use bls12_381::{G1Affine, G2Affine};
 // use async_std::io::prelude::WriteExt;
 // use async_std::io::{self};
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -64,8 +66,11 @@ use masp_primitives::transaction::{
 };
 use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
 use masp_proofs::bellman::groth16::PreparedVerifyingKey;
+#[cfg(any(test, feature = "testing"))]
+use masp_proofs::bellman::groth16::Proof;
 use masp_proofs::bls12_381::Bls12;
 use masp_proofs::prover::LocalTxProver;
+#[cfg(not(feature = "testing"))]
 use masp_proofs::sapling::SaplingVerificationContext;
 use namada_core::types::address::{Address, MASP};
 use namada_core::types::dec::Dec;
@@ -93,6 +98,8 @@ use crate::io::Io;
 use crate::masp_primitives::constants::VALUE_COMMITMENT_RANDOMNESS_GENERATOR;
 #[cfg(any(test, feature = "testing"))]
 use crate::masp_primitives::sapling::redjubjub::PrivateKey;
+#[cfg(any(test, feature = "testing"))]
+use crate::masp_proofs::sapling::SaplingVerificationContextInner;
 use crate::queries::Client;
 use crate::rpc::{
     query_block, query_conversion, query_denom, query_epoch_at_height,
@@ -106,16 +113,9 @@ use crate::{display_line, edisplay_line, rpc, MaybeSend, MaybeSync, Namada};
 /// the default OS specific path is used.
 pub const ENV_VAR_MASP_PARAMS_DIR: &str = "NAMADA_MASP_PARAMS_DIR";
 
-/// Env var to either "save" proofs into files or to "load" them from
-/// files.
-pub const ENV_VAR_MASP_TEST_PROOFS: &str = "NAMADA_MASP_TEST_PROOFS";
-
 /// Randomness seed for MASP integration tests to build proofs with
 /// deterministic rng.
 pub const ENV_VAR_MASP_TEST_SEED: &str = "NAMADA_MASP_TEST_SEED";
-
-/// A directory to save serialized proofs for tests.
-pub const MASP_TEST_PROOFS_DIR: &str = "test_fixtures/masp_proofs";
 
 /// The network to use for MASP
 #[cfg(feature = "mainnet")]
@@ -223,6 +223,124 @@ fn load_pvks() -> &'static PVKs {
     &VERIFIYING_KEYS
 }
 
+/// A context object for verifying the Sapling components of a single Zcash
+/// transaction. Same as SaplingVerificationContext, but always assumes the
+/// proofs to be valid.
+#[cfg(any(test, feature = "testing"))]
+pub struct MockSaplingVerificationContext {
+    inner: SaplingVerificationContextInner,
+    zip216_enabled: bool,
+}
+
+#[cfg(any(test, feature = "testing"))]
+impl MockSaplingVerificationContext {
+    /// Construct a new context to be used with a single transaction.
+    pub fn new(zip216_enabled: bool) -> Self {
+        MockSaplingVerificationContext {
+            inner: SaplingVerificationContextInner::new(),
+            zip216_enabled,
+        }
+    }
+
+    /// Perform consensus checks on a Sapling SpendDescription, while
+    /// accumulating its value commitment inside the context for later use.
+    #[allow(clippy::too_many_arguments)]
+    pub fn check_spend(
+        &mut self,
+        cv: jubjub::ExtendedPoint,
+        anchor: bls12_381::Scalar,
+        nullifier: &[u8; 32],
+        rk: PublicKey,
+        sighash_value: &[u8; 32],
+        spend_auth_sig: Signature,
+        zkproof: Proof<Bls12>,
+        _verifying_key: &PreparedVerifyingKey<Bls12>,
+    ) -> bool {
+        let zip216_enabled = true;
+        self.inner.check_spend(
+            cv,
+            anchor,
+            nullifier,
+            rk,
+            sighash_value,
+            spend_auth_sig,
+            zkproof,
+            &mut (),
+            |_, rk, msg, spend_auth_sig| {
+                rk.verify_with_zip216(
+                    &msg,
+                    &spend_auth_sig,
+                    SPENDING_KEY_GENERATOR,
+                    zip216_enabled,
+                )
+            },
+            |_, _proof, _public_inputs| true,
+        )
+    }
+
+    /// Perform consensus checks on a Sapling SpendDescription, while
+    /// accumulating its value commitment inside the context for later use.
+    #[allow(clippy::too_many_arguments)]
+    pub fn check_convert(
+        &mut self,
+        cv: jubjub::ExtendedPoint,
+        anchor: bls12_381::Scalar,
+        zkproof: Proof<Bls12>,
+        _verifying_key: &PreparedVerifyingKey<Bls12>,
+    ) -> bool {
+        self.inner.check_convert(
+            cv,
+            anchor,
+            zkproof,
+            &mut (),
+            |_, _proof, _public_inputs| true,
+        )
+    }
+
+    /// Perform consensus checks on a Sapling OutputDescription, while
+    /// accumulating its value commitment inside the context for later use.
+    pub fn check_output(
+        &mut self,
+        cv: jubjub::ExtendedPoint,
+        cmu: bls12_381::Scalar,
+        epk: jubjub::ExtendedPoint,
+        zkproof: Proof<Bls12>,
+        _verifying_key: &PreparedVerifyingKey<Bls12>,
+    ) -> bool {
+        self.inner.check_output(
+            cv,
+            cmu,
+            epk,
+            zkproof,
+            |_proof, _public_inputs| true,
+        )
+    }
+
+    /// Perform consensus checks on the valueBalance and bindingSig parts of a
+    /// Sapling transaction. All SpendDescriptions and OutputDescriptions must
+    /// have been checked before calling this function.
+    pub fn final_check(
+        &self,
+        value_balance: I128Sum,
+        sighash_value: &[u8; 32],
+        binding_sig: Signature,
+    ) -> bool {
+        self.inner.final_check(
+            value_balance,
+            sighash_value,
+            binding_sig,
+            |bvk, msg, binding_sig| {
+                bvk.verify_with_zip216(
+                    &msg,
+                    &binding_sig,
+                    VALUE_COMMITMENT_RANDOMNESS_GENERATOR,
+                    self.zip216_enabled,
+                )
+            },
+        )
+    }
+}
+
 // This function computes `value` in the exponent of the value commitment
 // base
 #[cfg(any(test, feature = "testing"))]
@@ -257,6 +375,7 @@ fn masp_compute_value_balance(
 
 // A context object for creating the Sapling components of a Zcash
 // transaction.
+#[cfg(any(test, feature = "testing"))]
 pub struct SaplingProvingContext {
     bsk: jubjub::Fr,
     // (sum of the Spend value commitments) - (sum of the Output value
@@ -324,7 +443,16 @@ impl<R: RngCore> TxProver for MockTxProver<R> {
         // Accumulate the value commitment in the context
         ctx.cv_sum += value_commitment;
 
-        Ok(([0u8; GROTH_PROOF_SIZE], value_commitment, rk))
+        let mut zkproof = [0u8; GROTH_PROOF_SIZE];
+        let proof = Proof::<Bls12> {
+            a: G1Affine::generator(),
+            b: G2Affine::generator(),
+            c: G1Affine::generator(),
+        };
+        proof
+            .write(&mut zkproof[..])
+            .expect("should be able to serialize a proof");
+        Ok((zkproof, value_commitment, rk))
     }
 
     fn output_proof(
@@ -364,7 +492,17 @@ impl<R: RngCore> TxProver for MockTxProver<R> {
         // check internal consistency.
         ctx.cv_sum -= value_commitment_point; // Outputs subtract from the total.
 
-        ([0u8; GROTH_PROOF_SIZE], value_commitment_point)
+        let mut zkproof = [0u8; GROTH_PROOF_SIZE];
+        let proof = Proof::<Bls12> {
+            a: G1Affine::generator(),
+            b: G2Affine::generator(),
+            c: G1Affine::generator(),
+        };
+        proof
+            .write(&mut zkproof[..])
+            .expect("should be able to serialize a proof");
+
+        (zkproof, value_commitment_point)
     }
 
     fn convert_proof(
@@ -400,7 +538,17 @@ impl<R: RngCore> TxProver for MockTxProver<R> {
         // Accumulate the value commitment in the context
         ctx.cv_sum += value_commitment;
 
-        Ok(([0u8; GROTH_PROOF_SIZE], value_commitment))
+        let mut zkproof = [0u8; GROTH_PROOF_SIZE];
+        let proof = Proof::<Bls12> {
+            a: G1Affine::generator(),
+            b: G2Affine::generator(),
+            c: G1Affine::generator(),
+        };
+        proof
+            .write(&mut zkproof[..])
+            .expect("should be able to serialize a proof");
+
+        Ok((zkproof, value_commitment))
     }
 
     fn binding_sig(
@@ -462,7 +610,8 @@ impl<R: RngCore> TxProver for MockTxProver<R> {
 pub fn check_spend(
     spend: &SpendDescription<<Authorized as Authorization>::SaplingAuth>,
     sighash: &[u8; 32],
-    ctx: &mut SaplingVerificationContext,
+    #[cfg(not(feature = "testing"))] ctx: &mut SaplingVerificationContext,
+    #[cfg(feature = "testing")] ctx: &mut MockSaplingVerificationContext,
     parameters: &PreparedVerifyingKey<Bls12>,
 ) -> bool {
     let zkproof =
@@ -487,7 +636,8 @@ pub fn check_spend(
 /// check_output wrapper
 pub fn check_output(
     output: &OutputDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>,
-    ctx: &mut SaplingVerificationContext,
+    #[cfg(not(feature = "testing"))] ctx: &mut SaplingVerificationContext,
+    #[cfg(feature = "testing")] ctx: &mut MockSaplingVerificationContext,
     parameters: &PreparedVerifyingKey<Bls12>,
 ) -> bool {
     let zkproof =
@@ -509,7 +659,8 @@ pub fn check_output(
 /// check convert wrapper
 pub fn check_convert(
     convert: &ConvertDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>,
-    ctx: &mut SaplingVerificationContext,
+    #[cfg(not(feature = "testing"))] ctx: &mut SaplingVerificationContext,
+    #[cfg(feature = "testing")] ctx: &mut MockSaplingVerificationContext,
     parameters: &PreparedVerifyingKey<Bls12>,
 ) -> bool {
     let zkproof =
@@ -596,7 +747,10 @@ pub fn verify_shielded_tx(transaction: &Transaction) -> bool {
         output_vk,
     } = load_pvks();
 
+    #[cfg(not(feature = "testing"))]
     let mut ctx = SaplingVerificationContext::new(true);
+    #[cfg(feature = "testing")]
+    let mut ctx = MockSaplingVerificationContext::new(true);
     let spends_valid = sapling_bundle
         .shielded_spends
         .iter()
