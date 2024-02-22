@@ -185,22 +185,36 @@ pub fn is_any_minted_balance_key(key: &storage::Key) -> Option<&Address> {
     }
 }
 
+/// The owner of a shielded action transfer, could be a proper address or the
+/// minted subkey
+pub enum ShieldedActionOwner<'key> {
+    /// A proper address
+    Owner(&'key Address),
+    /// The mint address
+    Minted,
+}
+
+impl ShieldedActionOwner<'_> {
+    pub fn to_address_ref(&self) -> &Address {
+        match self {
+            Self::Owner(addr) => addr,
+            Self::Minted => &Address::Internal(
+                InternalAddress::Ibc,
+            ),
+        }
+    }
+}
+
 /// Check if the given storage key is a balance key for a shielded action. If it
 /// is, returns the token and the owner addresses.
 pub fn is_any_shielded_action_balance_key(
     key: &storage::Key,
-) -> Option<[&Address; 2]> {
+) -> Option<(&Address, ShieldedActionOwner)> {
     is_any_token_balance_key(key).map_or_else(
         || {
-            is_any_minted_balance_key(key).map(|token| {
-                [
-                    token,
-                    &Address::Internal(
-                        namada_core::address::InternalAddress::Ibc,
-                    ),
-                ]
-            })
+            is_any_minted_balance_key(key)
+                .map(|token| (token, ShieldedActionOwner::Minted))
         },
-        Some,
+        |[token, owner]| Some((token, ShieldedActionOwner::Owner(owner))),
     )
 }
