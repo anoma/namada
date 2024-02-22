@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 use namada::core::address::Address;
@@ -68,41 +69,37 @@ where
         let proposal_author_key = gov_storage::get_author_key(id);
 
         let funds: token::Amount =
-            force_read(&shell.wl_storage, &proposal_funds_key)?;
+            force_read(&shell.state, &proposal_funds_key)?;
         let proposal_end_epoch: Epoch =
-            force_read(&shell.wl_storage, &proposal_end_epoch_key)?;
+            force_read(&shell.state, &proposal_end_epoch_key)?;
         let proposal_type: ProposalType =
-            force_read(&shell.wl_storage, &proposal_type_key)?;
+            force_read(&shell.state, &proposal_type_key)?;
         let proposal_author: Address =
-            force_read(&shell.wl_storage, &proposal_author_key)?;
+            force_read(&shell.state, &proposal_author_key)?;
 
-        let is_steward = pgf::is_steward(&shell.wl_storage, &proposal_author)?;
+        let is_steward = pgf::is_steward(&shell.state, &proposal_author)?;
 
-        let params = read_pos_params(&shell.wl_storage)?;
+        let params = read_pos_params(&shell.state)?;
         let total_voting_power =
-            read_total_stake(&shell.wl_storage, &params, proposal_end_epoch)?;
+            read_total_stake(&shell.state, &params, proposal_end_epoch)?;
 
         let tally_type = TallyType::from(proposal_type.clone(), is_steward);
         let votes = compute_proposal_votes(
-            &shell.wl_storage,
+            &shell.state,
             &params,
             id,
             proposal_end_epoch,
         )?;
         let proposal_result =
             compute_proposal_result(votes, total_voting_power, tally_type);
-        gov_api::write_proposal_result(
-            &mut shell.wl_storage,
-            id,
-            proposal_result,
-        )?;
+        gov_api::write_proposal_result(&mut shell.state, id, proposal_result)?;
 
         let transfer_address = match proposal_result.result {
             TallyResult::Passed => {
                 let proposal_event = match proposal_type {
                     ProposalType::Default(_) => {
                         let proposal_code =
-                            gov_api::get_proposal_code(&shell.wl_storage, id)?;
+                            gov_api::get_proposal_code(&shell.state, id)?;
                         let result = execute_default_proposal(
                             shell,
                             id,
@@ -129,7 +126,7 @@ where
                     }
                     ProposalType::PGFSteward(stewards) => {
                         let result = execute_pgf_steward_proposal(
-                            &mut shell.wl_storage,
+                            &mut shell.state,
                             stewards,
                         )?;
                         tracing::info!(
@@ -142,10 +139,9 @@ where
                             .into()
                     }
                     ProposalType::PGFPayment(payments) => {
-                        let native_token =
-                            &shell.wl_storage.get_native_token()?;
+                        let native_token = &shell.state.get_native_token()?;
                         let result = execute_pgf_funding_proposal(
-                            &mut shell.wl_storage,
+                            &mut shell.state,
                             native_token,
                             payments,
                             id,
@@ -157,15 +153,13 @@ where
                         );
 
                         for ibc_event in
-                            shell.wl_storage.write_log_mut().take_ibc_events()
+                            shell.state.write_log_mut().take_ibc_events()
                         {
                             let mut event = Event::from(ibc_event.clone());
                             // Add the height for IBC event query
-                            let height = shell
-                                .wl_storage
-                                .storage
-                                .get_last_block_height()
-                                + 1;
+                            let height =
+                                shell.state.in_mem().get_last_block_height()
+                                    + 1;
                             event["height"] = height.to_string();
                             events.emit(event);
                         }
@@ -177,13 +171,13 @@ where
                 events.emit(proposal_event);
                 proposals_result.passed.push(id);
 
-                gov_api::get_proposal_author(&shell.wl_storage, id)?
+                gov_api::get_proposal_author(&shell.state, id)?
             }
             TallyResult::Rejected => {
                 if let ProposalType::PGFPayment(_) = proposal_type {
                     if proposal_result.two_thirds_nay_over_two_thirds_total() {
                         pgf::remove_steward(
-                            &mut shell.wl_storage,
+                            &mut shell.state,
                             &proposal_author,
                         )?;
 
@@ -211,10 +205,10 @@ where
             }
         };
 
-        let native_token = shell.wl_storage.get_native_token()?;
+        let native_token = shell.state.get_native_token()?;
         if let Some(address) = transfer_address {
             token::transfer(
-                &mut shell.wl_storage,
+                &mut shell.state,
                 &native_token,
                 &gov_address,
                 &address,
@@ -222,7 +216,7 @@ where
             )?;
         } else {
             token::burn_tokens(
-                &mut shell.wl_storage,
+                &mut shell.state,
                 &native_token,
                 &gov_address,
                 funds,
@@ -306,7 +300,7 @@ where
 {
     if let Some(code) = proposal_code {
         let pending_execution_key = gov_storage::get_proposal_execution_key(id);
-        shell.wl_storage.write(&pending_execution_key, ())?;
+        shell.state.write(&pending_execution_key, ())?;
 
         let mut tx = Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
         tx.header.chain_id = shell.chain_id.clone();
@@ -319,28 +313,27 @@ where
                   * based on the code size. We dont
                   * need it here. */
             TxIndex::default(),
-            &mut TxGasMeter::new_from_sub_limit(u64::MAX.into()), /* No gas limit for governance proposal */
-            &mut shell.wl_storage,
+            &RefCell::new(TxGasMeter::new_from_sub_limit(u64::MAX.into())), /* No gas limit for governance proposal */
+            &mut shell.state,
             &mut shell.vp_wasm_cache,
             &mut shell.tx_wasm_cache,
             None,
         );
         shell
-            .wl_storage
-            .storage
+            .state
             .delete(&pending_execution_key)
             .expect("Should be able to delete the storage.");
         match tx_result {
             Ok(tx_result) => {
                 if tx_result.is_accepted() {
-                    shell.wl_storage.commit_tx();
+                    shell.state.commit_tx();
                     Ok(true)
                 } else {
                     Ok(false)
                 }
             }
             Err(_) => {
-                shell.wl_storage.drop_tx();
+                shell.state.drop_tx();
                 Ok(false)
             }
         }
@@ -379,7 +372,7 @@ where
 }
 
 fn execute_pgf_funding_proposal<D, H>(
-    storage: &mut WlStorage<D, H>,
+    state: &mut WlState<D, H>,
     token: &Address,
     fundings: BTreeSet<PGFAction>,
     proposal_id: u64,
@@ -393,7 +386,7 @@ where
             PGFAction::Continuous(action) => match action {
                 AddRemove::Add(target) => {
                     pgf_storage::fundings_handle().insert(
-                        storage,
+                        state,
                         target.target().clone(),
                         StoragePgfFunding::new(target.clone(), proposal_id),
                     )?;
@@ -407,7 +400,7 @@ where
                 }
                 AddRemove::Remove(target) => {
                     pgf_storage::fundings_handle()
-                        .remove(storage, &target.target())?;
+                        .remove(state, &target.target())?;
                     tracing::info!(
                         "Removed ContinousPgf from proposal id {}: set {} to \
                          {}.",
@@ -420,14 +413,14 @@ where
             PGFAction::Retro(target) => {
                 let result = match &target {
                     PGFTarget::Internal(target) => token::transfer(
-                        storage,
+                        state,
                         token,
                         &ADDRESS,
                         &target.target,
                         target.amount,
                     ),
                     PGFTarget::Ibc(target) => {
-                        ibc::transfer_over_ibc(storage, token, &ADDRESS, target)
+                        ibc::transfer_over_ibc(state, token, &ADDRESS, target)
                     }
                 };
                 match result {

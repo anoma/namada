@@ -6,7 +6,7 @@ use namada_core::address::Address;
 use namada_core::storage::BlockHeight;
 use namada_core::token;
 use namada_proof_of_stake::pos_queries::PosQueries;
-use namada_state::{DBIter, StorageHasher, WlStorage, DB};
+use namada_state::{DBIter, StorageHasher, WlState, DB};
 
 use super::{ChangedKeys, EpochedVotingPowerExt, Tally, Votes};
 use crate::storage::vote_tallies;
@@ -90,7 +90,7 @@ impl IntoIterator for NewVotes {
 /// votes from `vote_info` should be applied, and the returned changed keys will
 /// be empty.
 pub(in super::super) fn calculate<D, H, T>(
-    wl_storage: &mut WlStorage<D, H>,
+    state: &mut WlState<D, H>,
     keys: &vote_tallies::Keys<T>,
     vote_info: NewVotes,
 ) -> Result<(Tally, ChangedKeys)>
@@ -104,7 +104,7 @@ where
         validators = ?vote_info.voters(),
         "Calculating validators' votes applied to an existing tally"
     );
-    let tally_pre = super::storage::read(wl_storage, keys)?;
+    let tally_pre = super::storage::read(state, keys)?;
     if tally_pre.seen {
         return Ok((tally_pre, ChangedKeys::default()));
     }
@@ -118,7 +118,7 @@ where
             "Ignoring duplicate voter"
         );
     }
-    let tally_post = apply(wl_storage, &tally_pre, vote_info)
+    let tally_post = apply(state, &tally_pre, vote_info)
         .expect("We deduplicated voters already, so this should never error");
 
     let changed_keys = keys_changed(keys, &tally_pre, &tally_post);
@@ -147,7 +147,7 @@ where
 /// voters from `vote_info`. An error is returned if any validator which
 /// previously voted is present in `vote_info`.
 fn apply<D, H>(
-    wl_storage: &WlStorage<D, H>,
+    state: &WlState<D, H>,
     tally: &Tally,
     vote_info: NewVotes,
 ) -> Result<Tally>
@@ -167,7 +167,7 @@ where
                  {already_voted_height}",
             ));
         };
-        let epoch = wl_storage
+        let epoch = state
             .pos_queries()
             .get_epoch(vote_height)
             .expect("The queried epoch should be known");
@@ -177,7 +177,7 @@ where
         *aggregated += voting_power;
     }
 
-    let seen_post = voting_power_post.has_majority_quorum(wl_storage);
+    let seen_post = voting_power_post.has_majority_quorum(state);
 
     Ok(Tally {
         voting_power: voting_power_post,
@@ -212,7 +212,7 @@ mod tests {
     use namada_core::address;
     use namada_core::ethereum_events::EthereumEvent;
     use namada_core::voting_power::FractionalVotingPower;
-    use namada_state::testing::TestWlStorage;
+    use namada_state::testing::TestState;
 
     use self::helpers::{default_event, default_total_stake, TallyParams};
     use super::*;
@@ -242,7 +242,7 @@ mod tests {
         /// Parameters to construct a test [`Tally`].
         pub(super) struct TallyParams<'a> {
             /// Handle to storage.
-            pub wl_storage: &'a mut TestWlStorage,
+            pub state: &'a mut TestState,
             /// The event to be voted on.
             pub event: &'a EthereumEvent,
             /// Votes from the given validators at the given block height.
@@ -258,7 +258,7 @@ mod tests {
             /// Write an initial [`Tally`] to storage.
             pub(super) fn setup(self) -> Result<Tally> {
                 let Self {
-                    wl_storage,
+                    state,
                     event,
                     votes,
                     total_stake,
@@ -278,9 +278,9 @@ mod tests {
                     seen: seen_voting_power
                         > FractionalVotingPower::TWO_THIRDS * total_stake,
                 };
-                votes::storage::write(wl_storage, &keys, event, &tally, false)?;
+                votes::storage::write(state, &keys, event, &tally, false)?;
                 total_consensus_stake_handle().set(
-                    wl_storage,
+                    state,
                     total_stake,
                     0u64.into(),
                     0,
@@ -376,8 +376,8 @@ mod tests {
 
     #[test]
     fn test_apply_duplicate_votes() -> Result<()> {
-        let mut wl_storage = TestWlStorage::default();
-        test_utils::init_default_storage(&mut wl_storage);
+        let mut state = TestState::default();
+        test_utils::init_default_storage(&mut state);
 
         let validator = address::testing::established_address_1();
         let already_voted_height = BlockHeight(100);
@@ -385,7 +385,7 @@ mod tests {
         let event = default_event();
         let tally_pre = TallyParams {
             total_stake: default_total_stake(),
-            wl_storage: &mut wl_storage,
+            state: &mut state,
             event: &event,
             votes: HashSet::from([(
                 validator.clone(),
@@ -402,7 +402,7 @@ mod tests {
         )]);
         let vote_info = NewVotes::new(votes, &voting_powers)?;
 
-        let result = apply(&wl_storage, &tally_pre, vote_info);
+        let result = apply(&state, &tally_pre, vote_info);
 
         assert!(result.is_err());
         Ok(())
@@ -412,13 +412,13 @@ mod tests {
     /// already recorded as having been seen.
     #[test]
     fn test_calculate_already_seen() -> Result<()> {
-        let mut wl_storage = TestWlStorage::default();
-        test_utils::init_default_storage(&mut wl_storage);
+        let mut state = TestState::default();
+        test_utils::init_default_storage(&mut state);
         let event = default_event();
         let keys = vote_tallies::Keys::from(&event);
         let tally_pre = TallyParams {
             total_stake: default_total_stake(),
-            wl_storage: &mut wl_storage,
+            state: &mut state,
             event: &event,
             votes: HashSet::from([(
                 address::testing::established_address_1(),
@@ -439,7 +439,7 @@ mod tests {
         let vote_info = NewVotes::new(votes, &voting_powers)?;
 
         let (tally_post, changed_keys) =
-            calculate(&mut wl_storage, &keys, vote_info)?;
+            calculate(&mut state, &keys, vote_info)?;
 
         assert_eq!(tally_post, tally_pre);
         assert!(changed_keys.is_empty());
@@ -449,12 +449,12 @@ mod tests {
     /// Tests that an unchanged tally is returned if no votes are passed.
     #[test]
     fn test_calculate_empty() -> Result<()> {
-        let (mut wl_storage, _) = test_utils::setup_default_storage();
+        let (mut state, _) = test_utils::setup_default_storage();
         let event = default_event();
         let keys = vote_tallies::Keys::from(&event);
         let tally_pre = TallyParams {
             total_stake: default_total_stake(),
-            wl_storage: &mut wl_storage,
+            state: &mut state,
             event: &event,
             votes: HashSet::from([(
                 address::testing::established_address_1(),
@@ -466,7 +466,7 @@ mod tests {
         let vote_info = NewVotes::new(Votes::default(), &HashMap::default())?;
 
         let (tally_post, changed_keys) =
-            calculate(&mut wl_storage, &keys, vote_info)?;
+            calculate(&mut state, &keys, vote_info)?;
 
         assert_eq!(tally_post, tally_pre);
         assert!(changed_keys.is_empty());
@@ -477,13 +477,13 @@ mod tests {
     /// not yet seen.
     #[test]
     fn test_calculate_one_vote_not_seen() -> Result<()> {
-        let (mut wl_storage, _) = test_utils::setup_default_storage();
+        let (mut state, _) = test_utils::setup_default_storage();
 
         let event = default_event();
         let keys = vote_tallies::Keys::from(&event);
         let _tally_pre = TallyParams {
             total_stake: default_total_stake(),
-            wl_storage: &mut wl_storage,
+            state: &mut state,
             event: &event,
             votes: HashSet::from([(
                 address::testing::established_address_1(),
@@ -503,7 +503,7 @@ mod tests {
         let vote_info = NewVotes::new(votes, &voting_powers)?;
 
         let (tally_post, changed_keys) =
-            calculate(&mut wl_storage, &keys, vote_info)?;
+            calculate(&mut state, &keys, vote_info)?;
 
         assert_eq!(
             tally_post,
@@ -529,7 +529,7 @@ mod tests {
     /// seen.
     #[test]
     fn test_calculate_one_vote_seen() -> Result<()> {
-        let (mut wl_storage, _) = test_utils::setup_default_storage();
+        let (mut state, _) = test_utils::setup_default_storage();
 
         let first_vote_stake =
             FractionalVotingPower::ONE_THIRD * default_total_stake();
@@ -541,7 +541,7 @@ mod tests {
         let keys = vote_tallies::Keys::from(&event);
         let _tally_pre = TallyParams {
             total_stake,
-            wl_storage: &mut wl_storage,
+            state: &mut state,
             event: &event,
             votes: HashSet::from([(
                 address::testing::established_address_1(),
@@ -559,7 +559,7 @@ mod tests {
         let vote_info = NewVotes::new(votes, &voting_powers)?;
 
         let (tally_post, changed_keys) =
-            calculate(&mut wl_storage, &keys, vote_info)?;
+            calculate(&mut state, &keys, vote_info)?;
 
         assert_eq!(
             tally_post,

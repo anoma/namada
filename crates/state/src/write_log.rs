@@ -5,18 +5,15 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use itertools::Itertools;
 use namada_core::address::{Address, EstablishedAddressGen, InternalAddress};
-use namada_core::hash::{Hash, StorageHasher};
+use namada_core::hash::Hash;
 use namada_core::ibc::IbcEvent;
 use namada_core::storage;
 use namada_gas::{MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE};
-use namada_replay_protection as replay_protection;
 use namada_trans_token::storage_key::{
     is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
     is_any_token_parameter_key,
 };
 use thiserror::Error;
-
-use crate::{DBIter, State, DB};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -68,7 +65,7 @@ pub enum StorageModification {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// A replay protection storage modification
-enum ReProtStorageModification {
+pub(crate) enum ReProtStorageModification {
     /// Write an entry
     Write,
     /// Delete an entry
@@ -81,12 +78,12 @@ enum ReProtStorageModification {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WriteLog {
     /// The generator of established addresses
-    address_gen: Option<EstablishedAddressGen>,
+    pub(crate) address_gen: Option<EstablishedAddressGen>,
     /// All the storage modification accepted by validity predicates are stored
     /// in block write-log, before being committed to the storage
-    block_write_log: HashMap<storage::Key, StorageModification>,
+    pub(crate) block_write_log: HashMap<storage::Key, StorageModification>,
     /// The storage modifications for the current transaction
-    tx_write_log: HashMap<storage::Key, StorageModification>,
+    pub(crate) tx_write_log: HashMap<storage::Key, StorageModification>,
     /// A precommit bucket for the `tx_write_log`. This is useful for
     /// validation when a clean `tx_write_log` is needed without committing any
     /// modification already in there. These modifications can be temporarily
@@ -95,12 +92,13 @@ pub struct WriteLog {
     /// write/update/delete should ever happen on this field, this log should
     /// only be populated through a dump of the `tx_write_log` and should be
     /// cleaned either when committing or dumping the `tx_write_log`
-    tx_precommit_write_log: HashMap<storage::Key, StorageModification>,
+    pub(crate) tx_precommit_write_log:
+        HashMap<storage::Key, StorageModification>,
     /// The IBC events for the current transaction
-    ibc_events: BTreeSet<IbcEvent>,
+    pub(crate) ibc_events: BTreeSet<IbcEvent>,
     /// Storage modifications for the replay protection storage, always
     /// committed regardless of the result of the transaction
-    replay_protection: HashMap<Hash, ReProtStorageModification>,
+    pub(crate) replay_protection: HashMap<Hash, ReProtStorageModification>,
 }
 
 /// Write log prefix iterator
@@ -491,83 +489,6 @@ impl WriteLog {
         self.tx_write_log.clear();
     }
 
-    /// Commit the current block's write log to the storage. Starts a new block
-    /// write log.
-    pub fn commit_block<D, H>(
-        &mut self,
-        storage: &mut State<D, H>,
-        batch: &mut D::WriteBatch,
-    ) -> Result<()>
-    where
-        D: 'static + DB + for<'iter> DBIter<'iter>,
-        H: StorageHasher,
-    {
-        for (key, entry) in self.block_write_log.iter() {
-            match entry {
-                StorageModification::Write { value } => {
-                    storage
-                        .batch_write_subspace_val(batch, key, value.clone())
-                        .map_err(Error::StorageError)?;
-                }
-                StorageModification::Delete => {
-                    storage
-                        .batch_delete_subspace_val(batch, key)
-                        .map_err(Error::StorageError)?;
-                }
-                StorageModification::InitAccount { vp_code_hash } => {
-                    storage
-                        .batch_write_subspace_val(batch, key, *vp_code_hash)
-                        .map_err(Error::StorageError)?;
-                }
-                // temporary value isn't persisted
-                StorageModification::Temp { .. } => {}
-            }
-        }
-
-        // Replay protections specifically
-        for (hash, entry) in self.replay_protection.iter() {
-            match entry {
-                ReProtStorageModification::Write => storage
-                    .write_replay_protection_entry(
-                        batch,
-                        // Can only write tx hashes to the previous block, no
-                        // further
-                        &replay_protection::last_key(hash),
-                    )
-                    .map_err(Error::StorageError)?,
-                ReProtStorageModification::Delete => storage
-                    .delete_replay_protection_entry(
-                        batch,
-                        // Can only delete tx hashes from the previous block,
-                        // no further
-                        &replay_protection::last_key(hash),
-                    )
-                    .map_err(Error::StorageError)?,
-                ReProtStorageModification::Finalize => {
-                    storage
-                        .write_replay_protection_entry(
-                            batch,
-                            &replay_protection::all_key(hash),
-                        )
-                        .map_err(Error::StorageError)?;
-                    storage
-                        .delete_replay_protection_entry(
-                            batch,
-                            &replay_protection::last_key(hash),
-                        )
-                        .map_err(Error::StorageError)?
-                }
-            }
-        }
-
-        if let Some(address_gen) = self.address_gen.take() {
-            storage.address_gen = address_gen
-        }
-        self.block_write_log.clear();
-        self.replay_protection.clear();
-        Ok(())
-    }
-
     /// Get the verifiers set whose validity predicates should validate the
     /// current transaction changes and the storage keys that have been
     /// modified created, updated and deleted via the write log.
@@ -669,7 +590,7 @@ impl WriteLog {
     }
 
     /// Write the transaction hash
-    pub(crate) fn write_tx_hash(&mut self, hash: Hash) -> Result<()> {
+    pub fn write_tx_hash(&mut self, hash: Hash) -> Result<()> {
         if self
             .replay_protection
             .insert(hash, ReProtStorageModification::Write)
@@ -686,7 +607,7 @@ impl WriteLog {
     }
 
     /// Remove the transaction hash
-    pub(crate) fn delete_tx_hash(&mut self, hash: Hash) -> Result<()> {
+    pub fn delete_tx_hash(&mut self, hash: Hash) -> Result<()> {
         match self
             .replay_protection
             .insert(hash, ReProtStorageModification::Delete)
@@ -735,6 +656,7 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
+    use crate::StateRead;
 
     #[test]
     fn test_crud_value() {
@@ -895,9 +817,7 @@ mod tests {
 
     #[test]
     fn test_commit() {
-        let mut storage = crate::testing::TestStorage::default();
-        let mut write_log = WriteLog::default();
-        let mut batch = crate::testing::TestStorage::batch();
+        let mut state = crate::testing::TestState::default();
         let address_gen = EstablishedAddressGen::new("test");
 
         let key1 =
@@ -911,134 +831,132 @@ mod tests {
 
         // initialize an account
         let vp1 = Hash::sha256("vp1".as_bytes());
-        let (addr1, _) = write_log.init_account(&address_gen, vp1);
-        write_log.commit_tx();
+        let (addr1, _) = state.write_log.init_account(&address_gen, vp1);
+        state.write_log.commit_tx();
 
         // write values
         let val1 = "val1".as_bytes().to_vec();
-        write_log.write(&key1, val1.clone()).unwrap();
-        write_log.write(&key2, val1.clone()).unwrap();
-        write_log.write(&key3, val1.clone()).unwrap();
-        write_log.write_temp(&key4, val1.clone()).unwrap();
-        write_log.commit_tx();
+        state.write_log.write(&key1, val1.clone()).unwrap();
+        state.write_log.write(&key2, val1.clone()).unwrap();
+        state.write_log.write(&key3, val1.clone()).unwrap();
+        state.write_log.write_temp(&key4, val1.clone()).unwrap();
+        state.write_log.commit_tx();
 
         // these values are not written due to drop_tx
         let val2 = "val2".as_bytes().to_vec();
-        write_log.write(&key1, val2.clone()).unwrap();
-        write_log.write(&key2, val2.clone()).unwrap();
-        write_log.write(&key3, val2).unwrap();
-        write_log.drop_tx();
+        state.write_log.write(&key1, val2.clone()).unwrap();
+        state.write_log.write(&key2, val2.clone()).unwrap();
+        state.write_log.write(&key3, val2).unwrap();
+        state.write_log.drop_tx();
 
         // deletes and updates values
         let val3 = "val3".as_bytes().to_vec();
-        write_log.delete(&key2).unwrap();
-        write_log.write(&key3, val3.clone()).unwrap();
-        write_log.commit_tx();
+        state.write_log.delete(&key2).unwrap();
+        state.write_log.write(&key3, val3.clone()).unwrap();
+        state.write_log.commit_tx();
 
         // commit a block
-        write_log
-            .commit_block(&mut storage, &mut batch)
-            .expect("commit failed");
+        state.commit_block().expect("commit failed");
 
         let (vp_code_hash, _gas) =
-            storage.validity_predicate(&addr1).expect("vp read failed");
+            state.validity_predicate(&addr1).expect("vp read failed");
         assert_eq!(vp_code_hash, Some(vp1));
-        let (value, _) = storage.read(&key1).expect("read failed");
+        let (value, _) = state.db_read(&key1).expect("read failed");
         assert_eq!(value.expect("no read value"), val1);
-        let (value, _) = storage.read(&key2).expect("read failed");
+        let (value, _) = state.db_read(&key2).expect("read failed");
         assert!(value.is_none());
-        let (value, _) = storage.read(&key3).expect("read failed");
+        let (value, _) = state.db_read(&key3).expect("read failed");
         assert_eq!(value.expect("no read value"), val3);
-        let (value, _) = storage.read(&key4).expect("read failed");
+        let (value, _) = state.db_read(&key4).expect("read failed");
         assert_eq!(value, None);
     }
 
     #[test]
     fn test_replay_protection_commit() {
-        let mut storage = crate::testing::TestStorage::default();
-        let mut write_log = WriteLog::default();
-        let mut batch = crate::testing::TestStorage::batch();
+        let mut state = crate::testing::TestState::default();
 
-        // write some replay protection keys
-        write_log
-            .write_tx_hash(Hash::sha256("tx1".as_bytes()))
-            .unwrap();
-        write_log
-            .write_tx_hash(Hash::sha256("tx2".as_bytes()))
-            .unwrap();
-        write_log
-            .write_tx_hash(Hash::sha256("tx3".as_bytes()))
-            .unwrap();
-
-        // commit a block
-        write_log
-            .commit_block(&mut storage, &mut batch)
-            .expect("commit failed");
-
-        assert!(write_log.replay_protection.is_empty());
-        for tx in ["tx1", "tx2", "tx3"] {
-            assert!(
-                storage
-                    .has_replay_protection_entry(&Hash::sha256(tx.as_bytes()))
-                    .expect("read failed")
-            );
-        }
-
-        // write some replay protection keys
-        write_log
-            .write_tx_hash(Hash::sha256("tx4".as_bytes()))
-            .unwrap();
-        write_log
-            .write_tx_hash(Hash::sha256("tx5".as_bytes()))
-            .unwrap();
-        write_log
-            .write_tx_hash(Hash::sha256("tx6".as_bytes()))
-            .unwrap();
-
-        // delete previous hash
-        write_log
-            .delete_tx_hash(Hash::sha256("tx1".as_bytes()))
-            .unwrap();
-
-        // finalize previous hashes
-        for tx in ["tx2", "tx3"] {
+        {
+            let write_log = state.write_log_mut();
+            // write some replay protection keys
             write_log
-                .finalize_tx_hash(Hash::sha256(tx.as_bytes()))
+                .write_tx_hash(Hash::sha256("tx1".as_bytes()))
+                .unwrap();
+            write_log
+                .write_tx_hash(Hash::sha256("tx2".as_bytes()))
+                .unwrap();
+            write_log
+                .write_tx_hash(Hash::sha256("tx3".as_bytes()))
                 .unwrap();
         }
 
         // commit a block
-        write_log
-            .commit_block(&mut storage, &mut batch)
-            .expect("commit failed");
+        state.commit_block().expect("commit failed");
 
-        assert!(write_log.replay_protection.is_empty());
+        assert!(state.write_log.replay_protection.is_empty());
+        for tx in ["tx1", "tx2", "tx3"] {
+            let hash = Hash::sha256(tx.as_bytes());
+            assert!(
+                state
+                    .has_replay_protection_entry(&hash)
+                    .expect("read failed")
+            );
+        }
+
+        {
+            let write_log = state.write_log_mut();
+            // write some replay protection keys
+            write_log
+                .write_tx_hash(Hash::sha256("tx4".as_bytes()))
+                .unwrap();
+            write_log
+                .write_tx_hash(Hash::sha256("tx5".as_bytes()))
+                .unwrap();
+            write_log
+                .write_tx_hash(Hash::sha256("tx6".as_bytes()))
+                .unwrap();
+
+            // delete previous hash
+            write_log
+                .delete_tx_hash(Hash::sha256("tx1".as_bytes()))
+                .unwrap();
+
+            // finalize previous hashes
+            for tx in ["tx2", "tx3"] {
+                write_log
+                    .finalize_tx_hash(Hash::sha256(tx.as_bytes()))
+                    .unwrap();
+            }
+        }
+
+        // commit a block
+        state.commit_block().expect("commit failed");
+
+        assert!(state.write_log.replay_protection.is_empty());
         for tx in ["tx2", "tx3", "tx4", "tx5", "tx6"] {
             assert!(
-                storage
+                state
                     .has_replay_protection_entry(&Hash::sha256(tx.as_bytes()))
                     .expect("read failed")
             );
         }
         assert!(
-            !storage
+            !state
                 .has_replay_protection_entry(&Hash::sha256("tx1".as_bytes()))
                 .expect("read failed")
         );
 
         // try to delete finalized hash which shouldn't work
-        write_log
+        state
+            .write_log
             .delete_tx_hash(Hash::sha256("tx2".as_bytes()))
             .unwrap();
 
         // commit a block
-        write_log
-            .commit_block(&mut storage, &mut batch)
-            .expect("commit failed");
+        state.commit_block().expect("commit failed");
 
-        assert!(write_log.replay_protection.is_empty());
+        assert!(state.write_log.replay_protection.is_empty());
         assert!(
-            storage
+            state
                 .has_replay_protection_entry(&Hash::sha256("tx2".as_bytes()))
                 .expect("read failed")
         );

@@ -1,15 +1,17 @@
 //! The ledger's protocol
+use std::cell::RefCell;
 use std::collections::BTreeSet;
+use std::fmt::Debug;
 
 use borsh_ext::BorshSerializeExt;
 use eyre::{eyre, WrapErr};
 use masp_primitives::transaction::Transaction;
 use namada_core::hash::Hash;
 use namada_core::storage::Key;
+use namada_core::validity_predicate::VpSentinel;
 use namada_gas::TxGasMeter;
 use namada_sdk::tx::TX_TRANSFER_WASM;
-use namada_state::wl_storage::WriteLogAndStorage;
-use namada_state::StorageRead;
+use namada_state::StorageWrite;
 use namada_tx::data::protocol::ProtocolTxType;
 use namada_tx::data::{
     DecryptedTx, GasLimit, TxResult, TxType, VpsResult, WrapperTx,
@@ -32,8 +34,7 @@ use crate::ledger::native_vp::parameters::{self, ParametersVp};
 use crate::ledger::native_vp::{self, NativeVp};
 use crate::ledger::pgf::PgfVp;
 use crate::ledger::pos::{self, PosVP};
-use crate::state::write_log::WriteLog;
-use crate::state::{DBIter, State, StorageHasher, WlStorage, DB};
+use crate::state::{DBIter, State, StorageHasher, StorageRead, WlState, DB};
 use crate::storage;
 use crate::storage::TxIndex;
 use crate::token::Amount;
@@ -101,32 +102,37 @@ pub enum Error {
 
 /// Shell parameters for running wasm transactions.
 #[allow(missing_docs)]
-pub struct ShellParams<'a, CA, WLS>
+#[derive(Debug)]
+pub struct ShellParams<'a, S, D, H, CA>
 where
+    S: State<D = D, H = H> + Sync,
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
-    WLS: WriteLogAndStorage + StorageRead,
 {
-    tx_gas_meter: &'a mut TxGasMeter,
-    wl_storage: &'a mut WLS,
-    vp_wasm_cache: &'a mut VpCache<CA>,
-    tx_wasm_cache: &'a mut TxCache<CA>,
+    pub tx_gas_meter: &'a RefCell<TxGasMeter>,
+    pub state: &'a mut S,
+    pub vp_wasm_cache: &'a mut VpCache<CA>,
+    pub tx_wasm_cache: &'a mut TxCache<CA>,
 }
 
-impl<'a, CA, WLS> ShellParams<'a, CA, WLS>
+impl<'a, S, D, H, CA> ShellParams<'a, S, D, H, CA>
 where
+    S: State<D = D, H = H> + Sync,
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
-    WLS: WriteLogAndStorage + StorageRead,
 {
     /// Create a new instance of `ShellParams`
     pub fn new(
-        tx_gas_meter: &'a mut TxGasMeter,
-        wl_storage: &'a mut WLS,
+        tx_gas_meter: &'a RefCell<TxGasMeter>,
+        state: &'a mut S,
         vp_wasm_cache: &'a mut VpCache<CA>,
         tx_wasm_cache: &'a mut TxCache<CA>,
     ) -> Self {
         Self {
             tx_gas_meter,
-            wl_storage,
+            state,
             vp_wasm_cache,
             tx_wasm_cache,
         }
@@ -156,8 +162,8 @@ pub fn dispatch_tx<'a, D, H, CA>(
     tx: Tx,
     tx_bytes: &'a [u8],
     tx_index: TxIndex,
-    tx_gas_meter: &'a mut TxGasMeter,
-    wl_storage: &'a mut WlStorage<D, H>,
+    tx_gas_meter: &'a RefCell<TxGasMeter>,
+    state: &'a mut WlState<D, H>,
     vp_wasm_cache: &'a mut VpCache<CA>,
     tx_wasm_cache: &'a mut TxCache<CA>,
     wrapper_args: Option<&mut WrapperArgs>,
@@ -174,13 +180,13 @@ where
             &tx_index,
             ShellParams {
                 tx_gas_meter,
-                wl_storage,
+                state,
                 vp_wasm_cache,
                 tx_wasm_cache,
             },
         ),
         TxType::Protocol(protocol_tx) => {
-            apply_protocol_tx(protocol_tx.tx, tx.data(), wl_storage)
+            apply_protocol_tx(protocol_tx.tx, tx.data(), state)
         }
         TxType::Wrapper(ref wrapper) => {
             let fee_unshielding_transaction =
@@ -192,14 +198,14 @@ where
                 tx_bytes,
                 ShellParams {
                     tx_gas_meter,
-                    wl_storage,
+                    state,
                     vp_wasm_cache,
                     tx_wasm_cache,
                 },
                 wrapper_args,
             )?;
             Ok(TxResult {
-                gas_used: tx_gas_meter.get_tx_consumed_gas(),
+                gas_used: tx_gas_meter.borrow().get_tx_consumed_gas(),
                 changed_keys,
                 vps_result: VpsResult::default(),
                 initialized_accounts: vec![],
@@ -235,25 +241,26 @@ where
 ///  - gas accounting
 ///
 /// Returns the set of changed storage keys.
-pub(crate) fn apply_wrapper_tx<'a, D, H, CA, WLS>(
+pub(crate) fn apply_wrapper_tx<S, D, H, CA>(
     tx: Tx,
     wrapper: &WrapperTx,
     fee_unshield_transaction: Option<Transaction>,
     tx_bytes: &[u8],
-    mut shell_params: ShellParams<'a, CA, WLS>,
+    mut shell_params: ShellParams<'_, S, D, H, CA>,
     wrapper_args: Option<&mut WrapperArgs>,
 ) -> Result<BTreeSet<Key>>
 where
-    CA: 'static + WasmCacheAccess + Sync,
+    S: State<D = D, H = H> + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
-    WLS: WriteLogAndStorage<D = D, H = H> + StorageRead,
+    CA: 'static + WasmCacheAccess + Sync,
 {
     let mut changed_keys = BTreeSet::default();
 
     // Write wrapper tx hash to storage
     shell_params
-        .wl_storage
+        .state
+        .write_log_mut()
         .write_tx_hash(tx.header_hash())
         .expect("Error while writing tx hash to storage");
 
@@ -269,6 +276,7 @@ where
     // Account for gas
     shell_params
         .tx_gas_meter
+        .borrow_mut()
         .add_wrapper_gas(tx_bytes)
         .map_err(|err| Error::GasError(err.to_string()))?;
 
@@ -299,22 +307,22 @@ pub fn get_fee_unshielding_transaction(
 /// - Fee amount overflows
 /// - Not enough funds are available to pay the entire amount of the fee
 /// - The accumulated fee amount to be credited to the block proposer overflows
-fn charge_fee<'a, D, H, CA, WLS>(
+fn charge_fee<'a, S, D, H, CA>(
     wrapper: &WrapperTx,
     masp_transaction: Option<Transaction>,
-    shell_params: &mut ShellParams<'a, CA, WLS>,
+    shell_params: &mut ShellParams<'a, S, D, H, CA>,
     changed_keys: &mut BTreeSet<Key>,
     wrapper_args: Option<&mut WrapperArgs>,
 ) -> Result<()>
 where
-    CA: 'static + WasmCacheAccess + Sync,
+    S: State<D = D, H = H> + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
-    WLS: WriteLogAndStorage<D = D, H = H> + StorageRead,
+    CA: 'static + WasmCacheAccess + Sync,
 {
     let ShellParams {
         tx_gas_meter: _,
-        wl_storage,
+        state,
         vp_wasm_cache,
         tx_wasm_cache,
     } = shell_params;
@@ -323,22 +331,22 @@ where
     let requires_fee_unshield = if let Some(transaction) = masp_transaction {
         // The unshielding tx does not charge gas, instantiate a
         // custom gas meter for this step
-        let mut tx_gas_meter =
-            TxGasMeter::new(GasLimit::from(
-                wl_storage
+        let  tx_gas_meter =
+            RefCell::new(TxGasMeter::new(GasLimit::from(
+                state
                     .read::<u64>(
                         &namada_parameters::storage::get_fee_unshielding_gas_limit_key(
                         ),
                     )
                     .expect("Error reading the storage")
                     .expect("Missing fee unshielding gas limit in storage")),
-            );
+            ));
 
         // If it fails, do not return early
         // from this function but try to take the funds from the unshielded
         // balance
         match wrapper.generate_fee_unshielding(
-            get_transfer_hash_from_storage(*wl_storage),
+            get_transfer_hash_from_storage(*state),
             Some(TX_TRANSFER_WASM.to_string()),
             transaction,
         ) {
@@ -346,13 +354,13 @@ where
                 // NOTE: A clean tx write log must be provided to this call
                 // for a correct vp validation. Block write log, instead,
                 // should contain any prior changes (if any)
-                wl_storage.write_log_mut().precommit_tx();
+                state.write_log_mut().precommit_tx();
                 match apply_wasm_tx(
                     fee_unshielding_tx,
                     &TxIndex::default(),
                     ShellParams {
-                        tx_gas_meter: &mut tx_gas_meter,
-                        wl_storage: *wl_storage,
+                        tx_gas_meter: &tx_gas_meter,
+                        state: *state,
                         vp_wasm_cache,
                         tx_wasm_cache,
                     },
@@ -361,7 +369,7 @@ where
                         // NOTE: do not commit yet cause this could be
                         // exploited to get free unshieldings
                         if !result.is_accepted() {
-                            wl_storage.write_log_mut().drop_tx_keep_precommit();
+                            state.write_log_mut().drop_tx_keep_precommit();
                             tracing::error!(
                                 "The unshielding tx is invalid, some VPs \
                                  rejected it: {:#?}",
@@ -370,7 +378,7 @@ where
                         }
                     }
                     Err(e) => {
-                        wl_storage.write_log_mut().drop_tx_keep_precommit();
+                        state.write_log_mut().drop_tx_keep_precommit();
                         tracing::error!(
                             "The unshielding tx is invalid, wasm run failed: \
                              {}",
@@ -392,14 +400,14 @@ where
         Some(WrapperArgs {
             block_proposer,
             is_committed_fee_unshield: _,
-        }) => transfer_fee(*wl_storage, block_proposer, wrapper)?,
-        None => check_fees(*wl_storage, wrapper)?,
+        }) => transfer_fee(*state, block_proposer, wrapper)?,
+        None => check_fees(*state, wrapper)?,
     }
 
-    changed_keys.extend(wl_storage.write_log_mut().get_keys_with_precommit());
+    changed_keys.extend(state.write_log_mut().get_keys_with_precommit());
 
     // Commit tx write log even in case of subsequent errors
-    wl_storage.write_log_mut().commit_tx();
+    state.write_log_mut().commit_tx();
     // Update the flag only after the fee payment has been committed
     if let Some(args) = wrapper_args {
         args.is_committed_fee_unshield = requires_fee_unshield;
@@ -410,16 +418,16 @@ where
 
 /// Perform the actual transfer of fess from the fee payer to the block
 /// proposer.
-pub fn transfer_fee<WLS>(
-    wl_storage: &mut WLS,
+pub fn transfer_fee<S>(
+    state: &mut S,
     block_proposer: &Address,
     wrapper: &WrapperTx,
 ) -> Result<()>
 where
-    WLS: WriteLogAndStorage + StorageRead,
+    S: State + StorageRead + StorageWrite,
 {
     let balance = crate::token::read_balance(
-        wl_storage,
+        state,
         &wrapper.fee.token,
         &wrapper.fee_payer(),
     )
@@ -427,15 +435,12 @@ where
 
     match wrapper.get_tx_fee() {
         Ok(fees) => {
-            let fees = crate::token::denom_to_amount(
-                fees,
-                &wrapper.fee.token,
-                wl_storage,
-            )
-            .map_err(|e| Error::FeeError(e.to_string()))?;
+            let fees =
+                crate::token::denom_to_amount(fees, &wrapper.fee.token, state)
+                    .map_err(|e| Error::FeeError(e.to_string()))?;
             if balance.checked_sub(fees).is_some() {
                 token_transfer(
-                    wl_storage,
+                    state,
                     &wrapper.fee.token,
                     &wrapper.fee_payer(),
                     block_proposer,
@@ -454,7 +459,7 @@ where
                      shouldn't happen."
                 );
                 token_transfer(
-                    wl_storage,
+                    state,
                     &wrapper.fee.token,
                     &wrapper.fee_payer(),
                     block_proposer,
@@ -489,17 +494,17 @@ where
 /// `crate::token::transfer` this function updates the tx write log and
 /// not the block write log.
 fn token_transfer<WLS>(
-    wl_storage: &mut WLS,
+    state: &mut WLS,
     token: &Address,
     src: &Address,
     dest: &Address,
     amount: Amount,
 ) -> Result<()>
 where
-    WLS: WriteLogAndStorage + StorageRead,
+    WLS: State + StorageRead,
 {
     let src_key = crate::token::storage_key::balance_key(token, src);
-    let src_balance = crate::token::read_balance(wl_storage, token, src)
+    let src_balance = crate::token::read_balance(state, token, src)
         .expect("Token balance read in protocol must not fail");
     match src_balance.checked_sub(amount) {
         Some(new_src_balance) => {
@@ -507,16 +512,15 @@ where
                 return Ok(());
             }
             let dest_key = crate::token::storage_key::balance_key(token, dest);
-            let dest_balance =
-                crate::token::read_balance(wl_storage, token, dest)
-                    .expect("Token balance read in protocol must not fail");
+            let dest_balance = crate::token::read_balance(state, token, dest)
+                .expect("Token balance read in protocol must not fail");
             match dest_balance.checked_add(amount) {
                 Some(new_dest_balance) => {
-                    wl_storage
+                    state
                         .write_log_mut()
                         .write(&src_key, new_src_balance.serialize_to_vec())
                         .map_err(|e| Error::FeeError(e.to_string()))?;
-                    match wl_storage
+                    match state
                         .write_log_mut()
                         .write(&dest_key, new_dest_balance.serialize_to_vec())
                     {
@@ -535,12 +539,12 @@ where
 }
 
 /// Check if the fee payer has enough transparent balance to pay fees
-pub fn check_fees<WLS>(wl_storage: &WLS, wrapper: &WrapperTx) -> Result<()>
+pub fn check_fees<S>(state: &S, wrapper: &WrapperTx) -> Result<()>
 where
-    WLS: WriteLogAndStorage + StorageRead,
+    S: State + StorageRead,
 {
     let balance = crate::token::read_balance(
-        wl_storage,
+        state,
         &wrapper.fee.token,
         &wrapper.fee_payer(),
     )
@@ -550,9 +554,8 @@ where
         .get_tx_fee()
         .map_err(|e| Error::FeeError(e.to_string()))?;
 
-    let fees =
-        crate::token::denom_to_amount(fees, &wrapper.fee.token, wl_storage)
-            .map_err(|e| Error::FeeError(e.to_string()))?;
+    let fees = crate::token::denom_to_amount(fees, &wrapper.fee.token, state)
+        .map_err(|e| Error::FeeError(e.to_string()))?;
     if balance.checked_sub(fees).is_some() {
         Ok(())
     } else {
@@ -564,37 +567,30 @@ where
 
 /// Apply a transaction going via the wasm environment. Gas will be metered and
 /// validity predicates will be triggered in the normal way.
-pub fn apply_wasm_tx<'a, D, H, CA, WLS>(
+pub fn apply_wasm_tx<'a, S, D, H, CA>(
     tx: Tx,
     tx_index: &TxIndex,
-    shell_params: ShellParams<'a, CA, WLS>,
+    shell_params: ShellParams<'a, S, D, H, CA>,
 ) -> Result<TxResult>
 where
-    CA: 'static + WasmCacheAccess + Sync,
+    S: State<D = D, H = H> + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
-    WLS: WriteLogAndStorage<D = D, H = H> + StorageRead,
+    CA: 'static + WasmCacheAccess + Sync,
 {
     let ShellParams {
         tx_gas_meter,
-        wl_storage,
+        state,
         vp_wasm_cache,
         tx_wasm_cache,
     } = shell_params;
 
-    let (tx_gas_meter, storage, write_log, vp_wasm_cache, tx_wasm_cache) = {
-        let (write_log, storage) = wl_storage.split_borrow();
-        (
-            tx_gas_meter,
-            storage,
-            write_log,
-            vp_wasm_cache,
-            tx_wasm_cache,
-        )
-    };
+    let (tx_gas_meter, vp_wasm_cache, tx_wasm_cache) =
+        { (tx_gas_meter, vp_wasm_cache, tx_wasm_cache) };
 
     let tx_hash = tx.raw_header_hash();
-    if let Some(true) = write_log.has_replay_protection_entry(&tx_hash) {
+    if let Some(true) = state.write_log().has_replay_protection_entry(&tx_hash)
+    {
         // If the same transaction has already been applied in this block, skip
         // execution and return
         return Err(Error::ReplayAttempt(tx_hash));
@@ -603,9 +599,8 @@ where
     let verifiers = execute_tx(
         &tx,
         tx_index,
-        storage,
+        state,
         tx_gas_meter,
-        write_log,
         vp_wasm_cache,
         tx_wasm_cache,
     )?;
@@ -613,17 +608,16 @@ where
     let vps_result = check_vps(CheckVps {
         tx: &tx,
         tx_index,
-        storage,
-        tx_gas_meter,
-        write_log,
+        state,
+        tx_gas_meter: &mut tx_gas_meter.borrow_mut(),
         verifiers_from_tx: &verifiers,
         vp_wasm_cache,
     })?;
 
-    let gas_used = tx_gas_meter.get_tx_consumed_gas();
-    let initialized_accounts = write_log.get_initialized_accounts();
-    let changed_keys = write_log.get_keys();
-    let ibc_events = write_log.take_ibc_events();
+    let gas_used = tx_gas_meter.borrow().get_tx_consumed_gas();
+    let initialized_accounts = state.write_log().get_initialized_accounts();
+    let changed_keys = state.write_log().get_keys();
+    let ibc_events = state.write_log_mut().take_ibc_events();
 
     Ok(TxResult {
         gas_used,
@@ -637,10 +631,7 @@ where
 
 /// Returns [`Error::DisallowedTx`] when the given tx is inner (decrypted) tx
 /// and its code `Hash` is not included in the `tx_allowlist` parameter.
-pub fn check_tx_allowed<D, H>(
-    tx: &Tx,
-    wl_storage: &WlStorage<D, H>,
-) -> Result<()>
+pub fn check_tx_allowed<D, H>(tx: &Tx, state: &WlState<D, H>) -> Result<()>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -650,11 +641,8 @@ where
             .get_section(tx.code_sechash())
             .and_then(|x| Section::code_sec(&x))
         {
-            if crate::parameters::is_tx_allowed(
-                wl_storage,
-                &code_sec.code.hash(),
-            )
-            .map_err(Error::StorageError)?
+            if crate::parameters::is_tx_allowed(state, &code_sec.code.hash())
+                .map_err(Error::StorageError)?
             {
                 return Ok(());
             }
@@ -673,7 +661,7 @@ where
 pub(crate) fn apply_protocol_tx<D, H>(
     tx: ProtocolTxType,
     data: Option<Vec<u8>>,
-    storage: &mut WlStorage<D, H>,
+    state: &mut WlState<D, H>,
 ) -> Result<TxResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -702,15 +690,12 @@ where
         ) => {
             let ethereum_events::VextDigest { events, .. } =
                 ethereum_events::VextDigest::singleton(ext);
-            transactions::ethereum_events::apply_derived_tx(storage, events)
+            transactions::ethereum_events::apply_derived_tx(state, events)
                 .map_err(Error::ProtocolTxError)
         }
         EthereumTxData::BridgePoolVext(ext) => {
-            transactions::bridge_pool_roots::apply_derived_tx(
-                storage,
-                ext.into(),
-            )
-            .map_err(Error::ProtocolTxError)
+            transactions::bridge_pool_roots::apply_derived_tx(state, ext.into())
+                .map_err(Error::ProtocolTxError)
         }
         EthereumTxData::ValSetUpdateVext(ext) => {
             // NOTE(feature = "abcipp"): with ABCI++, we can write the
@@ -720,7 +705,7 @@ where
             // to reach a complete proof.
             let signing_epoch = ext.data.signing_epoch;
             transactions::validator_set_update::aggregate_votes(
-                storage,
+                state,
                 validator_set_update::VextDigest::singleton(ext),
                 signing_epoch,
             )
@@ -741,23 +726,22 @@ where
 
 /// Execute a transaction code. Returns verifiers requested by the transaction.
 #[allow(clippy::too_many_arguments)]
-fn execute_tx<D, H, CA>(
+fn execute_tx<S, D, H, CA>(
     tx: &Tx,
     tx_index: &TxIndex,
-    storage: &State<D, H>,
-    tx_gas_meter: &mut TxGasMeter,
-    write_log: &mut WriteLog,
+    state: &mut S,
+    tx_gas_meter: &RefCell<TxGasMeter>,
     vp_wasm_cache: &mut VpCache<CA>,
     tx_wasm_cache: &mut TxCache<CA>,
 ) -> Result<BTreeSet<Address>>
 where
+    S: State<D = D, H = H>,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
     wasm::run::tx(
-        storage,
-        write_log,
+        state,
         tx_gas_meter,
         tx_index,
         tx,
@@ -772,48 +756,44 @@ where
 }
 
 /// Arguments to [`check_vps`].
-struct CheckVps<'a, D, H, CA>
+struct CheckVps<'a, S, CA>
 where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
+    S: State,
     CA: 'static + WasmCacheAccess + Sync,
 {
     tx: &'a Tx,
     tx_index: &'a TxIndex,
-    storage: &'a State<D, H>,
+    state: &'a S,
     tx_gas_meter: &'a mut TxGasMeter,
-    write_log: &'a WriteLog,
     verifiers_from_tx: &'a BTreeSet<Address>,
     vp_wasm_cache: &'a mut VpCache<CA>,
 }
 
 /// Check the acceptance of a transaction by validity predicates
-fn check_vps<D, H, CA>(
+fn check_vps<S, CA>(
     CheckVps {
         tx,
         tx_index,
-        storage,
+        state,
         tx_gas_meter,
-        write_log,
         verifiers_from_tx,
         vp_wasm_cache,
-    }: CheckVps<'_, D, H, CA>,
+    }: CheckVps<'_, S, CA>,
 ) -> Result<VpsResult>
 where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
+    S: State + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    let (verifiers, keys_changed) =
-        write_log.verifiers_and_changed_keys(verifiers_from_tx);
+    let (verifiers, keys_changed) = state
+        .write_log()
+        .verifiers_and_changed_keys(verifiers_from_tx);
 
     let vps_result = execute_vps(
         verifiers,
         keys_changed,
         tx,
         tx_index,
-        storage,
-        write_log,
+        state,
         tx_gas_meter,
         vp_wasm_cache,
     )?;
@@ -828,31 +808,31 @@ where
 
 /// Execute verifiers' validity predicates
 #[allow(clippy::too_many_arguments)]
-fn execute_vps<D, H, CA>(
+fn execute_vps<S, CA>(
     verifiers: BTreeSet<Address>,
     keys_changed: BTreeSet<storage::Key>,
     tx: &Tx,
     tx_index: &TxIndex,
-    storage: &State<D, H>,
-    write_log: &WriteLog,
+    state: &S,
     tx_gas_meter: &TxGasMeter,
     vp_wasm_cache: &mut VpCache<CA>,
 ) -> Result<VpsResult>
 where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
+    S: State + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
     let vps_result = verifiers
         .par_iter()
         .try_fold(VpsResult::default, |mut result, addr| {
-            let mut gas_meter = VpGasMeter::new_from_tx_meter(tx_gas_meter);
+            let gas_meter =
+                RefCell::new(VpGasMeter::new_from_tx_meter(tx_gas_meter));
             let accept = match &addr {
                 Address::Implicit(_) | Address::Established(_) => {
-                    let (vp_hash, gas) = storage
+                    let (vp_hash, gas) = state
                         .validity_predicate(addr)
                         .map_err(Error::StateError)?;
                     gas_meter
+                        .borrow_mut()
                         .consume(gas)
                         .map_err(|err| Error::GasError(err.to_string()))?;
                     let Some(vp_code_hash) = vp_hash else {
@@ -869,9 +849,8 @@ where
                         tx,
                         tx_index,
                         addr,
-                        storage,
-                        write_log,
-                        &mut gas_meter,
+                        state,
+                        &gas_meter,
                         &keys_changed,
                         &verifiers,
                         vp_wasm_cache.clone(),
@@ -885,185 +864,94 @@ where
                     })
                 }
                 Address::Internal(internal_addr) => {
+                    let sentinel = RefCell::new(VpSentinel::default());
                     let ctx = native_vp::Ctx::new(
                         addr,
-                        storage,
-                        write_log,
+                        state,
                         tx,
                         tx_index,
-                        gas_meter,
+                        &gas_meter,
+                        &sentinel,
                         &keys_changed,
                         &verifiers,
                         vp_wasm_cache.clone(),
                     );
 
-                    let (accepted, sentinel): (Result<bool>, _) =
-                        match internal_addr {
-                            InternalAddress::PoS => {
-                                let pos = PosVP { ctx };
-                                let verifiers_addr_ref = &verifiers;
-                                let pos_ref = &pos;
-                                // TODO this is temporarily ran in a new thread
-                                // to
-                                // avoid crashing the ledger (required
-                                // `UnwindSafe`
-                                // and `RefUnwindSafe` in
-                                // namada/src/ledger/pos/vp.rs)
-                                let keys_changed_ref = &keys_changed;
-                                let result = pos_ref
-                                    .validate_tx(
-                                        tx,
-                                        keys_changed_ref,
-                                        verifiers_addr_ref,
-                                    )
-                                    .map_err(Error::PosNativeVpError);
-                                // Take the gas meter and sentinel
-                                // back
-                                // out of the context
-                                gas_meter = pos.ctx.gas_meter.into_inner();
-                                (result, pos.ctx.sentinel.into_inner())
-                            }
-                            InternalAddress::Ibc => {
-                                let ibc = Ibc { ctx };
-                                let result = ibc
-                                    .validate_tx(tx, &keys_changed, &verifiers)
-                                    .map_err(Error::IbcNativeVpError);
-                                // Take the gas meter and the sentinel
-                                // back
-                                // out of the context
-                                gas_meter = ibc.ctx.gas_meter.into_inner();
-                                (result, ibc.ctx.sentinel.into_inner())
-                            }
-                            InternalAddress::Parameters => {
-                                let parameters = ParametersVp { ctx };
-                                let result = parameters
-                                    .validate_tx(tx, &keys_changed, &verifiers)
-                                    .map_err(Error::ParametersNativeVpError);
-                                // Take the gas meter and the sentinel
-                                // back
-                                // out of the context
-                                gas_meter =
-                                    parameters.ctx.gas_meter.into_inner();
-                                (result, parameters.ctx.sentinel.into_inner())
-                            }
-                            InternalAddress::PosSlashPool => {
-                                // Take the gas meter and the sentinel
-                                // back
-                                // out of the context
-                                gas_meter = ctx.gas_meter.into_inner();
-                                (
-                                    Err(Error::AccessForbidden(
-                                        (*internal_addr).clone(),
-                                    )),
-                                    ctx.sentinel.into_inner(),
-                                )
-                            }
-                            InternalAddress::Governance => {
-                                let governance = GovernanceVp { ctx };
-                                let result = governance
-                                    .validate_tx(tx, &keys_changed, &verifiers)
-                                    .map_err(Error::GovernanceNativeVpError);
-                                // Take the gas meter and the sentinel
-                                // back
-                                // out of the context
-                                gas_meter =
-                                    governance.ctx.gas_meter.into_inner();
-                                (result, governance.ctx.sentinel.into_inner())
-                            }
-                            InternalAddress::Multitoken => {
-                                let multitoken = MultitokenVp { ctx };
-                                let result = multitoken
-                                    .validate_tx(tx, &keys_changed, &verifiers)
-                                    .map_err(Error::MultitokenNativeVpError);
-                                // Take the gas meter and the sentinel
-                                // back
-                                // out of the context
-                                gas_meter =
-                                    multitoken.ctx.gas_meter.into_inner();
-                                (result, multitoken.ctx.sentinel.into_inner())
-                            }
-                            InternalAddress::EthBridge => {
-                                let bridge = EthBridge { ctx };
-                                let result = bridge
-                                    .validate_tx(tx, &keys_changed, &verifiers)
-                                    .map_err(Error::EthBridgeNativeVpError);
-                                // Take the gas meter and the sentinel
-                                // back
-                                // out of the context
-                                gas_meter = bridge.ctx.gas_meter.into_inner();
-                                (result, bridge.ctx.sentinel.into_inner())
-                            }
-                            InternalAddress::EthBridgePool => {
-                                let bridge_pool = BridgePoolVp { ctx };
-                                let result = bridge_pool
-                                    .validate_tx(tx, &keys_changed, &verifiers)
-                                    .map_err(Error::BridgePoolNativeVpError);
-                                // Take the gas meter and the sentinel
-                                // back
-                                // out of the context
-                                gas_meter =
-                                    bridge_pool.ctx.gas_meter.into_inner();
-                                (result, bridge_pool.ctx.sentinel.into_inner())
-                            }
-                            InternalAddress::Pgf => {
-                                let pgf_vp = PgfVp { ctx };
-                                let result = pgf_vp
-                                    .validate_tx(tx, &keys_changed, &verifiers)
-                                    .map_err(Error::PgfNativeVpError);
-                                // Take the gas meter and the sentinel
-                                // back
-                                // out of the context
-                                gas_meter = pgf_vp.ctx.gas_meter.into_inner();
-                                (result, pgf_vp.ctx.sentinel.into_inner())
-                            }
-                            InternalAddress::Nut(_) => {
-                                let non_usable_tokens = NonUsableTokens { ctx };
-                                let result = non_usable_tokens
-                                    .validate_tx(tx, &keys_changed, &verifiers)
-                                    .map_err(Error::NutNativeVpError);
-                                // Take the gas meter and the sentinel
-                                // back
-                                // out of the context
-                                gas_meter = non_usable_tokens
-                                    .ctx
-                                    .gas_meter
-                                    .into_inner();
-                                (
-                                    result,
-                                    non_usable_tokens.ctx.sentinel.into_inner(),
-                                )
-                            }
-                            InternalAddress::IbcToken(_)
-                            | InternalAddress::Erc20(_) => {
-                                // The address should be a part of a multitoken
-                                // key
-                                // Take the gas meter and the sentinel
-                                // back
-                                // out of the context
-                                gas_meter = ctx.gas_meter.into_inner();
-                                (
-                                    Ok(verifiers.contains(&Address::Internal(
-                                        InternalAddress::Multitoken,
-                                    ))),
-                                    ctx.sentinel.into_inner(),
-                                )
-                            }
-                            InternalAddress::Masp => {
-                                let masp = MaspVp { ctx };
-                                let result = masp
-                                    .validate_tx(tx, &keys_changed, &verifiers)
-                                    .map_err(Error::MaspNativeVpError);
-                                // Take the gas meter and the sentinel back out
-                                // of the context
-                                gas_meter = masp.ctx.gas_meter.into_inner();
-                                (result, masp.ctx.sentinel.into_inner())
-                            }
-                        };
+                    let accepted: Result<bool> = match internal_addr {
+                        InternalAddress::PoS => {
+                            let pos = PosVP { ctx };
+                            pos.validate_tx(tx, &keys_changed, &verifiers)
+                                .map_err(Error::PosNativeVpError)
+                        }
+                        InternalAddress::Ibc => {
+                            let ibc = Ibc { ctx };
+                            ibc.validate_tx(tx, &keys_changed, &verifiers)
+                                .map_err(Error::IbcNativeVpError)
+                        }
+                        InternalAddress::Parameters => {
+                            let parameters = ParametersVp { ctx };
+                            parameters
+                                .validate_tx(tx, &keys_changed, &verifiers)
+                                .map_err(Error::ParametersNativeVpError)
+                        }
+                        InternalAddress::PosSlashPool => Err(
+                            Error::AccessForbidden((*internal_addr).clone()),
+                        ),
+                        InternalAddress::Governance => {
+                            let governance = GovernanceVp { ctx };
+                            governance
+                                .validate_tx(tx, &keys_changed, &verifiers)
+                                .map_err(Error::GovernanceNativeVpError)
+                        }
+                        InternalAddress::Multitoken => {
+                            let multitoken = MultitokenVp { ctx };
+                            multitoken
+                                .validate_tx(tx, &keys_changed, &verifiers)
+                                .map_err(Error::MultitokenNativeVpError)
+                        }
+                        InternalAddress::EthBridge => {
+                            let bridge = EthBridge { ctx };
+                            bridge
+                                .validate_tx(tx, &keys_changed, &verifiers)
+                                .map_err(Error::EthBridgeNativeVpError)
+                        }
+                        InternalAddress::EthBridgePool => {
+                            let bridge_pool = BridgePoolVp { ctx };
+                            bridge_pool
+                                .validate_tx(tx, &keys_changed, &verifiers)
+                                .map_err(Error::BridgePoolNativeVpError)
+                        }
+                        InternalAddress::Pgf => {
+                            let pgf_vp = PgfVp { ctx };
+                            pgf_vp
+                                .validate_tx(tx, &keys_changed, &verifiers)
+                                .map_err(Error::PgfNativeVpError)
+                        }
+                        InternalAddress::Nut(_) => {
+                            let non_usable_tokens = NonUsableTokens { ctx };
+                            non_usable_tokens
+                                .validate_tx(tx, &keys_changed, &verifiers)
+                                .map_err(Error::NutNativeVpError)
+                        }
+                        InternalAddress::IbcToken(_)
+                        | InternalAddress::Erc20(_) => {
+                            // The address should be a part of a multitoken
+                            // key
+                            Ok(verifiers.contains(&Address::Internal(
+                                InternalAddress::Multitoken,
+                            )))
+                        }
+                        InternalAddress::Masp => {
+                            let masp = MaspVp { ctx };
+                            masp.validate_tx(tx, &keys_changed, &verifiers)
+                                .map_err(Error::MaspNativeVpError)
+                        }
+                    };
 
                     accepted.map_err(|err| {
                         // No need to check invalid sig because internal vps
                         // don't check the signature
-                        if sentinel.is_out_of_gas() {
+                        if sentinel.borrow().is_out_of_gas() {
                             Error::GasError(err.to_string())
                         } else {
                             err
@@ -1105,7 +993,7 @@ where
 
             result
                 .gas_used
-                .set(gas_meter)
+                .set(gas_meter.into_inner())
                 .map_err(|err| Error::GasError(err.to_string()))?;
 
             Ok(result)
@@ -1175,14 +1063,14 @@ mod tests {
 
     fn apply_eth_tx<D, H>(
         tx: EthereumTxData,
-        wl_storage: &mut WlStorage<D, H>,
+        state: &mut WlState<D, H>,
     ) -> Result<TxResult>
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
     {
         let (data, tx) = tx.serialize();
-        let tx_result = apply_protocol_tx(tx, Some(data), wl_storage)?;
+        let tx_result = apply_protocol_tx(tx, Some(data), state)?;
         Ok(tx_result)
     }
 
@@ -1196,7 +1084,7 @@ mod tests {
         let validator_a_stake = Amount::native_whole(100);
         let validator_b_stake = Amount::native_whole(100);
         let total_stake = validator_a_stake + validator_b_stake;
-        let (mut wl_storage, _) = test_utils::setup_storage_with_validators(
+        let (mut state, _) = test_utils::setup_storage_with_validators(
             HashMap::from_iter(vec![
                 (validator_a.clone(), validator_a_stake),
                 (validator_b, validator_b_stake),
@@ -1221,11 +1109,11 @@ mod tests {
             namada_vote_ext::ethereum_events::SignedVext(signed),
         );
 
-        apply_eth_tx(tx.clone(), &mut wl_storage)?;
-        apply_eth_tx(tx, &mut wl_storage)?;
+        apply_eth_tx(tx.clone(), &mut state)?;
+        apply_eth_tx(tx, &mut state)?;
 
         let eth_msg_keys = vote_tallies::Keys::from(&event);
-        let seen_by_bytes = wl_storage.read_bytes(&eth_msg_keys.seen_by())?;
+        let seen_by_bytes = state.read_bytes(&eth_msg_keys.seen_by())?;
         let seen_by_bytes = seen_by_bytes.unwrap();
         assert_eq!(
             Votes::try_from_slice(&seen_by_bytes)?,
@@ -1234,7 +1122,7 @@ mod tests {
 
         // the vote should have only be applied once
         let voting_power: EpochedVotingPower =
-            wl_storage.read(&eth_msg_keys.voting_power())?.unwrap();
+            state.read(&eth_msg_keys.voting_power())?.unwrap();
         let expected = EpochedVotingPower::from([(
             0.into(),
             FractionalVotingPower::HALF * total_stake,
@@ -1254,18 +1142,18 @@ mod tests {
         let validator_a_stake = Amount::native_whole(100);
         let validator_b_stake = Amount::native_whole(100);
         let total_stake = validator_a_stake + validator_b_stake;
-        let (mut wl_storage, keys) = test_utils::setup_storage_with_validators(
+        let (mut state, keys) = test_utils::setup_storage_with_validators(
             HashMap::from_iter(vec![
                 (validator_a.clone(), validator_a_stake),
                 (validator_b, validator_b_stake),
             ]),
         );
-        vp::bridge_pool::init_storage(&mut wl_storage);
+        vp::bridge_pool::init_storage(&mut state);
 
-        let root = wl_storage.ethbridge_queries().get_bridge_pool_root();
-        let nonce = wl_storage.ethbridge_queries().get_bridge_pool_nonce();
+        let root = state.ethbridge_queries().get_bridge_pool_root();
+        let nonce = state.ethbridge_queries().get_bridge_pool_nonce();
         test_utils::commit_bridge_pool_root_at_height(
-            &mut wl_storage,
+            &mut state,
             &root,
             100.into(),
         );
@@ -1281,22 +1169,21 @@ mod tests {
         }
         .sign(&signing_key);
         let tx = EthereumTxData::BridgePoolVext(vext);
-        apply_eth_tx(tx.clone(), &mut wl_storage)?;
-        apply_eth_tx(tx, &mut wl_storage)?;
+        apply_eth_tx(tx.clone(), &mut state)?;
+        apply_eth_tx(tx, &mut state)?;
 
         let bp_root_keys = vote_tallies::Keys::from((
             &vote_tallies::BridgePoolRoot(EthereumProof::new((root, nonce))),
             100.into(),
         ));
-        let root_seen_by_bytes =
-            wl_storage.read_bytes(&bp_root_keys.seen_by())?;
+        let root_seen_by_bytes = state.read_bytes(&bp_root_keys.seen_by())?;
         assert_eq!(
             Votes::try_from_slice(root_seen_by_bytes.as_ref().unwrap())?,
             Votes::from([(validator_a, BlockHeight(100))])
         );
         // the vote should have only be applied once
         let voting_power: EpochedVotingPower =
-            wl_storage.read(&bp_root_keys.voting_power())?.unwrap();
+            state.read(&bp_root_keys.voting_power())?.unwrap();
         let expected = EpochedVotingPower::from([(
             0.into(),
             FractionalVotingPower::HALF * total_stake,
@@ -1308,7 +1195,7 @@ mod tests {
 
     #[test]
     fn test_apply_wasm_tx_allowlist() {
-        let (mut wl_storage, _validators) = test_utils::setup_default_storage();
+        let (mut state, _validators) = test_utils::setup_default_storage();
 
         let mut tx = Tx::new(ChainId::default(), None);
         tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
@@ -1321,13 +1208,12 @@ mod tests {
         {
             let allowlist = vec![format!("{}-bad", tx_hash)];
             crate::parameters::update_tx_allowlist_parameter(
-                &mut wl_storage,
-                allowlist,
+                &mut state, allowlist,
             )
             .unwrap();
-            wl_storage.commit_tx();
+            state.commit_tx();
 
-            let result = check_tx_allowed(&tx, &wl_storage);
+            let result = check_tx_allowed(&tx, &state);
             assert_matches!(result.unwrap_err(), Error::DisallowedTx);
         }
 
@@ -1335,13 +1221,12 @@ mod tests {
         {
             let allowlist = vec![tx_hash.to_string()];
             crate::parameters::update_tx_allowlist_parameter(
-                &mut wl_storage,
-                allowlist,
+                &mut state, allowlist,
             )
             .unwrap();
-            wl_storage.commit_tx();
+            state.commit_tx();
 
-            let result = check_tx_allowed(&tx, &wl_storage);
+            let result = check_tx_allowed(&tx, &state);
             if let Err(result) = result {
                 assert!(!matches!(result, Error::DisallowedTx));
             }

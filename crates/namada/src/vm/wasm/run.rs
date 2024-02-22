@@ -1,13 +1,15 @@
 //! Wasm runners
 
+use std::cell::RefCell;
 use std::collections::BTreeSet;
+use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
 use namada_core::validity_predicate::VpSentinel;
 use namada_gas::{GasMetering, TxGasMeter, WASM_MEMORY_PAGE_GAS};
 use namada_state::write_log::StorageModification;
-use namada_state::{State, StorageHasher};
+use namada_state::{DBIter, State, StateRead, StorageHasher, DB};
 use namada_tx::data::TxSentinel;
 use namada_tx::{Commitment, Section, Tx};
 use parity_wasm::elements;
@@ -20,7 +22,6 @@ use crate::address::Address;
 use crate::hash::{Error as TxHashError, Hash};
 use crate::internal::HostEnvResult;
 use crate::ledger::gas::VpGasMeter;
-use crate::state::write_log::WriteLog;
 use crate::storage::{Key, TxIndex};
 use crate::vm::host_env::{TxVmEnv, VpCtx, VpEvaluator, VpVmEnv};
 use crate::vm::prefix_iter::PrefixIterators;
@@ -91,18 +92,16 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Execute a transaction code. Returns the set verifiers addresses requested by
 /// the transaction.
 #[allow(clippy::too_many_arguments)]
-pub fn tx<DB, H, CA>(
-    storage: &State<DB, H>,
-    write_log: &mut WriteLog,
-    gas_meter: &mut TxGasMeter,
+pub fn tx<S, CA>(
+    state: &mut S,
+    gas_meter: &RefCell<TxGasMeter>,
     tx_index: &TxIndex,
     tx: &Tx,
     vp_wasm_cache: &mut VpCache<CA>,
     tx_wasm_cache: &mut TxCache<CA>,
 ) -> Result<BTreeSet<Address>>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    S: StateRead + State,
     CA: 'static + WasmCacheAccess,
 {
     let tx_code = tx
@@ -115,16 +114,12 @@ where
     if let Some(tag) = &tx_code.tag {
         // Get the WASM code hash corresponding to the tag from storage
         let hash_key = Key::wasm_hash(tag);
-        let hash_value = match storage
-            .read(&hash_key)
-            .map_err(|e| {
-                Error::LoadWasmCode(format!(
-                    "Read wasm code hash failed from storage: key {}, error {}",
-                    hash_key, e
-                ))
-            })?
-            .0
-        {
+        let hash_value = match state.read_bytes(&hash_key).map_err(|e| {
+            Error::LoadWasmCode(format!(
+                "Read wasm code hash failed from storage: key {}, error {}",
+                hash_key, e
+            ))
+        })? {
             Some(v) => Hash::try_from_slice(&v)
                 .map_err(|e| Error::ConversionError(e.to_string()))?,
             None => {
@@ -145,26 +140,24 @@ where
         }
     }
 
-    let (module, store) = fetch_or_compile(
-        tx_wasm_cache,
-        &tx_code.code,
-        write_log,
-        storage,
-        gas_meter,
-    )?;
+    let (module, store) =
+        fetch_or_compile(tx_wasm_cache, &tx_code.code, state, gas_meter)?;
 
-    let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::default();
+    let mut iterators: PrefixIterators<'_, <S as StateRead>::D> =
+        PrefixIterators::default();
     let mut verifiers = BTreeSet::new();
     let mut result_buffer: Option<Vec<u8>> = None;
 
-    let mut sentinel = TxSentinel::default();
+    let sentinel = RefCell::new(TxSentinel::default());
+    let (write_log, in_mem, db) = state.split_borrow();
     let env = TxVmEnv::new(
         WasmMemory::default(),
-        storage,
         write_log,
+        in_mem,
+        db,
         &mut iterators,
         gas_meter,
-        &mut sentinel,
+        &sentinel,
         tx,
         tx_index,
         &mut verifiers,
@@ -203,7 +196,7 @@ where
         })?;
     apply_tx.call(tx_data_ptr, tx_data_len).map_err(|err| {
         tracing::debug!("Tx WASM failed with {}", err);
-        match sentinel {
+        match *sentinel.borrow() {
             TxSentinel::None => Error::RuntimeError(err),
             TxSentinel::OutOfGas => Error::GasError(err.to_string()),
             TxSentinel::InvalidCommitment => {
@@ -219,48 +212,47 @@ where
 /// predicate accepted storage modifications performed by the transaction
 /// that triggered the execution.
 #[allow(clippy::too_many_arguments)]
-pub fn vp<DB, H, CA>(
+pub fn vp<S, CA>(
     vp_code_hash: Hash,
     tx: &Tx,
     tx_index: &TxIndex,
     address: &Address,
-    storage: &State<DB, H>,
-    write_log: &WriteLog,
-    gas_meter: &mut VpGasMeter,
+    state: &S,
+    gas_meter: &RefCell<VpGasMeter>,
     keys_changed: &BTreeSet<Key>,
     verifiers: &BTreeSet<Address>,
     mut vp_wasm_cache: VpCache<CA>,
 ) -> Result<bool>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     // Compile the wasm module
     let (module, store) = fetch_or_compile(
         &mut vp_wasm_cache,
         &Commitment::Hash(vp_code_hash),
-        write_log,
-        storage,
+        state,
         gas_meter,
     )?;
 
-    let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::default();
+    let mut iterators: PrefixIterators<'_, <S as StateRead>::D> =
+        PrefixIterators::default();
     let mut result_buffer: Option<Vec<u8>> = None;
-    let eval_runner = VpEvalWasm {
-        db: PhantomData,
-        hasher: PhantomData,
-        cache_access: PhantomData,
-    };
-
-    let mut sentinel = VpSentinel::default();
+    let eval_runner =
+        VpEvalWasm::<<S as StateRead>::D, <S as StateRead>::H, CA> {
+            db: PhantomData,
+            hasher: PhantomData,
+            cache_access: PhantomData,
+        };
+    let sentinel = RefCell::new(VpSentinel::default());
     let env = VpVmEnv::new(
         WasmMemory::default(),
         address,
-        storage,
-        write_log,
+        state.write_log(),
+        state.in_mem(),
+        state.db(),
         gas_meter,
-        &mut sentinel,
+        &sentinel,
         tx,
         tx_index,
         &mut iterators,
@@ -283,10 +275,9 @@ where
         address,
         keys_changed,
         verifiers,
-        gas_meter,
     ) {
         Ok(accept) => {
-            if sentinel.is_invalid_signature() {
+            if sentinel.borrow().is_invalid_signature() {
                 if accept {
                     // This is unexpected, if the signature is invalid the vp
                     // should have rejected the tx. Something must be wrong with
@@ -305,7 +296,7 @@ where
             }
         }
         Err(err) => {
-            if sentinel.is_out_of_gas() {
+            if sentinel.borrow().is_out_of_gas() {
                 Err(Error::GasError(err.to_string()))
             } else {
                 Err(err)
@@ -323,7 +314,6 @@ fn run_vp(
     address: &Address,
     keys_changed: &BTreeSet<Key>,
     verifiers: &BTreeSet<Address>,
-    _gas_meter: &mut VpGasMeter,
 ) -> Result<bool> {
     let input: VpInput = VpInput {
         addr: address,
@@ -381,34 +371,34 @@ fn run_vp(
 
 /// Validity predicate wasm evaluator for `eval` host function calls.
 #[derive(Default, Debug)]
-pub struct VpEvalWasm<DB, H, CA>
+pub struct VpEvalWasm<D, H, CA>
 where
-    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
+    D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
     /// Phantom type for DB
-    pub db: PhantomData<*const DB>,
-    /// Phantom type for DB Hasher
+    pub db: PhantomData<*const D>,
+    /// Phantom type for hasher
     pub hasher: PhantomData<*const H>,
     /// Phantom type for WASM compilation cache access
     pub cache_access: PhantomData<*const CA>,
 }
 
-impl<DB, H, CA> VpEvaluator for VpEvalWasm<DB, H, CA>
+impl<D, H, CA> VpEvaluator for VpEvalWasm<D, H, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    D: DB + for<'iter> DBIter<'iter>,
+    H: StorageHasher,
     CA: WasmCacheAccess,
 {
     type CA = CA;
-    type Db = DB;
+    type Db = D;
     type Eval = Self;
     type H = H;
 
     fn eval(
         &self,
-        ctx: VpCtx<'static, DB, H, Self, CA>,
+        ctx: VpCtx<'static, D, H, Self, CA>,
         vp_code_hash: Hash,
         input_data: Tx,
     ) -> HostEnvResult {
@@ -422,16 +412,16 @@ where
     }
 }
 
-impl<DB, H, CA> VpEvalWasm<DB, H, CA>
+impl<D, H, CA> VpEvalWasm<D, H, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    D: DB + for<'iter> DBIter<'iter>,
+    H: StorageHasher,
     CA: WasmCacheAccess,
 {
     /// Evaluate the given VP.
     pub fn eval_native_result(
         &self,
-        ctx: VpCtx<'static, DB, H, Self, CA>,
+        ctx: VpCtx<'static, D, H, Self, CA>,
         vp_code_hash: Hash,
         input_data: Tx,
     ) -> Result<bool> {
@@ -439,26 +429,23 @@ where
         let keys_changed = unsafe { ctx.keys_changed.get() };
         let verifiers = unsafe { ctx.verifiers.get() };
         let vp_wasm_cache = unsafe { ctx.vp_wasm_cache.get() };
-        let write_log = unsafe { ctx.write_log.get() };
-        let storage = unsafe { ctx.storage.get() };
         let gas_meter = unsafe { ctx.gas_meter.get() };
-        let env = VpVmEnv {
-            memory: WasmMemory::default(),
-            ctx,
-        };
 
         // Compile the wasm module
         let (module, store) = fetch_or_compile(
             vp_wasm_cache,
             &Commitment::Hash(vp_code_hash),
-            write_log,
-            storage,
+            &ctx.state(),
             gas_meter,
         )?;
 
         let initial_memory =
             memory::prepare_vp_memory(&store).map_err(Error::MemoryError)?;
 
+        let env = VpVmEnv {
+            memory: WasmMemory::default(),
+            ctx,
+        };
         let imports = vp_imports(&store, initial_memory, env);
 
         run_vp(
@@ -469,7 +456,6 @@ where
             address,
             keys_changed,
             verifiers,
-            gas_meter,
         )
     }
 }
@@ -504,16 +490,14 @@ pub fn prepare_wasm_code<T: AsRef<[u8]>>(code: T) -> Result<Vec<u8>> {
 
 // Fetch or compile a WASM code from the cache or storage. Account for the
 // loading and code compilation gas costs.
-fn fetch_or_compile<DB, H, CN, CA>(
+fn fetch_or_compile<S, CN, CA>(
     wasm_cache: &mut Cache<CN, CA>,
     code_or_hash: &Commitment,
-    write_log: &WriteLog,
-    storage: &State<DB, H>,
-    gas_meter: &mut dyn GasMetering,
+    state: &S,
+    gas_meter: &RefCell<impl GasMetering>,
 ) -> Result<(Module, Store)>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    S: StateRead,
     CN: 'static + CacheName,
     CA: 'static + WasmCacheAccess,
 {
@@ -523,14 +507,14 @@ where
                 Some((module, store)) => {
                     // Gas accounting even if the compiled module is in cache
                     let key = Key::wasm_code_len(code_hash);
-                    let tx_len = match write_log.read(&key).0 {
+                    let tx_len = match state.write_log().read(&key).0 {
                         Some(StorageModification::Write { value }) => {
                             u64::try_from_slice(value).map_err(|e| {
                                 Error::ConversionError(e.to_string())
                             })
                         }
-                        _ => match storage
-                            .read(&key)
+                        _ => match state
+                            .db_read(&key)
                             .map_err(|e| {
                                 Error::LoadWasmCode(format!(
                                     "Read wasm code length failed from \
@@ -554,12 +538,12 @@ where
                 }
                 None => {
                     let key = Key::wasm_code(code_hash);
-                    let code = match write_log.read(&key).0 {
+                    let code = match state.write_log().read(&key).0 {
                         Some(StorageModification::Write { value }) => {
                             value.clone()
                         }
-                        _ => match storage
-                            .read(&key)
+                        _ => match state
+                            .db_read(&key)
                             .map_err(|e| {
                                 Error::LoadWasmCode(format!(
                                     "Read wasm code failed from storage: key \
@@ -589,9 +573,11 @@ where
             };
 
             gas_meter
+                .borrow_mut()
                 .add_wasm_load_from_storage_gas(tx_len)
                 .map_err(|e| Error::GasError(e.to_string()))?;
             gas_meter
+                .borrow_mut()
                 .add_compiling_gas(tx_len)
                 .map_err(|e| Error::GasError(e.to_string()))?;
             Ok((module, store))
@@ -599,11 +585,13 @@ where
         Commitment::Id(code) => {
             let tx_len = code.len() as u64;
             gas_meter
+                .borrow_mut()
                 .add_wasm_validation_gas(tx_len)
                 .map_err(|e| Error::GasError(e.to_string()))?;
             validate_untrusted_wasm(code).map_err(Error::ValidationError)?;
 
             gas_meter
+                .borrow_mut()
                 .add_compiling_gas(tx_len)
                 .map_err(|e| Error::GasError(e.to_string()))?;
             match wasm_cache.compile_or_fetch(code)? {
@@ -634,6 +622,7 @@ mod tests {
 
     use borsh_ext::BorshSerializeExt;
     use itertools::Either;
+    use namada_state::StorageWrite;
     use namada_test_utils::TestWasms;
     use namada_tx::data::TxType;
     use namada_tx::{Code, Data};
@@ -642,7 +631,7 @@ mod tests {
 
     use super::*;
     use crate::hash::Hash;
-    use crate::state::testing::TestStorage;
+    use crate::state::testing::TestState;
     use crate::tx::data::eval_vp::EvalVp;
     use crate::vm::host_env::TxRuntimeError;
     use crate::vm::wasm;
@@ -758,9 +747,9 @@ mod tests {
     /// wasm execution, the execution is aborted.
     #[test]
     fn test_tx_memory_limiter_in_guest() {
-        let storage = TestStorage::default();
-        let mut write_log = WriteLog::default();
-        let mut gas_meter = TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into());
+        let mut state = TestState::default();
+        let gas_meter =
+            RefCell::new(TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()));
         let tx_index = TxIndex::default();
 
         // This code will allocate memory of the given size
@@ -770,8 +759,8 @@ mod tests {
         let key = Key::wasm_code(&code_hash);
         let len_key = Key::wasm_code_len(&code_hash);
         let code_len = (tx_code.len() as u64).serialize_to_vec();
-        write_log.write(&key, tx_code.clone()).unwrap();
-        write_log.write(&len_key, code_len).unwrap();
+        state.write_log_mut().write(&key, tx_code.clone()).unwrap();
+        state.write_log_mut().write(&len_key, code_len).unwrap();
 
         // Assuming 200 pages, 12.8 MiB limit
         assert_eq!(memory::TX_MEMORY_MAX_PAGES, 200);
@@ -787,9 +776,8 @@ mod tests {
         outer_tx.set_code(Code::new(tx_code.clone(), None));
         outer_tx.set_data(Data::new(tx_data));
         let result = tx(
-            &storage,
-            &mut write_log,
-            &mut gas_meter,
+            &mut state,
+            &gas_meter,
             &tx_index,
             &outer_tx,
             &mut vp_cache,
@@ -804,9 +792,8 @@ mod tests {
         outer_tx.set_code(Code::new(tx_code, None));
         outer_tx.set_data(Data::new(tx_data));
         let error = tx(
-            &storage,
-            &mut write_log,
-            &mut gas_meter,
+            &mut state,
+            &gas_meter,
             &tx_index,
             &outer_tx,
             &mut vp_cache,
@@ -822,12 +809,11 @@ mod tests {
     /// fails and hence returns `false`.
     #[test]
     fn test_vp_memory_limiter_in_guest_calling_eval() {
-        let mut storage = TestStorage::default();
-        let addr = storage.address_gen.generate_address("rng seed");
-        let write_log = WriteLog::default();
-        let mut gas_meter = VpGasMeter::new_from_tx_meter(
+        let mut state = TestState::default();
+        let addr = state.in_mem_mut().address_gen.generate_address("rng seed");
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
-        );
+        ));
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -839,8 +825,8 @@ mod tests {
         let key = Key::wasm_code(&code_hash);
         let len_key = Key::wasm_code_len(&code_hash);
         let code_len = (vp_eval.len() as u64).serialize_to_vec();
-        storage.write(&key, vp_eval).unwrap();
-        storage.write(&len_key, code_len).unwrap();
+        state.write_bytes(&key, vp_eval).unwrap();
+        state.write_bytes(&len_key, code_len).unwrap();
         // This code will allocate memory of the given size
         let vp_memory_limit = TestWasms::VpMemoryLimit.read_bytes();
         // store the wasm code
@@ -848,8 +834,8 @@ mod tests {
         let key = Key::wasm_code(&limit_code_hash);
         let len_key = Key::wasm_code_len(&limit_code_hash);
         let code_len = (vp_memory_limit.len() as u64).serialize_to_vec();
-        storage.write(&key, vp_memory_limit).unwrap();
-        storage.write(&len_key, code_len).unwrap();
+        state.write_bytes(&key, vp_memory_limit).unwrap();
+        state.write_bytes(&len_key, code_len).unwrap();
 
         // Assuming 200 pages, 12.8 MiB limit
         assert_eq!(memory::VP_MEMORY_MAX_PAGES, 200);
@@ -858,7 +844,7 @@ mod tests {
         // shouldn't fail
         let input = 2_usize.pow(23).serialize_to_vec();
 
-        let mut tx = Tx::new(storage.chain_id.clone(), None);
+        let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_code(vec![], None).add_serialized_data(input);
 
         let eval_vp = EvalVp {
@@ -866,7 +852,7 @@ mod tests {
             input: tx,
         };
 
-        let mut outer_tx = Tx::new(storage.chain_id.clone(), None);
+        let mut outer_tx = Tx::new(state.in_mem().chain_id.clone(), None);
         outer_tx.add_code(vec![], None).add_data(eval_vp);
 
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
@@ -877,9 +863,8 @@ mod tests {
             &outer_tx,
             &tx_index,
             &addr,
-            &storage,
-            &write_log,
-            &mut gas_meter,
+            &state,
+            &gas_meter,
             &keys_changed,
             &verifiers,
             vp_cache.clone(),
@@ -890,7 +875,7 @@ mod tests {
         // Allocating `2^24` (16 MiB) should be above the memory limit and
         // should fail
         let input = 2_usize.pow(24).serialize_to_vec();
-        let mut tx = Tx::new(storage.chain_id.clone(), None);
+        let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_code(vec![], None).add_data(input);
 
         let eval_vp = EvalVp {
@@ -898,7 +883,7 @@ mod tests {
             input: tx,
         };
 
-        let mut outer_tx = Tx::new(storage.chain_id.clone(), None);
+        let mut outer_tx = Tx::new(state.in_mem().chain_id.clone(), None);
         outer_tx.add_code(vec![], None).add_data(eval_vp);
 
         // When the `eval`ed VP runs out of memory, its result should be
@@ -909,9 +894,8 @@ mod tests {
             &outer_tx,
             &tx_index,
             &addr,
-            &storage,
-            &write_log,
-            &mut gas_meter,
+            &state,
+            &gas_meter,
             &keys_changed,
             &verifiers,
             vp_cache,
@@ -925,12 +909,11 @@ mod tests {
     /// inside the wasm execution, the execution is aborted.
     #[test]
     fn test_vp_memory_limiter_in_guest() {
-        let mut storage = TestStorage::default();
-        let addr = storage.address_gen.generate_address("rng seed");
-        let write_log = WriteLog::default();
-        let mut gas_meter = VpGasMeter::new_from_tx_meter(
+        let mut state = TestState::default();
+        let addr = state.in_mem_mut().address_gen.generate_address("rng seed");
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
-        );
+        ));
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -942,8 +925,8 @@ mod tests {
         let code_len = (vp_code.len() as u64).serialize_to_vec();
         let key = Key::wasm_code(&code_hash);
         let len_key = Key::wasm_code_len(&code_hash);
-        storage.write(&key, vp_code).unwrap();
-        storage.write(&len_key, code_len).unwrap();
+        state.write_bytes(&key, vp_code).unwrap();
+        state.write_bytes(&len_key, code_len).unwrap();
 
         // Assuming 200 pages, 12.8 MiB limit
         assert_eq!(memory::VP_MEMORY_MAX_PAGES, 200);
@@ -952,7 +935,7 @@ mod tests {
         // shouldn't fail
         let tx_data = 2_usize.pow(23).serialize_to_vec();
         let mut outer_tx = Tx::from_type(TxType::Raw);
-        outer_tx.header.chain_id = storage.chain_id.clone();
+        outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.set_code(Code::new(vec![], None));
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
@@ -961,9 +944,8 @@ mod tests {
             &outer_tx,
             &tx_index,
             &addr,
-            &storage,
-            &write_log,
-            &mut gas_meter,
+            &state,
+            &gas_meter,
             &keys_changed,
             &verifiers,
             vp_cache.clone(),
@@ -974,16 +956,15 @@ mod tests {
         // should fail
         let tx_data = 2_usize.pow(24).serialize_to_vec();
         let mut outer_tx = Tx::from_type(TxType::Raw);
-        outer_tx.header.chain_id = storage.chain_id.clone();
+        outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_data(Data::new(tx_data));
         let error = vp(
             code_hash,
             &outer_tx,
             &tx_index,
             &addr,
-            &storage,
-            &write_log,
-            &mut gas_meter,
+            &state,
+            &gas_meter,
             &keys_changed,
             &verifiers,
             vp_cache,
@@ -997,9 +978,9 @@ mod tests {
     /// host input, the execution fails.
     #[test]
     fn test_tx_memory_limiter_in_host_input() {
-        let storage = TestStorage::default();
-        let mut write_log = WriteLog::default();
-        let mut gas_meter = TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into());
+        let mut state = TestState::default();
+        let gas_meter =
+            RefCell::new(TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()));
         let tx_index = TxIndex::default();
 
         let tx_no_op = TestWasms::TxNoOp.read_bytes();
@@ -1008,8 +989,8 @@ mod tests {
         let key = Key::wasm_code(&code_hash);
         let len_key = Key::wasm_code_len(&code_hash);
         let code_len = (tx_no_op.len() as u64).serialize_to_vec();
-        write_log.write(&key, tx_no_op.clone()).unwrap();
-        write_log.write(&len_key, code_len).unwrap();
+        state.write_log_mut().write(&key, tx_no_op.clone()).unwrap();
+        state.write_log_mut().write(&len_key, code_len).unwrap();
 
         // Assuming 200 pages, 12.8 MiB limit
         assert_eq!(memory::TX_MEMORY_MAX_PAGES, 200);
@@ -1026,9 +1007,8 @@ mod tests {
         outer_tx.set_code(Code::new(tx_no_op, None));
         outer_tx.set_data(Data::new(tx_data));
         let result = tx(
-            &storage,
-            &mut write_log,
-            &mut gas_meter,
+            &mut state,
+            &gas_meter,
             &tx_index,
             &outer_tx,
             &mut vp_cache,
@@ -1057,12 +1037,11 @@ mod tests {
     /// in the host input, the execution fails.
     #[test]
     fn test_vp_memory_limiter_in_host_input() {
-        let mut storage = TestStorage::default();
-        let addr = storage.address_gen.generate_address("rng seed");
-        let write_log = WriteLog::default();
-        let mut gas_meter = VpGasMeter::new_from_tx_meter(
+        let mut state = TestState::default();
+        let addr = state.in_mem_mut().address_gen.generate_address("rng seed");
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
-        );
+        ));
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -1073,8 +1052,8 @@ mod tests {
         let key = Key::wasm_code(&code_hash);
         let len_key = Key::wasm_code_len(&code_hash);
         let code_len = (vp_code.len() as u64).serialize_to_vec();
-        storage.write(&key, vp_code).unwrap();
-        storage.write(&len_key, code_len).unwrap();
+        state.write_bytes(&key, vp_code).unwrap();
+        state.write_bytes(&len_key, code_len).unwrap();
 
         // Assuming 200 pages, 12.8 MiB limit
         assert_eq!(memory::VP_MEMORY_MAX_PAGES, 200);
@@ -1084,7 +1063,7 @@ mod tests {
         let len = 2_usize.pow(24);
         let tx_data: Vec<u8> = vec![6_u8; len];
         let mut outer_tx = Tx::from_type(TxType::Raw);
-        outer_tx.header.chain_id = storage.chain_id.clone();
+        outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.set_code(Code::new(vec![], None));
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
@@ -1093,9 +1072,8 @@ mod tests {
             &outer_tx,
             &tx_index,
             &addr,
-            &storage,
-            &write_log,
-            &mut gas_meter,
+            &state,
+            &gas_meter,
             &keys_changed,
             &verifiers,
             vp_cache,
@@ -1126,9 +1104,9 @@ mod tests {
     /// execution is aborted.
     #[test]
     fn test_tx_memory_limiter_in_host_env() {
-        let mut storage = TestStorage::default();
-        let mut write_log = WriteLog::default();
-        let mut gas_meter = TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into());
+        let mut state = TestState::default();
+        let gas_meter =
+            RefCell::new(TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()));
         let tx_index = TxIndex::default();
 
         let tx_read_key = TestWasms::TxReadStorageKey.read_bytes();
@@ -1137,8 +1115,11 @@ mod tests {
         let code_len = (tx_read_key.len() as u64).serialize_to_vec();
         let key = Key::wasm_code(&code_hash);
         let len_key = Key::wasm_code_len(&code_hash);
-        write_log.write(&key, tx_read_key.clone()).unwrap();
-        write_log.write(&len_key, code_len).unwrap();
+        state
+            .write_log_mut()
+            .write(&key, tx_read_key.clone())
+            .unwrap();
+        state.write_log_mut().write(&len_key, code_len).unwrap();
 
         // Allocating `2^24` (16 MiB) for a value in storage that the tx
         // attempts to read should be above the memory limit and should
@@ -1150,7 +1131,7 @@ mod tests {
         // Write the value that should be read by the tx into the storage. When
         // writing directly to storage, the value has to be encoded with
         // Borsh.
-        storage.write(&key, value.serialize_to_vec()).unwrap();
+        state.write_bytes(&key, value.serialize_to_vec()).unwrap();
         let tx_data = key.serialize_to_vec();
         let (mut vp_cache, _) =
             wasm::compilation_cache::common::testing::cache();
@@ -1160,9 +1141,8 @@ mod tests {
         outer_tx.set_code(Code::new(tx_read_key, None));
         outer_tx.set_data(Data::new(tx_data));
         let error = tx(
-            &storage,
-            &mut write_log,
-            &mut gas_meter,
+            &mut state,
+            &gas_meter,
             &tx_index,
             &outer_tx,
             &mut vp_cache,
@@ -1178,12 +1158,11 @@ mod tests {
     /// execution, the execution is aborted.
     #[test]
     fn test_vp_memory_limiter_in_host_env() {
-        let mut storage = TestStorage::default();
-        let addr = storage.address_gen.generate_address("rng seed");
-        let write_log = WriteLog::default();
-        let mut gas_meter = VpGasMeter::new_from_tx_meter(
+        let mut state = TestState::default();
+        let addr = state.in_mem_mut().address_gen.generate_address("rng seed");
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
-        );
+        ));
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -1194,8 +1173,8 @@ mod tests {
         let code_len = (vp_read_key.len() as u64).serialize_to_vec();
         let key = Key::wasm_code(&code_hash);
         let len_key = Key::wasm_code_len(&code_hash);
-        storage.write(&key, vp_read_key).unwrap();
-        storage.write(&len_key, code_len).unwrap();
+        state.write_bytes(&key, vp_read_key).unwrap();
+        state.write_bytes(&len_key, code_len).unwrap();
 
         // Allocating `2^24` (16 MiB) for a value in storage that the tx
         // attempts to read should be above the memory limit and should
@@ -1207,10 +1186,10 @@ mod tests {
         // Write the value that should be read by the tx into the storage. When
         // writing directly to storage, the value has to be encoded with
         // Borsh.
-        storage.write(&key, value.serialize_to_vec()).unwrap();
+        state.write_bytes(&key, value.serialize_to_vec()).unwrap();
         let tx_data = key.serialize_to_vec();
         let mut outer_tx = Tx::from_type(TxType::Raw);
-        outer_tx.header.chain_id = storage.chain_id.clone();
+        outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.set_code(Code::new(vec![], None));
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
@@ -1219,9 +1198,8 @@ mod tests {
             &outer_tx,
             &tx_index,
             &addr,
-            &storage,
-            &write_log,
-            &mut gas_meter,
+            &state,
+            &gas_meter,
             &keys_changed,
             &verifiers,
             vp_cache,
@@ -1237,12 +1215,11 @@ mod tests {
     /// and hence returns `false`.
     #[test]
     fn test_vp_memory_limiter_in_host_env_inside_guest_calling_eval() {
-        let mut storage = TestStorage::default();
-        let addr = storage.address_gen.generate_address("rng seed");
-        let write_log = WriteLog::default();
-        let mut gas_meter = VpGasMeter::new_from_tx_meter(
+        let mut state = TestState::default();
+        let addr = state.in_mem_mut().address_gen.generate_address("rng seed");
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
-        );
+        ));
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -1254,8 +1231,8 @@ mod tests {
         let code_len = (vp_eval.len() as u64).serialize_to_vec();
         let key = Key::wasm_code(&code_hash);
         let len_key = Key::wasm_code_len(&code_hash);
-        storage.write(&key, vp_eval).unwrap();
-        storage.write(&len_key, code_len).unwrap();
+        state.write_bytes(&key, vp_eval).unwrap();
+        state.write_bytes(&len_key, code_len).unwrap();
         // This code will read value from the storage
         let vp_read_key = TestWasms::VpReadStorageKey.read_bytes();
         // store the wasm code
@@ -1263,8 +1240,8 @@ mod tests {
         let code_len = (vp_read_key.len() as u64).serialize_to_vec();
         let key = Key::wasm_code(&read_code_hash);
         let len_key = Key::wasm_code_len(&read_code_hash);
-        storage.write(&key, vp_read_key).unwrap();
-        storage.write(&len_key, code_len).unwrap();
+        state.write_bytes(&key, vp_read_key).unwrap();
+        state.write_bytes(&len_key, code_len).unwrap();
 
         // Allocating `2^24` (16 MiB) for a value in storage that the tx
         // attempts to read should be above the memory limit and should
@@ -1276,10 +1253,10 @@ mod tests {
         // Write the value that should be read by the tx into the storage. When
         // writing directly to storage, the value has to be encoded with
         // Borsh.
-        storage.write(&key, value.serialize_to_vec()).unwrap();
+        state.write_bytes(&key, value.serialize_to_vec()).unwrap();
         let input = 2_usize.pow(23).serialize_to_vec();
 
-        let mut tx = Tx::new(storage.chain_id.clone(), None);
+        let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_code(vec![], None).add_serialized_data(input);
 
         let eval_vp = EvalVp {
@@ -1287,7 +1264,7 @@ mod tests {
             input: tx,
         };
 
-        let mut outer_tx = Tx::new(storage.chain_id.clone(), None);
+        let mut outer_tx = Tx::new(state.in_mem().chain_id.clone(), None);
         outer_tx.add_code(vec![], None).add_data(eval_vp);
 
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
@@ -1296,9 +1273,8 @@ mod tests {
             &outer_tx,
             &tx_index,
             &addr,
-            &storage,
-            &write_log,
-            &mut gas_meter,
+            &state,
+            &gas_meter,
             &keys_changed,
             &verifiers,
             vp_cache,
@@ -1310,9 +1286,9 @@ mod tests {
     fn execute_tx_with_code(tx_code: Vec<u8>) -> Result<BTreeSet<Address>> {
         let tx_data = vec![];
         let tx_index = TxIndex::default();
-        let storage = TestStorage::default();
-        let mut write_log = WriteLog::default();
-        let mut gas_meter = TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into());
+        let mut state = TestState::default();
+        let gas_meter =
+            RefCell::new(TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()));
         let (mut vp_cache, _) =
             wasm::compilation_cache::common::testing::cache();
         let (mut tx_cache, _) =
@@ -1323,17 +1299,16 @@ mod tests {
         let code_len = (tx_code.len() as u64).serialize_to_vec();
         let key = Key::wasm_code(&code_hash);
         let len_key = Key::wasm_code_len(&code_hash);
-        write_log.write(&key, tx_code).unwrap();
-        write_log.write(&len_key, code_len).unwrap();
+        state.write_log_mut().write(&key, tx_code).unwrap();
+        state.write_log_mut().write(&len_key, code_len).unwrap();
 
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.set_code(Code::from_hash(code_hash, None));
         outer_tx.set_data(Data::new(tx_data));
 
         tx(
-            &storage,
-            &mut write_log,
-            &mut gas_meter,
+            &mut state,
+            &gas_meter,
             &tx_index,
             &outer_tx,
             &mut vp_cache,
@@ -1410,12 +1385,11 @@ mod tests {
 
         let outer_tx = Tx::from_type(TxType::Raw);
         let tx_index = TxIndex::default();
-        let mut storage = TestStorage::default();
-        let addr = storage.address_gen.generate_address("rng seed");
-        let write_log = WriteLog::default();
-        let mut gas_meter = VpGasMeter::new_from_tx_meter(
+        let mut state = TestState::default();
+        let addr = state.in_mem_mut().address_gen.generate_address("rng seed");
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
-        );
+        ));
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
@@ -1424,17 +1398,16 @@ mod tests {
         let code_len = (vp_code.len() as u64).serialize_to_vec();
         let key = Key::wasm_code(&code_hash);
         let len_key = Key::wasm_code_len(&code_hash);
-        storage.write(&key, vp_code).unwrap();
-        storage.write(&len_key, code_len).unwrap();
+        state.write_bytes(&key, vp_code).unwrap();
+        state.write_bytes(&len_key, code_len).unwrap();
 
         vp(
             code_hash,
             &outer_tx,
             &tx_index,
             &addr,
-            &storage,
-            &write_log,
-            &mut gas_meter,
+            &state,
+            &gas_meter,
             &keys_changed,
             &verifiers,
             vp_cache,

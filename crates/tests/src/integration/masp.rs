@@ -2122,9 +2122,18 @@ fn dynamic_assets() -> Result<()> {
 
     let tokens = {
         // Only distribute rewards for NAM tokens
-        let storage = &mut node.shell.lock().unwrap().wl_storage.storage;
-        let tokens = storage.conversion_state.tokens.clone();
-        storage.conversion_state.tokens.retain(|k, _v| *k == nam);
+        let state = &mut node.shell.lock().unwrap().state;
+        let tokens = state.in_mem().conversion_state.tokens.clone();
+        state
+            .in_mem_mut()
+            .conversion_state
+            .tokens
+            .insert(btc.clone(), tokens[&btc].clone());
+        state
+            .in_mem_mut()
+            .conversion_state
+            .tokens
+            .retain(|k, _v| *k == nam);
         tokens
     };
     // add necessary viewing keys to shielded context
@@ -2210,8 +2219,9 @@ fn dynamic_assets() -> Result<()> {
     {
         // Start decoding and distributing shielded rewards for BTC in next
         // epoch
-        let storage = &mut node.shell.lock().unwrap().wl_storage.storage;
-        storage
+        let state = &mut node.shell.lock().unwrap().state;
+        state
+            .in_mem_mut()
             .conversion_state
             .tokens
             .insert(btc.clone(), tokens[&btc].clone());
@@ -2381,7 +2391,7 @@ fn dynamic_assets() -> Result<()> {
 
     {
         // Stop distributing shielded rewards for NAM in next epoch
-        let storage = &mut node.shell.lock().unwrap().wl_storage;
+        let storage = &mut node.shell.lock().unwrap().state;
         storage
             .write(
                 &token::storage_key::masp_max_reward_rate_key(&tokens[&nam]),
@@ -2440,8 +2450,8 @@ fn dynamic_assets() -> Result<()> {
 
     {
         // Stop decoding and distributing shielded rewards for BTC in next epoch
-        let storage = &mut node.shell.lock().unwrap().wl_storage.storage;
-        storage.conversion_state.tokens.remove(&btc);
+        let state = &mut node.shell.lock().unwrap().state;
+        state.in_mem_mut().conversion_state.tokens.remove(&btc);
     }
 
     // Wait till epoch boundary
@@ -2541,7 +2551,7 @@ fn dynamic_assets() -> Result<()> {
 
     {
         // Start distributing shielded rewards for NAM in next epoch
-        let storage = &mut node.shell.lock().unwrap().wl_storage;
+        let storage = &mut node.shell.lock().unwrap().state;
         storage
             .write(
                 &token::storage_key::masp_max_reward_rate_key(&tokens[&nam]),

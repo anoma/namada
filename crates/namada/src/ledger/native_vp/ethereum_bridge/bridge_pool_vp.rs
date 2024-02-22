@@ -13,6 +13,7 @@
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;
+use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
@@ -25,7 +26,7 @@ use namada_ethereum_bridge::storage::bridge_pool::{
 use namada_ethereum_bridge::storage::parameters::read_native_erc20_address;
 use namada_ethereum_bridge::storage::whitelist;
 use namada_ethereum_bridge::ADDRESS as BRIDGE_ADDRESS;
-use namada_state::{DBIter, StorageHasher, DB};
+use namada_state::StateRead;
 use namada_tx::Tx;
 
 use crate::address::{Address, InternalAddress};
@@ -70,20 +71,18 @@ impl AmountDelta {
 }
 
 /// Validity predicate for the Ethereum bridge
-pub struct BridgePoolVp<'ctx, D, H, CA>
+pub struct BridgePoolVp<'ctx, S, CA>
 where
-    D: DB + for<'iter> DBIter<'iter>,
-    H: StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     /// Context to interact with the host structures.
-    pub ctx: Ctx<'ctx, D, H, CA>,
+    pub ctx: Ctx<'ctx, S, CA>,
 }
 
-impl<'a, D, H, CA> BridgePoolVp<'a, D, H, CA>
+impl<'a, S, CA> BridgePoolVp<'a, S, CA>
 where
-    D: 'static + DB + for<'iter> DBIter<'iter>,
-    H: 'static + StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     /// Get the change in the balance of an account
@@ -334,7 +333,7 @@ where
             let same_sender_and_fee_payer =
                 transfer.gas_fee.payer == transfer.transfer.sender;
             let gas_is_native_asset =
-                transfer.gas_fee.token == self.ctx.storage.native_token;
+                transfer.gas_fee.token == self.ctx.state.in_mem().native_token;
             let gas_and_token_is_native_asset =
                 gas_is_native_asset && tok_is_native_asset;
             let same_token_and_gas_asset =
@@ -366,7 +365,7 @@ where
         {
             // when minting wrapped NAM on Ethereum, escrow to the Ethereum
             // bridge address, and draw from NAM token accounts
-            let token = Cow::Borrowed(&self.ctx.storage.native_token);
+            let token = Cow::Borrowed(&self.ctx.state.in_mem().native_token);
             let escrow_account = &BRIDGE_ADDRESS;
             (token, escrow_account)
         } else {
@@ -518,10 +517,9 @@ fn sum_gas_and_token_amounts(
         })
 }
 
-impl<'a, D, H, CA> NativeVp for BridgePoolVp<'a, D, H, CA>
+impl<'a, S, CA> NativeVp for BridgePoolVp<'a, S, CA>
 where
-    D: 'static + DB + for<'iter> DBIter<'iter>,
-    H: 'static + StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     type Error = Error;
@@ -639,29 +637,29 @@ where
 
 #[cfg(test)]
 mod test_bridge_pool_vp {
+    use std::cell::RefCell;
     use std::env::temp_dir;
 
     use borsh::BorshDeserialize;
     use namada_core::borsh::BorshSerializeExt;
+    use namada_core::validity_predicate::VpSentinel;
     use namada_ethereum_bridge::storage::bridge_pool::get_signed_root_key;
     use namada_ethereum_bridge::storage::parameters::{
         Contracts, EthereumBridgeParams, UpgradeableContract,
     };
     use namada_ethereum_bridge::storage::wrapped_erc20s;
     use namada_gas::TxGasMeter;
+    use namada_state::testing::TestState;
     use namada_state::StorageWrite;
     use namada_tx::data::TxType;
 
     use super::*;
     use crate::address::testing::{nam, wnam};
     use crate::address::InternalAddress;
-    use crate::chain::ChainId;
     use crate::eth_bridge_pool::{GasFee, TransferToEthereum};
     use crate::hash::Hash;
     use crate::ledger::gas::VpGasMeter;
-    use crate::state::mockdb::MockDB;
     use crate::state::write_log::WriteLog;
-    use crate::state::{Sha256Hasher, State, WlStorage};
     use crate::storage::TxIndex;
     use crate::vm::wasm::VpCache;
     use crate::vm::WasmCacheRwAccess;
@@ -751,16 +749,16 @@ mod test_bridge_pool_vp {
         }
     }
 
-    /// Create a writelog representing storage before a transfer is added to the
-    /// pool.
-    fn new_writelog() -> WriteLog {
-        let mut writelog = WriteLog::default();
+    /// Create a write-log representing storage before a transfer is added to
+    /// the pool.
+    fn new_write_log(write_log: &mut WriteLog) {
+        *write_log = WriteLog::default();
         // setup the initial bridge pool storage
-        writelog
+        write_log
             .write(&get_signed_root_key(), Hash([0; 32]).serialize_to_vec())
             .expect("Test failed");
         let transfer = initial_pool();
-        writelog
+        write_log
             .write(&get_pending_key(&transfer), transfer.serialize_to_vec())
             .expect("Test failed");
         // whitelist wnam
@@ -769,7 +767,7 @@ mod test_bridge_pool_vp {
             suffix: whitelist::KeyType::Whitelisted,
         }
         .into();
-        writelog
+        write_log
             .write(&key, true.serialize_to_vec())
             .expect("Test failed");
         let key = whitelist::Key {
@@ -777,45 +775,44 @@ mod test_bridge_pool_vp {
             suffix: whitelist::KeyType::Cap,
         }
         .into();
-        writelog
+        write_log
             .write(&key, Amount::max().serialize_to_vec())
             .expect("Test failed");
         // set up users with ERC20 and NUT balances
         update_balances(
-            &mut writelog,
+            write_log,
             Balance::new(TransferToEthereumKind::Erc20, bertha_address()),
             SignedAmount::Positive(BERTHA_WEALTH.into()),
             SignedAmount::Positive(BERTHA_TOKENS.into()),
         );
         update_balances(
-            &mut writelog,
+            write_log,
             Balance::new(TransferToEthereumKind::Nut, daewon_address()),
             SignedAmount::Positive(DAEWONS_GAS.into()),
             SignedAmount::Positive(DAES_NUTS.into()),
         );
         // set up the initial balances of the bridge pool
         update_balances(
-            &mut writelog,
+            write_log,
             Balance::new(TransferToEthereumKind::Erc20, BRIDGE_POOL_ADDRESS),
             SignedAmount::Positive(ESCROWED_AMOUNT.into()),
             SignedAmount::Positive(ESCROWED_TOKENS.into()),
         );
         update_balances(
-            &mut writelog,
+            write_log,
             Balance::new(TransferToEthereumKind::Nut, BRIDGE_POOL_ADDRESS),
             SignedAmount::Positive(ESCROWED_AMOUNT.into()),
             SignedAmount::Positive(ESCROWED_NUTS.into()),
         );
         // set up the initial balances of the ethereum bridge account
         update_balances(
-            &mut writelog,
+            write_log,
             Balance::new(TransferToEthereumKind::Erc20, BRIDGE_ADDRESS),
             SignedAmount::Positive(ESCROWED_AMOUNT.into()),
             // we only care about escrowing NAM
             SignedAmount::Positive(0.into()),
         );
-        writelog.commit_tx();
-        writelog
+        write_log.commit_tx();
     }
 
     /// Update gas and token balances of an address and
@@ -899,7 +896,7 @@ mod test_bridge_pool_vp {
     }
 
     /// Initialize some dummy storage for testing
-    fn setup_storage() -> WlStorage<MockDB, Sha256Hasher> {
+    fn setup_storage() -> TestState {
         // a dummy config for testing
         let config = EthereumBridgeParams {
             erc20_whitelist: vec![],
@@ -913,41 +910,30 @@ mod test_bridge_pool_vp {
                 },
             },
         };
-        let mut wl_storage = WlStorage {
-            storage: State::<MockDB, Sha256Hasher>::open(
-                std::path::Path::new(""),
-                ChainId::default(),
-                nam(),
-                None,
-                None,
-                namada_sdk::state::merklize_all_keys,
-            ),
-            write_log: Default::default(),
-        };
-        config.init_storage(&mut wl_storage);
-        wl_storage.commit_block().expect("Test failed");
-        wl_storage.write_log = new_writelog();
-        wl_storage.commit_block().expect("Test failed");
-        wl_storage
+        let mut state = TestState::default();
+        config.init_storage(&mut state);
+        state.commit_block().expect("Test failed");
+        new_write_log(state.write_log_mut());
+        state.commit_block().expect("Test failed");
+        state
     }
 
     /// Setup a ctx for running native vps
     fn setup_ctx<'a>(
         tx: &'a Tx,
-        storage: &'a State<MockDB, Sha256Hasher>,
-        write_log: &'a WriteLog,
+        state: &'a TestState,
+        gas_meter: &'a RefCell<VpGasMeter>,
+        sentinel: &'a RefCell<VpSentinel>,
         keys_changed: &'a BTreeSet<Key>,
         verifiers: &'a BTreeSet<Address>,
-    ) -> Ctx<'a, MockDB, Sha256Hasher, WasmCacheRwAccess> {
+    ) -> Ctx<'a, TestState, WasmCacheRwAccess> {
         Ctx::new(
             &BRIDGE_POOL_ADDRESS,
-            storage,
-            write_log,
+            state,
             tx,
             &TxIndex(0),
-            VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
-                u64::MAX.into(),
-            )),
+            gas_meter,
+            sentinel,
             keys_changed,
             verifiers,
             VpCache::new(temp_dir(), 100usize),
@@ -973,7 +959,7 @@ mod test_bridge_pool_vp {
         F: FnOnce(&mut PendingTransfer, &mut WriteLog) -> BTreeSet<Key>,
     {
         // setup
-        let mut wl_storage = setup_storage();
+        let mut state = setup_storage();
         let tx = Tx::from_type(TxType::Raw);
 
         // the transfer to be added to the pool
@@ -993,11 +979,11 @@ mod test_bridge_pool_vp {
         };
         // add transfer to pool
         let mut keys_changed =
-            insert_transfer(&mut transfer, &mut wl_storage.write_log);
+            insert_transfer(&mut transfer, state.write_log_mut());
 
         // change Bertha's balances
         let mut new_keys_changed = update_balances(
-            &mut wl_storage.write_log,
+            state.write_log_mut(),
             Balance {
                 asset: transfer.transfer.asset,
                 kind: TransferToEthereumKind::Erc20,
@@ -1012,7 +998,7 @@ mod test_bridge_pool_vp {
 
         // change the bridge pool balances
         let mut new_keys_changed = update_balances(
-            &mut wl_storage.write_log,
+            state.write_log_mut(),
             Balance {
                 asset: transfer.transfer.asset,
                 kind: TransferToEthereumKind::Erc20,
@@ -1026,17 +1012,22 @@ mod test_bridge_pool_vp {
         keys_changed.append(&mut new_keys_changed);
         let verifiers = BTreeSet::default();
         // create the data to be given to the vp
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        ));
+        let sentinel = RefCell::new(VpSentinel::default());
         let vp = BridgePoolVp {
             ctx: setup_ctx(
                 &tx,
-                &wl_storage.storage,
-                &wl_storage.write_log,
+                &state,
+                &gas_meter,
+                &sentinel,
                 &keys_changed,
                 &verifiers,
             ),
         };
 
-        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
 
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
@@ -1322,7 +1313,7 @@ mod test_bridge_pool_vp {
     #[test]
     fn test_adding_transfer_twice_fails() {
         // setup
-        let mut wl_storage = setup_storage();
+        let mut state = setup_storage();
         let tx = Tx::from_type(TxType::Raw);
 
         // the transfer to be added to the pool
@@ -1330,8 +1321,8 @@ mod test_bridge_pool_vp {
 
         // add transfer to pool
         let mut keys_changed = {
-            wl_storage
-                .write_log
+            state
+                .write_log_mut()
                 .write(&get_pending_key(&transfer), transfer.serialize_to_vec())
                 .unwrap();
             BTreeSet::from([get_pending_key(&transfer)])
@@ -1339,7 +1330,7 @@ mod test_bridge_pool_vp {
 
         // update Bertha's balances
         let mut new_keys_changed = update_balances(
-            &mut wl_storage.write_log,
+            state.write_log_mut(),
             Balance {
                 asset: ASSET,
                 kind: TransferToEthereumKind::Erc20,
@@ -1354,7 +1345,7 @@ mod test_bridge_pool_vp {
 
         // update the bridge pool balances
         let mut new_keys_changed = update_balances(
-            &mut wl_storage.write_log,
+            state.write_log_mut(),
             Balance {
                 asset: ASSET,
                 kind: TransferToEthereumKind::Erc20,
@@ -1369,17 +1360,22 @@ mod test_bridge_pool_vp {
         let verifiers = BTreeSet::default();
 
         // create the data to be given to the vp
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        ));
+        let sentinel = RefCell::new(VpSentinel::default());
         let vp = BridgePoolVp {
             ctx: setup_ctx(
                 &tx,
-                &wl_storage.storage,
-                &wl_storage.write_log,
+                &state,
+                &gas_meter,
+                &sentinel,
                 &keys_changed,
                 &verifiers,
             ),
         };
 
-        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
 
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
@@ -1391,7 +1387,7 @@ mod test_bridge_pool_vp {
     #[test]
     fn test_zero_gas_fees_rejected() {
         // setup
-        let mut wl_storage = setup_storage();
+        let mut state = setup_storage();
         let tx = Tx::from_type(TxType::Raw);
 
         // the transfer to be added to the pool
@@ -1412,8 +1408,8 @@ mod test_bridge_pool_vp {
 
         // add transfer to pool
         let mut keys_changed = {
-            wl_storage
-                .write_log
+            state
+                .write_log_mut()
                 .write(&get_pending_key(&transfer), transfer.serialize_to_vec())
                 .unwrap();
             BTreeSet::from([get_pending_key(&transfer)])
@@ -1430,17 +1426,22 @@ mod test_bridge_pool_vp {
 
         let verifiers = BTreeSet::default();
         // create the data to be given to the vp
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        ));
+        let sentinel = RefCell::new(VpSentinel::default());
         let vp = BridgePoolVp {
             ctx: setup_ctx(
                 &tx,
-                &wl_storage.storage,
-                &wl_storage.write_log,
+                &state,
+                &gas_meter,
+                &sentinel,
                 &keys_changed,
                 &verifiers,
             ),
         };
 
-        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
 
         let res = vp
@@ -1454,7 +1455,7 @@ mod test_bridge_pool_vp {
     #[test]
     fn test_minting_wnam() {
         // setup
-        let mut wl_storage = setup_storage();
+        let mut state = setup_storage();
         let eb_account_key =
             balance_key(&nam(), &Address::Internal(InternalAddress::EthBridge));
         let tx = Tx::from_type(TxType::Raw);
@@ -1477,8 +1478,8 @@ mod test_bridge_pool_vp {
 
         // add transfer to pool
         let mut keys_changed = {
-            wl_storage
-                .write_log
+            state
+                .write_log_mut()
                 .write(&get_pending_key(&transfer), transfer.serialize_to_vec())
                 .unwrap();
             BTreeSet::from([get_pending_key(&transfer)])
@@ -1486,8 +1487,8 @@ mod test_bridge_pool_vp {
         // We escrow 100 Nam into the bridge pool VP
         // and 100 Nam in the Eth bridge VP
         let account_key = balance_key(&nam(), &bertha_address());
-        wl_storage
-            .write_log
+        state
+            .write_log_mut()
             .write(
                 &account_key,
                 Amount::from(BERTHA_WEALTH - 200).serialize_to_vec(),
@@ -1495,16 +1496,16 @@ mod test_bridge_pool_vp {
             .expect("Test failed");
         assert!(keys_changed.insert(account_key));
         let bp_account_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
-        wl_storage
-            .write_log
+        state
+            .write_log_mut()
             .write(
                 &bp_account_key,
                 Amount::from(ESCROWED_AMOUNT + 100).serialize_to_vec(),
             )
             .expect("Test failed");
         assert!(keys_changed.insert(bp_account_key));
-        wl_storage
-            .write_log
+        state
+            .write_log_mut()
             .write(
                 &eb_account_key,
                 Amount::from(ESCROWED_AMOUNT + 100).serialize_to_vec(),
@@ -1514,17 +1515,22 @@ mod test_bridge_pool_vp {
 
         let verifiers = BTreeSet::default();
         // create the data to be given to the vp
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        ));
+        let sentinel = RefCell::new(VpSentinel::default());
         let vp = BridgePoolVp {
             ctx: setup_ctx(
                 &tx,
-                &wl_storage.storage,
-                &wl_storage.write_log,
+                &state,
+                &gas_meter,
+                &sentinel,
                 &keys_changed,
                 &verifiers,
             ),
         };
 
-        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
 
         let res = vp
@@ -1539,7 +1545,7 @@ mod test_bridge_pool_vp {
     #[test]
     fn test_reject_mint_wnam() {
         // setup
-        let mut wl_storage = setup_storage();
+        let mut state = setup_storage();
         let tx = Tx::from_type(TxType::Raw);
         let eb_account_key =
             balance_key(&nam(), &Address::Internal(InternalAddress::EthBridge));
@@ -1562,8 +1568,8 @@ mod test_bridge_pool_vp {
 
         // add transfer to pool
         let keys_changed = {
-            wl_storage
-                .write_log
+            state
+                .write_log_mut()
                 .write(&get_pending_key(&transfer), transfer.serialize_to_vec())
                 .unwrap();
             BTreeSet::from([get_pending_key(&transfer)])
@@ -1571,39 +1577,44 @@ mod test_bridge_pool_vp {
         // We escrow 100 Nam into the bridge pool VP
         // and 100 Nam in the Eth bridge VP
         let account_key = balance_key(&nam(), &bertha_address());
-        wl_storage
-            .write_log
+        state
+            .write_log_mut()
             .write(
                 &account_key,
                 Amount::from(BERTHA_WEALTH - 200).serialize_to_vec(),
             )
             .expect("Test failed");
         let bp_account_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
-        wl_storage
-            .write_log
+        state
+            .write_log_mut()
             .write(
                 &bp_account_key,
                 Amount::from(ESCROWED_AMOUNT + 100).serialize_to_vec(),
             )
             .expect("Test failed");
-        wl_storage
-            .write_log
+        state
+            .write_log_mut()
             .write(&eb_account_key, Amount::from(10).serialize_to_vec())
             .expect("Test failed");
         let verifiers = BTreeSet::default();
 
         // create the data to be given to the vp
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        ));
+        let sentinel = RefCell::new(VpSentinel::default());
         let vp = BridgePoolVp {
             ctx: setup_ctx(
                 &tx,
-                &wl_storage.storage,
-                &wl_storage.write_log,
+                &state,
+                &gas_meter,
+                &sentinel,
                 &keys_changed,
                 &verifiers,
             ),
         };
 
-        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
 
         let res = vp
@@ -1618,20 +1629,20 @@ mod test_bridge_pool_vp {
     #[test]
     fn test_mint_wnam_separate_gas_payer() {
         // setup
-        let mut wl_storage = setup_storage();
+        let mut state = setup_storage();
         // initialize the eth bridge balance to 0
         let eb_account_key =
             balance_key(&nam(), &Address::Internal(InternalAddress::EthBridge));
-        wl_storage
+        state
             .write(&eb_account_key, Amount::default())
             .expect("Test failed");
         // initialize the gas payers account
         let gas_payer_balance_key =
             balance_key(&nam(), &established_address_1());
-        wl_storage
+        state
             .write(&gas_payer_balance_key, Amount::from(BERTHA_WEALTH))
             .expect("Test failed");
-        wl_storage.write_log.commit_tx();
+        state.write_log_mut().commit_tx();
         let tx = Tx::from_type(TxType::Raw);
 
         // the transfer to be added to the pool
@@ -1652,8 +1663,8 @@ mod test_bridge_pool_vp {
 
         // add transfer to pool
         let keys_changed = {
-            wl_storage
-                .write_log
+            state
+                .write_log_mut()
                 .write(&get_pending_key(&transfer), transfer.serialize_to_vec())
                 .unwrap();
             BTreeSet::from([get_pending_key(&transfer)])
@@ -1661,45 +1672,50 @@ mod test_bridge_pool_vp {
         // We escrow 100 Nam into the bridge pool VP
         // and 100 Nam in the Eth bridge VP
         let account_key = balance_key(&nam(), &bertha_address());
-        wl_storage
-            .write_log
+        state
+            .write_log_mut()
             .write(
                 &account_key,
                 Amount::from(BERTHA_WEALTH - 100).serialize_to_vec(),
             )
             .expect("Test failed");
-        wl_storage
-            .write_log
+        state
+            .write_log_mut()
             .write(
                 &gas_payer_balance_key,
                 Amount::from(BERTHA_WEALTH - 100).serialize_to_vec(),
             )
             .expect("Test failed");
         let bp_account_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
-        wl_storage
-            .write_log
+        state
+            .write_log_mut()
             .write(
                 &bp_account_key,
                 Amount::from(ESCROWED_AMOUNT + 100).serialize_to_vec(),
             )
             .expect("Test failed");
-        wl_storage
-            .write_log
+        state
+            .write_log_mut()
             .write(&eb_account_key, Amount::from(10).serialize_to_vec())
             .expect("Test failed");
         let verifiers = BTreeSet::default();
         // create the data to be given to the vp
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        ));
+        let sentinel = RefCell::new(VpSentinel::default());
         let vp = BridgePoolVp {
             ctx: setup_ctx(
                 &tx,
-                &wl_storage.storage,
-                &wl_storage.write_log,
+                &state,
+                &gas_meter,
+                &sentinel,
                 &keys_changed,
                 &verifiers,
             ),
         };
 
-        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
 
         let res = vp
@@ -1711,7 +1727,7 @@ mod test_bridge_pool_vp {
     /// Auxiliary function to test NUT functionality.
     fn test_nut_aux(kind: TransferToEthereumKind, expect: Expect) {
         // setup
-        let mut wl_storage = setup_storage();
+        let mut state = setup_storage();
         let tx = Tx::from_type(TxType::Raw);
 
         // the transfer to be added to the pool
@@ -1732,8 +1748,8 @@ mod test_bridge_pool_vp {
 
         // add transfer to pool
         let mut keys_changed = {
-            wl_storage
-                .write_log
+            state
+                .write_log_mut()
                 .write(&get_pending_key(&transfer), transfer.serialize_to_vec())
                 .unwrap();
             BTreeSet::from([get_pending_key(&transfer)])
@@ -1741,7 +1757,7 @@ mod test_bridge_pool_vp {
 
         // update Daewon's balances
         let mut new_keys_changed = update_balances(
-            &mut wl_storage.write_log,
+            state.write_log_mut(),
             Balance {
                 kind,
                 asset: ASSET,
@@ -1756,7 +1772,7 @@ mod test_bridge_pool_vp {
 
         // change the bridge pool balances
         let mut new_keys_changed = update_balances(
-            &mut wl_storage.write_log,
+            state.write_log_mut(),
             Balance {
                 kind,
                 asset: ASSET,
@@ -1771,11 +1787,16 @@ mod test_bridge_pool_vp {
 
         // create the data to be given to the vp
         let verifiers = BTreeSet::default();
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        ));
+        let sentinel = RefCell::new(VpSentinel::default());
         let vp = BridgePoolVp {
             ctx: setup_ctx(
                 &tx,
-                &wl_storage.storage,
-                &wl_storage.write_log,
+                &state,
+                &gas_meter,
+                &sentinel,
                 &keys_changed,
                 &verifiers,
             ),

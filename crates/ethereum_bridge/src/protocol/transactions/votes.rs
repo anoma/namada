@@ -10,7 +10,7 @@ use namada_core::storage::{BlockHeight, Epoch};
 use namada_core::token;
 use namada_core::voting_power::FractionalVotingPower;
 use namada_proof_of_stake::pos_queries::PosQueries;
-use namada_state::{DBIter, StorageHasher, WlStorage, DB};
+use namada_state::{DBIter, StorageHasher, WlState, DB};
 
 use super::{read, ChangedKeys};
 
@@ -35,7 +35,7 @@ pub trait EpochedVotingPowerExt {
     /// the most staked tokens.
     fn epoch_max_voting_power<D, H>(
         &self,
-        wl_storage: &WlStorage<D, H>,
+        state: &WlState<D, H>,
     ) -> Option<token::Amount>
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -51,13 +51,13 @@ pub trait EpochedVotingPowerExt {
     #[inline]
     fn fractional_stake<D, H>(
         &self,
-        wl_storage: &WlStorage<D, H>,
+        state: &WlState<D, H>,
     ) -> FractionalVotingPower
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
     {
-        let Some(max_voting_power) = self.epoch_max_voting_power(wl_storage) else {
+        let Some(max_voting_power) = self.epoch_max_voting_power(state) else {
             return FractionalVotingPower::NULL;
         };
         FractionalVotingPower::new(
@@ -70,12 +70,12 @@ pub trait EpochedVotingPowerExt {
     /// Check if the [`Tally`] associated with an [`EpochedVotingPower`]
     /// can be considered `seen`.
     #[inline]
-    fn has_majority_quorum<D, H>(&self, wl_storage: &WlStorage<D, H>) -> bool
+    fn has_majority_quorum<D, H>(&self, state: &WlState<D, H>) -> bool
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
     {
-        let Some(max_voting_power) = self.epoch_max_voting_power(wl_storage) else {
+        let Some(max_voting_power) = self.epoch_max_voting_power(state) else {
             return false;
         };
         // NB: Preserve the safety property of the Tendermint protocol across
@@ -96,7 +96,7 @@ pub trait EpochedVotingPowerExt {
 impl EpochedVotingPowerExt for EpochedVotingPower {
     fn epoch_max_voting_power<D, H>(
         &self,
-        wl_storage: &WlStorage<D, H>,
+        state: &WlState<D, H>,
     ) -> Option<token::Amount>
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -105,7 +105,7 @@ impl EpochedVotingPowerExt for EpochedVotingPower {
         self.keys()
             .copied()
             .map(|epoch| {
-                wl_storage.pos_queries().get_total_voting_power(Some(epoch))
+                state.pos_queries().get_total_voting_power(Some(epoch))
             })
             .max()
     }
@@ -136,7 +136,7 @@ pub struct Tally {
 /// Calculate a new [`Tally`] based on some validators' fractional voting powers
 /// as specific block heights
 pub fn calculate_new<D, H>(
-    wl_storage: &WlStorage<D, H>,
+    state: &WlState<D, H>,
     seen_by: Votes,
     voting_powers: &HashMap<(Address, BlockHeight), token::Amount>,
 ) -> Result<Tally>
@@ -150,7 +150,7 @@ where
             .get(&(validator.to_owned(), block_height.to_owned()))
         {
             Some(&voting_power) => {
-                let epoch = wl_storage
+                let epoch = state
                     .pos_queries()
                     .get_epoch(*block_height)
                     .expect("The queried epoch should be known");
@@ -168,7 +168,7 @@ where
         };
     }
 
-    let newly_confirmed = seen_by_voting_power.has_majority_quorum(wl_storage);
+    let newly_confirmed = seen_by_voting_power.has_majority_quorum(state);
     Ok(Tally {
         voting_power: seen_by_voting_power,
         seen_by,
@@ -316,7 +316,7 @@ mod tests {
             validator_1_stake + validator_2_stake + validator_3_stake;
 
         // start epoch 0 with validator 1
-        let (mut wl_storage, _) = test_utils::setup_storage_with_validators(
+        let (mut state, _) = test_utils::setup_storage_with_validators(
             HashMap::from([(validator_1.clone(), validator_1_stake)]),
         );
 
@@ -325,11 +325,11 @@ mod tests {
             pipeline_len: 1,
             ..Default::default()
         };
-        write_pos_params(&mut wl_storage, &params).expect("Test failed");
+        write_pos_params(&mut state, &params).expect("Test failed");
 
         // insert validators 2 and 3 at epoch 1
         test_utils::append_validators_to_storage(
-            &mut wl_storage,
+            &mut state,
             HashMap::from([
                 (validator_2.clone(), validator_2_stake),
                 (validator_3.clone(), validator_3_stake),
@@ -338,7 +338,7 @@ mod tests {
 
         // query validators to make sure they were inserted correctly
         let query_validators = |epoch: u64| {
-            wl_storage
+            state
                 .pos_queries()
                 .get_consensus_validators(Some(epoch.into()))
                 .iter()
@@ -352,9 +352,7 @@ mod tests {
             HashMap::from([(validator_1.clone(), validator_1_stake)])
         );
         assert_eq!(
-            wl_storage
-                .pos_queries()
-                .get_total_voting_power(Some(0.into())),
+            state.pos_queries().get_total_voting_power(Some(0.into())),
             validator_1_stake,
         );
         assert_eq!(
@@ -366,9 +364,7 @@ mod tests {
             ])
         );
         assert_eq!(
-            wl_storage
-                .pos_queries()
-                .get_total_voting_power(Some(1.into())),
+            state.pos_queries().get_total_voting_power(Some(1.into())),
             total_stake,
         );
 
@@ -378,7 +374,7 @@ mod tests {
             (1.into(), FractionalVotingPower::ONE_THIRD * total_stake),
         ]);
         assert_eq!(
-            aggregated.fractional_stake(&wl_storage),
+            aggregated.fractional_stake(&state),
             FractionalVotingPower::TWO_THIRDS
         );
     }

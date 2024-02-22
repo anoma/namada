@@ -6,7 +6,7 @@ use namada_core::address::testing::{
 use namada_core::dec::Dec;
 use namada_core::storage::{Epoch, Key};
 use namada_core::token;
-use namada_state::testing::TestWlStorage;
+use namada_state::testing::TestState;
 use namada_storage::collections::lazy_map::NestedMap;
 use namada_storage::collections::LazyCollection;
 
@@ -35,7 +35,7 @@ use crate::{
 /// `iterateBondsUpToAmountTest`
 #[test]
 fn test_find_bonds_to_remove() {
-    let mut storage = TestWlStorage::default();
+    let mut storage = TestState::default();
     let gov_params =
         namada_governance::parameters::GovernanceParameters::default();
     gov_params.init_storage(&mut storage).unwrap();
@@ -119,7 +119,7 @@ fn test_find_bonds_to_remove() {
 /// `computeModifiedRedelegationTest`
 #[test]
 fn test_compute_modified_redelegation() {
-    let mut storage = TestWlStorage::default();
+    let mut storage = TestState::default();
     let validator1 = established_address_1();
     let validator2 = established_address_2();
     let owner = established_address_3();
@@ -293,7 +293,7 @@ fn test_compute_modified_redelegation() {
 /// `computeBondAtEpochTest`
 #[test]
 fn test_compute_bond_at_epoch() {
-    let mut storage = TestWlStorage::default();
+    let mut storage = TestState::default();
     let params = OwnedPosParams {
         pipeline_len: 2,
         unbonding_len: 4,
@@ -443,7 +443,7 @@ fn test_compute_bond_at_epoch() {
 /// `computeSlashBondAtEpochTest`
 #[test]
 fn test_compute_slash_bond_at_epoch() {
-    let mut storage = TestWlStorage::default();
+    let mut storage = TestState::default();
     let params = OwnedPosParams {
         pipeline_len: 2,
         unbonding_len: 4,
@@ -541,7 +541,7 @@ fn test_compute_slash_bond_at_epoch() {
 /// `computeNewRedelegatedUnbondsTest`
 #[test]
 fn test_compute_new_redelegated_unbonds() {
-    let mut storage = TestWlStorage::default();
+    let mut storage = TestState::default();
     let alice = established_address_1();
     let bob = established_address_2();
 
@@ -811,7 +811,7 @@ fn test_compute_slashable_amount() {
 /// `foldAndSlashRedelegatedBondsMapTest`
 #[test]
 fn test_fold_and_slash_redelegated_bonds() {
-    let mut storage = TestWlStorage::default();
+    let mut storage = TestState::default();
     let params = OwnedPosParams {
         unbonding_len: 4,
         ..Default::default()
@@ -910,7 +910,7 @@ fn test_fold_and_slash_redelegated_bonds() {
 /// `slashRedelegationTest`
 #[test]
 fn test_slash_redelegation() {
-    let mut storage = TestWlStorage::default();
+    let mut storage = TestState::default();
     let params = OwnedPosParams {
         unbonding_len: 4,
         ..Default::default()
@@ -1098,7 +1098,7 @@ fn test_slash_redelegation() {
 /// `slashValidatorRedelegationTest`
 #[test]
 fn test_slash_validator_redelegation() {
-    let mut storage = TestWlStorage::default();
+    let mut storage = TestState::default();
     let params = OwnedPosParams {
         unbonding_len: 4,
         ..Default::default()
@@ -1280,7 +1280,7 @@ fn test_slash_validator_redelegation() {
 /// `slashValidatorTest`
 #[test]
 fn test_slash_validator() {
-    let mut storage = TestWlStorage::default();
+    let mut storage = TestState::default();
     let params = OwnedPosParams {
         unbonding_len: 4,
         ..Default::default()
@@ -1680,7 +1680,7 @@ fn test_slash_validator() {
 /// `computeAmountAfterSlashingUnbondTest`
 #[test]
 fn test_compute_amount_after_slashing_unbond() {
-    let mut storage = TestWlStorage::default();
+    let mut storage = TestState::default();
     let params = OwnedPosParams {
         unbonding_len: 4,
         ..Default::default()
@@ -1798,7 +1798,7 @@ fn test_compute_amount_after_slashing_unbond() {
 /// `computeAmountAfterSlashingWithdrawTest`
 #[test]
 fn test_compute_amount_after_slashing_withdraw() {
-    let mut storage = TestWlStorage::default();
+    let mut storage = TestState::default();
     let params = OwnedPosParams {
         unbonding_len: 4,
         ..Default::default()
@@ -1929,7 +1929,7 @@ fn test_compute_amount_after_slashing_withdraw() {
 fn test_from_sm_case_1() {
     use namada_core::address::testing::established_address_4;
 
-    let mut storage = TestWlStorage::default();
+    let mut storage = TestState::default();
     let gov_params =
         namada_governance::parameters::GovernanceParameters::default();
     gov_params.init_storage(&mut storage).unwrap();
