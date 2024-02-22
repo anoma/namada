@@ -2,6 +2,7 @@
 //! and VPs (both native and WASM).
 
 pub mod collections;
+pub mod conversion_state;
 mod db;
 mod error;
 pub mod mockdb;
@@ -310,6 +311,7 @@ pub mod testing {
 
     use super::mockdb::MockDB;
     use super::*;
+    use crate::conversion_state::{ConversionState, WithConversionState};
 
     /// Storage with a mock DB for testing
     pub struct TestStorage {
@@ -319,6 +321,7 @@ pub mod testing {
         epoch: Epoch,
         pred_epochs: Epochs,
         native_token: Address,
+        conversion_state: ConversionState,
         merkle_tree_key_filter: fn(&storage::Key) -> bool,
     }
 
@@ -336,6 +339,7 @@ pub mod testing {
                 epoch: Epoch::default(),
                 pred_epochs: Epochs::default(),
                 native_token: address::nam(),
+                conversion_state: ConversionState::default(),
                 merkle_tree_key_filter: merklize_all_keys,
             }
         }
@@ -424,6 +428,16 @@ pub mod testing {
                 .delete_subspace_val(self.height, key, is_key_merklized)
                 .into_storage_result()?;
             Ok(())
+        }
+    }
+
+    impl WithConversionState for TestStorage {
+        fn conversion_state(&self) -> &ConversionState {
+            &self.conversion_state
+        }
+
+        fn conversion_state_mut(&mut self) -> &mut ConversionState {
+            &mut self.conversion_state
         }
     }
 

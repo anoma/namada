@@ -58,13 +58,13 @@ use namada::state::{
     BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, DbError as Error,
     DbResult as Result, MerkleTreeStoresRead, StoreType, DB,
 };
+use namada::token::ConversionState;
 use namada::types;
 use namada::types::storage::{
     BlockHeight, BlockResults, Epoch, EthEventsQueue, Header, Key, KeySeg,
     KEY_SEGMENT_SEPARATOR,
 };
 use namada::types::time::DateTimeUtc;
-use namada::types::token::ConversionState;
 use namada::types::{ethereum_events, ethereum_structs};
 use rayon::prelude::*;
 use rocksdb::{
