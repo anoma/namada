@@ -38,6 +38,32 @@ where
         Self { inner }
     }
 
+    /// Update the mint amount of the token
+    fn update_mint_amount(
+        &self,
+        token: &Address,
+        is_minted: bool,
+    ) -> Result<(), NftTransferError> {
+        let mint = self.inner.borrow().mint_amount(token)?;
+        let updated_mint = if is_minted {
+            mint.checked_add(Amount::from_u64(1)).ok_or_else(|| {
+                NftTransferError::Other(
+                    "The mint amount overflowed".to_string(),
+                )
+            })?
+        } else {
+            mint.checked_sub(Amount::from_u64(1)).ok_or_else(|| {
+                NftTransferError::Other(
+                    "The mint amount underflowed".to_string(),
+                )
+            })?
+        };
+        self.inner
+            .borrow_mut()
+            .store_mint_amount(token, updated_mint)
+            .map_err(NftTransferError::from)
+    }
+
     /// Add the amount to the per-epoch withdraw of the token
     fn add_deposit(&self, token: &Address) -> Result<(), NftTransferError> {
         let deposit = self.inner.borrow().deposit(token)?;
@@ -317,6 +343,7 @@ where
         };
         self.inner.borrow_mut().store_nft_metadata(metadata)?;
 
+        self.update_mint_amount(&ibc_token, true)?;
         self.add_deposit(&ibc_token)?;
 
         self.inner
@@ -334,6 +361,7 @@ where
     ) -> Result<(), NftTransferError> {
         let ibc_token = storage::ibc_token_for_nft(class_id, token_id);
 
+        self.update_mint_amount(&ibc_token, false)?;
         self.add_withdraw(&ibc_token)?;
 
         self.inner

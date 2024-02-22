@@ -27,6 +27,7 @@ const NFT_CLASS: &str = "nft_class";
 const NFT_METADATA: &str = "nft_meta";
 const PARAMS: &str = "params";
 const MINT_LIMIT: &str = "mint_limit";
+const MINT: &str = "mint";
 const THROUGHPUT_LIMIT: &str = "throughput_limit";
 const DEPOSIT: &str = "deposit";
 const WITHDRAW: &str = "withdraw";
@@ -494,10 +495,20 @@ pub fn params_key() -> Key {
         .expect("Cannot obtain a storage key")
 }
 
-/// Returns a key of the deposit limit for the token
+/// Returns a key of the mint limit for the token
 pub fn mint_limit_key(token: &Address) -> Key {
     Key::from(Address::Internal(InternalAddress::Ibc).to_db_key())
         .push(&MINT_LIMIT.to_string().to_db_key())
+        .expect("Cannot obtain a storage key")
+        // Set as String to avoid checking the token address
+        .push(&token.to_string().to_db_key())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Returns a key of the IBC mint amount for the token
+pub fn mint_amount_key(token: &Address) -> Key {
+    Key::from(Address::Internal(InternalAddress::Ibc).to_db_key())
+        .push(&MINT.to_string().to_db_key())
         .expect("Cannot obtain a storage key")
         // Set as String to avoid checking the token address
         .push(&token.to_string().to_db_key())

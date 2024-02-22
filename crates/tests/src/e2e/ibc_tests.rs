@@ -484,34 +484,43 @@ fn pgf_over_ibc_with_hermes() -> Result<()> {
 
 #[test]
 fn ibc_rate_limit() -> Result<()> {
-    // Mint limit 2 NAM, per-epoch throughput limit 1 NAM
-    let update_genesis =
-        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
-            genesis.parameters.parameters.epochs_per_year =
-                epochs_per_year_from_min_duration(10);
-            // for the trusting period of IBC client
-            genesis.parameters.pos_params.pipeline_len = 10;
-            genesis.parameters.ibc_params.default_mint_limit =
-                Amount::from_u64(2_000_000);
-            genesis
-                .parameters
-                .ibc_params
-                .default_per_epoch_throughput_limit =
-                Amount::from_u64(1_000_000);
-            setup::set_validators(1, genesis, base_dir, |_| 0)
-        };
+    // Mint limit 2 transfer/channel-0/nam, per-epoch throughput limit 1 NAM
+    let update_genesis = |mut genesis: templates::All<
+        templates::Unvalidated,
+    >,
+                          base_dir: &_| {
+        genesis.parameters.parameters.epochs_per_year =
+            epochs_per_year_from_min_duration(50);
+        genesis.parameters.ibc_params.default_mint_limit = Amount::from_u64(2);
+        genesis
+            .parameters
+            .ibc_params
+            .default_per_epoch_throughput_limit = Amount::from_u64(1_000_000);
+        setup::set_validators(1, genesis, base_dir, |_| 0)
+    };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
     let _bg_ledger_a = ledger_a.background();
     let _bg_ledger_b = ledger_b.background();
 
     setup_hermes(&test_a, &test_b)?;
     let port_id_a = "transfer".parse().unwrap();
-    let (channel_id_a, _channel_id_b) =
+    let port_id_b: PortId = "transfer".parse().unwrap();
+    let (channel_id_a, channel_id_b) =
         create_channel_with_hermes(&test_a, &test_b)?;
 
     // Start relaying
     let hermes = run_hermes(&test_a)?;
     let _bg_hermes = hermes.background();
+
+    // wait for the next epoch
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
+    let rpc_a = get_actor_rpc(&test_a, Who::Validator(0));
+    let mut epoch = get_epoch(&test_a, &rpc_a).unwrap();
+    let next_epoch = epoch.next();
+    while epoch <= next_epoch {
+        sleep(5);
+        epoch = get_epoch(&test_a, &rpc_a).unwrap();
+    }
 
     // Transfer 1 NAM from Chain A to Chain B
     std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
@@ -529,8 +538,6 @@ fn ibc_rate_limit() -> Result<()> {
         None,
         false,
     )?;
-    // This transfer should succeed
-    wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
 
     // Transfer 1 NAM from Chain A to Chain B again will fail
     transfer(
@@ -544,12 +551,11 @@ fn ibc_rate_limit() -> Result<()> {
         &channel_id_a,
         None,
         // expect an error of the throughput limit
-        Some(&format!("throughput limit")),
+        Some("Transaction was rejected by VPs"),
         false,
     )?;
 
     // wait for the next epoch
-    let rpc_a = get_actor_rpc(&test_a, Who::Validator(0));
     let mut epoch = get_epoch(&test_a, &rpc_a).unwrap();
     let next_epoch = epoch.next();
     while epoch <= next_epoch {
@@ -557,7 +563,7 @@ fn ibc_rate_limit() -> Result<()> {
         epoch = get_epoch(&test_a, &rpc_a).unwrap();
     }
 
-    // Transfer 1 NAM from Chain A to Chain B will succeed
+    // Transfer 1 NAM from Chain A to Chain B will succeed in the new epoch
     transfer(
         &test_a,
         ALBERT,
@@ -571,8 +577,6 @@ fn ibc_rate_limit() -> Result<()> {
         None,
         false,
     )?;
-    // This transfer should succeed
-    wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
 
     // wait for the next epoch
     let mut epoch = get_epoch(&test_a, &rpc_a).unwrap();
@@ -582,7 +586,8 @@ fn ibc_rate_limit() -> Result<()> {
         epoch = get_epoch(&test_a, &rpc_a).unwrap();
     }
 
-    // Transfer 1 NAM from Chain A to Chain B will fail
+    // Transfer 1 NAM from Chain A to Chain B will succeed, but Chain B can't
+    // receive due to the mint limit and the packet will be timed out
     transfer(
         &test_a,
         ALBERT,
@@ -592,13 +597,23 @@ fn ibc_rate_limit() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
+        Some(Duration::new(20, 0)),
         None,
-        // expect an error of the mint limit
-        Some(&format!("mint limit")),
         false,
     )?;
-    // This transfer should succeed
     wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
+
+    // Check the balance on Chain B
+    let ibc_denom = format!("{port_id_b}/{channel_id_b}/nam");
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
+    let rpc_b = get_actor_rpc(&test_b, Who::Validator(0));
+    let query_args = vec![
+        "balance", "--owner", BERTHA, "--token", &ibc_denom, "--node", &rpc_b,
+    ];
+    let expected = format!("{ibc_denom}: 2");
+    let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
+    client.exp_string(&expected)?;
+    client.assert_success();
 
     Ok(())
 }

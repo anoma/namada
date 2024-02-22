@@ -25,12 +25,12 @@ use thiserror::Error;
 
 use crate::ibc::core::host::types::identifiers::ChainId as IbcChainId;
 use crate::ledger::ibc::storage::{
-    calc_hash, deposit_key, is_ibc_key, is_ibc_trace_key, mint_limit_key,
-    params_key, throughput_limit_key, withdraw_key,
+    calc_hash, deposit_key, is_ibc_key, is_ibc_trace_key, mint_amount_key,
+    mint_limit_key, params_key, throughput_limit_key, withdraw_key,
 };
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::ledger::parameters::read_epoch_duration_parameter;
-use crate::token::storage_key::{is_any_token_balance_key, minted_balance_key};
+use crate::token::storage_key::is_any_token_balance_key;
 use crate::token::Amount;
 use crate::vm::WasmCacheAccess;
 
@@ -262,10 +262,10 @@ where
                 };
 
             // Check the supply
-            let minted_balance_key = minted_balance_key(token);
+            let mint_amount_key = mint_amount_key(token);
             let minted: Amount = self
                 .ctx
-                .read_post(&minted_balance_key)
+                .read_post(&mint_amount_key)
                 .map_err(Error::NativeVpError)?
                 .unwrap_or_default();
             if mint_limit < minted {

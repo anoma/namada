@@ -722,6 +722,22 @@ pub trait IbcCommonContext: IbcStorageContext {
         Ok(amount == Some(Amount::from_u64(1)))
     }
 
+    /// Read the mint amount of the given token
+    fn mint_amount(&self, token: &Address) -> Result<Amount> {
+        let key = storage::mint_amount_key(token);
+        Ok(self.read::<Amount>(&key)?.unwrap_or_default())
+    }
+
+    /// Write the mint amount of the given token
+    fn store_mint_amount(
+        &mut self,
+        token: &Address,
+        amount: Amount,
+    ) -> Result<()> {
+        let key = storage::mint_amount_key(token);
+        self.write(&key, amount).map_err(ContextError::from)
+    }
+
     /// Read the per-epoch deposit of the given token
     fn deposit(&self, token: &Address) -> Result<Amount> {
         let key = storage::deposit_key(token);

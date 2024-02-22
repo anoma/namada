@@ -69,6 +69,33 @@ where
         Ok((token, amount))
     }
 
+    /// Update the mint amount of the token
+    fn update_mint_amount(
+        &self,
+        token: &Address,
+        amount: Amount,
+        is_minted: bool,
+    ) -> Result<(), TokenTransferError> {
+        let mint = self.inner.borrow().mint_amount(token)?;
+        let updated_mint = if is_minted {
+            mint.checked_add(amount).ok_or_else(|| {
+                TokenTransferError::Other(
+                    "The mint amount overflowed".to_string(),
+                )
+            })?
+        } else {
+            mint.checked_sub(amount).ok_or_else(|| {
+                TokenTransferError::Other(
+                    "The mint amount underflowed".to_string(),
+                )
+            })?
+        };
+        self.inner
+            .borrow_mut()
+            .store_mint_amount(token, updated_mint)
+            .map_err(TokenTransferError::from)
+    }
+
     /// Add the amount to the per-epoch withdraw of the token
     fn add_deposit(
         &self,
@@ -223,6 +250,7 @@ where
         // The trace path of the denom is already updated if receiving the token
         let (ibc_token, amount) = self.get_token_amount(coin)?;
 
+        self.update_mint_amount(&ibc_token, amount, true)?;
         self.add_deposit(&ibc_token, amount)?;
 
         self.inner
@@ -239,6 +267,7 @@ where
     ) -> Result<(), TokenTransferError> {
         let (ibc_token, amount) = self.get_token_amount(coin)?;
 
+        self.update_mint_amount(&ibc_token, amount, false)?;
         self.add_withdraw(&ibc_token, amount)?;
 
         // The burn is "unminting" from the minted balance
