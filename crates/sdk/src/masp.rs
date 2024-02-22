@@ -1134,12 +1134,13 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                             let addresses = balance_keys
                                 .iter()
                                 .find(|addresses| {
-                                    if addresses[1] != &MASP {
+                                    let owner = addresses.1.to_address_ref();
+                                    if owner != &MASP {
                                         let transp_addr_commit =
                                             TransparentAddress(
                                                 ripemd::Ripemd160::digest(
                                                     sha2::Sha256::digest(
-                                                        &addresses[1]
+                                                        &owner
                                                             .serialize_to_vec(),
                                                     ),
                                                 )
@@ -1173,8 +1174,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                                 });
 
                             (
-                                addresses[1].to_owned(),
-                                addresses[0].to_owned(),
+                                addresses.1.to_address_ref().to_owned(),
+                                addresses.0.to_owned(),
                                 amount,
                             )
                         } else {
@@ -1186,12 +1187,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                         let token = balance_keys
                             .iter()
                             .find(|addresses| {
-                                if addresses[1] != &MASP {
+                                let owner = addresses.1.to_address_ref();
+                                if owner != &MASP {
                                     let transp_addr_commit = TransparentAddress(
                                         ripemd::Ripemd160::digest(
                                             sha2::Sha256::digest(
-                                                &addresses[1]
-                                                    .serialize_to_vec(),
+                                                &owner.serialize_to_vec(),
                                             ),
                                         )
                                         .into(),
@@ -1214,7 +1215,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                                     "Could not find target of MASP tx"
                                         .to_string(),
                                 )
-                            })?[0];
+                            })?
+                            .0;
 
                         let amount = transp_bundle
                             .vout

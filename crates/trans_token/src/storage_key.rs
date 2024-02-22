@@ -81,14 +81,10 @@ pub fn is_balance_key<'a>(
     key: &'a storage::Key,
 ) -> Option<&'a Address> {
     match &key.segments[..] {
-        [
-            DbKeySeg::AddressSeg(addr),
-            DbKeySeg::AddressSeg(token),
-            DbKeySeg::StringSeg(balance),
-            DbKeySeg::AddressSeg(owner),
-        ] if *addr == Address::Internal(InternalAddress::Multitoken)
-            && token == token_addr
-            && balance == BALANCE_STORAGE_KEY =>
+        [DbKeySeg::AddressSeg(addr), DbKeySeg::AddressSeg(token), DbKeySeg::StringSeg(balance), DbKeySeg::AddressSeg(owner)]
+            if *addr == Address::Internal(InternalAddress::Multitoken)
+                && token == token_addr
+                && balance == BALANCE_STORAGE_KEY =>
         {
             Some(owner)
         }
@@ -100,13 +96,9 @@ pub fn is_balance_key<'a>(
 /// If it is, return the token address.
 pub fn is_any_token_parameter_key(key: &storage::Key) -> Option<&Address> {
     match &key.segments[..] {
-        [
-            DbKeySeg::AddressSeg(addr),
-            DbKeySeg::AddressSeg(token),
-            DbKeySeg::StringSeg(parameter),
-            DbKeySeg::StringSeg(_parameter_name),
-        ] if *addr == Address::Internal(InternalAddress::Multitoken)
-            && parameter == PARAMETERS_STORAGE_KEY =>
+        [DbKeySeg::AddressSeg(addr), DbKeySeg::AddressSeg(token), DbKeySeg::StringSeg(parameter), DbKeySeg::StringSeg(_parameter_name)]
+            if *addr == Address::Internal(InternalAddress::Multitoken)
+                && parameter == PARAMETERS_STORAGE_KEY =>
         {
             Some(token)
         }
@@ -118,13 +110,9 @@ pub fn is_any_token_parameter_key(key: &storage::Key) -> Option<&Address> {
 /// it is, return the token and owner address.
 pub fn is_any_token_balance_key(key: &storage::Key) -> Option<[&Address; 2]> {
     match &key.segments[..] {
-        [
-            DbKeySeg::AddressSeg(addr),
-            DbKeySeg::AddressSeg(token),
-            DbKeySeg::StringSeg(balance),
-            DbKeySeg::AddressSeg(owner),
-        ] if *addr == Address::Internal(InternalAddress::Multitoken)
-            && balance == BALANCE_STORAGE_KEY =>
+        [DbKeySeg::AddressSeg(addr), DbKeySeg::AddressSeg(token), DbKeySeg::StringSeg(balance), DbKeySeg::AddressSeg(owner)]
+            if *addr == Address::Internal(InternalAddress::Multitoken)
+                && balance == BALANCE_STORAGE_KEY =>
         {
             Some([token, owner])
         }
@@ -153,12 +141,9 @@ pub fn is_denom_key(token_addr: &Address, key: &storage::Key) -> bool {
 /// If it is, returns the token.
 pub fn is_any_minter_key(key: &storage::Key) -> Option<&Address> {
     match &key.segments[..] {
-        [
-            DbKeySeg::AddressSeg(addr),
-            DbKeySeg::AddressSeg(token),
-            DbKeySeg::StringSeg(minter),
-        ] if *addr == Address::Internal(InternalAddress::Multitoken)
-            && minter == MINTER_STORAGE_KEY =>
+        [DbKeySeg::AddressSeg(addr), DbKeySeg::AddressSeg(token), DbKeySeg::StringSeg(minter)]
+            if *addr == Address::Internal(InternalAddress::Multitoken)
+                && minter == MINTER_STORAGE_KEY =>
         {
             Some(token)
         }
@@ -170,14 +155,10 @@ pub fn is_any_minter_key(key: &storage::Key) -> Option<&Address> {
 /// If it is, returns the token.
 pub fn is_any_minted_balance_key(key: &storage::Key) -> Option<&Address> {
     match &key.segments[..] {
-        [
-            DbKeySeg::AddressSeg(addr),
-            DbKeySeg::AddressSeg(token),
-            DbKeySeg::StringSeg(balance),
-            DbKeySeg::StringSeg(owner),
-        ] if *addr == Address::Internal(InternalAddress::Multitoken)
-            && balance == BALANCE_STORAGE_KEY
-            && owner == MINTED_STORAGE_KEY =>
+        [DbKeySeg::AddressSeg(addr), DbKeySeg::AddressSeg(token), DbKeySeg::StringSeg(balance), DbKeySeg::StringSeg(owner)]
+            if *addr == Address::Internal(InternalAddress::Multitoken)
+                && balance == BALANCE_STORAGE_KEY
+                && owner == MINTED_STORAGE_KEY =>
         {
             Some(token)
         }
@@ -185,22 +166,36 @@ pub fn is_any_minted_balance_key(key: &storage::Key) -> Option<&Address> {
     }
 }
 
+/// The owner of a shielded action transfer, could be a proper address or the
+/// minted subkey
+pub enum ShieldedActionOwner<'key> {
+    /// A proper address
+    Owner(&'key Address),
+    /// The mint address
+    Minted,
+}
+
+impl ShieldedActionOwner<'_> {
+    pub fn to_address_ref(&self) -> &Address {
+        match self {
+            Self::Owner(addr) => addr,
+            Self::Minted => {
+                &Address::Internal(namada_core::address::InternalAddress::Ibc)
+            }
+        }
+    }
+}
+
 /// Check if the given storage key is a balance key for a shielded action. If it
 /// is, returns the token and the owner addresses.
 pub fn is_any_shielded_action_balance_key(
     key: &storage::Key,
-) -> Option<[&Address; 2]> {
+) -> Option<(&Address, ShieldedActionOwner)> {
     is_any_token_balance_key(key).map_or_else(
         || {
-            is_any_minted_balance_key(key).map(|token| {
-                [
-                    token,
-                    &Address::Internal(
-                        namada_core::address::InternalAddress::Ibc,
-                    ),
-                ]
-            })
+            is_any_minted_balance_key(key)
+                .map(|token| (token, ShieldedActionOwner::Minted))
         },
-        Some,
+        |[token, owner]| Some((token, ShieldedActionOwner::Owner(owner))),
     )
 }
