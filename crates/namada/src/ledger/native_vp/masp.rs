@@ -60,7 +60,7 @@ where
     pub ctx: Ctx<'a, DB, H, CA>,
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 enum DeltaBalance {
     Positive(Amount),
     Negative(Amount),
@@ -383,14 +383,7 @@ where
         epoch: Epoch,
         conversion_state: &ConversionState,
     ) -> Result<bool> {
-        let bundle_balances = if let Some(transp_bundle) =
-            shielded_tx.transparent_bundle()
-        {
-            let mut total_bundle_balances: BTreeMap<
-                &Address,
-                BTreeMap<[u8; 20], DeltaBalance>,
-            > = BTreeMap::default();
-
+        if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
             let mut unprocessed_vins =
                 BTreeSet::from_iter(0..transp_bundle.vin.len());
             let mut unprocessed_vouts =
@@ -603,7 +596,36 @@ where
                     unprocessed_vouts.remove(idx);
                 }
 
-                total_bundle_balances.insert(token, token_bundle_balances);
+                // Iterate ofver the delta balances described by the transparent
+                // bundle and verify that these match the actual modifications
+                // in storage NOTE: this effectively prevent the
+                // same addresses/tokens couples from being
+                // involved in other transparent transfers in the same tx since
+                // that would lead to a different change in their balances
+                for (address, delta_bundle) in token_bundle_balances {
+                    let delta_balance = changed_balances
+                        .other
+                        .get(token)
+                        .and_then(|map| map.get(&address));
+
+                    match delta_balance {
+                        Some(delta_balance)
+                            if delta_balance == &delta_bundle => {}
+                        _ => {
+                            tracing::debug!(
+                                "The transparent bundle modifications for \
+                                 token {}, address: {:?} don't match the \
+                                 actual changes in storage. Transparent \
+                                 bundle changes: {:?}, Storage changes: {:?}",
+                                token,
+                                address,
+                                delta_bundle,
+                                delta_balance
+                            );
+                            return Ok(false);
+                        }
+                    }
+                }
             }
             if !(unprocessed_vins.is_empty() && unprocessed_vouts.is_empty()) {
                 tracing::debug!(
@@ -611,26 +633,6 @@ where
                 );
                 return Ok(false);
             }
-
-            total_bundle_balances
-        } else {
-            BTreeMap::default()
-        };
-
-        // FIXME: this is wrong, the bundle balances must be a subste of
-        // changed_balances.other, not the same otherwise I prevent other
-        // transparent transfers in parallel Check that the changed
-        // balance keys in storage match the modifications carried by
-        // the transparent bundle
-        if bundle_balances != changed_balances.other {
-            // NOTE: this effectively prevent addresses from being
-            // involved in other transparent transfers in the same tx since
-            // that would lead to a different change in their balances
-            tracing::debug!(
-                "The transparent bundle modifications don't match the actual \
-                 changes in storage."
-            );
-            return Ok(false);
         }
 
         Ok(true)
