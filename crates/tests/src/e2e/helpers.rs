@@ -443,7 +443,9 @@ pub fn generate_bin_command(bin_name: &str, manifest_path: &Path) -> Command {
 
         command.command()
     } else {
-        let dir = if run_debug {
+        let dir = if bin_name == "namadan" || bin_name == "namadan-rc" {
+            bin_name.to_string()
+        } else if run_debug {
             format!("target/debug/{}", bin_name)
         } else {
             format!("target/release/{}", bin_name)

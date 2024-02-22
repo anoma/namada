@@ -712,7 +712,7 @@ fn wrapper_disposable_signer() -> Result<()> {
             genesis.parameters.parameters.epochs_per_year =
                 epochs_per_year_from_min_duration(120);
             genesis.parameters.parameters.min_num_of_blocks = 1;
-            set_validators(1, genesis, base_dir, default_port_offset)
+            set_validators(2, genesis, base_dir, default_port_offset)
         },
         None,
     )?;
@@ -720,6 +720,9 @@ fn wrapper_disposable_signer() -> Result<()> {
     // 1. Run the ledger node
     let _bg_ledger =
         start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
+            .background();
+    let _bg_ledger1 =
+        start_namada_ledger_node_wait_wasm(&test, Some(1), Some(40))?
             .background();
 
     let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
@@ -853,6 +856,16 @@ fn wrapper_disposable_signer() -> Result<()> {
 
     client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
+
+    let validator_0_rpc = get_actor_rpc(&test, Who::Validator(0));
+    let validator_1_rpc = get_actor_rpc(&test, Who::Validator(1));
+
+    // Find the block height on the validator
+    let after_tx_height = get_height(&test, &validator_0_rpc)?;
+
+    // Wait for the non-validator to be synced to at least the same height
+    wait_for_block_height(&test, &validator_1_rpc, after_tx_height, 10)?;
+
     Ok(())
 }
 
@@ -1754,7 +1767,7 @@ fn pos_init_validator() -> Result<()> {
 fn ledger_many_txs_in_a_block() -> Result<()> {
     let test = Arc::new(setup::network(
         |genesis, base_dir: &_| {
-            setup::set_validators(1, genesis, base_dir, |_| 0)
+            setup::set_validators(2, genesis, base_dir,  default_port_offset)
         },
         // Set 10s consensus timeout to have more time to submit txs
         Some("10s"),
@@ -1770,7 +1783,10 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
 
     // 1. Run the ledger node
     let bg_ledger =
-        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(80))?
+            .background();
+    let bg_ledger1 =
+        start_namada_ledger_node_wait_wasm(&test, Some(1), Some(80))?
             .background();
 
     let validator_one_rpc = Arc::new(get_actor_rpc(&test, Who::Validator(0)));
@@ -1817,6 +1833,15 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
     // Wait to commit a block
     let mut ledger = bg_ledger.foreground();
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
+
+    let validator_0_rpc = get_actor_rpc(&test, Who::Validator(0));
+    let validator_1_rpc = get_actor_rpc(&test, Who::Validator(1));
+
+    // Find the block height on the validator
+    let after_tx_height = get_height(&test, &validator_0_rpc)?;
+
+    // Wait for the non-validator to be synced to at least the same height
+    wait_for_block_height(&test, &validator_1_rpc, after_tx_height, 10)?;
 
     Ok(())
 }

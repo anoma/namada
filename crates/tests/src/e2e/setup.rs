@@ -752,7 +752,16 @@ impl Test {
         S: AsRef<OsStr>,
     {
         let base_dir = self.get_base_dir(who);
-        run_cmd(bin, args, timeout_sec, &self.working_dir, base_dir, loc)
+        // run_cmd(bin, args, timeout_sec, &self.working_dir, base_dir, loc)
+        run_cmd2(
+            bin,
+            args,
+            timeout_sec,
+            &self.working_dir,
+            base_dir,
+            loc,
+            who,
+        )
     }
 
     pub fn get_base_dir(&self, who: Who) -> PathBuf {
@@ -1136,6 +1145,129 @@ where
     Ok(cmd_process)
 }
 
+pub fn run_cmd2<I, S>(
+    bin: Bin,
+    args: I,
+    timeout_sec: Option<u64>,
+    working_dir: impl AsRef<Path>,
+    base_dir: impl AsRef<Path>,
+    loc: String,
+    who: Who,
+) -> Result<NamadaCmd>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    // Root cargo workspace manifest path
+    let (bin_name, log_level) = match bin {
+        Bin::Node => (
+            match who {
+                Who::Validator(n) => {
+                    if n == 0 {
+                        "namadan-rc"
+                    } else {
+                        "namadan"
+                    }
+                }
+                Who::NonValidator => "namadan",
+            },
+            "info",
+        ),
+        Bin::Client => ("namadac", "tendermint_rpc=debug"),
+        Bin::Wallet => ("namadaw", "info"),
+        Bin::Relayer => ("namadar", "info"),
+    };
+
+    let mut run_cmd = generate_bin_command(
+        bin_name,
+        &working_dir.as_ref().join("Cargo.toml"),
+    );
+
+    run_cmd
+        .env("NAMADA_LOG", log_level)
+        .env("NAMADA_CMT_STDOUT", "true")
+        .env("CMT_LOG_LEVEL", "info")
+        .env("NAMADA_LOG_COLOR", "false")
+        .current_dir(working_dir)
+        .args(["--base-dir", &base_dir.as_ref().to_string_lossy()]);
+
+    run_cmd.args(args);
+
+    let args: String =
+        run_cmd.get_args().map(|s| s.to_string_lossy()).join(" ");
+    let cmd_str =
+        format!("{} {}", run_cmd.get_program().to_string_lossy(), args);
+
+    let session = Session::spawn(run_cmd).map_err(|e| {
+        eyre!(
+            "\n\n{}: {}\n{}: {}\n{}: {}",
+            "Failed to run".underline().red(),
+            cmd_str,
+            "Location".underline().red(),
+            loc,
+            "Error".underline().red(),
+            e
+        )
+    })?;
+
+    let log_path = {
+        let mut rng = rand::thread_rng();
+        let log_dir = base_dir.as_ref().join("logs");
+        fs::create_dir_all(&log_dir)?;
+        log_dir.join(format!(
+            "{}-{}-{}.log",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_micros(),
+            bin_name,
+            rng.gen::<u64>()
+        ))
+    };
+    let logger = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&log_path)?;
+    let mut session = expectrl::session::log(session, logger).unwrap();
+
+    session.set_expect_timeout(timeout_sec.map(std::time::Duration::from_secs));
+
+    let mut cmd_process = NamadaCmd {
+        session,
+        cmd_str,
+        log_path,
+    };
+
+    println!("{}:\n{}", "> Running".underline().green(), &cmd_process);
+
+    if let Bin::Node = &bin {
+        // When running a node command, we need to wait a bit before checking
+        // status
+        sleep(1);
+
+        // If the command failed, try print out its output
+        if let Ok(WaitStatus::Exited(_, result)) =
+            cmd_process.session.get_process().status()
+        {
+            if result != 0 {
+                let output = cmd_process.exp_eof().unwrap_or_else(|err| {
+                    format!("No output found, error: {}", err)
+                });
+                return Err(eyre!(
+                    "\n\n{}: {}\n{}: {} \n\n{}: {}",
+                    "Failed to run".underline().red(),
+                    cmd_process.cmd_str,
+                    "Location".underline().red(),
+                    loc,
+                    "Output".underline().red(),
+                    output,
+                ));
+            }
+        }
+    }
+
+    Ok(cmd_process)
+}
 /// Sleep for given `seconds`.
 pub fn sleep(seconds: u64) {
     thread::sleep(time::Duration::from_secs(seconds));
