@@ -28,7 +28,7 @@ use namada_ethereum_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_state::{DBIter, StorageHasher, DB};
 use namada_tx::Tx;
 
-use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
+use crate::ledger::native_vp::{Ctx, NativeVp, SignedAmount, StorageReader};
 use crate::token::storage_key::balance_key;
 use crate::token::Amount;
 use crate::types::address::{Address, InternalAddress};
@@ -41,13 +41,6 @@ use crate::vm::WasmCacheAccess;
 #[error(transparent)]
 /// Generic error that may be returned by the validity predicate
 pub struct Error(#[from] eyre::Error);
-
-/// A positive or negative amount
-#[derive(Copy, Clone)]
-enum SignedAmount {
-    Positive(Amount),
-    Negative(Amount),
-}
 
 /// An [`Amount`] that has been updated with some delta value.
 #[derive(Copy, Clone)]
