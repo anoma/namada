@@ -377,7 +377,7 @@ mod tests {
 
         let vp_owner = address::testing::established_address_1();
         let source = address::testing::established_address_2();
-        let token = address::nam();
+        let token = address::testing::nam();
         let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage
@@ -432,7 +432,7 @@ mod tests {
 
         let vp_owner = address::testing::established_address_1();
         let target = address::testing::established_address_2();
-        let token = address::nam();
+        let token = address::testing::nam();
         let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage
@@ -489,7 +489,7 @@ mod tests {
         let keypair = key::testing::keypair_1();
         let public_key = keypair.ref_to();
         let target = address::testing::established_address_2();
-        let token = address::nam();
+        let token = address::testing::nam();
         let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage
@@ -584,7 +584,7 @@ mod tests {
         let public_key = secret_key.ref_to();
         let vp_owner: Address = address::testing::established_address_2();
         let target = address::testing::established_address_3();
-        let token = address::nam();
+        let token = address::testing::nam();
         let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
         let bond_amount = token::Amount::from_uint(5_098_123, 0).unwrap();
         let unbond_amount = token::Amount::from_uint(3_098_123, 0).unwrap();
@@ -748,7 +748,7 @@ mod tests {
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
         let target = address::testing::established_address_3();
-        let token = address::nam();
+        let token = address::testing::nam();
         let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
         let bond_amount = token::Amount::from_uint(5_098_123, 0).unwrap();
         let unbond_amount = token::Amount::from_uint(3_098_123, 0).unwrap();
@@ -844,7 +844,7 @@ mod tests {
         let public_key = secret_key.ref_to();
         let vp_owner: Address = address::testing::established_address_2();
         let target = address::testing::established_address_3();
-        let token = address::nam();
+        let token = address::testing::nam();
         let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
         let bond_amount = token::Amount::from_uint(5_098_123, 0).unwrap();
         let unbond_amount = token::Amount::from_uint(3_098_123, 0).unwrap();
@@ -1033,7 +1033,7 @@ mod tests {
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
         let target = address::testing::established_address_3();
-        let token = address::nam();
+        let token = address::testing::nam();
         let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
         let bond_amount = token::Amount::from_uint(5_098_123, 0).unwrap();
         let unbond_amount = token::Amount::from_uint(3_098_123, 0).unwrap();
@@ -1109,7 +1109,7 @@ mod tests {
         let vp_owner = address::testing::established_address_1();
         let source = address::testing::established_address_2();
         let target = address::testing::established_address_3();
-        let token = address::nam();
+        let token = address::testing::nam();
         let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage

@@ -1145,7 +1145,7 @@ pub mod testing {
                 conversion_state: ConversionState::default(),
                 tx_queue: TxQueue::default(),
                 expired_txs_queue: ExpiredTxsQueue::default(),
-                native_token: address::nam(),
+                native_token: address::testing::nam(),
                 ethereum_height: None,
                 eth_events_queue: EthEventsQueue::default(),
                 storage_read_past_height_limit: Some(1000),

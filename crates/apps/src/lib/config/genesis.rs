@@ -313,7 +313,7 @@ pub fn make_dev_genesis(
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use std::time::Duration;
 
-    use namada::core::address::wnam;
+    use namada::core::address::testing::wnam;
     use namada::core::chain::ChainIdPrefix;
     use namada::core::ethereum_events::EthAddress;
     use namada::core::key::*;

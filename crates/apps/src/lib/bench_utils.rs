@@ -352,7 +352,7 @@ impl BenchShell {
 
     pub fn generate_ibc_transfer_tx(&self) -> Tx {
         let token = PrefixedCoin {
-            denom: address::nam().to_string().parse().unwrap(),
+            denom: address::testing::nam().to_string().parse().unwrap(),
             amount: Amount::native_whole(1000)
                 .to_string_native()
                 .split('.')
@@ -1035,7 +1035,7 @@ impl BenchShieldedCtx {
                     &namada,
                     &source,
                     &target,
-                    &address::nam(),
+                    &address::testing::nam(),
                     denominated_amount,
                 ),
             )
@@ -1064,7 +1064,7 @@ impl BenchShieldedCtx {
             Transfer {
                 source: source.effective_address(),
                 target: target.effective_address(),
-                token: address::nam(),
+                token: address::testing::nam(),
                 amount: DenominatedAmount::native(amount),
                 key: None,
                 shielded: shielded_section_hash,

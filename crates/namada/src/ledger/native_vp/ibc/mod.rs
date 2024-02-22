@@ -328,9 +328,9 @@ mod tests {
 
     use super::*;
     use crate::core::address::testing::{
-        established_address_1, established_address_2,
+        established_address_1, established_address_2, nam,
     };
-    use crate::core::address::{nam, InternalAddress};
+    use crate::core::address::InternalAddress;
     use crate::core::storage::Epoch;
     use crate::ibc::apps::transfer::types::events::{
         AckEvent, DenomTraceEvent, RecvEvent, TimeoutEvent, TransferEvent,

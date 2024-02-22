@@ -1220,7 +1220,7 @@ mod recommendations {
 
     #[cfg(test)]
     mod test_recommendations {
-        use namada_core::address::Address;
+        use namada_core::address;
 
         use super::*;
         use crate::io::StdIo;
@@ -1243,7 +1243,7 @@ mod recommendations {
                     amount: Default::default(),
                 },
                 gas_fee: GasFee {
-                    token: namada_core::address::nam(),
+                    token: address::testing::nam(),
                     amount: gas_amount.into(),
                     payer: bertha_address(),
                 },
@@ -1286,7 +1286,7 @@ mod recommendations {
             /// Add ETH to a conversion table.
             fn add_eth_to_conversion_table(&mut self) {
                 self.conversion_table.insert(
-                    namada_core::address::eth(),
+                    address::testing::eth(),
                     args::BpConversionTableEntry {
                         alias: "ETH".into(),
                         conversion_rate: 1e9, // 1 ETH = 1e9 GWEI
@@ -1311,7 +1311,7 @@ mod recommendations {
                     amount: Default::default(),
                 },
                 gas_fee: GasFee {
-                    token: namada_core::address::eth(),
+                    token: address::testing::eth(),
                     amount: 1_000_000_000_u64.into(), // 1 GWEI
                     payer: bertha_address(),
                 },
@@ -1544,14 +1544,14 @@ mod recommendations {
             let conversion_table = {
                 let mut t = HashMap::new();
                 t.insert(
-                    namada_core::address::apfel(),
+                    address::testing::apfel(),
                     args::BpConversionTableEntry {
                         alias: APFEL.into(),
                         conversion_rate: APF_RATE,
                     },
                 );
                 t.insert(
-                    namada_core::address::schnitzel(),
+                    address::testing::schnitzel(),
                     args::BpConversionTableEntry {
                         alias: SCHNITZEL.into(),
                         conversion_rate: SCH_RATE,
@@ -1566,13 +1566,13 @@ mod recommendations {
                 let transfer_paid_in_apfel = {
                     let mut pending = ctx.pending.clone();
                     pending.transfer.amount = 1.into();
-                    pending.gas_fee.token = namada_core::address::apfel();
+                    pending.gas_fee.token = address::testing::apfel();
                     pending
                 };
                 let transfer_paid_in_schnitzel = {
                     let mut pending = ctx.pending.clone();
                     pending.transfer.amount = 2.into();
-                    pending.gas_fee.token = namada_core::address::schnitzel();
+                    pending.gas_fee.token = address::testing::schnitzel();
                     pending
                 };
                 // add the transfers to the pool, and expect them to

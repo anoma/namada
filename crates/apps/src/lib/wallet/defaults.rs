@@ -13,9 +13,10 @@ mod dev {
     use std::collections::HashMap;
 
     use lazy_static::lazy_static;
-    use namada::core::address::{
-        apfel, btc, dot, eth, kartoffel, nam, schnitzel, Address,
+    use namada::core::address::testing::{
+        apfel, btc, dot, eth, kartoffel, nam, schnitzel,
     };
+    use namada::core::address::Address;
     use namada::core::key::*;
     use namada::ledger::{governance, pgf, pos};
     use namada_sdk::wallet::alias::Alias;
