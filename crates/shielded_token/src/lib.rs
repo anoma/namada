@@ -8,7 +8,7 @@ pub mod utils;
 use std::str::FromStr;
 
 use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use namada_core::types::dec::Dec;
+use namada_core::dec::Dec;
 pub use namada_storage::conversion_state::{
     ConversionState, WithConversionState,
 };

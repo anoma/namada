@@ -3,21 +3,18 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use borsh_ext::BorshSerializeExt;
-use ledger_storage::ResultExt;
-use namada_core::types::storage::Epochs;
+use namada_core::storage::Epochs;
 use namada_ibc::{IbcCommonContext, IbcStorageContext};
 use namada_state::{StorageError, StorageRead, StorageWrite};
 
+use crate::address::{Address, InternalAddress};
+use crate::ibc::IbcEvent;
 use crate::ledger::ibc::storage::is_ibc_key;
 use crate::ledger::native_vp::CtxPreStorageRead;
 use crate::state::write_log::StorageModification;
-use crate::state::{self as ledger_storage, StorageHasher};
+use crate::state::{self as ledger_storage, ResultExt, StorageHasher};
+use crate::storage::{BlockHash, BlockHeight, Epoch, Header, Key, TxIndex};
 use crate::token::{self as token, Amount, DenominatedAmount};
-use crate::types::address::{Address, InternalAddress};
-use crate::types::ibc::IbcEvent;
-use crate::types::storage::{
-    BlockHash, BlockHeight, Epoch, Header, Key, TxIndex,
-};
 use crate::vm::WasmCacheAccess;
 
 /// Result of a storage API call.

@@ -2,10 +2,10 @@
 
 use std::collections::{HashMap, HashSet};
 
-use namada_core::types::address::Address;
-use namada_core::types::key::PublicKeyTmRawHash;
-use namada_core::types::storage::Epoch;
-use namada_core::types::token;
+use namada_core::address::Address;
+use namada_core::key::PublicKeyTmRawHash;
+use namada_core::storage::Epoch;
+use namada_core::token;
 use namada_storage::collections::lazy_map::{NestedSubKey, SubKey};
 use namada_storage::{StorageRead, StorageWrite};
 use num_traits::ops::checked::CheckedAdd;

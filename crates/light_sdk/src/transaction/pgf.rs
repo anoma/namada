@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
+use namada_sdk::address::Address;
+use namada_sdk::dec::Dec;
+use namada_sdk::hash::Hash;
+use namada_sdk::key::common;
+use namada_sdk::storage::Epoch;
+use namada_sdk::token::DenominatedAmount;
 use namada_sdk::tx::data::GasLimit;
 use namada_sdk::tx::{Signature, Tx, TxError};
-use namada_sdk::types::address::Address;
-use namada_sdk::types::dec::Dec;
-use namada_sdk::types::hash::Hash;
-use namada_sdk::types::key::common;
-use namada_sdk::types::storage::Epoch;
-use namada_sdk::types::token::DenominatedAmount;
 
 use super::{attach_fee, attach_fee_signature, GlobalArgs};
 use crate::transaction;

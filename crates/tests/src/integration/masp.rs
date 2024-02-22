@@ -9,7 +9,7 @@ use namada_apps::node::ledger::shell::testing::client::run;
 use namada_apps::node::ledger::shell::testing::node::NodeResults;
 use namada_apps::node::ledger::shell::testing::utils::{Bin, CapturedOutput};
 use namada_apps::wallet::defaults::christel_keypair;
-use namada_core::types::dec::Dec;
+use namada_core::dec::Dec;
 use namada_sdk::masp::fs::FsShieldedUtils;
 use test_log::test;
 

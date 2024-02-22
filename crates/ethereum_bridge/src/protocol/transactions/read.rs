@@ -1,8 +1,8 @@
 //! Helpers for reading from storage
 use borsh::BorshDeserialize;
 use eyre::{eyre, Result};
-use namada_core::types::storage;
-use namada_core::types::token::Amount;
+use namada_core::storage;
+use namada_core::token::Amount;
 use namada_state::{DBIter, StorageHasher, WlStorage, DB};
 use namada_storage::StorageRead;
 
@@ -54,8 +54,8 @@ where
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
-    use namada_core::types::storage;
-    use namada_core::types::token::Amount;
+    use namada_core::storage;
+    use namada_core::token::Amount;
     use namada_state::testing::TestWlStorage;
     use namada_storage::StorageWrite;
 

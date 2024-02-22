@@ -8,8 +8,8 @@ use std::collections::HashMap;
 
 use data::TxType;
 use namada_core::event::{Event, EventLevel, EventType};
-pub use namada_core::types::key::SignableEthMessage;
-pub use namada_core::types::sign::SignatureIndex;
+pub use namada_core::key::SignableEthMessage;
+pub use namada_core::sign::SignatureIndex;
 pub use types::{
     standalone_signature, verify_standalone_sig, Code, Commitment,
     CompressedSignature, Data, DecodeError, Header, MaspBuilder, Memo, Section,

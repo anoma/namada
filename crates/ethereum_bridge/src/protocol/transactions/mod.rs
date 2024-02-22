@@ -14,7 +14,7 @@ pub mod votes;
 
 use std::collections::BTreeSet;
 
-use namada_core::types::storage;
+use namada_core::storage;
 
 /// The keys changed while applying a protocol transaction.
 pub type ChangedKeys = BTreeSet<storage::Key>;

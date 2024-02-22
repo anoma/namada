@@ -3,8 +3,8 @@
 use std::collections::BTreeSet;
 
 use eyre::WrapErr;
-use namada_core::types::address::{Address, InternalAddress};
-use namada_core::types::storage::Key;
+use namada_core::address::{Address, InternalAddress};
+use namada_core::storage::Key;
 use namada_state::StorageHasher;
 use namada_tx::Tx;
 use namada_vp_env::VpEnv;
@@ -121,10 +121,10 @@ mod test_nuts {
     use std::env::temp_dir;
 
     use assert_matches::assert_matches;
+    use namada_core::address::testing::arb_non_internal_address;
     use namada_core::borsh::BorshSerializeExt;
-    use namada_core::types::address::testing::arb_non_internal_address;
-    use namada_core::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
-    use namada_core::types::storage::TxIndex;
+    use namada_core::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
+    use namada_core::storage::TxIndex;
     use namada_ethereum_bridge::storage::wrapped_erc20s;
     use namada_state::testing::TestWlStorage;
     use namada_state::StorageWrite;

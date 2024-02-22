@@ -14,8 +14,8 @@ use num_traits::CheckedMul;
 use serde::{Deserialize, Serialize};
 
 use super::token::NATIVE_MAX_DECIMAL_PLACES;
-use crate::types::token::{Amount, Change};
-use crate::types::uint::{Uint, I256};
+use crate::token::{Amount, Change};
+use crate::uint::{Uint, I256};
 
 /// The number of Dec places for PoS rational calculations
 pub const POS_DECIMAL_PRECISION: u8 = 12;
@@ -69,7 +69,7 @@ impl Dec {
     ///
     /// Example:
     /// ```
-    /// use namada_core::types::dec::Dec;
+    /// use namada_core::dec::Dec;
     ///
     /// let x = Dec::new(3, 1).unwrap(); // Represents 0.3
     /// let y = Dec::new(2, 1).unwrap(); // Represents 0.2
@@ -549,7 +549,7 @@ pub mod testing {
 #[cfg(test)]
 mod test_dec {
     use super::*;
-    use crate::types::token::{Amount, Change};
+    use crate::token::{Amount, Change};
 
     #[derive(Debug, Serialize, Deserialize)]
     struct SerializerTest {

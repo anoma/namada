@@ -15,19 +15,17 @@ use eth_bridge_pool::{BridgePoolProof, BridgePoolTree};
 use ics23::commitment_proof::Proof as Ics23Proof;
 use ics23::{CommitmentProof, ExistenceProof, NonExistenceProof};
 use ics23_specs::ibc_leaf_spec;
+use namada_core::address::{Address, InternalAddress};
 use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
 use namada_core::bytes::ByteBuf;
-use namada_core::types::address::{Address, InternalAddress};
-use namada_core::types::eth_bridge_pool::{
-    is_pending_transfer_key, PendingTransfer,
-};
-use namada_core::types::hash::{Hash, StorageHasher};
-use namada_core::types::keccak::KeccakHash;
-use namada_core::types::storage::{
+use namada_core::eth_bridge_pool::{is_pending_transfer_key, PendingTransfer};
+use namada_core::hash::{Hash, StorageHasher};
+use namada_core::keccak::KeccakHash;
+use namada_core::storage::{
     self, BlockHeight, DbKeySeg, Epoch, Error as StorageError, Key, KeySeg,
     StringKey, TreeBytes, TreeKeyError, IBC_KEY_LIMIT,
 };
-use namada_core::types::{self, DecodeError};
+use namada_core::{self, decode, DecodeError};
 use thiserror::Error;
 
 /// Trait for reading from a merkle tree that is a sub-tree
@@ -303,11 +301,11 @@ impl StoreType {
         bytes: T,
     ) -> std::result::Result<Store, DecodeError> {
         match self {
-            Self::Base => Ok(Store::Base(types::decode(bytes)?)),
-            Self::Account => Ok(Store::Account(types::decode(bytes)?)),
-            Self::Ibc => Ok(Store::Ibc(types::decode(bytes)?)),
-            Self::PoS => Ok(Store::PoS(types::decode(bytes)?)),
-            Self::BridgePool => Ok(Store::BridgePool(types::decode(bytes)?)),
+            Self::Base => Ok(Store::Base(decode(bytes)?)),
+            Self::Account => Ok(Store::Account(decode(bytes)?)),
+            Self::Ibc => Ok(Store::Ibc(decode(bytes)?)),
+            Self::PoS => Ok(Store::PoS(decode(bytes)?)),
+            Self::BridgePool => Ok(Store::BridgePool(decode(bytes)?)),
         }
     }
 }
@@ -1004,8 +1002,8 @@ impl<'a> SubTreeWrite for &'a mut BridgePoolTree {
 #[cfg(test)]
 mod test {
     use ics23::HostFunctionsManager;
-    use namada_core::types::hash::Sha256Hasher;
-    use namada_core::types::storage::KeySeg;
+    use namada_core::hash::Sha256Hasher;
+    use namada_core::storage::KeySeg;
 
     use super::*;
     use crate::ics23_specs::{ibc_proof_specs, proof_specs};

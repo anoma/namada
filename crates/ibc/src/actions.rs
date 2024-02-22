@@ -3,18 +3,18 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use namada_core::address::{Address, InternalAddress};
+use namada_core::hash::Hash;
 use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
 use namada_core::ibc::apps::transfer::types::packet::PacketData;
 use namada_core::ibc::apps::transfer::types::PrefixedCoin;
 use namada_core::ibc::core::channel::types::timeout::TimeoutHeight;
 use namada_core::ibc::primitives::Msg;
+use namada_core::ibc::IbcEvent;
+use namada_core::storage::Epochs;
 use namada_core::tendermint::Time as TmTime;
-use namada_core::types::address::{Address, InternalAddress};
-use namada_core::types::hash::Hash;
-use namada_core::types::ibc::IbcEvent;
-use namada_core::types::storage::Epochs;
-use namada_core::types::time::DateTimeUtc;
-use namada_core::types::token::DenominatedAmount;
+use namada_core::time::DateTimeUtc;
+use namada_core::token::DenominatedAmount;
 use namada_governance::storage::proposal::PGFIbcTarget;
 use namada_parameters::read_epoch_duration_parameter;
 use namada_state::wl_storage::{PrefixIter, WriteLogAndStorage};

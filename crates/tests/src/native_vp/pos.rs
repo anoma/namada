@@ -95,10 +95,10 @@
 //! - add slashes
 //! - add rewards
 
+use namada::core::storage::Epoch;
 use namada::proof_of_stake::parameters::{OwnedPosParams, PosParams};
 use namada::proof_of_stake::test_utils::test_init_genesis as init_genesis;
 use namada::proof_of_stake::types::GenesisValidator;
-use namada::types::storage::Epoch;
 
 use crate::tx::tx_host_env;
 
@@ -147,11 +147,11 @@ pub fn init_pos(
 #[cfg(test)]
 mod tests {
 
+    use namada::core::address;
+    use namada::core::key::common::PublicKey;
+    use namada::core::storage::Epoch;
     use namada::ledger::pos::{PosParams, PosVP};
     use namada::token;
-    use namada::types::address;
-    use namada::types::key::common::PublicKey;
-    use namada::types::storage::Epoch;
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
     use namada_tx_prelude::Address;
     use proptest::prelude::*;
@@ -571,6 +571,11 @@ pub mod testing {
 
     use derivative::Derivative;
     use itertools::Either;
+    use namada::core::dec::Dec;
+    use namada::core::key::common::PublicKey;
+    use namada::core::key::RefTo;
+    use namada::core::storage::Epoch;
+    use namada::core::{address, key};
     use namada::ledger::gas::TxGasMeter;
     use namada::proof_of_stake::epoched::DynEpochOffset;
     use namada::proof_of_stake::parameters::testing::arb_rate;
@@ -582,11 +587,6 @@ pub mod testing {
     use namada::proof_of_stake::ADDRESS as POS_ADDRESS;
     use namada::token;
     use namada::token::{Amount, Change};
-    use namada::types::dec::Dec;
-    use namada::types::key::common::PublicKey;
-    use namada::types::key::RefTo;
-    use namada::types::storage::Epoch;
-    use namada::types::{address, key};
     use namada_tx_prelude::{Address, StorageRead, StorageWrite};
     use proptest::prelude::*;
 

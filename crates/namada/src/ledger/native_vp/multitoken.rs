@@ -8,14 +8,14 @@ use namada_tx::Tx;
 use namada_vp_env::VpEnv;
 use thiserror::Error;
 
+use crate::address::{Address, InternalAddress};
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
+use crate::storage::{Key, KeySeg};
 use crate::token::storage_key::{
     is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
     minter_key,
 };
 use crate::token::Amount;
-use crate::types::address::{Address, InternalAddress};
-use crate::types::storage::{Key, KeySeg};
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]
@@ -223,19 +223,19 @@ mod tests {
     use namada_tx::{Code, Data, Section, Signature, Tx};
 
     use super::*;
-    use crate::core::types::address::nam;
-    use crate::core::types::address::testing::{
+    use crate::address::{Address, InternalAddress};
+    use crate::core::address::nam;
+    use crate::core::address::testing::{
         established_address_1, established_address_2,
     };
+    use crate::key::testing::keypair_1;
     use crate::ledger::gas::VpGasMeter;
     use crate::ledger::ibc::storage::ibc_token;
+    use crate::storage::TxIndex;
     use crate::token::storage_key::{
         balance_key, minted_balance_key, minter_key,
     };
     use crate::token::Amount;
-    use crate::types::address::{Address, InternalAddress};
-    use crate::types::key::testing::keypair_1;
-    use crate::types::storage::TxIndex;
     use crate::vm::wasm::compilation_cache::common::testing::cache as wasm_cache;
 
     const ADDRESS: Address = Address::Internal(InternalAddress::Multitoken);

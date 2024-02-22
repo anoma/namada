@@ -13,8 +13,8 @@ use std::collections::BTreeSet;
 
 use namada_tx::Tx;
 
-use crate::types::address::Address;
-use crate::types::storage;
+use crate::address::Address;
+use crate::storage;
 
 /// Input for validity predicate wasm module call
 pub struct VpInput<'a> {

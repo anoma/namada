@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
+use namada::core::address::Address;
+use namada::core::encode;
 use namada::core::event::EmitEvents;
+use namada::core::storage::Epoch;
 use namada::governance::pgf::storage::keys as pgf_storage;
 use namada::governance::pgf::storage::steward::StewardDetail;
 use namada::governance::pgf::{storage as pgf, ADDRESS};
@@ -21,9 +24,6 @@ use namada::proof_of_stake::parameters::PosParams;
 use namada::proof_of_stake::storage::read_total_stake;
 use namada::state::{DBIter, StorageHasher, StorageWrite, DB};
 use namada::tx::{Code, Data};
-use namada::types::address::Address;
-use namada::types::encode;
-use namada::types::storage::Epoch;
 use namada::{ibc, token};
 use namada_sdk::proof_of_stake::storage::read_validator_stake;
 

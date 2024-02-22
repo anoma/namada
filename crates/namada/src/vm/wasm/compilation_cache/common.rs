@@ -18,8 +18,8 @@ use clru::{CLruCache, CLruCacheConfig, WeightScale};
 use wasmer::{Module, Store};
 use wasmer_cache::{FileSystemCache, Hash as CacheHash};
 
-use crate::core::types::hash::Hash;
-use crate::types::control_flow::time::{ExponentialBackoff, SleepStrategy};
+use crate::control_flow::time::{ExponentialBackoff, SleepStrategy};
+use crate::core::hash::Hash;
 use crate::vm::wasm::run::untrusted_wasm_store;
 use crate::vm::wasm::{self, memory};
 use crate::vm::{WasmCacheAccess, WasmCacheRoAccess};

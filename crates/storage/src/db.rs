@@ -1,13 +1,13 @@
 use std::fmt::Debug;
 
-use namada_core::types::address::EstablishedAddressGen;
-use namada_core::types::hash::{Error as HashError, Hash};
-use namada_core::types::storage::{
+use namada_core::address::EstablishedAddressGen;
+use namada_core::hash::{Error as HashError, Hash};
+use namada_core::storage::{
     BlockHash, BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue,
     Header, Key,
 };
-use namada_core::types::time::DateTimeUtc;
-use namada_core::types::{ethereum_events, ethereum_structs};
+use namada_core::time::DateTimeUtc;
+use namada_core::{ethereum_events, ethereum_structs};
 use namada_merkle_tree::{
     Error as MerkleTreeError, MerkleTreeStoresRead, MerkleTreeStoresWrite,
     StoreType,
@@ -25,9 +25,9 @@ pub enum Error {
     #[error("Found an unknown key: {key}")]
     UnknownKey { key: String },
     #[error("Storage key error {0}")]
-    KeyError(namada_core::types::storage::Error),
+    KeyError(namada_core::storage::Error),
     #[error("Coding error: {0}")]
-    CodingError(#[from] namada_core::types::DecodeError),
+    CodingError(#[from] namada_core::DecodeError),
     #[error("Merkle tree error: {0}")]
     MerkleTreeError(#[from] MerkleTreeError),
     #[error("DB error: {0}")]

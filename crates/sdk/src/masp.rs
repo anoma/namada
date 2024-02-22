@@ -51,15 +51,15 @@ use masp_proofs::bellman::groth16::PreparedVerifyingKey;
 use masp_proofs::bls12_381::Bls12;
 use masp_proofs::prover::LocalTxProver;
 use masp_proofs::sapling::SaplingVerificationContext;
-use namada_core::types::address::{Address, MASP};
-use namada_core::types::dec::Dec;
-use namada_core::types::masp::{
+use namada_core::address::{Address, MASP};
+use namada_core::dec::Dec;
+use namada_core::masp::{
     encode_asset_type, AssetData, BalanceOwner, ExtendedViewingKey,
     PaymentAddress, TransferSource, TransferTarget,
 };
-use namada_core::types::storage::{BlockHeight, Epoch, IndexedTx, TxIndex};
-use namada_core::types::time::{DateTimeUtc, DurationSecs};
-use namada_core::types::uint::Uint;
+use namada_core::storage::{BlockHeight, Epoch, IndexedTx, TxIndex};
+use namada_core::time::{DateTimeUtc, DurationSecs};
+use namada_core::uint::Uint;
 use namada_ibc::IbcMessage;
 use namada_token::{self as token, Denomination, MaspDigitPos, Transfer};
 use namada_tx::data::{TxResult, WrapperTx};
@@ -885,8 +885,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         tx: &Tx,
         action_arg: ExtractShieldedActionArg<'args, C>,
         check_header: bool,
-    ) -> Result<(BTreeSet<namada_core::types::storage::Key>, Transaction), Error>
-    {
+    ) -> Result<(BTreeSet<namada_core::storage::Key>, Transaction), Error> {
         let maybe_transaction = if check_header {
             let tx_header = tx.header();
             // NOTE: simply looking for masp sections attached to the tx
@@ -1037,7 +1036,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         &mut self,
         indexed_tx: IndexedTx,
         epoch: Epoch,
-        tx_changed_keys: &BTreeSet<namada_core::types::storage::Key>,
+        tx_changed_keys: &BTreeSet<namada_core::storage::Key>,
         shielded: &Transaction,
         vk: &ViewingKey,
         native_token: Address,
@@ -2296,27 +2295,28 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
         // To speed up integration tests, we can save and load proofs
         #[cfg(feature = "testing")]
-        let load_or_save =
-            if let Ok(masp_proofs) = env::var(ENV_VAR_MASP_TEST_PROOFS) {
-                let parsed = match masp_proofs.to_ascii_lowercase().as_str() {
-                    "load" => LoadOrSaveProofs::Load,
-                    "save" => LoadOrSaveProofs::Save,
-                    env_var => Err(Error::Other(format!(
+        let load_or_save = if let Ok(masp_proofs) =
+            env::var(ENV_VAR_MASP_TEST_PROOFS)
+        {
+            let parsed = match masp_proofs.to_ascii_lowercase().as_str() {
+                "load" => LoadOrSaveProofs::Load,
+                "save" => LoadOrSaveProofs::Save,
+                env_var => Err(Error::Other(format!(
                     "Unexpected value for {ENV_VAR_MASP_TEST_PROOFS} env var. \
                      Expecting \"save\" or \"load\", but got \"{env_var}\"."
                 )))?,
-                };
-                if env::var(ENV_VAR_MASP_TEST_SEED).is_err() {
-                    Err(Error::Other(format!(
+            };
+            if env::var(ENV_VAR_MASP_TEST_SEED).is_err() {
+                Err(Error::Other(format!(
                     "Ensure to set a seed with {ENV_VAR_MASP_TEST_SEED} env \
                      var when using {ENV_VAR_MASP_TEST_PROOFS} for \
                      deterministic proofs."
                 )))?;
-                }
-                parsed
-            } else {
-                LoadOrSaveProofs::Neither
-            };
+            }
+            parsed
+        } else {
+            LoadOrSaveProofs::Neither
+        };
 
         let builder_clone = builder.clone().map_builder(WalletMap);
         #[cfg(feature = "testing")]
@@ -2340,8 +2340,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
         #[cfg(feature = "testing")]
         {
-            let builder_hash =
-                namada_core::types::hash::Hash::sha256(&builder_bytes);
+            let builder_hash = namada_core::hash::Hash::sha256(&builder_bytes);
 
             let saved_filepath = env::current_dir()
                 .map_err(|e| Error::Other(e.to_string()))?
@@ -2757,7 +2756,7 @@ enum ExtractShieldedActionArg<'args, C: Client + Sync> {
 async fn extract_payload_from_shielded_action<'args, C: Client + Sync>(
     tx_data: &[u8],
     args: ExtractShieldedActionArg<'args, C>,
-) -> Result<(BTreeSet<namada_core::types::storage::Key>, Transaction), Error> {
+) -> Result<(BTreeSet<namada_core::storage::Key>, Transaction), Error> {
     let message = namada_ibc::decode_message(tx_data)
         .map_err(|e| Error::Other(e.to_string()))?;
 
@@ -2834,7 +2833,7 @@ async fn extract_payload_from_shielded_action<'args, C: Client + Sync>(
                             TxResult::from_str(&attribute.value).unwrap();
                         for ibc_event in &tx_result.ibc_events {
                             let event =
-                                namada_core::types::ibc::get_shielded_transfer(
+                                namada_core::ibc::get_shielded_transfer(
                                     ibc_event,
                                 )
                                 .ok()
@@ -3004,15 +3003,15 @@ pub mod testing {
     use proptest::{collection, option, prop_compose};
 
     use super::*;
+    use crate::address::testing::arb_address;
     use crate::masp_primitives::consensus::BranchId;
     use crate::masp_primitives::constants::VALUE_COMMITMENT_RANDOMNESS_GENERATOR;
     use crate::masp_primitives::merkle_tree::FrozenCommitmentTree;
     use crate::masp_primitives::sapling::keys::OutgoingViewingKey;
     use crate::masp_primitives::sapling::redjubjub::PrivateKey;
     use crate::masp_primitives::transaction::components::transparent::testing::arb_transparent_address;
+    use crate::storage::testing::arb_epoch;
     use crate::token::testing::arb_denomination;
-    use crate::types::address::testing::arb_address;
-    use crate::types::storage::testing::arb_epoch;
 
     #[derive(Debug, Clone)]
     // Adapts a CSPRNG from a PRNG for proptesting

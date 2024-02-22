@@ -2,19 +2,18 @@ use std::collections::BTreeSet;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use namada::account::UpdateAccount;
-use namada::core::types::address::{self, Address};
-use namada::core::types::key::{
-    common, SecretKey as SecretKeyInterface, SigScheme,
+use namada::core::address::{self, Address};
+use namada::core::hash::Hash;
+use namada::core::key::{
+    common, ed25519, SecretKey as SecretKeyInterface, SigScheme,
 };
+use namada::core::storage::{Key, TxIndex};
 use namada::governance::storage::vote::ProposalVote;
 use namada::governance::VoteProposalData;
 use namada::ledger::gas::{TxGasMeter, VpGasMeter};
 use namada::token::{Amount, Transfer};
 use namada::tx::data::pos::{Bond, CommissionChange};
 use namada::tx::{Code, Section};
-use namada::types::hash::Hash;
-use namada::types::key::ed25519;
-use namada::types::storage::{Key, TxIndex};
 use namada::vm::wasm::run;
 use namada_apps::bench_utils::{
     generate_foreign_key_tx, BenchShell, TX_BOND_WASM,
@@ -383,7 +382,7 @@ fn vp_validator(c: &mut Criterion) {
         TX_CHANGE_VALIDATOR_COMMISSION_WASM,
         CommissionChange {
             validator: defaults::validator_address(),
-            new_rate: namada::types::dec::Dec::new(6, 2).unwrap(),
+            new_rate: namada::core::dec::Dec::new(6, 2).unwrap(),
         },
         None,
         None,

@@ -12,24 +12,22 @@ use std::collections::BTreeSet;
 
 use borsh::BorshDeserialize;
 use eyre::WrapErr;
-use namada_core::types::storage;
-use namada_core::types::storage::Epochs;
-use namada_core::types::validity_predicate::VpSentinel;
+use namada_core::storage;
+use namada_core::storage::Epochs;
+use namada_core::validity_predicate::VpSentinel;
 use namada_gas::GasMetering;
 use namada_tx::Tx;
 pub use namada_vp_env::VpEnv;
 
 use super::vp_host_fns;
+use crate::address::Address;
+use crate::hash::Hash;
+use crate::ibc::IbcEvent;
 use crate::ledger::gas::VpGasMeter;
 use crate::state;
 use crate::state::write_log::WriteLog;
 use crate::state::{ResultExt, State, StorageHasher, StorageRead};
-use crate::types::address::Address;
-use crate::types::hash::Hash;
-use crate::types::ibc::IbcEvent;
-use crate::types::storage::{
-    BlockHash, BlockHeight, Epoch, Header, Key, TxIndex,
-};
+use crate::storage::{BlockHash, BlockHeight, Epoch, Header, Key, TxIndex};
 use crate::vm::prefix_iter::PrefixIterators;
 use crate::vm::WasmCacheAccess;
 

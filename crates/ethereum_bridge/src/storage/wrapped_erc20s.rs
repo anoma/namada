@@ -1,12 +1,12 @@
 //! Functionality for accessing the multitoken subspace
 
 use eyre::eyre;
-use namada_core::types::address::{Address, InternalAddress};
-pub use namada_core::types::eth_bridge_pool::{
+use namada_core::address::{Address, InternalAddress};
+pub use namada_core::eth_bridge_pool::{
     erc20_nut_address as nut, erc20_token_address as token,
 };
-use namada_core::types::ethereum_events::EthAddress;
-use namada_core::types::storage::{self, DbKeySeg};
+use namada_core::ethereum_events::EthAddress;
+use namada_core::storage::{self, DbKeySeg};
 use namada_trans_token::storage_key::{
     balance_key, minted_balance_key, MINTED_STORAGE_KEY,
 };
@@ -110,9 +110,9 @@ mod test {
     use std::str::FromStr;
 
     use assert_matches::assert_matches;
-    use namada_core::types::address::{nam, Address};
-    use namada_core::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
-    use namada_core::types::storage::DbKeySeg;
+    use namada_core::address::{nam, Address};
+    use namada_core::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
+    use namada_core::storage::DbKeySeg;
 
     use super::*;
     use crate::token::storage_key::BALANCE_STORAGE_KEY;

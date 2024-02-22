@@ -2,9 +2,9 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use borsh::BorshDeserialize;
 use eyre::{eyre, Result};
-use namada_core::types::address::Address;
-use namada_core::types::storage::BlockHeight;
-use namada_core::types::token;
+use namada_core::address::Address;
+use namada_core::storage::BlockHeight;
+use namada_core::token;
 use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_state::{DBIter, StorageHasher, WlStorage, DB};
 
@@ -209,9 +209,9 @@ fn keys_changed<T>(
 mod tests {
     use std::collections::BTreeMap;
 
-    use namada_core::types::address;
-    use namada_core::types::ethereum_events::EthereumEvent;
-    use namada_core::types::voting_power::FractionalVotingPower;
+    use namada_core::address;
+    use namada_core::ethereum_events::EthereumEvent;
+    use namada_core::voting_power::FractionalVotingPower;
     use namada_state::testing::TestWlStorage;
 
     use self::helpers::{default_event, default_total_stake, TallyParams};

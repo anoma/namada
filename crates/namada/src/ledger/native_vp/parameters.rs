@@ -2,8 +2,8 @@
 
 use std::collections::BTreeSet;
 
-use namada_core::types::address::Address;
-use namada_core::types::storage::Key;
+use namada_core::address::Address;
+use namada_core::storage::Key;
 use namada_tx::Tx;
 use thiserror::Error;
 
