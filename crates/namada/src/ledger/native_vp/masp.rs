@@ -592,7 +592,7 @@ where
         // shielded, unshielding) since a malicious tx could try to write keys
         // in an invalid way
         if !(self.valid_note_commitment_update(&shielded_tx)?
-            || self.valid_nullifiers_reveal(keys_changed, &shielded_tx)?)
+            && self.valid_nullifiers_reveal(keys_changed, &shielded_tx)?)
         {
             return Ok(false);
         }
