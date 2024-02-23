@@ -227,7 +227,8 @@ fn run_ledger_ibc() -> Result<()> {
 fn run_ledger_ibc_with_hermes() -> Result<()> {
     let update_genesis =
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
-            genesis.parameters.parameters.epochs_per_year = 31536;
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(1800);
             setup::set_validators(1, genesis, base_dir, |_| 0)
         };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
@@ -2306,8 +2307,8 @@ fn check_shielded_balances(
     test_b: &Test,
 ) -> Result<()> {
     // Check the balance on Chain A
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
     let rpc_a = get_actor_rpc(test_a, Who::Validator(0));
+    shielded_sync(test_a, AA_VIEWING_KEY)?;
     let query_args = vec![
         "balance",
         "--owner",
