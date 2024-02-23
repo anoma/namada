@@ -637,12 +637,12 @@ where
     pub fn commit(&mut self) -> response::Commit {
         self.bump_last_processed_eth_block();
 
-        self.wl_storage
+        self.state
             .commit_block()
             .expect("Encountered a storage error while committing a block");
 
-        let merkle_root = self.wl_storage.storage.merkle_root();
-        let committed_height = self.wl_storage.storage.get_last_block_height();
+        let merkle_root = self.state.in_mem().merkle_root();
+        let committed_height = self.state.in_mem().get_last_block_height();
         tracing::info!(
             "Committed block hash: {merkle_root}, height: {committed_height}",
         );

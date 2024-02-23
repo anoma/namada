@@ -349,8 +349,8 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    ctx.wl_storage
-        .storage
+    ctx.state
+        .in_mem()
         .block
         .pred_epochs
         .first_block_heights

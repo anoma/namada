@@ -1963,8 +1963,8 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
         .shell
         .lock()
         .unwrap()
-        .wl_storage
-        .storage
+        .state
+        .in_mem()
         .native_token
         .clone();
     let mut txs = vec![];
