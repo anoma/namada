@@ -2084,8 +2084,10 @@ fn wrapper_fee_unshielding_out_of_gas() -> Result<()> {
     );
     // Assert that the failure happens with the wrapper transaction that gets
     // rejected by mempool
-    assert!(format!("{:?}", captured.result)
-        .contains("Encountered error while broadcasting transaction"));
+    assert!(
+        format!("{:?}", captured.result)
+            .contains("Encountered error while broadcasting transaction")
+    );
 
     Ok(())
 }
