@@ -4747,7 +4747,7 @@ version = "0.31.6"
 dependencies = [
  "namada_core",
  "namada_shielded_token",
- "namada_storage",
+ "namada_state",
  "namada_trans_token",
 ]
 

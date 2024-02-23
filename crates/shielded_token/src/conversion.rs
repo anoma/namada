@@ -182,6 +182,18 @@ where
 }
 
 // This is only enabled when "wasm-runtime" is on, because we're using rayon
+#[cfg(not(any(feature = "multicore", test)))]
+/// Update the MASP's allowed conversions
+pub fn update_allowed_conversions<D, H>(
+    _wl_storage: &mut WlStorage<D, H>,
+) -> namada_storage::Result<()>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
+{
+    Ok(())
+}
+
 #[cfg(any(feature = "multicore", test))]
 /// Update the MASP's allowed conversions
 pub fn update_allowed_conversions<D, H>(
