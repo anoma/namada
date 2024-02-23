@@ -2017,11 +2017,27 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
 #[test]
 fn wrapper_fee_unshielding_out_of_gas() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
-    let validator_one_rpc = "127.0.0.1:26567";
+    let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
     let (mut node, _services) = setup::setup()?;
     _ = node.next_epoch();
+
+    // Add the relevant viewing keys to the wallet otherwise the shielded
+    // context won't precache the masp data
+    run(
+        &node,
+        Bin::Wallet,
+        vec![
+            "add",
+            "--alias",
+            "alias_a",
+            "--value",
+            AA_VIEWING_KEY,
+            "--unsafe-dont-encrypt",
+        ],
+    )?;
+    node.assert_success();
 
     // 1. Shield some tokens
     run(
@@ -2047,6 +2063,13 @@ fn wrapper_fee_unshielding_out_of_gas() -> Result<()> {
     )?;
     node.assert_success();
 
+    // sync shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+
     _ = node.next_epoch();
     // 2. Valid unshielding out of gas
     let tx_args = vec![
@@ -2061,7 +2084,7 @@ fn wrapper_fee_unshielding_out_of_gas() -> Result<()> {
         "1",
         "--gas-price",
         "1",
-        // Set a haigh gas limit to ensure that fee unshielding consumes it and
+        // Set a high gas limit to ensure that fee unshielding consumes it and
         // we don't go out of gas just because of the tx size
         "--gas-limit",
         "7000",
