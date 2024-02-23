@@ -514,7 +514,12 @@ pub fn received_ibc_token(
         dest_port_id,
         dest_channel_id,
     )?;
-    Ok(storage::ibc_token(ibc_trace))
+    if ibc_trace.contains('/') {
+        Ok(storage::ibc_token(ibc_trace))
+    } else {
+        Address::decode(ibc_trace)
+            .map_err(|e| Error::Trace(format!("Invalid base token: {e}")))
+    }
 }
 
 #[cfg(any(test, feature = "testing"))]
