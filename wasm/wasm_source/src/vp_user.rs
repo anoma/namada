@@ -388,7 +388,7 @@ mod tests {
         tx_env.credit_tokens(&source, &token, amount);
         // write the denomination of NAM into storage
         token::write_denom(
-            &mut tx_env.wl_storage,
+            &mut tx_env.state,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         )
@@ -439,7 +439,7 @@ mod tests {
         tx_env.spawn_accounts([&vp_owner, &target, &token]);
         // write the denomination of NAM into storage
         token::write_denom(
-            &mut tx_env.wl_storage,
+            &mut tx_env.state,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         )
@@ -501,7 +501,7 @@ mod tests {
         tx_env.credit_tokens(&vp_owner, &token, amount);
         // write the denomination of NAM into storage
         token::write_denom(
-            &mut tx_env.wl_storage,
+            &mut tx_env.state,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         )
@@ -594,7 +594,7 @@ mod tests {
         tx_env.init_account_storage(&vp_owner, vec![public_key], 1);
         // write the denomination of NAM into storage
         token::write_denom(
-            &mut tx_env.wl_storage,
+            &mut tx_env.state,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         )
@@ -758,7 +758,7 @@ mod tests {
         tx_env.init_account_storage(&validator, vec![public_key], 1);
         // write the denomination of NAM into storage
         token::write_denom(
-            &mut tx_env.wl_storage,
+            &mut tx_env.state,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         )
@@ -855,7 +855,7 @@ mod tests {
 
         // write the denomination of NAM into storage
         token::write_denom(
-            &mut tx_env.wl_storage,
+            &mut tx_env.state,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         )
@@ -1044,7 +1044,7 @@ mod tests {
 
         // write the denomination of NAM into storage
         token::write_denom(
-            &mut tx_env.wl_storage,
+            &mut tx_env.state,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         )

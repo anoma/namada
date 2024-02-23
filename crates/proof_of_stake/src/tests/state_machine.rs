@@ -13,7 +13,7 @@ use namada_core::key::common::PublicKey;
 use namada_core::storage::Epoch;
 use namada_core::token::Change;
 use namada_governance::parameters::GovernanceParameters;
-use namada_state::testing::TestWlStorage;
+use namada_state::testing::TestState;
 use namada_storage::collections::lazy_map::{
     Collectable, NestedSubKey, SubKey,
 };
@@ -163,7 +163,7 @@ struct AbstractPosState {
 #[derive(Debug)]
 struct ConcretePosState {
     /// Storage - contains all the PoS state
-    s: TestWlStorage,
+    s: TestState,
 }
 
 /// State machine transitions
@@ -225,7 +225,7 @@ impl StateMachineTest for ConcretePosState {
                 .map(|val| &val.address)
                 .collect::<Vec<_>>()
         );
-        let mut s = TestWlStorage::default();
+        let mut s = TestState::default();
         initial_state.gov_params.init_storage(&mut s).unwrap();
         crate::test_utils::test_init_genesis(
             &mut s,
@@ -245,7 +245,7 @@ impl StateMachineTest for ConcretePosState {
         let params = crate::read_pos_params(&state.s).unwrap();
         let pos_balance = read_balance(
             &state.s,
-            &state.s.storage.native_token,
+            &state.s.in_mem().native_token,
             &crate::ADDRESS,
         )
         .unwrap();
@@ -256,7 +256,7 @@ impl StateMachineTest for ConcretePosState {
                 advance_epoch(&mut state.s, &params);
 
                 // Need to apply some slashing
-                let current_epoch = state.s.storage.block.epoch;
+                let current_epoch = state.s.in_mem().block.epoch;
                 crate::slashing::process_slashes(&mut state.s, current_epoch)
                     .unwrap();
 
@@ -771,7 +771,7 @@ impl StateMachineTest for ConcretePosState {
 
 impl ConcretePosState {
     fn current_epoch(&self) -> Epoch {
-        self.s.storage.block.epoch
+        self.s.in_mem().block.epoch
     }
 
     fn check_next_epoch_post_conditions(&self, params: &PosParams) {
@@ -1443,7 +1443,7 @@ impl ConcretePosState {
         params: &PosParams,
         validator: &Address,
     ) {
-        let current_epoch = self.s.storage.block.epoch;
+        let current_epoch = self.s.in_mem().block.epoch;
 
         // Make sure the validator is not in either set until the pipeline epoch
         for epoch in current_epoch.iter_range(params.pipeline_len) {

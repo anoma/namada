@@ -64,7 +64,7 @@ where
             _ => unreachable!("{VALIDATOR_EXPECT_MSG}"),
         };
         sign_ethereum_events(
-            &self.wl_storage,
+            &self.state,
             validator_addr,
             protocol_key,
             ethereum_events,
@@ -89,7 +89,7 @@ where
             _ => unreachable!("{VALIDATOR_EXPECT_MSG}"),
         };
         sign_bridge_pool_root(
-            &self.wl_storage,
+            &self.state,
             validator_addr,
             eth_hot_key,
             protocol_key,
@@ -110,7 +110,7 @@ where
             .mode
             .get_eth_bridge_keypair()
             .expect("{VALIDATOR_EXPECT_MSG}");
-        sign_validator_set_update(&self.wl_storage, validator_addr, eth_hot_key)
+        sign_validator_set_update(&self.state, validator_addr, eth_hot_key)
     }
 
     /// Given a slice of [`TxBytes`], return an iterator over the
@@ -140,7 +140,7 @@ where
                         .ethereum_events
                         .iter()
                         .any(|event| {
-                            self.wl_storage
+                            self.state
                                 .ethbridge_queries()
                                 .validate_eth_event_nonce(event)
                         })
@@ -157,7 +157,7 @@ where
                     // will eventually be evicted, getting replaced
                     // by newer txs.
                     (!self
-                        .wl_storage
+                        .state
                         .ethbridge_queries()
                         .valset_upd_seen(ext.data.signing_epoch.next()))
                     .then(|| tx_bytes.clone())

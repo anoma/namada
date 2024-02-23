@@ -15,7 +15,7 @@ use namada_core::masp::encode_asset_type;
 use namada_core::storage::{IndexedTx, Key};
 use namada_gas::MASP_VERIFY_SHIELDED_TX_GAS;
 use namada_sdk::masp::verify_shielded_tx;
-use namada_state::{OptionExt, ResultExt};
+use namada_state::{OptionExt, ResultExt, StateRead};
 use namada_token::read_denom;
 use namada_tx::Tx;
 use namada_vp_env::VpEnv;
@@ -48,14 +48,13 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// MASP VP
-pub struct MaspVp<'a, DB, H, CA>
+pub struct MaspVp<'a, S, CA>
 where
-    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: namada_state::StorageHasher,
+    S: StateRead,
     CA: WasmCacheAccess,
 {
     /// Context to interact with the host structures.
-    pub ctx: Ctx<'a, DB, H, CA>,
+    pub ctx: Ctx<'a, S, CA>,
 }
 
 struct TransparentTransferData {
@@ -65,10 +64,9 @@ struct TransparentTransferData {
     amount: Amount,
 }
 
-impl<'a, DB, H, CA> MaspVp<'a, DB, H, CA>
+impl<'a, S, CA> MaspVp<'a, S, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + namada_state::StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     // Check that the transaction correctly revealed the nullifiers
@@ -397,10 +395,9 @@ fn unepoched_tokens(
     Ok(unepoched_tokens)
 }
 
-impl<'a, DB, H, CA> NativeVp for MaspVp<'a, DB, H, CA>
+impl<'a, S, CA> NativeVp for MaspVp<'a, S, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + namada_state::StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     type Error = Error;
@@ -412,7 +409,7 @@ where
         _verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
         let epoch = self.ctx.get_block_epoch()?;
-        let conversion_state = self.ctx.storage.get_conversion_state();
+        let conversion_state = self.ctx.state.in_mem().get_conversion_state();
         let shielded_tx = self.ctx.get_shielded_action(tx_data)?;
 
         if u64::from(self.ctx.get_block_height()?)

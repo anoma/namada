@@ -3,14 +3,14 @@ use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::hints;
 use namada_core::storage::Key;
 use namada_core::voting_power::FractionalVotingPower;
-use namada_state::{DBIter, PrefixIter, StorageHasher, WlStorage, DB};
+use namada_state::{DBIter, PrefixIter, StorageHasher, WlState, DB};
 use namada_storage::{StorageRead, StorageWrite};
 
 use super::{EpochedVotingPower, EpochedVotingPowerExt, Tally, Votes};
 use crate::storage::vote_tallies;
 
 pub fn write<D, H, T>(
-    wl_storage: &mut WlStorage<D, H>,
+    state: &mut WlState<D, H>,
     keys: &vote_tallies::Keys<T>,
     body: &T,
     tally: &Tally,
@@ -21,15 +21,15 @@ where
     H: 'static + StorageHasher + Sync,
     T: BorshSerialize,
 {
-    wl_storage.write(&keys.body(), body)?;
-    wl_storage.write(&keys.seen(), tally.seen)?;
-    wl_storage.write(&keys.seen_by(), tally.seen_by.clone())?;
-    wl_storage.write(&keys.voting_power(), tally.voting_power.clone())?;
+    state.write(&keys.body(), body)?;
+    state.write(&keys.seen(), tally.seen)?;
+    state.write(&keys.seen_by(), tally.seen_by.clone())?;
+    state.write(&keys.voting_power(), tally.voting_power.clone())?;
     if !already_present {
         // add the current epoch for the inserted event
-        wl_storage.write(
+        state.write(
             &keys.voting_started_epoch(),
-            wl_storage.storage.get_current_epoch().0,
+            state.in_mem().get_current_epoch().0,
         )?;
     }
     Ok(())
@@ -40,7 +40,7 @@ where
 /// of fractional voting power behind it.
 #[must_use = "The storage value returned by this function must be used"]
 pub fn delete<D, H, T>(
-    wl_storage: &mut WlStorage<D, H>,
+    state: &mut WlState<D, H>,
     keys: &vote_tallies::Keys<T>,
 ) -> Result<Option<T>>
 where
@@ -50,38 +50,38 @@ where
 {
     let opt_body = {
         let voting_power: EpochedVotingPower =
-            super::read::value(wl_storage, &keys.voting_power())?;
+            super::read::value(state, &keys.voting_power())?;
 
         if hints::unlikely(
-            voting_power.fractional_stake(wl_storage)
+            voting_power.fractional_stake(state)
                 > FractionalVotingPower::ONE_THIRD,
         ) {
-            let body: T = super::read::value(wl_storage, &keys.body())?;
+            let body: T = super::read::value(state, &keys.body())?;
             Some(body)
         } else {
             None
         }
     };
-    wl_storage.delete(&keys.body())?;
-    wl_storage.delete(&keys.seen())?;
-    wl_storage.delete(&keys.seen_by())?;
-    wl_storage.delete(&keys.voting_power())?;
-    wl_storage.delete(&keys.voting_started_epoch())?;
+    state.delete(&keys.body())?;
+    state.delete(&keys.seen())?;
+    state.delete(&keys.seen_by())?;
+    state.delete(&keys.voting_power())?;
+    state.delete(&keys.voting_started_epoch())?;
     Ok(opt_body)
 }
 
 pub fn read<D, H, T>(
-    wl_storage: &WlStorage<D, H>,
+    state: &WlState<D, H>,
     keys: &vote_tallies::Keys<T>,
 ) -> Result<Tally>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let seen: bool = super::read::value(wl_storage, &keys.seen())?;
-    let seen_by: Votes = super::read::value(wl_storage, &keys.seen_by())?;
+    let seen: bool = super::read::value(state, &keys.seen())?;
+    let seen_by: Votes = super::read::value(state, &keys.seen_by())?;
     let voting_power: EpochedVotingPower =
-        super::read::value(wl_storage, &keys.voting_power())?;
+        super::read::value(state, &keys.voting_power())?;
 
     Ok(Tally {
         voting_power,
@@ -91,21 +91,21 @@ where
 }
 
 pub fn iter_prefix<'a, D, H>(
-    wl_storage: &'a WlStorage<D, H>,
+    state: &'a WlState<D, H>,
     prefix: &Key,
 ) -> Result<PrefixIter<'a, D>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    wl_storage
+    state
         .iter_prefix(prefix)
         .context("Failed to iterate over the given storage prefix")
 }
 
 #[inline]
 pub fn read_body<D, H, T>(
-    wl_storage: &WlStorage<D, H>,
+    state: &WlState<D, H>,
     keys: &vote_tallies::Keys<T>,
 ) -> Result<T>
 where
@@ -113,12 +113,12 @@ where
     H: 'static + StorageHasher + Sync,
     T: BorshDeserialize,
 {
-    super::read::value(wl_storage, &keys.body())
+    super::read::value(state, &keys.body())
 }
 
 #[inline]
 pub fn maybe_read_seen<D, H, T>(
-    wl_storage: &WlStorage<D, H>,
+    state: &WlState<D, H>,
     keys: &vote_tallies::Keys<T>,
 ) -> Result<Option<bool>>
 where
@@ -126,7 +126,7 @@ where
     H: 'static + StorageHasher + Sync,
     T: BorshDeserialize,
 {
-    super::read::maybe_value(wl_storage, &keys.seen())
+    super::read::maybe_value(state, &keys.seen())
 }
 
 #[cfg(test)]
@@ -142,7 +142,7 @@ mod tests {
 
     #[test]
     fn test_delete_expired_tally() {
-        let (mut wl_storage, _) = test_utils::setup_default_storage();
+        let (mut state, _) = test_utils::setup_default_storage();
         let (validator, validator_voting_power) =
             test_utils::default_validator();
 
@@ -164,25 +164,25 @@ mod tests {
             seen_by: BTreeMap::from([(validator, 1.into())]),
             seen: false,
         };
-        assert!(write(&mut wl_storage, &keys, &event, &tally, false).is_ok());
+        assert!(write(&mut state, &keys, &event, &tally, false).is_ok());
 
         // delete the tally and check that the body is returned
-        let opt_body = delete(&mut wl_storage, &keys).unwrap();
+        let opt_body = delete(&mut state, &keys).unwrap();
         assert_matches!(opt_body, Some(e) if e == event);
 
         // now, we write another tally, with <=1/3 voting power
         tally.voting_power =
             EpochedVotingPower::from([(0.into(), 1u64.into())]);
-        assert!(write(&mut wl_storage, &keys, &event, &tally, false).is_ok());
+        assert!(write(&mut state, &keys, &event, &tally, false).is_ok());
 
         // delete the tally and check that no body is returned
-        let opt_body = delete(&mut wl_storage, &keys).unwrap();
+        let opt_body = delete(&mut state, &keys).unwrap();
         assert_matches!(opt_body, None);
     }
 
     #[test]
     fn test_write_tally() {
-        let (mut wl_storage, _) = test_utils::setup_default_storage();
+        let (mut state, _) = test_utils::setup_default_storage();
         let (validator, validator_voting_power) =
             test_utils::default_validator();
         let event = EthereumEvent::TransfersToNamada {
@@ -199,28 +199,27 @@ mod tests {
             seen: false,
         };
 
-        let result = write(&mut wl_storage, &keys, &event, &tally, false);
+        let result = write(&mut state, &keys, &event, &tally, false);
 
         assert!(result.is_ok());
-        let body = wl_storage.read_bytes(&keys.body()).unwrap();
+        let body = state.read_bytes(&keys.body()).unwrap();
         assert_eq!(body, Some(event.serialize_to_vec()));
-        let seen = wl_storage.read_bytes(&keys.seen()).unwrap();
+        let seen = state.read_bytes(&keys.seen()).unwrap();
         assert_eq!(seen, Some(tally.seen.serialize_to_vec()));
-        let seen_by = wl_storage.read_bytes(&keys.seen_by()).unwrap();
+        let seen_by = state.read_bytes(&keys.seen_by()).unwrap();
         assert_eq!(seen_by, Some(tally.seen_by.serialize_to_vec()));
-        let voting_power = wl_storage.read_bytes(&keys.voting_power()).unwrap();
+        let voting_power = state.read_bytes(&keys.voting_power()).unwrap();
         assert_eq!(voting_power, Some(tally.voting_power.serialize_to_vec()));
-        let epoch =
-            wl_storage.read_bytes(&keys.voting_started_epoch()).unwrap();
+        let epoch = state.read_bytes(&keys.voting_started_epoch()).unwrap();
         assert_eq!(
             epoch,
-            Some(wl_storage.storage.get_current_epoch().0.serialize_to_vec())
+            Some(state.in_mem().get_current_epoch().0.serialize_to_vec())
         );
     }
 
     #[test]
     fn test_read_tally() {
-        let (mut wl_storage, _) = test_utils::setup_default_storage();
+        let (mut state, _) = test_utils::setup_default_storage();
         let (validator, validator_voting_power) =
             test_utils::default_validator();
         let event = EthereumEvent::TransfersToNamada {
@@ -236,20 +235,20 @@ mod tests {
             seen_by: BTreeMap::from([(validator, 10.into())]),
             seen: false,
         };
-        wl_storage.write(&keys.body(), &event).unwrap();
-        wl_storage.write(&keys.seen(), tally.seen).unwrap();
-        wl_storage.write(&keys.seen_by(), &tally.seen_by).unwrap();
-        wl_storage
+        state.write(&keys.body(), &event).unwrap();
+        state.write(&keys.seen(), tally.seen).unwrap();
+        state.write(&keys.seen_by(), &tally.seen_by).unwrap();
+        state
             .write(&keys.voting_power(), &tally.voting_power)
             .unwrap();
-        wl_storage
+        state
             .write(
                 &keys.voting_started_epoch(),
-                wl_storage.storage.get_block_height().0,
+                state.in_mem().get_block_height().0,
             )
             .unwrap();
 
-        let result = read(&wl_storage, &keys);
+        let result = read(&state, &keys);
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), tally);

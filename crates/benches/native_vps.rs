@@ -46,6 +46,7 @@ use namada::sdk::masp_primitives::transaction::Transaction;
 use namada::state::{Epoch, StorageRead, StorageWrite, TxIndex};
 use namada::token::{Amount, Transfer};
 use namada::tx::{Code, Section, Tx};
+use namada::validity_predicate::VpSentinel;
 use namada_apps::bench_utils::{
     generate_foreign_key_tx, BenchShell, BenchShieldedCtx,
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
@@ -106,13 +107,13 @@ fn governance(c: &mut Criterion) {
                 let content_section =
                     Section::ExtraData(Code::new(vec![], None));
                 let params =
-                    proof_of_stake::storage::read_pos_params(&shell.wl_storage)
+                    proof_of_stake::storage::read_pos_params(&shell.state)
                         .unwrap();
                 let voting_start_epoch =
                     Epoch(2 + params.pipeline_len + params.unbonding_len);
                 // Must start after current epoch
                 debug_assert_eq!(
-                    shell.wl_storage.get_block_epoch().unwrap().next(),
+                    shell.state.get_block_epoch().unwrap().next(),
                     voting_start_epoch
                 );
                 shell.generate_tx(
@@ -137,12 +138,12 @@ fn governance(c: &mut Criterion) {
                 let max_proposal_content_key =
                     namada::governance::storage::keys::get_max_proposal_content_key();
                 let max_code_size: u64 = shell
-                    .wl_storage
+                    .state
                     .read(&max_code_size_key)
                     .expect("Error while reading from storage")
                     .expect("Missing max_code_size parameter in storage");
                 let max_proposal_content_size: u64 = shell
-                    .wl_storage
+                    .state
                     .read(&max_proposal_content_key)
                     .expect("Error while reading from storage")
                     .expect(
@@ -158,13 +159,13 @@ fn governance(c: &mut Criterion) {
                 ));
 
                 let params =
-                    proof_of_stake::storage::read_pos_params(&shell.wl_storage)
+                    proof_of_stake::storage::read_pos_params(&shell.state)
                         .unwrap();
                 let voting_start_epoch =
                     Epoch(2 + params.pipeline_len + params.unbonding_len);
                 // Must start after current epoch
                 debug_assert_eq!(
-                    shell.wl_storage.get_block_epoch().unwrap().next(),
+                    shell.state.get_block_epoch().unwrap().next(),
                     voting_start_epoch
                 );
                 shell.generate_tx(
@@ -192,20 +193,22 @@ fn governance(c: &mut Criterion) {
         shell.execute_tx(&signed_tx);
 
         let (verifiers, keys_changed) = shell
-            .wl_storage
-            .write_log
+            .state
+            .write_log()
             .verifiers_and_changed_keys(&BTreeSet::default());
 
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        ));
+        let sentinel = RefCell::new(VpSentinel::default());
         let governance = GovernanceVp {
             ctx: Ctx::new(
                 &Address::Internal(InternalAddress::Governance),
-                &shell.wl_storage.storage,
-                &shell.wl_storage.write_log,
+                &shell.state,
                 &signed_tx,
                 &TxIndex(0),
-                VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
-                    u64::MAX.into(),
-                )),
+                &gas_meter,
+                &sentinel,
                 &keys_changed,
                 &verifiers,
                 shell.vp_wasm_cache.clone(),
@@ -265,15 +268,15 @@ fn governance(c: &mut Criterion) {
 //          shell.execute_tx(&tx);
 
 //          let (verifiers, keys_changed) = shell
-//              .wl_storage
+//              .state
 //              .write_log
 //              .verifiers_and_changed_keys(&BTreeSet::default());
 
 //          let slash_fund = SlashFundVp {
 //              ctx: Ctx::new(
 //                  &Address::Internal(InternalAddress::SlashFund),
-//                  &shell.wl_storage.storage,
-//                  &shell.wl_storage.write_log,
+//                  &shell.state.storage,
+//                  &shell.state.write_log,
 //                  &tx,
 //                  &TxIndex(0),
 //
@@ -366,20 +369,22 @@ fn ibc(c: &mut Criterion) {
 
         shell.execute_tx(signed_tx);
         let (verifiers, keys_changed) = shell
-            .wl_storage
-            .write_log
+            .state
+            .write_log()
             .verifiers_and_changed_keys(&BTreeSet::default());
 
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        ));
+        let sentinel = RefCell::new(VpSentinel::default());
         let ibc = Ibc {
             ctx: Ctx::new(
                 &Address::Internal(InternalAddress::Ibc),
-                &shell.wl_storage.storage,
-                &shell.wl_storage.write_log,
+                &shell.state,
                 signed_tx,
                 &TxIndex(0),
-                VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
-                    u64::MAX.into(),
-                )),
+                &gas_meter,
+                &sentinel,
                 &keys_changed,
                 &verifiers,
                 shell.vp_wasm_cache.clone(),
@@ -432,20 +437,22 @@ fn vp_multitoken(c: &mut Criterion) {
         let mut shell = BenchShell::default();
         shell.execute_tx(signed_tx);
         let (verifiers, keys_changed) = shell
-            .wl_storage
-            .write_log
+            .state
+            .write_log()
             .verifiers_and_changed_keys(&BTreeSet::default());
 
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        ));
+        let sentinel = RefCell::new(VpSentinel::default());
         let multitoken = MultitokenVp {
             ctx: Ctx::new(
                 &Address::Internal(InternalAddress::Multitoken),
-                &shell.wl_storage.storage,
-                &shell.wl_storage.write_log,
+                &shell.state,
                 signed_tx,
                 &TxIndex(0),
-                VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
-                    u64::MAX.into(),
-                )),
+                &gas_meter,
+                &sentinel,
                 &keys_changed,
                 &verifiers,
                 shell.vp_wasm_cache.clone(),
@@ -502,20 +509,12 @@ fn setup_storage_for_masp_verification(
 
     // Update the anchor in storage
     let tree_key = namada::token::storage_key::masp_commitment_tree_key();
-    let updated_tree: CommitmentTree<Node> = shielded_ctx
-        .shell
-        .wl_storage
-        .read(&tree_key)
-        .unwrap()
-        .unwrap();
+    let updated_tree: CommitmentTree<Node> =
+        shielded_ctx.shell.state.read(&tree_key).unwrap().unwrap();
     let anchor_key = namada::token::storage_key::masp_commitment_anchor_key(
         updated_tree.root(),
     );
-    shielded_ctx
-        .shell
-        .wl_storage
-        .write(&anchor_key, ())
-        .unwrap();
+    shielded_ctx.shell.state.write(&anchor_key, ()).unwrap();
     shielded_ctx.shell.commit_block();
 
     let (mut shielded_ctx, signed_tx) = match bench_name {
@@ -550,20 +549,22 @@ fn masp(c: &mut Criterion) {
                 setup_storage_for_masp_verification(bench_name);
             let (verifiers, keys_changed) = shielded_ctx
                 .shell
-                .wl_storage
-                .write_log
+                .state
+                .write_log()
                 .verifiers_and_changed_keys(&BTreeSet::default());
 
+            let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+                &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+            ));
+            let sentinel = RefCell::new(VpSentinel::default());
             let masp = MaspVp {
                 ctx: Ctx::new(
                     &Address::Internal(InternalAddress::Masp),
-                    &shielded_ctx.shell.wl_storage.storage,
-                    &shielded_ctx.shell.wl_storage.write_log,
+                    &shielded_ctx.shell.state,
                     &signed_tx,
                     &TxIndex(0),
-                    VpGasMeter::new_from_tx_meter(
-                        &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
-                    ),
+                    &gas_meter,
+                    &sentinel,
                     &keys_changed,
                     &verifiers,
                     shielded_ctx.shell.vp_wasm_cache.clone(),
@@ -625,7 +626,7 @@ fn pgf(c: &mut Criterion) {
         let mut shell = BenchShell::default();
         namada::governance::pgf::storage::keys::stewards_handle()
             .insert(
-                &mut shell.wl_storage,
+                &mut shell.state,
                 defaults::albert_address(),
                 StewardDetail::base(defaults::albert_address()),
             )
@@ -665,20 +666,22 @@ fn pgf(c: &mut Criterion) {
         shell.execute_tx(&signed_tx);
 
         let (verifiers, keys_changed) = shell
-            .wl_storage
-            .write_log
+            .state
+            .write_log()
             .verifiers_and_changed_keys(&BTreeSet::default());
 
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        ));
+        let sentinel = RefCell::new(VpSentinel::default());
         let pgf = PgfVp {
             ctx: Ctx::new(
                 &Address::Internal(InternalAddress::Pgf),
-                &shell.wl_storage.storage,
-                &shell.wl_storage.write_log,
+                &shell.state,
                 &signed_tx,
                 &TxIndex(0),
-                VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
-                    u64::MAX.into(),
-                )),
+                &gas_meter,
+                &sentinel,
                 &keys_changed,
                 &verifiers,
                 shell.vp_wasm_cache.clone(),
@@ -704,8 +707,7 @@ fn pgf(c: &mut Criterion) {
 
 fn eth_bridge_nut(c: &mut Criterion) {
     let mut shell = BenchShell::default();
-    let native_erc20_addres =
-        read_native_erc20_address(&shell.wl_storage).unwrap();
+    let native_erc20_addres = read_native_erc20_address(&shell.state).unwrap();
 
     let signed_tx = {
         let data = PendingTransfer {
@@ -720,7 +722,7 @@ fn eth_bridge_nut(c: &mut Criterion) {
             gas_fee: GasFee {
                 amount: Amount::from(100),
                 payer: defaults::albert_address(),
-                token: shell.wl_storage.storage.native_token.clone(),
+                token: shell.state.in_mem().native_token.clone(),
             },
         };
         shell.generate_tx(
@@ -736,22 +738,24 @@ fn eth_bridge_nut(c: &mut Criterion) {
     shell.execute_tx(&signed_tx);
 
     let (verifiers, keys_changed) = shell
-        .wl_storage
-        .write_log
+        .state
+        .write_log()
         .verifiers_and_changed_keys(&BTreeSet::default());
 
     let vp_address =
         Address::Internal(InternalAddress::Nut(native_erc20_addres));
+    let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+        &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+    ));
+    let sentinel = RefCell::new(VpSentinel::default());
     let nut = NonUsableTokens {
         ctx: Ctx::new(
             &vp_address,
-            &shell.wl_storage.storage,
-            &shell.wl_storage.write_log,
+            &shell.state,
             &signed_tx,
             &TxIndex(0),
-            VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
-                u64::MAX.into(),
-            )),
+            &gas_meter,
+            &sentinel,
             &keys_changed,
             &verifiers,
             shell.vp_wasm_cache.clone(),
@@ -774,8 +778,7 @@ fn eth_bridge_nut(c: &mut Criterion) {
 
 fn eth_bridge(c: &mut Criterion) {
     let mut shell = BenchShell::default();
-    let native_erc20_addres =
-        read_native_erc20_address(&shell.wl_storage).unwrap();
+    let native_erc20_addres = read_native_erc20_address(&shell.state).unwrap();
 
     let signed_tx = {
         let data = PendingTransfer {
@@ -790,7 +793,7 @@ fn eth_bridge(c: &mut Criterion) {
             gas_fee: GasFee {
                 amount: Amount::from(100),
                 payer: defaults::albert_address(),
-                token: shell.wl_storage.storage.native_token.clone(),
+                token: shell.state.in_mem().native_token.clone(),
             },
         };
         shell.generate_tx(
@@ -806,21 +809,23 @@ fn eth_bridge(c: &mut Criterion) {
     shell.execute_tx(&signed_tx);
 
     let (verifiers, keys_changed) = shell
-        .wl_storage
-        .write_log
+        .state
+        .write_log()
         .verifiers_and_changed_keys(&BTreeSet::default());
 
     let vp_address = Address::Internal(InternalAddress::EthBridge);
+    let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+        &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+    ));
+    let sentinel = RefCell::new(VpSentinel::default());
     let eth_bridge = EthBridge {
         ctx: Ctx::new(
             &vp_address,
-            &shell.wl_storage.storage,
-            &shell.wl_storage.write_log,
+            &shell.state,
             &signed_tx,
             &TxIndex(0),
-            VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
-                u64::MAX.into(),
-            )),
+            &gas_meter,
+            &sentinel,
             &keys_changed,
             &verifiers,
             shell.vp_wasm_cache.clone(),
@@ -847,8 +852,7 @@ fn eth_bridge_pool(c: &mut Criterion) {
     // numerous accesses to storage that we already account for, so no need to
     // benchmark specific sections of it like for the ibc native vp
     let mut shell = BenchShell::default();
-    let native_erc20_addres =
-        read_native_erc20_address(&shell.wl_storage).unwrap();
+    let native_erc20_addres = read_native_erc20_address(&shell.state).unwrap();
 
     // Whitelist NAM token
     let cap_key = whitelist::Key {
@@ -856,24 +860,21 @@ fn eth_bridge_pool(c: &mut Criterion) {
         suffix: whitelist::KeyType::Cap,
     }
     .into();
-    shell
-        .wl_storage
-        .write(&cap_key, Amount::from(1_000))
-        .unwrap();
+    shell.state.write(&cap_key, Amount::from(1_000)).unwrap();
 
     let whitelisted_key = whitelist::Key {
         asset: native_erc20_addres,
         suffix: whitelist::KeyType::Whitelisted,
     }
     .into();
-    shell.wl_storage.write(&whitelisted_key, true).unwrap();
+    shell.state.write(&whitelisted_key, true).unwrap();
 
     let denom_key = whitelist::Key {
         asset: native_erc20_addres,
         suffix: whitelist::KeyType::Denomination,
     }
     .into();
-    shell.wl_storage.write(&denom_key, 0).unwrap();
+    shell.state.write(&denom_key, 0).unwrap();
 
     let signed_tx = {
         let data = PendingTransfer {
@@ -888,7 +889,7 @@ fn eth_bridge_pool(c: &mut Criterion) {
             gas_fee: GasFee {
                 amount: Amount::from(100),
                 payer: defaults::albert_address(),
-                token: shell.wl_storage.storage.native_token.clone(),
+                token: shell.state.in_mem().native_token.clone(),
             },
         };
         shell.generate_tx(
@@ -904,21 +905,23 @@ fn eth_bridge_pool(c: &mut Criterion) {
     shell.execute_tx(&signed_tx);
 
     let (verifiers, keys_changed) = shell
-        .wl_storage
-        .write_log
+        .state
+        .write_log()
         .verifiers_and_changed_keys(&BTreeSet::default());
 
     let vp_address = Address::Internal(InternalAddress::EthBridgePool);
+    let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+        &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+    ));
+    let sentinel = RefCell::new(VpSentinel::default());
     let bridge_pool = BridgePoolVp {
         ctx: Ctx::new(
             &vp_address,
-            &shell.wl_storage.storage,
-            &shell.wl_storage.write_log,
+            &shell.state,
             &signed_tx,
             &TxIndex(0),
-            VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
-                u64::MAX.into(),
-            )),
+            &gas_meter,
+            &sentinel,
             &keys_changed,
             &verifiers,
             shell.vp_wasm_cache.clone(),
@@ -957,13 +960,10 @@ fn parameters(c: &mut Criterion) {
                 // Simulate governance proposal to modify a parameter
                 let min_proposal_fund_key =
             namada::governance::storage::keys::get_min_proposal_fund_key();
-                shell
-                    .wl_storage
-                    .write(&min_proposal_fund_key, 1_000)
-                    .unwrap();
+                shell.state.write(&min_proposal_fund_key, 1_000).unwrap();
 
                 let proposal_key = namada::governance::storage::keys::get_proposal_execution_key(0);
-                shell.wl_storage.write(&proposal_key, 0).unwrap();
+                shell.state.write(&proposal_key, 0).unwrap();
 
                 // Return a dummy tx for validation
                 let mut tx =
@@ -977,21 +977,23 @@ fn parameters(c: &mut Criterion) {
         };
 
         let (verifiers, keys_changed) = shell
-            .wl_storage
-            .write_log
+            .state
+            .write_log()
             .verifiers_and_changed_keys(&BTreeSet::default());
 
         let vp_address = Address::Internal(InternalAddress::Parameters);
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        ));
+        let sentinel = RefCell::new(VpSentinel::default());
         let parameters = ParametersVp {
             ctx: Ctx::new(
                 &vp_address,
-                &shell.wl_storage.storage,
-                &shell.wl_storage.write_log,
+                &shell.state,
                 &signed_tx,
                 &TxIndex(0),
-                VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
-                    u64::MAX.into(),
-                )),
+                &gas_meter,
+                &sentinel,
                 &keys_changed,
                 &verifiers,
                 shell.vp_wasm_cache.clone(),
@@ -1033,13 +1035,10 @@ fn pos(c: &mut Criterion) {
                 // Simulate governance proposal to modify a parameter
                 let min_proposal_fund_key =
             namada::governance::storage::keys::get_min_proposal_fund_key();
-                shell
-                    .wl_storage
-                    .write(&min_proposal_fund_key, 1_000)
-                    .unwrap();
+                shell.state.write(&min_proposal_fund_key, 1_000).unwrap();
 
                 let proposal_key = namada::governance::storage::keys::get_proposal_execution_key(0);
-                shell.wl_storage.write(&proposal_key, 0).unwrap();
+                shell.state.write(&proposal_key, 0).unwrap();
 
                 // Return a dummy tx for validation
                 let mut tx =
@@ -1053,21 +1052,23 @@ fn pos(c: &mut Criterion) {
         };
 
         let (verifiers, keys_changed) = shell
-            .wl_storage
-            .write_log
+            .state
+            .write_log()
             .verifiers_and_changed_keys(&BTreeSet::default());
 
         let vp_address = Address::Internal(InternalAddress::PoS);
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        ));
+        let sentinel = RefCell::new(VpSentinel::default());
         let pos = PosVP {
             ctx: Ctx::new(
                 &vp_address,
-                &shell.wl_storage.storage,
-                &shell.wl_storage.write_log,
+                &shell.state,
                 &signed_tx,
                 &TxIndex(0),
-                VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
-                    u64::MAX.into(),
-                )),
+                &gas_meter,
+                &sentinel,
                 &keys_changed,
                 &verifiers,
                 shell.vp_wasm_cache.clone(),
@@ -1154,20 +1155,22 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
         shell.execute_tx(signed_tx);
         let tx_data = signed_tx.data().unwrap();
         let (verifiers, keys_changed) = shell
-            .wl_storage
-            .write_log
+            .state
+            .write_log()
             .verifiers_and_changed_keys(&BTreeSet::default());
 
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        ));
+        let sentinel = RefCell::new(VpSentinel::default());
         let ibc = Ibc {
             ctx: Ctx::new(
                 &Address::Internal(InternalAddress::Ibc),
-                &shell.wl_storage.storage,
-                &shell.wl_storage.write_log,
+                &shell.state,
                 signed_tx,
                 &TxIndex(0),
-                VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
-                    u64::MAX.into(),
-                )),
+                &gas_meter,
+                &sentinel,
                 &keys_changed,
                 &verifiers,
                 shell.vp_wasm_cache.clone(),
@@ -1252,20 +1255,22 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
         shell.execute_tx(signed_tx);
         let tx_data = signed_tx.data().unwrap();
         let (verifiers, keys_changed) = shell
-            .wl_storage
-            .write_log
+            .state
+            .write_log()
             .verifiers_and_changed_keys(&BTreeSet::default());
 
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        ));
+        let sentinel = RefCell::new(VpSentinel::default());
         let ibc = Ibc {
             ctx: Ctx::new(
                 &Address::Internal(InternalAddress::Ibc),
-                &shell.wl_storage.storage,
-                &shell.wl_storage.write_log,
+                &shell.state,
                 signed_tx,
                 &TxIndex(0),
-                VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
-                    u64::MAX.into(),
-                )),
+                &gas_meter,
+                &sentinel,
                 &keys_changed,
                 &verifiers,
                 shell.vp_wasm_cache.clone(),

@@ -60,7 +60,7 @@ where
 {
     if request.height.value() != 0
         && request.height.value()
-            != ctx.wl_storage.storage.get_last_block_height().0
+            != ctx.state.in_mem().get_last_block_height().0
     {
         return Err(namada_storage::Error::new_const(
             "This query doesn't support arbitrary block heights, only the \
@@ -98,7 +98,8 @@ pub fn require_no_data(request: &RequestQuery) -> namada_storage::Result<()> {
 mod testing {
 
     use namada_core::storage::BlockHeight;
-    use namada_state::testing::TestWlStorage;
+    use namada_state::testing::TestState;
+    use namada_storage::StorageWrite;
     use tendermint_rpc::Response;
 
     use super::*;
@@ -112,8 +113,8 @@ mod testing {
     {
         /// RPC router
         pub rpc: RPC,
-        /// storage
-        pub wl_storage: TestWlStorage,
+        /// state
+        pub state: TestState,
         /// event log
         pub event_log: EventLog,
     }
@@ -126,21 +127,18 @@ mod testing {
         /// Initialize a test client for the given root RPC router
         pub fn new(rpc: RPC) -> Self {
             // Initialize the `TestClient`
-            let mut wl_storage = TestWlStorage::default();
+            let mut state = TestState::default();
 
             // Initialize mock gas limit
             let max_block_gas_key =
                 namada_parameters::storage::get_max_block_gas_key();
-            wl_storage
-                .storage
-                .write(&max_block_gas_key, namada_core::encode(&20_000_000_u64))
-                .expect(
-                    "Max block gas parameter must be initialized in storage",
-                );
+            state.write(&max_block_gas_key, 20_000_000_u64).expect(
+                "Max block gas parameter must be initialized in storage",
+            );
             let event_log = EventLog::default();
             Self {
                 rpc,
-                wl_storage,
+                state,
                 event_log,
             }
         }
@@ -176,7 +174,7 @@ mod testing {
                 prove,
             };
             let ctx = RequestCtx {
-                wl_storage: &self.wl_storage,
+                state: self.state.read_only(),
                 event_log: &self.event_log,
                 vp_wasm_cache: (),
                 tx_wasm_cache: (),
