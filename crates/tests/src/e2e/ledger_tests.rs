@@ -11,6 +11,7 @@
 #![allow(clippy::type_complexity)]
 
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::path::PathBuf;
 use std::process::Command;
 use std::str::FromStr;
@@ -62,7 +63,7 @@ use crate::strings::{
 };
 use crate::{run, run_as};
 
-const ENV_VAR_NAMADA_ADD_PEER: &str = "NAMADA_ADD_PEER";
+const ENV_VAR_NAMADA_SEED_NODES: &str = "NAMADA_SEED_NODES";
 
 fn start_namada_ledger_node(
     test: &Test,
@@ -4020,8 +4021,8 @@ fn proposal_change_shielded_reward() -> Result<()> {
 /// Test sync with a chain.
 ///
 /// The chain ID must be set via `NAMADA_CHAIN_ID` env var.
-/// Additionally, `NAMADA_ADD_PEER` maybe be specified with a string that must
-/// be parsable into `TendermintAddress`.
+/// Additionally, `NAMADA_SEED_NODES` maybe be specified with a comma-separated
+/// list of addresses that must be parsable into `TendermintAddress`.
 ///
 /// To run this test use `--ignored`.
 #[test]
@@ -4059,21 +4060,32 @@ fn test_sync_chain() -> Result<()> {
     join_network.exp_string("Successfully configured for chain")?;
     join_network.assert_success();
 
-    // Add peer if any given
-    if let Ok(add_peer) = std::env::var(ENV_VAR_NAMADA_ADD_PEER) {
+    if cfg!(debug_assertions) {
+        let res: Result<Vec<TendermintAddress>, _> =
+            deserialize_comma_separated_list(
+                "tcp://9202be72cfe612af24b43f49f53096fc5512cd7f@194.163.172.\
+                 168:26656,tcp://0edfd7e6a1a172864ddb76a10ea77a8bb242759a@65.\
+                 21.194.46:36656",
+            );
+        debug_assert!(res.is_ok(), "Expected Ok, got {res:#?}");
+    }
+    // Add seed nodes if any given
+    if let Ok(seed_nodes) = std::env::var(ENV_VAR_NAMADA_SEED_NODES) {
         let mut config = namada_apps::config::Config::load(
             base_dir,
             &test.net.chain_id,
             None,
         );
-        config.ledger.cometbft.p2p.persistent_peers.push(
-            TendermintAddress::from_str(&add_peer).unwrap_or_else(|_| {
-                panic!(
-                    "Invalid `{ENV_VAR_NAMADA_ADD_PEER}` value. Must be a \
-                     valid `TendermintAddress`."
-                )
-            }),
-        );
+        let seed_nodes: Vec<TendermintAddress> =
+            deserialize_comma_separated_list(&seed_nodes).unwrap_or_else(
+                |_| {
+                    panic!(
+                        "Invalid `{ENV_VAR_NAMADA_SEED_NODES}` value. Must be \
+                         a valid `TendermintAddress`."
+                    )
+                },
+            );
+        config.ledger.cometbft.p2p.seeds.extend(seed_nodes);
         config.write(base_dir, &test.net.chain_id, true).unwrap();
     }
 
@@ -4101,4 +4113,33 @@ fn test_sync_chain() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Deserialize a comma separated list of types that impl `FromStr` as a `Vec`
+/// from a string. Same as `tendermint-config/src/config.rs` list
+/// deserialization.
+fn deserialize_comma_separated_list<T, E>(
+    list: &str,
+) -> serde_json::Result<Vec<T>>
+where
+    T: FromStr<Err = E>,
+    E: Display,
+{
+    use serde::de::Error;
+
+    let mut result = vec![];
+
+    if list.is_empty() {
+        return Ok(result);
+    }
+
+    for item in list.split(',') {
+        result.push(
+            item.parse()
+                .map_err(|e| serde_json::Error::custom(format!("{e}")))
+                .unwrap(),
+        );
+    }
+
+    Ok(result)
 }
