@@ -4,18 +4,10 @@ use std::cmp::Ordering;
 use std::collections::{btree_map, BTreeMap, BTreeSet, HashMap, HashSet};
 use std::env;
 use std::fmt::Debug;
-#[cfg(any(test, feature = "testing"))]
-use std::ops::AddAssign;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::str::FromStr;
-#[cfg(any(test, feature = "testing"))]
-use std::sync::Mutex;
 
-#[cfg(any(test, feature = "testing"))]
-use bls12_381::{G1Affine, G2Affine};
-// use async_std::io::prelude::WriteExt;
-// use async_std::io::{self};
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use itertools::Either;
@@ -25,11 +17,7 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::consensus::MainNetwork;
 #[cfg(not(feature = "mainnet"))]
 use masp_primitives::consensus::TestNetwork;
-#[cfg(any(test, feature = "testing"))]
-use masp_primitives::constants::SPENDING_KEY_GENERATOR;
 use masp_primitives::convert::AllowedConversion;
-#[cfg(any(test, feature = "testing"))]
-use masp_primitives::ff::Field;
 use masp_primitives::ff::PrimeField;
 use masp_primitives::group::GroupEncoding;
 use masp_primitives::memo::MemoBytes;
@@ -38,21 +26,13 @@ use masp_primitives::merkle_tree::{
 };
 use masp_primitives::sapling::keys::FullViewingKey;
 use masp_primitives::sapling::note_encryption::*;
-#[cfg(any(test, feature = "testing"))]
-use masp_primitives::sapling::prover::TxProver;
 use masp_primitives::sapling::redjubjub::PublicKey;
-#[cfg(any(test, feature = "testing"))]
-use masp_primitives::sapling::redjubjub::Signature;
 use masp_primitives::sapling::{
     Diversifier, Node, Note, Nullifier, ViewingKey,
 };
-#[cfg(any(test, feature = "testing"))]
-use masp_primitives::sapling::{ProofGenerationKey, Rseed};
 use masp_primitives::transaction::builder::{self, *};
 use masp_primitives::transaction::components::sapling::builder::SaplingMetadata;
 use masp_primitives::transaction::components::transparent::builder::TransparentBuilder;
-#[cfg(any(test, feature = "testing"))]
-use masp_primitives::transaction::components::GROTH_PROOF_SIZE;
 use masp_primitives::transaction::components::{
     ConvertDescription, I128Sum, OutputDescription, SpendDescription, TxOut,
     U64Sum, ValueSum,
@@ -66,8 +46,6 @@ use masp_primitives::transaction::{
 };
 use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
 use masp_proofs::bellman::groth16::PreparedVerifyingKey;
-#[cfg(any(test, feature = "testing"))]
-use masp_proofs::bellman::groth16::Proof;
 use masp_proofs::bls12_381::Bls12;
 use masp_proofs::prover::LocalTxProver;
 #[cfg(not(feature = "testing"))]
@@ -94,12 +72,6 @@ use token::Amount;
 
 use crate::error::{Error, PinnedBalanceError, QueryError};
 use crate::io::Io;
-#[cfg(any(test, feature = "testing"))]
-use crate::masp_primitives::constants::VALUE_COMMITMENT_RANDOMNESS_GENERATOR;
-#[cfg(any(test, feature = "testing"))]
-use crate::masp_primitives::sapling::redjubjub::PrivateKey;
-#[cfg(any(test, feature = "testing"))]
-use crate::masp_proofs::sapling::SaplingVerificationContextInner;
 use crate::queries::Client;
 use crate::rpc::{
     query_block, query_conversion, query_denom, query_epoch_at_height,
@@ -223,395 +195,13 @@ fn load_pvks() -> &'static PVKs {
     &VERIFIYING_KEYS
 }
 
-/// A context object for verifying the Sapling components of a single Zcash
-/// transaction. Same as SaplingVerificationContext, but always assumes the
-/// proofs to be valid.
-#[cfg(any(test, feature = "testing"))]
-pub struct MockSaplingVerificationContext {
-    inner: SaplingVerificationContextInner,
-    zip216_enabled: bool,
-}
-
-#[cfg(any(test, feature = "testing"))]
-impl MockSaplingVerificationContext {
-    /// Construct a new context to be used with a single transaction.
-    pub fn new(zip216_enabled: bool) -> Self {
-        MockSaplingVerificationContext {
-            inner: SaplingVerificationContextInner::new(),
-            zip216_enabled,
-        }
-    }
-
-    /// Perform consensus checks on a Sapling SpendDescription, while
-    /// accumulating its value commitment inside the context for later use.
-    #[allow(clippy::too_many_arguments)]
-    pub fn check_spend(
-        &mut self,
-        cv: jubjub::ExtendedPoint,
-        anchor: bls12_381::Scalar,
-        nullifier: &[u8; 32],
-        rk: PublicKey,
-        sighash_value: &[u8; 32],
-        spend_auth_sig: Signature,
-        zkproof: Proof<Bls12>,
-        _verifying_key: &PreparedVerifyingKey<Bls12>,
-    ) -> bool {
-        let zip216_enabled = true;
-        self.inner.check_spend(
-            cv,
-            anchor,
-            nullifier,
-            rk,
-            sighash_value,
-            spend_auth_sig,
-            zkproof,
-            &mut (),
-            |_, rk, msg, spend_auth_sig| {
-                rk.verify_with_zip216(
-                    &msg,
-                    &spend_auth_sig,
-                    SPENDING_KEY_GENERATOR,
-                    zip216_enabled,
-                )
-            },
-            |_, _proof, _public_inputs| true,
-        )
-    }
-
-    /// Perform consensus checks on a Sapling SpendDescription, while
-    /// accumulating its value commitment inside the context for later use.
-    #[allow(clippy::too_many_arguments)]
-    pub fn check_convert(
-        &mut self,
-        cv: jubjub::ExtendedPoint,
-        anchor: bls12_381::Scalar,
-        zkproof: Proof<Bls12>,
-        _verifying_key: &PreparedVerifyingKey<Bls12>,
-    ) -> bool {
-        self.inner.check_convert(
-            cv,
-            anchor,
-            zkproof,
-            &mut (),
-            |_, _proof, _public_inputs| true,
-        )
-    }
-
-    /// Perform consensus checks on a Sapling OutputDescription, while
-    /// accumulating its value commitment inside the context for later use.
-    pub fn check_output(
-        &mut self,
-        cv: jubjub::ExtendedPoint,
-        cmu: bls12_381::Scalar,
-        epk: jubjub::ExtendedPoint,
-        zkproof: Proof<Bls12>,
-        _verifying_key: &PreparedVerifyingKey<Bls12>,
-    ) -> bool {
-        self.inner.check_output(
-            cv,
-            cmu,
-            epk,
-            zkproof,
-            |_proof, _public_inputs| true,
-        )
-    }
-
-    /// Perform consensus checks on the valueBalance and bindingSig parts of a
-    /// Sapling transaction. All SpendDescriptions and OutputDescriptions must
-    /// have been checked before calling this function.
-    pub fn final_check(
-        &self,
-        value_balance: I128Sum,
-        sighash_value: &[u8; 32],
-        binding_sig: Signature,
-    ) -> bool {
-        self.inner.final_check(
-            value_balance,
-            sighash_value,
-            binding_sig,
-            |bvk, msg, binding_sig| {
-                bvk.verify_with_zip216(
-                    &msg,
-                    &binding_sig,
-                    VALUE_COMMITMENT_RANDOMNESS_GENERATOR,
-                    self.zip216_enabled,
-                )
-            },
-        )
-    }
-}
-
-// This function computes `value` in the exponent of the value commitment
-// base
-#[cfg(any(test, feature = "testing"))]
-fn masp_compute_value_balance(
-    asset_type: AssetType,
-    value: i128,
-) -> Option<jubjub::ExtendedPoint> {
-    // Compute the absolute value (failing if -i128::MAX is
-    // the value)
-    let abs = match value.checked_abs() {
-        Some(a) => a as u128,
-        None => return None,
-    };
-
-    // Is it negative? We'll have to negate later if so.
-    let is_negative = value.is_negative();
-
-    // Compute it in the exponent
-    let mut abs_bytes = [0u8; 32];
-    abs_bytes[0..16].copy_from_slice(&abs.to_le_bytes());
-    let mut value_balance = asset_type.value_commitment_generator()
-        * jubjub::Fr::from_bytes(&abs_bytes).unwrap();
-
-    // Negate if necessary
-    if is_negative {
-        value_balance = -value_balance;
-    }
-
-    // Convert to unknown order point
-    Some(value_balance.into())
-}
-
-// A context object for creating the Sapling components of a Zcash
-// transaction.
-#[cfg(any(test, feature = "testing"))]
-pub struct SaplingProvingContext {
-    bsk: jubjub::Fr,
-    // (sum of the Spend value commitments) - (sum of the Output value
-    // commitments)
-    cv_sum: jubjub::ExtendedPoint,
-}
-
-// An implementation of TxProver that does everything except generating
-// valid zero-knowledge proofs. Uses the supplied source of randomness to
-// carry out its operations.
-#[cfg(any(test, feature = "testing"))]
-pub struct MockTxProver<R: RngCore>(Mutex<R>);
-
-#[cfg(any(test, feature = "testing"))]
-impl<R: RngCore> TxProver for MockTxProver<R> {
-    type SaplingProvingContext = SaplingProvingContext;
-
-    fn new_sapling_proving_context(&self) -> Self::SaplingProvingContext {
-        SaplingProvingContext {
-            bsk: jubjub::Fr::zero(),
-            cv_sum: jubjub::ExtendedPoint::identity(),
-        }
-    }
-
-    fn spend_proof(
-        &self,
-        ctx: &mut Self::SaplingProvingContext,
-        proof_generation_key: ProofGenerationKey,
-        _diversifier: Diversifier,
-        _rseed: Rseed,
-        ar: jubjub::Fr,
-        asset_type: AssetType,
-        value: u64,
-        _anchor: bls12_381::Scalar,
-        _merkle_path: MerklePath<Node>,
-    ) -> Result<([u8; GROTH_PROOF_SIZE], jubjub::ExtendedPoint, PublicKey), ()>
-    {
-        // Initialize secure RNG
-        let mut rng = self.0.lock().unwrap();
-
-        // We create the randomness of the value commitment
-        let rcv = jubjub::Fr::random(&mut *rng);
-
-        // Accumulate the value commitment randomness in the context
-        {
-            let mut tmp = rcv;
-            tmp.add_assign(&ctx.bsk);
-
-            // Update the context
-            ctx.bsk = tmp;
-        }
-
-        // Construct the value commitment
-        let value_commitment = asset_type.value_commitment(value, rcv);
-
-        // This is the result of the re-randomization, we compute it for the
-        // caller
-        let rk = PublicKey(proof_generation_key.ak.into())
-            .randomize(ar, SPENDING_KEY_GENERATOR);
-
-        // Compute value commitment
-        let value_commitment: jubjub::ExtendedPoint =
-            value_commitment.commitment().into();
-
-        // Accumulate the value commitment in the context
-        ctx.cv_sum += value_commitment;
-
-        let mut zkproof = [0u8; GROTH_PROOF_SIZE];
-        let proof = Proof::<Bls12> {
-            a: G1Affine::generator(),
-            b: G2Affine::generator(),
-            c: G1Affine::generator(),
-        };
-        proof
-            .write(&mut zkproof[..])
-            .expect("should be able to serialize a proof");
-        Ok((zkproof, value_commitment, rk))
-    }
-
-    fn output_proof(
-        &self,
-        ctx: &mut Self::SaplingProvingContext,
-        _esk: jubjub::Fr,
-        _payment_address: masp_primitives::sapling::PaymentAddress,
-        _rcm: jubjub::Fr,
-        asset_type: AssetType,
-        value: u64,
-    ) -> ([u8; GROTH_PROOF_SIZE], jubjub::ExtendedPoint) {
-        // Initialize secure RNG
-        let mut rng = self.0.lock().unwrap();
-
-        // We construct ephemeral randomness for the value commitment. This
-        // randomness is not given back to the caller, but the synthetic
-        // blinding factor `bsk` is accumulated in the context.
-        let rcv = jubjub::Fr::random(&mut *rng);
-
-        // Accumulate the value commitment randomness in the context
-        {
-            let mut tmp = rcv.neg(); // Outputs subtract from the total.
-            tmp.add_assign(&ctx.bsk);
-
-            // Update the context
-            ctx.bsk = tmp;
-        }
-
-        // Construct the value commitment for the proof instance
-        let value_commitment = asset_type.value_commitment(value, rcv);
-
-        // Compute the actual value commitment
-        let value_commitment_point: jubjub::ExtendedPoint =
-            value_commitment.commitment().into();
-
-        // Accumulate the value commitment in the context. We do this to
-        // check internal consistency.
-        ctx.cv_sum -= value_commitment_point; // Outputs subtract from the total.
-
-        let mut zkproof = [0u8; GROTH_PROOF_SIZE];
-        let proof = Proof::<Bls12> {
-            a: G1Affine::generator(),
-            b: G2Affine::generator(),
-            c: G1Affine::generator(),
-        };
-        proof
-            .write(&mut zkproof[..])
-            .expect("should be able to serialize a proof");
-
-        (zkproof, value_commitment_point)
-    }
-
-    fn convert_proof(
-        &self,
-        ctx: &mut Self::SaplingProvingContext,
-        allowed_conversion: AllowedConversion,
-        value: u64,
-        _anchor: bls12_381::Scalar,
-        _merkle_path: MerklePath<Node>,
-    ) -> Result<([u8; GROTH_PROOF_SIZE], jubjub::ExtendedPoint), ()> {
-        // Initialize secure RNG
-        let mut rng = self.0.lock().unwrap();
-
-        // We create the randomness of the value commitment
-        let rcv = jubjub::Fr::random(&mut *rng);
-
-        // Accumulate the value commitment randomness in the context
-        {
-            let mut tmp = rcv;
-            tmp.add_assign(&ctx.bsk);
-
-            // Update the context
-            ctx.bsk = tmp;
-        }
-
-        // Construct the value commitment
-        let value_commitment = allowed_conversion.value_commitment(value, rcv);
-
-        // Compute value commitment
-        let value_commitment: jubjub::ExtendedPoint =
-            value_commitment.commitment().into();
-
-        // Accumulate the value commitment in the context
-        ctx.cv_sum += value_commitment;
-
-        let mut zkproof = [0u8; GROTH_PROOF_SIZE];
-        let proof = Proof::<Bls12> {
-            a: G1Affine::generator(),
-            b: G2Affine::generator(),
-            c: G1Affine::generator(),
-        };
-        proof
-            .write(&mut zkproof[..])
-            .expect("should be able to serialize a proof");
-
-        Ok((zkproof, value_commitment))
-    }
-
-    fn binding_sig(
-        &self,
-        ctx: &mut Self::SaplingProvingContext,
-        assets_and_values: &I128Sum,
-        sighash: &[u8; 32],
-    ) -> Result<Signature, ()> {
-        // Initialize secure RNG
-        let mut rng = self.0.lock().unwrap();
-
-        // Grab the current `bsk` from the context
-        let bsk = PrivateKey(ctx.bsk);
-
-        // Grab the `bvk` using DerivePublic.
-        let bvk = PublicKey::from_private(
-            &bsk,
-            VALUE_COMMITMENT_RANDOMNESS_GENERATOR,
-        );
-
-        // In order to check internal consistency, let's use the accumulated
-        // value commitments (as the verifier would) and apply
-        // value_balance to compare against our derived bvk.
-        {
-            let final_bvk = assets_and_values
-                .components()
-                .map(|(asset_type, value_balance)| {
-                    // Compute value balance for each asset
-                    // Error for bad value balances (-INT128_MAX value)
-                    masp_compute_value_balance(*asset_type, *value_balance)
-                })
-                .try_fold(ctx.cv_sum, |tmp, value_balance| {
-                    // Compute cv_sum minus sum of all value balances
-                    Result::<_, ()>::Ok(tmp - value_balance.ok_or(())?)
-                })?;
-
-            // The result should be the same, unless the provided
-            // valueBalance is wrong.
-            if bvk.0 != final_bvk {
-                return Err(());
-            }
-        }
-
-        // Construct signature message
-        let mut data_to_be_signed = [0u8; 64];
-        data_to_be_signed[0..32].copy_from_slice(&bvk.0.to_bytes());
-        data_to_be_signed[32..64].copy_from_slice(&sighash[..]);
-
-        // Sign
-        Ok(bsk.sign(
-            &data_to_be_signed,
-            &mut *rng,
-            VALUE_COMMITMENT_RANDOMNESS_GENERATOR,
-        ))
-    }
-}
-
 /// check_spend wrapper
 pub fn check_spend(
     spend: &SpendDescription<<Authorized as Authorization>::SaplingAuth>,
     sighash: &[u8; 32],
     #[cfg(not(feature = "testing"))] ctx: &mut SaplingVerificationContext,
-    #[cfg(feature = "testing")] ctx: &mut MockSaplingVerificationContext,
+    #[cfg(feature = "testing")]
+    ctx: &mut testing::MockSaplingVerificationContext,
     parameters: &PreparedVerifyingKey<Bls12>,
 ) -> bool {
     let zkproof =
@@ -637,7 +227,8 @@ pub fn check_spend(
 pub fn check_output(
     output: &OutputDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>,
     #[cfg(not(feature = "testing"))] ctx: &mut SaplingVerificationContext,
-    #[cfg(feature = "testing")] ctx: &mut MockSaplingVerificationContext,
+    #[cfg(feature = "testing")]
+    ctx: &mut testing::MockSaplingVerificationContext,
     parameters: &PreparedVerifyingKey<Bls12>,
 ) -> bool {
     let zkproof =
@@ -660,7 +251,8 @@ pub fn check_output(
 pub fn check_convert(
     convert: &ConvertDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>,
     #[cfg(not(feature = "testing"))] ctx: &mut SaplingVerificationContext,
-    #[cfg(feature = "testing")] ctx: &mut MockSaplingVerificationContext,
+    #[cfg(feature = "testing")]
+    ctx: &mut testing::MockSaplingVerificationContext,
     parameters: &PreparedVerifyingKey<Bls12>,
 ) -> bool {
     let zkproof =
@@ -750,7 +342,7 @@ pub fn verify_shielded_tx(transaction: &Transaction) -> bool {
     #[cfg(not(feature = "testing"))]
     let mut ctx = SaplingVerificationContext::new(true);
     #[cfg(feature = "testing")]
-    let mut ctx = MockSaplingVerificationContext::new(true);
+    let mut ctx = testing::MockSaplingVerificationContext::new(true);
     let spends_valid = sapling_bundle
         .shielded_spends
         .iter()
@@ -2618,7 +2210,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         #[cfg(not(feature = "testing"))]
         let prover = context.shielded().await.utils.local_tx_prover();
         #[cfg(feature = "testing")]
-        let prover = MockTxProver(Mutex::new(OsRng));
+        let prover = testing::MockTxProver(std::sync::Mutex::new(OsRng));
         let (masp_tx, metadata) =
             builder.build(&prover, &FeeRule::non_standard(U64Sum::zero()))?;
         Ok(Some(ShieldedTransfer {
@@ -3103,11 +2695,21 @@ mod tests {
 #[cfg(any(test, feature = "testing"))]
 /// Tests and strategies for transactions
 pub mod testing {
+    use std::ops::AddAssign;
     use std::sync::Mutex;
 
+    use bls12_381::{G1Affine, G2Affine};
     use masp_primitives::asset_type::AssetType;
     use masp_primitives::consensus::testing::arb_height;
-    use masp_primitives::sapling::{Diversifier, Node};
+    use masp_primitives::constants::SPENDING_KEY_GENERATOR;
+    use masp_primitives::ff::Field;
+    use masp_primitives::sapling::prover::TxProver;
+    use masp_primitives::sapling::redjubjub::Signature;
+    use masp_primitives::sapling::{
+        Diversifier, Node, ProofGenerationKey, Rseed,
+    };
+    use masp_primitives::transaction::components::GROTH_PROOF_SIZE;
+    use masp_proofs::bellman::groth16::Proof;
     use proptest::collection::SizeRange;
     use proptest::prelude::*;
     use proptest::test_runner::TestRng;
@@ -3115,12 +2717,397 @@ pub mod testing {
 
     use super::*;
     use crate::masp_primitives::consensus::BranchId;
+    use crate::masp_primitives::constants::VALUE_COMMITMENT_RANDOMNESS_GENERATOR;
     use crate::masp_primitives::merkle_tree::FrozenCommitmentTree;
     use crate::masp_primitives::sapling::keys::OutgoingViewingKey;
+    use crate::masp_primitives::sapling::redjubjub::PrivateKey;
     use crate::masp_primitives::transaction::components::transparent::testing::arb_transparent_address;
+    use crate::masp_proofs::sapling::SaplingVerificationContextInner;
     use crate::token::testing::arb_denomination;
     use crate::types::address::testing::arb_address;
     use crate::types::storage::testing::arb_epoch;
+
+    /// A context object for verifying the Sapling components of a single Zcash
+    /// transaction. Same as SaplingVerificationContext, but always assumes the
+    /// proofs to be valid.
+    pub struct MockSaplingVerificationContext {
+        inner: SaplingVerificationContextInner,
+        zip216_enabled: bool,
+    }
+
+    impl MockSaplingVerificationContext {
+        /// Construct a new context to be used with a single transaction.
+        pub fn new(zip216_enabled: bool) -> Self {
+            MockSaplingVerificationContext {
+                inner: SaplingVerificationContextInner::new(),
+                zip216_enabled,
+            }
+        }
+
+        /// Perform consensus checks on a Sapling SpendDescription, while
+        /// accumulating its value commitment inside the context for later use.
+        #[allow(clippy::too_many_arguments)]
+        pub fn check_spend(
+            &mut self,
+            cv: jubjub::ExtendedPoint,
+            anchor: bls12_381::Scalar,
+            nullifier: &[u8; 32],
+            rk: PublicKey,
+            sighash_value: &[u8; 32],
+            spend_auth_sig: Signature,
+            zkproof: Proof<Bls12>,
+            _verifying_key: &PreparedVerifyingKey<Bls12>,
+        ) -> bool {
+            let zip216_enabled = true;
+            self.inner.check_spend(
+                cv,
+                anchor,
+                nullifier,
+                rk,
+                sighash_value,
+                spend_auth_sig,
+                zkproof,
+                &mut (),
+                |_, rk, msg, spend_auth_sig| {
+                    rk.verify_with_zip216(
+                        &msg,
+                        &spend_auth_sig,
+                        SPENDING_KEY_GENERATOR,
+                        zip216_enabled,
+                    )
+                },
+                |_, _proof, _public_inputs| true,
+            )
+        }
+
+        /// Perform consensus checks on a Sapling SpendDescription, while
+        /// accumulating its value commitment inside the context for later use.
+        #[allow(clippy::too_many_arguments)]
+        pub fn check_convert(
+            &mut self,
+            cv: jubjub::ExtendedPoint,
+            anchor: bls12_381::Scalar,
+            zkproof: Proof<Bls12>,
+            _verifying_key: &PreparedVerifyingKey<Bls12>,
+        ) -> bool {
+            self.inner.check_convert(
+                cv,
+                anchor,
+                zkproof,
+                &mut (),
+                |_, _proof, _public_inputs| true,
+            )
+        }
+
+        /// Perform consensus checks on a Sapling OutputDescription, while
+        /// accumulating its value commitment inside the context for later use.
+        pub fn check_output(
+            &mut self,
+            cv: jubjub::ExtendedPoint,
+            cmu: bls12_381::Scalar,
+            epk: jubjub::ExtendedPoint,
+            zkproof: Proof<Bls12>,
+            _verifying_key: &PreparedVerifyingKey<Bls12>,
+        ) -> bool {
+            self.inner.check_output(
+                cv,
+                cmu,
+                epk,
+                zkproof,
+                |_proof, _public_inputs| true,
+            )
+        }
+
+        /// Perform consensus checks on the valueBalance and bindingSig parts of
+        /// a Sapling transaction. All SpendDescriptions and
+        /// OutputDescriptions must have been checked before calling
+        /// this function.
+        pub fn final_check(
+            &self,
+            value_balance: I128Sum,
+            sighash_value: &[u8; 32],
+            binding_sig: Signature,
+        ) -> bool {
+            self.inner.final_check(
+                value_balance,
+                sighash_value,
+                binding_sig,
+                |bvk, msg, binding_sig| {
+                    bvk.verify_with_zip216(
+                        &msg,
+                        &binding_sig,
+                        VALUE_COMMITMENT_RANDOMNESS_GENERATOR,
+                        self.zip216_enabled,
+                    )
+                },
+            )
+        }
+    }
+
+    // This function computes `value` in the exponent of the value commitment
+    // base
+    fn masp_compute_value_balance(
+        asset_type: AssetType,
+        value: i128,
+    ) -> Option<jubjub::ExtendedPoint> {
+        // Compute the absolute value (failing if -i128::MAX is
+        // the value)
+        let abs = match value.checked_abs() {
+            Some(a) => a as u128,
+            None => return None,
+        };
+
+        // Is it negative? We'll have to negate later if so.
+        let is_negative = value.is_negative();
+
+        // Compute it in the exponent
+        let mut abs_bytes = [0u8; 32];
+        abs_bytes[0..16].copy_from_slice(&abs.to_le_bytes());
+        let mut value_balance = asset_type.value_commitment_generator()
+            * jubjub::Fr::from_bytes(&abs_bytes).unwrap();
+
+        // Negate if necessary
+        if is_negative {
+            value_balance = -value_balance;
+        }
+
+        // Convert to unknown order point
+        Some(value_balance.into())
+    }
+
+    // A context object for creating the Sapling components of a Zcash
+    // transaction.
+    pub struct SaplingProvingContext {
+        bsk: jubjub::Fr,
+        // (sum of the Spend value commitments) - (sum of the Output value
+        // commitments)
+        cv_sum: jubjub::ExtendedPoint,
+    }
+
+    // An implementation of TxProver that does everything except generating
+    // valid zero-knowledge proofs. Uses the supplied source of randomness to
+    // carry out its operations.
+    pub struct MockTxProver<R: RngCore>(pub Mutex<R>);
+
+    impl<R: RngCore> TxProver for MockTxProver<R> {
+        type SaplingProvingContext = SaplingProvingContext;
+
+        fn new_sapling_proving_context(&self) -> Self::SaplingProvingContext {
+            SaplingProvingContext {
+                bsk: jubjub::Fr::zero(),
+                cv_sum: jubjub::ExtendedPoint::identity(),
+            }
+        }
+
+        fn spend_proof(
+            &self,
+            ctx: &mut Self::SaplingProvingContext,
+            proof_generation_key: ProofGenerationKey,
+            _diversifier: Diversifier,
+            _rseed: Rseed,
+            ar: jubjub::Fr,
+            asset_type: AssetType,
+            value: u64,
+            _anchor: bls12_381::Scalar,
+            _merkle_path: MerklePath<Node>,
+        ) -> Result<
+            ([u8; GROTH_PROOF_SIZE], jubjub::ExtendedPoint, PublicKey),
+            (),
+        > {
+            // Initialize secure RNG
+            let mut rng = self.0.lock().unwrap();
+
+            // We create the randomness of the value commitment
+            let rcv = jubjub::Fr::random(&mut *rng);
+
+            // Accumulate the value commitment randomness in the context
+            {
+                let mut tmp = rcv;
+                tmp.add_assign(&ctx.bsk);
+
+                // Update the context
+                ctx.bsk = tmp;
+            }
+
+            // Construct the value commitment
+            let value_commitment = asset_type.value_commitment(value, rcv);
+
+            // This is the result of the re-randomization, we compute it for the
+            // caller
+            let rk = PublicKey(proof_generation_key.ak.into())
+                .randomize(ar, SPENDING_KEY_GENERATOR);
+
+            // Compute value commitment
+            let value_commitment: jubjub::ExtendedPoint =
+                value_commitment.commitment().into();
+
+            // Accumulate the value commitment in the context
+            ctx.cv_sum += value_commitment;
+
+            let mut zkproof = [0u8; GROTH_PROOF_SIZE];
+            let proof = Proof::<Bls12> {
+                a: G1Affine::generator(),
+                b: G2Affine::generator(),
+                c: G1Affine::generator(),
+            };
+            proof
+                .write(&mut zkproof[..])
+                .expect("should be able to serialize a proof");
+            Ok((zkproof, value_commitment, rk))
+        }
+
+        fn output_proof(
+            &self,
+            ctx: &mut Self::SaplingProvingContext,
+            _esk: jubjub::Fr,
+            _payment_address: masp_primitives::sapling::PaymentAddress,
+            _rcm: jubjub::Fr,
+            asset_type: AssetType,
+            value: u64,
+        ) -> ([u8; GROTH_PROOF_SIZE], jubjub::ExtendedPoint) {
+            // Initialize secure RNG
+            let mut rng = self.0.lock().unwrap();
+
+            // We construct ephemeral randomness for the value commitment. This
+            // randomness is not given back to the caller, but the synthetic
+            // blinding factor `bsk` is accumulated in the context.
+            let rcv = jubjub::Fr::random(&mut *rng);
+
+            // Accumulate the value commitment randomness in the context
+            {
+                let mut tmp = rcv.neg(); // Outputs subtract from the total.
+                tmp.add_assign(&ctx.bsk);
+
+                // Update the context
+                ctx.bsk = tmp;
+            }
+
+            // Construct the value commitment for the proof instance
+            let value_commitment = asset_type.value_commitment(value, rcv);
+
+            // Compute the actual value commitment
+            let value_commitment_point: jubjub::ExtendedPoint =
+                value_commitment.commitment().into();
+
+            // Accumulate the value commitment in the context. We do this to
+            // check internal consistency.
+            ctx.cv_sum -= value_commitment_point; // Outputs subtract from the total.
+
+            let mut zkproof = [0u8; GROTH_PROOF_SIZE];
+            let proof = Proof::<Bls12> {
+                a: G1Affine::generator(),
+                b: G2Affine::generator(),
+                c: G1Affine::generator(),
+            };
+            proof
+                .write(&mut zkproof[..])
+                .expect("should be able to serialize a proof");
+
+            (zkproof, value_commitment_point)
+        }
+
+        fn convert_proof(
+            &self,
+            ctx: &mut Self::SaplingProvingContext,
+            allowed_conversion: AllowedConversion,
+            value: u64,
+            _anchor: bls12_381::Scalar,
+            _merkle_path: MerklePath<Node>,
+        ) -> Result<([u8; GROTH_PROOF_SIZE], jubjub::ExtendedPoint), ()>
+        {
+            // Initialize secure RNG
+            let mut rng = self.0.lock().unwrap();
+
+            // We create the randomness of the value commitment
+            let rcv = jubjub::Fr::random(&mut *rng);
+
+            // Accumulate the value commitment randomness in the context
+            {
+                let mut tmp = rcv;
+                tmp.add_assign(&ctx.bsk);
+
+                // Update the context
+                ctx.bsk = tmp;
+            }
+
+            // Construct the value commitment
+            let value_commitment =
+                allowed_conversion.value_commitment(value, rcv);
+
+            // Compute value commitment
+            let value_commitment: jubjub::ExtendedPoint =
+                value_commitment.commitment().into();
+
+            // Accumulate the value commitment in the context
+            ctx.cv_sum += value_commitment;
+
+            let mut zkproof = [0u8; GROTH_PROOF_SIZE];
+            let proof = Proof::<Bls12> {
+                a: G1Affine::generator(),
+                b: G2Affine::generator(),
+                c: G1Affine::generator(),
+            };
+            proof
+                .write(&mut zkproof[..])
+                .expect("should be able to serialize a proof");
+
+            Ok((zkproof, value_commitment))
+        }
+
+        fn binding_sig(
+            &self,
+            ctx: &mut Self::SaplingProvingContext,
+            assets_and_values: &I128Sum,
+            sighash: &[u8; 32],
+        ) -> Result<Signature, ()> {
+            // Initialize secure RNG
+            let mut rng = self.0.lock().unwrap();
+
+            // Grab the current `bsk` from the context
+            let bsk = PrivateKey(ctx.bsk);
+
+            // Grab the `bvk` using DerivePublic.
+            let bvk = PublicKey::from_private(
+                &bsk,
+                VALUE_COMMITMENT_RANDOMNESS_GENERATOR,
+            );
+
+            // In order to check internal consistency, let's use the accumulated
+            // value commitments (as the verifier would) and apply
+            // value_balance to compare against our derived bvk.
+            {
+                let final_bvk = assets_and_values
+                    .components()
+                    .map(|(asset_type, value_balance)| {
+                        // Compute value balance for each asset
+                        // Error for bad value balances (-INT128_MAX value)
+                        masp_compute_value_balance(*asset_type, *value_balance)
+                    })
+                    .try_fold(ctx.cv_sum, |tmp, value_balance| {
+                        // Compute cv_sum minus sum of all value balances
+                        Result::<_, ()>::Ok(tmp - value_balance.ok_or(())?)
+                    })?;
+
+                // The result should be the same, unless the provided
+                // valueBalance is wrong.
+                if bvk.0 != final_bvk {
+                    return Err(());
+                }
+            }
+
+            // Construct signature message
+            let mut data_to_be_signed = [0u8; 64];
+            data_to_be_signed[0..32].copy_from_slice(&bvk.0.to_bytes());
+            data_to_be_signed[32..64].copy_from_slice(&sighash[..]);
+
+            // Sign
+            Ok(bsk.sign(
+                &data_to_be_signed,
+                &mut *rng,
+                VALUE_COMMITMENT_RANDOMNESS_GENERATOR,
+            ))
+        }
+    }
 
     #[derive(Debug, Clone)]
     // Adapts a CSPRNG from a PRNG for proptesting
