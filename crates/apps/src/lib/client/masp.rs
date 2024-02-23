@@ -10,7 +10,7 @@ use namada_sdk::masp::{
     ShieldedUtils,
 };
 use namada_sdk::queries::Client;
-use namada_sdk::types::storage::BlockHeight;
+use namada_sdk::storage::BlockHeight;
 use namada_sdk::{display, display_line, MaybeSend, MaybeSync};
 
 pub async fn syncing<

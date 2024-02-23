@@ -4561,7 +4561,7 @@ dependencies = [
 
 [[package]]
 name = "namada_replay_protection"
-version = "0.31.5"
+version = "0.31.6"
 dependencies = [
  "namada_core",
 ]
