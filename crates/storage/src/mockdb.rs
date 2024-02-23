@@ -16,12 +16,12 @@ use namada_core::types::storage::{
     KEY_SEGMENT_SEPARATOR,
 };
 use namada_core::types::time::DateTimeUtc;
-use namada_core::types::token::ConversionState;
 use namada_core::types::{ethereum_events, ethereum_structs};
 use namada_merkle_tree::{
     base_tree_key_prefix, subtree_key_prefix, MerkleTreeStoresRead, StoreType,
 };
 
+use crate::conversion_state::ConversionState;
 use crate::db::{
     BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error, Result, DB,
 };

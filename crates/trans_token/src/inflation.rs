@@ -2,8 +2,8 @@
 //! proof-of-stake, providing liquity to shielded asset pools, and public goods
 //! funding.
 
-use crate::types::dec::Dec;
-use crate::types::uint::Uint;
+use namada_core::types::dec::Dec;
+use namada_core::types::uint::Uint;
 
 /// Holds the PD controller values that should be updated in storage
 #[allow(missing_docs)]

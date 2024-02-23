@@ -1,7 +1,6 @@
 //! A basic fungible token
 
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::iter::Sum;
 use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
@@ -10,10 +9,6 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::BASE32HEX_NOPAD;
 use ethabi::ethereum_types::U256;
-use masp_primitives::asset_type::AssetType;
-use masp_primitives::convert::AllowedConversion;
-use masp_primitives::merkle_tree::FrozenCommitmentTree;
-use masp_primitives::sapling;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -22,30 +17,8 @@ use crate::types::address::Address;
 use crate::types::dec::{Dec, POS_DECIMAL_PRECISION};
 use crate::types::hash::Hash;
 use crate::types::storage;
-use crate::types::storage::{DbKeySeg, Epoch, KeySeg};
+use crate::types::storage::{DbKeySeg, KeySeg};
 use crate::types::uint::{self, Uint, I256};
-
-/// A representation of the conversion state
-#[derive(Debug, Default, BorshSerialize, BorshDeserialize)]
-pub struct ConversionState {
-    /// The last amount of the native token distributed
-    pub normed_inflation: Option<u128>,
-    /// The tree currently containing all the conversions
-    pub tree: FrozenCommitmentTree<sapling::Node>,
-    /// A map from token alias to actual address.
-    pub tokens: BTreeMap<String, Address>,
-    /// Map assets to their latest conversion and position in Merkle tree
-    #[allow(clippy::type_complexity)]
-    pub assets: BTreeMap<
-        AssetType,
-        (
-            (Address, Denomination, MaspDigitPos),
-            Epoch,
-            AllowedConversion,
-            usize,
-        ),
-    >,
-}
 
 /// Amount in micro units. For different granularity another representation
 /// might be more appropriate.
@@ -999,44 +972,6 @@ impl From<Amount> for IbcAmount {
 impl From<DenominatedAmount> for IbcAmount {
     fn from(amount: DenominatedAmount) -> Self {
         amount.canonical().amount.into()
-    }
-}
-
-/// Token parameters for each kind of asset held on chain
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-    Deserialize,
-    Serialize,
-)]
-pub struct MaspParams {
-    /// Maximum reward rate
-    pub max_reward_rate: Dec,
-    /// Shielded Pool nominal derivative gain
-    pub kd_gain_nom: Dec,
-    /// Shielded Pool nominal proportional gain for the given token
-    pub kp_gain_nom: Dec,
-    /// Target amount for the given token that is locked in the shielded pool
-    /// TODO: should this be a Uint or DenominatedAmount???
-    pub locked_amount_target: u64,
-}
-
-impl Default for MaspParams {
-    fn default() -> Self {
-        Self {
-            max_reward_rate: Dec::from_str("0.1").unwrap(),
-            kp_gain_nom: Dec::from_str("0.25").unwrap(),
-            kd_gain_nom: Dec::from_str("0.25").unwrap(),
-            locked_amount_target: 10_000_u64,
-        }
     }
 }
 
