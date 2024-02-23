@@ -322,8 +322,8 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         100,
         ALBERT_KEY,
     )?;
+    shielded_sync(&test_a, AA_VIEWING_KEY)?;
     // Shieded transfer from Chain A to Chain B
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
     transfer(
         &test_a,
         A_SPENDING_KEY,
@@ -340,7 +340,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
     wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
     check_shielded_balances(&port_id_b, &channel_id_b, &test_a, &test_b)?;
 
-    // Shielded transfer to an invalid receiver address
+    // Shielded transfer to an invalid receiver address (refund)
     transfer(
         &test_a,
         A_SPENDING_KEY,
@@ -362,7 +362,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
     let mut hermes = bg_hermes.foreground();
     hermes.interrupt()?;
 
-    // Send transfer will be timed out
+    // Send transfer will be timed out (refund)
     transfer(
         &test_a,
         A_SPENDING_KEY,
@@ -1464,18 +1464,15 @@ fn shielded_transfer(
     channel_id_b: &ChannelId,
 ) -> Result<()> {
     // Send a token to the shielded address on Chain A
-    transfer_on_chain(test_a, ALBERT, AA_PAYMENT_ADDRESS, BTC, 10, ALBERT_KEY)?;
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
-    let rpc_a = get_actor_rpc(test_a, Who::Validator(0));
-    let tx_args = vec![
-        "shielded-sync",
-        "--viewing-keys",
-        AA_VIEWING_KEY,
-        "--node",
-        &rpc_a,
-    ];
-    let mut client = run!(test_a, Bin::Client, tx_args, Some(120))?;
-    client.assert_success();
+    transfer_on_chain(
+        test_a,
+        ALBERT,
+        AA_PAYMENT_ADDRESS,
+        BTC,
+        100,
+        ALBERT_KEY,
+    )?;
+    shielded_sync(test_a, AA_VIEWING_KEY)?;
 
     // Send a token from SP(A) on Chain A to PA(B) on Chain B
     let amount = Amount::native_whole(10).to_string_native();
@@ -2328,17 +2325,8 @@ fn check_shielded_balances(
     // Check the balance on Chain B
     // PA(B) on Chain B has received BTC on chain A
     let token_addr = find_address(test_a, BTC)?.to_string();
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
+    shielded_sync(test_b, AB_VIEWING_KEY)?;
     let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
-    let tx_args = vec![
-        "shielded-sync",
-        "--viewing-keys",
-        AB_VIEWING_KEY,
-        "--node",
-        &rpc_b,
-    ];
-    let mut client = run!(test_b, Bin::Client, tx_args, Some(120))?;
-    client.assert_success();
     let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/btc");
     let query_args = vec![
         "balance",
@@ -2568,4 +2556,19 @@ fn get_events(test: &Test, height: u32) -> Result<Vec<AbciEvent>> {
     response
         .end_block_events
         .ok_or_else(|| eyre!("IBC event was not found: height {}", height))
+}
+
+fn shielded_sync(test: &Test, viewing_key: impl AsRef<str>) -> Result<()> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+    let tx_args = vec![
+        "shielded-sync",
+        "--viewing-keys",
+        viewing_key.as_ref(),
+        "--node",
+        &rpc,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
+    client.assert_success();
+    Ok(())
 }
