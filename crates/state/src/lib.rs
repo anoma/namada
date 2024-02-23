@@ -10,8 +10,7 @@ use std::iter::Peekable;
 
 pub use host_env::{TxHostEnvState, VpHostEnvState};
 pub use in_memory::{BlockStorage, InMemory, LastBlock};
-use namada_core::address::{Address, EstablishedAddressGen};
-use namada_core::chain::ChainId;
+use namada_core::address::Address;
 use namada_core::eth_bridge_pool::is_pending_transfer_key;
 pub use namada_core::hash::Sha256Hasher;
 use namada_core::hash::{Error as HashError, Hash};
@@ -21,7 +20,6 @@ pub use namada_core::storage::{
     EPOCH_TYPE_LENGTH,
 };
 use namada_core::tendermint::merkle::proof::ProofOps;
-use namada_core::time::DateTimeUtc;
 use namada_gas::{
     MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_ACCESS_GAS_PER_BYTE,
     STORAGE_WRITE_GAS_PER_BYTE,
@@ -36,7 +34,6 @@ pub use namada_storage as storage;
 pub use namada_storage::conversion_state::{
     ConversionState, WithConversionState,
 };
-use namada_storage::tx_queue::{ExpiredTxsQueue, TxQueue};
 pub use namada_storage::types::{KVBytes, PrefixIterator};
 pub use namada_storage::{
     collections, iter_prefix, iter_prefix_bytes, iter_prefix_with_filter,
@@ -586,7 +583,11 @@ where
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
     use namada_core::address;
+    use namada_core::address::EstablishedAddressGen;
+    use namada_core::chain::ChainId;
     use namada_core::hash::Sha256Hasher;
+    use namada_core::time::DateTimeUtc;
+    use namada_storage::tx_queue::{ExpiredTxsQueue, TxQueue};
 
     use super::mockdb::MockDB;
     use super::*;
@@ -653,7 +654,7 @@ mod tests {
     use namada_core::borsh::{BorshDeserialize, BorshSerializeExt};
     use namada_core::dec::Dec;
     use namada_core::storage::DbKeySeg;
-    use namada_core::time::{self, Duration};
+    use namada_core::time::{self, DateTimeUtc, Duration};
     use namada_core::token;
     use namada_parameters::{EpochDuration, Parameters};
     use proptest::prelude::*;
