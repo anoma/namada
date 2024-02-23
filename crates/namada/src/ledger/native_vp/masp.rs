@@ -9,10 +9,10 @@ use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::transaction::Transaction;
-use namada_core::types::address::Address;
-use namada_core::types::address::InternalAddress::Masp;
-use namada_core::types::masp::encode_asset_type;
-use namada_core::types::storage::{IndexedTx, Key};
+use namada_core::address::Address;
+use namada_core::address::InternalAddress::Masp;
+use namada_core::masp::encode_asset_type;
+use namada_core::storage::{IndexedTx, Key};
 use namada_gas::MASP_VERIFY_SHIELDED_TX_GAS;
 use namada_sdk::masp::verify_shielded_tx;
 use namada_state::{OptionExt, ResultExt};
@@ -34,7 +34,7 @@ use token::Amount;
 use crate::ledger::native_vp;
 use crate::ledger::native_vp::{Ctx, NativeVp};
 use crate::token;
-use crate::types::token::MaspDigitPos;
+use crate::token::MaspDigitPos;
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]
@@ -217,7 +217,7 @@ where
                 let anchor_key = masp_convert_anchor_key();
                 let expected_anchor = self
                     .ctx
-                    .read_pre::<namada_core::types::hash::Hash>(&anchor_key)?
+                    .read_pre::<namada_core::hash::Hash>(&anchor_key)?
                     .ok_or(Error::NativeVpError(
                         native_vp::Error::SimpleMessage("Cannot read storage"),
                     ))?;
@@ -225,9 +225,8 @@ where
                 for description in &bundle.shielded_converts {
                     // Check if the provided anchor matches the current
                     // conversion tree's one
-                    if namada_core::types::hash::Hash(
-                        description.anchor.to_bytes(),
-                    ) != expected_anchor
+                    if namada_core::hash::Hash(description.anchor.to_bytes())
+                        != expected_anchor
                     {
                         tracing::debug!(
                             "Convert description refers to an invalid anchor"

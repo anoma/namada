@@ -1,12 +1,12 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use namada::core::types::address;
+use namada::core::address;
+use namada::core::key::RefTo;
+use namada::core::storage::BlockHeight;
+use namada::core::time::DateTimeUtc;
 use namada::ledger::storage::TempWlStorage;
 use namada::token::{Amount, DenominatedAmount, Transfer};
 use namada::tx::data::{Fee, WrapperTx};
 use namada::tx::Signature;
-use namada::types::key::RefTo;
-use namada::types::storage::BlockHeight;
-use namada::types::time::DateTimeUtc;
 use namada_apps::bench_utils::{BenchShell, TX_TRANSFER_WASM};
 use namada_apps::node::ledger::shell::process_proposal::ValidationMeta;
 use namada_apps::wallet::defaults;

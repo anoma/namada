@@ -4,17 +4,15 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::ops::Deref;
 
+use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use namada_core::types::address::Address;
-use namada_core::types::eth_abi::{AbiEncode, Encode, Token};
-use namada_core::types::ethereum_events::EthAddress;
-use namada_core::types::keccak::KeccakHash;
-use namada_core::types::key::common::{self, Signature};
-use namada_core::types::storage::Epoch;
-use namada_core::types::voting_power::{
-    EthBridgeVotingPower, FractionalVotingPower,
-};
-use namada_core::types::{ethereum_structs, token};
+use namada_core::eth_abi::{AbiEncode, Encode, Token};
+use namada_core::ethereum_events::EthAddress;
+use namada_core::keccak::KeccakHash;
+use namada_core::key::common::{self, Signature};
+use namada_core::storage::Epoch;
+use namada_core::voting_power::{EthBridgeVotingPower, FractionalVotingPower};
+use namada_core::{ethereum_structs, token};
 use namada_tx::Signed;
 
 // the contract versions and namespaces plugged into validator set hashes
@@ -384,10 +382,10 @@ impl Encode<1> for ValidatorSetArgs {
 // this is only here so we don't pollute the
 // outer namespace with serde traits
 mod tag {
-    use namada_core::types::eth_abi::{AbiEncode, Encode, Token};
-    use namada_core::types::hash::KeccakHasher;
-    use namada_core::types::keccak::KeccakHash;
-    use namada_core::types::key::Signable;
+    use namada_core::eth_abi::{AbiEncode, Encode, Token};
+    use namada_core::hash::KeccakHasher;
+    use namada_core::keccak::KeccakHash;
+    use namada_core::key::Signable;
     use serde::{Deserialize, Serialize};
 
     use super::{
@@ -428,7 +426,7 @@ mod tests {
     use std::str::FromStr;
 
     use data_encoding::HEXLOWER;
-    use namada_core::types::ethereum_events::EthAddress;
+    use namada_core::ethereum_events::EthAddress;
 
     use super::*;
 

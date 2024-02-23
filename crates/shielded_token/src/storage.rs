@@ -1,7 +1,7 @@
-use namada_core::types::address::Address;
-use namada_core::types::token;
-use namada_core::types::token::Amount;
-use namada_core::types::uint::Uint;
+use namada_core::address::Address;
+use namada_core::token;
+use namada_core::token::Amount;
+use namada_core::uint::Uint;
 use namada_storage as storage;
 use namada_storage::{StorageRead, StorageWrite};
 use storage::ResultExt;

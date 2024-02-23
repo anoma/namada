@@ -1,11 +1,11 @@
 use borsh_ext::BorshSerializeExt;
+use namada_sdk::address::Address;
+use namada_sdk::hash::Hash;
+use namada_sdk::key::common;
+use namada_sdk::storage::Epoch;
+use namada_sdk::token::DenominatedAmount;
 use namada_sdk::tx::data::GasLimit;
 use namada_sdk::tx::{Signature, Tx, TxError};
-use namada_sdk::types::address::Address;
-use namada_sdk::types::hash::Hash;
-use namada_sdk::types::key::common;
-use namada_sdk::types::storage::Epoch;
-use namada_sdk::types::token::DenominatedAmount;
 
 use super::{attach_fee, attach_fee_signature, GlobalArgs};
 use crate::transaction;
@@ -27,7 +27,7 @@ impl Transfer {
         shielded: Option<Hash>,
         args: GlobalArgs,
     ) -> Self {
-        let init_proposal = namada_sdk::types::token::Transfer {
+        let init_proposal = namada_sdk::token::Transfer {
             source,
             target,
             token,

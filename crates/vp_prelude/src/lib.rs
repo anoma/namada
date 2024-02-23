@@ -7,7 +7,7 @@
 #![deny(rustdoc::private_intra_doc_links)]
 
 pub mod ibc {
-    pub use namada_core::types::ibc::IbcEvent;
+    pub use namada_core::ibc::IbcEvent;
     pub use namada_ibc::storage::is_ibc_key;
 }
 
@@ -18,17 +18,17 @@ pub use std::collections::{BTreeSet, HashSet};
 use std::convert::TryFrom;
 use std::marker::PhantomData;
 
+pub use namada_core::address::Address;
 pub use namada_core::borsh::{
     BorshDeserialize, BorshSerialize, BorshSerializeExt,
 };
-pub use namada_core::types::address::Address;
-use namada_core::types::chain::CHAIN_ID_LENGTH;
-use namada_core::types::hash::{Hash, HASH_LENGTH};
-use namada_core::types::internal::HostEnvResult;
-use namada_core::types::storage::{
+use namada_core::chain::CHAIN_ID_LENGTH;
+use namada_core::hash::{Hash, HASH_LENGTH};
+use namada_core::internal::HostEnvResult;
+use namada_core::storage::{
     BlockHash, BlockHeight, Epoch, Epochs, Header, TxIndex, BLOCK_HASH_LENGTH,
 };
-pub use namada_core::types::*;
+pub use namada_core::*;
 pub use namada_governance::pgf::storage as pgf_storage;
 pub use namada_governance::storage as gov_storage;
 pub use namada_macros::validity_predicate;
@@ -551,7 +551,7 @@ fn get_pred_epochs() -> Result<Epochs, Error> {
             "Missing result from `namada_vp_get_pred_epochs` call",
         ),
     )?;
-    Ok(namada_core::types::decode(bytes).expect("Cannot decode pred epochs"))
+    Ok(namada_core::decode(bytes).expect("Cannot decode pred epochs"))
 }
 
 fn get_native_token() -> Result<Address, Error> {

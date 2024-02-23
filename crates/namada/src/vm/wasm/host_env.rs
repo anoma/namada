@@ -3,7 +3,7 @@
 //! Here, we expose the host functions into wasm's
 //! imports, so they can be called from inside the wasm.
 
-use namada_core::types::hash::StorageHasher;
+use namada_core::hash::StorageHasher;
 use wasmer::{
     Function, HostEnvInitError, ImportObject, Instance, Memory, Store,
     WasmerEnv,

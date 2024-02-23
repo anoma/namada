@@ -1,8 +1,8 @@
 //! MASP rewards conversions
 
-use namada_core::types::address::{Address, MASP};
-use namada_core::types::dec::Dec;
-use namada_core::types::uint::Uint;
+use namada_core::address::{Address, MASP};
+use namada_core::dec::Dec;
+use namada_core::uint::Uint;
 use namada_parameters as parameters;
 use namada_storage::{StorageRead, StorageWrite};
 use namada_trans_token::inflation::{
@@ -208,8 +208,8 @@ where
     use masp_primitives::merkle_tree::FrozenCommitmentTree;
     use masp_primitives::sapling::Node;
     use masp_primitives::transaction::components::I128Sum as MaspAmount;
-    use namada_core::types::masp::encode_asset_type;
-    use namada_core::types::storage::Epoch;
+    use namada_core::masp::encode_asset_type;
+    use namada_core::storage::Epoch;
     use namada_storage::ResultExt;
     use namada_trans_token::{MaspDigitPos, NATIVE_MAX_DECIMAL_PLACES};
     use rayon::iter::{
@@ -485,7 +485,7 @@ where
     // Update the anchor in storage
     storage.write(
         &crate::storage_key::masp_convert_anchor_key(),
-        namada_core::types::hash::Hash(
+        namada_core::hash::Hash(
             bls12_381::Scalar::from(storage.conversion_state().tree.root())
                 .to_bytes(),
         ),
@@ -526,10 +526,10 @@ mod tests {
     use std::collections::HashMap;
     use std::str::FromStr;
 
-    use namada_core::types::address;
-    use namada_core::types::dec::testing::arb_non_negative_dec;
-    use namada_core::types::time::DurationSecs;
-    use namada_core::types::token::testing::arb_amount;
+    use namada_core::address;
+    use namada_core::dec::testing::arb_non_negative_dec;
+    use namada_core::time::DurationSecs;
+    use namada_core::token::testing::arb_amount;
     use namada_parameters::{EpochDuration, Parameters};
     use namada_storage::testing::TestStorage;
     use namada_trans_token::{write_denom, Denomination};

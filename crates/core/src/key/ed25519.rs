@@ -19,7 +19,7 @@ use super::{
     ParsePublicKeyError, ParseSecretKeyError, ParseSignatureError, RefTo,
     SchemeType, SigScheme as SigSchemeTrait, SignableBytes, VerifySigError,
 };
-use crate::types::key::StorageHasher;
+use crate::key::StorageHasher;
 
 const PUBLIC_KEY_LENGTH: usize = 32;
 const SECRET_KEY_LENGTH: usize = 32;

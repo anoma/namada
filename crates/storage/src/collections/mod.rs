@@ -19,7 +19,7 @@ pub mod lazy_vec;
 pub use lazy_map::LazyMap;
 pub use lazy_set::LazySet;
 pub use lazy_vec::LazyVec;
-use namada_core::types::storage;
+use namada_core::storage;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]

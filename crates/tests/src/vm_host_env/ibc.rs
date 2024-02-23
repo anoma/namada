@@ -6,6 +6,12 @@ use ibc_testkit::testapp::ibc::clients::mock::client_state::{
 };
 use ibc_testkit::testapp::ibc::clients::mock::consensus_state::MockConsensusState;
 use ibc_testkit::testapp::ibc::clients::mock::header::MockHeader;
+use namada::core::address::{self, Address, InternalAddress};
+use namada::core::hash::Hash;
+use namada::core::storage::{
+    self, BlockHash, BlockHeight, Epoch, Key, TxIndex,
+};
+use namada::core::time::DurationSecs;
 use namada::gas::TxGasMeter;
 use namada::governance::parameters::GovernanceParameters;
 use namada::ibc::apps::transfer::types::error::TokenTransferError;
@@ -75,12 +81,6 @@ use namada::state::Sha256Hasher;
 use namada::tendermint::time::Time as TmTime;
 use namada::token::{self, Amount, DenominatedAmount};
 use namada::tx::Tx;
-use namada::types::address::{self, Address, InternalAddress};
-use namada::types::hash::Hash;
-use namada::types::storage::{
-    self, BlockHash, BlockHeight, Epoch, Key, TxIndex,
-};
-use namada::types::time::DurationSecs;
 use namada::vm::{wasm, WasmCacheRwAccess};
 use namada_test_utils::TestWasms;
 use namada_tx_prelude::BorshSerializeExt;
@@ -266,7 +266,7 @@ pub fn init_storage() -> (Address, Address) {
     // max_expected_time_per_block
     let time = DurationSecs::from(Duration::new(60, 0));
     let key = get_max_expected_time_per_block_key();
-    let bytes = namada::types::encode(&time);
+    let bytes = namada::core::encode(&time);
     tx_host_env::with(|env| {
         env.wl_storage.storage.write(&key, &bytes).unwrap();
     });

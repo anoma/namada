@@ -11,19 +11,19 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
+use namada::core::address::{Address, EstablishedAddress};
+use namada::core::chain::ProposalBytes;
+use namada::core::key::*;
+use namada::core::storage;
+use namada::core::string_encoding::StringEncoded;
+use namada::core::time::{DateTimeUtc, DurationSecs};
+use namada::core::token::Denomination;
 use namada::governance::parameters::GovernanceParameters;
 use namada::governance::pgf::parameters::PgfParameters;
 use namada::ledger::eth_bridge::EthereumBridgeParams;
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::{Dec, GenesisValidator, OwnedPosParams};
 use namada::token;
-use namada::types::address::{Address, EstablishedAddress};
-use namada::types::chain::ProposalBytes;
-use namada::types::key::*;
-use namada::types::storage;
-use namada::types::string_encoding::StringEncoded;
-use namada::types::time::{DateTimeUtc, DurationSecs};
-use namada::types::token::Denomination;
 use serde::{Deserialize, Serialize};
 
 #[cfg(all(any(test, feature = "benches"), not(feature = "integration")))]
@@ -313,13 +313,13 @@ pub fn make_dev_genesis(
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use std::time::Duration;
 
+    use namada::core::address::wnam;
+    use namada::core::chain::ChainIdPrefix;
+    use namada::core::ethereum_events::EthAddress;
+    use namada::core::key::*;
     use namada::ledger::eth_bridge::{Contracts, UpgradeableContract};
     use namada::ledger::pos::types::ValidatorMetaData;
     use namada::tx::standalone_signature;
-    use namada::types::address::wnam;
-    use namada::types::chain::ChainIdPrefix;
-    use namada::types::ethereum_events::EthAddress;
-    use namada::types::key::*;
     use namada_sdk::wallet::alias::Alias;
 
     use crate::config::genesis::chain::{finalize, DeriveEstablishedAddress};
@@ -554,8 +554,8 @@ pub fn make_dev_genesis(
 #[cfg(test)]
 pub mod tests {
     use borsh_ext::BorshSerializeExt;
-    use namada::types::address::testing::gen_established_address;
-    use namada::types::key::*;
+    use namada::core::address::testing::gen_established_address;
+    use namada::core::key::*;
     use rand::prelude::ThreadRng;
     use rand::thread_rng;
 

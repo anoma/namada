@@ -9,7 +9,7 @@ pub use ethbridge_structs::*;
 use num256::Uint256;
 use serde::{Deserialize, Serialize};
 
-use crate::types::keccak::KeccakHash;
+use crate::keccak::KeccakHash;
 
 /// Status of some Bridge pool transfer.
 #[derive(

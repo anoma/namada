@@ -5,8 +5,8 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
 use color_eyre::eyre::{eyre, Result};
+use namada::core::dec::Dec;
 use namada::token;
-use namada::types::dec::Dec;
 use namada_apps::cli::args;
 use namada_apps::client::utils::PRE_GENESIS_DIR;
 use namada_apps::config;
@@ -23,7 +23,7 @@ use namada_apps::node::ledger::shell::testing::node::{
 use namada_apps::node::ledger::shell::testing::utils::TestDir;
 use namada_apps::node::ledger::shell::Shell;
 use namada_apps::wallet::pre_genesis;
-use namada_core::types::chain::ChainIdPrefix;
+use namada_core::chain::ChainIdPrefix;
 use namada_sdk::wallet::alias::Alias;
 
 use crate::e2e::setup::{copy_wasm_to_chain_dir, SINGLE_NODE_NET_GENESIS};

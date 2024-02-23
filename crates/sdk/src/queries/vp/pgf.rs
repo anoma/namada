@@ -1,4 +1,4 @@
-use namada_core::types::address::Address;
+use namada_core::address::Address;
 use namada_governance::pgf::parameters::PgfParameters;
 use namada_governance::pgf::storage::steward::StewardDetail;
 use namada_governance::storage::proposal::StoragePgfFunding;

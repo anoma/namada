@@ -9,9 +9,9 @@ pub mod vote;
 
 use std::collections::BTreeMap;
 
+use namada_core::address::Address;
 use namada_core::borsh::BorshDeserialize;
-use namada_core::types::address::Address;
-use namada_core::types::storage::Epoch;
+use namada_core::storage::Epoch;
 use namada_state::{
     iter_prefix, StorageError, StorageRead, StorageResult, StorageWrite,
 };

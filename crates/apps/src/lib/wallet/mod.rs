@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::{env, fs};
 
 use namada::bip39::{Language, Mnemonic};
-use namada::types::key::*;
+use namada::core::key::*;
 pub use namada_sdk::wallet::alias::Alias;
 use namada_sdk::wallet::fs::FsWalletStorage;
 use namada_sdk::wallet::store::Store;

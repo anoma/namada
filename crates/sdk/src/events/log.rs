@@ -85,7 +85,7 @@ impl EventLog {
 
 #[cfg(test)]
 mod tests {
-    use namada_core::types::hash::Hash;
+    use namada_core::hash::Hash;
 
     use super::*;
     use crate::events::{EventLevel, EventType};

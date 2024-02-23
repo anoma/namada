@@ -1,17 +1,14 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::hints;
-use namada_core::types::address::Address;
-use namada_core::types::eth_abi::Encode;
-use namada_core::types::eth_bridge_pool::PendingTransfer;
-use namada_core::types::ethereum_events::{
+use namada_core::address::Address;
+use namada_core::eth_abi::Encode;
+use namada_core::eth_bridge_pool::PendingTransfer;
+use namada_core::ethereum_events::{
     EthAddress, EthereumEvent, GetEventNonce, TransferToEthereum, Uint,
 };
-use namada_core::types::keccak::KeccakHash;
-use namada_core::types::storage::{BlockHeight, Epoch, Key as StorageKey};
-use namada_core::types::token;
-use namada_core::types::voting_power::{
-    EthBridgeVotingPower, FractionalVotingPower,
-};
+use namada_core::keccak::KeccakHash;
+use namada_core::storage::{BlockHeight, Epoch, Key as StorageKey};
+use namada_core::voting_power::{EthBridgeVotingPower, FractionalVotingPower};
+use namada_core::{hints, token};
 use namada_proof_of_stake::pos_queries::{ConsensusValidators, PosQueries};
 use namada_proof_of_stake::storage::{
     validator_eth_cold_key_handle, validator_eth_hot_key_handle,

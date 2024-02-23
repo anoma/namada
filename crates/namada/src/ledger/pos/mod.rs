@@ -4,9 +4,9 @@ pub mod vp;
 
 use std::convert::TryFrom;
 
-use namada_core::types::address;
-pub use namada_core::types::dec::Dec;
-pub use namada_core::types::key::common;
+use namada_core::address;
+pub use namada_core::dec::Dec;
+pub use namada_core::key::common;
 pub use namada_proof_of_stake::parameters::{OwnedPosParams, PosParams};
 pub use namada_proof_of_stake::pos_queries::*;
 pub use namada_proof_of_stake::storage::*;
@@ -16,8 +16,8 @@ pub use namada_proof_of_stake::{staking_token_address, types};
 pub use vp::PosVP;
 pub use {namada_proof_of_stake, namada_state};
 
+use crate::address::{Address, InternalAddress};
 pub use crate::token;
-use crate::types::address::{Address, InternalAddress};
 
 /// Address of the PoS account implemented as a native VP
 pub const ADDRESS: Address = address::POS;

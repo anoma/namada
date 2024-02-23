@@ -1,8 +1,8 @@
 use eyre::{Result, WrapErr};
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::hints;
-use namada_core::types::storage::Key;
-use namada_core::types::voting_power::FractionalVotingPower;
+use namada_core::storage::Key;
+use namada_core::voting_power::FractionalVotingPower;
 use namada_state::{DBIter, PrefixIter, StorageHasher, WlStorage, DB};
 use namada_storage::{StorageRead, StorageWrite};
 
@@ -135,7 +135,7 @@ mod tests {
 
     use assert_matches::assert_matches;
     use namada_core::borsh::BorshSerializeExt;
-    use namada_core::types::ethereum_events::EthereumEvent;
+    use namada_core::ethereum_events::EthereumEvent;
 
     use super::*;
     use crate::test_utils;

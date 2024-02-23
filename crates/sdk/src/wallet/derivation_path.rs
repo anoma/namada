@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use derivation_path::{ChildIndex, DerivationPath as DerivationPathInner};
 use masp_primitives::zip32;
-use namada_core::types::key::SchemeType;
+use namada_core::key::SchemeType;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use tiny_hderive::bip44::{
@@ -272,7 +272,7 @@ impl From<DerivationPath> for Vec<zip32::ChildIndex> {
 
 #[cfg(test)]
 mod tests {
-    use namada_core::types::key::SchemeType;
+    use namada_core::key::SchemeType;
 
     use super::DerivationPath;
 

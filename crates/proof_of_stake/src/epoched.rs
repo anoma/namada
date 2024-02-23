@@ -7,7 +7,7 @@ use std::marker::PhantomData;
 use std::{cmp, ops};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use namada_core::types::storage::{self, Epoch};
+use namada_core::storage::{self, Epoch};
 use namada_storage;
 use namada_storage::collections::lazy_map::{LazyMap, NestedMap};
 use namada_storage::collections::{self, LazyCollection};
@@ -1085,9 +1085,9 @@ pub trait EpochOffset:
 
 #[cfg(test)]
 mod test {
-    use namada_core::types::address::testing::established_address_1;
-    use namada_core::types::dec::Dec;
-    use namada_core::types::{key, token};
+    use namada_core::address::testing::established_address_1;
+    use namada_core::dec::Dec;
+    use namada_core::{key, token};
     use namada_state::testing::TestWlStorage;
     use test_log::test;
 
