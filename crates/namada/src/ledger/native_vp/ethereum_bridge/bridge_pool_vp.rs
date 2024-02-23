@@ -642,7 +642,6 @@ mod test_bridge_pool_vp {
     use std::env::temp_dir;
 
     use borsh::BorshDeserialize;
-    use namada_core::address;
     use namada_core::borsh::BorshSerializeExt;
     use namada_ethereum_bridge::storage::bridge_pool::get_signed_root_key;
     use namada_ethereum_bridge::storage::parameters::{
@@ -654,7 +653,8 @@ mod test_bridge_pool_vp {
     use namada_tx::data::TxType;
 
     use super::*;
-    use crate::address::{nam, wnam, InternalAddress};
+    use crate::address::testing::{nam, wnam};
+    use crate::address::InternalAddress;
     use crate::chain::ChainId;
     use crate::eth_bridge_pool::{GasFee, TransferToEthereum};
     use crate::hash::Hash;
@@ -917,7 +917,7 @@ mod test_bridge_pool_vp {
             storage: State::<MockDB, Sha256Hasher>::open(
                 std::path::Path::new(""),
                 ChainId::default(),
-                address::nam(),
+                nam(),
                 None,
                 None,
                 namada_sdk::state::merklize_all_keys,

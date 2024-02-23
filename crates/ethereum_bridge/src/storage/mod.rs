@@ -69,7 +69,7 @@ pub fn bridge_contract_key() -> Key {
 #[cfg(test)]
 mod test {
     use namada_core::address;
-    use namada_core::address::nam;
+    use namada_core::address::testing::nam;
     use namada_core::ethereum_events::testing::arbitrary_eth_address;
 
     use super::*;

@@ -176,8 +176,7 @@ mod tests {
     use rand::Rng;
 
     use super::*;
-    use crate::address::testing::established_address_1;
-    use crate::address::{nam, wnam};
+    use crate::address::testing::{established_address_1, nam, wnam};
     use crate::ethereum_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
     use crate::ethereum_bridge::storage::parameters::{
         Contracts, EthereumBridgeParams, UpgradeableContract,

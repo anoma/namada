@@ -1868,9 +1868,10 @@ mod test_process_proposal {
     fn test_fee_non_whitelisted_token() {
         let (shell, _recv, _, _) = test_utils::setup();
 
-        let apfel_denom = read_denom(&shell.wl_storage, &address::apfel())
-            .expect("unable to read denomination from storage")
-            .expect("unable to find denomination of apfels");
+        let apfel_denom =
+            read_denom(&shell.wl_storage, &address::testing::apfel())
+                .expect("unable to read denomination from storage")
+                .expect("unable to find denomination of apfels");
 
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
@@ -1879,7 +1880,7 @@ mod test_process_proposal {
                         100.into(),
                         apfel_denom,
                     ),
-                    token: address::apfel(),
+                    token: address::testing::apfel(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 Epoch(0),

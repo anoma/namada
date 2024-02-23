@@ -4,7 +4,7 @@ mod test_bridge_pool_vp {
 
     use borsh::BorshDeserialize;
     use borsh_ext::BorshSerializeExt;
-    use namada::core::address::{nam, wnam};
+    use namada::core::address::testing::{nam, wnam};
     use namada::core::chain::ChainId;
     use namada::core::eth_bridge_pool::{
         GasFee, PendingTransfer, TransferToEthereum, TransferToEthereumKind,
