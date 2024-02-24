@@ -445,7 +445,7 @@ pub struct GovernanceParams {
     pub max_proposal_period: u64,
     /// Maximum number of characters in the proposal content
     pub max_proposal_content_size: u64,
-    /// Minimum number of epoch between end and grace epoch
+    /// Minimum number of epochs between the end and activation epochs
     pub min_proposal_grace_epochs: u64,
 }
 

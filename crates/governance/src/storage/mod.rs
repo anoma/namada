@@ -69,8 +69,9 @@ where
         governance_keys::get_voting_end_epoch_key(proposal_id);
     storage.write(&voting_end_epoch_key, data.voting_end_epoch)?;
 
-    let grace_epoch_key = governance_keys::get_grace_epoch_key(proposal_id);
-    storage.write(&grace_epoch_key, data.grace_epoch)?;
+    let activation_epoch_key =
+        governance_keys::get_activation_epoch_key(proposal_id);
+    storage.write(&activation_epoch_key, data.activation_epoch)?;
 
     if let ProposalType::Default(Some(_)) = data.r#type {
         let proposal_code_key =
@@ -93,7 +94,7 @@ where
     let committing_proposals_key =
         governance_keys::get_committing_proposals_key(
             proposal_id,
-            data.grace_epoch.0,
+            data.activation_epoch.0,
         );
     storage.write(&committing_proposals_key, ())?;
 
@@ -148,14 +149,15 @@ where
     let content = governance_keys::get_content_key(id);
     let start_epoch_key = governance_keys::get_voting_start_epoch_key(id);
     let end_epoch_key = governance_keys::get_voting_end_epoch_key(id);
-    let grace_epoch_key = governance_keys::get_grace_epoch_key(id);
+    let activation_epoch_key = governance_keys::get_activation_epoch_key(id);
     let proposal_type_key = governance_keys::get_proposal_type_key(id);
 
     let author: Option<Address> = storage.read(&author_key)?;
     let content: Option<BTreeMap<String, String>> = storage.read(&content)?;
     let voting_start_epoch: Option<Epoch> = storage.read(&start_epoch_key)?;
     let voting_end_epoch: Option<Epoch> = storage.read(&end_epoch_key)?;
-    let grace_epoch: Option<Epoch> = storage.read(&grace_epoch_key)?;
+    let activation_epoch: Option<Epoch> =
+        storage.read(&activation_epoch_key)?;
     let proposal_type: Option<ProposalType> =
         storage.read(&proposal_type_key)?;
 
@@ -166,7 +168,7 @@ where
         r#type: proposal_type,
         voting_start_epoch: voting_start_epoch.unwrap(),
         voting_end_epoch: voting_end_epoch.unwrap(),
-        grace_epoch: grace_epoch.unwrap(),
+        activation_epoch: activation_epoch.unwrap(),
     });
 
     Ok(proposal)
@@ -263,7 +265,7 @@ where
     let min_proposal_fund: token::Amount =
         storage.read(&key)?.expect("Parameter should be defined.");
 
-    let key = governance_keys::get_min_proposal_grace_epoch_key();
+    let key = governance_keys::get_min_proposal_grace_epochs_key();
     let min_proposal_grace_epochs: u64 =
         storage.read(&key)?.expect("Parameter should be defined.");
 
@@ -320,9 +322,9 @@ where
         governance_keys::get_commiting_proposals_prefix(current_epoch.0);
     for key_val in namada_storage::iter_prefix_bytes(storage, &proposals_key)? {
         let (key, _) = key_val?;
-        let grace_epoch = governance_keys::get_commit_proposal_epoch(&key)
+        let activation_epoch = governance_keys::get_commit_proposal_epoch(&key)
             .expect("this key segment should correspond to an epoch number");
-        if current_epoch.0 == grace_epoch {
+        if current_epoch.0 == activation_epoch {
             let proposal_id = governance_keys::get_commit_proposal_id(&key)
                 .expect("ths key segment should correspond to a proposal id");
             ids.insert(proposal_id);

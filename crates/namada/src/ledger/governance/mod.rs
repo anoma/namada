@@ -95,8 +95,8 @@ where
                 (KeyType::PROPOSAL_CODE, Some(proposal_id)) => {
                     self.is_valid_proposal_code(proposal_id)
                 }
-                (KeyType::GRACE_EPOCH, Some(proposal_id)) => {
-                    self.is_valid_grace_epoch(proposal_id)
+                (KeyType::ACTIVATION_EPOCH, Some(proposal_id)) => {
+                    self.is_valid_activation_epoch(proposal_id)
                 }
                 (KeyType::START_EPOCH, Some(proposal_id)) => {
                     self.is_valid_start_epoch(proposal_id)
@@ -162,7 +162,7 @@ where
                 gov_storage::get_funds_key(counter),
                 gov_storage::get_voting_start_epoch_key(counter),
                 gov_storage::get_voting_end_epoch_key(counter),
-                gov_storage::get_grace_epoch_key(counter),
+                gov_storage::get_activation_epoch_key(counter),
             ]);
 
             // Check that expected set is a subset of the actual one
@@ -455,18 +455,20 @@ where
         Ok(post_code.len() <= max_proposal_length)
     }
 
-    /// Validate a grace_epoch key
-    pub fn is_valid_grace_epoch(&self, proposal_id: u64) -> Result<bool> {
+    /// Validate an activation_epoch key
+    pub fn is_valid_activation_epoch(&self, proposal_id: u64) -> Result<bool> {
         let start_epoch_key =
             gov_storage::get_voting_start_epoch_key(proposal_id);
         let end_epoch_key = gov_storage::get_voting_end_epoch_key(proposal_id);
-        let grace_epoch_key = gov_storage::get_grace_epoch_key(proposal_id);
+        let activation_epoch_key =
+            gov_storage::get_activation_epoch_key(proposal_id);
         let max_proposal_period = gov_storage::get_max_proposal_period_key();
-        let min_grace_epoch_key =
-            gov_storage::get_min_proposal_grace_epoch_key();
+        let min_grace_epochs_key =
+            gov_storage::get_min_proposal_grace_epochs_key();
 
-        let has_pre_grace_epoch = self.ctx.has_key_pre(&grace_epoch_key)?;
-        if has_pre_grace_epoch {
+        let has_pre_activation_epoch =
+            self.ctx.has_key_pre(&activation_epoch_key)?;
+        if has_pre_activation_epoch {
             return Ok(false);
         }
 
@@ -474,16 +476,16 @@ where
             self.force_read(&start_epoch_key, ReadType::Post)?;
         let end_epoch: Epoch =
             self.force_read(&end_epoch_key, ReadType::Post)?;
-        let grace_epoch: Epoch =
-            self.force_read(&grace_epoch_key, ReadType::Post)?;
-        let min_grace_epoch: u64 =
-            self.force_read(&min_grace_epoch_key, ReadType::Pre)?;
+        let activation_epoch: Epoch =
+            self.force_read(&activation_epoch_key, ReadType::Post)?;
+        let min_grace_epochs: u64 =
+            self.force_read(&min_grace_epochs_key, ReadType::Pre)?;
         let max_proposal_period: u64 =
             self.force_read(&max_proposal_period, ReadType::Pre)?;
 
         let committing_epoch_key = gov_storage::get_committing_proposals_key(
             proposal_id,
-            grace_epoch.into(),
+            activation_epoch.into(),
         );
         let has_post_committing_epoch =
             self.ctx.has_key_post(&committing_epoch_key)?;
@@ -491,29 +493,29 @@ where
             tracing::info!("Committing proposal key is missing present");
         }
 
-        let is_valid_grace_epoch = end_epoch < grace_epoch
-            && (grace_epoch - end_epoch).0 >= min_grace_epoch;
-        if !is_valid_grace_epoch {
+        let is_valid_activation_epoch = end_epoch < activation_epoch
+            && (activation_epoch - end_epoch).0 >= min_grace_epochs;
+        if !is_valid_activation_epoch {
             tracing::info!(
-                "Expected min duration between the end and grace epoch \
-                 {min_grace_epoch}, but got grace = {}, end = {}",
-                grace_epoch,
+                "Expected min duration between the end and activation epoch \
+                 {min_grace_epochs}, but got activation = {}, end = {}",
+                activation_epoch,
                 end_epoch
             );
         }
-        let is_valid_max_proposal_period = start_epoch < grace_epoch
-            && grace_epoch.0 - start_epoch.0 <= max_proposal_period;
+        let is_valid_max_proposal_period = start_epoch < activation_epoch
+            && activation_epoch.0 - start_epoch.0 <= max_proposal_period;
         if !is_valid_max_proposal_period {
             tracing::info!(
-                "Expected max duration between the start and grace epoch \
-                 {max_proposal_period}, but got grace ={}, start = {}",
-                grace_epoch,
+                "Expected max duration between the start and activation epoch \
+                 {max_proposal_period}, but got activation = {}, start = {}",
+                activation_epoch,
                 start_epoch
             );
         }
 
         Ok(has_post_committing_epoch
-            && is_valid_grace_epoch
+            && is_valid_activation_epoch
             && is_valid_max_proposal_period)
     }
 
@@ -795,7 +797,7 @@ enum KeyType {
     #[allow(non_camel_case_types)]
     PROPOSAL_COMMIT,
     #[allow(non_camel_case_types)]
-    GRACE_EPOCH,
+    ACTIVATION_EPOCH,
     #[allow(non_camel_case_types)]
     START_EPOCH,
     #[allow(non_camel_case_types)]
@@ -824,8 +826,8 @@ impl KeyType {
             Self::TYPE
         } else if gov_storage::is_proposal_code_key(key) {
             Self::PROPOSAL_CODE
-        } else if gov_storage::is_grace_epoch_key(key) {
-            KeyType::GRACE_EPOCH
+        } else if gov_storage::is_activation_epoch_key(key) {
+            KeyType::ACTIVATION_EPOCH
         } else if gov_storage::is_start_epoch_key(key) {
             KeyType::START_EPOCH
         } else if gov_storage::is_commit_proposal_key(key) {
