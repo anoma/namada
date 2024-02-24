@@ -1348,7 +1348,7 @@ mod test {
     }
 
     #[test]
-    fn test_proposal_fifthteen() {
+    fn test_proposal_fifteen() {
         let mut proposal_votes = ProposalVotes::default();
 
         let validator_address = address::testing::established_address_1();
@@ -1401,5 +1401,45 @@ mod test {
         );
 
         assert!(!proposal_result.two_thirds_nay_over_two_thirds_total())
+    }
+
+    #[test]
+    fn test_validator_voting_period() {
+        assert!(!is_valid_validator_voting_period(
+            0.into(),
+            2.into(),
+            4.into()
+        ));
+        assert!(is_valid_validator_voting_period(
+            2.into(),
+            2.into(),
+            4.into()
+        ));
+        assert!(is_valid_validator_voting_period(
+            3.into(),
+            2.into(),
+            4.into()
+        ));
+        assert!(!is_valid_validator_voting_period(
+            4.into(),
+            2.into(),
+            4.into()
+        ));
+
+        assert!(is_valid_validator_voting_period(
+            3.into(),
+            2.into(),
+            5.into()
+        ));
+        assert!(is_valid_validator_voting_period(
+            4.into(),
+            2.into(),
+            5.into()
+        ));
+        assert!(!is_valid_validator_voting_period(
+            5.into(),
+            2.into(),
+            5.into()
+        ));
     }
 }
