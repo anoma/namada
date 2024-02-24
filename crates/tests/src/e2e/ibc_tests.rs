@@ -108,11 +108,12 @@ fn run_ledger_ibc() -> Result<()> {
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
             genesis.parameters.parameters.epochs_per_year =
                 epochs_per_year_from_min_duration(1800);
-            genesis.parameters.ibc_params.default_mint_limit = Amount::max();
+            genesis.parameters.ibc_params.default_mint_limit =
+                Amount::max_signed();
             genesis
                 .parameters
                 .ibc_params
-                .default_per_epoch_throughput_limit = Amount::max();
+                .default_per_epoch_throughput_limit = Amount::max_signed();
             setup::set_validators(1, genesis, base_dir, |_| 0)
         };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
@@ -235,11 +236,12 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
             genesis.parameters.parameters.epochs_per_year =
                 epochs_per_year_from_min_duration(1800);
-            genesis.parameters.ibc_params.default_mint_limit = Amount::max();
+            genesis.parameters.ibc_params.default_mint_limit =
+                Amount::max_signed();
             genesis
                 .parameters
                 .ibc_params
-                .default_per_epoch_throughput_limit = Amount::max();
+                .default_per_epoch_throughput_limit = Amount::max_signed();
             setup::set_validators(1, genesis, base_dir, |_| 0)
         };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
@@ -404,26 +406,28 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
 
 #[test]
 fn pgf_over_ibc_with_hermes() -> Result<()> {
-    let update_genesis =
-        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
-            genesis.parameters.parameters.epochs_per_year =
-                epochs_per_year_from_min_duration(20);
-            // for the trusting period of IBC client
-            genesis.parameters.pos_params.pipeline_len = 5;
-            genesis.parameters.parameters.max_proposal_bytes =
-                Default::default();
-            genesis.parameters.pgf_params.stewards =
-                BTreeSet::from_iter([get_established_addr_from_pregenesis(
-                    ALBERT_KEY, base_dir, &genesis,
-                )
-                .unwrap()]);
-            genesis.parameters.ibc_params.default_mint_limit = Amount::max();
-            genesis
-                .parameters
-                .ibc_params
-                .default_per_epoch_throughput_limit = Amount::max();
-            setup::set_validators(1, genesis, base_dir, |_| 0)
-        };
+    let update_genesis = |mut genesis: templates::All<
+        templates::Unvalidated,
+    >,
+                          base_dir: &_| {
+        genesis.parameters.parameters.epochs_per_year =
+            epochs_per_year_from_min_duration(20);
+        // for the trusting period of IBC client
+        genesis.parameters.pos_params.pipeline_len = 5;
+        genesis.parameters.parameters.max_proposal_bytes = Default::default();
+        genesis.parameters.pgf_params.stewards =
+            BTreeSet::from_iter([get_established_addr_from_pregenesis(
+                ALBERT_KEY, base_dir, &genesis,
+            )
+            .unwrap()]);
+        genesis.parameters.ibc_params.default_mint_limit = Amount::max_signed();
+        genesis
+            .parameters
+            .ibc_params
+            .default_per_epoch_throughput_limit = Amount::max_signed();
+
+        setup::set_validators(1, genesis, base_dir, |_| 0)
+    };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
     let _bg_ledger_a = ledger_a.background();
     let _bg_ledger_b = ledger_b.background();
