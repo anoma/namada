@@ -11,7 +11,6 @@ use context::{PseudoExecutionContext, VpValidationContext};
 use namada_core::address::Address;
 use namada_core::storage::Key;
 use namada_gas::{IBC_ACTION_EXECUTE_GAS, IBC_ACTION_VALIDATE_GAS};
-use namada_ibc::parameters::IbcParameters;
 use namada_ibc::{
     Error as ActionError, IbcActions, NftTransferModule, TransferModule,
     ValidationParams,
@@ -25,8 +24,8 @@ use thiserror::Error;
 
 use crate::ibc::core::host::types::identifiers::ChainId as IbcChainId;
 use crate::ledger::ibc::storage::{
-    calc_hash, deposit_key, is_ibc_key, is_ibc_trace_key, mint_amount_key,
-    mint_limit_key, params_key, throughput_limit_key, withdraw_key,
+    calc_hash, deposit_key, get_limits, is_ibc_key, is_ibc_trace_key,
+    mint_amount_key, withdraw_key,
 };
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::ledger::parameters::read_epoch_duration_parameter;
@@ -225,41 +224,14 @@ where
     }
 
     fn check_limits(&self, keys_changed: &BTreeSet<Key>) -> VpResult<bool> {
-        let mut tokens: Vec<&Address> = keys_changed
+        let tokens: BTreeSet<&Address> = keys_changed
             .iter()
             .filter_map(|k| is_any_token_balance_key(k).map(|[key, _]| key))
             .collect();
-        tokens.sort();
-        tokens.dedup();
         for token in tokens {
-            // Limits
-            let mint_limit_key = mint_limit_key(token);
-            let mint_limit: Option<Amount> = self
-                .ctx
-                .read_pre(&mint_limit_key)
-                .map_err(Error::NativeVpError)?;
-            let throughput_limit_key = throughput_limit_key(token);
-            let throughput_limit: Option<Amount> = self
-                .ctx
-                .read_pre(&throughput_limit_key)
-                .map_err(Error::NativeVpError)?;
             let (mint_limit, throughput_limit) =
-                match (mint_limit, throughput_limit) {
-                    (Some(ml), Some(tl)) => (ml, tl),
-                    _ => {
-                        let params: IbcParameters = self
-                            .ctx
-                            .read_pre(&params_key())
-                            .map_err(Error::NativeVpError)?
-                            .expect("Parameters should be stored");
-                        (
-                            mint_limit.unwrap_or(params.default_mint_limit),
-                            throughput_limit.unwrap_or(
-                                params.default_per_epoch_throughput_limit,
-                            ),
-                        )
-                    }
-                };
+                get_limits(&self.ctx.pre(), token)
+                    .map_err(Error::NativeVpError)?;
 
             // Check the supply
             let mint_amount_key = mint_amount_key(token);
@@ -496,6 +468,7 @@ mod tests {
         ChannelId, ClientId, ConnectionId, PortId, Sequence,
     };
     use crate::ibc::core::router::types::event::ModuleEvent;
+    use crate::ibc::parameters::IbcParameters;
     use crate::ibc::primitives::proto::{Any, Protobuf};
     use crate::ibc::primitives::{Timestamp, ToProto};
     use crate::ibc::storage::{
@@ -503,8 +476,9 @@ mod tests {
         client_connections_key, client_counter_key, client_state_key,
         client_update_height_key, client_update_timestamp_key, commitment_key,
         connection_counter_key, connection_key, consensus_state_key, ibc_token,
-        ibc_trace_key, next_sequence_ack_key, next_sequence_recv_key,
-        next_sequence_send_key, nft_class_key, nft_metadata_key, receipt_key,
+        ibc_trace_key, mint_amount_key, next_sequence_ack_key,
+        next_sequence_recv_key, next_sequence_send_key, nft_class_key,
+        nft_metadata_key, receipt_key,
     };
     use crate::ibc::{NftClass, NftMetadata};
     use crate::key::testing::keypair_1;
@@ -2409,8 +2383,18 @@ mod tests {
             packet.port_id_on_b.clone(),
             packet.chan_id_on_b.clone(),
         ));
-        // deposit
+        // mint
         let ibc_token = ibc_token(coin.denom.to_string());
+        let mint_key = mint_amount_key(&ibc_token);
+        let bytes = Amount::from_str(coin.amount.to_string(), 0)
+            .unwrap()
+            .serialize_to_vec();
+        wl_storage
+            .write_log
+            .write(&mint_key, bytes)
+            .expect("write failed");
+        keys_changed.insert(mint_key);
+        // deposit
         let deposit_key = deposit_key(&ibc_token);
         let bytes = Amount::from_str(coin.amount.to_string(), 0)
             .unwrap()
@@ -3309,8 +3293,16 @@ mod tests {
             .write(&metadata_key, bytes)
             .expect("write failed");
         keys_changed.insert(metadata_key);
-        // deposit
+        // mint
         let ibc_token = ibc_token(&ibc_trace);
+        let mint_key = mint_amount_key(&ibc_token);
+        let bytes = Amount::from_u64(1).serialize_to_vec();
+        wl_storage
+            .write_log
+            .write(&mint_key, bytes)
+            .expect("write failed");
+        keys_changed.insert(mint_key);
+        // deposit
         let deposit_key = deposit_key(&ibc_token);
         let bytes = Amount::from_u64(1).serialize_to_vec();
         state

@@ -15,8 +15,12 @@ use namada_core::ibc::core::host::types::path::{
 };
 use namada_core::ibc::IbcTokenHash;
 use namada_core::storage::{DbKeySeg, Key, KeySeg};
+use namada_core::token::Amount;
+use namada_state::{StorageRead, StorageResult};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
+
+use crate::parameters::IbcParameters;
 
 const CLIENTS_COUNTER_PREFIX: &str = "clients";
 const CONNECTIONS_COUNTER_PREFIX: &str = "connections";
@@ -503,6 +507,32 @@ pub fn mint_limit_key(token: &Address) -> Key {
         // Set as String to avoid checking the token address
         .push(&token.to_string().to_db_key())
         .expect("Cannot obtain a storage key")
+}
+
+/// Get the mint limit and the throughput limit for the token. If they don't
+/// exist in the storage, the default limits are loaded from IBC parameters
+pub fn get_limits<S: StorageRead>(
+    storage: &S,
+    token: &Address,
+) -> StorageResult<(Amount, Amount)> {
+    let mint_limit_key = mint_limit_key(token);
+    let mint_limit: Option<Amount> = storage.read(&mint_limit_key)?;
+    let throughput_limit_key = throughput_limit_key(token);
+    let throughput_limit: Option<Amount> =
+        storage.read(&throughput_limit_key)?;
+    Ok(match (mint_limit, throughput_limit) {
+        (Some(ml), Some(tl)) => (ml, tl),
+        _ => {
+            let params: IbcParameters = storage
+                .read(&params_key())?
+                .expect("Parameters should be stored");
+            (
+                mint_limit.unwrap_or(params.default_mint_limit),
+                throughput_limit
+                    .unwrap_or(params.default_per_epoch_throughput_limit),
+            )
+        }
+    })
 }
 
 /// Returns a key of the IBC mint amount for the token

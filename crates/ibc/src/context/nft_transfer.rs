@@ -45,18 +45,14 @@ where
         is_minted: bool,
     ) -> Result<(), NftTransferError> {
         let mint = self.inner.borrow().mint_amount(token)?;
-        let updated_mint = if is_minted {
-            mint.checked_add(Amount::from_u64(1)).ok_or_else(|| {
-                NftTransferError::Other(
-                    "The mint amount overflowed".to_string(),
-                )
-            })?
+        let updated_mint = if is_minted && mint.is_zero() {
+            Amount::from_u64(1)
+        } else if !is_minted && mint.is_zero() {
+            Amount::zero()
         } else {
-            mint.checked_sub(Amount::from_u64(1)).ok_or_else(|| {
-                NftTransferError::Other(
-                    "The mint amount underflowed".to_string(),
-                )
-            })?
+            return Err(NftTransferError::Other(
+                "The mint amount was invalid".to_string(),
+            ));
         };
         self.inner
             .borrow_mut()
