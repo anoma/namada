@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::ibc::apps::transfer::types::Amount as IbcAmount;
-use crate::types::address::{Address, DecodeError as AddressError};
+use crate::types::address::Address;
 use crate::types::dec::{Dec, POS_DECIMAL_PRECISION};
 use crate::types::hash::Hash;
 use crate::types::storage;
@@ -99,9 +99,12 @@ impl Amount {
     }
 
     /// Spend a given amount.
-    /// Panics when given `amount` > `self.raw` amount.
-    pub fn spend(&mut self, amount: &Amount) {
-        self.raw = self.raw.checked_sub(amount.raw).unwrap();
+    pub fn spend(&mut self, amount: &Amount) -> Result<(), AmountError> {
+        self.raw = self
+            .raw
+            .checked_sub(amount.raw)
+            .ok_or(AmountError::Insufficient)?;
+        Ok(())
     }
 
     /// Check if there are enough funds.
@@ -110,9 +113,12 @@ impl Amount {
     }
 
     /// Receive a given amount.
-    /// Panics on overflow and when [`uint::MAX_SIGNED_VALUE`] is exceeded.
-    pub fn receive(&mut self, amount: &Amount) {
-        self.raw = self.raw.checked_add(amount.raw).unwrap();
+    pub fn receive(&mut self, amount: &Amount) -> Result<(), AmountError> {
+        self.raw = self
+            .raw
+            .checked_add(amount.raw)
+            .ok_or(AmountError::Overflow)?;
+        Ok(())
     }
 
     /// Create a new amount of native token from whole number of tokens
@@ -151,8 +157,14 @@ impl Amount {
         self.raw == Uint::from(0)
     }
 
+    /// Check if [`Amount`] is greater than zero.
+    pub fn is_positive(&self) -> bool {
+        !self.is_zero()
+    }
+
     /// Checked addition. Returns `None` on overflow or if
     /// the amount exceed [`uint::MAX_VALUE`]
+    #[must_use]
     pub fn checked_add(&self, amount: Amount) -> Option<Self> {
         self.raw.checked_add(amount.raw).and_then(|result| {
             if result <= uint::MAX_VALUE {
@@ -165,6 +177,7 @@ impl Amount {
 
     /// Checked addition. Returns `None` on overflow or if
     /// the amount exceed [`uint::MAX_SIGNED_VALUE`]
+    #[must_use]
     pub fn checked_signed_add(&self, amount: Amount) -> Option<Self> {
         self.raw.checked_add(amount.raw).and_then(|result| {
             if result <= uint::MAX_SIGNED_VALUE {
@@ -189,6 +202,7 @@ impl Amount {
     }
 
     /// Checked division. Returns `None` on underflow.
+    #[must_use]
     pub fn checked_div(&self, amount: Amount) -> Option<Self> {
         self.raw
             .checked_div(amount.raw)
@@ -196,6 +210,7 @@ impl Amount {
     }
 
     /// Checked multiplication. Returns `None` on overflow.
+    #[must_use]
     pub fn checked_mul(&self, amount: Amount) -> Option<Self> {
         self.raw
             .checked_mul(amount.raw)
@@ -1009,8 +1024,9 @@ pub struct MaspParams {
     pub kd_gain_nom: Dec,
     /// Shielded Pool nominal proportional gain for the given token
     pub kp_gain_nom: Dec,
-    /// Locked ratio for the given token
-    pub locked_ratio_target: Dec,
+    /// Target amount for the given token that is locked in the shielded pool
+    /// TODO: should this be a Uint or DenominatedAmount???
+    pub locked_amount_target: u64,
 }
 
 impl Default for MaspParams {
@@ -1019,7 +1035,7 @@ impl Default for MaspParams {
             max_reward_rate: Dec::from_str("0.1").unwrap(),
             kp_gain_nom: Dec::from_str("0.25").unwrap(),
             kd_gain_nom: Dec::from_str("0.25").unwrap(),
-            locked_ratio_target: Dec::from_str("0.6667").unwrap(),
+            locked_amount_target: 10_000_u64,
         }
     }
 }
@@ -1055,13 +1071,11 @@ pub struct Transfer {
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
-pub enum TransferError {
-    #[error("Invalid address is specified: {0}")]
-    Address(AddressError),
-    #[error("Invalid amount: {0}")]
-    Amount(AmountParseError),
-    #[error("No token is specified")]
-    NoToken,
+pub enum AmountError {
+    #[error("Insufficient amount")]
+    Insufficient,
+    #[error("Amount overlofow")]
+    Overflow,
 }
 
 #[cfg(any(test, feature = "testing"))]

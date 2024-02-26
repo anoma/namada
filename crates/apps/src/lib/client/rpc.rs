@@ -54,9 +54,11 @@ use namada_sdk::error::{
 };
 use namada_sdk::masp::{Conversions, MaspChange, MaspTokenRewardData};
 use namada_sdk::proof_of_stake::types::ValidatorMetaData;
+use namada_sdk::queries::Client;
 use namada_sdk::rpc::{
     self, enriched_bonds_and_unbonds, query_epoch, TxResponse,
 };
+use namada_sdk::tendermint_rpc::endpoint::status;
 use namada_sdk::tx::{display_inner_resp, display_wrapper_resp_and_get_result};
 use namada_sdk::wallet::AddressVpType;
 use namada_sdk::{display, display_line, edisplay_line, error, prompt, Namada};
@@ -85,6 +87,50 @@ pub async fn query_and_print_epoch(context: &impl Namada) -> Epoch {
     let epoch = rpc::query_epoch(context.client()).await.unwrap();
     display_line!(context.io(), "Last committed epoch: {}", epoch);
     epoch
+}
+
+/// Query and print some information to help discern when the next epoch will
+/// begin.
+pub async fn query_and_print_next_epoch_info(context: &impl Namada) {
+    let (this_epoch_first_height, epoch_duration) =
+        rpc::query_next_epoch_info(context.client()).await.unwrap();
+
+    display_line!(
+        context.io(),
+        "First block height of this current epoch: {this_epoch_first_height}."
+    );
+    display_line!(
+        context.io(),
+        "Minimum number of blocks in an epoch: {}.",
+        epoch_duration.min_num_of_blocks
+    );
+    display_line!(
+        context.io(),
+        "Minimum amount of time for an epoch: {} seconds.",
+        epoch_duration.min_duration
+    );
+    display_line!(
+        context.io(),
+        "\nEarliest height at which the next epoch can begin is block {}.",
+        this_epoch_first_height.0 + epoch_duration.min_num_of_blocks
+    );
+}
+
+/// Query and print node's status.
+pub async fn query_and_print_status(
+    context: &impl Namada,
+) -> Option<status::Response> {
+    let status = context.client().status().await;
+    match status {
+        Ok(status) => {
+            display_line!(context.io(), "Node's status {status:#?}");
+            Some(status)
+        }
+        Err(err) => {
+            edisplay_line!(context.io(), "Status query failed with {err:#?}");
+            None
+        }
+    }
 }
 
 /// Query the last committed block
@@ -132,11 +178,16 @@ pub async fn query_transfers(
     let mut shielded = context.shielded_mut().await;
     let _ = shielded.load().await;
     // Precompute asset types to increase chances of success in decoding
-    let _ = shielded.precompute_asset_types(context).await;
+    let token_map = query_tokens(context, None, None).await;
+    let tokens = token_map.values().collect();
+    let _ = shielded
+        .precompute_asset_types(context.client(), tokens)
+        .await;
     // Obtain the effects of all shielded and transparent transactions
     let transfers = shielded
         .query_tx_deltas(
             context.client(),
+            context.io(),
             &query_owner,
             &query_token,
             &wallet.get_viewing_keys(),
@@ -431,10 +482,12 @@ pub async fn query_pinned_balance(
         .collect();
     let _ = context.shielded_mut().await.load().await;
     // Precompute asset types to increase chances of success in decoding
+    let token_map = query_tokens(context, None, None).await;
+    let tokens = token_map.values().collect();
     let _ = context
         .shielded_mut()
         .await
-        .precompute_asset_types(context)
+        .precompute_asset_types(context.client(), tokens)
         .await;
     // Print the token balances by payment address
     for owner in owners {
@@ -878,13 +931,12 @@ pub async fn query_shielded_balance(
     {
         let mut shielded = context.shielded_mut().await;
         let _ = shielded.load().await;
-        let fvks: Vec<_> = viewing_keys
-            .iter()
-            .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
-            .collect();
-        shielded.fetch(context.client(), &[], &fvks).await.unwrap();
         // Precompute asset types to increase chances of success in decoding
-        let _ = shielded.precompute_asset_types(context).await;
+        let token_map = query_tokens(context, None, None).await;
+        let tokens = token_map.values().collect();
+        let _ = shielded
+            .precompute_asset_types(context.client(), tokens)
+            .await;
         // Save the update state so that future fetches can be short-circuited
         let _ = shielded.save().await;
     }
@@ -1204,15 +1256,43 @@ pub async fn query_proposal_result(
         let proposal_id =
             args.proposal_id.expect("Proposal id should be defined.");
 
+        let current_epoch = query_epoch(context.client()).await.unwrap();
         let proposal_result = namada_sdk::rpc::query_proposal_result(
             context.client(),
             proposal_id,
         )
         .await;
+        let proposal_query = namada_sdk::rpc::query_proposal_by_id(
+            context.client(),
+            proposal_id,
+        )
+        .await;
 
-        if let Ok(Some(proposal_result)) = proposal_result {
+        if let (Ok(Some(proposal_result)), Ok(Some(proposal_query))) =
+            (proposal_result, proposal_query)
+        {
             display_line!(context.io(), "Proposal Id: {} ", proposal_id);
-            display_line!(context.io(), "{:4}{}", "", proposal_result);
+            if current_epoch >= proposal_query.voting_end_epoch {
+                display_line!(context.io(), "{:4}{}", "", proposal_result);
+            } else {
+                display_line!(
+                    context.io(),
+                    "{:4}Still voting until epoch {}",
+                    "",
+                    proposal_query.voting_end_epoch
+                );
+                let res = format!("{}", proposal_result);
+                if let Some(idx) = res.find(' ') {
+                    let slice = &res[idx..];
+                    display_line!(context.io(), "{:4}Currently{}", "", slice);
+                } else {
+                    display_line!(
+                        context.io(),
+                        "{:4}Error parsing the result string",
+                        "",
+                    );
+                }
+            }
         } else {
             edisplay_line!(context.io(), "Proposal {} not found.", proposal_id);
         };
@@ -1375,7 +1455,7 @@ pub async fn query_protocol_parameters(
 ) {
     let governance_parameters =
         query_governance_parameters(context.client()).await;
-    display_line!(context.io(), "Governance Parameters\n");
+    display_line!(context.io(), "\nGovernance Parameters");
     display_line!(
         context.io(),
         "{:4}Min. proposal fund: {}",
@@ -1414,7 +1494,7 @@ pub async fn query_protocol_parameters(
     );
 
     let pgf_parameters = query_pgf_parameters(context.client()).await;
-    display_line!(context.io(), "Public Goods Funding Parameters\n");
+    display_line!(context.io(), "\nPublic Goods Funding Parameters");
     display_line!(
         context.io(),
         "{:4}Pgf inflation rate: {}",
@@ -1428,7 +1508,7 @@ pub async fn query_protocol_parameters(
         pgf_parameters.stewards_inflation_rate
     );
 
-    display_line!(context.io(), "Protocol parameters");
+    display_line!(context.io(), "\nProtocol parameters");
     let key = param_storage::get_epoch_duration_storage_key();
     let epoch_duration: EpochDuration =
         query_storage_value(context.client(), &key)
@@ -1519,15 +1599,33 @@ pub async fn query_protocol_parameters(
     let pos_params = query_pos_parameters(context.client()).await;
     display_line!(
         context.io(),
-        "{:4}Block proposer reward: {}",
+        "{:4}Pipeline length: {}",
         "",
-        pos_params.block_proposer_reward
+        pos_params.pipeline_len
     );
     display_line!(
         context.io(),
-        "{:4}Block vote reward: {}",
+        "{:4}Unbonding length: {}",
         "",
-        pos_params.block_vote_reward
+        pos_params.unbonding_len
+    );
+    display_line!(
+        context.io(),
+        "{:4}Cubic slashing window length: {}",
+        "",
+        pos_params.cubic_slashing_window_length
+    );
+    display_line!(
+        context.io(),
+        "{:4}Max. consensus validator slots: {}",
+        "",
+        pos_params.max_validator_slots
+    );
+    display_line!(
+        context.io(),
+        "{:4}Validator stake threshold: {}",
+        "",
+        pos_params.validator_stake_threshold
     );
     display_line!(
         context.io(),
@@ -1543,25 +1641,55 @@ pub async fn query_protocol_parameters(
     );
     display_line!(
         context.io(),
-        "{:4}Max. validator slots: {}",
+        "{:4}Liveness window: {} blocks",
         "",
-        pos_params.max_validator_slots
+        pos_params.liveness_window_check
     );
     display_line!(
         context.io(),
-        "{:4}Pipeline length: {}",
+        "{:4}Liveness threshold: {}",
         "",
-        pos_params.pipeline_len
+        pos_params.liveness_threshold
     );
     display_line!(
         context.io(),
-        "{:4}Unbonding length: {}",
+        "{:4}Block proposer reward: {}",
         "",
-        pos_params.unbonding_len
+        pos_params.block_proposer_reward
     );
     display_line!(
         context.io(),
-        "{:4}Votes per token: {}",
+        "{:4}Block vote reward: {}",
+        "",
+        pos_params.block_vote_reward
+    );
+    display_line!(
+        context.io(),
+        "{:4}Max inflation rate: {}",
+        "",
+        pos_params.max_inflation_rate
+    );
+    display_line!(
+        context.io(),
+        "{:4}Target staked ratio: {}",
+        "",
+        pos_params.target_staked_ratio
+    );
+    display_line!(
+        context.io(),
+        "{:4}Inflation kP gain: {}",
+        "",
+        pos_params.rewards_gain_p
+    );
+    display_line!(
+        context.io(),
+        "{:4}Inflation kD gain: {}",
+        "",
+        pos_params.rewards_gain_d
+    );
+    display_line!(
+        context.io(),
+        "{:4}Votes per raw token: {}",
         "",
         pos_params.tm_votes_per_token
     );
@@ -2523,7 +2651,7 @@ pub async fn query_masp_reward_tokens(context: &impl Namada) {
         max_reward_rate,
         kp_gain,
         kd_gain,
-        locked_ratio_target,
+        locked_amount_target,
     } in tokens
     {
         display_line!(context.io(), "{}: {}", name, address);
@@ -2532,8 +2660,8 @@ pub async fn query_masp_reward_tokens(context: &impl Namada) {
         display_line!(context.io(), "  Kd gain: {}", kd_gain);
         display_line!(
             context.io(),
-            "  Locked ratio target: {}",
-            locked_ratio_target
+            "  Locked amount target: {}",
+            locked_amount_target
         );
     }
 }
@@ -2855,14 +2983,18 @@ pub async fn compute_proposal_votes<
                 &vote.validator,
                 epoch,
             )
-            .await
-            .unwrap_or_default();
+            .await;
 
-            delegators_vote.insert(vote.delegator.clone(), vote.data.into());
-            delegator_voting_power
-                .entry(vote.delegator.clone())
-                .or_default()
-                .insert(vote.validator, delegator_stake);
+            if let Some(stake) = delegator_stake {
+                delegators_vote
+                    .insert(vote.delegator.clone(), vote.data.into());
+                delegator_voting_power
+                    .entry(vote.delegator.clone())
+                    .or_default()
+                    .insert(vote.validator, stake);
+            } else {
+                continue;
+            }
         }
     }
 

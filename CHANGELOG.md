@@ -1,5 +1,170 @@
 # CHANGELOG
 
+## v0.31.6
+
+Namada 0.31.6 is a patch release that contains various fixes and improvements.
+
+### BUG FIXES
+
+- Fix shielded balance query for IBC tokens
+  ([\#2625](https://github.com/anoma/namada/issues/2625))
+- Rather than allowing CometBFT to keep processing blocks after a storage write
+  has failed in Namada, crash the ledger to avoid any potential corruption of
+  state. ([\#2657](https://github.com/anoma/namada/pull/2657))
+- Fixing the order of proposal execution to be deterministic.
+  ([\#2679](https://github.com/anoma/namada/pull/2679))
+
+### FEATURES
+
+- Added wallet command to "convert" a consensus key
+  into Tendermint private validator key JSON format.
+  ([\#2516](https://github.com/anoma/namada/pull/2516))
+
+### IMPROVEMENTS
+
+- Simplified the transaction fetching algorithm to enable it to be saved to
+  storage more frequently. ([\#2458](https://github.com/anoma/namada/pull/2458))
+- The client, when generating a shielded transfer, invalidates the
+  masp notes that have been spent without the need to sync with a node.
+  ([\#2534](https://github.com/anoma/namada/pull/2534))
+- CLI: Allow to use global args (`--chain-id`, `--base-dir`, `--wasm-dir` and 
+  `--pre-genesis`) before or after a sub-command.
+  ([\#2545](https://github.com/anoma/namada/pull/2545))
+- Show help message for query-proposal subcommand instead of crashing when no
+  arg provided. ([\#2611](https://github.com/anoma/namada/pull/2611))
+- Various improvements to client and error logging.
+  ([\#2615](https://github.com/anoma/namada/pull/2615))
+- Allow users to input http/https url as ledger urls.
+  ([\#2658](https://github.com/anoma/namada/pull/2658))
+- Increase broadcaster timeout and allow users to increase it via environment
+  variable. ([\#2668](https://github.com/anoma/namada/pull/2668))
+
+### SDK
+
+- Reworked the sdk to support the new speculative state of the
+  `ShieldedContext`:\n-`ShieldedContext` now has an extra field to determin its
+  state\n-When calling `gen_shielded_transfer` the context now invalidates the
+  spent notes (if any)\n-The fee unshielding `Transaction` is now built before
+  the actual transaction\n-`find_viewing_key` only requires a shared reference
+  now ([\#2534](https://github.com/anoma/namada/pull/2534))
+
+## v0.31.5
+
+Namada 0.31.5 is a patch release that fixes consensus validator set update for CometBFT.
+
+### BUG FIXES
+
+- Fixed a bug in the communication of validator set updates to
+  CometBFT after a change of validator consensus key that occurs
+  at the same epoch as a validator entering the consensus set.
+  ([\#2653](https://github.com/anoma/namada/pull/2653))
+
+## v0.31.4
+
+Namada 0.31.4 is a patch release that fixes the result query of an active governance proposal.
+
+### BUG FIXES
+
+- Fixes the query-proposal-result output in the case that a proposal is still
+  voting. ([\#2573](https://github.com/anoma/namada/pull/2573))
+
+## v0.31.3
+
+Namada 0.31.3 is a patch release that fixes various issues.
+
+### BUG FIXES
+
+- Fix PoS bonds and unbonds query to return delegations when only a validator
+  address is specified. ([\#2522](https://github.com/anoma/namada/pull/2522))
+- PoS: fixed the order of iteration when slashing validators for liveness.
+  ([\#2577](https://github.com/anoma/namada/pull/2577))
+- Reject validator set updates signing over a superset of the next validator
+  set. ([\#2578](https://github.com/anoma/namada/pull/2578))
+- Governance tallying for delegators now works.
+  ([\#2579](https://github.com/anoma/namada/pull/2579))
+
+### IMPROVEMENTS
+
+- Adds some useful internal addresses, such as PoS, to the wallet upon join-
+  network. ([\#2543](https://github.com/anoma/namada/pull/2543))
+- Fixes query-protocol-parameters to include some missing PoS data and a better-
+  formatted output. ([\#2558](https://github.com/anoma/namada/pull/2558))
+
+## v0.31.2
+
+Namada 0.31.2 is a patch release that fixes an issue with request ordering introduced in 0.31.1.
+
+### BUG FIXES
+
+- ABCI calls must be executed synchronously.
+  ([\#2547](https://github.com/anoma/namada/pull/2547))
+
+### FEATURES
+
+- Added a client command "status" to query a node's status.
+  ([\#2511](https://github.com/anoma/namada/pull/2511))
+
+## v0.31.1
+
+Namada 0.31.1 is a patch release that fixes the memo processing for some transactions and improves logs related to ledger startup and the wallet.
+
+### BUG FIXES
+
+- Wallet: respect the optional bip39-flag for key derivation.
+  ([\#2489](https://github.com/anoma/namada/pull/2489))
+
+### IMPROVEMENTS
+
+- Wallet: print the generated payment address.
+  ([\#2490](https://github.com/anoma/namada/pull/2490))
+- Reworks the way the ledger waits for genesis start. It now fully initializes the node and 
+  outputs logs before sleeping until genesis start time. Previously it would not start any 
+  processes until genesis times, giving no feedback to users until genesis time was reached.
+  ([\#2502](https://github.com/anoma/namada/pull/2502))
+
+## v0.31.0
+
+Namada 0.31.0 is a minor release that fixes wasm host function execution and upgrades some CLI functions and the Masp VP.
+
+### BUG FIXES
+
+- Use the configured native token for genesis validation.
+  ([\#2471](https://github.com/anoma/namada/pull/2471))
+- Wallet: handle the case when empty decryption password is provided.
+  ([\#2473](https://github.com/anoma/namada/pull/2473))
+- Avoid panic in host env functions
+  ([\#2478](https://github.com/anoma/namada/issues/2478))
+
+### IMPROVEMENTS
+
+- Removed possible over/under-flow of `I128Sum` operations in the masp vp.
+  ([\#2476](https://github.com/anoma/namada/pull/2476))
+
+## v0.30.3
+
+Namada 0.30.3 is a patch release that refactors some MASP functionality and fixes some governance and CLI issues.
+
+### BUG FIXES
+
+- Fixing several bugs in how governance and pgf transactions are handled and
+  validated. ([\#2459](https://github.com/anoma/namada/pull/2459))
+
+### IMPROVEMENTS
+
+- Modified the MASP VP to validate the changed storage keys instead of the
+  `Transfer` object. ([\#2452](https://github.com/anoma/namada/pull/2452))
+- MASP inflation for a given token now is adjusted based on a target amount
+  of total locked (shielded) tokens rather than a ratio relative to some total
+  supply. ([\#2460](https://github.com/anoma/namada/pull/2460))
+- Add an address CLI arg that defaults to the native token.
+  ([\#2467](https://github.com/anoma/namada/pull/2467))
+
+### SDK
+
+- Modified `scan_tx` to require the set of changed keys instead of `Transfer`.
+  `fetch_shielded_transfer` now returns the set of changed keys instead of
+  `Transfer`. ([\#2452](https://github.com/anoma/namada/pull/2452))
+
 ## v0.30.2
 
 Namada 0.30.2 is a patch release that contains various bug fixes and improvements.
@@ -55,6 +220,11 @@ Namada 0.30.2 is a patch release that contains various bug fixes and improvement
 ## v0.30.1
 
 Namada 0.30.1 is a patch release that contains various bug fixes for MASP, IBC, the shell and crates refactor (the core has been subdivided into many smaller crates).
+<!--
+    Add a summary for the release here.
+
+    If you don't change this message, or if this file is empty, the release
+    will not be created. -->
 
 ### IMPROVEMENTS
 

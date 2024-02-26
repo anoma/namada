@@ -1,4 +1,5 @@
 use color_eyre::eyre::Result;
+use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::types::io::Io;
 use namada_sdk::{Namada, NamadaImpl};
 
@@ -23,11 +24,13 @@ impl CliApi {
                 use NamadaClientWithContext as Sub;
                 match cmd {
                     // Ledger cmds
-                    Sub::TxCustom(TxCustom(mut args)) => {
+                    Sub::TxCustom(TxCustom(args)) => {
+                        // TODO: too much boilerplate to setup client
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.tx.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.tx.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
@@ -48,44 +51,48 @@ impl CliApi {
                             )
                         }
                     }
-                    Sub::TxTransfer(TxTransfer(mut args)) => {
+                    Sub::TxTransfer(TxTransfer(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.tx.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.tx.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         tx::submit_transfer(&namada, args).await?;
                     }
-                    Sub::TxIbcTransfer(TxIbcTransfer(mut args)) => {
+                    Sub::TxIbcTransfer(TxIbcTransfer(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.tx.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.tx.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         tx::submit_ibc_transfer(&namada, args).await?;
                     }
-                    Sub::TxUpdateAccount(TxUpdateAccount(mut args)) => {
+                    Sub::TxUpdateAccount(TxUpdateAccount(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.tx.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.tx.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         tx::submit_update_account(&namada, args).await?;
                     }
-                    Sub::TxInitAccount(TxInitAccount(mut args)) => {
+                    Sub::TxInitAccount(TxInitAccount(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.tx.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.tx.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
@@ -106,11 +113,12 @@ impl CliApi {
                             )
                         }
                     }
-                    Sub::TxBecomeValidator(TxBecomeValidator(mut args)) => {
+                    Sub::TxBecomeValidator(TxBecomeValidator(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.tx.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.tx.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
@@ -130,11 +138,12 @@ impl CliApi {
                         tx::submit_become_validator(&namada, &mut config, args)
                             .await?;
                     }
-                    Sub::TxInitValidator(TxInitValidator(mut args)) => {
+                    Sub::TxInitValidator(TxInitValidator(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.tx.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.tx.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
@@ -154,88 +163,96 @@ impl CliApi {
                         tx::submit_init_validator(&namada, &mut config, args)
                             .await?;
                     }
-                    Sub::TxInitProposal(TxInitProposal(mut args)) => {
+                    Sub::TxInitProposal(TxInitProposal(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.tx.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.tx.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         tx::submit_init_proposal(&namada, args).await?;
                     }
-                    Sub::TxVoteProposal(TxVoteProposal(mut args)) => {
+                    Sub::TxVoteProposal(TxVoteProposal(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.tx.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.tx.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         tx::submit_vote_proposal(&namada, args).await?;
                     }
-                    Sub::TxRevealPk(TxRevealPk(mut args)) => {
+                    Sub::TxRevealPk(TxRevealPk(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.tx.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.tx.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         tx::submit_reveal_pk(&namada, args).await?;
                     }
-                    Sub::Bond(Bond(mut args)) => {
+                    Sub::Bond(Bond(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.tx.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.tx.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         tx::submit_bond(&namada, args).await?;
                     }
-                    Sub::Unbond(Unbond(mut args)) => {
+                    Sub::Unbond(Unbond(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.tx.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.tx.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         tx::submit_unbond(&namada, args).await?;
                     }
-                    Sub::Withdraw(Withdraw(mut args)) => {
+                    Sub::Withdraw(Withdraw(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.tx.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.tx.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         tx::submit_withdraw(&namada, args).await?;
                     }
-                    Sub::ClaimRewards(ClaimRewards(mut args)) => {
+                    Sub::ClaimRewards(ClaimRewards(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.tx.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.tx.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         tx::submit_claim_rewards(&namada, args).await?;
                     }
-                    Sub::Redelegate(Redelegate(mut args)) => {
+                    Sub::Redelegate(Redelegate(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.tx.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.tx.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
@@ -243,12 +260,13 @@ impl CliApi {
                         tx::submit_redelegate(&namada, args).await?;
                     }
                     Sub::TxCommissionRateChange(TxCommissionRateChange(
-                        mut args,
+                        args,
                     )) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.tx.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.tx.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
@@ -256,13 +274,12 @@ impl CliApi {
                         tx::submit_validator_commission_change(&namada, args)
                             .await?;
                     }
-                    Sub::TxChangeConsensusKey(TxChangeConsensusKey(
-                        mut args,
-                    )) => {
+                    Sub::TxChangeConsensusKey(TxChangeConsensusKey(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.tx.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.tx.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
@@ -286,11 +303,12 @@ impl CliApi {
                         )
                         .await?;
                     }
-                    Sub::TxMetadataChange(TxMetadataChange(mut args)) => {
+                    Sub::TxMetadataChange(TxMetadataChange(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.tx.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.tx.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
@@ -298,50 +316,83 @@ impl CliApi {
                         tx::submit_validator_metadata_change(&namada, args)
                             .await?;
                     }
+                    Sub::ShieldedSync(ShieldedSync(args)) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(&args.ledger_address)
+                        });
+                        client.wait_until_node_is_synced(&io).await?;
+                        let args = args.to_sdk(&mut ctx);
+                        let chain_ctx = ctx.take_chain_or_exit();
+                        let vks = chain_ctx
+                            .wallet
+                            .get_viewing_keys()
+                            .values()
+                            .copied()
+                            .map(|vk| ExtendedFullViewingKey::from(vk).fvk.vk)
+                            .chain(args.viewing_keys.into_iter().map(|vk| {
+                                ExtendedFullViewingKey::from(vk).fvk.vk
+                            }))
+                            .collect::<Vec<_>>();
+                        let sks = args
+                            .spending_keys
+                            .into_iter()
+                            .map(|sk| sk.into())
+                            .collect::<Vec<_>>();
+                        crate::client::masp::syncing(
+                            chain_ctx.shielded,
+                            &client,
+                            &io,
+                            args.batch_size,
+                            args.last_query_height,
+                            &sks,
+                            &vks,
+                        )
+                        .await?;
+                    }
                     // Eth bridge
                     Sub::AddToEthBridgePool(args) => {
-                        let mut args = args.0;
+                        let args = args.0;
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.tx.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.tx.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         tx::submit_bridge_pool_tx(&namada, args).await?;
                     }
-                    Sub::TxUnjailValidator(TxUnjailValidator(mut args)) => {
+                    Sub::TxUnjailValidator(TxUnjailValidator(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.tx.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.tx.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         tx::submit_unjail_validator(&namada, args).await?;
                     }
-                    Sub::TxDeactivateValidator(TxDeactivateValidator(
-                        mut args,
-                    )) => {
+                    Sub::TxDeactivateValidator(TxDeactivateValidator(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.tx.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.tx.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         tx::submit_deactivate_validator(&namada, args).await?;
                     }
-                    Sub::TxReactivateValidator(TxReactivateValidator(
-                        mut args,
-                    )) => {
+                    Sub::TxReactivateValidator(TxReactivateValidator(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.tx.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.tx.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
@@ -349,12 +400,13 @@ impl CliApi {
                         tx::submit_reactivate_validator(&namada, args).await?;
                     }
                     Sub::TxUpdateStewardCommission(
-                        TxUpdateStewardCommission(mut args),
+                        TxUpdateStewardCommission(args),
                     ) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.tx.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.tx.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
@@ -362,11 +414,12 @@ impl CliApi {
                         tx::submit_update_steward_commission(&namada, args)
                             .await?;
                     }
-                    Sub::TxResignSteward(TxResignSteward(mut args)) => {
+                    Sub::TxResignSteward(TxResignSteward(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.tx.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.tx.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
@@ -374,19 +427,44 @@ impl CliApi {
                         tx::submit_resign_steward(&namada, args).await?;
                     }
                     // Ledger queries
-                    Sub::QueryEpoch(QueryEpoch(mut args)) => {
+                    Sub::QueryEpoch(QueryEpoch(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(&mut args.ledger_address)
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let namada = ctx.to_sdk(client, io);
                         rpc::query_and_print_epoch(&namada).await;
                     }
-                    Sub::QueryValidatorState(QueryValidatorState(mut args)) => {
+                    Sub::QueryNextEpochInfo(QueryNextEpochInfo(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.query.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
+                        });
+                        client.wait_until_node_is_synced(&io).await?;
+                        let namada = ctx.to_sdk(client, io);
+                        rpc::query_and_print_next_epoch_info(&namada).await;
+                    }
+                    Sub::QueryStatus(QueryStatus(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.ledger_address);
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(&ledger_address)
+                        });
+                        let namada = ctx.to_sdk(client, io);
+                        rpc::query_and_print_status(&namada).await;
+                    }
+                    Sub::QueryValidatorState(QueryValidatorState(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.query.ledger_address);
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
@@ -394,62 +472,70 @@ impl CliApi {
                         rpc::query_and_print_validator_state(&namada, args)
                             .await;
                     }
-                    Sub::QueryTransfers(QueryTransfers(mut args)) => {
+                    Sub::QueryTransfers(QueryTransfers(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.query.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.query.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         rpc::query_transfers(&namada, args).await;
                     }
-                    Sub::QueryConversions(QueryConversions(mut args)) => {
+                    Sub::QueryConversions(QueryConversions(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.query.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.query.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         rpc::query_conversions(&namada, args).await;
                     }
-                    Sub::QueryMaspRewardTokens(QueryMaspRewardTokens(
-                        mut args,
-                    )) => {
+                    Sub::QueryMaspRewardTokens(QueryMaspRewardTokens(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(&mut args.ledger_address)
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let namada = ctx.to_sdk(client, io);
                         rpc::query_masp_reward_tokens(&namada).await;
                     }
-                    Sub::QueryBlock(QueryBlock(mut args)) => {
+                    Sub::QueryBlock(QueryBlock(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(&mut args.ledger_address)
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let namada = ctx.to_sdk(client, io);
                         rpc::query_block(&namada).await;
                     }
-                    Sub::QueryBalance(QueryBalance(mut args)) => {
+                    Sub::QueryBalance(QueryBalance(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.query.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.query.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         rpc::query_balance(&namada, args).await;
                     }
-                    Sub::QueryBonds(QueryBonds(mut args)) => {
+                    Sub::QueryBonds(QueryBonds(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.query.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.query.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
@@ -458,22 +544,24 @@ impl CliApi {
                             .await
                             .expect("expected successful query of bonds");
                     }
-                    Sub::QueryBondedStake(QueryBondedStake(mut args)) => {
+                    Sub::QueryBondedStake(QueryBondedStake(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.query.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.query.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         rpc::query_bonded_stake(&namada, args).await;
                     }
-                    Sub::QueryCommissionRate(QueryCommissionRate(mut args)) => {
+                    Sub::QueryCommissionRate(QueryCommissionRate(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.query.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.query.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
@@ -481,110 +569,120 @@ impl CliApi {
                         rpc::query_and_print_commission_rate(&namada, args)
                             .await;
                     }
-                    Sub::QueryMetaData(QueryMetaData(mut args)) => {
+                    Sub::QueryMetaData(QueryMetaData(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.query.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.query.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         rpc::query_and_print_metadata(&namada, args).await;
                     }
-                    Sub::QuerySlashes(QuerySlashes(mut args)) => {
+                    Sub::QuerySlashes(QuerySlashes(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.query.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.query.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         rpc::query_slashes(&namada, args).await;
                     }
-                    Sub::QueryRewards(QueryRewards(mut args)) => {
+                    Sub::QueryRewards(QueryRewards(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.query.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.query.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         rpc::query_and_print_rewards(&namada, args).await;
                     }
-                    Sub::QueryDelegations(QueryDelegations(mut args)) => {
+                    Sub::QueryDelegations(QueryDelegations(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.query.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.query.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         rpc::query_delegations(&namada, args).await;
                     }
-                    Sub::QueryFindValidator(QueryFindValidator(mut args)) => {
+                    Sub::QueryFindValidator(QueryFindValidator(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.query.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.query.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         rpc::query_find_validator(&namada, args).await;
                     }
-                    Sub::QueryResult(QueryResult(mut args)) => {
+                    Sub::QueryResult(QueryResult(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.query.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.query.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         rpc::query_result(&namada, args).await;
                     }
-                    Sub::QueryRawBytes(QueryRawBytes(mut args)) => {
+                    Sub::QueryRawBytes(QueryRawBytes(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.query.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.query.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         rpc::query_raw_bytes(&namada, args).await;
                     }
-                    Sub::QueryProposal(QueryProposal(mut args)) => {
+                    Sub::QueryProposal(QueryProposal(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.query.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.query.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         rpc::query_proposal(&namada, args).await;
                     }
-                    Sub::QueryProposalResult(QueryProposalResult(mut args)) => {
+                    Sub::QueryProposalResult(QueryProposalResult(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.query.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.query.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         rpc::query_proposal_result(&namada, args).await;
                     }
-                    Sub::QueryProposalVotes(QueryProposalVotes(mut args)) => {
+                    Sub::QueryProposalVotes(QueryProposalVotes(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.query.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.query.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
@@ -592,58 +690,63 @@ impl CliApi {
                         rpc::query_proposal_votes(&namada, args).await;
                     }
                     Sub::QueryProtocolParameters(QueryProtocolParameters(
-                        mut args,
+                        args,
                     )) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.query.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.query.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         rpc::query_protocol_parameters(&namada, args).await;
                     }
-                    Sub::QueryPgf(QueryPgf(mut args)) => {
+                    Sub::QueryPgf(QueryPgf(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.query.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.query.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         rpc::query_pgf(&namada, args).await;
                     }
-                    Sub::QueryAccount(QueryAccount(mut args)) => {
+                    Sub::QueryAccount(QueryAccount(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.query.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.query.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         rpc::query_account(&namada, args).await;
                     }
-                    Sub::SignTx(SignTx(mut args)) => {
+                    Sub::SignTx(SignTx(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.tx.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.tx.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         tx::sign_tx(&namada, args).await?;
                     }
-                    Sub::GenIbcShieldedTransafer(GenIbcShieldedTransafer(
-                        mut args,
+                    Sub::GenIbcShieldedTransfer(GenIbcShieldedTransfer(
+                        args,
                     )) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.query.ledger_address);
                         let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(
-                                &mut args.query.ledger_address,
-                            )
+                            C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
@@ -687,9 +790,9 @@ impl CliApi {
                 Utils::EpochSleep(EpochSleep(args)) => {
                     let mut ctx = cli::Context::new::<IO>(global_args)
                         .expect("expected to construct a context");
-                    let mut ledger_address = args.ledger_address.clone();
-                    let client =
-                        C::from_tendermint_address(&mut ledger_address);
+                    let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                    let ledger_address = chain_ctx.get(&args.ledger_address);
+                    let client = C::from_tendermint_address(&ledger_address);
                     client.wait_until_node_is_synced(&io).await?;
                     let args = args.to_sdk(&mut ctx);
                     let namada = ctx.to_sdk(client, io);

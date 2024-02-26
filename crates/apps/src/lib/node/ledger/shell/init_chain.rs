@@ -435,6 +435,7 @@ where
                 masp_params,
                 &mut self.wl_storage,
                 address,
+                denom,
             )
             .unwrap();
             if masp_params.is_some() {

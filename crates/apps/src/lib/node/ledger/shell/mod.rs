@@ -21,7 +21,7 @@ pub mod testing;
 pub mod utils;
 mod vote_extensions;
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 use std::convert::{TryFrom, TryInto};
 use std::mem;
 use std::path::{Path, PathBuf};
@@ -38,7 +38,6 @@ use namada::ethereum_bridge::protocol::validation::validator_set_update::validat
 use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
 use namada::ledger::gas::{Gas, TxGasMeter};
-use namada::ledger::pos::into_tm_voting_power;
 use namada::ledger::pos::namada_proof_of_stake::types::{
     ConsensusValidator, ValidatorSetUpdate,
 };
@@ -358,7 +357,7 @@ where
     /// queried for reading values.
     storage_read_past_height_limit: Option<u64>,
     /// Proposal execution tracking
-    pub proposal_data: HashSet<u64>,
+    pub proposal_data: BTreeSet<u64>,
     /// Log of events emitted by `FinalizeBlock` ABCI calls.
     event_log: EventLog,
 }
@@ -534,7 +533,7 @@ where
                 tx_wasm_compilation_cache as usize,
             ),
             storage_read_past_height_limit,
-            proposal_data: HashSet::new(),
+            proposal_data: BTreeSet::new(),
             // TODO: config event log params
             event_log: EventLog::default(),
         };
@@ -769,30 +768,27 @@ where
     /// Commit a block. Persist the application state and return the Merkle root
     /// hash.
     pub fn commit(&mut self) -> response::Commit {
-        let mut response = response::Commit {
-            retain_height: tendermint::block::Height::from(0_u32),
-            ..Default::default()
-        };
-        // commit block's data from write log and store the in DB
-        self.wl_storage.commit_block().unwrap_or_else(|e| {
-            tracing::error!(
-                "Encountered a storage error while committing a block {:?}",
-                e
-            )
-        });
-
-        let root = self.wl_storage.storage.merkle_root();
-        tracing::info!(
-            "Committed block hash: {}, height: {}",
-            root,
-            self.wl_storage.storage.get_last_block_height(),
-        );
-        response.data = root.0.to_vec().into();
-
         self.bump_last_processed_eth_block();
+
+        self.wl_storage
+            .commit_block()
+            .expect("Encountered a storage error while committing a block");
+
+        let merkle_root = self.wl_storage.storage.merkle_root();
+        let committed_height = self.wl_storage.storage.get_last_block_height();
+        tracing::info!(
+            "Committed block hash: {merkle_root}, height: {committed_height}",
+        );
+
         self.broadcast_queued_txs();
 
-        response
+        response::Commit {
+            // NB: by passing 0, we forbid CometBFT from deleting
+            // data pertaining to past blocks
+            retain_height: tendermint::block::Height::from(0_u32),
+            // NB: current application hash
+            data: merkle_root.0.to_vec().into(),
+        }
     }
 
     /// Updates the Ethereum oracle's last processed block.
@@ -1294,7 +1290,7 @@ where
         let validator_set_update_fn = if is_genesis {
             namada_proof_of_stake::genesis_validator_set_tendermint
         } else {
-            namada_proof_of_stake::validator_set_update::validator_set_update_tendermint
+            namada_proof_of_stake::validator_set_update::validator_set_update_comet
         };
 
         validator_set_update_fn(
@@ -1305,14 +1301,8 @@ where
                 let (consensus_key, power) = match update {
                     ValidatorSetUpdate::Consensus(ConsensusValidator {
                         consensus_key,
-                        bonded_stake,
-                    }) => {
-                        let power: i64 = into_tm_voting_power(
-                            pos_params.tm_votes_per_token,
-                            bonded_stake,
-                        );
-                        (consensus_key, power)
-                    }
+                        bonded_stake: power,
+                    }) => (consensus_key, power),
                     ValidatorSetUpdate::Deactivated(consensus_key) => {
                         // Any validators that have been dropped from the
                         // consensus set must have voting power set to 0 to
@@ -1895,6 +1885,8 @@ mod test_utils {
                 self.wl_storage.storage.last_block.as_mut()
             {
                 *height = next_epoch_min_start_height;
+            } else {
+                panic!("Test failed");
             }
             self.finalize_and_commit(req.clone());
 

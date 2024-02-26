@@ -176,12 +176,13 @@ where
                 ?balance,
                 "Existing value found",
             );
-            balance.spend(amount);
+            balance.spend(amount)?;
             tracing::debug!(
                 %eth_bridge_native_token_balance_key,
                 ?balance,
                 "New value calculated",
             );
+            Ok(())
         },
     )?;
     update::amount(
@@ -193,12 +194,13 @@ where
                 ?balance,
                 "Existing value found",
             );
-            balance.receive(amount);
+            balance.receive(amount)?;
             tracing::debug!(
                 %receiver_native_token_balance_key,
                 ?balance,
                 "New value calculated",
             );
+            Ok(())
         },
     )?;
     update::amount(wl_storage, &native_werc20_supply_key, |balance| {
@@ -207,12 +209,13 @@ where
             ?balance,
             "Existing value found",
         );
-        balance.spend(amount);
+        balance.spend(amount)?;
         tracing::debug!(
             %native_werc20_supply_key,
             ?balance,
             "New value calculated",
         );
+        Ok(())
     })?;
 
     tracing::info!(
@@ -272,12 +275,13 @@ where
                 ?balance,
                 "Existing value found",
             );
-            balance.receive(amount);
+            balance.receive(amount)?;
             tracing::debug!(
                 %balance_key,
                 ?balance,
                 "New value calculated",
             );
+            Ok(())
         })?;
         _ = changed_keys.insert(balance_key);
 
@@ -288,12 +292,13 @@ where
                 ?supply,
                 "Existing value found",
             );
-            supply.receive(amount);
+            supply.receive(amount)?;
             tracing::debug!(
                 %supply_key,
                 ?supply,
                 "New value calculated",
             );
+            Ok(())
         })?;
         _ = changed_keys.insert(supply_key);
     }
@@ -357,11 +362,11 @@ where
             balance_key(&pending_transfer.gas_fee.token, relayer);
         // give the relayer the gas fee for this transfer.
         update::amount(wl_storage, &relayer_rewards_key, |balance| {
-            balance.receive(&pending_transfer.gas_fee.amount);
+            balance.receive(&pending_transfer.gas_fee.amount)
         })?;
         // the gas fee is removed from escrow.
         update::amount(wl_storage, &pool_balance_key, |balance| {
-            balance.spend(&pending_transfer.gas_fee.amount);
+            balance.spend(&pending_transfer.gas_fee.amount)
         })?;
         wl_storage.delete(&key)?;
         _ = pending_keys.remove(&key);
@@ -464,10 +469,10 @@ where
     let pool_balance_key =
         balance_key(&transfer.gas_fee.token, &BRIDGE_POOL_ADDRESS);
     update::amount(wl_storage, &payer_balance_key, |balance| {
-        balance.receive(&transfer.gas_fee.amount);
+        balance.receive(&transfer.gas_fee.amount)
     })?;
     update::amount(wl_storage, &pool_balance_key, |balance| {
-        balance.spend(&transfer.gas_fee.amount);
+        balance.spend(&transfer.gas_fee.amount)
     })?;
 
     tracing::debug!(?transfer, "Refunded Bridge pool transfer fees");
@@ -509,10 +514,10 @@ where
         (escrow_balance_key, sender_balance_key)
     };
     update::amount(wl_storage, &source, |balance| {
-        balance.spend(&transfer.transfer.amount);
+        balance.spend(&transfer.transfer.amount)
     })?;
     update::amount(wl_storage, &target, |balance| {
-        balance.receive(&transfer.transfer.amount);
+        balance.receive(&transfer.transfer.amount)
     })?;
 
     tracing::debug!(?transfer, "Refunded Bridge pool transferred assets");
@@ -550,7 +555,7 @@ where
         }
         let supply_key = minted_balance_key(&token);
         update::amount(wl_storage, &supply_key, |supply| {
-            supply.receive(&transfer.transfer.amount);
+            supply.receive(&transfer.transfer.amount)
         })?;
         _ = changed_keys.insert(supply_key);
         tracing::debug!(?transfer, "Updated wrapped NAM supply");
@@ -561,13 +566,13 @@ where
 
     let escrow_balance_key = balance_key(&token, &BRIDGE_POOL_ADDRESS);
     update::amount(wl_storage, &escrow_balance_key, |balance| {
-        balance.spend(&transfer.transfer.amount);
+        balance.spend(&transfer.transfer.amount)
     })?;
     _ = changed_keys.insert(escrow_balance_key);
 
     let supply_key = minted_balance_key(&token);
     update::amount(wl_storage, &supply_key, |supply| {
-        supply.spend(&transfer.transfer.amount);
+        supply.spend(&transfer.transfer.amount)
     })?;
     _ = changed_keys.insert(supply_key);
 
@@ -763,7 +768,7 @@ mod tests {
                 balance_key(&transfer.gas_fee.token, &BRIDGE_POOL_ADDRESS);
             update::amount(wl_storage, &escrow_key, |balance| {
                 let gas_fee = Amount::from_u64(1);
-                balance.receive(&gas_fee);
+                balance.receive(&gas_fee)
             })
             .expect("Test failed");
 
@@ -794,9 +799,7 @@ mod tests {
                 update::amount(
                     wl_storage,
                     &minted_balance_key(&token),
-                    |supply| {
-                        supply.receive(&transfer.transfer.amount);
-                    },
+                    |supply| supply.receive(&transfer.transfer.amount),
                 )
                 .expect("Test failed");
             };
@@ -1117,11 +1120,11 @@ mod tests {
         )
         .expect("Test failed");
 
-        bp_nam_balance_pre.spend(&bp_nam_balance_post);
+        bp_nam_balance_pre.spend(&bp_nam_balance_post).unwrap();
         assert_eq!(bp_nam_balance_pre, Amount::from(3));
         assert_eq!(bp_nam_balance_post, Amount::from(0));
 
-        bp_erc_balance_pre.spend(&bp_erc_balance_post);
+        bp_erc_balance_pre.spend(&bp_erc_balance_post).unwrap();
         assert_eq!(bp_erc_balance_pre, Amount::from(2));
         assert_eq!(bp_erc_balance_post, Amount::from(0));
     }

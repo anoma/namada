@@ -149,9 +149,9 @@ test: test-unit test-e2e test-wasm test-benches
 test-coverage:
 	# Run integration tests separately because they require `integration`
 	# feature (and without coverage) and run them with pre-built MASP proofs
-	$(cargo) +$(nightly) llvm-cov --output-dir target \
+	$(cargo) +$(nightly) llvm-cov --output-path lcov.info \
 		--features namada/testing \
-		--html \
+		--lcov \
 		-- --skip e2e --skip pos_state_machine_test --skip integration \
 		-Z unstable-options --report-time && \
 	NAMADA_MASP_TEST_SEED=$(NAMADA_MASP_TEST_SEED) \
@@ -168,7 +168,7 @@ test-e2e:
 	NAMADA_E2E_USE_PREBUILT_BINARIES=$(NAMADA_E2E_USE_PREBUILT_BINARIES) \
 	NAMADA_E2E_DEBUG=$(NAMADA_E2E_DEBUG) \
 	RUST_BACKTRACE=$(RUST_BACKTRACE) \
-	$(cargo) +$(nightly) test e2e::$(TEST_FILTER) \
+	$(cargo) +$(nightly) test $(jobs) e2e::$(TEST_FILTER) \
 	-Z unstable-options \
 	-- \
 	--test-threads=1 \
@@ -193,7 +193,7 @@ test-integration-save-proofs:
 # Run integration tests without specifying any pre-built MASP proofs option
 test-integration-slow:
 	RUST_BACKTRACE=$(RUST_BACKTRACE) \
-	$(cargo) +$(nightly) test integration::$(TEST_FILTER)  --features integration \
+	$(cargo) +$(nightly) test $(jobs) integration::$(TEST_FILTER)  --features integration \
 	-Z unstable-options \
 	-- \
 	--test-threads=1 \
@@ -207,9 +207,9 @@ test-unit:
 		-Z unstable-options --report-time
 
 test-unit-with-coverage:
-	$(cargo) +$(nightly) llvm-cov --output-dir target \
+	$(cargo) +$(nightly) llvm-cov --output-path lcov.info \
 		--features namada/testing \
-		--html \
+		--lcov \
 		-- --skip e2e --skip pos_state_machine_test --skip integration \
 		-Z unstable-options --report-time
 

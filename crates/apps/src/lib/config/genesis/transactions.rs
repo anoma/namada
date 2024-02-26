@@ -64,6 +64,8 @@ pub trait TxToSign {
 /// Return a dummy set of tx arguments to sign with the
 /// hardware wallet.
 fn get_tx_args(use_device: bool) -> TxArgs {
+    use std::str::FromStr;
+
     TxArgs {
         dry_run: false,
         dry_run_wrapper: false,
@@ -71,7 +73,8 @@ fn get_tx_args(use_device: bool) -> TxArgs {
         output_folder: None,
         force: false,
         broadcast_only: false,
-        ledger_address: (),
+        ledger_address: tendermint_rpc::Url::from_str("http://127.0.0.1:26657")
+            .unwrap(),
         initialized_account_alias: None,
         wallet_alias_force: false,
         fee_amount: None,

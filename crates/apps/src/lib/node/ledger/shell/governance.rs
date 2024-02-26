@@ -24,6 +24,7 @@ use namada::types::address::Address;
 use namada::types::encode;
 use namada::types::storage::Epoch;
 use namada::{ibc, token};
+use namada_sdk::proof_of_stake::storage::read_validator_stake;
 
 use super::utils::force_read;
 use super::*;
@@ -127,7 +128,7 @@ where
                     ProposalType::PGFPayment(payments) => {
                         let native_token =
                             &shell.wl_storage.get_native_token()?;
-                        let result = execute_pgf_payment_proposal(
+                        let result = execute_pgf_funding_proposal(
                             &mut shell.wl_storage,
                             native_token,
                             payments,
@@ -242,7 +243,8 @@ where
             let vote_data = vote.data.clone();
 
             let validator_stake =
-                read_total_stake(storage, params, epoch).unwrap_or_default();
+                read_validator_stake(storage, params, &validator, epoch)
+                    .unwrap_or_default();
 
             validators_vote.insert(validator.clone(), vote_data.into());
             validator_voting_power.insert(validator, validator_stake);
@@ -255,14 +257,17 @@ where
                 source: delegator.clone(),
                 validator: validator.clone(),
             };
-            let delegator_stake =
-                bond_amount(storage, &bond_id, epoch).unwrap_or_default();
+            let delegator_stake = bond_amount(storage, &bond_id, epoch);
 
-            delegators_vote.insert(delegator.clone(), vote_data.into());
-            delegator_voting_power
-                .entry(delegator)
-                .or_default()
-                .insert(validator, delegator_stake);
+            if let Ok(stake) = delegator_stake {
+                delegators_vote.insert(delegator.clone(), vote_data.into());
+                delegator_voting_power
+                    .entry(delegator)
+                    .or_default()
+                    .insert(validator, stake);
+            } else {
+                continue;
+            }
         }
     }
 
@@ -334,7 +339,7 @@ where
 
 fn execute_pgf_steward_proposal<S>(
     storage: &mut S,
-    stewards: HashSet<AddRemove<Address>>,
+    stewards: BTreeSet<AddRemove<Address>>,
 ) -> Result<bool>
 where
     S: StorageRead + StorageWrite,
@@ -357,18 +362,18 @@ where
     Ok(true)
 }
 
-fn execute_pgf_payment_proposal<D, H>(
+fn execute_pgf_funding_proposal<D, H>(
     storage: &mut WlStorage<D, H>,
     token: &Address,
-    payments: Vec<PGFAction>,
+    fundings: BTreeSet<PGFAction>,
     proposal_id: u64,
 ) -> Result<bool>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
 {
-    for payment in payments {
-        match payment {
+    for funding in fundings {
+        match funding {
             PGFAction::Continuous(action) => match action {
                 AddRemove::Add(target) => {
                     pgf_storage::fundings_handle().insert(
@@ -377,8 +382,8 @@ where
                         StoragePgfFunding::new(target.clone(), proposal_id),
                     )?;
                     tracing::info!(
-                        "Execute ContinousPgf from proposal id {}: set {} to \
-                         {}.",
+                        "Added/Updated ContinousPgf from proposal id {}: set \
+                         {} to {}.",
                         proposal_id,
                         target.amount().to_string_native(),
                         target.target()
@@ -388,7 +393,7 @@ where
                     pgf_storage::fundings_handle()
                         .remove(storage, &target.target())?;
                     tracing::info!(
-                        "Execute ContinousPgf from proposal id {}: set {} to \
+                        "Removed ContinousPgf from proposal id {}: set {} to \
                          {}.",
                         proposal_id,
                         target.amount().to_string_native(),

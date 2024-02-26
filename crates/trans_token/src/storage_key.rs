@@ -184,3 +184,23 @@ pub fn is_any_minted_balance_key(key: &storage::Key) -> Option<&Address> {
         _ => None,
     }
 }
+
+/// Check if the given storage key is a balance key for a shielded action. If it
+/// is, returns the token and the owner addresses.
+pub fn is_any_shielded_action_balance_key(
+    key: &storage::Key,
+) -> Option<[&Address; 2]> {
+    is_any_token_balance_key(key).map_or_else(
+        || {
+            is_any_minted_balance_key(key).map(|token| {
+                [
+                    token,
+                    &Address::Internal(
+                        namada_core::types::address::InternalAddress::Ibc,
+                    ),
+                ]
+            })
+        },
+        Some,
+    )
+}

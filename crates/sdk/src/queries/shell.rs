@@ -16,6 +16,7 @@ use namada_core::types::storage::{
     self, BlockHeight, BlockResults, Epoch, KeySeg, PrefixValue,
 };
 use namada_core::types::token::{Denomination, MaspDigitPos};
+use namada_core::types::uint::Uint;
 use namada_state::{DBIter, LastBlock, StorageHasher, DB};
 use namada_storage::{self, ResultExt, StorageRead};
 #[cfg(any(test, feature = "async-client"))]
@@ -66,6 +67,9 @@ router! {SHELL,
 
     // Query the last committed block
     ( "last_block" ) -> Option<LastBlock> = last_block,
+
+    // First block height of the current epoch
+    ( "first_block_height_of_current_epoch" ) -> BlockHeight = first_block_height_of_current_epoch,
 
     // Raw storage access - read value
     ( "value" / [storage_key: storage::Key] )
@@ -269,10 +273,10 @@ where
                     ),
                 ))
             })?;
-        let locked_ratio_target = ctx
+        let locked_amount_target = ctx
             .wl_storage
-            .read::<Dec>(
-                &namada_token::storage_key::masp_locked_ratio_target_key(
+            .read::<Uint>(
+                &namada_token::storage_key::masp_locked_amount_target_key(
                     &token,
                 ),
             )?
@@ -293,7 +297,7 @@ where
             max_reward_rate,
             kp_gain,
             kd_gain,
-            locked_ratio_target,
+            locked_amount_target,
         });
     }
     Ok(data)
@@ -340,6 +344,26 @@ where
     H: 'static + StorageHasher + Sync,
 {
     Ok(ctx.wl_storage.storage.last_block.clone())
+}
+
+fn first_block_height_of_current_epoch<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+) -> namada_storage::Result<BlockHeight>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    ctx.wl_storage
+        .storage
+        .block
+        .pred_epochs
+        .first_block_heights
+        .last()
+        .ok_or(namada_storage::Error::new(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "The pred_epochs is unexpectedly empty",
+        )))
+        .cloned()
 }
 
 /// Returns data with `vec![]` when the storage key is not found. For all

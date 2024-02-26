@@ -1,0 +1,83 @@
+name: Triggerable PoS state-machine test
+
+on: 
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'The branch name'
+        required: true
+        type: string
+      total_tests:
+        description: 'Total prop. test cases'
+        required: false
+        default: 150
+        type: number
+
+env:
+  RUSTC_WRAPPER: sccache
+  SCCACHE_S3_USE_SSL: ${{ secrets.CACHE_SSL }}
+  GIT_LFS_SKIP_SMUDGE: 1
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: full
+  SCCACHE_BUCKET: namada-cache
+  SCCACHE_ENDPOINT: ${{ secrets.CACHE_ENDPOINT }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.CACHE_ACCESS_KEY }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.CACHE_SECRET_KEY }}
+  AWS_REGION: us-east-1
+
+jobs:
+  test-pos:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ matrix.timeout }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        mold_version: [2.4.0]
+        name: ["Run PoS state-machine tests"]
+        command: ["make test-pos-sm"]
+        timeout: [360]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+      - name: Install libudev
+        run: sudo apt-get update && sudo apt-get -y install libudev-dev
+      - name: Install Protoc
+        uses: heliaxdev/setup-protoc@v2
+        with:
+          version: "25.0"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
+      - name: Setup rust toolchain
+        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+        with:
+          profile: default
+          override: true
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        continue-on-error: false
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+      - name: Start sccache server
+        run: sccache --start-server
+      - name: Install mold linker
+        run: |
+          wget -q -O- https://github.com/rui314/mold/releases/download/v${{ matrix.mold_version }}/mold-${{ matrix.mold_version }}-x86_64-linux.tar.gz | tar -xz
+          mv mold-${{ matrix.mold_version }}-x86_64-linux/bin/mold  /usr/local/bin
+      - name: Run task `${{ matrix.name }}`
+        run: ${{ matrix.command }}
+        env:
+          PROPTEST_CASES: ${{ inputs.total_tests }}
+          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
+      - name: Stats sccache server
+        run: sccache --show-stats || true
+      - name: Start sccache server
+        run: sccache --stop-server || true

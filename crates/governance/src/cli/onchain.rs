@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fmt::Display;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::types::address::Address;
@@ -281,6 +282,24 @@ pub struct PgfFunding {
     pub continuous: Vec<PGFTarget>,
     /// pgf retro fundings
     pub retro: Vec<PGFTarget>,
+}
+
+impl Display for PgfFunding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if !self.continuous.is_empty() {
+            write!(f, "Continuous: ")?;
+            for target in &self.continuous {
+                write!(f, "  {}", &target)?;
+            }
+        }
+        if !self.retro.is_empty() {
+            write!(f, "Retro: ")?;
+            for target in &self.retro {
+                write!(f, "  {}", &target)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Pgf continuous funding
