@@ -47,7 +47,7 @@ where
         let mint = self.inner.borrow().mint_amount(token)?;
         let updated_mint = if is_minted && mint.is_zero() {
             Amount::from_u64(1)
-        } else if !is_minted && mint.is_zero() {
+        } else if !is_minted && mint == Amount::from_u64(1) {
             Amount::zero()
         } else {
             return Err(NftTransferError::Other(
