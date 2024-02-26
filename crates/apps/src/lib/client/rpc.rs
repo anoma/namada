@@ -1846,16 +1846,17 @@ pub async fn query_bonds(
             display_line!(
                 context.io(),
                 &mut w;
-                "  Remaining active bond from epoch {}: Δ {}",
+                "  Remaining active bond from epoch {}: Δ {} (slashed {})",
                 bond.start,
-                bond.amount.to_string_native()
+                bond.amount.to_string_native(),
+                bond.slashed_amount.unwrap_or_default().to_string_native()
             )?;
         }
         if !details.bonds_total.is_zero() {
             display_line!(
                 context.io(),
                 &mut w;
-                "Active (slashed) bonds total: {}",
+                "Active (slashable) bonds total: {}",
                 details.bonds_total_active().to_string_native()
             )?;
         }
@@ -1873,10 +1874,11 @@ pub async fn query_bonds(
                 display_line!(
                     context.io(),
                     &mut w;
-                    "  Withdrawable from epoch {} (active from {}): Δ {}",
+                    "  Withdrawable from epoch {} (active from {}): Δ {} (slashed {})",
                     unbond.withdraw,
                     unbond.start,
-                    unbond.amount.to_string_native()
+                    unbond.amount.to_string_native(),
+                    unbond.slashed_amount.unwrap_or_default().to_string_native()
                 )?;
             }
             display_line!(
@@ -1908,6 +1910,12 @@ pub async fn query_bonds(
         "All bonds total: {}",
         bonds_and_unbonds.bonds_total.to_string_native()
     )?;
+    display_line!(
+        context.io(),
+        &mut w;
+        "All bonds total slashed: {}",
+        bonds_and_unbonds.bonds_total_slashed.to_string_native()
+    )?;
 
     if bonds_and_unbonds.unbonds_total
         != bonds_and_unbonds.unbonds_total_slashed
@@ -1930,6 +1938,12 @@ pub async fn query_bonds(
         &mut w;
         "All unbonds total withdrawable: {}",
         bonds_and_unbonds.total_withdrawable.to_string_native()
+    )?;
+    display_line!(
+        context.io(),
+        &mut w;
+        "All unbonds total slashed: {}",
+        bonds_and_unbonds.unbonds_total_slashed.to_string_native()
     )?;
     Ok(())
 }
