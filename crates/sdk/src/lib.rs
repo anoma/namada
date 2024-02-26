@@ -846,7 +846,7 @@ pub mod testing {
         pub fn arb_commitment()(
             commitment in prop_oneof![
                 arb_hash().prop_map(Commitment::Hash),
-                arbitrary::any::<Vec<u8>>().prop_map(Commitment::Id),
+                collection::vec(arbitrary::any::<u8>(), 0..=1024).prop_map(Commitment::Id),
             ],
         ) -> Commitment {
             commitment
@@ -873,7 +873,7 @@ pub mod testing {
         pub fn arb_utf8_commitment()(
             commitment in prop_oneof![
                 arb_hash().prop_map(Commitment::Hash),
-                "[a-zA-Z0-9_]*".prop_map(|x| Commitment::Id(x.into_bytes())),
+                "[a-zA-Z0-9_]{0,1024}".prop_map(|x| Commitment::Id(x.into_bytes())),
             ],
         ) -> Commitment {
             commitment
@@ -885,7 +885,7 @@ pub mod testing {
         pub fn arb_utf8_code()(
             salt: [u8; 8],
             code in arb_utf8_commitment(),
-            tag in option::of("[a-zA-Z0-9_]*"),
+            tag in option::of("[a-zA-Z0-9_]{0,1024}"),
         ) -> Code {
             Code {
                 salt,
