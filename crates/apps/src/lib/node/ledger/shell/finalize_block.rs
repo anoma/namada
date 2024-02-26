@@ -1921,8 +1921,7 @@ mod test_finalize_block {
         assert_eq!(current_height, shell.state.in_mem().block.height.0);
 
         for _ in current_height..height_of_next_epoch.0 + 2 {
-            // dbg!(get_rewards_acc(&shell.state),
-            // get_rewards_sum(&shell.state),);
+            dbg!(get_rewards_acc(&shell.state), get_rewards_sum(&shell.state));
             next_block_for_inflation(
                 &mut shell,
                 pkh1.to_vec(),
@@ -4132,7 +4131,7 @@ mod test_finalize_block {
             Dec::one(),
             Dec::new(9, 0).unwrap() * tot_frac * tot_frac,
         );
-        // dbg!(&cubic_rate);
+        dbg!(cubic_rate);
 
         let equal_enough = |rate1: Dec, rate2: Dec| -> bool {
             let tolerance = Dec::new(1, 9).unwrap();

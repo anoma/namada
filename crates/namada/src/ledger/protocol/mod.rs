@@ -585,9 +585,6 @@ where
         tx_wasm_cache,
     } = shell_params;
 
-    let (tx_gas_meter, vp_wasm_cache, tx_wasm_cache) =
-        { (tx_gas_meter, vp_wasm_cache, tx_wasm_cache) };
-
     let tx_hash = tx.raw_header_hash();
     if let Some(true) = state.write_log().has_replay_protection_entry(&tx_hash)
     {

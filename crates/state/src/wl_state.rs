@@ -476,23 +476,28 @@ where
             .read_last_block()
             .expect("Read block call must not fail")
         {
-            // Rebuild Merkle tree
+            {
+                let in_mem = &mut self.0.in_mem;
+                in_mem.block.hash = hash.clone();
+                in_mem.block.height = height;
+                in_mem.block.epoch = epoch;
+                in_mem.block.results = results;
+                in_mem.block.pred_epochs = pred_epochs;
+                in_mem.last_block = Some(LastBlock { height, hash, time });
+                in_mem.last_epoch = epoch;
+                in_mem.next_epoch_min_start_height =
+                    next_epoch_min_start_height;
+                in_mem.next_epoch_min_start_time = next_epoch_min_start_time;
+                in_mem.update_epoch_blocks_delay = update_epoch_blocks_delay;
+                in_mem.address_gen = address_gen;
+            }
+
+            // Rebuild Merkle tree - requires the values above to be set first
             let tree = MerkleTree::new(merkle_tree_stores)
                 .or_else(|_| self.rebuild_full_merkle_tree(height))
                 .unwrap();
 
             let in_mem = &mut self.0.in_mem;
-            in_mem.block.hash = hash.clone();
-            in_mem.block.height = height;
-            in_mem.block.epoch = epoch;
-            in_mem.block.results = results;
-            in_mem.block.pred_epochs = pred_epochs;
-            in_mem.last_block = Some(LastBlock { height, hash, time });
-            in_mem.last_epoch = epoch;
-            in_mem.next_epoch_min_start_height = next_epoch_min_start_height;
-            in_mem.next_epoch_min_start_time = next_epoch_min_start_time;
-            in_mem.update_epoch_blocks_delay = update_epoch_blocks_delay;
-            in_mem.address_gen = address_gen;
             in_mem.block.tree = tree;
             in_mem.conversion_state = conversion_state;
             in_mem.tx_queue = tx_queue;

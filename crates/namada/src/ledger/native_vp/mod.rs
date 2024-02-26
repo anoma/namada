@@ -174,20 +174,20 @@ where
         key: &storage::Key,
     ) -> Result<Option<Vec<u8>>, state::StorageError> {
         vp_host_fns::read_pre(
-            &mut self.ctx.gas_meter.borrow_mut(),
+            self.ctx.gas_meter,
             self.ctx.state,
             key,
-            &mut self.ctx.sentinel.borrow_mut(),
+            self.ctx.sentinel,
         )
         .into_storage_result()
     }
 
     fn has_key(&self, key: &storage::Key) -> Result<bool, state::StorageError> {
         vp_host_fns::has_key_pre(
-            &mut self.ctx.gas_meter.borrow_mut(),
+            self.ctx.gas_meter,
             self.ctx.state,
             key,
-            &mut self.ctx.sentinel.borrow_mut(),
+            self.ctx.sentinel,
         )
         .into_storage_result()
     }
@@ -197,11 +197,11 @@ where
         prefix: &storage::Key,
     ) -> Result<Self::PrefixIter<'iter>, state::StorageError> {
         vp_host_fns::iter_prefix_pre(
-            &mut self.ctx.gas_meter.borrow_mut(),
+            self.ctx.gas_meter,
             self.ctx.state.write_log(),
             self.ctx.state.db(),
             prefix,
-            &mut self.ctx.sentinel.borrow_mut(),
+            self.ctx.sentinel,
         )
         .into_storage_result()
     }
@@ -214,9 +214,9 @@ where
         iter: &mut Self::PrefixIter<'iter>,
     ) -> Result<Option<(String, Vec<u8>)>, state::StorageError> {
         vp_host_fns::iter_next::<<S as StateRead>::D>(
-            &mut self.ctx.gas_meter.borrow_mut(),
+            self.ctx.gas_meter,
             iter,
-            &mut self.ctx.sentinel.borrow_mut(),
+            self.ctx.sentinel,
         )
         .into_storage_result()
     }
@@ -270,20 +270,20 @@ where
         key: &storage::Key,
     ) -> Result<Option<Vec<u8>>, state::StorageError> {
         vp_host_fns::read_post(
-            &mut self.ctx.gas_meter.borrow_mut(),
+            self.ctx.gas_meter,
             self.ctx.state,
             key,
-            &mut self.ctx.sentinel.borrow_mut(),
+            self.ctx.sentinel,
         )
         .into_storage_result()
     }
 
     fn has_key(&self, key: &storage::Key) -> Result<bool, state::StorageError> {
         vp_host_fns::has_key_post(
-            &mut self.ctx.gas_meter.borrow_mut(),
+            self.ctx.gas_meter,
             self.ctx.state,
             key,
-            &mut self.ctx.sentinel.borrow_mut(),
+            self.ctx.sentinel,
         )
         .into_storage_result()
     }
@@ -293,11 +293,11 @@ where
         prefix: &storage::Key,
     ) -> Result<Self::PrefixIter<'iter>, state::StorageError> {
         vp_host_fns::iter_prefix_post(
-            &mut self.ctx.gas_meter.borrow_mut(),
+            self.ctx.gas_meter,
             self.ctx.state.write_log(),
             self.ctx.state.db(),
             prefix,
-            &mut self.ctx.sentinel.borrow_mut(),
+            self.ctx.sentinel,
         )
         .into_storage_result()
     }
@@ -310,9 +310,9 @@ where
         iter: &mut Self::PrefixIter<'iter>,
     ) -> Result<Option<(String, Vec<u8>)>, state::StorageError> {
         vp_host_fns::iter_next::<<S as StateRead>::D>(
-            &mut self.ctx.gas_meter.borrow_mut(),
+            self.ctx.gas_meter,
             iter,
-            &mut self.ctx.sentinel.borrow_mut(),
+            self.ctx.sentinel,
         )
         .into_storage_result()
     }
@@ -374,45 +374,27 @@ where
         &self,
         key: &Key,
     ) -> Result<Option<T>, state::StorageError> {
-        vp_host_fns::read_temp(
-            &mut self.gas_meter.borrow_mut(),
-            self.state,
-            key,
-            &mut self.sentinel.borrow_mut(),
-        )
-        .map(|data| data.and_then(|t| T::try_from_slice(&t[..]).ok()))
-        .into_storage_result()
+        vp_host_fns::read_temp(self.gas_meter, self.state, key, self.sentinel)
+            .map(|data| data.and_then(|t| T::try_from_slice(&t[..]).ok()))
+            .into_storage_result()
     }
 
     fn read_bytes_temp(
         &self,
         key: &Key,
     ) -> Result<Option<Vec<u8>>, state::StorageError> {
-        vp_host_fns::read_temp(
-            &mut self.gas_meter.borrow_mut(),
-            self.state,
-            key,
-            &mut self.sentinel.borrow_mut(),
-        )
-        .into_storage_result()
+        vp_host_fns::read_temp(self.gas_meter, self.state, key, self.sentinel)
+            .into_storage_result()
     }
 
     fn get_chain_id(&self) -> Result<String, state::StorageError> {
-        vp_host_fns::get_chain_id(
-            &mut self.gas_meter.borrow_mut(),
-            self.state,
-            &mut self.sentinel.borrow_mut(),
-        )
-        .into_storage_result()
+        vp_host_fns::get_chain_id(self.gas_meter, self.state, self.sentinel)
+            .into_storage_result()
     }
 
     fn get_block_height(&self) -> Result<BlockHeight, state::StorageError> {
-        vp_host_fns::get_block_height(
-            &mut self.gas_meter.borrow_mut(),
-            self.state,
-            &mut self.sentinel.borrow_mut(),
-        )
-        .into_storage_result()
+        vp_host_fns::get_block_height(self.gas_meter, self.state, self.sentinel)
+            .into_storage_result()
     }
 
     fn get_block_header(
@@ -420,69 +402,45 @@ where
         height: BlockHeight,
     ) -> Result<Option<Header>, state::StorageError> {
         vp_host_fns::get_block_header(
-            &mut self.gas_meter.borrow_mut(),
+            self.gas_meter,
             self.state,
             height,
-            &mut self.sentinel.borrow_mut(),
+            self.sentinel,
         )
         .into_storage_result()
     }
 
     fn get_block_hash(&self) -> Result<BlockHash, state::StorageError> {
-        vp_host_fns::get_block_hash(
-            &mut self.gas_meter.borrow_mut(),
-            self.state,
-            &mut self.sentinel.borrow_mut(),
-        )
-        .into_storage_result()
+        vp_host_fns::get_block_hash(self.gas_meter, self.state, self.sentinel)
+            .into_storage_result()
     }
 
     fn get_block_epoch(&self) -> Result<Epoch, state::StorageError> {
-        vp_host_fns::get_block_epoch(
-            &mut self.gas_meter.borrow_mut(),
-            self.state,
-            &mut self.sentinel.borrow_mut(),
-        )
-        .into_storage_result()
+        vp_host_fns::get_block_epoch(self.gas_meter, self.state, self.sentinel)
+            .into_storage_result()
     }
 
     fn get_tx_index(&self) -> Result<TxIndex, state::StorageError> {
-        vp_host_fns::get_tx_index(
-            &mut self.gas_meter.borrow_mut(),
-            self.tx_index,
-            &mut self.sentinel.borrow_mut(),
-        )
-        .into_storage_result()
+        vp_host_fns::get_tx_index(self.gas_meter, self.tx_index, self.sentinel)
+            .into_storage_result()
     }
 
     fn get_native_token(&self) -> Result<Address, state::StorageError> {
-        vp_host_fns::get_native_token(
-            &mut self.gas_meter.borrow_mut(),
-            self.state,
-            &mut self.sentinel.borrow_mut(),
-        )
-        .into_storage_result()
+        vp_host_fns::get_native_token(self.gas_meter, self.state, self.sentinel)
+            .into_storage_result()
     }
 
     fn get_pred_epochs(&self) -> state::StorageResult<Epochs> {
-        vp_host_fns::get_pred_epochs(
-            &mut self.gas_meter.borrow_mut(),
-            self.state,
-            &mut self.sentinel.borrow_mut(),
-        )
-        .into_storage_result()
+        vp_host_fns::get_pred_epochs(self.gas_meter, self.state, self.sentinel)
+            .into_storage_result()
     }
 
     fn get_ibc_events(
         &self,
         event_type: String,
     ) -> Result<Vec<IbcEvent>, state::StorageError> {
-        vp_host_fns::get_ibc_events(
-            &mut self.gas_meter.borrow_mut(),
-            self.state,
-            event_type,
-        )
-        .into_storage_result()
+        vp_host_fns::get_ibc_events(self.gas_meter, self.state, event_type)
+            .into_storage_result()
     }
 
     fn iter_prefix<'iter>(
@@ -490,11 +448,11 @@ where
         prefix: &Key,
     ) -> Result<Self::PrefixIter<'iter>, state::StorageError> {
         vp_host_fns::iter_prefix_pre(
-            &mut self.gas_meter.borrow_mut(),
+            self.gas_meter,
             self.state.write_log(),
             self.state.db(),
             prefix,
-            &mut self.sentinel.borrow_mut(),
+            self.sentinel,
         )
         .into_storage_result()
     }
@@ -569,12 +527,8 @@ where
     }
 
     fn get_tx_code_hash(&self) -> Result<Option<Hash>, state::StorageError> {
-        vp_host_fns::get_tx_code_hash(
-            &mut self.gas_meter.borrow_mut(),
-            self.tx,
-            &mut self.sentinel.borrow_mut(),
-        )
-        .into_storage_result()
+        vp_host_fns::get_tx_code_hash(self.gas_meter, self.tx, self.sentinel)
+            .into_storage_result()
     }
 
     fn read_pre<T: borsh::BorshDeserialize>(

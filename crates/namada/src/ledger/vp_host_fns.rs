@@ -1,8 +1,8 @@
 //! Host functions for VPs used for both native and WASM VPs.
 
+use std::cell::RefCell;
 use std::fmt::Debug;
 use std::num::TryFromIntError;
-use std::ops::DerefMut;
 
 use namada_core::address::{Address, ESTABLISHED_ADDRESS_BYTES_LEN};
 use namada_core::hash::{Hash, HASH_LENGTH};
@@ -52,12 +52,12 @@ pub type EnvResult<T> = std::result::Result<T, RuntimeError>;
 
 /// Add a gas cost incured in a validity predicate
 pub fn add_gas(
-    gas_meter: &mut impl DerefMut<Target = VpGasMeter>,
+    gas_meter: &RefCell<VpGasMeter>,
     used_gas: u64,
-    sentinel: &mut impl DerefMut<Target = VpSentinel>,
+    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<()> {
-    gas_meter.consume(used_gas).map_err(|err| {
-        sentinel.set_out_of_gas();
+    gas_meter.borrow_mut().consume(used_gas).map_err(|err| {
+        sentinel.borrow_mut().set_out_of_gas();
         tracing::info!("Stopping VP execution because of gas error: {}", err);
         RuntimeError::OutOfGas(err)
     })
@@ -66,10 +66,10 @@ pub fn add_gas(
 /// Storage read prior state (before tx execution). It will try to read from the
 /// storage.
 pub fn read_pre<S>(
-    gas_meter: &mut impl DerefMut<Target = VpGasMeter>,
+    gas_meter: &RefCell<VpGasMeter>,
     state: &S,
     key: &Key,
-    sentinel: &mut impl DerefMut<Target = VpSentinel>,
+    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<Option<Vec<u8>>>
 where
     S: StateRead + Debug,
@@ -106,10 +106,10 @@ where
 /// Storage read posterior state (after tx execution). It will try to read from
 /// the write log first and if no entry found then from the storage.
 pub fn read_post<S>(
-    gas_meter: &mut impl DerefMut<Target = VpGasMeter>,
+    gas_meter: &RefCell<VpGasMeter>,
     state: &S,
     key: &Key,
-    sentinel: &mut impl DerefMut<Target = VpSentinel>,
+    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<Option<Vec<u8>>>
 where
     S: StateRead + Debug,
@@ -147,10 +147,10 @@ where
 /// Storage read temporary state (after tx execution). It will try to read from
 /// only the write log.
 pub fn read_temp<S>(
-    gas_meter: &mut impl DerefMut<Target = VpGasMeter>,
+    gas_meter: &RefCell<VpGasMeter>,
     state: &S,
     key: &Key,
-    sentinel: &mut impl DerefMut<Target = VpSentinel>,
+    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<Option<Vec<u8>>>
 where
     S: StateRead + Debug,
@@ -170,10 +170,10 @@ where
 /// Storage `has_key` in prior state (before tx execution). It will try to read
 /// from the storage.
 pub fn has_key_pre<S>(
-    gas_meter: &mut impl DerefMut<Target = VpGasMeter>,
+    gas_meter: &RefCell<VpGasMeter>,
     state: &S,
     key: &Key,
-    sentinel: &mut impl DerefMut<Target = VpSentinel>,
+    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<bool>
 where
     S: StateRead + Debug,
@@ -202,10 +202,10 @@ where
 /// Storage `has_key` in posterior state (after tx execution). It will try to
 /// check the write log first and if no entry found then the storage.
 pub fn has_key_post<S>(
-    gas_meter: &mut impl DerefMut<Target = VpGasMeter>,
+    gas_meter: &RefCell<VpGasMeter>,
     state: &S,
     key: &Key,
-    sentinel: &mut impl DerefMut<Target = VpSentinel>,
+    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<bool>
 where
     S: StateRead + Debug,
@@ -233,9 +233,9 @@ where
 
 /// Getting the chain ID.
 pub fn get_chain_id<S>(
-    gas_meter: &mut impl DerefMut<Target = VpGasMeter>,
+    gas_meter: &RefCell<VpGasMeter>,
     state: &S,
-    sentinel: &mut impl DerefMut<Target = VpSentinel>,
+    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<String>
 where
     S: StateRead + Debug,
@@ -248,9 +248,9 @@ where
 /// Getting the block height. The height is that of the block to which the
 /// current transaction is being applied.
 pub fn get_block_height<S>(
-    gas_meter: &mut impl DerefMut<Target = VpGasMeter>,
+    gas_meter: &RefCell<VpGasMeter>,
     state: &S,
-    sentinel: &mut impl DerefMut<Target = VpSentinel>,
+    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<BlockHeight>
 where
     S: StateRead + Debug,
@@ -262,10 +262,10 @@ where
 
 /// Getting the block header.
 pub fn get_block_header<S>(
-    gas_meter: &mut impl DerefMut<Target = VpGasMeter>,
+    gas_meter: &RefCell<VpGasMeter>,
     state: &S,
     height: BlockHeight,
-    sentinel: &mut impl DerefMut<Target = VpSentinel>,
+    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<Option<Header>>
 where
     S: StateRead + Debug,
@@ -279,9 +279,9 @@ where
 /// Getting the block hash. The height is that of the block to which the
 /// current transaction is being applied.
 pub fn get_block_hash<S>(
-    gas_meter: &mut impl DerefMut<Target = VpGasMeter>,
+    gas_meter: &RefCell<VpGasMeter>,
     state: &S,
-    sentinel: &mut impl DerefMut<Target = VpSentinel>,
+    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<BlockHash>
 where
     S: StateRead + Debug,
@@ -294,9 +294,9 @@ where
 /// Getting the block hash. The height is that of the block to which the
 /// current transaction is being applied.
 pub fn get_tx_code_hash(
-    gas_meter: &mut impl DerefMut<Target = VpGasMeter>,
+    gas_meter: &RefCell<VpGasMeter>,
     tx: &Tx,
-    sentinel: &mut impl DerefMut<Target = VpSentinel>,
+    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<Option<Hash>> {
     add_gas(
         gas_meter,
@@ -313,9 +313,9 @@ pub fn get_tx_code_hash(
 /// Getting the block epoch. The epoch is that of the block to which the
 /// current transaction is being applied.
 pub fn get_block_epoch<S>(
-    gas_meter: &mut impl DerefMut<Target = VpGasMeter>,
+    gas_meter: &RefCell<VpGasMeter>,
     state: &S,
-    sentinel: &mut impl DerefMut<Target = VpSentinel>,
+    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<Epoch>
 where
     S: StateRead + Debug,
@@ -328,9 +328,9 @@ where
 /// Getting the block epoch. The epoch is that of the block to which the
 /// current transaction is being applied.
 pub fn get_tx_index(
-    gas_meter: &mut impl DerefMut<Target = VpGasMeter>,
+    gas_meter: &RefCell<VpGasMeter>,
     tx_index: &TxIndex,
-    sentinel: &mut impl DerefMut<Target = VpSentinel>,
+    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<TxIndex> {
     add_gas(
         gas_meter,
@@ -342,9 +342,9 @@ pub fn get_tx_index(
 
 /// Getting the native token's address.
 pub fn get_native_token<S>(
-    gas_meter: &mut impl DerefMut<Target = VpGasMeter>,
+    gas_meter: &RefCell<VpGasMeter>,
     state: &S,
-    sentinel: &mut impl DerefMut<Target = VpSentinel>,
+    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<Address>
 where
     S: StateRead + Debug,
@@ -359,9 +359,9 @@ where
 
 /// Given the information about predecessor block epochs
 pub fn get_pred_epochs<S>(
-    gas_meter: &mut impl DerefMut<Target = VpGasMeter>,
+    gas_meter: &RefCell<VpGasMeter>,
     state: &S,
-    sentinel: &mut impl DerefMut<Target = VpSentinel>,
+    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<Epochs>
 where
     S: StateRead + Debug,
@@ -378,7 +378,7 @@ where
 
 /// Getting the IBC event.
 pub fn get_ibc_events<S>(
-    _gas_meter: &mut impl DerefMut<Target = VpGasMeter>,
+    _gas_meter: &RefCell<VpGasMeter>,
     state: &S,
     event_type: String,
 ) -> EnvResult<Vec<IbcEvent>>
@@ -397,14 +397,14 @@ where
 /// Storage prefix iterator for prior state (before tx execution), ordered by
 /// storage keys. It will try to get an iterator from the storage.
 pub fn iter_prefix_pre<'a, D>(
-    gas_meter: &mut impl DerefMut<Target = VpGasMeter>,
+    gas_meter: &RefCell<VpGasMeter>,
     // We cannot use e.g. `&'a State`, because it doesn't live long
     // enough - the lifetime of the `PrefixIter` must depend on the lifetime of
     // references to the `WriteLog` and `DB`.
     write_log: &'a WriteLog,
     db: &'a D,
     prefix: &Key,
-    sentinel: &mut impl DerefMut<Target = VpSentinel>,
+    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<namada_state::PrefixIter<'a, D>>
 where
     D: DB + for<'iter> DBIter<'iter>,
@@ -417,14 +417,14 @@ where
 /// Storage prefix iterator for posterior state (after tx execution), ordered by
 /// storage keys. It will try to get an iterator from the storage.
 pub fn iter_prefix_post<'a, D>(
-    gas_meter: &mut impl DerefMut<Target = VpGasMeter>,
+    gas_meter: &RefCell<VpGasMeter>,
     // We cannot use e.g. `&'a State`, because it doesn't live long
     // enough - the lifetime of the `PrefixIter` must depend on the lifetime of
     // references to the `WriteLog` and `DB`.
     write_log: &'a WriteLog,
     db: &'a D,
     prefix: &Key,
-    sentinel: &mut impl DerefMut<Target = VpSentinel>,
+    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<namada_state::PrefixIter<'a, D>>
 where
     D: DB + for<'iter> DBIter<'iter>,
@@ -436,9 +436,9 @@ where
 
 /// Get the next item in a storage prefix iterator (pre or post).
 pub fn iter_next<DB>(
-    gas_meter: &mut impl DerefMut<Target = VpGasMeter>,
+    gas_meter: &RefCell<VpGasMeter>,
     iter: &mut namada_state::PrefixIter<DB>,
-    sentinel: &mut impl DerefMut<Target = VpSentinel>,
+    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<Option<(String, Vec<u8>)>>
 where
     DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,

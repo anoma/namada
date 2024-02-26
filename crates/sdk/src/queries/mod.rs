@@ -97,9 +97,9 @@ pub fn require_no_data(request: &RequestQuery) -> namada_storage::Result<()> {
 #[cfg(any(test, feature = "testing"))]
 mod testing {
 
+    use borsh_ext::BorshSerializeExt;
     use namada_core::storage::BlockHeight;
     use namada_state::testing::TestState;
-    use namada_storage::StorageWrite;
     use tendermint_rpc::Response;
 
     use super::*;
@@ -132,9 +132,11 @@ mod testing {
             // Initialize mock gas limit
             let max_block_gas_key =
                 namada_parameters::storage::get_max_block_gas_key();
-            state.write(&max_block_gas_key, 20_000_000_u64).expect(
-                "Max block gas parameter must be initialized in storage",
-            );
+            state
+                .db_write(&max_block_gas_key, 20_000_000_u64.serialize_to_vec())
+                .expect(
+                    "Max block gas parameter must be initialized in storage",
+                );
             let event_log = EventLog::default();
             Self {
                 rpc,

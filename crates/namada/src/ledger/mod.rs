@@ -190,9 +190,11 @@ mod test {
             // Initialize mock gas limit
             let max_block_gas_key =
                 namada_parameters::storage::get_max_block_gas_key();
-            state.write(&max_block_gas_key, 20_000_000_u64).expect(
-                "Max block gas parameter must be initialized in storage",
-            );
+            state
+                .db_write(&max_block_gas_key, 20_000_000_u64.serialize_to_vec())
+                .expect(
+                    "Max block gas parameter must be initialized in storage",
+                );
             let event_log = EventLog::default();
             let (vp_wasm_cache, vp_cache_dir) =
                 wasm::compilation_cache::common::testing::cache();

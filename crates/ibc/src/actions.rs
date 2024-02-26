@@ -116,52 +116,6 @@ where
     }
 }
 
-// impl<S> StateRead for IbcProtocolContext<'_, S>
-// where
-// S: StateRead,
-// {
-//     type D = <S as StateRead>::D;
-//     type H = <S as StateRead>::H;
-
-//     fn write_log(&self) -> &namada_state::write_log::WriteLog {
-//         self.state.write_log()
-//     }
-
-//     fn db(&self) -> &Self::D {
-//         self.state.db()
-//     }
-
-//     fn in_mem(&self) -> &namada_state::InMemory<Self::H> {
-//         self.state.in_mem()
-//     }
-
-//     fn charge_gas(&self, gas: u64) -> namada_state::Result<()> {
-//         self.state.charge_gas(gas)
-//     }
-// }
-
-// impl<S> State for IbcProtocolContext<'_, S>
-// where
-// S: State
-// {
-//     fn write_log_mut(&mut self) -> &mut write_log::WriteLog {
-//         self.state.write_log_mut()
-//     }
-
-//     fn split_borrow(
-//         &mut self,
-//     ) -> (
-//         &mut write_log::WriteLog,
-//         &storage::InMemory<Self::H>,
-//         &Self::D,
-//     ) {
-//         self.state.split_borrow()
-//     }
-// }
-
-// impl_storage_read!(IbcProtocolContext<'_, D, H>);
-// impl_storage_write!(IbcProtocolContext<'_, D, H>);
-
 impl<D, H> IbcStorageContext for TxHostEnvState<'_, D, H>
 where
     D: 'static + DB + for<'iter> DBIter<'iter>,
