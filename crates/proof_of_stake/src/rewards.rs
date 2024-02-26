@@ -51,57 +51,33 @@ pub enum RewardsError {
     CoeffsNotSet,
 }
 
-/// PoS wrapper around a PDController for inflation
-#[derive(Clone, Debug)]
-pub struct PosInflation {
-    controller: PDController,
-}
-
-impl PosInflation {
-    /// Initialize a new PD Controller for PoS inflation
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        locked_amount: Uint,
-        total_native_amount: Uint,
-        max_reward_rate: Dec,
-        last_inflation_amount: Uint,
-        p_gain_nom: Dec,
-        d_gain_nom: Dec,
-        epochs_per_year: u64,
-        target_ratio: Dec,
-        last_ratio: Dec,
-    ) -> PosInflation {
-        PosInflation {
-            controller: PDController::new(
-                locked_amount,
-                total_native_amount,
-                max_reward_rate,
-                last_inflation_amount,
-                p_gain_nom,
-                d_gain_nom,
-                epochs_per_year,
-                target_ratio,
-                last_ratio,
-            ),
-        }
-    }
-
-    fn get_control(&self) -> Dec {
-        let total_native = self.controller.get_total_native_dec();
-        let locked = self.controller.get_locked_amount_dec();
-        let epochs_py: Dec = self.controller.get_epochs_per_year().into();
-
-        let coeff =
-            total_native * self.controller.get_max_reward_rate() / epochs_py;
-        let locked_ratio = locked / total_native;
-
-        self.controller.compute_control(coeff, locked_ratio)
-    }
-
-    fn get_new_inflation(&self) -> Uint {
-        let control = self.get_control();
-        self.controller.compute_inflation(control)
-    }
+/// Compute PoS inflation amount
+#[allow(clippy::too_many_arguments)]
+pub fn compute_inflation(
+    locked_amount: token::Amount,
+    total_native_amount: token::Amount,
+    max_reward_rate: Dec,
+    last_inflation_amount: token::Amount,
+    p_gain_nom: Dec,
+    d_gain_nom: Dec,
+    epochs_per_year: u64,
+    target_ratio: Dec,
+    last_ratio: Dec,
+) -> namada_storage::Result<token::Amount> {
+    let controller = PDController::new(
+        total_native_amount.into(),
+        max_reward_rate,
+        last_inflation_amount.into(),
+        p_gain_nom,
+        d_gain_nom,
+        epochs_per_year,
+        target_ratio,
+        last_ratio,
+    );
+    let metric = Dec::from(locked_amount) / Dec::from(total_native_amount);
+    let amount_uint = controller.compute_inflation(metric);
+    token::Amount::from_uint(amount_uint, 0)
+        .into_storage_result()
 }
 
 /// Holds coefficients for the three different ways to get PoS rewards
@@ -387,20 +363,17 @@ where
     let d_gain_nom = params.rewards_gain_d;
 
     // Compute the new inflation
-    let pos_controller = PosInflation::new(
-        locked_amount.raw_amount(),
-        total_amount.raw_amount(),
+    let inflation = compute_inflation(
+        locked_amount,
+        total_amount,
         max_inflation_rate,
-        last_inflation_amount.raw_amount(),
+        last_inflation_amount,
         p_gain_nom,
         d_gain_nom,
         epochs_per_year,
         locked_ratio_target,
         last_staked_ratio,
-    );
-    let inflation = pos_controller.get_new_inflation();
-    let inflation =
-        token::Amount::from_uint(inflation, 0).into_storage_result()?;
+    )?;
 
     // Mint inflation and partition rewards among all accounts that earn a
     // portion of it
@@ -653,28 +626,27 @@ mod tests {
 
     #[test]
     fn test_inflation_calc_up() {
-        let locked_amount = Uint::from(2_000_000_000);
-        let total_native_amount = Uint::from(4_000_000_000_u64);
+        let locked_amount = token::Amount::native_whole(2_000_000_000);
+        let total_native_amount =
+            token::Amount::native_whole(4_000_000_000_u64);
         let max_reward_rate = Dec::from_str("0.1").unwrap();
         let p_gain_nom = Dec::from_str("0.1").unwrap();
         let d_gain_nom = Dec::from_str("0.1").unwrap();
         let epochs_per_year = 365;
         let target_ratio = Dec::from_str("0.66666666").unwrap();
 
-        let mut controller = PosInflation::new(
+        let inflation_0 = compute_inflation(
             locked_amount,
             total_native_amount,
             max_reward_rate,
-            Uint::zero(),
+            token::Amount::zero(),
             p_gain_nom,
             d_gain_nom,
             epochs_per_year,
             target_ratio,
             Dec::from_str("0.5").unwrap(),
-        );
-        dbg!(&controller);
-
-        let inflation_0 = controller.get_new_inflation();
+        )
+        .unwrap();
         let locked_ratio_0 = Dec::try_from(locked_amount).unwrap()
             / Dec::try_from(total_native_amount).unwrap();
 
@@ -682,13 +654,13 @@ mod tests {
             "Round 0: Locked ratio: {locked_ratio_0}, inflation: {inflation_0}"
         );
         assert_eq!(locked_ratio_0, Dec::from_str("0.5").unwrap());
-        assert_eq!(inflation_0, Uint::from(18_264));
+        assert_eq!(inflation_0, token::Amount::native_whole(18_264));
 
         let locked_amount = locked_amount + inflation_0;
         let last_inflation_amount = inflation_0;
         let last_locked_ratio = locked_ratio_0;
 
-        controller = PosInflation::new(
+        let inflation_1 = compute_inflation(
             locked_amount,
             total_native_amount,
             max_reward_rate,
@@ -698,11 +670,11 @@ mod tests {
             epochs_per_year,
             target_ratio,
             last_locked_ratio,
-        );
+        )
+        .unwrap();
 
         // BUG: DIDN'T ADD TO TOTAL AMOUNT
 
-        let inflation_1 = controller.get_new_inflation();
         let locked_ratio_1 = Dec::try_from(locked_amount).unwrap()
             / Dec::try_from(total_native_amount).unwrap();
 
@@ -712,13 +684,13 @@ mod tests {
         assert!(locked_ratio_1 > locked_ratio_0);
         assert!(locked_ratio_1 > Dec::from_str("0.5").unwrap());
         assert!(locked_ratio_1 < Dec::from_str("0.51").unwrap());
-        assert_eq!(inflation_1, Uint::from(36_528));
+        assert_eq!(inflation_1, token::Amount::native_whole(36_528));
 
         let locked_amount = locked_amount + inflation_1;
         let last_inflation_amount = inflation_1;
         let last_locked_ratio = locked_ratio_1;
 
-        controller = PosInflation::new(
+        let inflation_2 = compute_inflation(
             locked_amount,
             total_native_amount,
             max_reward_rate,
@@ -728,9 +700,9 @@ mod tests {
             epochs_per_year,
             target_ratio,
             last_locked_ratio,
-        );
+        )
+        .unwrap();
 
-        let inflation_2 = controller.get_new_inflation();
         let locked_ratio_2 = Dec::try_from(locked_amount).unwrap()
             / Dec::try_from(total_native_amount).unwrap();
         println!(
@@ -739,33 +711,32 @@ mod tests {
         assert!(locked_ratio_2 > locked_ratio_1);
         assert!(locked_ratio_2 > Dec::from_str("0.5").unwrap());
         assert!(locked_ratio_2 < Dec::from_str("0.51").unwrap());
-        assert_eq!(inflation_2, Uint::from(54_792));
+        assert_eq!(inflation_2, token::Amount::native_whole(54_792));
     }
 
     #[test]
     fn test_inflation_calc_down() {
-        let locked_amount = Uint::from(900_000_000);
-        let total_native_amount = Uint::from(1_000_000_000_u64);
+        let locked_amount = token::Amount::native_whole(900_000_000);
+        let total_native_amount =
+            token::Amount::native_whole(1_000_000_000_u64);
         let max_reward_rate = Dec::from_str("0.1").unwrap();
         let p_gain_nom = Dec::from_str("0.1").unwrap();
         let d_gain_nom = Dec::from_str("0.1").unwrap();
         let epochs_per_year = 365;
         let target_ratio = Dec::from_str("0.66666666").unwrap();
 
-        let mut controller = PosInflation::new(
+        let inflation_0 = compute_inflation(
             locked_amount,
             total_native_amount,
             max_reward_rate,
-            Uint::from(10_000),
+            token::Amount::native_whole(10_000),
             p_gain_nom,
             d_gain_nom,
             epochs_per_year,
             target_ratio,
             Dec::from_str("0.9").unwrap(),
-        );
-        dbg!(&controller);
-
-        let inflation_0 = controller.get_new_inflation();
+        )
+        .unwrap();
         let locked_ratio_0 = Dec::try_from(locked_amount).unwrap()
             / Dec::try_from(total_native_amount).unwrap();
 
@@ -773,13 +744,13 @@ mod tests {
             "Round 0: Locked ratio: {locked_ratio_0}, inflation: {inflation_0}"
         );
         assert_eq!(locked_ratio_0, Dec::from_str("0.9").unwrap());
-        assert_eq!(inflation_0, Uint::from(3_607));
+        assert_eq!(inflation_0, token::Amount::native_whole(3_607));
 
         let locked_amount = locked_amount + inflation_0;
         let last_inflation_amount = inflation_0;
         let last_locked_ratio = locked_ratio_0;
 
-        controller = PosInflation::new(
+        let inflation_1 = compute_inflation(
             locked_amount,
             total_native_amount,
             max_reward_rate,
@@ -789,11 +760,11 @@ mod tests {
             epochs_per_year,
             target_ratio,
             last_locked_ratio,
-        );
+        )
+        .unwrap();
 
         // BUG: DIDN'T ADD TO TOTAL AMOUNT
 
-        let inflation_1 = controller.get_new_inflation();
         let locked_ratio_1 = Dec::try_from(locked_amount).unwrap()
             / Dec::try_from(total_native_amount).unwrap();
 
@@ -803,13 +774,13 @@ mod tests {
         assert!(locked_ratio_1 > locked_ratio_0);
         assert!(locked_ratio_1 > Dec::from_str("0.9").unwrap());
         assert!(locked_ratio_1 < Dec::from_str("0.91").unwrap());
-        assert_eq!(inflation_1, Uint::zero());
+        assert_eq!(inflation_1, token::Amount::zero());
 
         let locked_amount = locked_amount + inflation_1;
         let last_inflation_amount = inflation_1;
         let last_locked_ratio = locked_ratio_1;
 
-        controller = PosInflation::new(
+        let inflation_2 = compute_inflation(
             locked_amount,
             total_native_amount,
             max_reward_rate,
@@ -819,29 +790,29 @@ mod tests {
             epochs_per_year,
             target_ratio,
             last_locked_ratio,
-        );
+        )
+        .unwrap();
 
-        let inflation_2 = controller.get_new_inflation();
         let locked_ratio_2 = Dec::try_from(locked_amount).unwrap()
             / Dec::try_from(total_native_amount).unwrap();
         println!(
             "Round 2: Locked ratio: {locked_ratio_2}, inflation: {inflation_2}",
         );
         assert_eq!(locked_ratio_2, locked_ratio_1);
-        assert_eq!(inflation_2, Uint::zero());
+        assert_eq!(inflation_2, token::Amount::zero());
     }
 
     #[test]
     fn test_pos_inflation_playground() {
-        let denom = 1_000_000_u64;
         let epochs_per_year = 365_u64;
 
         let init_locked_ratio = Dec::from_str("0.1").unwrap();
-        let total_native_tokens = 1_000_000_000_u64 * denom;
+        let total_native_tokens = 1_000_000_000_u64;
         let mut locked_amount =
-            (init_locked_ratio * total_native_tokens).to_uint().unwrap();
-        let mut last_inflation_amount = Uint::zero();
-        let mut total_native_tokens = Uint::from(total_native_tokens);
+            token::Amount::from(init_locked_ratio * total_native_tokens);
+        let mut last_inflation_amount = token::Amount::zero();
+        let mut total_native_tokens =
+            token::Amount::native_whole(total_native_tokens);
 
         let max_reward_rate = Dec::from_str("0.1").unwrap();
         let target_ratio = Dec::from_str("0.66666666").unwrap();
@@ -853,27 +824,24 @@ mod tests {
 
         let num_rounds = 50;
 
-        let mut controller = PosInflation::new(
-            locked_amount,
-            total_native_tokens,
-            max_reward_rate,
-            last_inflation_amount,
-            p_gain_nom,
-            d_gain_nom,
-            epochs_per_year,
-            target_ratio,
-            init_locked_ratio,
-        );
-        dbg!(&controller);
-
         for round in 0..num_rounds {
-            let inflation = controller.get_new_inflation();
-            let locked_ratio = Dec::try_from(locked_amount).unwrap()
-                / Dec::try_from(total_native_tokens).unwrap();
+            let inflation = compute_inflation(
+                locked_amount,
+                total_native_tokens,
+                max_reward_rate,
+                last_inflation_amount,
+                p_gain_nom,
+                d_gain_nom,
+                epochs_per_year,
+                target_ratio,
+                init_locked_ratio,
+            )
+            .unwrap();
+            let locked_ratio =
+                Dec::from(locked_amount) / Dec::from(total_native_tokens);
 
-            let rate = Dec::try_from(inflation).unwrap()
-                * Dec::from(epochs_per_year)
-                / Dec::try_from(total_native_tokens).unwrap();
+            let rate = Dec::from(inflation) * Dec::from(epochs_per_year)
+                / Dec::from(total_native_tokens);
             println!(
                 "Round {round}: Locked ratio: {locked_ratio}, inflation rate: \
                  {rate}",
@@ -888,25 +856,13 @@ mod tests {
             //     controller.locked_tokens = controller.total_tokens;
             // }
 
-            let tot_tokens = u64::try_from(total_native_tokens).unwrap();
+            let tot_tokens = Dec::from(total_native_tokens);
             let change_staked_tokens =
-                (staking_growth * tot_tokens).to_uint().unwrap();
+                token::Amount::from(staking_growth * tot_tokens);
 
             locked_amount = std::cmp::min(
                 total_native_tokens,
                 locked_amount + change_staked_tokens,
-            );
-
-            controller = PosInflation::new(
-                locked_amount,
-                total_native_tokens,
-                max_reward_rate,
-                last_inflation_amount,
-                p_gain_nom,
-                d_gain_nom,
-                epochs_per_year,
-                target_ratio,
-                locked_ratio,
             );
 
             // if locked_ratio > Dec::from_str("0.8").unwrap()

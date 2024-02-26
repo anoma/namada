@@ -25,52 +25,33 @@ use crate::storage_key::{
 };
 use crate::WithConversionState;
 
-#[derive(Clone, Debug)]
-struct ShieldedInflation {
-    controller: PDController,
-}
+/// Compute shielded token inflation amount
+#[allow(clippy::too_many_arguments)]
+pub fn compute_inflation(
+    locked_amount: Uint,
+    total_native_amount: Uint,
+    max_reward_rate: Dec,
+    last_inflation_amount: Uint,
+    p_gain_nom: Dec,
+    d_gain_nom: Dec,
+    epochs_per_year: u64,
+    target_amount: Dec,
+    last_amount: Dec,
+) -> Uint {
+    let controller = PDController::new(
+        total_native_amount,
+        max_reward_rate,
+        last_inflation_amount,
+        p_gain_nom,
+        d_gain_nom,
+        epochs_per_year,
+        target_amount,
+        last_amount,
+    );
 
-impl ShieldedInflation {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        locked_amount: Uint,
-        total_native_amount: Uint,
-        max_reward_rate: Dec,
-        last_inflation_amount: Uint,
-        p_gain_nom: Dec,
-        d_gain_nom: Dec,
-        epochs_per_year: u64,
-        target_amount: Dec,
-        last_amount: Dec,
-    ) -> ShieldedInflation {
-        ShieldedInflation {
-            controller: PDController::new(
-                locked_amount,
-                total_native_amount,
-                max_reward_rate,
-                last_inflation_amount,
-                p_gain_nom,
-                d_gain_nom,
-                epochs_per_year,
-                target_amount,
-                last_amount,
-            ),
-        }
-    }
-
-    fn get_control(&self) -> Dec {
-        let locked = self.controller.get_locked_amount_dec();
-        let epochs_py: Dec = self.controller.get_epochs_per_year().into();
-
-        let coeff = self.controller.get_max_reward_rate() / epochs_py;
-
-        self.controller.compute_control(coeff, locked)
-    }
-
-    pub fn get_new_inflation(&self) -> Uint {
-        let control = self.get_control();
-        self.controller.compute_inflation(control)
-    }
+    let metric = Dec::try_from(locked_amount)
+        .expect("Should not fail to convert Uint to Dec");
+    controller.compute_inflation(metric)
 }
 
 /// Compute the precision of MASP rewards for the given token. This function
@@ -160,7 +141,7 @@ where
         .expect("Should not fail to convert Uint to Dec");
 
     // Initial computation of the new shielded inflation
-    let controller = ShieldedInflation::new(
+    let inflation = compute_inflation(
         total_tokens_in_masp.raw_amount(),
         total_native_tokens.raw_amount(),
         max_reward_rate,
@@ -171,7 +152,6 @@ where
         target_locked_dec,
         last_locked_dec,
     );
-    let inflation = controller.get_new_inflation();
 
     // inflation-per-token = inflation / locked tokens = n/PRECISION
     // ∴ n = (inflation * PRECISION) / locked tokens
@@ -725,21 +705,18 @@ mod tests {
 
         let num_rounds = 10;
 
-        let mut controller = ShieldedInflation::new(
-            locked_amount,
-            total_tokens,
-            max_reward_rate,
-            last_inflation_amount,
-            p_gain_nom,
-            d_gain_nom,
-            epochs_per_year,
-            Dec::try_from(locked_tokens_target).unwrap(),
-            Dec::try_from(locked_tokens_last).unwrap(),
-        );
-        dbg!(&controller);
-
         for round in 0..num_rounds {
-            let inflation = controller.get_new_inflation();
+            let inflation = compute_inflation(
+                locked_amount,
+                total_tokens,
+                max_reward_rate,
+                last_inflation_amount,
+                p_gain_nom,
+                d_gain_nom,
+                epochs_per_year,
+                Dec::try_from(locked_tokens_target).unwrap(),
+                Dec::try_from(locked_tokens_last).unwrap(),
+            );
 
             let rate = Dec::try_from(inflation).unwrap()
                 * Dec::from(epochs_per_year)
@@ -757,18 +734,6 @@ mod tests {
 
             let change_staked_tokens = Uint::from(2) * locked_tokens_target;
             locked_amount += change_staked_tokens;
-
-            controller = ShieldedInflation::new(
-                locked_amount,
-                total_tokens,
-                max_reward_rate,
-                last_inflation_amount,
-                p_gain_nom,
-                d_gain_nom,
-                epochs_per_year,
-                Dec::try_from(locked_tokens_target).unwrap(),
-                Dec::try_from(locked_tokens_last).unwrap(),
-            )
         }
     }
 }

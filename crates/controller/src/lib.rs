@@ -3,7 +3,6 @@ use namada_core::types::uint::Uint;
 
 #[derive(Clone, Debug)]
 pub struct PDController {
-    locked_amount: Uint,
     total_native_amount: Uint,
     max_reward_rate: Dec,
     last_inflation_amount: Uint,
@@ -17,7 +16,6 @@ pub struct PDController {
 impl PDController {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        locked_amount: Uint,
         total_native_amount: Uint,
         max_reward_rate: Dec,
         last_inflation_amount: Uint,
@@ -28,7 +26,6 @@ impl PDController {
         last_metric: Dec,
     ) -> PDController {
         PDController {
-            locked_amount,
             total_native_amount,
             max_reward_rate,
             last_inflation_amount,
@@ -40,27 +37,18 @@ impl PDController {
         }
     }
 
+    pub fn compute_inflation(&self, current_metric: Dec) -> Uint {
+        let control = self.compute_control(current_metric);
+        self.compute_inflation_aux(control)
+    }
+
     pub fn get_total_native_dec(&self) -> Dec {
         Dec::try_from(self.total_native_amount)
             .expect("Should not fail to convert Uint to Dec")
     }
 
-    pub fn get_locked_amount_dec(&self) -> Dec {
-        Dec::try_from(self.locked_amount)
-            .expect("Should not fail to convert Uint to Dec")
-    }
-
-    pub fn get_epochs_per_year(&self) -> u64 {
-        self.epochs_per_year
-    }
-
-    pub fn get_max_reward_rate(&self) -> Dec {
-        self.max_reward_rate
-    }
-
     fn get_max_inflation(&self) -> Uint {
-        let total_native = Dec::try_from(self.total_native_amount)
-            .expect("Should not fail to convert Uint to Dec");
+        let total_native = self.get_total_native_dec();
         let epochs_py: Dec = self.epochs_per_year.into();
 
         let max_inflation = total_native * self.max_reward_rate / epochs_py;
@@ -71,7 +59,7 @@ impl PDController {
 
     // TODO: could possibly use I256 instead of Dec here (need to account for
     // negative vals)
-    pub fn compute_inflation(&self, control: Dec) -> Uint {
+    fn compute_inflation_aux(&self, control: Dec) -> Uint {
         let last_inflation_amount = Dec::try_from(self.last_inflation_amount)
             .expect("Should not fail to convert Uint to Dec");
         let new_inflation_amount = last_inflation_amount + control;
@@ -89,7 +77,10 @@ impl PDController {
 
     // NOTE: This formula is the comactification of all the old intermediate
     // computations that were done in multiple steps (as in the specs)
-    pub fn compute_control(&self, coeff: Dec, current_metric: Dec) -> Dec {
+    fn compute_control(&self, current_metric: Dec) -> Dec {
+        let total_native = self.get_total_native_dec();
+        let epochs_py: Dec = self.epochs_per_year.into();
+        let coeff = total_native * self.max_reward_rate / epochs_py;
         let val = current_metric * (self.d_gain_nom - self.p_gain_nom)
             + (self.target_metric * self.p_gain_nom)
             - (self.last_metric * self.d_gain_nom);
