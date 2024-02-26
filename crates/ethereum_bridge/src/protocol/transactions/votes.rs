@@ -3,7 +3,7 @@
 //! on once they have received enough votes
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::{eyre, Result};
 use namada_core::address::Address;
 use namada_core::storage::{BlockHeight, Epoch};
@@ -115,9 +115,7 @@ impl EpochedVotingPowerExt for EpochedVotingPower {
     }
 }
 
-#[derive(
-    Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
-)]
+#[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 /// Represents all the information needed to tally a piece of data that may be
 /// voted for over multiple epochs
 pub struct Tally {

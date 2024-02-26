@@ -19,9 +19,7 @@ use std::str::FromStr;
 
 pub use decrypted::*;
 use namada_core::address::Address;
-use namada_core::borsh::{
-    BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
-};
+use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
 use namada_core::ethereum_structs::EthBridgeEvent;
 use namada_core::hash::Hash;
 use namada_core::ibc::IbcEvent;
@@ -162,7 +160,6 @@ pub fn hash_tx(tx_bytes: &[u8]) -> Hash {
 }
 
 /// Transaction application result
-// TODO derive BorshSchema after <https://github.com/near/borsh-rs/issues/82>
 #[derive(
     Clone,
     Debug,
@@ -195,7 +192,6 @@ impl TxResult {
 }
 
 /// Result of checking a transaction with validity predicates
-// TODO derive BorshSchema after <https://github.com/near/borsh-rs/issues/82>
 #[derive(
     Clone,
     Debug,
@@ -286,13 +282,7 @@ fn iterable_to_string<T: fmt::Display>(
 /// Struct that classifies that kind of Tx
 /// based on the contents of its data.
 #[derive(
-    Clone,
-    Debug,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-    Serialize,
-    Deserialize,
+    Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
 pub enum TxType {
     /// An ordinary tx

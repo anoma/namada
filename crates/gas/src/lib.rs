@@ -4,7 +4,7 @@
 use std::fmt::Display;
 use std::ops::Div;
 
-use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -73,7 +73,6 @@ const SCALE: u64 = 10_000;
     PartialOrd,
     BorshDeserialize,
     BorshSerialize,
-    BorshSchema,
     Serialize,
     Deserialize,
 )]
@@ -205,7 +204,6 @@ pub struct VpGasMeter {
     Default,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
     Serialize,
     Deserialize,
 )]

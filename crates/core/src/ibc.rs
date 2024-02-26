@@ -4,7 +4,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use data_encoding::{DecodePartial, HEXLOWER, HEXLOWER_PERMISSIVE, HEXUPPER};
 pub use ibc::*;
@@ -35,7 +35,6 @@ pub const EVENT_TYPE_DENOM_TRACE: &str = "denomination_trace";
     Deserialize,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
     PartialEq,
     Eq,
     PartialOrd,
@@ -68,7 +67,6 @@ impl FromStr for IbcTokenHash {
     Clone,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
     PartialEq,
     Eq,
     Serialize,

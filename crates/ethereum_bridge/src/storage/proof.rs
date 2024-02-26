@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSerialize};
 use ethers::abi::Tokenizable;
 use namada_core::eth_abi::Encode;
 use namada_core::ethereum_events::Uint;
@@ -20,7 +20,7 @@ use namada_vote_ext::validator_set_update::{
 /// At any given time, an [`EthereumProof`] will be considered
 /// "complete" once a number of signatures pertaining to validators
 /// reflecting more than 2/3 of the bonded stake on Namada is available.
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub struct EthereumProof<T> {
     /// The signatures contained in the proof.
     pub signatures: HashMap<EthAddrBook, secp256k1::Signature>,

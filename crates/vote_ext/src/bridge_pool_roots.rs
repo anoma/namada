@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use std::ops::{Deref, DerefMut};
 
 use namada_core::address::Address;
-use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::key::common;
 use namada_core::key::common::Signature;
 use namada_core::storage::BlockHeight;
@@ -25,7 +25,6 @@ use namada_tx::Signed;
     Hash,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
 )]
 pub struct BridgePoolRootVext {
     /// The validator sending the vote extension
@@ -56,7 +55,6 @@ pub type Vext = BridgePoolRootVext;
     Clone,
     Debug,
     BorshSerialize,
-    BorshSchema,
     BorshDeserialize,
     PartialEq,
     Eq,
@@ -91,14 +89,7 @@ impl Vext {
 /// A collection of validator signatures over the
 /// Ethereum bridge pool Merkle root and nonce.
 #[derive(
-    Debug,
-    Default,
-    Clone,
-    PartialEq,
-    Eq,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
+    Debug, Default, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize,
 )]
 pub struct MultiSignedVext(pub HashSet<SignedVext>);
 

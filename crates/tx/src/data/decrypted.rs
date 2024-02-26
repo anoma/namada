@@ -4,7 +4,7 @@ pub use ark_bls12_381::Bls12_381 as EllipticCurve;
 /// *Not wasm compatible*
 pub mod decrypted_tx {
     use namada_core::borsh::{
-        BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
+        BorshDeserialize, BorshSerialize, BorshSerializeExt,
     };
     use sha2::{Digest, Sha256};
 
@@ -13,7 +13,6 @@ pub mod decrypted_tx {
         Debug,
         BorshSerialize,
         BorshDeserialize,
-        BorshSchema,
         serde::Serialize,
         serde::Deserialize,
     )]

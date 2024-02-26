@@ -364,28 +364,6 @@ impl borsh::BorshDeserialize for PGFIbcTarget {
     }
 }
 
-impl borsh::BorshSchema for PGFIbcTarget {
-    fn add_definitions_recursively(
-        definitions: &mut BTreeMap<
-            borsh::schema::Declaration,
-            borsh::schema::Definition,
-        >,
-    ) {
-        let fields = borsh::schema::Fields::NamedFields(vec![
-            ("target".into(), String::declaration()),
-            ("amount".into(), Amount::declaration()),
-            ("port_id".into(), String::declaration()),
-            ("channel_id".into(), String::declaration()),
-        ]);
-        let definition = borsh::schema::Definition::Struct { fields };
-        definitions.insert(Self::declaration(), definition);
-    }
-
-    fn declaration() -> borsh::schema::Declaration {
-        std::any::type_name::<Self>().into()
-    }
-}
-
 /// The actions that a PGF Steward can propose to execute
 #[derive(
     Debug,

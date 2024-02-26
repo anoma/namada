@@ -10,7 +10,7 @@ pub mod wrapper_tx {
     use masp_primitives::transaction::Transaction;
     use namada_core::address::{Address, MASP};
     use namada_core::borsh::{
-        BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
+        BorshDeserialize, BorshSerialize, BorshSerializeExt,
     };
     use namada_core::hash::Hash;
     use namada_core::key::*;
@@ -61,7 +61,6 @@ pub mod wrapper_tx {
         PartialEq,
         BorshSerialize,
         BorshDeserialize,
-        BorshSchema,
         Serialize,
         Deserialize,
         Eq,
@@ -89,7 +88,6 @@ pub mod wrapper_tx {
         PartialEq,
         BorshSerialize,
         BorshDeserialize,
-        BorshSchema,
         Serialize,
         Deserialize,
         Eq,
@@ -178,13 +176,7 @@ pub mod wrapper_tx {
     /// unshielding tx for fee payment and some non-encrypted metadata for
     /// inclusion and / or verification purposes
     #[derive(
-        Debug,
-        Clone,
-        BorshSerialize,
-        BorshDeserialize,
-        BorshSchema,
-        Serialize,
-        Deserialize,
+        Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
     )]
     pub struct WrapperTx {
         /// The fee to be paid for including the tx

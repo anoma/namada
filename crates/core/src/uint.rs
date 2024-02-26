@@ -5,7 +5,7 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::ops::{Add, AddAssign, BitAnd, Div, Mul, Neg, Rem, Sub, SubAssign};
 
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSerialize};
 use impl_num_traits::impl_uint_num_traits;
 use num_integer::Integer;
 use num_traits::{CheckedAdd, CheckedMul, CheckedSub};
@@ -300,7 +300,6 @@ construct_uint! {
     #[derive(
         BorshSerialize,
         BorshDeserialize,
-        BorshSchema,
     )]
 
     pub struct Uint(4);
@@ -474,15 +473,7 @@ const MINUS_ZERO: Uint = Uint([0u64, 0u64, 0u64, 9223372036854775808]);
 
 /// A signed 256 big integer.
 #[derive(
-    Copy,
-    Clone,
-    Default,
-    PartialEq,
-    Eq,
-    Hash,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
+    Copy, Clone, Default, PartialEq, Eq, Hash, BorshSerialize, BorshDeserialize,
 )]
 pub struct I256(pub Uint);
 

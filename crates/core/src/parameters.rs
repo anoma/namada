@@ -8,7 +8,7 @@ use super::dec::Dec;
 use super::hash::Hash;
 use super::time::DurationSecs;
 use super::token;
-use crate::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use crate::borsh::{BorshDeserialize, BorshSerialize};
 
 /// Protocol parameters
 #[derive(
@@ -21,7 +21,6 @@ use crate::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
     Hash,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
 )]
 pub struct Parameters {
     /// Max payload size, in bytes, for a mempool tx.
@@ -68,7 +67,6 @@ pub struct Parameters {
     Hash,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
 )]
 pub struct EpochDuration {
     /// Minimum number of blocks in an epoch

@@ -6,7 +6,6 @@ members = [
   "crates/apps",
   "crates/benches",
   "crates/core",
-  "crates/encoding_spec",
   "crates/ethereum_bridge",
   "crates/gas",
   "crates/governance",
@@ -73,7 +72,7 @@ blake2b-rs = "0.2.0"
 bls12_381 = "0.8"
 byte-unit = "4.0.13"
 byteorder = "1.4.2"
-borsh = {version = "1.2.0", features = ["unstable__schema", "derive"]}
+borsh = {version = "1.2.0", features = ["derive"]}
 borsh-ext = { git = "https://github.com/heliaxdev/borsh-ext", tag = "v1.2.0" }
 chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}
 circular-queue = "0.2.6"

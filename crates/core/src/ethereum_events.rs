@@ -5,7 +5,7 @@ use std::fmt::{Display, Formatter};
 use std::ops::{Add, Sub};
 use std::str::FromStr;
 
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use ethabi::ethereum_types::{H160, U256 as ethUint};
 use ethabi::Token;
@@ -33,7 +33,6 @@ use crate::token::Amount;
     Deserialize,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
 )]
 pub struct Uint(pub [u64; 4]);
 
@@ -137,7 +136,6 @@ impl Sub<u64> for Uint {
     Deserialize,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
 )]
 #[serde(try_from = "String")]
 #[serde(into = "String")]
@@ -229,7 +227,6 @@ pub trait GetEventNonce {
     Debug,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
 )]
 pub struct TransfersToNamada {
     /// Monotonically increasing nonce
@@ -264,7 +261,6 @@ impl From<TransfersToNamada> for EthereumEvent {
     Debug,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
 )]
 pub enum EthereumEvent {
     /// Event transferring batches of ether or Ethereum based ERC20 tokens
@@ -325,7 +321,6 @@ impl EthereumEvent {
     Ord,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
 )]
 pub struct TransferToNamada {
     /// Quantity of the ERC20 token in the transfer
@@ -347,7 +342,6 @@ pub struct TransferToNamada {
     Ord,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
     Serialize,
     Deserialize,
 )]

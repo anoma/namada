@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::ops::Deref;
 
 use namada_core::address::Address;
-use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::eth_abi::{AbiEncode, Encode, Token};
 use namada_core::ethereum_events::EthAddress;
 use namada_core::keccak::KeccakHash;
@@ -27,9 +27,7 @@ pub type VextDigest = ValidatorSetUpdateVextDigest;
 
 /// Contains the digest of all signatures from a quorum of
 /// validators for a [`Vext`].
-#[derive(
-    Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
-)]
+#[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub struct ValidatorSetUpdateVextDigest {
     /// A mapping from a consensus validator address to a [`Signature`].
     pub signatures: HashMap<Address, Signature>,
@@ -75,9 +73,7 @@ impl VextDigest {
 
 /// Represents a [`Vext`] signed by some validator, with
 /// an Ethereum key.
-#[derive(
-    Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, PartialEq, Eq,
-)]
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, PartialEq, Eq)]
 pub struct SignedVext(pub Signed<Vext, SerializeWithAbiEncode>);
 
 impl Deref for SignedVext {
@@ -92,9 +88,7 @@ impl Deref for SignedVext {
 pub type Vext = ValidatorSetUpdateVext;
 
 /// Represents a validator set update, for some new [`Epoch`].
-#[derive(
-    Eq, PartialEq, Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema,
-)]
+#[derive(Eq, PartialEq, Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub struct ValidatorSetUpdateVext {
     /// The addresses of the validators in the new [`Epoch`],
     /// and their respective voting power.
@@ -149,7 +143,6 @@ impl Vext {
     Hash,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
 )]
 pub struct EthAddrBook {
     /// Ethereum address derived from a hot key.
@@ -323,14 +316,7 @@ fn encode_validator_data(
 /// arguments with ABI for Ethereum smart
 /// contracts.
 #[derive(
-    Debug,
-    Clone,
-    Default,
-    Eq,
-    PartialEq,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
+    Debug, Clone, Default, Eq, PartialEq, BorshSerialize, BorshDeserialize,
 )]
 // TODO: find a new home for this type
 pub struct ValidatorSetArgs {

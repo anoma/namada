@@ -1,12 +1,11 @@
 //! This module contains types related with validator voting power calculations.
 
-use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::io::Read;
 use std::iter::Sum;
 use std::ops::{Add, AddAssign, Mul};
 
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSerialize};
 use ethabi::ethereum_types as ethereum;
 use eyre::{eyre, Result};
 use num_rational::Ratio;
@@ -21,7 +20,6 @@ use crate::uint::Uint;
 #[derive(
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
     Default,
     Copy,
     Clone,
@@ -253,30 +251,6 @@ impl BorshDeserialize for FractionalVotingPower {
         let (numer, denom): (Uint, Uint) =
             BorshDeserialize::deserialize_reader(reader)?;
         Ok(FractionalVotingPower(Ratio::<Uint>::new(numer, denom)))
-    }
-}
-
-impl BorshSchema for FractionalVotingPower {
-    fn add_definitions_recursively(
-        definitions: &mut BTreeMap<
-            borsh::schema::Declaration,
-            borsh::schema::Definition,
-        >,
-    ) {
-        let fields = borsh::schema::Fields::UnnamedFields(vec![
-            Uint::declaration(),
-            Uint::declaration(),
-        ]);
-        let definition = borsh::schema::Definition::Struct { fields };
-        borsh::schema::add_definition(
-            Self::declaration(),
-            definition,
-            definitions,
-        );
-    }
-
-    fn declaration() -> borsh::schema::Declaration {
-        "FractionalVotingPower".into()
     }
 }
 

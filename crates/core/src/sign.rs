@@ -8,9 +8,7 @@ use thiserror::Error;
 
 use super::address::Address;
 use super::key::common;
-use crate::borsh::{
-    BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
-};
+use crate::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -28,7 +26,6 @@ pub enum SigIndexDecodeError {
     Debug,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
     Serialize,
     Deserialize,
     Eq,

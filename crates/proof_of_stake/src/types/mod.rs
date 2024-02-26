@@ -9,7 +9,7 @@ use std::fmt::Display;
 use std::hash::Hash;
 use std::ops::Sub;
 
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::address::Address;
 use namada_core::dec::Dec;
 use namada_core::key::common;
@@ -308,7 +308,6 @@ pub struct Redelegation {
     Debug,
     Clone,
     BorshSerialize,
-    BorshSchema,
     BorshDeserialize,
     PartialEq,
     Eq,
@@ -342,7 +341,6 @@ pub struct GenesisValidator {
     Clone,
     Debug,
     BorshSerialize,
-    BorshSchema,
     BorshDeserialize,
     Deserialize,
     Serialize,
@@ -408,7 +406,6 @@ pub struct ConsensusValidator {
     Hash,
     BorshDeserialize,
     BorshSerialize,
-    BorshSchema,
 )]
 pub struct BondId {
     /// (Un)bond's source address is the owner of the bonded tokens.
@@ -428,7 +425,6 @@ pub struct BondId {
     Ord,
     BorshDeserialize,
     BorshSerialize,
-    BorshSchema,
 )]
 pub struct WeightedValidator {
     /// The `total_stake` field must be on top, because lexicographic ordering
@@ -463,7 +459,6 @@ impl Display for WeightedValidator {
     Clone,
     Copy,
     BorshDeserialize,
-    BorshSchema,
     BorshSerialize,
 )]
 pub struct Position(pub u64);
@@ -506,14 +501,7 @@ impl Position {
 
 /// Validator's state.
 #[derive(
-    Debug,
-    Clone,
-    Copy,
-    BorshDeserialize,
-    BorshSerialize,
-    BorshSchema,
-    PartialEq,
-    Eq,
+    Debug, Clone, Copy, BorshDeserialize, BorshSerialize, PartialEq, Eq,
 )]
 pub enum ValidatorState {
     /// A validator who may participate in the consensus
@@ -539,7 +527,6 @@ pub enum ValidatorState {
     Clone,
     BorshDeserialize,
     BorshSerialize,
-    BorshSchema,
     PartialEq,
     Eq,
     PartialOrd,
@@ -568,7 +555,6 @@ pub type Slashes = LazyVec<Slash>;
     Copy,
     BorshDeserialize,
     BorshSerialize,
-    BorshSchema,
     PartialEq,
     Eq,
     PartialOrd,
@@ -608,7 +594,7 @@ pub struct ResultSlashing {
 pub type BondsAndUnbondsDetails = HashMap<BondId, BondsAndUnbondsDetail>;
 
 /// Bonds and unbonds with all details (slashes and rewards, if any)
-#[derive(Debug, Clone, BorshDeserialize, BorshSerialize, BorshSchema)]
+#[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
 pub struct BondsAndUnbondsDetail {
     /// Bonds
     pub bonds: Vec<BondDetails>,
@@ -619,9 +605,7 @@ pub struct BondsAndUnbondsDetail {
 }
 
 /// Bond with all its details
-#[derive(
-    Debug, Clone, BorshDeserialize, BorshSerialize, BorshSchema, PartialEq,
-)]
+#[derive(Debug, Clone, BorshDeserialize, BorshSerialize, PartialEq)]
 pub struct BondDetails {
     /// The first epoch in which this bond contributed to a stake
     pub start: Epoch,
@@ -632,9 +616,7 @@ pub struct BondDetails {
 }
 
 /// Unbond with all its details
-#[derive(
-    Debug, Clone, BorshDeserialize, BorshSerialize, BorshSchema, PartialEq,
-)]
+#[derive(Debug, Clone, BorshDeserialize, BorshSerialize, PartialEq)]
 pub struct UnbondDetails {
     /// The first epoch in which the source bond of this unbond contributed to
     /// a stake

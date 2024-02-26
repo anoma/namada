@@ -37,7 +37,6 @@ crates += namada_account
 crates += namada_apps
 crates += namada_benchmarks
 crates += namada_core
-crates += namada_encoding_spec
 crates += namada_ethereum_bridge
 crates += namada_gas
 crates += namada_governance

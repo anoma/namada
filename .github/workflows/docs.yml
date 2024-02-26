@@ -48,7 +48,7 @@ jobs:
           - name: Build development docs
             folder: documentation/dev
             bucket: namada-dev-static-website
-            command: cargo run --bin namada_encoding_spec && cd documentation/dev && mdbook build
+            command: cd documentation/dev && mdbook build
 
     steps:
       - name: Checkout repo

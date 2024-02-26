@@ -5,7 +5,7 @@ use std::fmt;
 use std::num::NonZeroU64;
 use std::str::FromStr;
 
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -93,26 +93,6 @@ impl<'de> Deserialize<'de> for ProposalBytes {
     }
 }
 
-impl BorshSchema for ProposalBytes {
-    fn add_definitions_recursively(
-        definitions: &mut std::collections::BTreeMap<
-            borsh::schema::Declaration,
-            borsh::schema::Definition,
-        >,
-    ) {
-        let fields = borsh::schema::Fields::NamedFields(vec![(
-            "inner".into(),
-            u64::declaration(),
-        )]);
-        let definition = borsh::schema::Definition::Struct { fields };
-        definitions.insert(Self::declaration(), definition);
-    }
-
-    fn declaration() -> borsh::schema::Declaration {
-        std::any::type_name::<Self>().into()
-    }
-}
-
 impl Default for ProposalBytes {
     #[inline]
     fn default() -> Self {
@@ -183,7 +163,6 @@ pub const DEFAULT_CHAIN_ID: &str = "namada-internal.00000000000000";
     Deserialize,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
     PartialOrd,
     Ord,
     PartialEq,

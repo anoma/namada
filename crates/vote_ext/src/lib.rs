@@ -4,9 +4,7 @@ pub mod bridge_pool_roots;
 pub mod ethereum_events;
 pub mod validator_set_update;
 
-use namada_core::borsh::{
-    BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
-};
+use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
 use namada_core::chain::ChainId;
 use namada_core::key::common;
 use namada_tx::data::protocol::{ProtocolTx, ProtocolTxType};
@@ -15,9 +13,7 @@ use namada_tx::{Signature, Signed, Tx, TxError};
 
 /// This type represents the data we pass to the extension of
 /// a vote at the PreCommit phase of Tendermint.
-#[derive(
-    Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
-)]
+#[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub struct VoteExtension {
     /// Vote extension data related with Ethereum events.
     pub ethereum_events: Option<Signed<ethereum_events::Vext>>,
@@ -89,7 +85,7 @@ macro_rules! ethereum_tx_data_declare {
 
 ethereum_tx_data_declare! {
     /// Data associated with Ethereum protocol transactions.
-    #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+    #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
     {
         /// Ethereum events contained in vote extensions that
         /// are compressed before being included on chain

@@ -4,7 +4,7 @@ use std::convert::TryFrom;
 use std::fmt::Display;
 use std::str::FromStr;
 
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
 #[cfg(any(test, feature = "rand"))]
@@ -32,7 +32,6 @@ use crate::{impl_display_and_from_str_via_format, string_encoding};
     Hash,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
 )]
 pub enum PublicKey {
     /// Encapsulate Ed25519 public keys
@@ -170,7 +169,7 @@ impl TryFrom<&PublicKey> for EthAddress {
 }
 
 /// Secret key
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 #[allow(clippy::large_enum_variant)]
 pub enum SecretKey {
     /// Encapsulate Ed25519 secret keys
@@ -299,7 +298,6 @@ impl FromStr for SecretKey {
     Deserialize,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
 )]
 pub enum Signature {
     /// Encapsulate Ed25519 signatures
@@ -374,7 +372,6 @@ impl super::Signature for Signature {
     Clone,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
     PartialEq,
     Eq,
     PartialOrd,
