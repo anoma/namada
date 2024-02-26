@@ -15,6 +15,7 @@ use core::ops::Deref;
 
 use namada_vp_prelude::*;
 use once_cell::unsync::Lazy;
+use proof_of_stake::jail_validator;
 use proof_of_stake::storage::{read_pos_params, validator_state_handle};
 use proof_of_stake::storage_key::{
     is_below_capacity_validator_set_key, is_bond_epoched_meta_key, is_bond_key,
@@ -85,18 +86,19 @@ fn validate_tx(
     keys_changed: BTreeSet<storage::Key>,
     verifiers: BTreeSet<Address>,
 ) -> VpResult {
-    debug_log!(
-        "vp_user called with user addr: {}, key_changed: {:?}, verifiers: {:?}",
-        addr,
-        keys_changed,
-        verifiers
-    );
+    // debug_log!(
+    //     "vp_user called with user addr: {}, key_changed: {:?}, verifiers:
+    // {:?}",     addr,
+    //     keys_changed,
+    //     verifiers
+    // );
 
     let valid_sig = Lazy::new(|| {
         matches!(verify_signatures(ctx, &tx_data, &addr), Ok(true))
     });
 
     for key in keys_changed.iter() {
+        // dbg!(key);
         let key_type: KeyType = key.into();
         let is_valid = match key_type {
             KeyType::TokenBalance { owner, .. } => {
@@ -149,6 +151,7 @@ fn validate_tx(
             }
         };
         if !is_valid {
+            println!("FAILED key {}", &key);
             log_string(format!("key {} modification failed vp_user", key));
             return reject();
         }
@@ -235,7 +238,7 @@ fn validate_pos_changes(
                                         | BelowThreshold
                                 ))
                         {
-                            address == owner && **valid_sig
+                            dbg!(address == owner) && dbg!(**valid_sig)
                         } else if
                         // Bonding and unbonding may affect validator sets
                         matches!(
@@ -245,6 +248,7 @@ fn validate_pos_changes(
                             post,
                             Consensus | BelowCapacity | BelowThreshold
                         ) {
+                            println!("I'm in here for demotion!");
                             true
                         } else {
                             // Unknown state changes are not allowed
@@ -332,7 +336,11 @@ fn validate_pos_changes(
 #[cfg(test)]
 mod tests {
     use address::testing::arb_non_internal_address;
-    use namada::ledger::pos::{GenesisValidator, PosParams};
+    use namada::ledger::pos::{
+        read_consensus_validator_set_addresses_with_stake, GenesisValidator,
+        PosParams,
+    };
+    use namada::proof_of_stake::OwnedPosParams;
     use namada::tx::data::{self, TxType};
     use namada::tx::{Code, Data, Signature};
     use namada::types::dec::Dec;
@@ -626,6 +634,179 @@ mod tests {
             !validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
                 .unwrap()
         );
+    }
+
+    /// Test VP shit
+    #[test]
+    fn test_se_bug() {
+        println!("\n\nDOING MY TEST NOW\n\n");
+        // Genesis validators
+        let mut pos_params = PosParams::default();
+        pos_params.owned.unbonding_len = 3;
+        pos_params.owned.max_validator_slots = 2;
+
+        // Common
+        let protocol_key = key::testing::keypair_1().ref_to();
+        let eth_cold_key = key::testing::keypair_1().ref_to();
+        let eth_hot_key = key::testing::keypair_1().ref_to();
+        let commission_rate = Dec::new(5, 2).unwrap();
+        let max_commission_rate_change = Dec::new(1, 2).unwrap();
+
+        // Unique
+        let (validator1, validator2, validator3) = (
+            address::testing::established_address_1(),
+            address::testing::established_address_2(),
+            address::testing::established_address_3(),
+        );
+        let (stake1, stake2, stake3) = (
+            token::Amount::native_whole(1),
+            token::Amount::native_whole(2),
+            token::Amount::native_whole(3),
+        );
+        let (ck1, ck2, ck3) = (
+            key::testing::keypair_2().ref_to(),
+            key::testing::keypair_3().ref_to(),
+            key::testing::keypair_4().ref_to(),
+        );
+        let genesis_validators = [
+            GenesisValidator {
+                address: validator1.clone(),
+                tokens: stake1,
+                consensus_key: ck1.clone(),
+                protocol_key: protocol_key.clone(),
+                commission_rate,
+                max_commission_rate_change,
+                eth_hot_key: eth_hot_key.clone(),
+                eth_cold_key: eth_cold_key.clone(),
+                metadata: Default::default(),
+            },
+            GenesisValidator {
+                address: validator3.clone(),
+                tokens: stake3,
+                consensus_key: ck3,
+                protocol_key: protocol_key.clone(),
+                commission_rate,
+                max_commission_rate_change,
+                eth_hot_key: eth_hot_key.clone(),
+                eth_cold_key: eth_cold_key.clone(),
+                metadata: Default::default(),
+            },
+            GenesisValidator {
+                address: validator2.clone(),
+                tokens: stake2,
+                consensus_key: ck2,
+                protocol_key,
+                commission_rate,
+                max_commission_rate_change,
+                eth_hot_key,
+                eth_cold_key,
+                metadata: Default::default(),
+            },
+        ];
+
+        println!("\nValidator1: {}", &validator1);
+        println!("Validator2: {}", &validator2);
+        println!("Validator3: {}\n", &validator3);
+
+        // Init PoS storage
+        init_pos(&genesis_validators[..], &pos_params, Epoch(0));
+
+        // Initialize a tx environment
+        let mut tx_env = tx_host_env::take();
+
+        // let secret_key = key::testing::keypair_1();
+        // let public_key = secret_key.ref_to();
+        // let vp_owner: Address = address::testing::established_address_2();
+        // let target = address::testing::established_address_3();
+        let token = address::nam();
+        // let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
+        // let bond_amount = token::Amount::from_uint(5_098_123, 0).unwrap();
+        // let unbond_amount = token::Amount::from_uint(3_098_123, 0).unwrap();
+
+        // Spawn the accounts to be able to modify their storage
+        // tx_env.spawn_accounts([&target, &token]);
+        // tx_env.init_account_storage(&vp_owner, vec![public_key], 1);
+
+        // write the denomination of NAM into storage
+        token::write_denom(
+            &mut tx_env.wl_storage,
+            &token,
+            token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        )
+        .unwrap();
+
+        // Credit the tokens to the VP owner before running the transaction to
+        // be able to transfer from it
+        // tx_env.credit_tokens(&vp_owner, &token, amount);
+
+        // Jail validator1
+        jail_validator(
+            &mut tx_env.wl_storage,
+            &pos_params,
+            &validator3,
+            Epoch(0),
+            Epoch(0),
+        )
+        .unwrap();
+
+        dbg!(
+            &read_consensus_validator_set_addresses_with_stake(
+                &tx_env.wl_storage,
+                Epoch(2)
+            )
+            .unwrap()
+        );
+
+        // Initialize VP environment
+        vp_host_env::init_from_tx(validator3.clone(), tx_env, |_address| {
+            // Unjail validator3
+            tx::ctx().unjail_validator(&validator3).unwrap()
+        });
+
+        // tx.set_data(Data::new(vec![]));
+        // tx.set_code(Code::new(vec![], None));
+        // tx.add_section(Section::Signature(Signature::new(
+        //     vec![tx.raw_header_hash()],
+        //     pks_map.index_secret_keys(vec![secret_key]),
+        //     None,
+        // )));
+        // let signed_tx = tx.clone();
+        // vp_env.tx = signed_tx.clone();
+        // let keys_changed: BTreeSet<storage::Key> =
+        //     vp_env.all_touched_storage_keys();
+        // let verifiers: BTreeSet<Address> = BTreeSet::default();
+        // vp_host_env::set(vp_env);
+
+        let pks_map = AccountPublicKeysMap::from_iter(vec![ck1]);
+
+        let mut vp_env = vp_host_env::take();
+        let mut tx_data = Tx::from_type(TxType::Raw);
+        tx_data.set_data(Data::new(vec![]));
+        tx_data.set_code(Code::new(vec![], None));
+        tx_data.add_section(Section::Signature(Signature::new(
+            vec![tx_data.raw_header_hash()],
+            pks_map.index_secret_keys(vec![key::testing::keypair_2()]),
+            None,
+        )));
+        let signed_tx = tx_data.clone();
+        vp_env.tx = signed_tx.clone();
+
+        let keys_changed: BTreeSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        // dbg!(&keys_changed);
+        let verifiers: BTreeSet<Address> = BTreeSet::default();
+        vp_host_env::set(vp_env);
+        assert!(
+            validate_tx(
+                &CTX,
+                signed_tx,
+                validator1.clone(),
+                keys_changed,
+                verifiers
+            )
+            .unwrap()
+        );
+        println!("\n\nENDING MY TEST NOW\n\n");
     }
 
     /// Test that a PoS action to become validator that must be authorized is
