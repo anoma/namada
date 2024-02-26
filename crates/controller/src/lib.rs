@@ -37,14 +37,22 @@ impl PDController {
         }
     }
 
-    pub fn compute_inflation(&self, current_metric: Dec) -> Uint {
-        let control = self.compute_control(current_metric);
+    pub fn compute_inflation(
+        &self,
+        control_coeff: Dec,
+        current_metric: Dec,
+    ) -> Uint {
+        let control = self.compute_control(control_coeff, current_metric);
         self.compute_inflation_aux(control)
     }
 
     pub fn get_total_native_dec(&self) -> Dec {
         Dec::try_from(self.total_native_amount)
             .expect("Should not fail to convert Uint to Dec")
+    }
+
+    pub fn get_epochs_per_year(&self) -> u64 {
+        self.epochs_per_year
     }
 
     fn get_max_inflation(&self) -> Uint {
@@ -77,10 +85,7 @@ impl PDController {
 
     // NOTE: This formula is the comactification of all the old intermediate
     // computations that were done in multiple steps (as in the specs)
-    fn compute_control(&self, current_metric: Dec) -> Dec {
-        let total_native = self.get_total_native_dec();
-        let epochs_py: Dec = self.epochs_per_year.into();
-        let coeff = total_native * self.max_reward_rate / epochs_py;
+    fn compute_control(&self, coeff: Dec, current_metric: Dec) -> Dec {
         let val = current_metric * (self.d_gain_nom - self.p_gain_nom)
             + (self.target_metric * self.p_gain_nom)
             - (self.last_metric * self.d_gain_nom);

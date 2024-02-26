@@ -51,7 +51,8 @@ pub fn compute_inflation(
 
     let metric = Dec::try_from(locked_amount)
         .expect("Should not fail to convert Uint to Dec");
-    controller.compute_inflation(metric)
+    let control_coeff = max_reward_rate / controller.get_epochs_per_year();
+    controller.compute_inflation(control_coeff, metric)
 }
 
 /// Compute the precision of MASP rewards for the given token. This function
@@ -704,6 +705,7 @@ mod tests {
         let mut locked_tokens_last = init_locked_tokens;
 
         let num_rounds = 10;
+        println!();
 
         for round in 0..num_rounds {
             let inflation = compute_inflation(
