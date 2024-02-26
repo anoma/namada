@@ -476,7 +476,7 @@ impl ArgFromContext for tendermint_rpc::Url {
                     .rpc
                     .laddr
                     .to_string()
-                    .replace("tpc", "http"),
+                    .replace("tcp", "http"),
             )
             .map_err(|err| format!("Invalid Tendermint address: {err}"));
         }
