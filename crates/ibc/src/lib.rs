@@ -205,6 +205,10 @@ where
                 &msg.packet.port_id_on_b,
                 &msg.packet.chan_id_on_b,
             )?;
+            if !ibc_denom.contains('/') {
+                // Skip to store it because the token has been redeemed
+                return Ok(());
+            }
             let receiver =
                 if PaymentAddress::from_str(data.receiver.as_ref()).is_ok() {
                     MASP.to_string()

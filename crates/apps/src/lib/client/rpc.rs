@@ -16,7 +16,6 @@ use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::core::address::{Address, InternalAddress, MASP};
 use namada::core::hash::Hash;
-use namada::core::ibc::{is_ibc_denom, IbcTokenHash};
 use namada::core::key::*;
 use namada::core::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use namada::core::storage::{
@@ -39,9 +38,7 @@ use namada::governance::utils::{
 };
 use namada::io::Io;
 use namada::ledger::events::Event;
-use namada::ledger::ibc::storage::{
-    ibc_trace_key, ibc_trace_key_prefix, is_ibc_trace_key,
-};
+use namada::ledger::ibc::storage::ibc_trace_key;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::types::{CommissionPair, Slash};
 use namada::ledger::pos::PosParams;
@@ -731,7 +728,9 @@ async fn lookup_token_alias(
         match query_storage_value::<_, String>(context.client(), &ibc_trace_key)
             .await
         {
-            Ok(ibc_trace) => get_ibc_trace_alias(context, ibc_trace).await,
+            Ok(ibc_trace) => {
+                context.wallet().await.lookup_ibc_token_alias(ibc_trace)
+            }
             Err(_) => token.to_string(),
         }
     } else {
@@ -763,60 +762,51 @@ async fn query_tokens(
     if tokens.is_empty() {
         base_token = None;
     }
-    let prefixes = match (base_token, owner) {
-        (Some(base_token), Some(owner)) => vec![
-            ibc_trace_key_prefix(Some(base_token.to_string())),
-            ibc_trace_key_prefix(Some(owner.to_string())),
-        ],
-        (Some(base_token), None) => {
-            vec![ibc_trace_key_prefix(Some(base_token.to_string()))]
-        }
-        (None, Some(_)) => {
-            // Check all IBC denoms because the owner might not know IBC token
-            // transfers in the same chain
-            vec![ibc_trace_key_prefix(None)]
-        }
-        (None, None) => vec![ibc_trace_key_prefix(None)],
-    };
-
-    for prefix in prefixes {
-        let ibc_denoms = query_storage_prefix::<String>(context, &prefix).await;
-        if let Some(ibc_denoms) = ibc_denoms {
-            for (key, ibc_trace) in ibc_denoms {
-                if let Some((_, hash)) = is_ibc_trace_key(&key) {
-                    let ibc_denom_alias =
-                        get_ibc_trace_alias(context, ibc_trace).await;
-                    let hash: IbcTokenHash = hash.parse().expect(
-                        "Parsing an IBC token hash from storage shouldn't fail",
-                    );
-                    let ibc_token =
-                        Address::Internal(InternalAddress::IbcToken(hash));
-                    tokens.insert(ibc_denom_alias, ibc_token);
-                }
+    match rpc::query_ibc_tokens(
+        context,
+        base_token.map(|t| t.to_string()),
+        owner,
+    )
+    .await
+    {
+        Ok(ibc_tokens) => {
+            for (trace, addr) in ibc_tokens {
+                let ibc_trace_alias =
+                    context.wallet().await.lookup_ibc_token_alias(trace);
+                tokens.insert(ibc_trace_alias, addr);
             }
+        }
+        Err(e) => {
+            edisplay_line!(context.io(), "IBC token query failed: {}", e);
         }
     }
     tokens
 }
 
-async fn get_ibc_trace_alias(
+pub async fn query_ibc_tokens(
     context: &impl Namada,
-    ibc_trace: impl AsRef<str>,
-) -> String {
+    args: args::QueryIbcToken,
+) {
     let wallet = context.wallet().await;
-    is_ibc_denom(&ibc_trace)
-        .map(|(trace_path, base_token)| {
-            let base_token_alias = match Address::decode(&base_token) {
-                Ok(base_token) => wallet.lookup_alias(&base_token),
-                Err(_) => base_token,
-            };
-            if trace_path.is_empty() {
-                base_token_alias
-            } else {
-                format!("{}/{}", trace_path, base_token_alias)
+    let token = args.token.map(|t| {
+        wallet
+            .find_address(&t)
+            .map(|addr| addr.to_string())
+            .unwrap_or(t)
+    });
+    let owner = args.owner.map(|o| o.address().unwrap_or(MASP));
+    match rpc::query_ibc_tokens(context, token, owner.as_ref()).await {
+        Ok(ibc_tokens) => {
+            for (trace, addr) in ibc_tokens {
+                let alias =
+                    context.wallet().await.lookup_ibc_token_alias(trace);
+                display_line!(context.io(), "{}: {}", alias, addr);
             }
-        })
-        .unwrap_or(ibc_trace.as_ref().to_string())
+        }
+        Err(e) => {
+            edisplay_line!(context.io(), "IBC token query failed: {}", e);
+        }
+    }
 }
 
 /// Query votes for the given proposal

@@ -12,6 +12,7 @@ use masp_primitives::sapling::Node;
 use namada_account::Account;
 use namada_core::address::{Address, InternalAddress};
 use namada_core::hash::Hash;
+use namada_core::ibc::IbcTokenHash;
 use namada_core::key::common;
 use namada_core::storage::{
     BlockHeight, BlockResults, Epoch, Key, PrefixValue,
@@ -1358,6 +1359,48 @@ pub async fn format_denominated_amount(
     denominate_amount(client, io, token, amount)
         .await
         .to_string()
+}
+
+/// Look up IBC tokens. The given base token can be non-Namada token.
+pub async fn query_ibc_tokens<N: Namada>(
+    context: &N,
+    base_token: Option<String>,
+    owner: Option<&Address>,
+) -> Result<BTreeMap<String, Address>, Error> {
+    // Check the base token
+    let prefixes = match (base_token, owner) {
+        (Some(base_token), Some(owner)) => vec![
+            ibc_trace_key_prefix(Some(base_token)),
+            ibc_trace_key_prefix(Some(owner.to_string())),
+        ],
+        (Some(base_token), None) => {
+            vec![ibc_trace_key_prefix(Some(base_token))]
+        }
+        _ => {
+            // Check all IBC denoms because the owner might not know IBC token
+            // transfers in the same chain
+            vec![ibc_trace_key_prefix(None)]
+        }
+    };
+
+    let mut tokens = BTreeMap::new();
+    for prefix in prefixes {
+        let ibc_traces =
+            query_storage_prefix::<_, String>(context, &prefix).await?;
+        if let Some(ibc_traces) = ibc_traces {
+            for (key, ibc_trace) in ibc_traces {
+                if let Some((_, hash)) = is_ibc_trace_key(&key) {
+                    let hash: IbcTokenHash = hash.parse().expect(
+                        "Parsing an IBC token hash from storage shouldn't fail",
+                    );
+                    let ibc_token =
+                        Address::Internal(InternalAddress::IbcToken(hash));
+                    tokens.insert(ibc_trace, ibc_token);
+                }
+            }
+        }
+    }
+    Ok(tokens)
 }
 
 /// Look up the IBC denomination from a IbcToken.
