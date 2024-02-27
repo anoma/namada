@@ -630,7 +630,6 @@ mod tests {
     use wasmer_vm::TrapCode;
 
     use super::*;
-    use crate::hash::Hash;
     use crate::state::testing::TestState;
     use crate::tx::data::eval_vp::EvalVp;
     use crate::vm::host_env::TxRuntimeError;

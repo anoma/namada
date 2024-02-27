@@ -654,16 +654,14 @@ where
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_process_proposal {
-    use namada::core::ethereum_events::EthereumEvent;
     use namada::core::key::*;
     use namada::core::storage::Epoch;
-    use namada::core::time::DateTimeUtc;
+    use namada::replay_protection;
     use namada::state::StorageWrite;
     use namada::token::{read_denom, Amount, DenominatedAmount};
     use namada::tx::data::Fee;
     use namada::tx::{Code, Data, Signature, Signed};
     use namada::vote_ext::{bridge_pool_roots, ethereum_events};
-    use namada::{replay_protection, token};
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{

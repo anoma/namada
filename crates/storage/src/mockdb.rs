@@ -18,7 +18,7 @@ use namada_core::{decode, encode, ethereum_events, ethereum_structs};
 use namada_merkle_tree::{
     base_tree_key_prefix, subtree_key_prefix, MerkleTreeStoresRead, StoreType,
 };
-use {namada_core, namada_replay_protection as replay_protection};
+use namada_replay_protection as replay_protection;
 
 use crate::conversion_state::ConversionState;
 use crate::db::{

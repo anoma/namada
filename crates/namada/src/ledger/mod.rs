@@ -258,7 +258,7 @@ mod test {
 
         async fn perform<R>(&self, _request: R) -> Result<R::Output, RpcError>
         where
-            R: tendermint_rpc::SimpleRequest,
+            R: namada_sdk::tendermint_rpc::SimpleRequest,
         {
             Ok(R::Response::from_string("TODO").unwrap().into())
         }

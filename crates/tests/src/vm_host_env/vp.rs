@@ -106,8 +106,6 @@ impl TestVpEnv {
 /// invoked host environment functions and so it must be initialized
 /// before the test.
 mod native_vp_host_env {
-
-    use std::cell::RefCell;
     use std::pin::Pin;
 
     // TODO replace with `std::concat_idents` once stabilized (https://github.com/rust-lang/rust/issues/29599)

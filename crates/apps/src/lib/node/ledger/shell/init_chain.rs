@@ -9,6 +9,7 @@ use namada::account::protocol_pk_key;
 use namada::core::hash::Hash as CodeHash;
 use namada::core::time::{TimeZone, Utc};
 use namada::ledger::parameters::Parameters;
+use namada::ledger::{ibc, pos};
 use namada::proof_of_stake::BecomeValidator;
 use namada::state::StorageWrite;
 use namada::token::{credit_tokens, write_denom};

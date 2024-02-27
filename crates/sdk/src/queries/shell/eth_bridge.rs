@@ -831,9 +831,7 @@ mod test_ethbridge_router {
     use namada_core::eth_bridge_pool::{
         GasFee, TransferToEthereum, TransferToEthereumKind,
     };
-    use namada_core::voting_power::{
-        EthBridgeVotingPower, FractionalVotingPower,
-    };
+    use namada_core::voting_power::EthBridgeVotingPower;
     use namada_ethereum_bridge::protocol::transactions::validator_set_update::aggregate_votes;
     use namada_ethereum_bridge::storage::bridge_pool::{
         get_pending_key, get_signed_root_key, BridgePoolTree,

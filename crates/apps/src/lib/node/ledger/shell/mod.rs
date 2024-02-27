@@ -1422,6 +1422,7 @@ mod test_utils {
 
     use super::*;
     use crate::config::ethereum_bridge::ledger::ORACLE_CHANNEL_BUFFER_SIZE;
+    use crate::facade::tendermint::abci::types::Misbehavior;
     use crate::facade::tendermint_proto::google::protobuf::Timestamp;
     use crate::facade::tendermint_proto::v0_37::abci::{
         RequestPrepareProposal, RequestProcessProposal,
@@ -2066,9 +2067,7 @@ mod test_utils {
 
 #[cfg(test)]
 mod shell_tests {
-    use namada::core::ethereum_events::EthereumEvent;
-    use namada::core::key::RefTo;
-    use namada::core::storage::{BlockHeight, Epoch};
+    use namada::core::storage::Epoch;
     use namada::replay_protection;
     use namada::token::read_denom;
     use namada::tx::data::protocol::{ProtocolTx, ProtocolTxType};

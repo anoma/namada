@@ -222,7 +222,6 @@ mod tests {
     use namada_tx::{Code, Data, Section, Signature};
 
     use super::*;
-    use crate::address::{Address, InternalAddress};
     use crate::core::address::testing::{
         established_address_1, established_address_2, nam,
     };
