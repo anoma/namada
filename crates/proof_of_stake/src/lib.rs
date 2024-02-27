@@ -27,6 +27,8 @@ use std::cmp::{self};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 pub use error::*;
+use namada_core::event::EmitEvents;
+use namada_core::tendermint::abci::types::Misbehavior;
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::dec::Dec;
 use namada_core::types::key::common;
@@ -2766,5 +2768,111 @@ where
             offset,
         )?;
     }
+    Ok(())
+}
+
+/// Apply PoS updates for a block
+pub fn finalize_block<S>(
+    storage: &mut S,
+    _events: &mut impl EmitEvents,
+    is_new_epoch: bool,
+    validator_set_update_epoch: Epoch,
+    votes: Vec<VoteInfo>,
+    byzantine_validators: Vec<Misbehavior>,
+) -> namada_storage::Result<()>
+where
+    S: StorageWrite + StorageRead,
+{
+    let height = storage.get_block_height()?;
+    let current_epoch = storage.get_block_epoch()?;
+    let pos_params = storage::read_pos_params(storage)?;
+
+    if is_new_epoch {
+        // Copy the new_epoch + pipeline_len - 1 validator set into
+        // new_epoch + pipeline_len
+        validator_set_update::copy_validator_sets_and_positions(
+            storage,
+            &pos_params,
+            current_epoch,
+            current_epoch + pos_params.pipeline_len,
+        )?;
+
+        // Compute the total stake of the consensus validator set and record
+        // it in storage
+        compute_and_store_total_consensus_stake(storage, current_epoch)?;
+    }
+
+    // Invariant: Has to be applied before `record_slashes_from_evidence`
+    // because it potentially needs to be able to read validator state from
+    // previous epoch and jailing validator removes the historical state
+    if !votes.is_empty() {
+        rewards::log_block_rewards(
+            storage,
+            votes.clone(),
+            height,
+            current_epoch,
+            is_new_epoch,
+        )?;
+    }
+
+    // Invariant: This has to be applied after
+    // `copy_validator_sets_and_positions` and before `self.update_epoch`.
+    slashing::record_slashes_from_evidence(
+        storage,
+        byzantine_validators,
+        &pos_params,
+        current_epoch,
+        validator_set_update_epoch,
+    )?;
+
+    // Invariant: This has to be applied after
+    // `copy_validator_sets_and_positions` if we're starting a new epoch
+    if is_new_epoch {
+        // Invariant: Process slashes before inflation as they may affect
+        // the rewards in the current epoch.
+
+        // Process and apply slashes that have already been recorded for the
+        // current epoch
+        if let Err(err) = slashing::process_slashes(storage, current_epoch) {
+            tracing::error!(
+                "Error while processing slashes queued for epoch {}: {}",
+                current_epoch,
+                err
+            );
+            panic!("Error while processing slashes");
+        }
+    }
+
+    // Consensus set liveness check
+    if !votes.is_empty() {
+        let vote_height = height.prev_height();
+        let epoch_of_votes =
+            storage.get_pred_epochs()?.get_epoch(vote_height).expect(
+                "Should always find an epoch when looking up the vote height \
+                 before recording liveness data.",
+            );
+        record_liveness_data(
+            storage,
+            &votes,
+            epoch_of_votes,
+            vote_height,
+            &pos_params,
+        )?;
+    }
+
+    // Jail validators for inactivity
+    jail_for_liveness(
+        storage,
+        &pos_params,
+        current_epoch,
+        validator_set_update_epoch,
+    )?;
+
+    if is_new_epoch {
+        // Prune liveness data from validators that are no longer in the
+        // consensus set
+        prune_liveness_data(storage, current_epoch)?;
+    }
+
     Ok(())
 }

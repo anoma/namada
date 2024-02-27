@@ -8,25 +8,24 @@ use namada::ledger::events::EventType;
 use namada::ledger::gas::{GasMetering, TxGasMeter};
 use namada::ledger::pos::namada_proof_of_stake;
 use namada::ledger::protocol::{self, WrapperArgs};
+use namada::proof_of_stake;
 use namada::proof_of_stake::storage::{
-    find_validator_by_raw_hash, read_last_block_proposer_address,
-    write_last_block_proposer_address,
+    find_validator_by_raw_hash, write_last_block_proposer_address,
 };
 use namada::state::wl_storage::WriteLogAndStorage;
 use namada::state::write_log::StorageModification;
 use namada::state::{
     ResultExt, StorageRead, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY,
 };
-use namada::token::conversion::update_allowed_conversions;
 use namada::tx::data::protocol::ProtocolTxType;
 use namada::types::key::tm_raw_hash_to_string;
 use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
 use namada::vote_ext::ethereum_events::MultiSignedEthEvent;
 use namada::vote_ext::ethereum_tx_data_variants;
+use namada_sdk::tx::new_tx_event;
 
-use super::governance::execute_governance_proposals;
 use super::*;
-use crate::facade::tendermint::abci::types::{Misbehavior, VoteInfo};
+use crate::facade::tendermint::abci::types::VoteInfo;
 use crate::node::ledger::shell::stats::InternalStats;
 
 impl<D, H> Shell<D, H>
@@ -61,8 +60,7 @@ where
         let mut response = shim::response::FinalizeBlock::default();
 
         // Begin the new block and check if a new epoch has begun
-        let (height, new_epoch) =
-            self.update_state(req.header, req.hash, req.byzantine_validators);
+        let (height, new_epoch) = self.update_state(req.header, req.hash);
 
         let (current_epoch, _gas) = self.wl_storage.storage.get_current_epoch();
         let update_for_tendermint = matches!(
@@ -96,98 +94,41 @@ where
                 .expect("Failed tx hashes finalization")
         }
 
-        let pos_params =
-            namada_proof_of_stake::storage::read_pos_params(&self.wl_storage)?;
-
-        if new_epoch {
-            update_allowed_conversions(&mut self.wl_storage)?;
-
-            execute_governance_proposals(self, &mut response)?;
-
-            // Copy the new_epoch + pipeline_len - 1 validator set into
-            // new_epoch + pipeline_len
-            namada_proof_of_stake::validator_set_update::copy_validator_sets_and_positions(
-                &mut self.wl_storage,
-                &pos_params,
-                current_epoch,
-                current_epoch + pos_params.pipeline_len,
-            )?;
-
-            // Compute the total stake of the consensus validator set and record
-            // it in storage
-            namada_proof_of_stake::compute_and_store_total_consensus_stake(
-                &mut self.wl_storage,
-                current_epoch,
-            )?;
-        }
-
+        let emit_events = &mut response.events;
         // Get the actual votes from cometBFT in the preferred format
         let votes = pos_votes_from_abci(&self.wl_storage, &req.votes);
-
-        // Invariant: Has to be applied before `record_slashes_from_evidence`
-        // because it potentially needs to be able to read validator state from
-        // previous epoch and jailing validator removes the historical state
-        if !votes.is_empty() {
-            self.log_block_rewards(
-                votes.clone(),
-                height,
-                current_epoch,
-                new_epoch,
-            )?;
-        }
-
-        // Invariant: This has to be applied after
-        // `copy_validator_sets_and_positions` and before `self.update_epoch`.
-        self.record_slashes_from_evidence();
-        // Invariant: This has to be applied after
-        // `copy_validator_sets_and_positions` if we're starting a new epoch
-        if new_epoch {
-            // Invariant: Process slashes before inflation as they may affect
-            // the rewards in the current epoch.
-            self.process_slashes();
-            self.apply_inflation(current_epoch, &mut response)?;
-        }
-
-        // Consensus set liveness check
-        if !votes.is_empty() {
-            let vote_height = height.prev_height();
-            let epoch_of_votes = self
-                .wl_storage
-                .storage
-                .block
-                .pred_epochs
-                .get_epoch(vote_height)
-                .expect(
-                    "Should always find an epoch when looking up the vote \
-                     height before recording liveness data.",
-                );
-            namada_proof_of_stake::record_liveness_data(
-                &mut self.wl_storage,
-                &votes,
-                epoch_of_votes,
-                vote_height,
-                &pos_params,
-            )?;
-        }
-
         let validator_set_update_epoch =
             self.get_validator_set_update_epoch(current_epoch);
 
-        // Jail validators for inactivity
-        namada_proof_of_stake::jail_for_liveness(
+        // Sub-system updates:
+        // - Governance - applied first in case a proposal changes any of the
+        //   other syb-systems
+        governance::finalize_block(self, emit_events, new_epoch)?;
+        // - Token
+        token::finalize_block(&mut self.wl_storage, emit_events, new_epoch)?;
+        // - PoS
+        //    - Must be applied after governance in case it changes PoS params
+        proof_of_stake::finalize_block(
             &mut self.wl_storage,
-            &pos_params,
-            current_epoch,
+            emit_events,
+            new_epoch,
             validator_set_update_epoch,
+            votes,
+            req.byzantine_validators,
         )?;
 
+        // Take IBC events that may be emitted from PGF
+        for ibc_event in self.wl_storage.write_log_mut().take_ibc_events() {
+            let mut event = Event::from(ibc_event.clone());
+            // Add the height for IBC event query
+            let height = self.wl_storage.storage.get_last_block_height() + 1;
+            event["height"] = height.to_string();
+            response.events.push(event);
+        }
+
         if new_epoch {
-            // Prune liveness data from validators that are no longer in the
-            // consensus set
-            namada_proof_of_stake::prune_liveness_data(
-                &mut self.wl_storage,
-                current_epoch,
-            )?;
+            // Apply PoS and PGF inflation
+            self.apply_inflation(current_epoch)?;
         }
 
         let mut stats = InternalStats::default();
@@ -224,7 +165,7 @@ where
             {
                 let mut tx_event = match tx.header().tx_type {
                     TxType::Wrapper(_) | TxType::Protocol(_) => {
-                        Event::new_tx_event(&tx, height.0)
+                        new_tx_event(&tx, height.0)
                     }
                     _ => {
                         tracing::error!(
@@ -257,7 +198,7 @@ where
             if ResultCode::from_u32(processed_tx.result.code).unwrap()
                 != ResultCode::Ok
             {
-                let mut tx_event = Event::new_tx_event(&tx, height.0);
+                let mut tx_event = new_tx_event(&tx, height.0);
                 tx_event["code"] = processed_tx.result.code.to_string();
                 tx_event["info"] =
                     format!("Tx rejected: {}", &processed_tx.result.info);
@@ -285,7 +226,7 @@ where
             ) = match &tx_header.tx_type {
                 TxType::Wrapper(wrapper) => {
                     stats.increment_wrapper_txs();
-                    let tx_event = Event::new_tx_event(&tx, height.0);
+                    let tx_event = new_tx_event(&tx, height.0);
                     let gas_meter = TxGasMeter::new(wrapper.gas_limit);
                     (
                         tx_event,
@@ -306,7 +247,7 @@ where
                         .tx_queue
                         .pop()
                         .expect("Missing wrapper tx in queue");
-                    let mut event = Event::new_tx_event(&tx, height.0);
+                    let mut event = new_tx_event(&tx, height.0);
 
                     match inner {
                         DecryptedTx::Decrypted => {
@@ -353,7 +294,7 @@ where
                     | ProtocolTxType::BridgePool
                     | ProtocolTxType::ValSetUpdateVext
                     | ProtocolTxType::ValidatorSetUpdate => (
-                        Event::new_tx_event(&tx, height.0),
+                        new_tx_event(&tx, height.0),
                         None,
                         TxGasMeter::new_from_sub_limit(0.into()),
                         None,
@@ -378,7 +319,7 @@ where
                             }
                         }
                         (
-                            Event::new_tx_event(&tx, height.0),
+                            new_tx_event(&tx, height.0),
                             None,
                             TxGasMeter::new_from_sub_limit(0.into()),
                             None,
@@ -406,7 +347,7 @@ where
                             }
                         }
                         (
-                            Event::new_tx_event(&tx, height.0),
+                            new_tx_event(&tx, height.0),
                             None,
                             TxGasMeter::new_from_sub_limit(0.into()),
                             None,
@@ -647,7 +588,6 @@ where
         &mut self,
         header: Header,
         hash: BlockHash,
-        byzantine_validators: Vec<Misbehavior>,
     ) -> (BlockHeight, bool) {
         let height = self.wl_storage.storage.get_last_block_height() + 1;
 
@@ -661,8 +601,6 @@ where
             .storage
             .set_header(header)
             .expect("Setting a header shouldn't fail");
-
-        self.byzantine_validators = byzantine_validators;
 
         let new_epoch = self
             .wl_storage
@@ -694,11 +632,7 @@ where
     /// account, then update the reward products of the validators. This is
     /// executed while finalizing the first block of a new epoch and is applied
     /// with respect to the previous epoch.
-    fn apply_inflation(
-        &mut self,
-        current_epoch: Epoch,
-        response: &mut shim::response::FinalizeBlock,
-    ) -> Result<()> {
+    fn apply_inflation(&mut self, current_epoch: Epoch) -> Result<()> {
         let last_epoch = current_epoch.prev();
 
         // Get the number of blocks in the last epoch
@@ -724,55 +658,7 @@ where
             &mut self.wl_storage,
             namada::ibc::transfer_over_ibc,
         )?;
-        for ibc_event in self.wl_storage.write_log_mut().take_ibc_events() {
-            let mut event = Event::from(ibc_event.clone());
-            // Add the height for IBC event query
-            let height = self.wl_storage.storage.get_last_block_height() + 1;
-            event["height"] = height.to_string();
-            response.events.push(event);
-        }
 
-        Ok(())
-    }
-
-    // Process the proposer and votes in the block to assign their PoS rewards.
-    fn log_block_rewards(
-        &mut self,
-        votes: Vec<namada_proof_of_stake::types::VoteInfo>,
-        height: BlockHeight,
-        current_epoch: Epoch,
-        new_epoch: bool,
-    ) -> Result<()> {
-        // Read the block proposer of the previously committed block in storage
-        // (n-1 if we are in the process of finalizing n right now).
-        match read_last_block_proposer_address(&self.wl_storage)? {
-            Some(proposer_address) => {
-                tracing::debug!(
-                    "Found last block proposer: {proposer_address}"
-                );
-                namada_proof_of_stake::rewards::log_block_rewards(
-                    &mut self.wl_storage,
-                    if new_epoch {
-                        current_epoch.prev()
-                    } else {
-                        current_epoch
-                    },
-                    &proposer_address,
-                    votes,
-                )?;
-            }
-            None => {
-                if height > BlockHeight::default().next_height() {
-                    tracing::error!(
-                        "Can't find the last block proposer at height {height}"
-                    );
-                } else {
-                    tracing::debug!(
-                        "No last block proposer at height {height}"
-                    );
-                }
-            }
-        }
         Ok(())
     }
 
@@ -910,6 +796,7 @@ mod test_finalize_block {
         liveness_missed_votes_handle, liveness_sum_missed_votes_handle,
         read_consensus_validator_set_addresses,
     };
+    use namada_sdk::tendermint::abci::types::MisbehaviorKind;
     use namada_test_utils::tx_data::TxWriteData;
     use namada_test_utils::TestWasms;
     use test_log::test;
