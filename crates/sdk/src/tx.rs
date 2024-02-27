@@ -1773,12 +1773,33 @@ pub async fn build_bond(
             .await?;
 
     // Check that the source address exists on chain
+    let mut is_src_also_val = false;
     let source = match source.clone() {
-        Some(source) => source_exists_or_err(source, tx_args.force, context)
-            .await
-            .map(Some),
+        Some(source) => {
+            is_src_also_val =
+                rpc::is_validator(context.client(), &source).await?;
+            source_exists_or_err(source, tx_args.force, context)
+                .await
+                .map(Some)
+        }
         None => Ok(source.clone()),
     }?;
+
+    // Check that the source is not a different validator bonding to validator
+    if is_src_also_val && source != Some(validator.clone()) {
+        edisplay_line!(
+            context.io(),
+            "The given source address {} is a validator. A validator is \
+             prohibited from bonding to another validator.",
+            &source.clone().unwrap()
+        );
+        if !tx_args.force {
+            return Err(Error::from(TxSubmitError::InvalidBondPair(
+                source.clone().unwrap(),
+                validator.clone(),
+            )));
+        }
+    }
 
     // Give a bonding warning based on the pipeline state
     let params: PosParams = rpc::get_pos_params(context.client()).await?;
