@@ -439,7 +439,7 @@ mod tests {
         tx_env.spawn_accounts([&vp_owner, &source, &token]);
         // write the denomination of NAM into storage
         token::write_denom(
-            &mut tx_env.wl_storage,
+            &mut tx_env.state,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         )
@@ -531,7 +531,7 @@ mod tests {
         tx_env.credit_tokens(&vp_owner, &token, amount);
         // write the denomination of NAM into storage
         token::write_denom(
-            &mut tx_env.wl_storage,
+            &mut tx_env.state,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         )
@@ -615,7 +615,7 @@ mod tests {
         tx_env.credit_tokens(&vp_owner, &token, amount);
         // write the denomination of NAM into storage
         token::write_denom(
-            &mut tx_env.wl_storage,
+            &mut tx_env.state,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         )
@@ -678,7 +678,7 @@ mod tests {
         tx_env.credit_tokens(&vp_owner, &token, amount);
         // write the denomination of NAM into storage
         token::write_denom(
-            &mut tx_env.wl_storage,
+            &mut tx_env.state,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         )
@@ -739,7 +739,7 @@ mod tests {
         tx_env.credit_tokens(&vp_owner, &token, amount);
         // write the denomination of NAM into storage
         token::write_denom(
-            &mut tx_env.wl_storage,
+            &mut tx_env.state,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         )
@@ -810,7 +810,7 @@ mod tests {
         tx_env.credit_tokens(&source, &token, amount);
         // write the denomination of NAM into storage
         token::write_denom(
-            &mut tx_env.wl_storage,
+            &mut tx_env.state,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         )

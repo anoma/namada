@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod test_bridge_pool_vp {
+    use std::cell::RefCell;
     use std::path::PathBuf;
 
     use borsh::BorshDeserialize;
@@ -13,10 +14,12 @@ mod test_bridge_pool_vp {
     use namada::core::key::{common, ed25519, SecretKey};
     use namada::core::token::Amount;
     use namada::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
+    use namada::gas::VpGasMeter;
     use namada::ledger::native_vp::ethereum_bridge::bridge_pool_vp::BridgePoolVp;
     use namada::tx::Tx;
     use namada_apps::wallet::defaults::{albert_address, bertha_address};
     use namada_apps::wasm_loader;
+    use namada_core::validity_predicate::VpSentinel;
     use namada_sdk::eth_bridge::{
         wrapped_erc20s, Contracts, Erc20WhitelistEntry, EthereumBridgeParams,
         UpgradeableContract,
@@ -82,7 +85,7 @@ mod test_bridge_pool_vp {
             },
         };
         // initialize Ethereum bridge storage
-        config.init_storage(&mut env.wl_storage);
+        config.init_storage(&mut env.state);
         // initialize Bertha's account
         env.spawn_accounts([&albert_address(), &bertha_address(), &nam()]);
         // enrich Albert
@@ -111,9 +114,13 @@ mod test_bridge_pool_vp {
         tx_host_env::set(env);
         let mut tx_env = tx_host_env::take();
         tx_env.execute_tx().expect("Test failed.");
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &tx_env.gas_meter.borrow(),
+        ));
+        let sentinel = RefCell::new(VpSentinel::default());
         let vp_env = TestNativeVpEnv::from_tx_env(tx_env, BRIDGE_POOL_ADDRESS);
         vp_env
-            .validate_tx(|ctx| BridgePoolVp { ctx })
+            .validate_tx(&gas_meter, &sentinel, |ctx| BridgePoolVp { ctx })
             .expect("Test failed")
     }
 

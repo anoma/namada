@@ -230,16 +230,15 @@ where
     }
 
     let mut status = TransferToEthereumStatus {
-        queried_height: ctx.wl_storage.storage.get_last_block_height(),
+        queried_height: ctx.state.in_mem().get_last_block_height(),
         ..Default::default()
     };
 
     // check which transfers in the Bridge pool match the requested hashes
     let merkle_tree = ctx
-        .wl_storage
-        .storage
+        .state
         .get_merkle_tree(
-            ctx.wl_storage.storage.get_last_block_height(),
+            ctx.state.in_mem().get_last_block_height(),
             Some(StoreType::BridgePool),
         )
         .expect("We should always be able to read the database");
@@ -338,7 +337,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let ethbridge_queries = ctx.wl_storage.ethbridge_queries();
+    let ethbridge_queries = ctx.state.ethbridge_queries();
 
     let whitelisted = ethbridge_queries.is_token_whitelisted(&asset);
     let supply = ethbridge_queries
@@ -363,7 +362,7 @@ where
     H: 'static + StorageHasher + Sync,
     T: BorshDeserialize,
 {
-    let Some(contract) = StorageRead::read(ctx.wl_storage, key)? else {
+    let Some(contract) = StorageRead::read(ctx.state, key)? else {
         return Err(namada_storage::Error::SimpleMessage(
             "Failed to read contract: The Ethereum bridge \
              storage is not initialized",
@@ -408,7 +407,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     Ok(read_ethereum_bridge_pool_at_height(
-        ctx.wl_storage.storage.get_last_block_height(),
+        ctx.state.in_mem().get_last_block_height(),
         ctx,
     ))
 }
@@ -424,7 +423,7 @@ where
 {
     // get the latest signed merkle root of the Ethereum bridge pool
     let (_, height) = ctx
-        .wl_storage
+        .state
         .ethbridge_queries()
         .get_signed_bridge_pool_root()
         .ok_or(namada_storage::Error::SimpleMessage(
@@ -446,8 +445,7 @@ where
     // get the backing store of the merkle tree corresponding
     // at the specified height.
     let merkle_tree = ctx
-        .wl_storage
-        .storage
+        .state
         .get_merkle_tree(height, Some(StoreType::BridgePool))
         .expect("We should always be able to read the database");
     let stores = merkle_tree.stores();
@@ -460,9 +458,8 @@ where
         .keys()
         .map(|hash| {
             let value = ctx
-                .wl_storage
-                .storage
-                .read_with_height(&get_key_from_hash(hash), height)
+                .state
+                .db_read_with_height(&get_key_from_hash(hash), height)
                 .unwrap()
                 .0
                 .unwrap();
@@ -490,7 +487,7 @@ where
     {
         // get the latest signed merkle root of the Ethereum bridge pool
         let (signed_root, height) = ctx
-            .wl_storage
+            .state
             .ethbridge_queries()
             .get_signed_bridge_pool_root()
             .ok_or(namada_storage::Error::SimpleMessage(
@@ -502,7 +499,7 @@ where
         // make sure a relay attempt won't happen before the new signed
         // root has had time to be generated
         let latest_bp_nonce =
-            ctx.wl_storage.ethbridge_queries().get_bridge_pool_nonce();
+            ctx.state.ethbridge_queries().get_bridge_pool_nonce();
         if latest_bp_nonce != signed_root.data.1 {
             return Err(namada_storage::Error::Custom(CustomError(
                 format!(
@@ -516,8 +513,7 @@ where
 
         // get the merkle tree corresponding to the above root.
         let tree = ctx
-            .wl_storage
-            .storage
+            .state
             .get_merkle_tree(height, Some(StoreType::BridgePool))
             .into_storage_result()?;
         // from the hashes of the transfers, get the actual values.
@@ -526,7 +522,7 @@ where
             .iter()
             .filter_map(|hash| {
                 let key = get_key_from_hash(hash);
-                match ctx.wl_storage.read_bytes(&key) {
+                match ctx.state.read_bytes(&key) {
                     Ok(Some(bytes)) => Some((key, bytes)),
                     _ => {
                         missing_hashes.push(hash);
@@ -565,7 +561,7 @@ where
         ) {
             Ok(BridgePool(proof)) => {
                 let (validator_args, voting_powers) = ctx
-                    .wl_storage
+                    .state
                     .ethbridge_queries()
                     .get_bridge_validator_set(None);
                 let relay_proof = ethereum_structs::RelayProof {
@@ -616,7 +612,7 @@ where
 {
     let mut pending_events = HashMap::new();
     for (mut key, value) in ctx
-        .wl_storage
+        .state
         .iter_prefix(&eth_msgs_prefix())?
         .filter_map(|(k, v, _)| {
             let key = Key::from_str(&k).expect(
@@ -637,11 +633,8 @@ where
         *key.segments.last_mut().unwrap() =
             DbKeySeg::StringSeg(Keys::segments().seen.into());
         // check if the event has been seen
-        let is_seen = ctx
-            .wl_storage
-            .read::<bool>(&key)
-            .into_storage_result()?
-            .expect(
+        let is_seen =
+            ctx.state.read::<bool>(&key).into_storage_result()?.expect(
                 "Iterating over storage should not yield keys without values.",
             );
         if is_seen {
@@ -655,18 +648,18 @@ where
             *key.segments.last_mut().unwrap() =
                 DbKeySeg::StringSeg(Keys::segments().voting_power.into());
             let voting_power = ctx
-                .wl_storage
+                .state
                 .read::<EpochedVotingPower>(&key)
                 .into_storage_result()?
                 .expect(
                     "Iterating over storage should not yield keys without \
                      values.",
                 )
-                .fractional_stake(ctx.wl_storage);
+                .fractional_stake(ctx.state);
             for transfer in transfers {
                 let key = get_key_from_hash(&transfer.keccak256());
                 let transfer = ctx
-                    .wl_storage
+                    .state
                     .read::<PendingTransfer>(&key)
                     .into_storage_result()?
                     .expect("The transfer must be present in storage");
@@ -696,7 +689,7 @@ where
                 .into(),
         )));
     }
-    let current_epoch = ctx.wl_storage.storage.last_epoch;
+    let current_epoch = ctx.state.in_mem().last_epoch;
     if epoch > current_epoch.next() {
         return Err(namada_storage::Error::Custom(CustomError(
             format!(
@@ -707,7 +700,7 @@ where
         )));
     }
 
-    if !ctx.wl_storage.ethbridge_queries().valset_upd_seen(epoch) {
+    if !ctx.state.ethbridge_queries().valset_upd_seen(epoch) {
         return Err(namada_storage::Error::Custom(CustomError(
             format!(
                 "Validator set update proof is not yet available for the \
@@ -719,7 +712,7 @@ where
 
     let valset_upd_keys = vote_tallies::Keys::from(&epoch);
     let proof: EthereumProof<VotingPowersMap> =
-        StorageRead::read(ctx.wl_storage, &valset_upd_keys.body())?.expect(
+        StorageRead::read(ctx.state, &valset_upd_keys.body())?.expect(
             "EthereumProof is seen in storage, therefore it must exist",
         );
 
@@ -739,7 +732,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let current_epoch = ctx.wl_storage.storage.last_epoch;
+    let current_epoch = ctx.state.in_mem().last_epoch;
     if epoch > current_epoch.next() {
         Err(namada_storage::Error::Custom(CustomError(
             format!(
@@ -750,7 +743,7 @@ where
         )))
     } else {
         Ok(ctx
-            .wl_storage
+            .state
             .ethbridge_queries()
             .get_bridge_validator_set(Some(epoch))
             .0)
@@ -769,7 +762,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let current_epoch = ctx.wl_storage.storage.last_epoch;
+    let current_epoch = ctx.state.in_mem().last_epoch;
     if epoch > current_epoch.next() {
         Err(namada_storage::Error::Custom(CustomError(
             format!(
@@ -780,7 +773,7 @@ where
         )))
     } else {
         Ok(ctx
-            .wl_storage
+            .state
             .ethbridge_queries()
             .get_governance_validator_set(Some(epoch))
             .0)
@@ -797,7 +790,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let maybe_epoch = ctx.wl_storage.pos_queries().get_epoch(height);
+    let maybe_epoch = ctx.state.pos_queries().get_epoch(height);
     let Some(epoch) = maybe_epoch else {
         return Err(namada_storage::Error::SimpleMessage(
             "The epoch of the requested height does not exist",
@@ -816,14 +809,14 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let current_epoch = ctx.wl_storage.storage.get_current_epoch().0;
+    let current_epoch = ctx.state.in_mem().get_current_epoch().0;
     if epoch > current_epoch + 1u64 {
         return Err(namada_storage::Error::SimpleMessage(
             "The requested epoch cannot be queried",
         ));
     }
     let (_, voting_powers) = ctx
-        .wl_storage
+        .state
         .ethbridge_queries()
         .get_bridge_validator_set(Some(epoch));
     Ok(voting_powers)
@@ -851,7 +844,7 @@ mod test_ethbridge_router {
     use namada_ethereum_bridge::storage::proof::BridgePoolRootProof;
     use namada_ethereum_bridge::storage::whitelist;
     use namada_proof_of_stake::pos_queries::PosQueries;
-    use namada_state::mockdb::MockDBWriteBatch;
+    use namada_storage::mockdb::MockDBWriteBatch;
     use namada_storage::StorageWrite;
     use namada_vote_ext::validator_set_update;
     use namada_vote_ext::validator_set_update::{
@@ -868,16 +861,15 @@ mod test_ethbridge_router {
     async fn test_read_consensus_valset() {
         let mut client = TestClient::new(RPC);
         let epoch = Epoch(0);
-        assert_eq!(client.wl_storage.storage.last_epoch, epoch);
+        assert_eq!(client.state.in_mem().last_epoch, epoch);
 
         // write validator to storage
-        test_utils::init_default_storage(&mut client.wl_storage);
+        test_utils::init_default_storage(&mut client.state);
 
         // commit the changes
         client
-            .wl_storage
-            .storage
-            .commit_block(MockDBWriteBatch)
+            .state
+            .commit_block_from_batch(MockDBWriteBatch)
             .expect("Test failed");
 
         // check the response
@@ -889,13 +881,13 @@ mod test_ethbridge_router {
             .unwrap();
         let expected = {
             let total_power = client
-                .wl_storage
+                .state
                 .pos_queries()
                 .get_total_voting_power(Some(epoch))
                 .into();
 
             let voting_powers_map: VotingPowersMap = client
-                .wl_storage
+                .state
                 .ethbridge_queries()
                 .get_consensus_eth_addresses(Some(epoch))
                 .iter()
@@ -928,16 +920,15 @@ mod test_ethbridge_router {
     #[tokio::test]
     async fn test_read_consensus_valset_too_far_ahead() {
         let mut client = TestClient::new(RPC);
-        assert_eq!(client.wl_storage.storage.last_epoch.0, 0);
+        assert_eq!(client.state.in_mem().last_epoch.0, 0);
 
         // write validator to storage
-        test_utils::init_default_storage(&mut client.wl_storage);
+        test_utils::init_default_storage(&mut client.state);
 
         // commit the changes
         client
-            .wl_storage
-            .storage
-            .commit_block(MockDBWriteBatch)
+            .state
+            .commit_block_from_batch(MockDBWriteBatch)
             .expect("Test failed");
 
         // check the response
@@ -961,10 +952,10 @@ mod test_ethbridge_router {
     #[tokio::test]
     async fn test_read_valset_upd_proof() {
         let mut client = TestClient::new(RPC);
-        assert_eq!(client.wl_storage.storage.last_epoch.0, 0);
+        assert_eq!(client.state.in_mem().last_epoch.0, 0);
 
         // write validator to storage
-        let keys = test_utils::init_default_storage(&mut client.wl_storage);
+        let keys = test_utils::init_default_storage(&mut client.state);
 
         // write proof to storage
         let vext = validator_set_update::Vext {
@@ -979,7 +970,7 @@ mod test_ethbridge_router {
                 .eth_bridge,
         );
         let tx_result = aggregate_votes(
-            &mut client.wl_storage,
+            &mut client.state,
             validator_set_update::VextDigest::singleton(vext.clone()),
             0.into(),
         )
@@ -988,9 +979,8 @@ mod test_ethbridge_router {
 
         // commit the changes
         client
-            .wl_storage
-            .storage
-            .commit_block(MockDBWriteBatch)
+            .state
+            .commit_block_from_batch(MockDBWriteBatch)
             .expect("Test failed");
 
         // check the response
@@ -1005,7 +995,7 @@ mod test_ethbridge_router {
                 EthereumProof::new((1.into(), vext.0.data.voting_powers));
             proof.attach_signature(
                 client
-                    .wl_storage
+                    .state
                     .ethbridge_queries()
                     .get_eth_addr_book(&established_address_1(), Some(0.into()))
                     .expect("Test failed"),
@@ -1022,16 +1012,15 @@ mod test_ethbridge_router {
     #[tokio::test]
     async fn test_read_valset_upd_proof_too_far_ahead() {
         let mut client = TestClient::new(RPC);
-        assert_eq!(client.wl_storage.storage.last_epoch.0, 0);
+        assert_eq!(client.state.in_mem().last_epoch.0, 0);
 
         // write validator to storage
-        test_utils::init_default_storage(&mut client.wl_storage);
+        test_utils::init_default_storage(&mut client.state);
 
         // commit the changes
         client
-            .wl_storage
-            .storage
-            .commit_block(MockDBWriteBatch)
+            .state
+            .commit_block_from_batch(MockDBWriteBatch)
             .expect("Test failed");
 
         // check the response
@@ -1072,15 +1061,15 @@ mod test_ethbridge_router {
         };
 
         // write a transfer into the bridge pool
-        client.wl_storage.storage.block.height = 1.into();
+        client.state.in_mem_mut().block.height = 1.into();
         client
-            .wl_storage
+            .state
             .write(&get_pending_key(&transfer), &transfer)
             .expect("Test failed");
 
         // commit the changes and increase block height
-        client.wl_storage.commit_block().expect("Test failed");
-        client.wl_storage.storage.block.height += 1;
+        client.state.commit_block().expect("Test failed");
+        client.state.in_mem_mut().block.height += 1;
 
         // check the response
         let pool = RPC
@@ -1114,29 +1103,29 @@ mod test_ethbridge_router {
 
         // write a transfer into the bridge pool
         client
-            .wl_storage
+            .state
             .write(&get_pending_key(&transfer), &transfer)
             .expect("Test failed");
 
         // commit the changes and increase block height
-        client.wl_storage.commit_block().expect("Test failed");
-        client.wl_storage.storage.block.height += 1;
+        client.state.commit_block().expect("Test failed");
+        client.state.in_mem_mut().block.height += 1;
 
         // update the pool
         client
-            .wl_storage
+            .state
             .delete(&get_pending_key(&transfer))
             .expect("Test failed");
         let mut transfer2 = transfer;
         transfer2.transfer.amount = 1.into();
         client
-            .wl_storage
+            .state
             .write(&get_pending_key(&transfer2), &transfer2)
             .expect("Test failed");
 
         // commit the changes and increase block height
-        client.wl_storage.commit_block().expect("Test failed");
-        client.wl_storage.storage.block.height += 1;
+        client.state.commit_block().expect("Test failed");
+        client.state.in_mem_mut().block.height += 1;
 
         // check the response
         let pool = RPC
@@ -1169,11 +1158,11 @@ mod test_ethbridge_router {
         };
 
         // write validator to storage
-        test_utils::init_default_storage(&mut client.wl_storage);
+        test_utils::init_default_storage(&mut client.state);
 
         // write a transfer into the bridge pool
         client
-            .wl_storage
+            .state
             .write(&get_pending_key(&transfer), &transfer)
             .expect("Test failed");
 
@@ -1182,23 +1171,23 @@ mod test_ethbridge_router {
             signatures: Default::default(),
             data: (transfer.keccak256(), 0.into()),
         };
-        let written_height = client.wl_storage.storage.block.height;
+        let written_height = client.state.in_mem().block.height;
 
         // commit the changes and increase block height
-        client.wl_storage.commit_block().expect("Test failed");
-        client.wl_storage.storage.block.height += 1;
+        client.state.commit_block().expect("Test failed");
+        client.state.in_mem_mut().block.height += 1;
 
         // update the pool
         let mut transfer2 = transfer.clone();
         transfer2.transfer.amount = 1.into();
         client
-            .wl_storage
+            .state
             .write(&get_pending_key(&transfer2), transfer2)
             .expect("Test failed");
 
         // add the signature for the pool at the previous block height
         client
-            .wl_storage
+            .state
             .write(
                 &get_signed_root_key(),
                 (signed_root.clone(), written_height),
@@ -1206,8 +1195,8 @@ mod test_ethbridge_router {
             .expect("Test failed");
 
         // commit the changes and increase block height
-        client.wl_storage.commit_block().expect("Test failed");
-        client.wl_storage.storage.block.height += 1;
+        client.state.commit_block().expect("Test failed");
+        client.state.in_mem_mut().block.height += 1;
 
         let resp = RPC
             .shell()
@@ -1237,7 +1226,7 @@ mod test_ethbridge_router {
             .expect("Test failed");
 
         let (validator_args, voting_powers) = client
-            .wl_storage
+            .state
             .ethbridge_queries()
             .get_bridge_validator_set(None);
         let relay_proof = ethereum_structs::RelayProof {
@@ -1279,11 +1268,11 @@ mod test_ethbridge_router {
             },
         };
         // write validator to storage
-        test_utils::init_default_storage(&mut client.wl_storage);
+        test_utils::init_default_storage(&mut client.state);
 
         // write a transfer into the bridge pool
         client
-            .wl_storage
+            .state
             .write(&get_pending_key(&transfer), &transfer)
             .expect("Test failed");
 
@@ -1295,33 +1284,31 @@ mod test_ethbridge_router {
 
         // commit the changes and increase block height
         client
-            .wl_storage
-            .storage
-            .commit_block(MockDBWriteBatch)
+            .state
+            .commit_block_from_batch(MockDBWriteBatch)
             .expect("Test failed");
-        client.wl_storage.storage.block.height += 1;
+        client.state.in_mem_mut().block.height += 1;
 
         // update the pool
         let mut transfer2 = transfer;
         transfer2.transfer.amount = 1.into();
         client
-            .wl_storage
+            .state
             .write(&get_pending_key(&transfer2), &transfer2)
             .expect("Test failed");
 
         // add the signature for the pool at the previous block height
         client
-            .wl_storage
+            .state
             .write(&get_signed_root_key(), (signed_root, BlockHeight::from(0)))
             .expect("Test failed");
 
         // commit the changes and increase block height
         client
-            .wl_storage
-            .storage
-            .commit_block(MockDBWriteBatch)
+            .state
+            .commit_block_from_batch(MockDBWriteBatch)
             .expect("Test failed");
-        client.wl_storage.storage.block.height += 1;
+        client.state.in_mem_mut().block.height += 1;
 
         // this is in the pool, but its merkle root has not been signed yet
         let resp = RPC
@@ -1365,11 +1352,11 @@ mod test_ethbridge_router {
             },
         };
         // write validator to storage
-        test_utils::init_default_storage(&mut client.wl_storage);
+        test_utils::init_default_storage(&mut client.state);
 
         // write a transfer into the bridge pool
         client
-            .wl_storage
+            .state
             .write(&get_pending_key(&transfer), &transfer)
             .expect("Test failed");
 
@@ -1378,29 +1365,29 @@ mod test_ethbridge_router {
             signatures: Default::default(),
             data: (transfer.keccak256(), 0.into()),
         };
-        let written_height = client.wl_storage.storage.block.height;
+        let written_height = client.state.in_mem().block.height;
 
         // commit the changes and increase block height
-        client.wl_storage.commit_block().expect("Test failed");
-        client.wl_storage.storage.block.height += 1;
+        client.state.commit_block().expect("Test failed");
+        client.state.in_mem_mut().block.height += 1;
 
         // update the pool
         let mut transfer2 = transfer.clone();
         transfer2.transfer.amount = 1.into();
         client
-            .wl_storage
+            .state
             .write(&get_pending_key(&transfer2), transfer2)
             .expect("Test failed");
 
         // add the signature for the pool at the previous block height
         client
-            .wl_storage
+            .state
             .write(&get_signed_root_key(), (signed_root, written_height))
             .expect("Test failed");
 
         // commit the changes and increase block height
-        client.wl_storage.commit_block().expect("Test failed");
-        client.wl_storage.storage.block.height += 1;
+        client.state.commit_block().expect("Test failed");
+        client.state.in_mem_mut().block.height += 1;
         let resp = RPC
             .shell()
             .eth_bridge()
@@ -1431,11 +1418,11 @@ mod test_ethbridge_router {
         };
         // write validator to storage
         let (_, dummy_validator_stake) = test_utils::default_validator();
-        test_utils::init_default_storage(&mut client.wl_storage);
+        test_utils::init_default_storage(&mut client.state);
 
         // write a transfer into the bridge pool
         client
-            .wl_storage
+            .state
             .write(&get_pending_key(&transfer), &transfer)
             .expect("Test failed");
 
@@ -1449,11 +1436,11 @@ mod test_ethbridge_router {
         let eth_msg_key = vote_tallies::Keys::from(&eth_event);
         let voting_power = FractionalVotingPower::HALF;
         client
-            .wl_storage
+            .state
             .write(&eth_msg_key.body(), eth_event)
             .expect("Test failed");
         client
-            .wl_storage
+            .state
             .write(
                 &eth_msg_key.voting_power(),
                 EpochedVotingPower::from([(
@@ -1463,32 +1450,30 @@ mod test_ethbridge_router {
             )
             .expect("Test failed");
         client
-            .wl_storage
+            .state
             .write(&eth_msg_key.seen(), false)
             .expect("Test failed");
         // commit the changes and increase block height
         client
-            .wl_storage
-            .storage
-            .commit_block(MockDBWriteBatch)
+            .state
+            .commit_block_from_batch(MockDBWriteBatch)
             .expect("Test failed");
-        client.wl_storage.storage.block.height += 1;
+        client.state.in_mem_mut().block.height += 1;
 
         // update the pool
         let mut transfer2 = transfer.clone();
         transfer2.transfer.amount = 1.into();
         client
-            .wl_storage
+            .state
             .write(&get_pending_key(&transfer2), transfer2)
             .expect("Test failed");
 
         // commit the changes and increase block height
         client
-            .wl_storage
-            .storage
-            .commit_block(MockDBWriteBatch)
+            .state
+            .commit_block_from_batch(MockDBWriteBatch)
             .expect("Test failed");
-        client.wl_storage.storage.block.height += 1;
+        client.state.in_mem_mut().block.height += 1;
         let resp = RPC
             .shell()
             .eth_bridge()
@@ -1509,7 +1494,7 @@ mod test_ethbridge_router {
     async fn test_cannot_get_proof_for_removed_transfer() {
         let mut client = TestClient::new(RPC);
         // write validator to storage
-        test_utils::init_default_storage(&mut client.wl_storage);
+        test_utils::init_default_storage(&mut client.state);
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
                 kind: TransferToEthereumKind::Erc20,
@@ -1527,7 +1512,7 @@ mod test_ethbridge_router {
 
         // write a transfer into the bridge pool
         client
-            .wl_storage
+            .state
             .write(&get_pending_key(&transfer), &transfer)
             .expect("Test failed");
 
@@ -1536,29 +1521,29 @@ mod test_ethbridge_router {
             signatures: Default::default(),
             data: (transfer.keccak256(), 0.into()),
         };
-        let written_height = client.wl_storage.storage.block.height;
+        let written_height = client.state.in_mem().block.height;
 
         // commit the changes and increase block height
-        client.wl_storage.commit_block().expect("Test failed");
-        client.wl_storage.storage.block.height += 1;
+        client.state.commit_block().expect("Test failed");
+        client.state.in_mem_mut().block.height += 1;
 
         // update the pool
         let mut transfer2 = transfer.clone();
         transfer2.transfer.amount = 1.into();
         client
-            .wl_storage
+            .state
             .write(&get_pending_key(&transfer2), transfer2)
             .expect("Test failed");
 
         // add the signature for the pool at the previous block height
         client
-            .wl_storage
+            .state
             .write(&get_signed_root_key(), (signed_root, written_height))
             .expect("Test failed");
 
         // commit the changes and increase block height
-        client.wl_storage.commit_block().expect("Test failed");
-        client.wl_storage.storage.block.height += 1;
+        client.state.commit_block().expect("Test failed");
+        client.state.in_mem_mut().block.height += 1;
         // this was in the pool, covered by an old signed Merkle root.
         let resp = RPC
             .shell()
@@ -1581,7 +1566,7 @@ mod test_ethbridge_router {
 
         // remove a transfer from the pool.
         client
-            .wl_storage
+            .state
             .delete(&get_pending_key(&transfer))
             .expect("Test failed");
 
@@ -1613,10 +1598,10 @@ mod test_ethbridge_router {
         const ERC20_TOKEN: EthAddress = EthAddress([0; 20]);
 
         let mut client = TestClient::new(RPC);
-        assert_eq!(client.wl_storage.storage.last_epoch.0, 0);
+        assert_eq!(client.state.in_mem().last_epoch.0, 0);
 
         // initialize storage
-        test_utils::init_default_storage(&mut client.wl_storage);
+        test_utils::init_default_storage(&mut client.state);
 
         // check supply - should be 0
         let result = RPC
@@ -1638,7 +1623,7 @@ mod test_ethbridge_router {
         }
         .into();
         client
-            .wl_storage
+            .state
             .write(&key, supply_amount)
             .expect("Test failed");
         let key = whitelist::Key {
@@ -1646,10 +1631,7 @@ mod test_ethbridge_router {
             suffix: whitelist::KeyType::Cap,
         }
         .into();
-        client
-            .wl_storage
-            .write(&key, cap_amount)
-            .expect("Test failed");
+        client.state.write(&key, cap_amount).expect("Test failed");
 
         // check that the supply was updated
         let result = RPC
@@ -1685,7 +1667,7 @@ mod test_ethbridge_router {
             },
         };
         client
-            .wl_storage
+            .state
             .write(&get_pending_key(&transfer), transfer.clone())
             .expect("Test failed");
 
@@ -1714,7 +1696,7 @@ mod test_ethbridge_router {
         transfer4.transfer.amount = 3.into();
 
         // change block height
-        client.wl_storage.storage.block.height = 1.into();
+        client.state.in_mem_mut().block.height = 1.into();
 
         // write bridge pool signed root
         {
@@ -1722,20 +1704,19 @@ mod test_ethbridge_router {
                 signatures: Default::default(),
                 data: (KeccakHash([0; 32]), 0.into()),
             };
-            let written_height = client.wl_storage.storage.block.height;
+            let written_height = client.state.in_mem().block.height;
             client
-                .wl_storage
+                .state
                 .write(&get_signed_root_key(), (signed_root, written_height))
                 .expect("Test failed");
             client
-                .wl_storage
-                .storage
-                .commit_block(MockDBWriteBatch)
+                .state
+                .commit_block_from_batch(MockDBWriteBatch)
                 .expect("Test failed");
         }
 
         // commit storage changes
-        client.wl_storage.commit_block().expect("Test failed");
+        client.state.commit_block().expect("Test failed");
 
         // check transfer statuses
         let status = RPC

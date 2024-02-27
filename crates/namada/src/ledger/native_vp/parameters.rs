@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 
 use namada_core::address::Address;
 use namada_core::storage::Key;
+use namada_state::StateRead;
 use namada_tx::Tx;
 use thiserror::Error;
 
@@ -21,20 +22,18 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Parameters VP
-pub struct ParametersVp<'a, DB, H, CA>
+pub struct ParametersVp<'a, S, CA>
 where
-    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: namada_state::StorageHasher,
+    S: StateRead,
     CA: WasmCacheAccess,
 {
     /// Context to interact with the host structures.
-    pub ctx: Ctx<'a, DB, H, CA>,
+    pub ctx: Ctx<'a, S, CA>,
 }
 
-impl<'a, DB, H, CA> NativeVp for ParametersVp<'a, DB, H, CA>
+impl<'a, S, CA> NativeVp for ParametersVp<'a, S, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + namada_state::StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     type Error = Error;

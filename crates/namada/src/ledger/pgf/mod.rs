@@ -7,6 +7,7 @@ use std::collections::BTreeSet;
 
 use namada_governance::pgf::storage::keys as pgf_storage;
 use namada_governance::{is_proposal_accepted, pgf};
+use namada_state::StateRead;
 use namada_tx::Tx;
 use thiserror::Error;
 
@@ -30,20 +31,18 @@ pub enum Error {
 }
 
 /// Pgf VP
-pub struct PgfVp<'a, DB, H, CA>
+pub struct PgfVp<'a, S, CA>
 where
-    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: namada_state::StorageHasher,
+    S: StateRead,
     CA: WasmCacheAccess,
 {
     /// Context to interact with the host structures.
-    pub ctx: Ctx<'a, DB, H, CA>,
+    pub ctx: Ctx<'a, S, CA>,
 }
 
-impl<'a, DB, H, CA> NativeVp for PgfVp<'a, DB, H, CA>
+impl<'a, S, CA> NativeVp for PgfVp<'a, S, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + namada_state::StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     type Error = Error;
@@ -111,10 +110,9 @@ where
     }
 }
 
-impl<'a, DB, H, CA> PgfVp<'a, DB, H, CA>
+impl<'a, S, CA> PgfVp<'a, S, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + namada_state::StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     /// Validate a governance parameter

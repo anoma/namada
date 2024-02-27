@@ -1,6 +1,7 @@
 //! Library code for benchmarks provides a wrapper of the ledger's shell
 //! `BenchShell` and helper functions to generate transactions.
 
+use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
@@ -226,7 +227,7 @@ impl Default for BenchShell {
             source: Some(defaults::albert_address()),
         };
         let params =
-            proof_of_stake::storage::read_pos_params(&bench_shell.wl_storage)
+            proof_of_stake::storage::read_pos_params(&bench_shell.state)
                 .unwrap();
         let signed_tx = bench_shell.generate_tx(
             TX_BOND_WASM,
@@ -237,7 +238,7 @@ impl Default for BenchShell {
         );
 
         bench_shell.execute_tx(&signed_tx);
-        bench_shell.wl_storage.commit_tx();
+        bench_shell.state.commit_tx();
 
         // Initialize governance proposal
         let content_section = Section::ExtraData(Code::new(
@@ -263,7 +264,7 @@ impl Default for BenchShell {
         );
 
         bench_shell.execute_tx(&signed_tx);
-        bench_shell.wl_storage.commit_tx();
+        bench_shell.state.commit_tx();
         bench_shell.commit_block();
 
         // Advance epoch for pos benches
@@ -272,7 +273,7 @@ impl Default for BenchShell {
         }
         // Must start after current epoch
         debug_assert_eq!(
-            bench_shell.wl_storage.get_block_epoch().unwrap().next(),
+            bench_shell.state.get_block_epoch().unwrap().next(),
             voting_start_epoch
         );
 
@@ -388,10 +389,11 @@ impl BenchShell {
     }
 
     pub fn execute_tx(&mut self, tx: &Tx) {
+        let gas_meter =
+            RefCell::new(TxGasMeter::new_from_sub_limit(u64::MAX.into()));
         run::tx(
-            &self.inner.wl_storage.storage,
-            &mut self.inner.wl_storage.write_log,
-            &mut TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+            &mut self.inner.state,
+            &gas_meter,
             &TxIndex(0),
             tx,
             &mut self.inner.vp_wasm_cache,
@@ -402,31 +404,29 @@ impl BenchShell {
 
     pub fn advance_epoch(&mut self) {
         let params =
-            proof_of_stake::storage::read_pos_params(&self.inner.wl_storage)
+            proof_of_stake::storage::read_pos_params(&self.inner.state)
                 .unwrap();
 
-        self.wl_storage.storage.block.epoch =
-            self.wl_storage.storage.block.epoch.next();
-        let current_epoch = self.wl_storage.storage.block.epoch;
+        self.state.in_mem_mut().block.epoch =
+            self.state.in_mem().block.epoch.next();
+        let current_epoch = self.state.in_mem().block.epoch;
 
         proof_of_stake::validator_set_update::copy_validator_sets_and_positions(
-            &mut self.wl_storage,
+            &mut self.state,
             &params,
             current_epoch,
             current_epoch + params.pipeline_len,
         )
         .unwrap();
 
-        namada::token::conversion::update_allowed_conversions(
-            &mut self.wl_storage,
-        )
-        .unwrap();
+        namada::token::conversion::update_allowed_conversions(&mut self.state)
+            .unwrap();
     }
 
     pub fn init_ibc_client_state(&mut self, addr_key: Key) -> ClientId {
         // Set a dummy header
-        self.wl_storage
-            .storage
+        self.state
+            .in_mem_mut()
             .set_header(get_dummy_header())
             .unwrap();
         // Set client state
@@ -455,9 +455,8 @@ impl BenchShell {
         .unwrap()
         .into();
         let bytes = <ClientState as Protobuf<Any>>::encode_vec(client_state);
-        self.wl_storage
-            .storage
-            .write(&client_state_key, bytes)
+        self.state
+            .db_write(&client_state_key, bytes)
             .expect("write failed");
 
         // Set consensus state
@@ -482,10 +481,7 @@ impl BenchShell {
 
         let bytes =
             <ConsensusState as Protobuf<Any>>::encode_vec(consensus_state);
-        self.wl_storage
-            .storage
-            .write(&consensus_key, bytes)
-            .unwrap();
+        self.state.db_write(&consensus_key, bytes).unwrap();
 
         client_id
     }
@@ -511,9 +507,8 @@ impl BenchShell {
         .unwrap();
 
         let connection_key = connection_key(&NamadaConnectionId::new(1));
-        self.wl_storage
-            .storage
-            .write(&connection_key, connection.encode_vec())
+        self.state
+            .db_write(&connection_key, connection.encode_vec())
             .unwrap();
 
         // Set port
@@ -521,19 +516,12 @@ impl BenchShell {
 
         let index_key = addr_key
             .join(&Key::from("capabilities/index".to_string().to_db_key()));
-        self.wl_storage
-            .storage
-            .write(&index_key, 1u64.to_be_bytes())
-            .unwrap();
-        self.wl_storage
-            .storage
-            .write(&port_key, 1u64.to_be_bytes())
-            .unwrap();
+        self.state.db_write(&index_key, 1u64.to_be_bytes()).unwrap();
+        self.state.db_write(&port_key, 1u64.to_be_bytes()).unwrap();
         let cap_key =
             addr_key.join(&Key::from("capabilities/1".to_string().to_db_key()));
-        self.wl_storage
-            .storage
-            .write(&cap_key, PortId::transfer().as_bytes())
+        self.state
+            .db_write(&cap_key, PortId::transfer().as_bytes())
             .unwrap();
 
         (addr_key, client_id)
@@ -557,22 +545,19 @@ impl BenchShell {
         .unwrap();
         let channel_key =
             channel_key(&NamadaPortId::transfer(), &NamadaChannelId::new(5));
-        self.wl_storage
-            .storage
-            .write(&channel_key, channel.encode_vec())
+        self.state
+            .db_write(&channel_key, channel.encode_vec())
             .unwrap();
     }
 
     // Update the block height in state to guarantee a valid response to the
     // client queries
     pub fn commit_block(&mut self) {
+        let last_height = self.inner.state.in_mem().get_last_block_height();
         self.inner
-            .wl_storage
-            .storage
-            .begin_block(
-                Hash::default().into(),
-                self.inner.wl_storage.storage.get_last_block_height() + 1,
-            )
+            .state
+            .in_mem_mut()
+            .begin_block(Hash::default().into(), last_height + 1)
             .unwrap();
 
         self.inner.commit();
@@ -582,8 +567,8 @@ impl BenchShell {
     // client queries
     pub fn commit_masp_tx(&mut self, masp_tx: Tx) {
         self.last_block_masp_txs
-            .push((masp_tx, self.wl_storage.write_log.get_keys()));
-        self.wl_storage.commit_tx();
+            .push((masp_tx, self.state.write_log().get_keys()));
+        self.state.commit_tx();
     }
 }
 
@@ -759,7 +744,7 @@ impl Client for BenchShell {
         };
 
         let ctx = RequestCtx {
-            wl_storage: &self.wl_storage,
+            state: &self.state,
             event_log: self.event_log(),
             vp_wasm_cache: self.vp_wasm_cache.read_only(),
             tx_wasm_cache: self.tx_wasm_cache.read_only(),
@@ -800,13 +785,12 @@ impl Client for BenchShell {
         // Given the way we setup and run benchmarks, the masp transactions can
         // only present in the last block, we can mock the previous
         // responses with an empty set of transactions
-        let last_block_txs = if height
-            == self.inner.wl_storage.storage.get_last_block_height()
-        {
-            self.last_block_masp_txs.clone()
-        } else {
-            vec![]
-        };
+        let last_block_txs =
+            if height == self.inner.state.in_mem().get_last_block_height() {
+                self.last_block_masp_txs.clone()
+            } else {
+                vec![]
+            };
         Ok(tendermint_rpc::endpoint::block::Response {
             block_id: tendermint::block::Id {
                 hash: tendermint::Hash::None,
@@ -865,7 +849,7 @@ impl Client for BenchShell {
         // We can expect all the masp tranfers to have happened only in the last
         // block
         let end_block_events = if height.value()
-            == self.inner.wl_storage.storage.get_last_block_height().0
+            == self.inner.state.in_mem().get_last_block_height().0
         {
             Some(
                 self.last_block_masp_txs
@@ -1021,7 +1005,7 @@ impl BenchShieldedCtx {
                 &[],
             ))
             .unwrap();
-        let native_token = self.shell.wl_storage.storage.native_token.clone();
+        let native_token = self.shell.state.in_mem().native_token.clone();
         let namada = NamadaImpl::native_new(
             self.shell,
             self.wallet,

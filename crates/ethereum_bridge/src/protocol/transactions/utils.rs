@@ -7,7 +7,7 @@ use namada_core::storage::BlockHeight;
 use namada_core::token;
 use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_proof_of_stake::types::WeightedValidator;
-use namada_state::{DBIter, StorageHasher, WlStorage, DB};
+use namada_state::{DBIter, StorageHasher, WlState, DB};
 
 /// Proof of some arbitrary tally whose voters can be queried.
 pub(super) trait GetVoters {
@@ -22,7 +22,7 @@ pub(super) trait GetVoters {
 /// which they signed some arbitrary object, and whose values are the voting
 /// powers of these validators at the key's given block height.
 pub(super) fn get_voting_powers<D, H, P>(
-    wl_storage: &WlStorage<D, H>,
+    state: &WlState<D, H>,
     proof: P,
 ) -> eyre::Result<HashMap<(Address, BlockHeight), token::Amount>>
 where
@@ -34,7 +34,7 @@ where
     tracing::debug!(?voters, "Got validators who voted on at least one event");
 
     let consensus_validators = get_consensus_validators(
-        wl_storage,
+        state,
         voters.iter().map(|(_, h)| h.to_owned()).collect(),
     );
     tracing::debug!(
@@ -55,7 +55,7 @@ where
 
 // TODO: we might be able to remove allocation here
 pub(super) fn get_consensus_validators<D, H>(
-    wl_storage: &WlStorage<D, H>,
+    state: &WlState<D, H>,
     block_heights: HashSet<BlockHeight>,
 ) -> BTreeMap<BlockHeight, BTreeSet<WeightedValidator>>
 where
@@ -64,12 +64,12 @@ where
 {
     let mut consensus_validators = BTreeMap::default();
     for height in block_heights.into_iter() {
-        let epoch = wl_storage.pos_queries().get_epoch(height).expect(
+        let epoch = state.pos_queries().get_epoch(height).expect(
             "The epoch of the last block height should always be known",
         );
         _ = consensus_validators.insert(
             height,
-            wl_storage
+            state
                 .pos_queries()
                 .get_consensus_validators(Some(epoch))
                 .iter()
