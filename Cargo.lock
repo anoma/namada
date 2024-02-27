@@ -4418,6 +4418,7 @@ dependencies = [
 name = "namada_examples"
 version = "0.31.6"
 dependencies = [
+ "data-encoding",
  "masp_proofs",
  "namada_sdk",
  "proptest",
