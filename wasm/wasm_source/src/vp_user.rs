@@ -660,8 +660,8 @@ mod tests {
         );
         let (stake1, stake2, stake3) = (
             token::Amount::native_whole(1),
+            token::Amount::native_whole(1),
             token::Amount::native_whole(2),
-            token::Amount::native_whole(3),
         );
         let (ck1, ck2, ck3) = (
             key::testing::keypair_2().ref_to(),
@@ -793,19 +793,34 @@ mod tests {
 
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
-        // dbg!(&keys_changed);
-        let verifiers: BTreeSet<Address> = BTreeSet::default();
+        dbg!(&keys_changed);
+        // let verifiers: BTreeSet<Address> = BTreeSet::default();
+        let verifiers: BTreeSet<Address> = vp_env.get_verifiers();
+        dbg!(&verifiers);
         vp_host_env::set(vp_env);
-        assert!(
-            validate_tx(
-                &CTX,
-                signed_tx,
-                validator1.clone(),
-                keys_changed,
-                verifiers
-            )
-            .unwrap()
-        );
+        // for verifier in verifiers.clone() {
+            // dbg!(&verifier);
+            // assert!(
+            //     validate_tx(
+            //         &CTX,
+            //         signed_tx.clone(),
+            //         validator1,
+            //         keys_changed.clone(),
+            //         verifiers.clone()
+            //     )
+            //     .unwrap()
+            // );
+            assert!(
+                validate_tx(
+                    &CTX,
+                    signed_tx.clone(),
+                    validator2,
+                    keys_changed.clone(),
+                    verifiers.clone()
+                )
+                .unwrap()
+            );
+        // }
         println!("\n\nENDING MY TEST NOW\n\n");
     }
 
