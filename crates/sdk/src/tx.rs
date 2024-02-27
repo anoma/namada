@@ -1317,8 +1317,8 @@ pub async fn build_redelegation(
         edisplay_line!(
             context.io(),
             "WARNING: the given destination validator address {} is inactive \
-             at the pipeline epoch {}. If you would still like to bond to the \
-             inactive validator, use the --force option.",
+             at the pipeline epoch {}. If you would still like to redelegate \
+             to the inactive validator, use the --force option.",
             &dest_validator,
             &pipeline_epoch
         );
