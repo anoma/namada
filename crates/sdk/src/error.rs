@@ -268,7 +268,7 @@ pub enum TxSubmitError {
     ImplicitInternalError,
     /// Unexpected Error
     #[error("Unexpected behavior reading the unbonds data has occurred")]
-    UnboundError,
+    UnbondError,
     /// Epoch not in storage
     #[error("Proposal end epoch is not in the storage.")]
     EpochNotInStorage,

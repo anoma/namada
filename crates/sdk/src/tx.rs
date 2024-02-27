@@ -1712,7 +1712,7 @@ pub async fn query_unbonds(
                          occurred"
                     );
                 } else {
-                    return Err(Error::from(TxSubmitError::UnboundError));
+                    return Err(Error::from(TxSubmitError::UnbondError));
                 }
             }
             std::cmp::Ordering::Equal => {
