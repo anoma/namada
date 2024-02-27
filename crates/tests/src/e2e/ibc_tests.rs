@@ -2062,6 +2062,15 @@ fn check_shielded_balances_after_back(
     // Check the balance on Chain B
     std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
     let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
+    let tx_args = vec![
+        "shielded-sync",
+        "--viewing-keys",
+        AB_VIEWING_KEY,
+        "--node",
+        &rpc_b,
+    ];
+    let mut client = run!(test_b, Bin::Client, tx_args, Some(120))?;
+    client.assert_success();
     let ibc_denom = format!("{src_port_id}/{src_channel_id}/btc");
     let query_args = vec![
         "balance",
@@ -2081,6 +2090,15 @@ fn check_shielded_balances_after_back(
     // Check the balance on Chain A
     std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
     let rpc_a = get_actor_rpc(test_a, Who::Validator(0));
+    let tx_args = vec![
+        "shielded-sync",
+        "--viewing-keys",
+        AA_VIEWING_KEY,
+        "--node",
+        &rpc_a,
+    ];
+    let mut client = run!(test_a, Bin::Client, tx_args, Some(120))?;
+    client.assert_success();
     let query_args = vec![
         "balance",
         "--owner",
