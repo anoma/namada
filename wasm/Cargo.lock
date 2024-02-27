@@ -3644,12 +3644,13 @@ dependencies = [
 name = "namada_shielded_token"
 version = "0.31.6"
 dependencies = [
+ "borsh",
  "masp_primitives",
  "namada_core",
  "namada_parameters",
- "namada_state",
  "namada_storage",
  "namada_trans_token",
+ "serde",
  "tracing",
 ]
 
@@ -3738,7 +3739,7 @@ version = "0.31.6"
 dependencies = [
  "namada_core",
  "namada_shielded_token",
- "namada_state",
+ "namada_storage",
  "namada_trans_token",
 ]
 

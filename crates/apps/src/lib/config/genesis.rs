@@ -16,13 +16,14 @@ use namada::governance::pgf::parameters::PgfParameters;
 use namada::ledger::eth_bridge::EthereumBridgeParams;
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::{Dec, GenesisValidator, OwnedPosParams};
+use namada::token;
 use namada::types::address::{Address, EstablishedAddress};
 use namada::types::chain::ProposalBytes;
 use namada::types::key::*;
+use namada::types::storage;
 use namada::types::string_encoding::StringEncoded;
 use namada::types::time::{DateTimeUtc, DurationSecs};
 use namada::types::token::Denomination;
-use namada::types::{storage, token};
 use serde::{Deserialize, Serialize};
 
 #[cfg(all(any(test, feature = "benches"), not(feature = "integration")))]
@@ -228,7 +229,7 @@ pub struct TokenAccount {
     #[derivative(PartialOrd = "ignore", Ord = "ignore")]
     pub balances: HashMap<Address, token::Amount>,
     /// Token parameters
-    pub masp_params: Option<token::MaspParams>,
+    pub masp_params: Option<token::ShieldedParams>,
     /// Token inflation from the last epoch (read + write for every epoch)
     pub last_inflation: token::Amount,
     /// Token shielded ratio from the last epoch (read + write for every epoch)

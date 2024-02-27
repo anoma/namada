@@ -7,6 +7,7 @@ use namada_core::types::hash::{Hash, StorageHasher};
 use namada_core::types::storage::{self, BlockHeight, Epochs};
 use namada_core::types::time::DateTimeUtc;
 use namada_parameters::EpochDuration;
+use namada_storage::conversion_state::{ConversionState, WithConversionState};
 use namada_storage::{ResultExt, StorageRead, StorageWrite};
 
 use super::EPOCH_SWITCH_BLOCKS_DELAY;
@@ -571,6 +572,20 @@ macro_rules! impl_storage_traits {
 }
 impl_storage_traits!(WlStorage<D, H>);
 impl_storage_traits!(TempWlStorage<'_, D, H>);
+
+impl<D, H> WithConversionState for WlStorage<D, H>
+where
+    D: DB + for<'iter> DBIter<'iter>,
+    H: StorageHasher,
+{
+    fn conversion_state(&self) -> &ConversionState {
+        &self.storage.conversion_state
+    }
+
+    fn conversion_state_mut(&mut self) -> &mut ConversionState {
+        &mut self.storage.conversion_state
+    }
+}
 
 #[cfg(test)]
 mod tests {

@@ -8,13 +8,14 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use namada::eth_bridge::storage::parameters::{
     Contracts, Erc20WhitelistEntry, MinimumConfirmations,
 };
+use namada::token;
 use namada::types::address::Address;
 use namada::types::chain::ProposalBytes;
 use namada::types::dec::Dec;
+use namada::types::ethereum_structs;
 use namada::types::token::{
     Amount, DenominatedAmount, Denomination, NATIVE_MAX_DECIMAL_PLACES,
 };
-use namada::types::{ethereum_structs, token};
 use serde::{Deserialize, Serialize};
 
 use super::transactions::{self, Transactions};
@@ -209,7 +210,7 @@ pub struct Tokens {
 )]
 pub struct TokenConfig {
     pub denom: Denomination,
-    pub masp_params: Option<token::MaspParams>,
+    pub masp_params: Option<token::ShieldedParams>,
 }
 
 #[derive(

@@ -416,6 +416,11 @@ impl BenchShell {
             current_epoch + params.pipeline_len,
         )
         .unwrap();
+
+        namada::token::conversion::update_allowed_conversions(
+            &mut self.wl_storage,
+        )
+        .unwrap();
     }
 
     pub fn init_ibc_client_state(&mut self, addr_key: Key) -> ClientId {
@@ -913,7 +918,7 @@ impl Client for BenchShell {
 
 impl Default for BenchShieldedCtx {
     fn default() -> Self {
-        let mut shell = BenchShell::default();
+        let shell = BenchShell::default();
         let base_dir = shell.tempdir.as_ref().canonicalize().unwrap();
 
         // Create a global config and an empty wallet in the chain dir - this is
@@ -983,10 +988,6 @@ impl Default for BenchShieldedCtx {
         }
 
         crate::wallet::save(&chain_ctx.wallet).unwrap();
-        namada::token::conversion::update_allowed_conversions(
-            &mut shell.wl_storage,
-        )
-        .unwrap();
 
         Self {
             shielded: ShieldedContext::default(),
