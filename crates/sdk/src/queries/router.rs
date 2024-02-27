@@ -126,6 +126,10 @@ macro_rules! try_match_segments {
                 );
             }
         )*
+
+        return Err(
+            $crate::queries::router::Error::WrongPath($request.path.clone()))
+            .into_storage_result();
     };
 
     // Terminal tail call, invoked after when all the args in the current
@@ -1033,6 +1037,25 @@ mod test {
         let ctx = RequestCtx {
             event_log: &client.event_log,
             state: &client.state,
+            vp_wasm_cache: (),
+            tx_wasm_cache: (),
+            storage_read_past_height_limit: None,
+        };
+        let result = TEST_RPC.handle(ctx, &request);
+        assert!(result.is_err());
+
+        // Test request with another invalid path.
+        // The key difference here is that we are testing
+        // an invalid path in a nested segment.
+        let request = RequestQuery {
+            path: "/b/4".to_owned(),
+            data: Default::default(),
+            height: block::Height::from(0_u32),
+            prove: Default::default(),
+        };
+        let ctx = RequestCtx {
+            event_log: &client.event_log,
+            wl_storage: &client.wl_storage,
             vp_wasm_cache: (),
             tx_wasm_cache: (),
             storage_read_past_height_limit: None,
