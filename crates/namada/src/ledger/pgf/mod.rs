@@ -10,10 +10,10 @@ use namada_governance::{is_proposal_accepted, pgf};
 use namada_tx::Tx;
 use thiserror::Error;
 
+use crate::address::{Address, InternalAddress};
 use crate::ledger::native_vp;
 use crate::ledger::native_vp::{Ctx, NativeVp};
-use crate::types::address::{Address, InternalAddress};
-use crate::types::storage::Key;
+use crate::storage::Key;
 use crate::vm::WasmCacheAccess;
 
 /// for handling Pgf NativeVP errors

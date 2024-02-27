@@ -332,11 +332,11 @@ fn validate_pos_changes(
 #[cfg(test)]
 mod tests {
     use address::testing::arb_non_internal_address;
+    use namada::core::dec::Dec;
+    use namada::core::storage::Epoch;
     use namada::ledger::pos::{GenesisValidator, PosParams};
     use namada::tx::data::{self, TxType};
     use namada::tx::{Code, Data, Signature};
-    use namada::types::dec::Dec;
-    use namada::types::storage::Epoch;
     use namada_test_utils::TestWasms;
     // Use this as `#[test]` annotation to enable logging
     use namada_tests::log::test;

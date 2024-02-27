@@ -17,8 +17,8 @@ use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
 use eyre::eyre;
+use namada_core::eth_bridge_pool::erc20_token_address;
 use namada_core::hints;
-use namada_core::types::eth_bridge_pool::erc20_token_address;
 use namada_ethereum_bridge::storage::bridge_pool::{
     get_pending_key, is_bridge_pool_key, BRIDGE_POOL_ADDRESS,
 };
@@ -28,13 +28,13 @@ use namada_ethereum_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_state::{DBIter, StorageHasher, DB};
 use namada_tx::Tx;
 
+use crate::address::{Address, InternalAddress};
+use crate::eth_bridge_pool::{PendingTransfer, TransferToEthereumKind};
+use crate::ethereum_events::EthAddress;
 use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
+use crate::storage::Key;
 use crate::token::storage_key::balance_key;
 use crate::token::Amount;
-use crate::types::address::{Address, InternalAddress};
-use crate::types::eth_bridge_pool::{PendingTransfer, TransferToEthereumKind};
-use crate::types::ethereum_events::EthAddress;
-use crate::types::storage::Key;
 use crate::vm::WasmCacheAccess;
 
 #[derive(thiserror::Error, Debug)]
@@ -642,8 +642,8 @@ mod test_bridge_pool_vp {
     use std::env::temp_dir;
 
     use borsh::BorshDeserialize;
+    use namada_core::address;
     use namada_core::borsh::BorshSerializeExt;
-    use namada_core::types::address;
     use namada_ethereum_bridge::storage::bridge_pool::get_signed_root_key;
     use namada_ethereum_bridge::storage::parameters::{
         Contracts, EthereumBridgeParams, UpgradeableContract,
@@ -654,15 +654,15 @@ mod test_bridge_pool_vp {
     use namada_tx::data::TxType;
 
     use super::*;
+    use crate::address::{nam, wnam, InternalAddress};
+    use crate::chain::ChainId;
+    use crate::eth_bridge_pool::{GasFee, TransferToEthereum};
+    use crate::hash::Hash;
     use crate::ledger::gas::VpGasMeter;
     use crate::state::mockdb::MockDB;
     use crate::state::write_log::WriteLog;
     use crate::state::{Sha256Hasher, State, WlStorage};
-    use crate::types::address::{nam, wnam, InternalAddress};
-    use crate::types::chain::ChainId;
-    use crate::types::eth_bridge_pool::{GasFee, TransferToEthereum};
-    use crate::types::hash::Hash;
-    use crate::types::storage::TxIndex;
+    use crate::storage::TxIndex;
     use crate::vm::wasm::VpCache;
     use crate::vm::WasmCacheRwAccess;
 
@@ -714,7 +714,7 @@ mod test_bridge_pool_vp {
     /// An implicit user address for testing & development
     #[allow(dead_code)]
     pub fn daewon_address() -> Address {
-        use crate::types::key::*;
+        use crate::key::*;
         pub fn daewon_keypair() -> common::SecretKey {
             let bytes = [
                 235, 250, 15, 1, 145, 250, 172, 218, 247, 27, 63, 212, 60, 47,

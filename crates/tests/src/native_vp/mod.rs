@@ -4,12 +4,12 @@ pub mod pos;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 
+use namada::core::address::Address;
+use namada::core::storage;
 use namada::ledger::gas::VpGasMeter;
 use namada::ledger::native_vp::{Ctx, NativeVp};
 use namada::state::mockdb::MockDB;
 use namada::state::Sha256Hasher;
-use namada::types::address::Address;
-use namada::types::storage;
 use namada::vm::WasmCacheRwAccess;
 
 use crate::tx::TestTxEnv;

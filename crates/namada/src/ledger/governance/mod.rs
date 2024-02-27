@@ -19,11 +19,11 @@ use namada_vp_env::VpEnv;
 use thiserror::Error;
 
 use self::utils::ReadType;
+use crate::address::{Address, InternalAddress};
 use crate::ledger::native_vp::{Ctx, NativeVp};
 use crate::ledger::{native_vp, pos};
+use crate::storage::{Epoch, Key};
 use crate::token;
-use crate::types::address::{Address, InternalAddress};
-use crate::types::storage::{Epoch, Key};
 use crate::vm::WasmCacheAccess;
 
 /// for handling Governance NativeVP errors

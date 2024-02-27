@@ -4,10 +4,10 @@ use std::process::Stdio;
 use std::str::FromStr;
 
 use borsh_ext::BorshSerializeExt;
-use namada::types::chain::ChainId;
-use namada::types::key::*;
-use namada::types::storage::BlockHeight;
-use namada::types::time::DateTimeUtc;
+use namada::core::chain::ChainId;
+use namada::core::key::*;
+use namada::core::storage::BlockHeight;
+use namada::core::time::DateTimeUtc;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use thiserror::Error;

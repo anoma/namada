@@ -4,17 +4,17 @@ mod test_bridge_pool_vp {
 
     use borsh::BorshDeserialize;
     use borsh_ext::BorshSerializeExt;
+    use namada::core::address::{nam, wnam};
+    use namada::core::chain::ChainId;
+    use namada::core::eth_bridge_pool::{
+        GasFee, PendingTransfer, TransferToEthereum, TransferToEthereumKind,
+    };
+    use namada::core::ethereum_events::EthAddress;
+    use namada::core::key::{common, ed25519, SecretKey};
+    use namada::core::token::Amount;
     use namada::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
     use namada::ledger::native_vp::ethereum_bridge::bridge_pool_vp::BridgePoolVp;
     use namada::tx::Tx;
-    use namada::types::address::{nam, wnam};
-    use namada::types::chain::ChainId;
-    use namada::types::eth_bridge_pool::{
-        GasFee, PendingTransfer, TransferToEthereum, TransferToEthereumKind,
-    };
-    use namada::types::ethereum_events::EthAddress;
-    use namada::types::key::{common, ed25519, SecretKey};
-    use namada::types::token::Amount;
     use namada_apps::wallet::defaults::{albert_address, bertha_address};
     use namada_apps::wasm_loader;
     use namada_sdk::eth_bridge::{
@@ -35,7 +35,7 @@ mod test_bridge_pool_vp {
     /// A signing keypair for good old Bertha.
     fn bertha_keypair() -> common::SecretKey {
         // generated from
-        // [`namada::types::key::ed25519::gen_keypair`]
+        // [`namada::core::key::ed25519::gen_keypair`]
         let bytes = [
             240, 3, 224, 69, 201, 148, 60, 53, 112, 79, 80, 107, 101, 127, 186,
             6, 176, 162, 113, 224, 62, 8, 183, 187, 124, 234, 244, 251, 92, 36,

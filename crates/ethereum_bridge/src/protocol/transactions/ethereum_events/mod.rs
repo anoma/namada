@@ -8,12 +8,12 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use borsh::BorshDeserialize;
 use eth_msgs::EthMsgUpdate;
 use eyre::Result;
-use namada_core::types::address::Address;
-use namada_core::types::ethereum_events::EthereumEvent;
-use namada_core::types::ethereum_structs::EthBridgeEvent;
-use namada_core::types::key::common;
-use namada_core::types::storage::{BlockHeight, Epoch, Key};
-use namada_core::types::token::Amount;
+use namada_core::address::Address;
+use namada_core::ethereum_events::EthereumEvent;
+use namada_core::ethereum_structs::EthBridgeEvent;
+use namada_core::key::common;
+use namada_core::storage::{BlockHeight, Epoch, Key};
+use namada_core::token::Amount;
 use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_state::tx_queue::ExpiredTx;
 use namada_state::{DBIter, StorageHasher, WlStorage, DB};
@@ -337,15 +337,13 @@ mod tests {
     use std::collections::{BTreeSet, HashMap, HashSet};
 
     use borsh::BorshDeserialize;
-    use namada_core::types::address;
-    use namada_core::types::ethereum_events::testing::{
+    use namada_core::address;
+    use namada_core::ethereum_events::testing::{
         arbitrary_amount, arbitrary_eth_address, arbitrary_nonce,
         arbitrary_single_transfer, DAI_ERC20_ETH_ADDRESS,
     };
-    use namada_core::types::ethereum_events::{
-        EthereumEvent, TransferToNamada,
-    };
-    use namada_core::types::voting_power::FractionalVotingPower;
+    use namada_core::ethereum_events::{EthereumEvent, TransferToNamada};
+    use namada_core::voting_power::FractionalVotingPower;
     use namada_state::testing::TestWlStorage;
     use namada_storage::mockdb::MockDBWriteBatch;
     use namada_storage::StorageRead;

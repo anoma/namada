@@ -2,7 +2,7 @@
 //! defined via `router!` macro.
 
 // Re-export to show in rustdoc!
-use namada_core::types::storage::BlockHeight;
+use namada_core::storage::BlockHeight;
 use namada_state::{DBIter, StorageHasher, DB};
 pub use shell::Shell;
 use shell::SHELL;
@@ -97,7 +97,7 @@ pub fn require_no_data(request: &RequestQuery) -> namada_storage::Result<()> {
 #[cfg(any(test, feature = "testing"))]
 mod testing {
 
-    use namada_core::types::storage::BlockHeight;
+    use namada_core::storage::BlockHeight;
     use namada_state::testing::TestWlStorage;
     use tendermint_rpc::Response;
 
@@ -133,10 +133,7 @@ mod testing {
                 namada_parameters::storage::get_max_block_gas_key();
             wl_storage
                 .storage
-                .write(
-                    &max_block_gas_key,
-                    namada_core::types::encode(&20_000_000_u64),
-                )
+                .write(&max_block_gas_key, namada_core::encode(&20_000_000_u64))
                 .expect(
                     "Max block gas parameter must be initialized in storage",
                 );

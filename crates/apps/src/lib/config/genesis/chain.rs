@@ -4,17 +4,17 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
-use namada::ledger::parameters::EpochDuration;
-use namada::types::address::{
+use namada::address::InternalAddress;
+use namada::core::address::{
     Address, EstablishedAddress, EstablishedAddressGen,
 };
-use namada::types::chain::{ChainId, ChainIdPrefix};
-use namada::types::dec::Dec;
-use namada::types::hash::Hash;
-use namada::types::key::{common, RefTo};
-use namada::types::time::{DateTimeUtc, DurationNanos, Rfc3339String};
-use namada::types::token::Amount;
-use namada_sdk::types::address::InternalAddress;
+use namada::core::chain::{ChainId, ChainIdPrefix};
+use namada::core::dec::Dec;
+use namada::core::hash::Hash;
+use namada::core::key::{common, RefTo};
+use namada::core::time::{DateTimeUtc, DurationNanos, Rfc3339String};
+use namada::core::token::Amount;
+use namada::ledger::parameters::EpochDuration;
 use namada_sdk::wallet::store::AddressVpType;
 use namada_sdk::wallet::{pre_genesis, Wallet};
 use serde::{Deserialize, Serialize};
@@ -310,11 +310,11 @@ impl Finalized {
         let min_duration: i64 = 60 * 60 * 24 * 365 / (epochs_per_year as i64);
         let epoch_duration = EpochDuration {
             min_num_of_blocks,
-            min_duration: namada::types::time::Duration::seconds(min_duration)
+            min_duration: namada::core::time::Duration::seconds(min_duration)
                 .into(),
         };
         let max_expected_time_per_block =
-            namada::types::time::Duration::seconds(max_expected_time_per_block)
+            namada::core::time::Duration::seconds(max_expected_time_per_block)
                 .into();
         let vp_allowlist = vp_allowlist.unwrap_or_default();
         let tx_allowlist = tx_allowlist.unwrap_or_default();

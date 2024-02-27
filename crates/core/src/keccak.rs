@@ -11,8 +11,8 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 pub use tiny_keccak::{Hasher, Keccak};
 
-use crate::types::eth_abi::Encode;
-use crate::types::hash::{Hash, HASH_LENGTH};
+use crate::eth_abi::Encode;
+use crate::hash::{Hash, HASH_LENGTH};
 
 /// Errors for converting / parsing Keccak hashes
 #[allow(missing_docs)]

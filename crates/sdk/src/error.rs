@@ -1,11 +1,11 @@
 //! Generic Error Type for all of the Shared Crate
 
+use namada_core::address::Address;
+use namada_core::dec::Dec;
+use namada_core::ethereum_events::EthAddress;
 use namada_core::event::EventError;
-use namada_core::types::address::Address;
-use namada_core::types::dec::Dec;
-use namada_core::types::ethereum_events::EthAddress;
-use namada_core::types::storage;
-use namada_core::types::storage::Epoch;
+use namada_core::storage;
+use namada_core::storage::Epoch;
 use namada_tx::Tx;
 use prost::EncodeError;
 use tendermint_rpc::Error as RpcError;

@@ -5,7 +5,9 @@ use std::str::FromStr;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use masp_primitives::sapling::Node;
-use namada::core::types::address::{self, Address};
+use namada::core::address::{self, Address, InternalAddress};
+use namada::core::eth_bridge_pool::{GasFee, PendingTransfer};
+use namada::core::masp::{TransferSource, TransferTarget};
 use namada::eth_bridge::storage::whitelist;
 use namada::governance::pgf::storage::steward::StewardDetail;
 use namada::governance::storage::proposal::ProposalType;
@@ -44,9 +46,6 @@ use namada::sdk::masp_primitives::transaction::Transaction;
 use namada::state::{Epoch, StorageRead, StorageWrite, TxIndex};
 use namada::token::{Amount, Transfer};
 use namada::tx::{Code, Section, Tx};
-use namada::types::address::InternalAddress;
-use namada::types::eth_bridge_pool::{GasFee, PendingTransfer};
-use namada::types::masp::{TransferSource, TransferTarget};
 use namada_apps::bench_utils::{
     generate_foreign_key_tx, BenchShell, BenchShieldedCtx,
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
@@ -353,7 +352,7 @@ fn ibc(c: &mut Criterion) {
         match bench_name {
             "open_connection" => {
                 let _ = shell.init_ibc_client_state(
-                    namada::core::types::storage::Key::from(
+                    namada::core::storage::Key::from(
                         Address::Internal(InternalAddress::Ibc).to_db_key(),
                     ),
                 );
@@ -648,7 +647,7 @@ fn pgf(c: &mut Criterion) {
                     steward: defaults::albert_address(),
                     commission: HashMap::from([(
                         defaults::albert_address(),
-                        namada::types::dec::Dec::zero(),
+                        namada::core::dec::Dec::zero(),
                     )]),
                 };
                 shell.generate_tx(
@@ -709,20 +708,21 @@ fn eth_bridge_nut(c: &mut Criterion) {
         read_native_erc20_address(&shell.wl_storage).unwrap();
 
     let signed_tx = {
-        let data = PendingTransfer{
-        transfer: namada::types::eth_bridge_pool::TransferToEthereum {
-            kind: namada::types::eth_bridge_pool::TransferToEthereumKind::Erc20,
-            asset: native_erc20_addres,
-            recipient: namada::types::ethereum_events::EthAddress([1u8; 20]),
-            sender: defaults::albert_address(),
-            amount: Amount::from(1),
-        },
-        gas_fee: GasFee{
-            amount: Amount::from(100),
-            payer: defaults::albert_address(),
-            token: shell.wl_storage.storage.native_token.clone(),
-        },
-    };
+        let data = PendingTransfer {
+            transfer: namada::core::eth_bridge_pool::TransferToEthereum {
+                kind:
+                    namada::core::eth_bridge_pool::TransferToEthereumKind::Erc20,
+                asset: native_erc20_addres,
+                recipient: namada::core::ethereum_events::EthAddress([1u8; 20]),
+                sender: defaults::albert_address(),
+                amount: Amount::from(1),
+            },
+            gas_fee: GasFee {
+                amount: Amount::from(100),
+                payer: defaults::albert_address(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+        };
         shell.generate_tx(
             TX_BRIDGE_POOL_WASM,
             data,
@@ -778,20 +778,21 @@ fn eth_bridge(c: &mut Criterion) {
         read_native_erc20_address(&shell.wl_storage).unwrap();
 
     let signed_tx = {
-        let data = PendingTransfer{
-                transfer: namada::types::eth_bridge_pool::TransferToEthereum {
-                    kind: namada::types::eth_bridge_pool::TransferToEthereumKind::Erc20,
-                    asset: native_erc20_addres,
-                    recipient: namada::types::ethereum_events::EthAddress([1u8; 20]),
-                    sender: defaults::albert_address(),
-                    amount: Amount::from(1),
-                },
-                gas_fee: GasFee{
-                    amount: Amount::from(100),
-                    payer: defaults::albert_address(),
-                    token: shell.wl_storage.storage.native_token.clone(),
-                },
-            };
+        let data = PendingTransfer {
+            transfer: namada::core::eth_bridge_pool::TransferToEthereum {
+                kind:
+                    namada::core::eth_bridge_pool::TransferToEthereumKind::Erc20,
+                asset: native_erc20_addres,
+                recipient: namada::core::ethereum_events::EthAddress([1u8; 20]),
+                sender: defaults::albert_address(),
+                amount: Amount::from(1),
+            },
+            gas_fee: GasFee {
+                amount: Amount::from(100),
+                payer: defaults::albert_address(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+        };
         shell.generate_tx(
             TX_BRIDGE_POOL_WASM,
             data,
@@ -875,20 +876,21 @@ fn eth_bridge_pool(c: &mut Criterion) {
     shell.wl_storage.write(&denom_key, 0).unwrap();
 
     let signed_tx = {
-        let data = PendingTransfer{
-        transfer: namada::types::eth_bridge_pool::TransferToEthereum {
-            kind: namada::types::eth_bridge_pool::TransferToEthereumKind::Erc20,
-            asset: native_erc20_addres,
-            recipient: namada::types::ethereum_events::EthAddress([1u8; 20]),
-            sender: defaults::albert_address(),
-            amount: Amount::from(1),
-        },
-        gas_fee: GasFee{
-            amount: Amount::from(100),
-            payer: defaults::albert_address(),
-            token: shell.wl_storage.storage.native_token.clone(),
-        },
-    };
+        let data = PendingTransfer {
+            transfer: namada::core::eth_bridge_pool::TransferToEthereum {
+                kind:
+                    namada::core::eth_bridge_pool::TransferToEthereumKind::Erc20,
+                asset: native_erc20_addres,
+                recipient: namada::core::ethereum_events::EthAddress([1u8; 20]),
+                sender: defaults::albert_address(),
+                amount: Amount::from(1),
+            },
+            gas_fee: GasFee {
+                amount: Amount::from(100),
+                payer: defaults::albert_address(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+        };
         shell.generate_tx(
             TX_BRIDGE_POOL_WASM,
             data,
@@ -1137,7 +1139,7 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
         match bench_name {
             "open_connection" => {
                 let _ = shell.init_ibc_client_state(
-                    namada::core::types::storage::Key::from(
+                    namada::core::storage::Key::from(
                         Address::Internal(InternalAddress::Ibc).to_db_key(),
                     ),
                 );
@@ -1235,7 +1237,7 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
         match bench_name {
             "open_connection" => {
                 let _ = shell.init_ibc_client_state(
-                    namada::core::types::storage::Key::from(
+                    namada::core::storage::Key::from(
                         Address::Internal(InternalAddress::Ibc).to_db_key(),
                     ),
                 );

@@ -4,12 +4,12 @@ use std::cmp::{self, Reverse};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use borsh::BorshDeserialize;
+use namada_core::address::Address;
+use namada_core::dec::Dec;
+use namada_core::key::tm_raw_hash_to_string;
+use namada_core::storage::{BlockHeight, Epoch};
 use namada_core::tendermint::abci::types::{Misbehavior, MisbehaviorKind};
-use namada_core::types::address::Address;
-use namada_core::types::dec::Dec;
-use namada_core::types::key::tm_raw_hash_to_string;
-use namada_core::types::storage::{BlockHeight, Epoch};
-use namada_core::types::token;
+use namada_core::token;
 use namada_storage::collections::lazy_map::{
     Collectable, NestedMap, NestedSubKey, SubKey,
 };

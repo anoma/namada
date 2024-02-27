@@ -1,7 +1,7 @@
 //! Bridge pool roots validation.
 
-use namada_core::types::keccak::keccak_hash;
-use namada_core::types::storage::BlockHeight;
+use namada_core::keccak::keccak_hash;
+use namada_core::storage::BlockHeight;
 use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_state::{DBIter, StorageHasher, WlStorage, DB};
 use namada_tx::{SignableEthMessage, Signed};

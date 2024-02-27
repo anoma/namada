@@ -7,8 +7,8 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 #[doc(inline)]
 pub use ethabi::token::Token;
 
-use crate::types::keccak::{keccak_hash, KeccakHash};
-use crate::types::key::{Signable, SignableEthMessage};
+use crate::keccak::{keccak_hash, KeccakHash};
+use crate::key::{Signable, SignableEthMessage};
 
 /// A container for data types that are able to be Ethereum ABI-encoded.
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
@@ -129,7 +129,7 @@ mod tests {
     use tiny_keccak::{Hasher, Keccak};
 
     use super::*;
-    use crate::types::ethereum_events::EthAddress;
+    use crate::ethereum_events::EthAddress;
 
     /// Checks if we get the same result as `abi.encode`, for some given
     /// input data.

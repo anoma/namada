@@ -1,7 +1,7 @@
 //! Token validity predicate queries
 
-use namada_core::types::address::Address;
-use namada_core::types::token;
+use namada_core::address::Address;
+use namada_core::token;
 use namada_state::{DBIter, StorageHasher, DB};
 use namada_token::{read_denom, read_total_supply};
 
@@ -40,8 +40,8 @@ where
 #[cfg(any(test, feature = "async-client"))]
 pub mod client_only_methods {
     use borsh::BorshDeserialize;
-    use namada_core::types::address::Address;
-    use namada_core::types::token;
+    use namada_core::address::Address;
+    use namada_core::token;
     use namada_token::storage_key::balance_key;
 
     use super::Token;

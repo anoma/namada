@@ -2,9 +2,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use eyre::eyre;
 use itertools::Itertools;
-use namada_core::types::address::Address;
-use namada_core::types::storage::BlockHeight;
-use namada_core::types::token;
+use namada_core::address::Address;
+use namada_core::storage::BlockHeight;
+use namada_core::token;
 use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_proof_of_stake::types::WeightedValidator;
 use namada_state::{DBIter, StorageHasher, WlStorage, DB};
@@ -123,9 +123,9 @@ mod tests {
     use std::collections::HashSet;
 
     use assert_matches::assert_matches;
-    use namada_core::types::address;
-    use namada_core::types::ethereum_events::testing::arbitrary_bonded_stake;
-    use namada_core::types::voting_power::FractionalVotingPower;
+    use namada_core::address;
+    use namada_core::ethereum_events::testing::arbitrary_bonded_stake;
+    use namada_core::voting_power::FractionalVotingPower;
 
     use super::*;
 

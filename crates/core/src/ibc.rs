@@ -7,6 +7,7 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use data_encoding::{DecodePartial, HEXLOWER, HEXLOWER_PERMISSIVE, HEXUPPER};
+pub use ibc::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -17,9 +18,9 @@ use crate::ibc::core::handler::types::events::{
     Error as IbcEventError, IbcEvent as RawIbcEvent,
 };
 use crate::ibc::primitives::proto::Protobuf;
+use crate::masp::PaymentAddress;
 use crate::tendermint::abci::Event as AbciEvent;
-use crate::types::masp::PaymentAddress;
-use crate::types::token::Transfer;
+use crate::token::Transfer;
 
 /// The event type defined in ibc-rs for receiving a token
 pub const EVENT_TYPE_PACKET: &str = "fungible_token_packet";
@@ -166,7 +167,7 @@ pub enum Error {
 }
 
 /// Conversion functions result
-pub type Result<T> = std::result::Result<T, Error>;
+type Result<T> = std::result::Result<T, Error>;
 
 impl TryFrom<RawIbcEvent> for IbcEvent {
     type Error = Error;

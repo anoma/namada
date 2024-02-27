@@ -8,8 +8,8 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use context::{PseudoExecutionContext, VpValidationContext};
-use namada_core::types::address::Address;
-use namada_core::types::storage::Key;
+use namada_core::address::Address;
+use namada_core::storage::Key;
 use namada_gas::{IBC_ACTION_EXECUTE_GAS, IBC_ACTION_VALIDATE_GAS};
 use namada_ibc::{
     Error as ActionError, IbcActions, TransferModule, ValidationParams,
@@ -247,12 +247,12 @@ impl From<ActionError> for Error {
 
 /// A dummy header used for testing
 #[cfg(any(test, feature = "testing"))]
-pub fn get_dummy_header() -> crate::types::storage::Header {
+pub fn get_dummy_header() -> crate::storage::Header {
     use crate::tendermint::time::Time as TmTime;
-    crate::types::storage::Header {
-        hash: crate::types::hash::Hash([0; 32]),
+    crate::storage::Header {
+        hash: crate::hash::Hash([0; 32]),
         time: TmTime::now().try_into().unwrap(),
-        next_validators_hash: crate::types::hash::Hash([0; 32]),
+        next_validators_hash: crate::hash::Hash([0; 32]),
     }
 }
 
@@ -260,11 +260,11 @@ pub fn get_dummy_header() -> crate::types::storage::Header {
 #[cfg(any(test, feature = "testing"))]
 pub fn get_dummy_genesis_validator()
 -> namada_proof_of_stake::types::GenesisValidator {
-    use crate::core::types::address::testing::established_address_1;
-    use crate::core::types::dec::Dec;
-    use crate::core::types::key::testing::common_sk_from_simple_seed;
+    use crate::core::address::testing::established_address_1;
+    use crate::core::dec::Dec;
+    use crate::core::key::testing::common_sk_from_simple_seed;
+    use crate::key;
     use crate::token::Amount;
-    use crate::types::key;
 
     let address = established_address_1();
     let tokens = Amount::native_whole(1);
@@ -327,11 +327,11 @@ mod tests {
     use sha2::Digest;
 
     use super::*;
-    use crate::core::types::address::testing::{
+    use crate::core::address::testing::{
         established_address_1, established_address_2,
     };
-    use crate::core::types::address::{nam, InternalAddress};
-    use crate::core::types::storage::Epoch;
+    use crate::core::address::{nam, InternalAddress};
+    use crate::core::storage::Epoch;
     use crate::ibc::apps::transfer::types::events::{
         AckEvent, DenomTraceEvent, RecvEvent, TimeoutEvent, TransferEvent,
     };
@@ -398,18 +398,18 @@ mod tests {
         ibc_denom_key, next_sequence_ack_key, next_sequence_recv_key,
         next_sequence_send_key, receipt_key,
     };
+    use crate::key::testing::keypair_1;
     use crate::ledger::gas::VpGasMeter;
     use crate::ledger::parameters::storage::{
         get_epoch_duration_storage_key, get_max_expected_time_per_block_key,
     };
     use crate::ledger::parameters::EpochDuration;
     use crate::ledger::{ibc, pos};
+    use crate::storage::{BlockHash, BlockHeight, TxIndex};
     use crate::tendermint::time::Time as TmTime;
+    use crate::time::DurationSecs;
     use crate::token::storage_key::balance_key;
     use crate::token::Amount;
-    use crate::types::key::testing::keypair_1;
-    use crate::types::storage::{BlockHash, BlockHeight, TxIndex};
-    use crate::types::time::DurationSecs;
     use crate::vm::wasm;
 
     const ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
@@ -450,7 +450,7 @@ mod tests {
         let time_key = get_max_expected_time_per_block_key();
         wl_storage
             .write_log
-            .write(&time_key, namada_core::types::encode(&time))
+            .write(&time_key, namada_core::encode(&time))
             .expect("write failed");
         // set a dummy header
         wl_storage

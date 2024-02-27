@@ -9,8 +9,8 @@ pub mod storage_key {
     pub use namada_trans_token::storage_key::*;
 }
 
+use namada_core::address::Address;
 use namada_core::event::EmitEvents;
-use namada_core::types::address::Address;
 use namada_storage::{Result, StorageRead, StorageWrite};
 
 /// Initialize parameters for the token in storage during the genesis block.

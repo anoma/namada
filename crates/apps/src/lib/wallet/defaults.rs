@@ -13,11 +13,11 @@ mod dev {
     use std::collections::HashMap;
 
     use lazy_static::lazy_static;
-    use namada::ledger::{governance, pgf, pos};
-    use namada::types::address::{
+    use namada::core::address::{
         apfel, btc, dot, eth, kartoffel, nam, schnitzel, Address,
     };
-    use namada::types::key::*;
+    use namada::core::key::*;
+    use namada::ledger::{governance, pgf, pos};
     use namada_sdk::wallet::alias::Alias;
     use namada_sdk::wallet::pre_genesis::ValidatorWallet;
     use namada_sdk::wallet::Wallet;
@@ -78,7 +78,7 @@ mod dev {
             ("christel".into(), christel_address()),
             ("daewon".into(), daewon_address()),
             ("ester".into(), ester_address()),
-            ("masp".into(), namada::types::address::MASP),
+            ("masp".into(), namada::core::address::MASP),
         ]
         .into_iter()
         .collect();

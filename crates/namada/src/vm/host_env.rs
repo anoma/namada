@@ -7,10 +7,10 @@ use std::num::TryFromIntError;
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::transaction::Transaction;
-use namada_core::types::address::ESTABLISHED_ADDRESS_BYTES_LEN;
-use namada_core::types::internal::KeyVal;
-use namada_core::types::storage::{Epochs, TX_INDEX_LENGTH};
-use namada_core::types::validity_predicate::VpSentinel;
+use namada_core::address::ESTABLISHED_ADDRESS_BYTES_LEN;
+use namada_core::internal::KeyVal;
+use namada_core::storage::{Epochs, TX_INDEX_LENGTH};
+use namada_core::validity_predicate::VpSentinel;
 use namada_gas::{
     self as gas, GasMetering, TxGasMeter, VpGasMeter,
     MEMORY_ACCESS_GAS_PER_BYTE,
@@ -27,16 +27,16 @@ use super::wasm::TxCache;
 #[cfg(feature = "wasm-runtime")]
 use super::wasm::VpCache;
 use super::WasmCacheAccess;
+use crate::address::{self, Address};
+use crate::hash::Hash;
+use crate::ibc::IbcEvent;
+use crate::internal::HostEnvResult;
 use crate::ledger::vp_host_fns;
+use crate::storage::{BlockHeight, Epoch, Key, TxIndex};
 use crate::token::storage_key::{
     balance_key, is_any_minted_balance_key, is_any_minter_key,
     is_any_token_balance_key, minted_balance_key, minter_key,
 };
-use crate::types::address::{self, Address};
-use crate::types::hash::Hash;
-use crate::types::ibc::IbcEvent;
-use crate::types::internal::HostEnvResult;
-use crate::types::storage::{BlockHeight, Epoch, Key, TxIndex};
 use crate::vm::memory::VmMemory;
 use crate::vm::prefix_iter::{PrefixIteratorId, PrefixIterators};
 use crate::vm::{HostRef, MutHostRef};
@@ -63,7 +63,7 @@ pub enum TxRuntimeError {
     #[error("Storage error: {0}")]
     StorageError(#[from] StorageError),
     #[error("Storage data error: {0}")]
-    StorageDataError(crate::types::storage::Error),
+    StorageDataError(crate::storage::Error),
     #[error("Encoding error: {0}")]
     EncodingError(std::io::Error),
     #[error("Address error: {0}")]
@@ -1982,7 +1982,7 @@ where
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     vp_host_fns::add_gas(gas_meter, gas, sentinel)?;
     let public_keys_map =
-        namada_core::types::account::AccountPublicKeysMap::try_from_slice(
+        namada_core::account::AccountPublicKeysMap::try_from_slice(
             &public_keys_map,
         )
         .map_err(vp_host_fns::RuntimeError::EncodingError)?;
@@ -2196,7 +2196,7 @@ where
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas(env, gas)?;
     let public_keys_map =
-        namada_core::types::account::AccountPublicKeysMap::try_from_slice(
+        namada_core::account::AccountPublicKeysMap::try_from_slice(
             &public_keys_map,
         )
         .map_err(TxRuntimeError::EncodingError)?;
@@ -2367,7 +2367,7 @@ where
 // Temp. workaround for <https://github.com/anoma/namada/issues/1831>
 use namada_state::StorageRead;
 
-use crate::types::storage::BlockHash;
+use crate::storage::BlockHash;
 impl<'a, DB, H, CA> StorageRead for TxCtx<'a, DB, H, CA>
 where
     DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
@@ -2493,7 +2493,7 @@ where
     fn get_block_header(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<namada_core::types::storage::Header>, StorageError> {
+    ) -> Result<Option<namada_core::storage::Header>, StorageError> {
         let storage = unsafe { self.storage.get() };
         let (header, gas) = storage
             .get_block_header(Some(height))

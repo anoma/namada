@@ -1,6 +1,6 @@
 //! Governance library code
 
-use namada_core::types::address::{self, Address};
+use namada_core::address::{self, Address};
 
 /// governance CLI structures
 pub mod cli;

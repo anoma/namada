@@ -2,10 +2,10 @@ use std::ops::Deref;
 use std::str::FromStr;
 
 use assert_matches::assert_matches;
-use namada_core::types::address;
-use namada_core::types::dec::Dec;
-use namada_core::types::storage::{BlockHeight, Epoch};
-use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
+use namada_core::address;
+use namada_core::dec::Dec;
+use namada_core::storage::{BlockHeight, Epoch};
+use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_state::testing::TestWlStorage;
 use namada_storage::collections::lazy_map::Collectable;
 use namada_storage::StorageRead;

@@ -1,13 +1,13 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
+use namada_sdk::address::Address;
+use namada_sdk::key::common;
 use namada_sdk::proof_of_stake::types::{
     BondsAndUnbondsDetails, CommissionPair, ValidatorMetaData, ValidatorState,
 };
 use namada_sdk::proof_of_stake::PosParams;
 use namada_sdk::queries::vp::pos::EnrichedBondsAndUnbondsDetails;
-use namada_sdk::types::address::Address;
-use namada_sdk::types::key::common;
-use namada_sdk::types::storage::{BlockHeight, Epoch};
+use namada_sdk::storage::{BlockHeight, Epoch};
 
 use super::*;
 
