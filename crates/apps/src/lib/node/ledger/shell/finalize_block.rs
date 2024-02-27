@@ -108,9 +108,18 @@ where
             req.byzantine_validators,
         )?;
 
+        // Take IBC events that may be emitted from PGF
+        for ibc_event in self.wl_storage.write_log_mut().take_ibc_events() {
+            let mut event = Event::from(ibc_event.clone());
+            // Add the height for IBC event query
+            let height = self.wl_storage.storage.get_last_block_height() + 1;
+            event["height"] = height.to_string();
+            response.events.push(event);
+        }
+
         if new_epoch {
             // Apply PoS and PGF inflation
-            self.apply_inflation(current_epoch, &mut response)?;
+            self.apply_inflation(current_epoch)?;
         }
 
         let mut stats = InternalStats::default();
@@ -614,11 +623,7 @@ where
     /// account, then update the reward products of the validators. This is
     /// executed while finalizing the first block of a new epoch and is applied
     /// with respect to the previous epoch.
-    fn apply_inflation(
-        &mut self,
-        current_epoch: Epoch,
-        response: &mut shim::response::FinalizeBlock,
-    ) -> Result<()> {
+    fn apply_inflation(&mut self, current_epoch: Epoch) -> Result<()> {
         let last_epoch = current_epoch.prev();
 
         // Get the number of blocks in the last epoch
@@ -644,13 +649,6 @@ where
             &mut self.wl_storage,
             namada::ibc::transfer_over_ibc,
         )?;
-        for ibc_event in self.wl_storage.write_log_mut().take_ibc_events() {
-            let mut event = Event::from(ibc_event.clone());
-            // Add the height for IBC event query
-            let height = self.wl_storage.storage.get_last_block_height() + 1;
-            event["height"] = height.to_string();
-            response.events.push(event);
-        }
 
         Ok(())
     }
