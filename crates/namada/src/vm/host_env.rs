@@ -796,19 +796,9 @@ where
                 // a VP of a new account doesn't need to be iterated
                 continue;
             }
-            Some(write_log::StorageModification::Temp { ref value }) => {
-                let key_val = borsh::to_vec(&KeyVal {
-                    key,
-                    val: value.clone(),
-                })
-                .map_err(TxRuntimeError::EncodingError)?;
-                let len: i64 = key_val
-                    .len()
-                    .try_into()
-                    .map_err(TxRuntimeError::NumConversionError)?;
-                let result_buffer = unsafe { env.ctx.result_buffer.get() };
-                result_buffer.replace(key_val);
-                return Ok(len);
+            Some(write_log::StorageModification::Temp { .. }) => {
+                // temporary values are not returned by the iterator
+                continue;
             }
             None => {
                 let key_val = borsh::to_vec(&KeyVal { key, val })
