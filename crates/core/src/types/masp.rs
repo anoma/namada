@@ -1,6 +1,5 @@
 //! MASP types
 
-use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::str::FromStr;
 
@@ -89,9 +88,6 @@ pub fn encode_asset_type(
     }
     .encode()
 }
-
-/// MASP token map
-pub type TokenMap = BTreeMap<String, Address>;
 
 // enough capacity to store the payment address
 // plus the pinned/unpinned discriminant
