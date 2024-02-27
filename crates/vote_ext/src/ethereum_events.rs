@@ -147,11 +147,9 @@ impl VextDigest {
 
 #[cfg(test)]
 mod tests {
-    use namada_core::address::{self, Address};
     use namada_core::ethereum_events::{EthereumEvent, Uint};
     use namada_core::hash::Hash;
-    use namada_core::key;
-    use namada_tx::Signed;
+    use namada_core::{address, key};
 
     use super::*;
 

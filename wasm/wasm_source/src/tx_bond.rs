@@ -22,7 +22,6 @@ mod tests {
     use std::collections::BTreeSet;
 
     use namada::core::dec::Dec;
-    use namada::core::storage::Epoch;
     use namada::ledger::gas::VpGasMeter;
     use namada::ledger::pos::{OwnedPosParams, PosVP};
     use namada::proof_of_stake::storage::{
@@ -43,7 +42,6 @@ mod tests {
     use namada_tx_prelude::key::testing::arb_common_keypair;
     use namada_tx_prelude::key::RefTo;
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
-    use namada_tx_prelude::{token, BorshSerializeExt};
     use proptest::prelude::*;
 
     use super::*;

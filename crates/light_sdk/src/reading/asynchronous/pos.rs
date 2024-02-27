@@ -1,6 +1,5 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
-use namada_sdk::address::Address;
 use namada_sdk::key::common;
 use namada_sdk::proof_of_stake::types::{
     BondsAndUnbondsDetails, CommissionPair, ValidatorMetaData, ValidatorState,

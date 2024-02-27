@@ -4,7 +4,6 @@ use std::collections::{BTreeSet, HashSet};
 use eyre::{eyre, Result};
 use namada_core::address::Address;
 use namada_core::storage::Key;
-use namada_ethereum_bridge;
 use namada_ethereum_bridge::storage;
 use namada_ethereum_bridge::storage::escrow_key;
 use namada_tx::Tx;
@@ -165,7 +164,6 @@ fn validate_changed_keys(
 #[cfg(test)]
 mod tests {
     use std::cell::RefCell;
-    use std::default::Default;
     use std::env::temp_dir;
 
     use namada_core::borsh::BorshSerializeExt;
@@ -174,7 +172,6 @@ mod tests {
     use namada_state::testing::TestState;
     use namada_state::StorageWrite;
     use namada_tx::data::TxType;
-    use namada_tx::Tx;
     use rand::Rng;
 
     use super::*;

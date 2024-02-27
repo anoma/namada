@@ -3,9 +3,6 @@
 //! The log can only hold `N` events at a time, where `N` is a configurable
 //! parameter. If the log is holding `N` events, and a new event is logged,
 //! old events are pruned.
-
-use std::default::Default;
-
 use circular_queue::CircularQueue;
 
 use crate::events::Event;

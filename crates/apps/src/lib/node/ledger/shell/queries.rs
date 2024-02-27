@@ -1,12 +1,10 @@
 //! Shell methods for querying state
 
-use namada::core::address::Address;
 use namada::ledger::dry_run_tx;
 use namada::ledger::queries::{RequestCtx, ResponseQuery};
 use namada::token;
 
 use super::*;
-use crate::node::ledger::response;
 
 impl<D, H> Shell<D, H>
 where
@@ -70,12 +68,10 @@ mod test_queries {
     use namada::ledger::pos::PosQueries;
     use namada::proof_of_stake::storage::read_consensus_validator_set_addresses_with_stake;
     use namada::proof_of_stake::types::WeightedValidator;
-    use namada::state::EPOCH_SWITCH_BLOCKS_DELAY;
     use namada::tendermint::abci::types::VoteInfo;
-    use namada_sdk::eth_bridge::{EthBridgeQueries, SendValsetUpd};
+    use namada_sdk::eth_bridge::SendValsetUpd;
 
     use super::*;
-    use crate::node::ledger::shell::test_utils;
     use crate::node::ledger::shell::test_utils::get_pkh_from_address;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
 

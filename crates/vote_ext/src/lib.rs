@@ -109,15 +109,15 @@ impl TryFrom<&Tx> for EthereumTxData {
 
     fn try_from(tx: &Tx) -> Result<Self, TxError> {
         let TxType::Protocol(protocol_tx) = tx.header().tx_type else {
-                return Err(TxError::Deserialization(
-                    "Expected protocol tx type".into(),
-                ));
-            };
+            return Err(TxError::Deserialization(
+                "Expected protocol tx type".into(),
+            ));
+        };
         let Some(tx_data) = tx.data() else {
-                return Err(TxError::Deserialization(
-                    "Expected protocol tx type associated data".into(),
-                ));
-            };
+            return Err(TxError::Deserialization(
+                "Expected protocol tx type associated data".into(),
+            ));
+        };
         Self::deserialize(&protocol_tx.tx, &tx_data)
     }
 }

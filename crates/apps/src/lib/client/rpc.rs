@@ -4,7 +4,6 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::{self, read_dir};
 use std::io;
-use std::iter::Iterator;
 use std::str::FromStr;
 
 use borsh::BorshDeserialize;
@@ -1330,8 +1329,8 @@ pub async fn query_proposal_result(
                 false,
             );
 
-            if proposal.is_ok() {
-                proposal.unwrap()
+            if let Ok(proposal) = proposal {
+                proposal
             } else {
                 edisplay_line!(
                     context.io(),
@@ -1960,7 +1959,6 @@ pub async fn query_bonded_stake<N: Namada>(
 
     match args.validator {
         Some(validator) => {
-            let validator = validator;
             // Find bonded stake for the given validator
             let stake =
                 get_validator_stake(context.client(), epoch, &validator).await;
@@ -2262,7 +2260,6 @@ pub async fn query_and_print_metadata(
 pub async fn query_slashes<N: Namada>(context: &N, args: args::QuerySlashes) {
     match args.validator {
         Some(validator) => {
-            let validator = validator;
             // Find slashes for the given validator
             let slashes: Vec<Slash> = unwrap_client_response::<N::Client, _>(
                 RPC.vp()

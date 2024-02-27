@@ -1,7 +1,5 @@
 //! Cryptographic signature keys storage API
 
-use namada_core::address::Address;
-use namada_core::key::common;
 use namada_core::storage;
 use namada_storage::{Result, StorageRead, StorageWrite};
 

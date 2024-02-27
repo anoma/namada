@@ -1,4 +1,5 @@
 pub mod eth_events {
+    #![allow(dead_code)]
     use std::fmt::Debug;
     use std::str::FromStr;
 
@@ -119,6 +120,7 @@ pub mod eth_events {
         }
     }
 
+    #[allow(unused_macros)]
     macro_rules! parse_method {
         ($name:ident -> $type:ty) => {
             fn $name(self) -> Result<$type> {

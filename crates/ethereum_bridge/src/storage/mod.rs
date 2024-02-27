@@ -46,7 +46,7 @@ pub fn has_eth_addr_segment(key: &Key) -> bool {
 /// Returns whether a key belongs to this account or not
 pub fn is_eth_bridge_key(nam_addr: &Address, key: &Key) -> bool {
     key == &escrow_key(nam_addr)
-        || matches!(key.segments.get(0), Some(first_segment) if first_segment == &ADDRESS.to_db_key())
+        || matches!(key.segments.first(), Some(first_segment) if first_segment == &ADDRESS.to_db_key())
         || wrapped_erc20s::has_erc20_segment(key)
 }
 

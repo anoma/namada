@@ -77,8 +77,8 @@ impl AbortableSpawner {
     /// This future will resolve when:
     ///
     ///   1. A user sends a shutdown signal (e.g. SIGINT), or...
-    ///   2. One of the child processes of the ledger terminates,
-    ///      which generates a notification upon dropping an [`Aborter`].
+    ///   2. One of the child processes of the ledger terminates, which
+    ///      generates a notification upon dropping an [`Aborter`].
     ///
     /// These two scenarios are represented by the [`AborterStatus`] enum.
     pub async fn wait_for_abort(mut self) -> AborterStatus {

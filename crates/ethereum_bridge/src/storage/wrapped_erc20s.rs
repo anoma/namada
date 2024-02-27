@@ -106,14 +106,11 @@ impl TryFrom<(&Address, &storage::Key)> for Key {
 
 #[cfg(test)]
 mod test {
-    use std::result::Result;
     use std::str::FromStr;
 
     use assert_matches::assert_matches;
     use namada_core::address::testing::nam;
-    use namada_core::address::Address;
     use namada_core::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
-    use namada_core::storage::DbKeySeg;
 
     use super::*;
     use crate::token::storage_key::BALANCE_STORAGE_KEY;

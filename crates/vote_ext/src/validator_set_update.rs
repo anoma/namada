@@ -341,7 +341,7 @@ impl From<ValidatorSetArgs> for ethereum_structs::ValidatorSetArgs {
         ethereum_structs::ValidatorSetArgs {
             validator_set: validators
                 .into_iter()
-                .zip(voting_powers.into_iter())
+                .zip(voting_powers)
                 .map(|(addr, power)| encode_validator_data(addr, power))
                 .collect(),
             nonce: epoch.0.into(),
@@ -412,7 +412,6 @@ mod tests {
     use std::str::FromStr;
 
     use data_encoding::HEXLOWER;
-    use namada_core::ethereum_events::EthAddress;
 
     use super::*;
 

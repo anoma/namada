@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::convert::TryFrom;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 
@@ -1160,7 +1159,7 @@ impl Tx {
     ) -> Result<&Signature, VerifySigError> {
         self.verify_signatures(
             hashes,
-            AccountPublicKeysMap::from_iter([public_key.clone()].into_iter()),
+            AccountPublicKeysMap::from_iter([public_key.clone()]),
             &None,
             1,
             None,
@@ -1419,7 +1418,7 @@ impl Tx {
         let secret_keys = if signer.is_some() {
             account_public_keys_map.index_secret_keys(keypairs)
         } else {
-            (0..).zip(keypairs.into_iter()).collect()
+            (0..).zip(keypairs).collect()
         };
 
         self.add_section(Section::Signature(Signature::new(

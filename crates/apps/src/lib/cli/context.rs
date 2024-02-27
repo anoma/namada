@@ -549,7 +549,7 @@ impl ArgFromMutContext for ExtendedViewingKey {
             // Or it is a stored alias of one
             ctx.wallet
                 .find_viewing_key(raw)
-                .map(Clone::clone)
+                .copied()
                 .map_err(|_find_err| format!("Unknown viewing key {}", raw))
         })
     }

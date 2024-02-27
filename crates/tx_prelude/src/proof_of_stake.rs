@@ -1,7 +1,6 @@
 //! Proof of Stake system integration with functions for transactions
 
 use namada_core::dec::Dec;
-use namada_core::key::common;
 use namada_core::{key, token};
 pub use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::storage::read_pos_params;

@@ -28,6 +28,7 @@ use crate::vp::TestVpEnv;
 static mut CTX: Ctx = unsafe { Ctx::new() };
 
 /// Tx execution context provides access to host env functions
+#[allow(static_mut_refs)]
 pub fn ctx() -> &'static mut Ctx {
     unsafe { &mut CTX }
 }
@@ -251,7 +252,7 @@ mod native_tx_host_env {
         /// A [`TestTxEnv`] that can be used for tx host env functions calls
         /// that implements the WASM host environment in native environment.
         pub static ENV: RefCell<Option<Pin<Box<TestTxEnv>>>> =
-            RefCell::new(None);
+            const { RefCell::new(None) };
     }
 
     /// Initialize the tx host environment in [`ENV`]. This will be used in the
@@ -516,7 +517,6 @@ mod native_tx_host_env {
 #[cfg(test)]
 mod tests {
     use namada::core::storage;
-    use namada::ledger::storage::mockdb::MockDB;
     use namada::vm::host_env::{self, TxVmEnv};
     use namada::vm::memory::VmMemory;
     use namada_core::hash::Sha256Hasher;

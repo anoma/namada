@@ -29,7 +29,6 @@ pub use namada_merkle_tree::{
     self as merkle_tree, ics23_specs, MembershipProof, MerkleTree,
     MerkleTreeStoresRead, MerkleTreeStoresWrite, StoreRef, StoreType,
 };
-use namada_parameters::{self};
 pub use namada_storage as storage;
 pub use namada_storage::conversion_state::{
     ConversionState, WithConversionState,
@@ -585,7 +584,6 @@ pub mod testing {
     use namada_core::address;
     use namada_core::address::EstablishedAddressGen;
     use namada_core::chain::ChainId;
-    use namada_core::hash::Sha256Hasher;
     use namada_core::time::DateTimeUtc;
     use namada_storage::tx_queue::{ExpiredTxsQueue, TxQueue};
 
@@ -656,7 +654,7 @@ mod tests {
     use namada_core::storage::DbKeySeg;
     use namada_core::time::{self, DateTimeUtc, Duration};
     use namada_core::token;
-    use namada_parameters::{EpochDuration, Parameters};
+    use namada_parameters::EpochDuration;
     use proptest::prelude::*;
     use proptest::test_runner::Config;
     // Use `RUST_LOG=info` (or another tracing level) and `--nocapture` to

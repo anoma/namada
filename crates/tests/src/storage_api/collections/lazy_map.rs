@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
-    use std::convert::TryInto;
 
     use borsh::{BorshDeserialize, BorshSerialize};
     use namada::core::address::{self, Address};
@@ -154,9 +153,7 @@ mod tests {
                 Transition::CommitTx | Transition::CommitTxAndBlock => {
                     let valid_actions_to_commit =
                         std::mem::take(&mut state.valid_transitions);
-                    state
-                        .committed_transitions
-                        .extend(valid_actions_to_commit.into_iter());
+                    state.committed_transitions.extend(valid_actions_to_commit);
                 }
                 _ => state.valid_transitions.push(transition.clone()),
             }

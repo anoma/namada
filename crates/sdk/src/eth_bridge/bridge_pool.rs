@@ -747,6 +747,7 @@ mod recommendations {
     use namada_core::ethereum_events::Uint as EthUint;
     use namada_core::storage::BlockHeight;
     use namada_core::uint::{self, Uint, I256};
+    use namada_ethereum_bridge::storage::proof::BridgePoolRootProof;
     use namada_vote_ext::validator_set_update::{
         EthAddrBook, VotingPowersMap, VotingPowersMapExt,
     };
@@ -756,8 +757,6 @@ mod recommendations {
     use crate::eth_bridge::storage::bridge_pool::{
         get_nonce_key, get_signed_root_key,
     };
-    use crate::eth_bridge::storage::proof::BridgePoolRootProof;
-    use crate::io::Io;
 
     const fn unsigned_transfer_fee() -> Uint {
         Uint::from_u64(37_500_u64)
@@ -1220,8 +1219,6 @@ mod recommendations {
 
     #[cfg(test)]
     mod test_recommendations {
-        use namada_core::address;
-
         use super::*;
         use crate::io::StdIo;
 
@@ -1347,8 +1344,7 @@ mod recommendations {
                 ctx.expected_eligible.push(EligibleRecommendation {
                     transfer_hash: ctx.pending.keccak256().to_string(),
                     cost: transfer_fee()
-                        - I256::try_from(ctx.pending.gas_fee.amount)
-                            .expect("Test failed"),
+                        - I256::from(ctx.pending.gas_fee.amount),
                     pending_transfer: ctx.pending.clone(),
                 });
             });
@@ -1589,8 +1585,7 @@ mod recommendations {
                         transfer_hash: pending.keccak256().to_string(),
                         cost: transfer_fee()
                             - I256::from((1e9 / rate).floor() as u64)
-                                * I256::try_from(pending.gas_fee.amount)
-                                    .expect("Test failed"),
+                                * I256::from(pending.gas_fee.amount),
                         pending_transfer: pending,
                     });
                 }

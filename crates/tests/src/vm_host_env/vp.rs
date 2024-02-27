@@ -114,7 +114,6 @@ mod native_vp_host_env {
     use concat_idents::concat_idents;
     use namada::state::StateRead;
     use namada::vm::host_env::*;
-    use namada::vm::WasmCacheRwAccess;
 
     use super::*;
 
@@ -131,7 +130,7 @@ mod native_vp_host_env {
         /// A [`TestVpEnv`] that can be used for VP host env functions calls
         /// that implements the WASM host environment in native environment.
         pub static ENV: RefCell<Option<Pin<Box<TestVpEnv>>>> =
-            RefCell::new(None);
+            const {RefCell::new(None) };
     }
 
     /// Initialize the VP environment in [`ENV`]. This will be used in the

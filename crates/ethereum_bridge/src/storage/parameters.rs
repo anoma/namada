@@ -361,8 +361,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use eyre::Result;
-    use namada_core::ethereum_events::EthAddress;
     use namada_state::testing::TestState;
 
     use super::*;

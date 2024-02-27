@@ -64,7 +64,7 @@ impl DerivationPath {
     pub fn is_bip44_conform(&self, strict: bool) -> bool {
         // check the path conforms the structure:
         // m / purpose' / coin_type' / account' / change / address_index
-        let purpose = self.0.as_ref().get(0);
+        let purpose = self.0.as_ref().first();
         let coin_type = self.0.as_ref().get(1);
         let account = self.0.as_ref().get(2);
         let change = self.0.as_ref().get(3);
@@ -108,7 +108,7 @@ impl DerivationPath {
         // check the path conforms one of the structure:
         // m / purpose' / coin_type' / account'
         // m / purpose' / coin_type' / account' / address_index
-        let purpose = self.0.as_ref().get(0);
+        let purpose = self.0.as_ref().first();
         let coin_type = self.0.as_ref().get(1);
         let account = self.0.as_ref().get(2);
         let address = self.0.as_ref().get(3);

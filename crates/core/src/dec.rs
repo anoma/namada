@@ -548,7 +548,6 @@ pub mod testing {
 #[cfg(test)]
 mod test_dec {
     use super::*;
-    use crate::token::{Amount, Change};
 
     #[derive(Debug, Serialize, Deserialize)]
     struct SerializerTest {

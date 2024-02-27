@@ -12,10 +12,8 @@ pub mod ibc {
 }
 
 // used in the VP input
-use core::convert::AsRef;
 use core::slice;
 pub use std::collections::{BTreeSet, HashSet};
-use std::convert::TryFrom;
 use std::marker::PhantomData;
 
 pub use namada_core::address::Address;

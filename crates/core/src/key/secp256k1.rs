@@ -92,7 +92,7 @@ impl Hash for PublicKey {
 
 impl PartialOrd for PublicKey {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.0.to_sec1_bytes().partial_cmp(&other.0.to_sec1_bytes())
+        Some(self.cmp(other))
     }
 }
 
@@ -417,16 +417,16 @@ impl Hash for Signature {
 
 impl PartialOrd for Signature {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        match self.0.to_bytes().partial_cmp(&other.0.to_bytes()) {
-            Some(Ordering::Equal) => self.1.partial_cmp(&other.1),
-            res => res,
-        }
+        Some(self.cmp(other))
     }
 }
 
 impl Ord for Signature {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).unwrap()
+        match self.0.to_bytes().cmp(&other.0.to_bytes()) {
+            Ordering::Equal => self.1.cmp(&other.1),
+            res => res,
+        }
     }
 }
 
@@ -528,7 +528,6 @@ impl super::SigScheme for SigScheme {
 
 #[cfg(test)]
 mod test {
-    use k256::elliptic_curve::sec1::ToEncodedPoint;
 
     use super::*;
 

@@ -532,7 +532,7 @@ mod tests {
     use namada_core::token::testing::arb_amount;
     use namada_parameters::{EpochDuration, Parameters};
     use namada_storage::testing::TestStorage;
-    use namada_trans_token::{write_denom, Denomination};
+    use namada_trans_token::write_denom;
     use proptest::prelude::*;
     use proptest::test_runner::Config;
     use test_log::test;

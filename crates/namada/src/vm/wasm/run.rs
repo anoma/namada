@@ -687,7 +687,8 @@ mod tests {
         let downcasted_tx_rt_err: &TxRuntimeError = source_err
             .downcast_ref()
             .unwrap_or_else(|| panic!("{assert_msg}: {source_err}"));
-        let TxRuntimeError::MemoryError(tx_mem_err) = downcasted_tx_rt_err else {
+        let TxRuntimeError::MemoryError(tx_mem_err) = downcasted_tx_rt_err
+        else {
             panic!("{assert_msg}: {downcasted_tx_rt_err}");
         };
         tx_mem_err

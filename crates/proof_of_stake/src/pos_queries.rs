@@ -82,9 +82,7 @@ pub struct PosQueriesHook<'db, S> {
 
 impl<'db, S> Clone for PosQueriesHook<'db, S> {
     fn clone(&self) -> Self {
-        Self {
-            storage: self.storage,
-        }
+        *self
     }
 }
 

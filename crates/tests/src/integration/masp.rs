@@ -1376,7 +1376,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 vec!["shielded-sync", "--node", validator_one_rpc],
             )?;
             let tx_args = if dry_run && tx_args[0] == "transfer" {
-                vec![tx_args.clone(), vec!["--dry-run"]].concat()
+                [tx_args.clone(), vec!["--dry-run"]].concat()
             } else {
                 tx_args.clone()
             };

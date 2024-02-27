@@ -3,11 +3,7 @@
 
 use std::collections::HashMap;
 
-use namada::state::{DBIter, StorageHasher, DB};
-use namada::vote_ext::validator_set_update;
-
 use super::*;
-use crate::node::ledger::shell::Shell;
 
 impl<D, H> Shell<D, H>
 where
@@ -157,19 +153,17 @@ mod test_vote_extensions {
                 .collect()
         };
         #[allow(clippy::redundant_clone)]
-        let validator_set_update = Some(
-            validator_set_update::Vext {
-                voting_powers,
-                validator_addr: validator_addr.clone(),
-                // invalid epoch
-                signing_epoch: next_epoch,
-            }
-            .sign(eth_bridge_key),
-        );
+        let validator_set_update = validator_set_update::Vext {
+            voting_powers,
+            validator_addr: validator_addr.clone(),
+            // invalid epoch
+            signing_epoch: next_epoch,
+        }
+        .sign(eth_bridge_key);
         assert!(
             validate_valset_upd_vext(
                 &shell.state,
-                &validator_set_update.unwrap(),
+                &validator_set_update,
                 signing_epoch,
             )
             .is_err()
@@ -200,18 +194,16 @@ mod test_vote_extensions {
                 .collect()
         };
         #[allow(clippy::redundant_clone)]
-        let validator_set_update = Some(
-            validator_set_update::Vext {
-                voting_powers,
-                signing_epoch,
-                validator_addr: validator_addr.clone(),
-            }
-            .sign(&eth_bridge_key),
-        );
+        let validator_set_update = validator_set_update::Vext {
+            voting_powers,
+            signing_epoch,
+            validator_addr: validator_addr.clone(),
+        }
+        .sign(&eth_bridge_key);
         assert!(
             validate_valset_upd_vext(
                 &shell.state,
-                &validator_set_update.unwrap(),
+                &validator_set_update,
                 signing_epoch,
             )
             .is_err()

@@ -348,7 +348,7 @@ pub async fn aux_signing_data(
         match &args.wrapper_fee_payer {
             Some(keypair) => keypair.clone(),
             None => public_keys
-                .get(0)
+                .first()
                 .ok_or(TxSubmitError::InvalidFeePayer)?
                 .clone(),
         }
@@ -388,7 +388,7 @@ pub async fn init_validator_signing_data(
         match &args.wrapper_fee_payer {
             Some(keypair) => keypair.clone(),
             None => public_keys
-                .get(0)
+                .first()
                 .ok_or(TxSubmitError::InvalidFeePayer)?
                 .clone(),
         }

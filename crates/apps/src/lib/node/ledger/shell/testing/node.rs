@@ -32,19 +32,19 @@ use namada::proof_of_stake::types::WeightedValidator;
 use namada::state::{LastBlock, Sha256Hasher, EPOCH_SWITCH_BLOCKS_DELAY};
 use namada::tendermint::abci::response::Info;
 use namada::tendermint::abci::types::VoteInfo;
-use namada::tendermint_rpc::SimpleRequest;
 use namada_sdk::queries::Client;
 use namada_sdk::tendermint_proto::google::protobuf::Timestamp;
 use namada_sdk::tx::data::ResultCode;
 use regex::Regex;
 use tendermint_rpc::endpoint::block;
+use tendermint_rpc::SimpleRequest;
 use tokio::sync::mpsc;
 
+use crate::facade::tendermint;
 use crate::facade::tendermint_proto::v0_37::abci::{
     RequestPrepareProposal, RequestProcessProposal,
 };
 use crate::facade::tendermint_rpc::error::Error as RpcError;
-use crate::facade::{tendermint, tendermint_rpc};
 use crate::node::ledger::ethereum_oracle::test_tools::mock_web3_client::{
     TestOracle, Web3Client, Web3Controller,
 };
@@ -565,7 +565,7 @@ impl MockNode {
             txs: txs
                 .clone()
                 .into_iter()
-                .zip(tx_results.into_iter())
+                .zip(tx_results)
                 .map(|(tx, result)| ProcessedTx {
                     tx: tx.into(),
                     result,
@@ -829,7 +829,7 @@ impl<'a> Client for &'a MockNode {
                             block: 0,
                             app: 0,
                         }),
-                        chain_id: "Namada".try_into().unwrap(),
+                        chain_id: "Namada".into(),
                         height: encoded_event.0 as i64,
                         time: None,
                         last_block_id: None,

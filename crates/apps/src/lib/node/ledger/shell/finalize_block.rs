@@ -9,17 +9,15 @@ use namada::core::key::tm_raw_hash_to_string;
 use namada::core::storage::{BlockHash, BlockResults, Epoch, Header};
 use namada::governance::pgf::inflation as pgf_inflation;
 use namada::ledger::events::EventType;
-use namada::ledger::gas::{GasMetering, TxGasMeter};
+use namada::ledger::gas::GasMetering;
 use namada::ledger::pos::namada_proof_of_stake;
-use namada::ledger::protocol::{self, WrapperArgs};
+use namada::ledger::protocol::WrapperArgs;
 use namada::proof_of_stake;
 use namada::proof_of_stake::storage::{
     find_validator_by_raw_hash, write_last_block_proposer_address,
 };
 use namada::state::write_log::StorageModification;
-use namada::state::{
-    ResultExt, StorageRead, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY,
-};
+use namada::state::{ResultExt, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY};
 use namada::tx::data::protocol::ProtocolTxType;
 use namada::vote_ext::ethereum_events::MultiSignedEthEvent;
 use namada::vote_ext::ethereum_tx_data_variants;
@@ -722,9 +720,7 @@ fn pos_votes_from_abci(
                     );
 
                     // Try to convert voting power to u64
-                    let validator_vp = u64::try_from(*power).expect(
-                        "Must be able to convert voting power from i64 to u64",
-                    );
+                    let validator_vp = u64::from(*power);
 
                     Some(namada_proof_of_stake::types::VoteInfo {
                         validator_address,
@@ -745,7 +741,7 @@ fn pos_votes_from_abci(
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_finalize_block {
-    use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+    use std::collections::{BTreeMap, HashMap, HashSet};
     use std::num::NonZeroU64;
     use std::str::FromStr;
 
@@ -804,9 +800,7 @@ mod test_finalize_block {
     use test_log::test;
 
     use super::*;
-    use crate::facade::tendermint::abci::types::{
-        Misbehavior, Validator, VoteInfo,
-    };
+    use crate::facade::tendermint::abci::types::Validator;
     use crate::node::ledger::oracle::control::Command;
     use crate::node::ledger::shell::test_utils::*;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{

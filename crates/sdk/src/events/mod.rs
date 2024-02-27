@@ -2,7 +2,6 @@
 pub mod log;
 
 use std::collections::HashMap;
-use std::convert::TryFrom;
 
 pub use namada_core::event::{Event, EventError, EventLevel, EventType};
 use serde_json::Value;

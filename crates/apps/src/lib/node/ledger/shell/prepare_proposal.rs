@@ -4,7 +4,6 @@ use masp_primitives::transaction::Transaction;
 use namada::core::address::Address;
 use namada::core::hints;
 use namada::core::key::tm_raw_hash_to_string;
-use namada::core::time::DateTimeUtc;
 use namada::gas::TxGasMeter;
 use namada::ledger::protocol;
 use namada::ledger::storage::tx_queue::TxInQueue;
@@ -426,7 +425,7 @@ mod test_prepare_proposal {
     use std::collections::BTreeSet;
 
     use borsh_ext::BorshSerializeExt;
-    use namada::core::address::{self, Address};
+    use namada::core::address;
     use namada::core::ethereum_events::EthereumEvent;
     use namada::core::key::RefTo;
     use namada::core::storage::{BlockHeight, InnerEthEventsQueue};
@@ -440,14 +439,13 @@ mod test_prepare_proposal {
     use namada::proof_of_stake::Epoch;
     use namada::state::collections::lazy_map::{NestedSubKey, SubKey};
     use namada::token::{read_denom, Amount, DenominatedAmount};
-    use namada::tx::data::{Fee, TxType, WrapperTx};
+    use namada::tx::data::Fee;
     use namada::tx::{Code, Data, Header, Section, Signature, Signed};
     use namada::vote_ext::{ethereum_events, ethereum_tx_data_variants};
     use namada::{replay_protection, token};
     use namada_sdk::storage::StorageWrite;
 
     use super::*;
-    use crate::config::ValidatorLocalConfig;
     use crate::node::ledger::shell::test_utils::{
         self, gen_keypair, get_pkh_from_address, TestShell,
     };
@@ -836,7 +834,7 @@ mod test_prepare_proposal {
         // fail the test
         let expected_txs: Vec<Header> = expected_wrapper
             .into_iter()
-            .chain(expected_decrypted.into_iter())
+            .chain(expected_decrypted)
             .map(|tx| tx.header)
             .collect();
         let received: Vec<Header> = shell

@@ -627,26 +627,26 @@ impl Neg for I256 {
 
 impl PartialOrd for I256 {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match (self.non_negative(), other.non_negative()) {
-            (true, false) => Some(Ordering::Greater),
-            (false, true) => Some(Ordering::Less),
-            (true, true) => {
-                let this = self.abs();
-                let that = other.abs();
-                this.partial_cmp(&that)
-            }
-            (false, false) => {
-                let this = self.abs();
-                let that = other.abs();
-                that.partial_cmp(&this)
-            }
-        }
+        Some(self.cmp(other))
     }
 }
 
 impl Ord for I256 {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).unwrap()
+        match (self.non_negative(), other.non_negative()) {
+            (true, false) => Ordering::Greater,
+            (false, true) => Ordering::Less,
+            (true, true) => {
+                let this = self.abs();
+                let that = other.abs();
+                this.cmp(&that)
+            }
+            (false, false) => {
+                let this = self.abs();
+                let that = other.abs();
+                that.cmp(&this)
+            }
+        }
     }
 }
 
