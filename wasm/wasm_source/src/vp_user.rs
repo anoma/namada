@@ -235,7 +235,7 @@ fn validate_pos_changes(
                                         | BelowThreshold
                                 ))
                         {
-                            address == owner && **valid_sig
+                            if address == owner { **valid_sig } else { true }
                         } else if
                         // Bonding and unbonding may affect validator sets
                         matches!(
@@ -347,6 +347,7 @@ mod tests {
     use namada_tx_prelude::{StorageWrite, TxEnv};
     use namada_vp_prelude::account::AccountPublicKeysMap;
     use namada_vp_prelude::key::RefTo;
+    use proof_of_stake::jail_validator;
     use proptest::prelude::*;
     use storage::testing::arb_account_storage_key_no_vp;
 
@@ -625,6 +626,153 @@ mod tests {
         assert!(
             !validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
                 .unwrap()
+        );
+    }
+
+    /// Test unjailing of a validator that causes a consensus validator to be
+    /// demoted to the below-capacity set. Probing a bug as seen in the SE.
+    #[test]
+    fn test_unjail_with_demotion() {
+        // Genesis validators
+        let mut pos_params = PosParams::default();
+        pos_params.owned.max_validator_slots = 2;
+
+        // Common
+        let protocol_key = key::testing::keypair_1().ref_to();
+        let eth_cold_key = key::testing::keypair_1().ref_to();
+        let eth_hot_key = key::testing::keypair_1().ref_to();
+        let commission_rate = Dec::new(5, 2).unwrap();
+        let max_commission_rate_change = Dec::new(1, 2).unwrap();
+
+        // Unique
+        let (validator1, validator2, validator3) = (
+            address::testing::established_address_1(),
+            address::testing::established_address_2(),
+            address::testing::established_address_3(),
+        );
+        let (stake1, stake2, stake3) = (
+            token::Amount::native_whole(1),
+            token::Amount::native_whole(2),
+            token::Amount::native_whole(3),
+        );
+        let (ck1, ck2, ck3) = (
+            key::testing::keypair_2().ref_to(),
+            key::testing::keypair_3().ref_to(),
+            key::testing::keypair_4().ref_to(),
+        );
+        let genesis_validators = [
+            GenesisValidator {
+                address: validator1.clone(),
+                tokens: stake1,
+                consensus_key: ck1.clone(),
+                protocol_key: protocol_key.clone(),
+                commission_rate,
+                max_commission_rate_change,
+                eth_hot_key: eth_hot_key.clone(),
+                eth_cold_key: eth_cold_key.clone(),
+                metadata: Default::default(),
+            },
+            GenesisValidator {
+                address: validator3.clone(),
+                tokens: stake3,
+                consensus_key: ck3.clone(),
+                protocol_key: protocol_key.clone(),
+                commission_rate,
+                max_commission_rate_change,
+                eth_hot_key: eth_hot_key.clone(),
+                eth_cold_key: eth_cold_key.clone(),
+                metadata: Default::default(),
+            },
+            GenesisValidator {
+                address: validator2.clone(),
+                tokens: stake2,
+                consensus_key: ck2,
+                protocol_key,
+                commission_rate,
+                max_commission_rate_change,
+                eth_hot_key,
+                eth_cold_key,
+                metadata: Default::default(),
+            },
+        ];
+
+        println!("\nValidator1: {}", &validator1);
+        println!("Validator2: {}", &validator2);
+        println!("Validator3: {}\n", &validator3);
+
+        // Init PoS storage
+        init_pos(&genesis_validators[..], &pos_params, Epoch(0));
+
+        // Initialize a tx environment
+        let mut tx_env = tx_host_env::take();
+        let token = address::testing::nam();
+
+        // write the denomination of NAM into storage
+        token::write_denom(
+            &mut tx_env.state,
+            &token,
+            token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        )
+        .unwrap();
+
+        // Jail validator3
+        jail_validator(
+            &mut tx_env.state,
+            &pos_params,
+            &validator3,
+            Epoch(0),
+            Epoch(0),
+        )
+        .unwrap();
+
+        // Initialize VP environment
+        vp_host_env::init_from_tx(validator3.clone(), tx_env, |_address| {
+            // Unjail validator3
+            tx::ctx().unjail_validator(&validator3).unwrap()
+        });
+
+        let pks_map = AccountPublicKeysMap::from_iter(vec![ck3]);
+
+        let mut vp_env = vp_host_env::take();
+        let mut tx_data = Tx::from_type(TxType::Raw);
+        tx_data.set_data(Data::new(vec![]));
+        tx_data.set_code(Code::new(vec![], None));
+        tx_data.add_section(Section::Signature(Signature::new(
+            vec![tx_data.raw_header_hash()],
+            pks_map.index_secret_keys(vec![key::testing::keypair_4()]),
+            None,
+        )));
+        let signed_tx = tx_data.clone();
+        vp_env.tx = signed_tx.clone();
+
+        let keys_changed: BTreeSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        // dbg!(&keys_changed);
+        // let verifiers: BTreeSet<Address> = BTreeSet::default();
+        let verifiers: BTreeSet<Address> = vp_env.get_verifiers();
+        dbg!(&verifiers);
+        vp_host_env::set(vp_env);
+        // for verifier in verifiers.clone() {
+        // dbg!(&verifier);
+        // assert!(
+        //     validate_tx(
+        //         &CTX,
+        //         signed_tx.clone(),
+        //         validator1,
+        //         keys_changed.clone(),
+        //         verifiers.clone()
+        //     )
+        //     .unwrap()
+        // );
+        assert!(
+            validate_tx(
+                &CTX,
+                signed_tx.clone(),
+                validator1,
+                keys_changed.clone(),
+                verifiers.clone()
+            )
+            .unwrap()
         );
     }
 
