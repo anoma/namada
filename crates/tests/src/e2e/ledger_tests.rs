@@ -211,7 +211,6 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
     let _bg_validator_1 = validator_1.background();
 
     let validator_0_rpc = get_actor_rpc(&test, Who::Validator(0));
-    let validator_1_rpc = get_actor_rpc(&test, Who::Validator(1));
     let non_validator_rpc = get_actor_rpc(&test, Who::NonValidator);
 
     // Find the block height on the validator
@@ -220,14 +219,12 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
     // Wait for the non-validator to be synced to at least the same height
     wait_for_block_height(&test, &non_validator_rpc, after_tx_height, 10)?;
 
-    let query_balance_args = |ledger_rpc| {
-        vec![
-            "balance", "--owner", ALBERT, "--token", NAM, "--node", ledger_rpc,
-        ]
-    };
-    for ledger_rpc in &[validator_0_rpc, validator_1_rpc, non_validator_rpc] {
+    let query_balance_args = ["balance", "--owner", ALBERT, "--token", NAM];
+    for who in
+        [Who::Validator(0), Who::Validator(1), Who::NonValidator].into_iter()
+    {
         let mut client =
-            run!(test, Bin::Client, query_balance_args(ledger_rpc), Some(40))?;
+            run_as!(test, who, Bin::Client, query_balance_args, Some(40))?;
         client.exp_string("nam: 2000010.1")?;
         client.assert_success();
     }
