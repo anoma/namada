@@ -10,9 +10,9 @@ use namada_core::types::dec::Dec;
 #[cfg(any(feature = "multicore", test))]
 use namada_core::types::hash::Hash;
 #[cfg(any(feature = "multicore", test))]
-use namada_core::types::masp::TokenMap;
 use namada_core::types::uint::Uint;
 use namada_parameters as parameters;
+use namada_state::collections::{LazyCollection, LazyMap};
 use namada_state::{DBIter, StorageHasher, WlStorage, DB};
 use namada_storage::{StorageRead, StorageWrite};
 use namada_trans_token::storage_key::{balance_key, minted_balance_key};
@@ -25,6 +25,12 @@ use crate::storage_key::{
     masp_last_locked_amount_key, masp_locked_amount_target_key,
     masp_max_reward_rate_key,
 };
+
+type TokenMap = LazyMap<String, Address>;
+
+pub fn token_map_handle() -> TokenMap {
+    LazyMap::open(masp_token_map_key())
+}
 
 /// Compute the precision of MASP rewards for the given token. This function
 /// must be a non-zero constant for a given token.
@@ -220,10 +226,15 @@ where
     // The derived conversions will be placed in MASP address space
     let masp_addr = MASP;
 
-    let token_map_key = masp_token_map_key();
-    let token_map: TokenMap =
-        wl_storage.read(&token_map_key)?.unwrap_or_default();
-    let mut masp_reward_keys: Vec<_> = token_map.values().cloned().collect();
+    let token_map = token_map_handle();
+    let mut masp_reward_keys = token_map
+        .iter(wl_storage)?
+        .map(|a| {
+            let (_, address) = a.unwrap();
+            address
+        })
+        .collect::<Vec<_>>();
+
     let mut masp_reward_denoms = BTreeMap::new();
     // Put the native rewards first because other inflation computations depend
     // on it
@@ -623,11 +634,10 @@ mod tests {
                 .unwrap();
 
                 // Insert tokens into MASP conversion state
-                let token_map_key = masp_token_map_key();
-                let mut token_map: TokenMap =
-                    s.read(&token_map_key).unwrap().unwrap_or_default();
-                token_map.insert(alias.to_string(), token_addr.clone());
-                s.write(&token_map_key, token_map).unwrap();
+                let token_map = token_map_handle();
+                token_map
+                    .insert(&mut s, alias.to_string(), token_addr.clone())
+                    .unwrap();
             }
         }
 
