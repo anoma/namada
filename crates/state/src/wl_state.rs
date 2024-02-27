@@ -849,14 +849,14 @@ where
             .block
             .pred_epochs
             .get_epoch(height)
-            .unwrap_or(Epoch::default());
+            .unwrap_or_default();
         let epoch_start_height = match self
             .in_mem
             .block
             .pred_epochs
             .get_start_height_of_epoch(epoch)
         {
-            Some(height) if height == BlockHeight(0) => BlockHeight(1),
+            Some(BlockHeight(0)) => BlockHeight(1),
             Some(height) => height,
             None => BlockHeight(1),
         };

@@ -654,7 +654,7 @@ mod tests {
     use namada_core::storage::DbKeySeg;
     use namada_core::time::{self, DateTimeUtc, Duration};
     use namada_core::token;
-    use namada_parameters::EpochDuration;
+    use namada_parameters::{EpochDuration, Parameters};
     use proptest::prelude::*;
     use proptest::test_runner::Config;
     // Use `RUST_LOG=info` (or another tracing level) and `--nocapture` to

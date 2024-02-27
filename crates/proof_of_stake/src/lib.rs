@@ -2928,13 +2928,7 @@ where
         for evidence in byzantine_validators {
             // dbg!(&evidence);
             tracing::info!("Processing evidence {evidence:?}.");
-            let evidence_height = match u64::try_from(evidence.height) {
-                Ok(height) => height,
-                Err(err) => {
-                    tracing::error!("Unexpected evidence block height {}", err);
-                    continue;
-                }
-            };
+            let evidence_height = u64::from(evidence.height);
             let evidence_epoch =
                 match pred_epochs.get_epoch(BlockHeight(evidence_height)) {
                     Some(epoch) => epoch,

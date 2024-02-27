@@ -2,7 +2,6 @@
 
 use namada::ledger::dry_run_tx;
 use namada::ledger::queries::{RequestCtx, ResponseQuery};
-use namada::token;
 
 use super::*;
 

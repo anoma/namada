@@ -25,7 +25,7 @@ use namada_core::storage::{
     self, BlockHeight, DbKeySeg, Epoch, Error as StorageError, Key, KeySeg,
     StringKey, TreeBytes, TreeKeyError, IBC_KEY_LIMIT,
 };
-use namada_core::{self, decode, DecodeError};
+use namada_core::{decode, DecodeError};
 use thiserror::Error;
 
 /// Trait for reading from a merkle tree that is a sub-tree

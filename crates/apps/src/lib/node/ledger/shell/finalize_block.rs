@@ -1,11 +1,8 @@
 //! Implementation of the `FinalizeBlock` ABCI++ method for the Shell
 
-use std::cell::RefCell;
-
 use data_encoding::HEXUPPER;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
-use namada::core::key::tm_raw_hash_to_string;
 use namada::core::storage::{BlockHash, BlockResults, Epoch, Header};
 use namada::governance::pgf::inflation as pgf_inflation;
 use namada::ledger::events::EventType;
@@ -745,15 +742,13 @@ mod test_finalize_block {
     use std::num::NonZeroU64;
     use std::str::FromStr;
 
-    use data_encoding::HEXUPPER;
     use namada::core::dec::{Dec, POS_DECIMAL_PRECISION};
     use namada::core::ethereum_events::{EthAddress, Uint as ethUint};
     use namada::core::hash::Hash;
     use namada::core::keccak::KeccakHash;
     use namada::core::key::testing::common_sk_from_simple_seed;
-    use namada::core::key::tm_consensus_key_raw_hash;
-    use namada::core::storage::{Epoch, KeySeg};
-    use namada::core::time::{DateTimeUtc, DurationSecs};
+    use namada::core::storage::KeySeg;
+    use namada::core::time::DurationSecs;
     use namada::core::uint::Uint;
     use namada::eth_bridge::storage::bridge_pool::{
         self, get_key_from_hash, get_nonce_key, get_signed_root_key,
@@ -782,18 +777,17 @@ mod test_finalize_block {
     };
     use namada::proof_of_stake::{unjail_validator, ADDRESS as pos_address};
     use namada::replay_protection;
-    use namada::state::StorageWrite;
+    use namada::tendermint::abci::types::{Misbehavior, MisbehaviorKind};
     use namada::token::{Amount, DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
-    use namada::tx::data::{Fee, WrapperTx};
-    use namada::tx::{Code, Data, Section, Signature};
-    use namada::vote_ext::{ethereum_events, EthereumTxData};
+    use namada::tx::data::Fee;
+    use namada::tx::{Code, Data, Signature};
+    use namada::vote_ext::ethereum_events;
     use namada_sdk::eth_bridge::MinimumConfirmations;
     use namada_sdk::governance::ProposalVote;
     use namada_sdk::proof_of_stake::storage::{
         liveness_missed_votes_handle, liveness_sum_missed_votes_handle,
         read_consensus_validator_set_addresses,
     };
-    use namada_sdk::tendermint::abci::types::MisbehaviorKind;
     use namada_sdk::validity_predicate::VpSentinel;
     use namada_test_utils::tx_data::TxWriteData;
     use namada_test_utils::TestWasms;

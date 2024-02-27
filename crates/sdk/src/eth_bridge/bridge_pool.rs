@@ -1219,6 +1219,8 @@ mod recommendations {
 
     #[cfg(test)]
     mod test_recommendations {
+        use namada_core::address;
+
         use super::*;
         use crate::io::StdIo;
 

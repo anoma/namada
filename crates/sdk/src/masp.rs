@@ -2856,10 +2856,11 @@ pub mod testing {
     use masp_primitives::ff::Field;
     use masp_primitives::sapling::prover::TxProver;
     use masp_primitives::sapling::redjubjub::Signature;
-    use masp_primitives::sapling::{PaymentAddress, ProofGenerationKey, Rseed};
+    use masp_primitives::sapling::{ProofGenerationKey, Rseed};
     use masp_primitives::transaction::components::GROTH_PROOF_SIZE;
     use masp_proofs::bellman::groth16::Proof;
     use proptest::prelude::*;
+    use proptest::sample::SizeRange;
     use proptest::test_runner::TestRng;
     use proptest::{collection, option, prop_compose};
 
