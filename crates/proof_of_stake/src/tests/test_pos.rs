@@ -24,7 +24,7 @@ use crate::parameters::testing::arb_pos_params;
 use crate::parameters::OwnedPosParams;
 use crate::queries::bonds_and_unbonds;
 use crate::rewards::{
-    log_block_rewards, update_rewards_products_and_mint_inflation,
+    log_block_rewards_aux, update_rewards_products_and_mint_inflation,
     PosRewardsCalculator,
 };
 use crate::slashing::{process_slashes, slash};
@@ -120,18 +120,18 @@ proptest! {
 }
 
 proptest! {
-    // Generate arb valid input for `test_log_block_rewards_aux`
+    // Generate arb valid input for `test_log_block_rewards_aux_aux`
     #![proptest_config(Config {
         cases: 1,
         .. Config::default()
     })]
     #[test]
-    fn test_log_block_rewards(
+    fn test_log_block_rewards_aux(
         genesis_validators in arb_genesis_validators(4..10, None),
         params in arb_pos_params(Some(5))
 
     ) {
-        test_log_block_rewards_aux(genesis_validators, params)
+        test_log_block_rewards_aux_aux(genesis_validators, params)
     }
 }
 
@@ -1143,7 +1143,7 @@ fn test_unslashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
     }
 }
 
-fn test_log_block_rewards_aux(
+fn test_log_block_rewards_aux_aux(
     validators: Vec<GenesisValidator>,
     params: OwnedPosParams,
 ) {
@@ -1231,7 +1231,7 @@ fn test_log_block_rewards_aux(
         };
 
         let (votes, signing_stake, non_voters) = prep_votes(current_epoch);
-        log_block_rewards(
+        log_block_rewards_aux(
             &mut s,
             current_epoch,
             &proposer_address,
