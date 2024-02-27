@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::dec::Dec;
-use namada_state::{StorageRead, StorageResult, StorageWrite};
+use namada_storage::{Result, StorageRead, StorageWrite};
 use serde::{Deserialize, Serialize};
 
 use super::storage::keys as pgf_storage;
@@ -44,7 +44,7 @@ impl Default for PgfParameters {
 
 impl PgfParameters {
     /// Initialize governance parameters into storage
-    pub fn init_storage<S>(&self, storage: &mut S) -> StorageResult<()>
+    pub fn init_storage<S>(&self, storage: &mut S) -> Result<()>
     where
         S: StorageRead + StorageWrite,
     {
