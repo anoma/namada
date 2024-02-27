@@ -31,6 +31,8 @@ pub enum Error {
     DeleteVp,
     #[error("Trying to write a temporary value after deleting")]
     WriteTempAfterDelete,
+    #[error("Trying to write a temporary value after writing")]
+    WriteTempAfterWrite,
     #[error("Replay protection key: {0}")]
     ReplayProtection(String),
 }
@@ -259,6 +261,8 @@ impl WriteLog {
     }
 
     /// Write a key and a value and return the gas cost and the size difference
+    /// Fails with [`Error::WriteTempAfterWrite`] when attempting to update a
+    /// temporary value after writing.
     /// Fails with [`Error::UpdateVpOfNewAccount`] when attempting to update a
     /// validity predicate of a new account that's not yet committed to storage.
     /// Fails with [`Error::WriteTempAfterDelete`] when attempting to update a
@@ -275,8 +279,9 @@ impl WriteLog {
             .insert(key.clone(), StorageModification::Temp { value })
         {
             Some(prev) => match prev {
-                StorageModification::Write { ref value } => {
-                    len as i64 - value.len() as i64
+                StorageModification::Write { .. } => {
+                    // Cannot overwrite a write request with a temporary one
+                    return Err(Error::WriteTempAfterWrite);
                 }
                 StorageModification::Delete => {
                     return Err(Error::WriteTempAfterDelete);
@@ -568,6 +573,11 @@ impl WriteLog {
         let mut matches = BTreeMap::new();
 
         for (key, modification) in &self.block_write_log {
+            if key.split_prefix(prefix).is_some() {
+                matches.insert(key.to_string(), modification.clone());
+            }
+        }
+        for (key, modification) in &self.tx_precommit_write_log {
             if key.split_prefix(prefix).is_some() {
                 matches.insert(key.to_string(), modification.clone());
             }
