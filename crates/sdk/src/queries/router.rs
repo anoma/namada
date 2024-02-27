@@ -126,6 +126,10 @@ macro_rules! try_match_segments {
                 );
             }
         )*
+
+        return Err(
+            $crate::queries::router::Error::WrongPath($request.path.clone()))
+            .into_storage_result();
     };
 
     // Terminal tail call, invoked after when all the args in the current
