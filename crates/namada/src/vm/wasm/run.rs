@@ -8,7 +8,6 @@ use std::marker::PhantomData;
 use borsh::BorshDeserialize;
 use namada_core::validity_predicate::VpSentinel;
 use namada_gas::{GasMetering, TxGasMeter, WASM_MEMORY_PAGE_GAS};
-use namada_state::write_log::StorageModification;
 use namada_state::{DBIter, State, StateRead, StorageHasher, DB};
 use namada_tx::data::TxSentinel;
 use namada_tx::{Commitment, Section, Tx};
@@ -507,61 +506,42 @@ where
                 Some((module, store)) => {
                     // Gas accounting even if the compiled module is in cache
                     let key = Key::wasm_code_len(code_hash);
-                    let tx_len = match state.write_log().read(&key).0 {
-                        Some(StorageModification::Write { value }) => {
-                            u64::try_from_slice(value).map_err(|e| {
-                                Error::ConversionError(e.to_string())
-                            })
-                        }
-                        _ => match state
-                            .db_read(&key)
-                            .map_err(|e| {
-                                Error::LoadWasmCode(format!(
-                                    "Read wasm code length failed from \
-                                     storage: key {}, error {}",
-                                    key, e
-                                ))
-                            })?
-                            .0
-                        {
-                            Some(v) => u64::try_from_slice(&v).map_err(|e| {
-                                Error::ConversionError(e.to_string())
-                            }),
-                            None => Err(Error::LoadWasmCode(format!(
+                    let tx_len = state
+                        .read::<u64>(&key)
+                        .map_err(|e| {
+                            Error::LoadWasmCode(format!(
+                                "Read wasm code length failed from storage: \
+                                 key {}, error {}",
+                                key, e
+                            ))
+                        })?
+                        .ok_or_else(|| {
+                            Error::LoadWasmCode(format!(
                                 "No wasm code length in storage: key {}",
                                 key
-                            ))),
-                        },
-                    }?;
+                            ))
+                        })?;
 
                     (module, store, tx_len)
                 }
                 None => {
                     let key = Key::wasm_code(code_hash);
-                    let code = match state.write_log().read(&key).0 {
-                        Some(StorageModification::Write { value }) => {
-                            value.clone()
-                        }
-                        _ => match state
-                            .db_read(&key)
-                            .map_err(|e| {
-                                Error::LoadWasmCode(format!(
-                                    "Read wasm code failed from storage: key \
-                                     {}, error {}",
-                                    key, e
-                                ))
-                            })?
-                            .0
-                        {
-                            Some(v) => v,
-                            None => {
-                                return Err(Error::LoadWasmCode(format!(
-                                    "No wasm code in storage: key {}",
-                                    key
-                                )));
-                            }
-                        },
-                    };
+                    let code = state
+                        .read_bytes(&key)
+                        .map_err(|e| {
+                            Error::LoadWasmCode(format!(
+                                "Read wasm code failed from storage: key {}, \
+                                 error {}",
+                                key, e
+                            ))
+                        })?
+                        .ok_or_else(|| {
+                            Error::LoadWasmCode(format!(
+                                "No wasm code in storage: key {}",
+                                key
+                            ))
+                        })?;
+
                     let tx_len = u64::try_from(code.len())
                         .map_err(|e| Error::ConversionError(e.to_string()))?;
 
