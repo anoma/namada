@@ -41,7 +41,7 @@ fn vp_user(c: &mut Criterion) {
         Transfer {
             source: defaults::albert_address(),
             target: defaults::bertha_address(),
-            token: address::nam(),
+            token: address::testing::nam(),
             amount: Amount::native_whole(1000).native_denominated(),
             key: None,
             shielded: None,
@@ -56,7 +56,7 @@ fn vp_user(c: &mut Criterion) {
         Transfer {
             source: defaults::bertha_address(),
             target: defaults::albert_address(),
-            token: address::nam(),
+            token: address::testing::nam(),
             amount: Amount::native_whole(1000).native_denominated(),
             key: None,
             shielded: None,
@@ -187,7 +187,7 @@ fn vp_implicit(c: &mut Criterion) {
         Transfer {
             source: Address::from(&implicit_account.to_public()),
             target: defaults::bertha_address(),
-            token: address::nam(),
+            token: address::testing::nam(),
             amount: Amount::native_whole(500).native_denominated(),
             key: None,
             shielded: None,
@@ -202,7 +202,7 @@ fn vp_implicit(c: &mut Criterion) {
         Transfer {
             source: defaults::bertha_address(),
             target: Address::from(&implicit_account.to_public()),
-            token: address::nam(),
+            token: address::testing::nam(),
             amount: Amount::native_whole(1000).native_denominated(),
             key: None,
             shielded: None,
@@ -330,7 +330,7 @@ fn vp_validator(c: &mut Criterion) {
         Transfer {
             source: defaults::validator_address(),
             target: defaults::bertha_address(),
-            token: address::nam(),
+            token: address::testing::nam(),
             amount: Amount::native_whole(1000).native_denominated(),
             key: None,
             shielded: None,
@@ -345,7 +345,7 @@ fn vp_validator(c: &mut Criterion) {
         Transfer {
             source: defaults::bertha_address(),
             target: defaults::validator_address(),
-            token: address::nam(),
+            token: address::testing::nam(),
             amount: Amount::native_whole(1000).native_denominated(),
             key: None,
             shielded: None,

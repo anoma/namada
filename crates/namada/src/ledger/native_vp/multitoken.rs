@@ -224,9 +224,8 @@ mod tests {
 
     use super::*;
     use crate::address::{Address, InternalAddress};
-    use crate::core::address::nam;
     use crate::core::address::testing::{
-        established_address_1, established_address_2,
+        established_address_1, established_address_2, nam,
     };
     use crate::key::testing::keypair_1;
     use crate::ledger::gas::VpGasMeter;

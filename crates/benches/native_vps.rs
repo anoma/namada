@@ -415,7 +415,7 @@ fn vp_multitoken(c: &mut Criterion) {
         Transfer {
             source: defaults::albert_address(),
             target: defaults::bertha_address(),
-            token: address::nam(),
+            token: address::testing::nam(),
             amount: Amount::native_whole(1000).native_denominated(),
             key: None,
             shielded: None,
