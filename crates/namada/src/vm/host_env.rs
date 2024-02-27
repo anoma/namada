@@ -938,25 +938,16 @@ where
             continue;
         }
         let vp_key = Key::validity_predicate(&addr);
-        let (vp, gas) = state.write_log().read(&vp_key);
-        tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
-        // just check the existence because the write log should not have the
-        // delete log of the VP
-        if vp.is_none() {
-            let (is_present, gas) = state
-                .db_has_key(&vp_key)
-                .map_err(TxRuntimeError::StateError)?;
-            tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
-            if !is_present {
-                tracing::info!(
-                    "Trying to write into storage with a key containing an \
-                     address that doesn't exist: {}",
-                    addr
-                );
-                return Err(TxRuntimeError::UnknownAddressStorageModification(
-                    addr,
-                ));
-            }
+        let is_present = state.has_key(&vp_key)?;
+        if !is_present {
+            tracing::info!(
+                "Trying to write into storage with a key containing an \
+                 address that doesn't exist: {}",
+                addr
+            );
+            return Err(TxRuntimeError::UnknownAddressStorageModification(
+                addr,
+            ));
         }
     }
     Ok(())
@@ -2120,18 +2111,11 @@ where
 
     // Then check that the corresponding VP code does indeed exist
     let code_key = Key::wasm_code(&code_hash);
-    let (result, gas) = state.write_log().read(&code_key);
-    tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
-    if result.is_none() {
-        let (is_present, gas) = state
-            .db_has_key(&code_key)
-            .map_err(TxRuntimeError::StateError)?;
-        tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
-        if !is_present {
-            return Err(TxRuntimeError::InvalidVpCodeHash(
-                "The corresponding VP code doesn't exist".to_string(),
-            ));
-        }
+    let is_present = state.has_key(&code_key)?;
+    if !is_present {
+        return Err(TxRuntimeError::InvalidVpCodeHash(
+            "The corresponding VP code doesn't exist".to_string(),
+        ));
     }
     Ok(())
 }
