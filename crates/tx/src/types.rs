@@ -653,7 +653,13 @@ impl From<SaplingMetadataSerde> for Vec<u8> {
 /// A section providing the auxiliary inputs used to construct a MASP
 /// transaction
 #[derive(
-    Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+    BorshSchema,
 )]
 pub struct MaspBuilder {
     /// The MASP transaction that this section witnesses
@@ -681,20 +687,6 @@ impl MaspBuilder {
     pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
         hasher.update(self.serialize_to_vec());
         hasher
-    }
-}
-
-impl borsh::BorshSchema for MaspBuilder {
-    fn add_definitions_recursively(
-        _definitions: &mut BTreeMap<
-            borsh::schema::Declaration,
-            borsh::schema::Definition,
-        >,
-    ) {
-    }
-
-    fn declaration() -> borsh::schema::Declaration {
-        "Builder".into()
     }
 }
 

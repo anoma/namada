@@ -943,6 +943,7 @@ impl From<Amount> for Uint {
     BorshDeserialize,
     Serialize,
     Deserialize,
+    BorshSchema,
 )]
 #[repr(u8)]
 #[allow(missing_docs)]

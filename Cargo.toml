@@ -114,8 +114,8 @@ ledger-transport-hid = "0.10.0"
 libc = "0.2.97"
 libloading = "0.7.2"
 # branch = "murisi/namada-integration"
-masp_primitives = { git = "https://github.com/anoma/masp", tag = "v1.1.0" }
-masp_proofs = { git = "https://github.com/anoma/masp", tag = "v1.1.0", default-features = false, features = ["local-prover"] }
+masp_primitives = { git = "https://github.com/anoma/masp", branch = "murisi/borsh-schemas" }
+masp_proofs = { git = "https://github.com/anoma/masp", branch = "murisi/borsh-schemas", default-features = false, features = ["local-prover"] }
 num256 = "0.3.5"
 num_cpus = "1.13.0"
 num-derive = "0.3.3"
