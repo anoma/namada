@@ -93,10 +93,11 @@ where
             self.get_validator_set_update_epoch(current_epoch);
 
         // Sub-system updates:
+        // - Governance - applied first in case a proposal changes any of the
+        //   other syb-systems
+        governance::finalize_block(self, emit_events, new_epoch)?;
         // - Token
         token::finalize_block(&mut self.wl_storage, emit_events, new_epoch)?;
-        // - Governance
-        governance::finalize_block(self, emit_events, new_epoch)?;
         // - PoS
         //    - Must be applied after governance in case it changes PoS params
         proof_of_stake::finalize_block(
